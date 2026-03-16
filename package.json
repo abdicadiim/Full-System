@@ -1,0 +1,37 @@
+{
+  "name": "full-system-backend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "install:all": "npm install && npm --prefix Frontend/Auth install && npm --prefix Frontend/Billing install && npm --prefix Frontend/Invoice install",
+    "dev": "tsx watch server.ts",
+    "dev:backend": "powershell -NoProfile -Command \"$c=Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1; if($c){ try{ Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue }catch{} }; tsx watch server.ts\"",
+    "dev:auth": "npm --prefix Frontend/Auth run dev",
+    "dev:billing": "npm --prefix Frontend/Billing run dev",
+    "dev:invoice": "npm --prefix Frontend/Invoice run dev",
+    "dev:all": "concurrently -k -n backend,auth,billing,invoice -c blue,magenta,green,yellow \"npm run dev:backend\" \"npm run dev:auth\" \"npm run dev:billing\" \"npm run dev:invoice\"",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.12.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cookie-parser": "^1.4.9",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/node": "^22.13.5",
+    "concurrently": "^9.1.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.2"
+  }
+}

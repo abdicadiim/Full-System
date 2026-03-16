@@ -1,0 +1,12 @@
+/node_modules/
+/dist/
+/tsc_output.txt
+/pnpm-lock.yaml
+/package-lock.json
+.env
+.env.*
+/coverage/
+/build/
+/out/
+/.idea/
+/.vscode/

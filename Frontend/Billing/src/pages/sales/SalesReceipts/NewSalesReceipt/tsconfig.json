@@ -1,0 +1,10 @@
+{
+    "compilerOptions": {
+        "noImplicitAny": false,
+        "strictNullChecks": false,
+        "strictPropertyInitialization": false
+    },
+    "include": [
+        "NewSalesReceipt.tsx"
+    ]
+}
