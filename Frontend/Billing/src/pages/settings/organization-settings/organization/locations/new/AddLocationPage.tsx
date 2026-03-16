@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { getCurrentUser } from "../../../../../../services/auth";
 import { Upload, X, ChevronDown, ChevronUp, Search, Check, Plus } from "lucide-react";
@@ -59,6 +59,14 @@ export default function AddLocationPage() {
   const transactionSeriesDropdownRef = useRef(null);
   const defaultTransactionSeriesDropdownRef = useRef(null);
 
+  // Helper to safely extract a role string from a role value that may be an object
+  const extractRoleString = (role: any): string => {
+    if (!role) return "Admin";
+    if (typeof role === "string") return role;
+    if (typeof role === "object") return role.name || role.code || "Admin";
+    return String(role);
+  };
+
   // Load users for primary contact dropdown
   useEffect(() => {
     const currentUser = getCurrentUser();
@@ -78,7 +86,7 @@ export default function AddLocationPage() {
               userId: preferredUser?.id || "",
               userName: preferredUser?.name || "",
               userEmail: preferredUser?.email || "",
-              role: preferredUser?.role || "Admin",
+              role: extractRoleString(preferredUser?.role),
             }],
     }));
   }, []);
@@ -276,7 +284,7 @@ export default function AddLocationPage() {
           userId: userId,
           userName: user.name,
           userEmail: user.email,
-          role: user.role || "Admin",
+          role: extractRoleString(user.role),
         }],
       }));
     }
@@ -376,70 +384,51 @@ export default function AddLocationPage() {
   return (
     <div className="w-full h-full p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Add Location</h1>
+        <h1 className="text-xl font-semibold text-gray-900">Add Location</h1>
       </div>
 
       {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
           {error}
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="bg-white border border-gray-200 rounded-lg">
+      <form onSubmit={handleSubmit}>
         {/* Location Type Section */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-sm font-semibold text-gray-900 mb-4">Location Type</h2>
+        <div className="px-6 py-4 border-b border-gray-200">
           <div className="grid grid-cols-2 gap-4">
             <label className={`relative flex flex-col p-4 border-2 rounded-lg cursor-pointer transition ${
-              formData.type === "Business" 
-                ? "border-blue-500 bg-blue-50" 
+              formData.type === "Business"
+                ? "border-blue-500 bg-blue-50"
                 : "border-gray-200 hover:border-gray-300"
             }`}>
               <div className="flex items-center gap-3 mb-2">
-                <input
-                  type="radio"
-                  name="type"
-                  value="Business"
-                  checked={formData.type === "Business"}
-                  onChange={handleChange}
-                  className="w-4 h-4 text-blue-600"
-                />
+                <input type="radio" name="type" value="Business" checked={formData.type === "Business"} onChange={handleChange} className="w-4 h-4 text-blue-600" />
                 <span className="text-sm font-medium text-gray-900">Business Location</span>
               </div>
-              <p className="text-xs text-gray-600 ml-7">
-                A Business Location represents your organization or office's operational location. It is used to record transactions, assess regional performance, and monitor stock levels for items stored at this location.
-              </p>
+              <p className="text-xs text-gray-600 ml-7">A Business Location represents your organization or office's operational location. It is used to record transactions, assess regional performance, and monitor stock levels for items stored at this location.</p>
             </label>
-
             <label className={`relative flex flex-col p-4 border-2 rounded-lg cursor-pointer transition ${
-              formData.type === "Warehouse" 
-                ? "border-blue-500 bg-blue-50" 
+              formData.type === "Warehouse"
+                ? "border-blue-500 bg-blue-50"
                 : "border-gray-200 hover:border-gray-300"
             }`}>
               <div className="flex items-center gap-3 mb-2">
-                <input
-                  type="radio"
-                  name="type"
-                  value="Warehouse"
-                  checked={formData.type === "Warehouse"}
-                  onChange={handleChange}
-                  className="w-4 h-4 text-blue-600"
-                />
+                <input type="radio" name="type" value="Warehouse" checked={formData.type === "Warehouse"} onChange={handleChange} className="w-4 h-4 text-blue-600" />
                 <span className="text-sm font-medium text-gray-900">Warehouse Only Location</span>
               </div>
-              <p className="text-xs text-gray-600 ml-7">
-                A Warehouse Only Location refers to where your items are stored. It helps track and monitor stock levels for items stored at this location.
-              </p>
+              <p className="text-xs text-gray-600 ml-7">A Warehouse Only Location refers to where your items are stored. It helps track and monitor stock levels for items stored at this location.</p>
             </label>
           </div>
         </div>
 
         {/* Logo Field - Only show for Business Location */}
         {formData.type === "Business" && (
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="grid grid-cols-3 gap-4">
-              <label className="text-sm font-medium text-gray-700">Logo</label>
-              <div className="col-span-2 space-y-4">
+          <div className="px-6 py-3 border-b border-gray-200">
+            <div className="grid grid-cols-3 gap-4 items-start">
+              <label className="text-sm font-medium text-gray-700 pt-2">Logo</label>
+              <div className="col-span-2 space-y-3">
               {/* Logo Dropdown */}
               <div className="relative" ref={logoDropdownRef}>
                 <button
@@ -553,8 +542,8 @@ export default function AddLocationPage() {
         )}
 
         {/* Name Field */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="grid grid-cols-3 gap-4">
+        <div className="px-6 py-3 border-b border-gray-200">
+          <div className="grid grid-cols-3 gap-4 items-start">
             <label className="text-sm font-medium text-gray-700 flex items-center">
               Name<span className="text-red-500 ml-1">*</span>
             </label>
@@ -587,7 +576,7 @@ export default function AddLocationPage() {
 
         {/* Parent Location Field - Show for Warehouse or Business Location when checkbox is checked */}
         {(formData.type === "Warehouse" || (formData.type === "Business" && formData.isChildLocation)) && (
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="px-6 py-3 border-b border-gray-200">
             <div className="grid grid-cols-3 gap-4 items-center">
               <label className="text-sm font-medium text-gray-700 flex items-center">
                 Parent Location<span className="text-red-500 ml-1">*</span>
@@ -652,9 +641,10 @@ export default function AddLocationPage() {
         )}
 
         {/* Address Section */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-sm font-semibold text-gray-900 mb-4">Address</h2>
-          <div className="space-y-4">
+        <div className="px-6 py-3 border-b border-gray-200">
+          <div className="grid grid-cols-3 gap-4">
+            <label className="text-sm font-medium text-gray-700 pt-2">Address</label>
+            <div className="col-span-2 space-y-2">
             <div className="grid grid-cols-3 gap-4">
               <label className="text-sm font-medium text-gray-700">Attention</label>
               <input
@@ -767,9 +757,10 @@ export default function AddLocationPage() {
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Website URL - Show for both Business and Warehouse */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        {/* Website URL */}
+        <div className="px-6 py-3 border-b border-gray-200">
           <div className="grid grid-cols-3 gap-4 items-center">
             <label className="text-sm font-medium text-gray-700">Website URL</label>
             <input
@@ -783,12 +774,10 @@ export default function AddLocationPage() {
           </div>
         </div>
 
-        {/* Primary Contact - Show for both Business and Warehouse */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        {/* Primary Contact */}
+        <div className="px-6 py-3 border-b border-gray-200">
           <div className="grid grid-cols-3 gap-4 items-center">
-            <label className="text-sm font-medium text-gray-700 flex items-center">
-              Primary Contact
-            </label>
+            <label className="text-sm font-medium text-gray-700">Primary Contact*</label>
             <select
               name="primaryContact"
               value={formData.primaryContact}
@@ -809,11 +798,9 @@ export default function AddLocationPage() {
         {formData.type === "Business" && (
           <>
             {/* Transaction Number Series */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <div className="px-6 py-3 border-b border-gray-200">
               <div className="grid grid-cols-3 gap-4 items-center">
-                <label className="text-sm font-medium text-gray-700 flex items-center">
-                  Transaction Number Series<span className="text-red-500 ml-1">*</span>
-                </label>
+                <label className="text-sm font-medium text-gray-700">Transaction Number Series*</label>
                 <div className="col-span-2 relative" ref={transactionSeriesDropdownRef}>
                   <button
                     type="button"
@@ -881,11 +868,9 @@ export default function AddLocationPage() {
             </div>
 
             {/* Default Transaction Number Series */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <div className="px-6 py-3 border-b border-gray-200">
               <div className="grid grid-cols-3 gap-4 items-center">
-                <label className="text-sm font-medium text-gray-700 flex items-center">
-                  Default Transaction Number Series<span className="text-red-500 ml-1">*</span>
-                </label>
+                <label className="text-sm font-medium text-gray-700">Default Transaction Number Series*</label>
                 <div className="col-span-2 relative" ref={defaultTransactionSeriesDropdownRef}>
                   <button
                     type="button"
@@ -956,83 +941,84 @@ export default function AddLocationPage() {
           </>
         )}
 
-        {/* Location Access - Show for both Business and Warehouse */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        {/* Location Access */}
+        <div className="px-6 py-3 border-b border-gray-200">
           <div className="grid grid-cols-3 gap-4">
             <label className="text-sm font-medium text-gray-700">Location Access</label>
             <div className="col-span-2">
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                 {formData.locationAccess.length === 0 ? (
-                  <>
-                    <p className="text-sm font-semibold text-gray-900 mb-2">No users selected</p>
-                    <p className="text-xs text-gray-600 mb-4">
-                      Select the users who can create and access transactions for this location.
-                    </p>
-                    <div className="flex items-center justify-end mb-4">
+                  <div className="py-2">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-gray-300"></span>
+                        <span className="text-sm font-medium text-gray-900">No users selected</span>
+                      </div>
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={provideAccessToAll}
                           onChange={(e) => setProvideAccessToAll(e.target.checked)}
-                          className="w-4 h-4 text-blue-600 rounded"
+                          className="w-4 h-4 text-blue-600 rounded border-gray-300"
                         />
-                        <span className="text-sm text-gray-700">Provide access to all users</span>
+                        <span className="text-sm text-gray-600">Provide access to all users</span>
                       </label>
                     </div>
-                    <table className="w-full text-sm">
+                    <p className="text-xs text-gray-500 mb-4">
+                      Select the users who can create and access transactions for this location.
+                    </p>
+                    <table className="w-full">
                       <thead>
-                        <tr className="border-b border-gray-200">
-                          <th className="text-left py-2 px-3 text-xs font-semibold text-gray-600 uppercase">USERS</th>
-                          <th className="text-left py-2 px-3 text-xs font-semibold text-gray-600 uppercase">ROLE</th>
+                        <tr className="border-b border-gray-100">
+                          <th className="text-left py-2 px-0 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">USERS</th>
+                          <th className="text-left py-2 px-0 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">ROLE</th>
                         </tr>
                       </thead>
                       <tbody>
                         <tr>
-                          <td className="py-2 px-3">
+                          <td className="py-3 px-0 pr-4">
                             <div className="relative" ref={userDropdownRef}>
                               <button
                                 type="button"
                                 onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-white"
+                                className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm text-left flex items-center justify-between bg-white hover:border-gray-300 transition-colors"
                               >
-                                <span className="text-gray-500">Select users</span>
-                                <ChevronDown size={16} className="text-gray-500" />
+                                <span className="text-gray-400 italic">Select users</span>
+                                <ChevronDown size={14} className="text-gray-400" />
                               </button>
 
                               {isUserDropdownOpen && (
-                                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                                  <div className="p-2 border-b border-gray-200 sticky top-0 bg-white">
+                                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-60 overflow-y-auto">
+                                  <div className="p-2 border-b border-gray-100 sticky top-0 bg-white">
                                     <div className="relative">
-                                      <Search size={16} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                                      <Search size={14} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
                                       <input
                                         type="text"
                                         placeholder="Search"
                                         value={userSearch}
                                         onChange={(e) => setUserSearch(e.target.value)}
-                                        className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                        className="w-full pl-7 pr-3 py-1.5 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
                                         onClick={(e) => e.stopPropagation()}
                                       />
                                     </div>
                                   </div>
                                   <div className="py-1">
                                     {filteredUsers.length === 0 ? (
-                                      <div className="px-3 py-2 text-sm text-gray-500 text-center">NO RESULTS FOUND</div>
+                                      <div className="px-3 py-2 text-xs text-gray-400 text-center uppercase tracking-tighter">NO RESULTS FOUND</div>
                                     ) : (
                                       filteredUsers.map((user) => (
                                         <button
                                           key={user._id || user.id}
                                           type="button"
                                           onClick={() => handleUserSelect(user._id || user.id)}
-                                          className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                                          className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
                                         >
-                                          <div className="flex items-center gap-2">
-                                            <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-semibold">
-                                              {(user.name || '').charAt(0).toUpperCase()}
-                                            </div>
-                                            <div>
-                                              <div className="font-medium text-gray-900">{user.name}</div>
-                                              <div className="text-xs text-gray-500">{user.email}</div>
-                                            </div>
+                                          <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-[10px] font-bold">
+                                            {(user.name || '').charAt(0).toUpperCase()}
+                                          </div>
+                                          <div className="overflow-hidden">
+                                            <div className="font-medium text-gray-900 truncate">{user.name}</div>
+                                            <div className="text-[10px] text-gray-500 truncate">{user.email}</div>
                                           </div>
                                         </button>
                                       ))
@@ -1042,29 +1028,41 @@ export default function AddLocationPage() {
                               )}
                             </div>
                           </td>
-                          <td className="py-2 px-3">
-                            <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white">
+                          <td className="py-3 px-0">
+                            <select className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm bg-white text-gray-400 italic">
                               <option>User's Role</option>
                             </select>
                           </td>
                         </tr>
                       </tbody>
                     </table>
-                  </>
+                  </div>
                 ) : (
-                  <>
-                    <p className="text-sm font-medium text-gray-900 mb-2">
-                      â€¢ {formData.locationAccess.length} user(s) selected
-                    </p>
-                    <p className="text-xs text-gray-600 mb-4">
+                  <div className="py-2">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                        <span className="text-sm font-medium text-gray-900">{formData.locationAccess.length} user(s) selected</span>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={provideAccessToAll}
+                          onChange={(e) => setProvideAccessToAll(e.target.checked)}
+                          className="w-4 h-4 text-blue-600 rounded border-gray-300"
+                        />
+                        <span className="text-sm text-gray-600">Provide access to all users</span>
+                      </label>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-4 italic">
                       Selected users can create and access transactions for this location.
                     </p>
                     
-                    <table className="w-full text-sm">
+                    <table className="w-full mt-2">
                       <thead>
-                        <tr className="border-b border-gray-200">
-                          <th className="text-left py-2 px-3 text-xs font-semibold text-gray-600 uppercase">USERS</th>
-                          <th className="text-left py-2 px-3 text-xs font-semibold text-gray-600 uppercase">ROLE</th>
+                        <tr className="border-b border-gray-100">
+                          <th className="text-left py-2 px-0 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">USERS</th>
+                          <th className="text-left py-2 px-0 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">ROLE</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1073,57 +1071,127 @@ export default function AddLocationPage() {
                           return (
                             <tr 
                               key={index} 
-                              className="border-b border-gray-200 group hover:bg-gray-50"
+                              className="border-b border-gray-50 group hover:bg-gray-50/50 transition-colors"
                             >
-                              <td className="py-2 px-3">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-semibold">
-                                    {(user?.name || user?.firstName || access.userName || '').charAt(0).toUpperCase()}
+                              <td className="py-3 px-0">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
+                                      {user?.image ? (
+                                          <img src={user.image} alt="" className="w-full h-full object-cover" />
+                                      ) : (
+                                          <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs font-bold uppercase">
+                                              {(user?.name || user?.firstName || access.userName || '').charAt(0)}
+                                          </div>
+                                      )}
                                   </div>
-                                  <div className="flex-1">
-                                    <div className="font-medium text-gray-900">{access.userName || user?.name || `${user?.firstName} ${user?.lastName}`}</div>
-                                    <div className="text-xs text-gray-500">{access.userEmail || user?.email}</div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="font-medium text-gray-900 truncate text-sm">{access.userName || user?.name || `${user?.firstName} ${user?.lastName}`}</div>
+                                    <div className="text-xs text-gray-500 truncate">{access.userEmail || user?.email}</div>
                                   </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveUser(access.userId)}
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity w-6 h-6 rounded-full bg-red-500 flex items-center justify-center hover:bg-red-600"
-                                  >
-                                    <X size={14} className="text-white" />
-                                  </button>
                                 </div>
                               </td>
-                              <td className="py-2 px-3 text-gray-700">{access.role || user?.role || "Admin"}</td>
+                              <td className="py-3 px-0">
+                                <div className="flex items-center justify-between gap-4">
+                                    <span className="text-sm text-gray-600 capitalize">{extractRoleString(access.role) || extractRoleString(user?.role) || "Admin"}</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleRemoveUser(access.userId)}
+                                        className="opacity-0 group-hover:opacity-100 transition-opacity w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center hover:bg-red-50 hover:text-red-500 text-gray-400"
+                                    >
+                                        <X size={12} />
+                                    </button>
+                                </div>
+                              </td>
                             </tr>
                           );
                         })}
+                        <tr>
+                            <td className="py-4 px-0 pr-4">
+                                <div className="relative" ref={userDropdownRef}>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
+                                        className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm text-left flex items-center justify-between bg-white hover:border-gray-300 transition-colors"
+                                    >
+                                        <span className="text-gray-400 italic">Select users</span>
+                                        <ChevronDown size={14} className="text-gray-400" />
+                                    </button>
+
+                                    {isUserDropdownOpen && (
+                                        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-60 overflow-y-auto">
+                                            <div className="p-2 border-b border-gray-100 sticky top-0 bg-white">
+                                                <div className="relative">
+                                                    <Search size={14} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Search"
+                                                        value={userSearch}
+                                                        onChange={(e) => setUserSearch(e.target.value)}
+                                                        className="w-full pl-7 pr-3 py-1.5 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="py-1">
+                                                {filteredUsers.length === 0 ? (
+                                                    <div className="px-3 py-2 text-xs text-gray-400 text-center uppercase tracking-tighter">NO RESULTS FOUND</div>
+                                                ) : (
+                                                    filteredUsers.map((user) => (
+                                                        <button
+                                                            key={user._id || user.id}
+                                                            type="button"
+                                                            onClick={() => handleUserSelect(user._id || user.id)}
+                                                            className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                                                        >
+                                                            <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-[10px] font-bold">
+                                                                {(user.name || '').charAt(0).toUpperCase()}
+                                                            </div>
+                                                            <div className="overflow-hidden">
+                                                                <div className="font-medium text-gray-900 truncate">{user.name}</div>
+                                                                <div className="text-[10px] text-gray-500 truncate">{user.email}</div>
+                                                            </div>
+                                                        </button>
+                                                    ))
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </td>
+                            <td className="py-4 px-0">
+                                <select className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm bg-white text-gray-400 italic">
+                                    <option>User's Role</option>
+                                </select>
+                            </td>
+                        </tr>
                       </tbody>
                     </table>
-                  </>
-                )}
+                  </div>
+                )}  )}
               </div>
             </div>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-4 pt-4">
+        <div className="flex items-center gap-4 px-6 py-4">
           <button
             type="submit"
             disabled={isSaving}
-            className="px-6 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSaving ? 'Saving...' : 'Save'}
           </button>
           <button
             type="button"
             onClick={handleCancel}
-            className="px-6 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition"
+            className="px-5 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded hover:bg-gray-50 transition"
           >
             Cancel
           </button>
         </div>
       </form>
+      </div>
     </div>
   );
 }

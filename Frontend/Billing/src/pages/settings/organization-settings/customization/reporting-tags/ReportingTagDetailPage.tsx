@@ -45,6 +45,7 @@ export default function ReportingTagDetailPage({ tagId }: { tagId: string }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [markingReady, setMarkingReady] = useState(false);
+  const [showMarkReadyModal, setShowMarkReadyModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tag, setTag] = useState<Tag | null>(null);
 
@@ -237,7 +238,7 @@ export default function ReportingTagDetailPage({ tagId }: { tagId: string }) {
         <div className="flex items-center gap-2">
           {!isEditing && !tag.isActive && (
             <button
-              onClick={onMarkReady}
+              onClick={() => setShowMarkReadyModal(true)}
               disabled={markingReady}
               className="px-3 py-2 text-[13px] font-medium text-white bg-[#156372] rounded hover:bg-[#0f4d5a] disabled:opacity-60 flex items-center gap-2"
             >
@@ -291,6 +292,47 @@ export default function ReportingTagDetailPage({ tagId }: { tagId: string }) {
           </button>
         </div>
       </div>
+
+      {showMarkReadyModal && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-[10000] pt-16"
+          onClick={() => setShowMarkReadyModal(false)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 border-b border-gray-200">
+              <div className="flex items-start gap-3">
+                <div className="text-orange-500 text-lg leading-none">⚠️</div>
+                <div>
+                  <div className="text-sm font-semibold text-gray-900">Mark this reporting tag as Ready?</div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    Once marked as Ready, this reporting tag will be available for association with transactions and entities.
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 p-4">
+              <button
+                onClick={async () => {
+                  setShowMarkReadyModal(false);
+                  await onMarkReady();
+                }}
+                className="px-3 py-2 rounded-md bg-blue-600 text-white text-sm"
+              >
+                Mark as Ready
+              </button>
+              <button
+                onClick={() => setShowMarkReadyModal(false)}
+                className="px-3 py-2 rounded-md bg-gray-100 border border-gray-300 text-gray-600 text-sm"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 p-8">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6">

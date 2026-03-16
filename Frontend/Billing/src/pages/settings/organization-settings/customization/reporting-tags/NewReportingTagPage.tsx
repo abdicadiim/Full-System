@@ -1,18 +1,16 @@
-﻿import React, { useState } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { reportingTagsAPI } from "../../../../../services/api";
 
-type PrimaryModule = "sales" | "purchases" | "journals" | "inventoryAdjustments";
+type PrimaryModule = "sales" | "purchases";
 type Level = "transaction" | "lineItem";
 
 const primaryLabels: Record<PrimaryModule, string> = {
   sales: "Sales",
   purchases: "Purchases",
-  journals: "Journals",
-  inventoryAdjustments: "Inventory Adjustments",
 };
 
-export default function NewReportingTagPage() {
+export default function NewReportingTagPage({ tagId, mode }: { tagId?: string; mode?: "edit" }) {
   const navigate = useNavigate();
   const [step, setStep] = useState<1 | 2>(1);
   const [tagName, setTagName] = useState("");
@@ -20,25 +18,71 @@ export default function NewReportingTagPage() {
   const [selectedPrimary, setSelectedPrimary] = useState<Record<PrimaryModule, boolean>>({
     sales: false,
     purchases: false,
-    journals: false,
-    inventoryAdjustments: false,
   });
   const [activePrimary, setActivePrimary] = useState<PrimaryModule>("sales");
   const [moduleLevel, setModuleLevel] = useState<Record<PrimaryModule, Level>>({
     sales: "transaction",
     purchases: "transaction",
-    journals: "transaction",
-    inventoryAdjustments: "transaction",
   });
   const [selectedOther, setSelectedOther] = useState({
     customers: false,
-    vendors: false,
     items: false,
-    banking: false,
   });
   const [mandatory, setMandatory] = useState(false);
   const [options, setOptions] = useState<string[]>([""]);
   const [isSaving, setIsSaving] = useState(false);
+  const isEditMode = mode === "edit" && Boolean(tagId);
+  const [loadingEdit, setLoadingEdit] = useState(false);
+
+  const itemsEnabled = useMemo(
+    () =>
+      (Object.keys(selectedPrimary) as PrimaryModule[]).some(
+        (key) => selectedPrimary[key] && moduleLevel[key] === "lineItem"
+      ),
+    [selectedPrimary, moduleLevel]
+  );
+
+  useEffect(() => {
+    if (!itemsEnabled && selectedOther.items) {
+      setSelectedOther((prev) => ({ ...prev, items: false }));
+    }
+  }, [itemsEnabled, selectedOther.items]);
+
+  useEffect(() => {
+    if (!isEditMode || !tagId) return;
+    const load = async () => {
+      setLoadingEdit(true);
+      try {
+        const res = await reportingTagsAPI.getById(tagId);
+        if (res?.success && res?.data) {
+          const t = res.data;
+          setTagName(String(t.name || ""));
+          setDescription(String(t.description || ""));
+          const appliesTo = Array.isArray(t.appliesTo) ? t.appliesTo : [];
+          setSelectedPrimary({
+            sales: appliesTo.includes("sales"),
+            purchases: appliesTo.includes("purchases"),
+          });
+          setSelectedOther({
+            customers: appliesTo.includes("customers"),
+            items: appliesTo.includes("items"),
+          });
+          const levels = t.moduleLevel || {};
+          setModuleLevel({
+            sales: levels.sales || "transaction",
+            purchases: levels.purchases || "transaction",
+          });
+          setMandatory(Boolean(t.isMandatory));
+          setOptions(Array.isArray(t.options) && t.options.length > 0 ? t.options : [""]);
+        }
+      } catch {
+        // no-op
+      } finally {
+        setLoadingEdit(false);
+      }
+    };
+    load();
+  }, [isEditMode, tagId]);
 
   const togglePrimary = (key: PrimaryModule) => {
     setActivePrimary(key);
@@ -46,6 +90,7 @@ export default function NewReportingTagPage() {
   };
 
   const toggleOther = (key: keyof typeof selectedOther) => {
+    if (key === "items" && !itemsEnabled) return;
     setSelectedOther((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
@@ -54,7 +99,11 @@ export default function NewReportingTagPage() {
       alert("Please enter reporting tag name");
       return;
     }
-    setStep(2);
+    if (isEditMode) {
+      updateTag();
+    } else {
+      setStep(2);
+    }
   };
 
   const updateOption = (index: number, value: string) => {
@@ -89,7 +138,11 @@ export default function NewReportingTagPage() {
       });
 
       if (response?.success) {
-        const id = response?.data?._id;
+        let id = response?.data?._id || response?.data?.id;
+        if (!id) {
+          const latest = await reportingTagsAPI.getAll({ page: 1, limit: 1 });
+          id = latest?.data?.[0]?._id || latest?.data?.[0]?.id;
+        }
         navigate(id ? `/settings/customization/reporting-tags/${id}` : "/settings/customization/reporting-tags");
       }
     } catch (error: any) {
@@ -99,74 +152,135 @@ export default function NewReportingTagPage() {
     }
   };
 
+  const updateTag = async () => {
+    if (!tagId || isSaving) return;
+
+    const appliesTo: string[] = [];
+    (Object.keys(selectedPrimary) as PrimaryModule[]).forEach((key) => {
+      if (selectedPrimary[key]) appliesTo.push(key);
+    });
+    (Object.keys(selectedOther) as Array<keyof typeof selectedOther>).forEach((key) => {
+      if (selectedOther[key]) appliesTo.push(key);
+    });
+
+    setIsSaving(true);
+    try {
+      const payload: any = {
+        name: tagName.trim(),
+        description: description.trim(),
+        appliesTo,
+        moduleLevel,
+        isMandatory: mandatory,
+      };
+      const res = await reportingTagsAPI.update(tagId, payload);
+      if (res?.success) {
+        setStep(2);
+      }
+    } catch (error: any) {
+      alert(error?.message || "Failed to update reporting tag");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const saveOptionsOnly = async () => {
+    if (!tagId || isSaving) return;
+    setIsSaving(true);
+    try {
+      const res = await reportingTagsAPI.update(tagId, {
+        options: options.map((o) => o.trim()).filter(Boolean),
+      });
+      if (res?.success) {
+        navigate(`/settings/customization/reporting-tags/${tagId}`);
+      }
+    } catch (error: any) {
+      alert(error?.message || "Failed to update options");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#f3f4f8] flex flex-col">
-      <div className="bg-white border-b border-[#e4e7ef] px-6 py-5">
-        <div className="flex items-center justify-center gap-5">
-          <div className="flex items-center gap-3">
-            <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs ${step === 1 ? "bg-[#3b82f6] text-white" : "border border-[#d4d8e2] text-[#9aa1af]"}`}>
+      <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="flex items-center justify-center gap-5 text-sm">
+          <button
+            type="button"
+            onClick={() => setStep(1)}
+            className="flex items-center gap-2"
+          >
+            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${step === 1 ? "bg-blue-600 text-white" : "border border-gray-300 text-gray-400"}`}>
               1
             </span>
-            <span className={`${step === 1 ? "text-[#111827]" : "text-[#9aa1af]"} text-[24px] font-medium`}>Create Reporting Tag</span>
-          </div>
-          <div className="w-8 border-t border-[#d6dae5]" />
-          <div className="flex items-center gap-3">
-            <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs ${step === 2 ? "bg-[#3b82f6] text-white" : "border border-[#d4d8e2] text-[#c5cad5]"}`}>
+            <span className={`${step === 1 ? "text-gray-900" : "text-gray-400"} font-medium`}>
+              {isEditMode ? "Edit Reporting Tag" : "Create Reporting Tag"}
+            </span>
+          </button>
+          <div className="w-8 border-t border-gray-300" />
+          <button
+            type="button"
+            onClick={() => setStep(2)}
+            className="flex items-center gap-2"
+          >
+            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${step === 2 ? "bg-blue-600 text-white" : "border border-gray-300 text-gray-300"}`}>
               2
             </span>
-            <span className={`${step === 2 ? "text-[#111827]" : "text-[#c5cad5]"} text-[24px] font-medium`}>Configure Options</span>
-          </div>
+            <span className={`${step === 2 ? "text-gray-900" : "text-gray-300"} font-medium`}>Configure Options</span>
+          </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-4">
-        <div className="bg-[#f7f8fb] border border-[#e3e6ef] rounded-xl p-7">
+      <div className="flex-1 overflow-auto p-6">
+        <div className="bg-white border border-gray-200 rounded-lg p-6">
           {step === 1 ? (
             <>
               <div className="space-y-4 max-w-3xl">
-                <div className="grid grid-cols-[210px_1fr] gap-7 items-center">
-                  <label className="text-[#ef4444] text-[24px]">Reporting Tag Name*</label>
+                <div className="grid grid-cols-[200px_1fr] gap-6 items-center">
+                  <label className="text-red-500 text-sm font-medium">Reporting Tag Name*</label>
                   <input
                     value={tagName}
                     onChange={(e) => setTagName(e.target.value)}
-                    className="h-10 max-w-[410px] rounded-md border border-[#cdd3df] bg-white px-3 text-[24px] outline-none focus:border-[#4f8df8]"
+                    className="h-10 max-w-[380px] rounded-md border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
                   />
                 </div>
-                <div className="grid grid-cols-[210px_1fr] gap-7 items-start">
-                  <label className="text-[#111827] text-[24px] pt-2">Description</label>
+                <div className="grid grid-cols-[200px_1fr] gap-6 items-start">
+                  <label className="text-gray-800 text-sm pt-2">Description</label>
                   <textarea
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    className="h-[58px] max-w-[410px] rounded-md border border-[#cdd3df] bg-white px-3 py-2 text-[24px] resize-none outline-none focus:border-[#4f8df8]"
+                    className="h-[60px] max-w-[380px] rounded-md border border-gray-300 bg-white px-3 py-2 text-sm resize-none outline-none focus:border-blue-500"
                   />
                 </div>
               </div>
 
-              <div className="mt-7 pt-5 border-t border-[#dce0ea]">
-                <h2 className="text-[24px] text-[#111827]">Associate This Reporting Tag To</h2>
-                <p className="text-[22px] text-[#64748b] mt-1">You can select the modules for which you want to associate reporting tags.</p>
+              <div className="mt-6 pt-5 border-t border-gray-200">
+                <h2 className="text-sm font-semibold text-gray-900">Associate This Reporting Tag To</h2>
+                <p className="text-sm text-gray-500 mt-1">You can select the modules for which you want to associate reporting tags.</p>
 
-                <div className="mt-4 max-w-[1000px] border border-[#d6dbe7] rounded-xl overflow-hidden grid grid-cols-[250px_1fr] bg-white">
-                  <div className="px-5 py-4 border-r border-[#dde2ec] space-y-2">
+                <div className="mt-4 max-w-[900px] border border-gray-200 rounded-lg overflow-hidden grid grid-cols-[220px_1fr] bg-white">
+                  <div className="px-4 py-4 border-r border-gray-200 space-y-2">
                     {(Object.keys(primaryLabels) as PrimaryModule[]).map((key) => (
-                      <label key={key} className="flex items-center gap-2 cursor-pointer text-[24px]">
+                      <label key={key} className="flex items-center gap-2 cursor-pointer text-sm">
                         <input type="checkbox" checked={selectedPrimary[key]} onChange={() => togglePrimary(key)} className="w-4 h-4" />
                         <span>{primaryLabels[key]}</span>
                       </label>
                     ))}
                   </div>
-                  <div className={`px-5 py-4 bg-[#fbfcff] space-y-4 ${selectedPrimary[activePrimary] ? "" : "opacity-45 pointer-events-none"}`}>
+                  <div className={`px-4 py-4 bg-gray-50 space-y-4 ${selectedPrimary[activePrimary] ? "" : "opacity-45 pointer-events-none"}`}>
                     <label className="flex items-start gap-2 cursor-pointer">
                       <input
                         type="radio"
                         name="module-level"
                         checked={moduleLevel[activePrimary] === "transaction"}
-                        onChange={() => setModuleLevel((prev) => ({ ...prev, [activePrimary]: "transaction" }))}
+                        onChange={() => {
+                          setModuleLevel((prev) => ({ ...prev, [activePrimary]: "transaction" }));
+                          setSelectedOther((prev) => ({ ...prev, items: false }));
+                        }}
                         className="mt-1"
                       />
                       <div>
-                        <div className="text-[24px] text-[#111827]">At Transaction Level</div>
-                        <div className="text-[22px] text-[#64748b]">The reporting tag is applied to the entire transaction.</div>
+                        <div className="text-sm font-medium text-gray-900">At Transaction Level</div>
+                        <div className="text-xs text-gray-500">The reporting tag is applied to the entire transaction.</div>
                       </div>
                     </label>
                     <label className="flex items-start gap-2 cursor-pointer">
@@ -178,40 +292,42 @@ export default function NewReportingTagPage() {
                         className="mt-1"
                       />
                       <div>
-                        <div className="text-[24px] text-[#111827]">At Line Item Level</div>
-                        <div className="text-[22px] text-[#64748b]">The reporting tag is applied to individual line items within a transaction.</div>
+                        <div className="text-sm font-medium text-gray-900">At Line Item Level</div>
+                        <div className="text-xs text-gray-500">The reporting tag is applied to individual line items within a transaction.</div>
                       </div>
                     </label>
                   </div>
                 </div>
 
-                <div className="mt-5 space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer text-[24px]">
+                <div className="mt-4 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer text-sm">
                     <input type="checkbox" checked={selectedOther.customers} onChange={() => toggleOther("customers")} className="w-4 h-4" />
                     <span>Customers</span>
                   </label>
-                  <label className="flex items-center gap-2 cursor-pointer text-[24px]">
-                    <input type="checkbox" checked={selectedOther.vendors} onChange={() => toggleOther("vendors")} className="w-4 h-4" />
-                    <span>Vendors</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer text-[24px]">
-                    <input type="checkbox" checked={selectedOther.items} onChange={() => toggleOther("items")} className="w-4 h-4" />
+                  <label
+                    className={`flex items-center gap-2 text-sm ${
+                      itemsEnabled ? "cursor-pointer" : "cursor-not-allowed opacity-50"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedOther.items}
+                      onChange={() => toggleOther("items")}
+                      className="w-4 h-4"
+                      disabled={!itemsEnabled}
+                    />
                     <span>Items</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer text-[24px]">
-                    <input type="checkbox" checked={selectedOther.banking} onChange={() => toggleOther("banking")} className="w-4 h-4" />
-                    <span>Banking</span>
                   </label>
                 </div>
               </div>
 
-              <div className="mt-7 pt-5 border-t border-[#dce0ea]">
-                <h3 className="text-[24px] text-[#111827]">Configurations</h3>
-                <label className="mt-2 flex items-start gap-2 cursor-pointer">
+              <div className="mt-6 pt-5 border-t border-gray-200">
+                <h3 className="text-sm font-semibold text-gray-900">Configurations</h3>
+                <label className="mt-2 flex items-start gap-2 cursor-pointer text-sm">
                   <input type="checkbox" checked={mandatory} onChange={(e) => setMandatory(e.target.checked)} className="w-4 h-4 mt-1" />
                   <div>
-                    <div className="text-[24px]">Make this reporting tag as mandatory</div>
-                    <div className="text-[22px] text-[#64748b]">
+                    <div className="font-medium text-gray-900">Make this reporting tag as mandatory</div>
+                    <div className="text-xs text-gray-500">
                       Requires you to provide input for the reporting tag field. However, it will be skipped for auto-created transactions and in certain apps where this field is not present.
                     </div>
                   </div>
@@ -220,26 +336,26 @@ export default function NewReportingTagPage() {
             </>
           ) : (
             <div className="max-w-3xl">
-              <h3 className="text-[24px] text-[#111827]">Configure Options</h3>
-              <p className="text-[22px] text-[#64748b] mt-1 mb-4">Add options for the reporting tag: {tagName}</p>
+              <h3 className="text-sm font-semibold text-gray-900">Configure Options</h3>
+              <p className="text-sm text-gray-500 mt-1 mb-4">Add options for the reporting tag: {tagName}</p>
               <div className="space-y-3">
                 {options.map((item, idx) => (
                   <div key={idx} className="flex items-center gap-2">
                     <input
                       value={item}
                       onChange={(e) => updateOption(idx, e.target.value)}
-                      className="h-10 flex-1 rounded-md border border-[#cdd3df] bg-white px-3 text-[22px] outline-none focus:border-[#4f8df8]"
+                      className="h-10 flex-1 rounded-md border border-gray-300 bg-white px-3 text-sm outline-none focus:border-blue-500"
                       placeholder="Enter option"
                     />
                     {options.length > 1 && (
-                      <button onClick={() => removeOption(idx)} className="px-3 py-2 border border-[#cfd4df] rounded-md text-[22px] text-[#4b5563]">
+                      <button onClick={() => removeOption(idx)} className="px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-600">
                         Remove
                       </button>
                     )}
                   </div>
                 ))}
               </div>
-              <button onClick={addOption} className="mt-3 text-[#2563eb] text-[22px]">
+              <button onClick={addOption} className="mt-3 text-blue-600 text-sm">
                 + Add Option
               </button>
             </div>
@@ -247,29 +363,29 @@ export default function NewReportingTagPage() {
         </div>
       </div>
 
-      <div className="bg-white border-t border-[#e4e7ef] px-5 py-3 sticky bottom-0">
+      <div className="bg-white border-t border-gray-200 px-5 py-3 sticky bottom-0">
         {step === 1 ? (
           <div className="flex items-center gap-2">
-            <button onClick={saveAndContinue} className="px-4 py-2 rounded-md bg-[#3b82f6] text-white text-[22px]">
-              Save and Continue
+            <button onClick={saveAndContinue} className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm" disabled={isSaving || loadingEdit}>
+              {isEditMode ? (isSaving ? "Saving..." : "Save and Continue") : "Save and Continue"}
             </button>
-            <button onClick={() => navigate("/settings/customization/reporting-tags")} className="px-4 py-2 rounded-md bg-[#f3f4f6] border border-[#d1d5db] text-[#4b5563] text-[22px]">
+            <button onClick={() => navigate("/settings/customization/reporting-tags")} className="px-4 py-2 rounded-md bg-gray-100 border border-gray-300 text-gray-600 text-sm">
               Cancel
             </button>
           </div>
         ) : (
           <div className="flex items-center gap-2">
             <button
-              onClick={saveTag}
+              onClick={isEditMode ? saveOptionsOnly : saveTag}
               disabled={isSaving}
-              className="px-4 py-2 rounded-md bg-[#3b82f6] text-white text-[22px] disabled:opacity-60"
+              className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm disabled:opacity-60"
             >
               {isSaving ? "Saving..." : "Save"}
             </button>
-            <button onClick={() => setStep(1)} className="px-4 py-2 rounded-md bg-[#f3f4f6] border border-[#d1d5db] text-[#4b5563] text-[22px]">
+            <button onClick={() => setStep(1)} className="px-4 py-2 rounded-md bg-gray-100 border border-gray-300 text-gray-600 text-sm">
               Back
             </button>
-            <button onClick={() => navigate("/settings/customization/reporting-tags")} className="px-4 py-2 rounded-md bg-[#f3f4f6] border border-[#d1d5db] text-[#4b5563] text-[22px]">
+            <button onClick={() => navigate("/settings/customization/reporting-tags")} className="px-4 py-2 rounded-md bg-gray-100 border border-gray-300 text-gray-600 text-sm">
               Cancel
             </button>
           </div>
@@ -278,5 +394,6 @@ export default function NewReportingTagPage() {
     </div>
   );
 }
+
 
 

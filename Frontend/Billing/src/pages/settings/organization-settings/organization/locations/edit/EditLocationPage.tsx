@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { getCurrentUser } from "../../../../../../services/auth";
 import { Upload, X, ChevronDown, ChevronUp, Search, Check, Plus } from "lucide-react";
@@ -63,6 +63,14 @@ export default function EditLocationPage() {
   const userDropdownRef = useRef(null);
   const transactionSeriesDropdownRef = useRef(null);
   const defaultTransactionSeriesDropdownRef = useRef(null);
+
+  // Helper to safely extract a role string from a role value that may be an object
+  const extractRoleString = (role: any): string => {
+    if (!role) return "Admin";
+    if (typeof role === "string") return role;
+    if (typeof role === "object") return role.name || role.code || "Admin";
+    return String(role);
+  };
 
   // Load location data when component mounts
   useEffect(() => {
@@ -308,7 +316,7 @@ export default function EditLocationPage() {
           userId: userId,
           userName: user.name,
           userEmail: user.email,
-          role: user.role || "Admin",
+          role: extractRoleString(user.role),
         }],
       }));
     }
@@ -1151,7 +1159,7 @@ export default function EditLocationPage() {
                                   </button>
                                 </div>
                               </td>
-                              <td className="py-2 px-3 text-gray-700">{access.role || user?.role || "Admin"}</td>
+                               <td className="py-2 px-3 text-gray-700">{extractRoleString(access.role) || extractRoleString(user?.role) || "Admin"}</td>
                             </tr>
                           );
                         })}

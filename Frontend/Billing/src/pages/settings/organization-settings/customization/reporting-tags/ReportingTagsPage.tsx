@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect } from "react";
-import { Plus } from "lucide-react";
+import { Plus, MoreVertical } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { reportingTagsAPI } from "../../../../../services/api";
 
@@ -18,6 +18,7 @@ interface Tag {
 
 export default function ReportingTagsPage() {
   const [tags, setTags] = useState<Tag[]>([]);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   // Load tags from API
   useEffect(() => {
@@ -69,6 +70,8 @@ export default function ReportingTagsPage() {
                 <th className="px-8 py-3.5 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
                   MANDATORY
                 </th>
+                <th className="px-6 py-3.5 text-right text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -88,6 +91,48 @@ export default function ReportingTagsPage() {
                     <span className="text-[13px] text-gray-600">
                       {tag.isMandatory ? 'Yes' : 'No'}
                     </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity relative">
+                      <button
+                        className="text-[13px] text-blue-600 hover:underline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/settings/customization/reporting-tags/${tag._id}/edit`);
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="p-1 rounded hover:bg-gray-100"
+                        title="More"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenMenuId((prev) => (prev === tag._id ? null : tag._id));
+                        }}
+                      >
+                        <MoreVertical size={14} className="text-gray-600" />
+                      </button>
+                      {openMenuId === tag._id && (
+                        <div
+                          className="absolute right-0 top-8 w-40 bg-white border border-gray-200 rounded-md shadow-lg z-20"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            className="w-full text-left px-3 py-2 text-[13px] text-blue-600 hover:bg-gray-50"
+                            onClick={() => setOpenMenuId(null)}
+                          >
+                            Mark as Inactive
+                          </button>
+                          <button
+                            className="w-full text-left px-3 py-2 text-[13px] text-gray-700 hover:bg-gray-50"
+                            onClick={() => setOpenMenuId(null)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
