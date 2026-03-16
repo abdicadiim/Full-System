@@ -1,27 +1,92 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { getCurrentUser } from "../../../../../../services/auth";
-import { Upload, X, ChevronDown, ChevronUp, Search, Check, Plus } from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
+import { 
+  Building2, 
+  MapPin, 
+  Globe, 
+  User, 
+  Phone, 
+  Mail, 
+  ChevronUp, 
+  ChevronDown, 
+  Plus, 
+  X, 
+  Search, 
+  Upload, 
+  Check,
+  Package,
+  ArrowLeft
+} from "lucide-react";
+import { getToken, API_BASE_URL } from "../../../../../../services/auth";
 import {
-  getDemoUsers,
-  getLocationById,
   readLocations,
   writeLocations,
   writeLocationsEnabled,
+  getDemoUsers
 } from "../storage";
 
+interface User {
+  _id?: string;
+  id?: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+  email: string;
+  role: any;
+  image?: string;
+}
+
+interface LocationData {
+  _id?: string;
+  id?: string;
+  type: "Business" | "Warehouse";
+  logo: string;
+  name: string;
+  parentLocation: string;
+  address: {
+    attention: string;
+    street1: string;
+    street2: string;
+    city: string;
+    zipCode: string;
+    country: string;
+    state: string;
+    phone: string;
+    fax: string;
+  };
+  website: string;
+  primaryContact: string;
+  transactionNumberSeriesId: string;
+  defaultTransactionNumberSeriesId: string;
+  locationAccess: Array<{
+    userId: string;
+    userName?: string;
+    userEmail?: string;
+    role?: string;
+  }>;
+}
+
+const extractRoleString = (role: any): string => {
+  if (!role) return "";
+  if (typeof role === 'string') return role;
+  if (typeof role === 'object') {
+    return role.name || role.code || "";
+  }
+  return String(role);
+};
+
 export default function EditLocationPage() {
+  const { id } = useParams();
   const navigate = useNavigate();
-  const { id: routeId } = useParams(); // May be undefined with wrapper route
-  const location = useLocation();
-  const id = routeId || location.pathname.split("/").filter(Boolean).pop() || "";
   const [isLoading, setIsLoading] = useState(true);
-  const [formData, setFormData] = useState({
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [formData, setFormData] = useState<LocationData>({
     type: "Business",
     logo: "Same as Organization Logo",
     name: "",
-    isChildLocation: false,
-    parentLocation: "",
+    parentLocation: "None",
     address: {
       attention: "",
       street1: "",
@@ -35,369 +100,176 @@ export default function EditLocationPage() {
     },
     website: "",
     primaryContact: "",
-    transactionSeries: "",
-    defaultTransactionSeries: "Default Transaction Series",
+    transactionNumberSeriesId: "",
+    defaultTransactionNumberSeriesId: "",
     locationAccess: [],
   });
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState(null);
-  const [users, setUsers] = useState([]);
-  const [logoImage, setLogoImage] = useState(null);
-  const [logoPreview, setLogoPreview] = useState(null);
+
   const [isLogoDropdownOpen, setIsLogoDropdownOpen] = useState(false);
-  const [parentLocations, setParentLocations] = useState([]);
-  const [isParentLocationDropdownOpen, setIsParentLocationDropdownOpen] = useState(false);
-  const [parentLocationSearch, setParentLocationSearch] = useState("");
-  const [allUsers, setAllUsers] = useState([]);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const logoDropdownRef = useRef<HTMLDivElement>(null);
+
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [userSearch, setUserSearch] = useState("");
+  const userDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [isParentDropdownOpen, setIsParentDropdownOpen] = useState(false);
+  const [parentSearch, setParentSearch] = useState("");
+  const parentDropdownRef = useRef<HTMLDivElement>(null);
+
   const [provideAccessToAll, setProvideAccessToAll] = useState(false);
-  const [transactionSeriesList, setTransactionSeriesList] = useState(["Default Transaction Series"]);
-  const [isTransactionSeriesDropdownOpen, setIsTransactionSeriesDropdownOpen] = useState(false);
-  const [isDefaultTransactionSeriesDropdownOpen, setIsDefaultTransactionSeriesDropdownOpen] = useState(false);
-  const [transactionSeriesSearch, setTransactionSeriesSearch] = useState("");
-  const [defaultTransactionSeriesSearch, setDefaultTransactionSeriesSearch] = useState("");
-  const fileInputRef = useRef(null);
-  const logoDropdownRef = useRef(null);
-  const parentLocationDropdownRef = useRef(null);
-  const userDropdownRef = useRef(null);
-  const transactionSeriesDropdownRef = useRef(null);
-  const defaultTransactionSeriesDropdownRef = useRef(null);
 
-  // Helper to safely extract a role string from a role value that may be an object
-  const extractRoleString = (role: any): string => {
-    if (!role) return "Admin";
-    if (typeof role === "string") return role;
-    if (typeof role === "object") return role.name || role.code || "Admin";
-    return String(role);
-  };
-
-  // Load location data when component mounts
   useEffect(() => {
-    setIsLoading(true);
-    try {
-      const localLocation = getLocationById(String(id));
-      if (!localLocation) {
-        setError('Location not found');
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        const token = getToken();
+        
+        // Fetch users from API if possible, otherwise use demo users
+        let fetchedUsers: User[] = [];
+        try {
+            if (token) {
+                const userResponse = await fetch(`${API_BASE_URL}/users`, {
+                    headers: { 'Authorization': `Bearer ${token}` },
+                });
+                if (userResponse.ok) {
+                    const data = await userResponse.json();
+                    if (data.success) fetchedUsers = data.data || [];
+                }
+            }
+        } catch (e) {
+            console.warn("API User fetch failed, using demo data");
+        }
+        
+        if (fetchedUsers.length === 0) {
+            fetchedUsers = getDemoUsers() as any;
+        }
+        setAllUsers(fetchedUsers);
+
+        // Load location data
+        const existingLocations = readLocations();
+        const locationToEdit = existingLocations.find(loc => String(loc._id || loc.id) === String(id));
+
+        if (locationToEdit) {
+          setFormData({
+            ...locationToEdit,
+            address: {
+              ...locationToEdit.address,
+            }
+          } as any);
+          if (locationToEdit.logo && locationToEdit.logo !== "Same as Organization Logo" && locationToEdit.logo !== "Upload a New Logo") {
+            setLogoPreview(locationToEdit.logo);
+          }
+        } else {
+          setError("Location not found.");
+        }
+      } catch (err) {
+        console.error("Error fetching data:", err);
+        setError("Failed to load data.");
+      } finally {
         setIsLoading(false);
-        return;
       }
+    };
 
-      const currentUser = getCurrentUser();
-      const demoUsers = getDemoUsers(currentUser);
-      let website = "";
-      if (localLocation.notes && String(localLocation.notes).includes("Website: ")) {
-        website = String(localLocation.notes).split("Website: ")[1].split("\n")[0].trim();
-      }
+    fetchData();
+  }, [id, navigate]);
 
-      const isChild = !!localLocation.parentLocation;
-      let logoOption = "Same as Organization Logo";
-      let preview = null;
-      if (localLocation.logo && String(localLocation.logo).trim()) {
-        logoOption = "Upload a New Logo";
-        preview = localLocation.logo;
-      }
-
-      const matchedPrimaryContact =
-        demoUsers.find((u: any) => u.email === localLocation.contactPerson?.email)?.id || demoUsers[0]?.id || "";
-
-      setUsers(demoUsers);
-      setAllUsers(demoUsers);
-      setLogoPreview(preview);
-      setFormData({
-        type: localLocation.type || "Business",
-        logo: logoOption,
-        name: localLocation.name || "",
-        isChildLocation: isChild,
-        parentLocation: localLocation.parentLocation ? String(localLocation.parentLocation) : "",
-        address: {
-          attention: localLocation.address?.attention || "",
-          street1: localLocation.address?.street1 || "",
-          street2: localLocation.address?.street2 || "",
-          city: localLocation.address?.city || "",
-          zipCode: localLocation.address?.zipCode || "",
-          country: localLocation.address?.country || "United Kingdom",
-          state: localLocation.address?.state || "",
-          phone: localLocation.address?.phone || "",
-          fax: localLocation.address?.fax || "",
-        },
-        website,
-        primaryContact: matchedPrimaryContact,
-        transactionSeries: localLocation.defaultTransactionSeries || "",
-        defaultTransactionSeries: localLocation.defaultTransactionSeries || "Default Transaction Series",
-        locationAccess: [],
-      });
-      setError(null);
-    } catch (error) {
-      console.error('Error loading location:', error);
-      setError('An error occurred while loading the location');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [id]);
-
-
-
-  // Load parent locations (same logic as AddLocationPage)
   useEffect(() => {
-    if (formData.type === "Business" && !formData.isChildLocation) {
-      setParentLocations([]);
-      return;
-    }
-
-    setParentLocations(
-      readLocations().filter((loc: any) => String(loc?._id || loc?.id) !== String(id) && loc?.isActive !== false)
-    );
-  }, [formData.type, formData.isChildLocation, id]);
-
-  // Close dropdowns when clicking outside (same as AddLocationPage)
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (logoDropdownRef.current && !logoDropdownRef.current.contains(event.target)) {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (logoDropdownRef.current && !logoDropdownRef.current.contains(event.target as Node)) {
         setIsLogoDropdownOpen(false);
       }
-      if (parentLocationDropdownRef.current && !parentLocationDropdownRef.current.contains(event.target)) {
-        setIsParentLocationDropdownOpen(false);
-      }
-      if (userDropdownRef.current && !userDropdownRef.current.contains(event.target)) {
+      if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
         setIsUserDropdownOpen(false);
       }
-      if (transactionSeriesDropdownRef.current && !transactionSeriesDropdownRef.current.contains(event.target)) {
-        setIsTransactionSeriesDropdownOpen(false);
-      }
-      if (defaultTransactionSeriesDropdownRef.current && !defaultTransactionSeriesDropdownRef.current.contains(event.target)) {
-        setIsDefaultTransactionSeriesDropdownOpen(false);
+      if (parentDropdownRef.current && !parentDropdownRef.current.contains(event.target as Node)) {
+        setIsParentDropdownOpen(false);
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Handle form changes (same as AddLocationPage)
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-
-    if (name.startsWith('address.')) {
-      const addressField = name.split('.')[1];
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    if (name.includes('.')) {
+      const [parent, child] = name.split('.');
       setFormData(prev => ({
         ...prev,
-        address: {
-          ...prev.address,
-          [addressField]: value,
-        },
+        [parent]: {
+          ...(prev[parent as keyof LocationData] as any),
+          [child]: value
+        }
       }));
-    } else if (name === 'isChildLocation') {
-      setFormData(prev => ({
-        ...prev,
-        [name]: checked,
-        parentLocation: checked ? prev.parentLocation : "",
-      }));
-    } else if (name === 'type') {
-      setFormData(prev => ({
-        ...prev,
-        [name]: value,
-        isChildLocation: value === "Warehouse" ? false : prev.isChildLocation,
-        logo: value === "Warehouse" ? "Same as Organization Logo" : prev.logo,
-        transactionSeries: value === "Warehouse" ? "" : prev.transactionSeries,
-        defaultTransactionSeries: value === "Warehouse" ? "Default Transaction Series" : prev.defaultTransactionSeries,
-        website: value === "Warehouse" ? prev.website : prev.website,
-        primaryContact: value === "Warehouse" ? prev.primaryContact : prev.primaryContact,
-      }));
-      setLogoImage(null);
-      setLogoPreview(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
     } else {
-      setFormData(prev => ({
-        ...prev,
-        [name]: type === 'checkbox' ? checked : value,
-      }));
+      setFormData(prev => ({ ...prev, [name]: value }));
     }
   };
 
-  // Handle logo dropdown (same as AddLocationPage)
-  const handleLogoOptionSelect = (option) => {
+  const handleLogoOptionSelect = (option: string) => {
     setFormData(prev => ({ ...prev, logo: option }));
     setIsLogoDropdownOpen(false);
-
-    if (option === "Upload a New Logo") {
-      fileInputRef.current?.click();
-    } else {
-      setLogoImage(null);
-      setLogoPreview(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    }
   };
 
-  // Handle logo upload (same as AddLocationPage)
-  const handleLogoUpload = (e) => {
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      setError('Please select an image file');
-      return;
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setLogoPreview(reader.result as string);
+        setFormData(prev => ({ ...prev, logo: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
     }
-
-    // Validate file size (1MB)
-    if (file.size > 1024 * 1024) {
-      setError('Logo file size must be less than 1MB');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = reader.result;
-      setLogoPreview(base64String);
-    };
-    reader.readAsDataURL(file);
-    setLogoImage(file);
   };
 
-  // Handle logo click
   const handleLogoClick = () => {
-    if (!logoPreview) {
-      fileInputRef.current?.click();
-    }
+    fileInputRef.current?.click();
   };
 
-  // Handle remove logo
   const handleRemoveLogo = () => {
-    setLogoImage(null);
     setLogoPreview(null);
     setFormData(prev => ({ ...prev, logo: "Same as Organization Logo" }));
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
   };
 
-  // Handle parent location selection (same as AddLocationPage)
-  const handleParentLocationSelect = (locationId) => {
-    setFormData(prev => ({ ...prev, parentLocation: locationId }));
-    setIsParentLocationDropdownOpen(false);
-    setParentLocationSearch("");
-  };
-
-  // Handle transaction series selection (same as AddLocationPage)
-  const handleTransactionSeriesSelect = (series) => {
-    setFormData(prev => ({ ...prev, transactionSeries: series }));
-    setIsTransactionSeriesDropdownOpen(false);
-    setTransactionSeriesSearch("");
-  };
-
-  // Handle default transaction series selection (same as AddLocationPage)
-  const handleDefaultTransactionSeriesSelect = (series) => {
-    setFormData(prev => ({ ...prev, defaultTransactionSeries: series }));
-    setIsDefaultTransactionSeriesDropdownOpen(false);
-    setDefaultTransactionSeriesSearch("");
-  };
-
-  // Handle add new transaction series (same as AddLocationPage)
-  const handleAddTransactionSeries = () => {
-    navigate('/settings/customization/transaction-number-series');
-    setIsTransactionSeriesDropdownOpen(false);
-    setIsDefaultTransactionSeriesDropdownOpen(false);
-  };
-
-  // Handle user selection (same as AddLocationPage)
-  const handleUserSelect = (userId) => {
+  const handleUserSelect = (userId: string) => {
     const user = allUsers.find(u => (u._id || u.id) === userId);
     if (user && !formData.locationAccess.find(access => access.userId === userId)) {
       setFormData(prev => ({
         ...prev,
-        locationAccess: [...prev.locationAccess, {
-          userId: userId,
-          userName: user.name,
-          userEmail: user.email,
-          role: extractRoleString(user.role),
-        }],
+        locationAccess: [
+          ...prev.locationAccess,
+          {
+            userId,
+            userName: user.name || `${user.firstName} ${user.lastName}`,
+            userEmail: user.email,
+            role: extractRoleString(user.role),
+          }
+        ]
       }));
     }
     setIsUserDropdownOpen(false);
-    setUserSearch("");
   };
 
-  // Handle remove user (same as AddLocationPage)
-  const handleRemoveUser = (userId) => {
+  const handleRemoveUser = (userId: string) => {
     setFormData(prev => ({
       ...prev,
-      locationAccess: prev.locationAccess.filter(access => access.userId !== userId),
+      locationAccess: prev.locationAccess.filter(access => access.userId !== userId)
     }));
   };
 
-  // Filter functions (same as AddLocationPage)
-  const filteredParentLocations = parentLocations.filter(location =>
-    location.name.toLowerCase().includes(parentLocationSearch.toLowerCase())
-  );
-
-  const filteredTransactionSeries = transactionSeriesList.filter(series =>
-    series.toLowerCase().includes(transactionSeriesSearch.toLowerCase())
-  );
-
-  const filteredDefaultTransactionSeries = transactionSeriesList.filter(series =>
-    series.toLowerCase().includes(defaultTransactionSeriesSearch.toLowerCase())
-  );
-
-  const filteredUsers = allUsers.filter(user =>
-    (user.name?.toLowerCase().includes(userSearch.toLowerCase()) ||
-     user.email?.toLowerCase().includes(userSearch.toLowerCase()))
-  );
-
-  const selectedParentLocation = parentLocations.find(loc => loc._id === formData.parentLocation);
-
-  // Handle form submission - UPDATE instead of CREATE
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setIsSaving(true);
+    if (!formData.name) {
+      setError("Location name is required.");
+      return;
+    }
 
     try {
-      if (!formData.name.trim()) {
-        setError('Location name is required');
-        setIsSaving(false);
-        return;
-      }
-
-      // Validate parent location for Warehouse or Business child location
-      if ((formData.type === "Warehouse" || (formData.type === "Business" && formData.isChildLocation)) && !formData.parentLocation) {
-        setError('Parent Location is required');
-        setIsSaving(false);
-        return;
-      }
-
-      const selectedUser = users.find(u => (u._id || u.id) === formData.primaryContact);
-      
-      const locationData = {
-        name: formData.name.trim(),
-        type: formData.type === "Warehouse" ? "Warehouse" : "Business",
-        address: {
-          attention: formData.address.attention || "",
-          street1: formData.address.street1 || "",
-          street2: formData.address.street2 || "",
-          city: formData.address.city || "",
-          zipCode: formData.address.zipCode || "",
-          country: formData.address.country || "United Kingdom",
-          state: formData.address.state || "",
-          phone: formData.address.phone || "",
-          fax: formData.address.fax || "",
-        },
-        defaultTransactionSeries: formData.defaultTransactionSeries || "Default Transaction Series",
-        contactPerson: {
-          name: selectedUser?.name || "",
-          email: selectedUser?.email || "",
-          phone: formData.address.phone || "",
-        },
-        notes: formData.website ? `Website: ${formData.website}` : "",
-        parentLocation: (formData.type === "Warehouse" || (formData.type === "Business" && formData.isChildLocation)) ? formData.parentLocation : null,
-        logo: formData.type === "Business" && formData.logo === "Upload a New Logo" && logoPreview ? logoPreview : "",
-      };
+      setIsSaving(true);
+      setError(null);
       const existingRows = readLocations();
       const now = new Date().toISOString();
       const nextRows = Array.isArray(existingRows)
@@ -405,9 +277,7 @@ export default function EditLocationPage() {
             String(row?._id || row?.id) === String(id)
               ? {
                   ...row,
-                  ...locationData,
-                  _id: String(row?._id || row?.id || id),
-                  id: String(row?._id || row?.id || id),
+                  ...formData,
                   updatedAt: now,
                 }
               : row
@@ -417,7 +287,7 @@ export default function EditLocationPage() {
       writeLocations(nextRows);
       writeLocationsEnabled(true);
       navigate('/settings/locations');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating location:', error);
       setError(error.message || 'An error occurred while updating the location. Please try again.');
     } finally {
@@ -429,769 +299,461 @@ export default function EditLocationPage() {
     navigate('/settings/locations');
   };
 
+  const filteredUsers = allUsers.filter(user => 
+    (user.name || `${user.firstName} ${user.lastName}` || '').toLowerCase().includes(userSearch.toLowerCase()) ||
+    (user.email || '').toLowerCase().includes(userSearch.toLowerCase())
+  );
+
   if (isLoading) {
     return (
-      <div className="w-full h-full p-6">
-        <div className="text-center py-8">
-          <div className="text-gray-500">Loading location data...</div>
-        </div>
+      <div className="w-full h-full p-6 bg-gray-50 flex items-center justify-center">
+        <div className="text-gray-500 animate-pulse font-medium">Loading location data...</div>
       </div>
     );
   }
 
   return (
-    <div className="w-full h-full p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Update Location</h1>
+    <div className="w-full h-full p-6 bg-gray-50">
+      <div className="mb-6 flex items-center gap-4">
+        <button 
+            onClick={handleCancel}
+            className="p-1 hover:bg-gray-200 rounded-full transition-colors"
+        >
+            <ArrowLeft size={20} className="text-gray-600" />
+        </button>
+        <h1 className="text-xl font-semibold text-gray-900">Update Location</h1>
       </div>
 
       {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
           {error}
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Location Type Section */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-sm font-semibold text-gray-900 mb-4">Location Type</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <label className={`relative flex flex-col p-4 border-2 rounded-lg cursor-pointer transition ${
-              formData.type === "Business" 
-                ? "border-blue-500 bg-blue-50" 
-                : "border-gray-200 hover:border-gray-300"
-            }`}>
-              <div className="flex items-center gap-3 mb-2">
-                <input
-                  type="radio"
-                  name="type"
-                  value="Business"
-                  checked={formData.type === "Business"}
-                  onChange={handleChange}
-                  className="w-4 h-4 text-blue-600"
-                />
-                <span className="text-sm font-medium text-gray-900">Business Location</span>
-              </div>
-              <p className="text-xs text-gray-600 ml-7">
-                A Business Location represents your organization or office's operational location. It is used to record transactions, assess regional performance, and monitor stock levels for items stored at this location.
-              </p>
-            </label>
-
-            <label className={`relative flex flex-col p-4 border-2 rounded-lg cursor-pointer transition ${
-              formData.type === "Warehouse" 
-                ? "border-blue-500 bg-blue-50" 
-                : "border-gray-200 hover:border-gray-300"
-            }`}>
-              <div className="flex items-center gap-3 mb-2">
-                <input
-                  type="radio"
-                  name="type"
-                  value="Warehouse"
-                  checked={formData.type === "Warehouse"}
-                  onChange={handleChange}
-                  className="w-4 h-4 text-blue-600"
-                />
-                <span className="text-sm font-medium text-gray-900">Warehouse Only Location</span>
-              </div>
-              <p className="text-xs text-gray-600 ml-7">
-                A Warehouse Only Location refers to where your items are stored. It helps track and monitor stock levels for items stored at this location.
-              </p>
-            </label>
-          </div>
-        </div>
-
-        {/* Logo Field - Only show for Business Location */}
-        {formData.type === "Business" && (
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm max-w-5xl">
+        <form onSubmit={handleSubmit}>
+          {/* Location Type Section */}
+          <div className="px-6 py-4 border-b border-gray-200">
             <div className="grid grid-cols-3 gap-4">
-              <label className="text-sm font-medium text-gray-700">Logo</label>
-              <div className="col-span-2 space-y-4">
-              {/* Logo Dropdown */}
-              <div className="relative" ref={logoDropdownRef}>
-                <button
-                  type="button"
-                  onClick={() => setIsLogoDropdownOpen(!isLogoDropdownOpen)}
-                  className="w-full px-3 py-2 border border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-white"
-                >
-                  <span>{formData.logo}</span>
-                  {isLogoDropdownOpen ? (
-                    <ChevronUp size={16} className="text-gray-500" />
-                  ) : (
-                    <ChevronDown size={16} className="text-gray-500" />
-                  )}
-                </button>
-
-                {isLogoDropdownOpen && (
-                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
-                    <div className="p-2 border-b border-gray-200">
-                      <div className="relative">
-                        <Search size={16} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                        <input
-                          type="text"
-                          placeholder="Search"
-                          className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                          onClick={(e) => e.stopPropagation()}
-                          onFocus={(e) => e.stopPropagation()}
-                          readOnly
-                        />
+              <label className="text-sm font-medium text-gray-700 pt-2">Location Type</label>
+              <div className="col-span-2">
+                <div className="grid grid-cols-2 gap-4">
+                  <label className={`relative flex flex-col p-4 border rounded-lg cursor-pointer transition ${
+                    formData.type === "Business"
+                      ? "border-blue-500 bg-blue-50/30"
+                      : "border-gray-200 hover:border-gray-300"
+                  }`}>
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                          formData.type === "Business" ? "border-blue-500" : "border-gray-300"
+                      }`}>
+                          {formData.type === "Business" && <div className="w-2 h-2 rounded-full bg-blue-500"></div>}
                       </div>
+                      <input type="radio" name="type" value="Business" checked={formData.type === "Business"} onChange={handleChange} className="hidden" />
+                      <span className="text-sm font-medium text-gray-900">Business Location</span>
                     </div>
-                    <div className="py-1">
-                      <button
-                        type="button"
-                        onClick={() => handleLogoOptionSelect("Same as Organization Logo")}
-                        className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between ${
-                          formData.logo === "Same as Organization Logo" ? "bg-blue-50" : ""
-                        }`}
-                      >
-                        <span>Same as Organization Logo</span>
-                        {formData.logo === "Same as Organization Logo" && (
-                          <Check size={16} className="text-blue-600" />
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleLogoOptionSelect("Upload a New Logo")}
-                        className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between ${
-                          formData.logo === "Upload a New Logo" ? "bg-blue-50" : ""
-                        }`}
-                      >
-                        <span>Upload a New Logo</span>
-                        {formData.logo === "Upload a New Logo" && (
-                          <Check size={16} className="text-blue-600" />
-                        )}
-                      </button>
+                    <p className="text-[11px] leading-relaxed text-gray-500 ml-7">A Business Location represents your organization or office's operational location. It is used to record transactions, assess regional performance, and monitor stock levels for items stored at this location.</p>
+                  </label>
+                  <label className={`relative flex flex-col p-4 border rounded-lg cursor-pointer transition ${
+                    formData.type === "Warehouse"
+                      ? "border-blue-500 bg-blue-50/30"
+                      : "border-gray-200 hover:border-gray-300"
+                  }`}>
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                          formData.type === "Warehouse" ? "border-blue-500" : "border-gray-300"
+                      }`}>
+                          {formData.type === "Warehouse" && <div className="w-2 h-2 rounded-full bg-blue-500"></div>}
+                      </div>
+                      <input type="radio" name="type" value="Warehouse" checked={formData.type === "Warehouse"} onChange={handleChange} className="hidden" />
+                      <span className="text-sm font-medium text-gray-900">Warehouse Only Location</span>
                     </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Logo Upload Area - Show when "Upload a New Logo" is selected */}
-              {formData.logo === "Upload a New Logo" && (
-                <div className="space-y-4">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/jpeg,image/jpg,image/png,image/gif,image/bmp"
-                    onChange={handleLogoUpload}
-                    className="hidden"
-                  />
-                  <div 
-                    className="w-full border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-blue-500 transition relative bg-gray-50 p-8"
-                    onClick={handleLogoClick}
-                  >
-                    {logoPreview ? (
-                      <>
-                        <img 
-                          src={logoPreview} 
-                          alt="Logo preview" 
-                          className="max-w-full max-h-48 object-contain mb-2"
-                        />
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveLogo();
-                          }}
-                          className="mt-2 px-4 py-2 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600 transition"
-                        >
-                          Remove Logo
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <Upload size={32} className="text-gray-400 mb-2" />
-                        <p className="text-sm font-medium text-gray-700">Upload your Location Logo</p>
-                      </>
-                    )}
-                  </div>
-                  <div className="text-xs text-gray-500 space-y-1">
-                    <p>This logo will be displayed in transaction PDFs and email notifications.</p>
-                    <p>Preferred Image Dimensions: 240 x 240 pixels @ 72 DPI</p>
-                    <p>Supported Files: jpg, jpeg, png, gif, bmp</p>
-                    <p>Maximum File Size: 1MB</p>
-                  </div>
+                    <p className="text-[11px] leading-relaxed text-gray-500 ml-7">A Warehouse Only Location refers to where your items are stored. It helps track and monitor stock levels for items stored at this location.</p>
+                  </label>
                 </div>
-              )}
               </div>
             </div>
           </div>
-        )}
 
-        {/* Name Field */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="grid grid-cols-3 gap-4">
-            <label className="text-sm font-medium text-gray-700 flex items-center">
-              Name<span className="text-red-500 ml-1">*</span>
-            </label>
-            <div className="col-span-2 space-y-3">
+          {/* Logo Section */}
+          {formData.type === "Business" && (
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="grid grid-cols-3 gap-4">
+                <label className="text-sm font-medium text-gray-700 pt-2">Logo</label>
+                <div className="col-span-2 space-y-3">
+                  <div className="relative" ref={logoDropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => setIsLogoDropdownOpen(!isLogoDropdownOpen)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-white transition-colors"
+                    >
+                      <span className={formData.logo?.startsWith("data:") ? "text-blue-600 font-medium" : "text-gray-700"}>
+                          {formData.logo?.startsWith("data:") ? "Custom Logo Uploaded" : (formData.logo || "Select Logo Option")}
+                      </span>
+                      {isLogoDropdownOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    </button>
+
+                    {isLogoDropdownOpen && (
+                      <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg overflow-hidden">
+                        <div className="py-1">
+                          <button
+                            type="button"
+                            onClick={() => handleLogoOptionSelect("Same as Organization Logo")}
+                            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between"
+                          >
+                            <span>Same as Organization Logo</span>
+                            {formData.logo === "Same as Organization Logo" && <Check size={14} className="text-blue-600" />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                                handleLogoOptionSelect("Upload a New Logo");
+                                handleLogoClick();
+                            }}
+                            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between"
+                          >
+                            <span>Upload a New Logo</span>
+                            {formData.logo !== "Same as Organization Logo" && formData.logo !== "" && <Check size={14} className="text-blue-600" />}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {(formData.logo !== "Same as Organization Logo" || logoPreview) && (
+                    <div className="mt-2 flex items-center gap-4 p-3 border border-gray-100 rounded bg-gray-50/50">
+                      <div className="w-16 h-16 border border-gray-200 rounded bg-white flex items-center justify-center overflow-hidden">
+                        {logoPreview ? (
+                          <img src={logoPreview} alt="Logo" className="max-w-full max-h-full object-contain" />
+                        ) : (
+                          <Building2 size={24} className="text-gray-300" />
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <button type="button" onClick={handleLogoClick} className="text-xs text-blue-600 font-medium hover:underline">Change Logo</button>
+                        <button type="button" onClick={handleRemoveLogo} className="text-xs text-red-500 font-medium hover:underline">Remove</button>
+                      </div>
+                      <input ref={fileInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Name Section */}
+          <div className="px-6 py-4 border-b border-gray-200">
+            <div className="grid grid-cols-3 gap-4 items-center">
+              <label className="text-sm font-medium text-gray-700">Location Name*</label>
               <input
                 type="text"
                 name="name"
                 value={formData.name}
                 onChange={handleChange}
-                placeholder="Location Name"
+                placeholder="Name"
+                className="col-span-2 px-3 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               />
-              {/* Only show checkbox for Business Location */}
-              {formData.type === "Business" && (
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    name="isChildLocation"
-                    checked={formData.isChildLocation}
-                    onChange={handleChange}
-                    className="w-4 h-4 text-blue-600 rounded"
-                  />
-                  <span className="text-sm text-gray-700">This is a Child Location</span>
-                </label>
-              )}
             </div>
           </div>
-        </div>
 
-        {/* Parent Location Field - Show for Warehouse or Business Location when checkbox is checked */}
-        {(formData.type === "Warehouse" || (formData.type === "Business" && formData.isChildLocation)) && (
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
+          {/* Parent Location Section */}
+          <div className="px-6 py-4 border-b border-gray-200">
             <div className="grid grid-cols-3 gap-4 items-center">
-              <label className="text-sm font-medium text-gray-700 flex items-center">
-                Parent Location<span className="text-red-500 ml-1">*</span>
-              </label>
-              <div className="col-span-2 relative" ref={parentLocationDropdownRef}>
+              <label className="text-sm font-medium text-gray-700">Parent Location</label>
+              <div className="col-span-2 relative" ref={parentDropdownRef}>
                 <button
                   type="button"
-                  onClick={() => setIsParentLocationDropdownOpen(!isParentLocationDropdownOpen)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-white"
+                  onClick={() => setIsParentDropdownOpen(!isParentDropdownOpen)}
+                  className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm text-left flex items-center justify-between bg-white"
                 >
-                  <span className={selectedParentLocation ? "text-gray-900" : "text-gray-500"}>
-                    {selectedParentLocation ? selectedParentLocation.name : "Select Location"}
-                  </span>
-                  {isParentLocationDropdownOpen ? (
-                    <ChevronUp size={16} className="text-gray-500" />
-                  ) : (
-                    <ChevronDown size={16} className="text-gray-500" />
-                  )}
+                  <span className="text-gray-700">{formData.parentLocation || "None"}</span>
+                  <ChevronDown size={14} className="text-gray-400" />
                 </button>
-
-                {isParentLocationDropdownOpen && (
-                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    <div className="p-2 border-b border-gray-200 sticky top-0 bg-white">
-                      <div className="relative">
-                        <Search size={16} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                        <input
-                          type="text"
-                          placeholder="Search"
-                          value={parentLocationSearch}
-                          onChange={(e) => setParentLocationSearch(e.target.value)}
-                          className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                          onClick={(e) => e.stopPropagation()}
-                        />
+                {isParentDropdownOpen && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg overflow-hidden">
+                      <div className="p-2 border-b border-gray-100">
+                          <div className="relative">
+                            <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input 
+                                type="text" 
+                                placeholder="Search" 
+                                className="w-full pl-8 pr-3 py-1 text-sm border-none focus:ring-0" 
+                                value={parentSearch}
+                                onChange={(e) => setParentSearch(e.target.value)}
+                            />
+                          </div>
                       </div>
-                    </div>
-                    <div className="py-1">
-                      {filteredParentLocations.length === 0 ? (
-                        <div className="px-3 py-2 text-sm text-gray-500 text-center">NO RESULTS FOUND</div>
-                      ) : (
-                        filteredParentLocations.map((location) => (
-                          <button
-                            key={location._id}
-                            type="button"
-                            onClick={() => handleParentLocationSelect(location._id)}
-                            className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between ${
-                              formData.parentLocation === location._id ? "bg-blue-50" : ""
-                            }`}
+                      <div className="max-h-48 overflow-y-auto py-1">
+                          <button 
+                            type="button" 
+                            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between"
+                            onClick={() => { setFormData(prev => ({ ...prev, parentLocation: "None" })); setIsParentDropdownOpen(false); }}
                           >
-                            <span>{location.name}</span>
-                            {formData.parentLocation === location._id && (
-                              <Check size={16} className="text-blue-600" />
-                            )}
+                              <span>None</span>
+                              {formData.parentLocation === "None" && <Check size={14} className="text-blue-600" />}
                           </button>
-                        ))
-                      )}
-                    </div>
+                      </div>
                   </div>
                 )}
               </div>
             </div>
           </div>
-        )}
 
-        {/* Address Section */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-sm font-semibold text-gray-900 mb-4">Address</h2>
-          <div className="space-y-4">
+          {/* Address Section */}
+          <div className="px-6 py-4 border-b border-gray-200">
             <div className="grid grid-cols-3 gap-4">
-              <label className="text-sm font-medium text-gray-700">Attention</label>
-              <input
-                type="text"
-                name="address.attention"
-                value={formData.address.attention}
-                onChange={handleChange}
-                placeholder="Attention"
-                className="col-span-2 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              />
-            </div>
-
-            <div className="grid grid-cols-3 gap-4">
-              <label className="text-sm font-medium text-gray-700">Street 1</label>
-              <input
-                type="text"
-                name="address.street1"
-                value={formData.address.street1}
-                onChange={handleChange}
-                placeholder="Street 1"
-                className="col-span-2 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              />
-            </div>
-
-            <div className="grid grid-cols-3 gap-4">
-              <label className="text-sm font-medium text-gray-700">Street 2</label>
-              <input
-                type="text"
-                name="address.street2"
-                value={formData.address.street2}
-                onChange={handleChange}
-                placeholder="Street 2"
-                className="col-span-2 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              />
-            </div>
-
-            <div className="grid grid-cols-3 gap-4">
-              <label className="text-sm font-medium text-gray-700">City</label>
-              <div className="col-span-2 grid grid-cols-2 gap-4">
-                <input
-                  type="text"
-                  name="address.city"
-                  value={formData.address.city}
-                  onChange={handleChange}
-                  placeholder="City"
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                />
-                <input
-                  type="text"
-                  name="address.zipCode"
-                  value={formData.address.zipCode}
-                  onChange={handleChange}
-                  placeholder="ZIP/Postal Code"
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                />
+              <label className="text-sm font-medium text-gray-700 pt-2">Address</label>
+              <div className="col-span-2 space-y-3">
+                <div className="grid grid-cols-3 gap-4 items-center">
+                    <label className="text-xs text-gray-500">Attention</label>
+                    <input type="text" name="address.attention" value={formData.address.attention} onChange={handleChange} placeholder="Attention" className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm" />
+                </div>
+                <div className="grid grid-cols-3 gap-4 items-center">
+                    <label className="text-xs text-gray-500">Street 1</label>
+                    <input type="text" name="address.street1" value={formData.address.street1} onChange={handleChange} placeholder="Street 1" className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm" />
+                </div>
+                <div className="grid grid-cols-3 gap-4 items-center">
+                    <label className="text-xs text-gray-500">Street 2</label>
+                    <input type="text" name="address.street2" value={formData.address.street2} onChange={handleChange} placeholder="Street 2" className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm" />
+                </div>
+                <div className="grid grid-cols-3 gap-4 items-center">
+                    <label className="text-xs text-gray-500">City / Zip</label>
+                    <div className="col-span-2 grid grid-cols-2 gap-2">
+                        <input type="text" name="address.city" value={formData.address.city} onChange={handleChange} placeholder="City" className="px-3 py-1.5 border border-gray-300 rounded text-sm" />
+                        <input type="text" name="address.zipCode" value={formData.address.zipCode} onChange={handleChange} placeholder="ZIP Code" className="px-3 py-1.5 border border-gray-300 rounded text-sm" />
+                    </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4 items-center">
+                    <label className="text-xs text-gray-500">Country</label>
+                    <select name="address.country" value={formData.address.country} onChange={handleChange} className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm bg-white">
+                        <option value="United Kingdom">United Kingdom</option>
+                        <option value="United States">United States</option>
+                        <option value="Uganda">Uganda</option>
+                        <option value="Kenya">Kenya</option>
+                    </select>
+                </div>
+                <div className="grid grid-cols-3 gap-4 items-center">
+                    <label className="text-xs text-gray-500">State / Phone</label>
+                    <div className="col-span-2 grid grid-cols-2 gap-2">
+                        <input type="text" name="address.state" value={formData.address.state} onChange={handleChange} placeholder="State" className="px-3 py-1.5 border border-gray-300 rounded text-sm" />
+                        <input type="text" name="address.phone" value={formData.address.phone} onChange={handleChange} placeholder="Phone" className="px-3 py-1.5 border border-gray-300 rounded text-sm" />
+                    </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4 items-center">
+                    <label className="text-xs text-gray-500">Fax</label>
+                    <input type="text" name="address.fax" value={formData.address.fax} onChange={handleChange} placeholder="Fax" className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm" />
+                </div>
               </div>
             </div>
+          </div>
 
-            <div className="grid grid-cols-3 gap-4">
-              <label className="text-sm font-medium text-gray-700">Country</label>
-              <select
-                name="address.country"
-                value={formData.address.country}
+          <div className="px-6 py-4 border-b border-gray-200">
+            <div className="grid grid-cols-3 gap-4 items-center">
+              <label className="text-sm font-medium text-gray-700">Website URL</label>
+              <input
+                type="url"
+                name="website"
+                value={formData.website}
                 onChange={handleChange}
-                className="col-span-2 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                placeholder="https://example.com"
+                className="col-span-2 px-3 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="px-6 py-4 border-b border-gray-200">
+            <div className="grid grid-cols-3 gap-4 items-center">
+              <label className="text-sm font-medium text-gray-700">Primary Contact*</label>
+              <select
+                name="primaryContact"
+                value={formData.primaryContact}
+                onChange={handleChange}
+                className="col-span-2 px-3 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm bg-white"
               >
-                <option value="United Kingdom">United Kingdom</option>
-                <option value="United States">United States</option>
-                <option value="Canada">Canada</option>
-                <option value="Australia">Australia</option>
-                <option value="Germany">Germany</option>
-                <option value="France">France</option>
-                <option value="India">India</option>
-                <option value="Kenya">Kenya</option>
+                <option value="">Select Primary Contact</option>
+                {allUsers.map(u => (
+                  <option key={u._id || u.id} value={u._id || u.id}>{u.name || `${u.firstName} ${u.lastName}`} ({u.email})</option>
+                ))}
               </select>
             </div>
-
-            <div className="grid grid-cols-3 gap-4">
-              <label className="text-sm font-medium text-gray-700">State/Province</label>
-              <div className="col-span-2 grid grid-cols-2 gap-4">
-                <input
-                  type="text"
-                  name="address.state"
-                  value={formData.address.state}
-                  onChange={handleChange}
-                  placeholder="State/Province"
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                />
-                <input
-                  type="text"
-                  name="address.phone"
-                  value={formData.address.phone}
-                  onChange={handleChange}
-                  placeholder="Phone"
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-4">
-              <label className="text-sm font-medium text-gray-700">Fax Number</label>
-              <input
-                type="text"
-                name="address.fax"
-                value={formData.address.fax}
-                onChange={handleChange}
-                placeholder="Fax Number"
-                className="col-span-2 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              />
-            </div>
           </div>
-        </div>
 
-        {/* Website URL - Show for both Business and Warehouse */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="grid grid-cols-3 gap-4 items-center">
-            <label className="text-sm font-medium text-gray-700">Website URL</label>
-            <input
-              type="url"
-              name="website"
-              value={formData.website}
-              onChange={handleChange}
-              placeholder="Website URL"
-              className="col-span-2 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-            />
-          </div>
-        </div>
-
-        {/* Primary Contact - Show for both Business and Warehouse */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="grid grid-cols-3 gap-4 items-center">
-            <label className="text-sm font-medium text-gray-700 flex items-center">
-              Primary Contact
-            </label>
-            <select
-              name="primaryContact"
-              value={formData.primaryContact}
-              onChange={handleChange}
-              className="col-span-2 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-            >
-              <option value="">Select Primary Contact</option>
-              {users.map((user) => (
-                <option key={user._id || user.id} value={user._id || user.id}>
-                  {user.name || `${user.firstName} ${user.lastName}`} &lt;{user.email}&gt;
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Transaction Number Series - Only show for Business Location */}
-        {formData.type === "Business" && (
-          <>
-            {/* Transaction Number Series */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <div className="grid grid-cols-3 gap-4 items-center">
-                <label className="text-sm font-medium text-gray-700 flex items-center">
-                  Transaction Number Series<span className="text-red-500 ml-1">*</span>
-                </label>
-                <div className="col-span-2 relative" ref={transactionSeriesDropdownRef}>
-                  <button
-                    type="button"
-                    onClick={() => setIsTransactionSeriesDropdownOpen(!isTransactionSeriesDropdownOpen)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-white"
-                  >
-                    <span className={formData.transactionSeries ? "text-gray-900" : "text-gray-500"}>
-                      {formData.transactionSeries || "Add Transaction Series"}
-                    </span>
-                    {isTransactionSeriesDropdownOpen ? (
-                      <ChevronUp size={16} className="text-gray-500" />
-                    ) : (
-                      <ChevronDown size={16} className="text-gray-500" />
-                    )}
-                  </button>
-
-                  {isTransactionSeriesDropdownOpen && (
-                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                      <div className="p-2 border-b border-gray-200 sticky top-0 bg-white">
-                        <div className="relative">
-                          <Search size={16} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                          <input
-                            type="text"
-                            placeholder="Search"
-                            value={transactionSeriesSearch}
-                            onChange={(e) => setTransactionSeriesSearch(e.target.value)}
-                            className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                        </div>
-                      </div>
-                      <div className="py-1">
-                        {filteredTransactionSeries.length === 0 ? (
-                          <div className="px-3 py-2 text-sm text-gray-500 text-center">NO RESULTS FOUND</div>
-                        ) : (
-                          filteredTransactionSeries.map((series, index) => (
-                            <button
-                              key={index}
-                              type="button"
-                              onClick={() => handleTransactionSeriesSelect(series)}
-                              className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between ${
-                                formData.transactionSeries === series ? "bg-blue-50" : ""
-                              }`}
-                            >
-                              <span>{series}</span>
-                              {formData.transactionSeries === series && (
-                                <Check size={16} className="text-blue-600" />
-                              )}
-                            </button>
-                          ))
-                        )}
-                        <button
-                          type="button"
-                          onClick={handleAddTransactionSeries}
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-blue-600 border-t border-gray-200 mt-1 pt-2"
-                        >
-                          <Plus size={16} className="text-blue-600" />
-                          <span>Add Transaction Series</span>
-                        </button>
-                      </div>
+          {formData.type === "Business" && (
+            <>
+                <div className="px-6 py-4 border-b border-gray-200">
+                    <div className="grid grid-cols-3 gap-4 items-center">
+                        <label className="text-sm font-medium text-gray-700">Transaction Number Series*</label>
+                        <select className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm bg-white">
+                            <option>Select Series</option>
+                        </select>
                     </div>
-                  )}
                 </div>
-              </div>
-            </div>
-
-            {/* Default Transaction Number Series */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <div className="grid grid-cols-3 gap-4 items-center">
-                <label className="text-sm font-medium text-gray-700 flex items-center">
-                  Default Transaction Number Series<span className="text-red-500 ml-1">*</span>
-                </label>
-                <div className="col-span-2 relative" ref={defaultTransactionSeriesDropdownRef}>
-                  <button
-                    type="button"
-                    onClick={() => setIsDefaultTransactionSeriesDropdownOpen(!isDefaultTransactionSeriesDropdownOpen)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-white"
-                  >
-                    <span className={formData.defaultTransactionSeries ? "text-gray-900" : "text-gray-500"}>
-                      {formData.defaultTransactionSeries || "Default Transaction Series"}
-                    </span>
-                    {isDefaultTransactionSeriesDropdownOpen ? (
-                      <ChevronUp size={16} className="text-gray-500" />
-                    ) : (
-                      <ChevronDown size={16} className="text-gray-500" />
-                    )}
-                  </button>
-
-                  {isDefaultTransactionSeriesDropdownOpen && (
-                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                      <div className="p-2 border-b border-gray-200 sticky top-0 bg-white">
-                        <div className="relative">
-                          <Search size={16} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                          <input
-                            type="text"
-                            placeholder="Search"
-                            value={defaultTransactionSeriesSearch}
-                            onChange={(e) => setDefaultTransactionSeriesSearch(e.target.value)}
-                            className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                        </div>
-                      </div>
-                      <div className="py-1">
-                        {filteredDefaultTransactionSeries.length === 0 ? (
-                          <div className="px-3 py-2 text-sm text-gray-500 text-center">NO RESULTS FOUND</div>
-                        ) : (
-                          filteredDefaultTransactionSeries.map((series, index) => (
-                            <button
-                              key={index}
-                              type="button"
-                              onClick={() => handleDefaultTransactionSeriesSelect(series)}
-                              className={`w-full px-3 py-2 text-left text-sm rounded-lg transition ${
-                                formData.defaultTransactionSeries === series 
-                                  ? "bg-blue-500 text-white font-medium" 
-                                  : "hover:bg-gray-50"
-                              } flex items-center justify-between`}
-                            >
-                              <span>{series}</span>
-                              {formData.defaultTransactionSeries === series && (
-                                <Check size={16} className="text-white" />
-                              )}
-                            </button>
-                          ))
-                        )}
-                        <button
-                          type="button"
-                          onClick={handleAddTransactionSeries}
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-blue-600 border-t border-gray-200 mt-1 pt-2"
-                        >
-                          <Plus size={16} className="text-blue-600" />
-                          <span>Add Transaction Series</span>
-                        </button>
-                      </div>
+                <div className="px-6 py-4 border-b border-gray-200">
+                    <div className="grid grid-cols-3 gap-4 items-center">
+                        <label className="text-sm font-medium text-gray-700">Default Transaction Number Series*</label>
+                        <select className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm bg-white">
+                            <option>Select Default Series</option>
+                        </select>
                     </div>
-                  )}
                 </div>
+            </>
+          )}
+
+          <div className="px-6 py-6 bg-gray-50/50">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium text-gray-700">Location Access</label>
+                <p className="text-[11px] text-gray-500">Define who can manage this location.</p>
               </div>
-            </div>
-          </>
-        )}
-
-        {/* Location Access - Show for both Business and Warehouse */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="grid grid-cols-3 gap-4">
-            <label className="text-sm font-medium text-gray-700">Location Access</label>
-            <div className="col-span-2">
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                {formData.locationAccess.length === 0 ? (
-                  <>
-                    <p className="text-sm font-semibold text-gray-900 mb-2">No users selected</p>
-                    <p className="text-xs text-gray-600 mb-4">
-                      Select the users who can create and access transactions for this location.
-                    </p>
-                    <div className="flex items-center justify-end mb-4">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={provideAccessToAll}
-                          onChange={(e) => setProvideAccessToAll(e.target.checked)}
-                          className="w-4 h-4 text-blue-600 rounded"
-                        />
-                        <span className="text-sm text-gray-700">Provide access to all users</span>
-                      </label>
+              <div className="col-span-2">
+                <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${formData.locationAccess?.length > 0 ? 'bg-blue-500' : 'bg-gray-300'}`}></div>
+                      <span className="text-xs font-semibold text-gray-900">
+                        {formData.locationAccess?.length || 0} user(s) selected
+                      </span>
                     </div>
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-gray-200">
-                          <th className="text-left py-2 px-3 text-xs font-semibold text-gray-600 uppercase">USERS</th>
-                          <th className="text-left py-2 px-3 text-xs font-semibold text-gray-600 uppercase">ROLE</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td className="py-2 px-3">
-                            <div className="relative" ref={userDropdownRef}>
-                              <button
-                                type="button"
-                                onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-white"
-                              >
-                                <span className="text-gray-500">Select users</span>
-                                <ChevronDown size={16} className="text-gray-500" />
-                              </button>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={provideAccessToAll} 
+                        onChange={(e) => setProvideAccessToAll(e.target.checked)} 
+                        className="w-3.5 h-3.5 text-blue-600 rounded border-gray-300" 
+                      />
+                      <span className="text-xs text-gray-600">Provide access to all users</span>
+                    </label>
+                  </div>
+                  
+                  <p className="text-[11px] text-gray-500 mb-4 italic">
+                    Selected users can create and access transactions for this location.
+                  </p>
 
-                              {isUserDropdownOpen && (
-                                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                                  <div className="p-2 border-b border-gray-200 sticky top-0 bg-white">
-                                    <div className="relative">
-                                      <Search size={16} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                                      <input
-                                        type="text"
-                                        placeholder="Search"
-                                        value={userSearch}
-                                        onChange={(e) => setUserSearch(e.target.value)}
-                                        className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                                        onClick={(e) => e.stopPropagation()}
-                                      />
-                                    </div>
-                                  </div>
-                                  <div className="py-1">
-                                    {filteredUsers.length === 0 ? (
-                                      <div className="px-3 py-2 text-sm text-gray-500 text-center">NO RESULTS FOUND</div>
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-100">
+                        <th className="text-left py-2 px-0 text-[10px] uppercase tracking-wider text-gray-400 font-bold">USERS</th>
+                        <th className="text-left py-2 px-0 text-[10px] uppercase tracking-wider text-gray-400 font-bold">ROLE</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {formData.locationAccess?.map((access, index) => {
+                          const user = allUsers.find(u => (u._id || u.id) === access.userId);
+                          return (
+                            <tr key={index} className="group hover:bg-gray-50 transition-colors">
+                              <td className="py-2.5 px-0">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
+                                    {user?.image ? (
+                                        <img src={user.image} alt="" className="w-full h-full object-cover" />
                                     ) : (
-                                      filteredUsers.map((user) => (
-                                        <button
-                                          key={user._id || user.id}
-                                          type="button"
-                                          onClick={() => handleUserSelect(user._id || user.id)}
-                                          className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
-                                        >
-                                          <div className="flex items-center gap-2">
-                                            <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-semibold">
-                                              {(user.name || '').charAt(0).toUpperCase()}
-                                            </div>
-                                            <div>
-                                              <div className="font-medium text-gray-900">{user.name}</div>
-                                              <div className="text-xs text-gray-500">{user.email}</div>
-                                            </div>
-                                          </div>
-                                        </button>
-                                      ))
+                                        <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs font-bold font-sans">
+                                            {(user?.name || user?.firstName || access.userName || '?').charAt(0).toUpperCase()}
+                                        </div>
                                     )}
                                   </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-medium text-gray-900 truncate">{access.userName || user?.name || `${user?.firstName} ${user?.lastName}`}</div>
+                                    <div className="text-[11px] text-gray-500 truncate">{access.userEmail || user?.email}</div>
+                                  </div>
                                 </div>
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-2 px-3">
-                            <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white">
-                              <option>User's Role</option>
-                            </select>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-sm font-medium text-gray-900 mb-2">
-                      â€¢ {formData.locationAccess.length} user(s) selected
-                    </p>
-                    <p className="text-xs text-gray-600 mb-4">
-                      Selected users can create and access transactions for this location.
-                    </p>
-                    
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-gray-200">
-                          <th className="text-left py-2 px-3 text-xs font-semibold text-gray-600 uppercase">USERS</th>
-                          <th className="text-left py-2 px-3 text-xs font-semibold text-gray-600 uppercase">ROLE</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {formData.locationAccess.map((access, index) => {
-                          const user = allUsers.find(u => (u._id || u.id) === access.userId) || users.find(u => (u._id || u.id) === access.userId);
-                          return (
-                            <tr 
-                              key={index} 
-                              className="border-b border-gray-200 group hover:bg-gray-50"
-                            >
-                              <td className="py-2 px-3">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-semibold">
-                                    {(user?.name || user?.firstName || access.userName || '').charAt(0).toUpperCase()}
-                                  </div>
-                                  <div className="flex-1">
-                                    <div className="font-medium text-gray-900">{access.userName || user?.name || `${user?.firstName} ${user?.lastName}`}</div>
-                                    <div className="text-xs text-gray-500">{access.userEmail || user?.email}</div>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveUser(access.userId)}
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity w-6 h-6 rounded-full bg-red-500 flex items-center justify-center hover:bg-red-600"
-                                  >
-                                    <X size={14} className="text-white" />
+                              </td>
+                              <td className="py-2.5 px-0">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm text-gray-600">{extractRoleString(access.role) || "User"}</span>
+                                  <button type="button" onClick={() => handleRemoveUser(access.userId)} className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-600 text-gray-400 transition-all">
+                                    <X size={14} />
                                   </button>
                                 </div>
                               </td>
-                               <td className="py-2 px-3 text-gray-700">{extractRoleString(access.role) || extractRoleString(user?.role) || "Admin"}</td>
                             </tr>
                           );
-                        })}
-                      </tbody>
-                    </table>
-                  </>
-                )}
+                      })}
+                      <tr>
+                        <td className="py-4 px-0 pr-4">
+                            <div className="relative" ref={userDropdownRef}>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
+                                    className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm text-left flex items-center justify-between bg-white hover:border-gray-300 transition-colors"
+                                >
+                                    <span className="text-gray-400 italic">Select users</span>
+                                    <ChevronDown size={14} className="text-gray-400" />
+                                </button>
+
+                                {isUserDropdownOpen && (
+                                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-60 overflow-y-auto">
+                                        <div className="p-2 border-b border-gray-100 sticky top-0 bg-white">
+                                            <div className="relative">
+                                                <Search size={14} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search"
+                                                    value={userSearch}
+                                                    onChange={(e) => setUserSearch(e.target.value)}
+                                                    className="w-full pl-7 pr-3 py-1.5 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="py-1">
+                                            {filteredUsers.length === 0 ? (
+                                                <div className="px-3 py-2 text-xs text-gray-400 text-center uppercase tracking-tighter">NO RESULTS FOUND</div>
+                                            ) : (
+                                                filteredUsers.map((user) => (
+                                                    <button
+                                                        key={user._id || user.id}
+                                                        type="button"
+                                                        onClick={() => handleUserSelect(user._id || user.id)}
+                                                        className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                                                    >
+                                                        <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-[10px] font-bold">
+                                                            {(user.name || '').charAt(0).toUpperCase()}
+                                                        </div>
+                                                        <div className="overflow-hidden">
+                                                            <div className="font-medium text-gray-900 truncate">{user.name}</div>
+                                                            <div className="text-[10px] text-gray-500 truncate">{user.email}</div>
+                                                        </div>
+                                                    </button>
+                                                ))
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </td>
+                        <td className="py-4 px-0">
+                            <select className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm bg-white text-gray-400 italic">
+                                <option>User's Role</option>
+                            </select>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-4 pt-4">
-          <button
-            type="submit"
-            disabled={isSaving}
-            className="px-6 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isSaving ? 'Updating...' : 'Update'}
-          </button>
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="px-6 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition"
-          >
-            Cancel
-          </button>
-        </div>
-      </form>
+          <div className="px-6 py-4 border-t border-gray-200 flex items-center gap-3">
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
+            >
+              {isSaving ? 'Updating...' : 'Update Location'}
+            </button>
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="px-6 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
-
-

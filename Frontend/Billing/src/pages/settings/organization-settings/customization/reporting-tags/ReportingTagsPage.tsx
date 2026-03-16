@@ -36,6 +36,36 @@ export default function ReportingTagsPage() {
   }, []);
 
   const navigate = useNavigate();
+  const refreshTags = async () => {
+    try {
+      const response = await reportingTagsAPI.getAll();
+      if (response.success) {
+        setTags(response.data || []);
+      }
+    } catch (error) {
+      console.error("Error loading tags:", error);
+    }
+  };
+
+  const handleMarkInactive = async (id: string) => {
+    try {
+      await reportingTagsAPI.update(id, { isActive: false });
+      setOpenMenuId(null);
+      await refreshTags();
+    } catch (error) {
+      console.error("Failed to mark inactive:", error);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await reportingTagsAPI.delete(id);
+      setOpenMenuId(null);
+      await refreshTags();
+    } catch (error) {
+      console.error("Failed to delete tag:", error);
+    }
+  };
 
   return (
     <div className="flex flex-col min-h-screen bg-white font-sans">
@@ -120,13 +150,13 @@ export default function ReportingTagsPage() {
                         >
                           <button
                             className="w-full text-left px-3 py-2 text-[13px] text-blue-600 hover:bg-gray-50"
-                            onClick={() => setOpenMenuId(null)}
+                            onClick={() => handleMarkInactive(tag._id)}
                           >
                             Mark as Inactive
                           </button>
                           <button
                             className="w-full text-left px-3 py-2 text-[13px] text-gray-700 hover:bg-gray-50"
-                            onClick={() => setOpenMenuId(null)}
+                            onClick={() => handleDelete(tag._id)}
                           >
                             Delete
                           </button>
