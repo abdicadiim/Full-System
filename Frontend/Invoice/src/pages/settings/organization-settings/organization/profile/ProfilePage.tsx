@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { Upload, Edit2, X, Search, HelpCircle, Send, Settings as SettingsIcon } from "lucide-react";
+import { Upload, Edit2, X, Search, HelpCircle, Send, Settings as SettingsIcon, Info } from "lucide-react";
 import { TIMEZONES } from "../../../../../constants/timezones";
 
 const API_BASE_URL = '/api';
@@ -22,24 +22,34 @@ const INDUSTRIES = [
   "Agriculture",
   "Art and Design",
   "Automotive",
-  "Banking & Finance",
   "Construction",
   "Consulting",
   "Consumer Packaged Goods",
   "Education",
-  "Energy & Utilities",
-  "Food & Beverage",
-  "Healthcare",
-  "Hospitality",
-  "Information Technology",
+  "Engineering",
+  "Entertainment",
+  "Financial Services",
+  "Food Services (Restaurants/Fast Food)",
+  "Gaming",
+  "Government",
+  "Health Care",
+  "Interior Design",
+  "Internal",
+  "Legal",
   "Manufacturing",
-  "Media & Entertainment",
+  "Marketing",
+  "Mining and Logistics",
+  "Non-Profit",
+  "Publishing and Web Media",
   "Real Estate",
-  "Retail",
+  "Retail (E-Commerce and Offline)",
+  "Services",
+  "Technology",
   "Telecommunications",
-  "Transportation & Logistics",
-  "Travel & Tourism",
-  "Other"
+  "Travel/Hospitality",
+  "Web Designing",
+  "Web Development",
+  "Writers"
 ];
 
 const BUSINESS_TYPES = [
@@ -825,9 +835,15 @@ export default function ProfilePage() {
   };
   const [companyIdType, setCompanyIdType] = useState("Company ID :");
   const [companyIdValue, setCompanyIdValue] = useState("");
-  const [additionalFields, setAdditionalFields] = useState<any[]>([{ label: "Label", value: "Value" }]);
+  const [additionalFields, setAdditionalFields] = useState<any[]>([{ label: "", value: "" }]);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [isEditCurrencyModalOpen, setIsEditCurrencyModalOpen] = useState(false);
+  const [editCurrencyCode, setEditCurrencyCode] = useState("USD");
+  const [editCurrencySymbol, setEditCurrencySymbol] = useState("$");
+  const [editCurrencyName, setEditCurrencyName] = useState("United States Dollar");
+  const [editCurrencyDecimals, setEditCurrencyDecimals] = useState("2");
+  const [editCurrencyFormat, setEditCurrencyFormat] = useState("1,234,567.89");
 
   // Temporary state for the edit modal
   const [editStreet1, setEditStreet1] = useState(street1);
@@ -912,6 +928,13 @@ export default function ProfilePage() {
 
   const handleOpenOrganizationAddressFormat = () => {
     navigate("/settings/general#organization-address-format");
+  };
+  const handleOpenCurrencyModal = () => {
+    const code = baseCurrency?.split(" - ")[0] || "USD";
+    setEditCurrencyCode(code);
+    setEditCurrencySymbol(code === "USD" ? "$" : editCurrencySymbol);
+    setEditCurrencyName(code === "USD" ? "United States Dollar" : editCurrencyName);
+    setIsEditCurrencyModalOpen(true);
   };
 
   // Load profile data on mount
@@ -1192,6 +1215,13 @@ export default function ProfilePage() {
         </div>
       </div>
 
+      <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 mb-6 flex items-start gap-2">
+        <Info size={16} className="text-blue-600 flex-shrink-0 mt-0.5" />
+        <div className="text-sm text-blue-900">
+          You have the same organization in Zoho Invoice. Altering any information on this page will alter it there.
+        </div>
+      </div>
+
       {/* Organization Logo */}
       <div className="rounded-lg border-0 p-6 mb-6">
         <div className="flex gap-6">
@@ -1204,7 +1234,7 @@ export default function ProfilePage() {
               className="hidden"
             />
             <div
-              className="w-40 h-40 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-blue-500 transition relative"
+              className="w-32 h-32 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-blue-500 transition relative"
               onClick={handleLogoClick}
             >
               {logoPreview ? (
@@ -1245,6 +1275,8 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      <div className="border-t border-gray-200 my-6" />
 
       {/* Organization Details */}
       <div className="rounded-lg border-0 p-6 mb-6">
@@ -1303,6 +1335,7 @@ export default function ProfilePage() {
               />
             </div>
           </div>
+          {/* Organization Address info card hidden per request */}
           <div className="rounded-lg border border-gray-200 p-4 bg-[#d8dbe0]">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-gray-700">
@@ -1347,235 +1380,248 @@ export default function ProfilePage() {
 
       {/* Organization Address hidden per request */}
 
-      {/* Website URL */}
-      <div className="rounded-lg border-0 p-6 mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">Website URL</label>
-        <input
-          type="text"
-          value={website}
-          onChange={(e) => setWebsite(e.target.value)}
-          placeholder="Website URL"
-          className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
+      <div className="border-t border-gray-200 my-6" />
 
       {/* Primary Contact */}
       <div className="rounded-lg border-0 p-6 mb-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Primary Contact</h2>
-        <div className="grid grid-cols-2 gap-6 mb-4">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Send size={16} className="text-gray-600" />
-              <span className="text-xs font-semibold text-gray-600 uppercase">SENDER</span>
+        <div className="rounded-lg border border-gray-200 bg-white p-4 mb-4">
+          <div className="grid grid-cols-2 gap-6">
+            <div className="pr-6 border-r border-gray-200">
+              <div className="flex items-center gap-2 mb-2">
+                <Send size={16} className="text-gray-600" />
+                <span className="text-xs font-semibold text-gray-600 uppercase">SENDER</span>
+              </div>
+              <div className="text-sm font-medium text-gray-900">{primarySenderName || "Organization Owner"}</div>
+              <div className="text-sm text-gray-600">({primarySenderEmail || email || "No email"})</div>
             </div>
-            <div className="text-sm font-medium text-gray-900">{primarySenderName || "Organization Owner"}</div>
-            <div className="text-sm text-gray-600">({primarySenderEmail || email || "No email"})</div>
-          </div>
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <SettingsIcon size={16} className="text-gray-600" />
-              <span className="text-xs font-semibold text-gray-600 uppercase">EMAILS ARE SENT THROUGH</span>
+            <div className="pl-2">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-gray-600 uppercase">EMAILS ARE SENT THROUGH</span>
+                </div>
+                <button
+                  className="p-1 hover:bg-gray-100 rounded"
+                  onClick={() => navigate("/settings/customization/email-notifications")}
+                >
+                  <SettingsIcon size={16} className="text-blue-600" />
+                </button>
+              </div>
+              <div className="text-sm font-medium text-gray-900">Email address of Taban Books</div>
+              <div className="text-sm text-gray-600">({DEFAULT_SYSTEM_SENDER_EMAIL})</div>
             </div>
-            <div className="text-sm font-medium text-gray-900">Email address of Taban Books</div>
-            <div className="text-sm text-gray-600">({DEFAULT_SYSTEM_SENDER_EMAIL})</div>
           </div>
         </div>
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
           <HelpCircle size={16} className="text-blue-600 flex-shrink-0 mt-0.5" />
           <div className="text-sm text-gray-700">
-            Your primary contact's email address belongs to a public domain. So, emails will be sent from {DEFAULT_SYSTEM_SENDER_EMAIL} to prevent them from landing in the Spam folder. If you still want to send emails using the public domain, <button className="text-blue-600 hover:underline">change setting</button> &gt;
+            Your primary contact's email address belongs to a public domain. So, emails will be sent from {DEFAULT_SYSTEM_SENDER_EMAIL} to prevent them from landing in the Spam folder.
           </div>
         </div>
       </div>
 
+      <div className="border-t border-gray-200 my-6" />
+
       {/* Base Currency */}
       <div className="rounded-lg border-0 p-6 mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <label className="block text-sm font-medium text-gray-700">
+        <div className="flex items-start gap-6">
+          <label className="w-56 text-sm font-medium text-gray-700 pt-2">
             Base Currency <HelpTooltip text="Your transactions and financial reports will be shown in the base currency.">
-              <HelpCircle size={14} className="inline text-gray-400 cursor-help" />
+              <HelpCircle size={14} className="inline text-gray-400 cursor-help ml-1" />
             </HelpTooltip>
           </label>
-          <button className="p-1 hover:bg-gray-100 rounded">
-            <SettingsIcon size={16} className="text-gray-600" />
-          </button>
+          <div className="flex-1">
+            <div className="flex items-center gap-3">
+              <div className="flex-1">
+                <SearchableDropdown
+                  value={baseCurrency}
+                  placeholder="Select Currency"
+                  options={CURRENCIES}
+                  onChange={setBaseCurrency}
+                />
+              </div>
+              <button className="p-1 hover:bg-gray-100 rounded" onClick={handleOpenCurrencyModal}>
+                <SettingsIcon size={16} className="text-blue-600" />
+              </button>
+            </div>
+            <div className="text-xs text-gray-500 mt-2">
+              You can't change the base currency as there are <button className="text-blue-600 hover:underline">transactions</button> recorded in your organization.
+            </div>
+          </div>
         </div>
-        <SearchableDropdown
-          value={baseCurrency}
-          placeholder="Select Currency"
-          options={CURRENCIES}
-          onChange={setBaseCurrency}
-        />
       </div>
+
+      <div className="border-t border-gray-200 my-6" />
 
       {/* Fiscal Year */}
       <div className="rounded-lg border-0 p-6 mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">Fiscal Year</label>
-        <div className="grid grid-cols-2 gap-4 mb-2">
-          <SearchableDropdown
-            value={fiscalYear}
-            placeholder="Select Fiscal Year"
-            options={FISCAL_YEARS}
-            onChange={setFiscalYear}
-          />
-          <SearchableDropdown
-            value={startDate}
-            placeholder="Start Date"
-            options={START_DATES.map(d => d.toString())}
-            onChange={setStartDate}
-          />
-        </div>
-        <div className="text-sm text-gray-600 mt-2">Period: {getFiscalPeriod()}</div>
-      </div>
-
-      {/* Report Basis */}
-      <div className="rounded-lg border-0 p-6 mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-3">Report Basis</label>
-        <div className="space-y-3">
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="radio"
-              name="reportBasis"
-              value="Accrual"
-              checked={reportBasis === "Accrual"}
-              onChange={(e) => setReportBasis(e.target.value)}
-              className="mt-1"
-            />
-            <div>
-              <div className="text-sm font-medium text-gray-900">Accrual</div>
-              <div className="text-xs text-gray-600">You owe tax as of invoice date</div>
+        <div className="flex items-start gap-6">
+          <label className="w-56 text-sm font-medium text-gray-700 pt-2">Fiscal Year</label>
+          <div className="flex-1">
+            <div className="grid grid-cols-2 gap-4 mb-2">
+              <SearchableDropdown
+                value={fiscalYear}
+                placeholder="Select Fiscal Year"
+                options={FISCAL_YEARS}
+                onChange={setFiscalYear}
+              />
+              <SearchableDropdown
+                value={startDate}
+                placeholder="Start Date"
+                options={START_DATES.map(d => d.toString())}
+                onChange={setStartDate}
+              />
             </div>
-          </label>
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="radio"
-              name="reportBasis"
-              value="Cash"
-              checked={reportBasis === "Cash"}
-              onChange={(e) => setReportBasis(e.target.value)}
-              className="mt-1"
-            />
-            <div>
-              <div className="text-sm font-medium text-gray-900">Cash</div>
-              <div className="text-xs text-gray-600">You owe tax upon payment receipt</div>
+            <div className="mt-2">
+              <div className="h-10 px-3 rounded-lg border border-gray-300 bg-transparent text-sm text-gray-700 flex items-center">
+                Period: {getFiscalPeriod()}
+              </div>
             </div>
-          </label>
+          </div>
         </div>
       </div>
 
       {/* Organization Language */}
       <div className="rounded-lg border-0 p-6 mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Organization Language <HelpTooltip text="Any change in the language will not be reflected in Chart of Accounts, Email Templates, Template Customizations, Payment Modes and Default tax Rates. These will still remain in the language selected during this organization's setup.">
-            <HelpCircle size={14} className="inline text-gray-400 cursor-help" />
-          </HelpTooltip>
-        </label>
-        <SearchableDropdown
-          value={orgLanguage}
-          placeholder="Select Language"
-          options={LANGUAGES}
-          onChange={setOrgLanguage}
-        />
+        <div className="flex items-start gap-6">
+          <label className="w-56 text-sm font-medium text-gray-700 pt-2">
+            Organization Language <HelpTooltip text="Any change in the language will not be reflected in Chart of Accounts, Email Templates, Template Customizations, Payment Modes and Default tax Rates. These will still remain in the language selected during this organization's setup.">
+              <HelpCircle size={14} className="inline text-gray-400 cursor-help ml-1" />
+            </HelpTooltip>
+          </label>
+          <div className="flex-1">
+            <SearchableDropdown
+              value={orgLanguage}
+              placeholder="Select Language"
+              options={LANGUAGES}
+              onChange={setOrgLanguage}
+            />
+          </div>
+        </div>
       </div>
+
+      <div className="border-t border-gray-200 my-6" />
 
       {/* Communication Languages */}
       <div className="rounded-lg border-0 p-6 mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Communication Languages <HelpTooltip text="Select the languages in which users can create email templates and send emails to customers and vendors.">
-            <HelpCircle size={14} className="inline text-gray-400 cursor-help" />
-          </HelpTooltip>
-        </label>
-        <SearchableDropdown
-          value={commLanguage}
-          placeholder="Select Language"
-          options={LANGUAGES}
-          onChange={setCommLanguage}
-        />
+        <div className="flex items-start gap-6">
+          <label className="w-56 text-sm font-medium text-gray-700 pt-2">
+            Communication Languages <HelpTooltip text="Select the languages in which users can create email templates and send emails to customers and vendors.">
+              <HelpCircle size={14} className="inline text-gray-400 cursor-help ml-1" />
+            </HelpTooltip>
+          </label>
+          <div className="flex-1">
+            <SearchableDropdown
+              value={commLanguage}
+              placeholder="Select Language"
+              options={LANGUAGES}
+              onChange={setCommLanguage}
+            />
+          </div>
+        </div>
       </div>
+
+      <div className="border-t border-gray-200 my-6" />
 
       {/* Time Zone */}
       <div className="rounded-lg border-0 p-6 mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">Time Zone</label>
-        <SearchableDropdown
-          value={timeZone}
-          placeholder="Select Time Zone"
-          options={TIME_ZONES}
-          onChange={setTimeZone}
-        />
+        <div className="flex items-start gap-6">
+          <label className="w-56 text-sm font-medium text-gray-700 pt-2">Time Zone</label>
+          <div className="flex-1">
+            <SearchableDropdown
+              value={timeZone}
+              placeholder="Select Time Zone"
+              options={TIME_ZONES}
+              onChange={setTimeZone}
+            />
+          </div>
+        </div>
       </div>
+
+      <div className="border-t border-gray-200 my-6" />
 
       {/* Date Format */}
       <div className="rounded-lg border-0 p-6 mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">Date Format</label>
-        <div className="grid grid-cols-2 gap-4">
-          <DateFormatDropdown
-            value={dateFormat}
-            placeholder="Select Date Format"
-            onChange={setDateFormat}
-          />
-          <SearchableDropdown
-            value={dateSeparator}
-            placeholder="-"
-            options={[".", "-", "/"]}
-            onChange={handleDateSeparatorChange}
-          />
+        <div className="flex items-start gap-6">
+          <label className="w-56 text-sm font-medium text-gray-700 pt-2">Date Format</label>
+          <div className="flex-1">
+            <div className="grid grid-cols-1">
+              <DateFormatDropdown
+                value={dateFormat}
+                placeholder="Select Date Format"
+                onChange={setDateFormat}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
+      <div className="border-t border-gray-200 my-6" />
+
       {/* Company ID */}
       <div className="rounded-lg border-0 p-6 mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">Company ID</label>
-        <div className="grid grid-cols-2 gap-4">
-          <SearchableDropdown
-            value={companyIdType}
-            placeholder="Select Type"
-            options={["ACN", "BN", "CN", "CPR", "CVR", "DIW", "KT", "ORG", "SEC", "CRN", "Company ID :"]}
-            onChange={setCompanyIdType}
-          />
-          <input
-            type="text"
-            value={companyIdValue}
-            onChange={(e) => setCompanyIdValue(e.target.value)}
-            placeholder="Enter Company ID"
-            className="h-10 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+        <div className="flex items-start gap-6">
+          <label className="w-56 text-sm font-medium text-gray-700 pt-2">Company ID</label>
+          <div className="flex-1">
+            <div className="grid grid-cols-2 gap-4">
+              <SearchableDropdown
+                value={companyIdType}
+                placeholder="Select Type"
+                options={["ACN", "BN", "CN", "CPR", "CVR", "DIW", "KT", "ORG", "SEC", "CRN", "Company ID :"]}
+                onChange={setCompanyIdType}
+              />
+              <input
+                type="text"
+                value={companyIdValue}
+                onChange={(e) => setCompanyIdValue(e.target.value)}
+                placeholder="Enter Company ID"
+                className="h-10 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
         </div>
       </div>
+
+      <div className="border-t border-gray-200 my-6" />
 
       {/* Additional Fields */}
       <div className="rounded-lg border-0 p-6 mb-6">
         <h3 className="text-sm font-bold text-gray-900 mb-4">Additional Fields</h3>
         <div className="mb-4">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-200">
-                <th className="text-left py-2 text-xs font-semibold text-gray-700 uppercase">LABEL NAME</th>
-                <th className="text-left py-2 text-xs font-semibold text-gray-700 uppercase">VALUE</th>
-              </tr>
-            </thead>
-            <tbody>
-              {additionalFields.map((field, index) => (
-                <tr key={index} className="border-b border-gray-100">
-                  <td className="py-2">
-                    <input
-                      type="text"
-                      value={field.label}
-                      onChange={(e) => handleFieldChange(index, 'label', e.target.value)}
-                      className="w-full h-9 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </td>
-                  <td className="py-2">
-                    <input
-                      type="text"
-                      value={field.value}
-                      onChange={(e) => handleFieldChange(index, 'value', e.target.value)}
-                      className="w-full h-9 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </td>
+          <div className="rounded-lg border border-gray-200 overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50">
+                  <th className="text-left py-2 px-3 text-xs font-semibold text-gray-600 uppercase">LABEL NAME</th>
+                  <th className="text-left py-2 px-3 text-xs font-semibold text-gray-600 uppercase">VALUE</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {additionalFields.map((field, index) => (
+                  <tr key={index} className="border-b border-gray-200 last:border-b-0">
+                    <td className="py-2 px-3 border-r border-gray-200">
+                      <input
+                        type="text"
+                        value={field.label}
+                        onChange={(e) => handleFieldChange(index, 'label', e.target.value)}
+                        placeholder="Label"
+                        className="w-full h-9 px-3 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </td>
+                    <td className="py-2 px-3">
+                      <input
+                        type="text"
+                        value={field.value}
+                        onChange={(e) => handleFieldChange(index, 'value', e.target.value)}
+                        placeholder="Value"
+                        className="w-full h-9 px-3 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
         <button
           onClick={handleAddField}
@@ -1739,6 +1785,92 @@ export default function ProfilePage() {
                   className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
                 >
                   Proceed
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {/* Edit Currency Modal */}
+      {
+        isEditCurrencyModalOpen && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-[10000] pt-16"
+            onClick={() => setIsEditCurrencyModalOpen(false)}
+          >
+            <div
+              className="bg-white rounded-lg shadow-xl w-full max-w-xl mx-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900">Edit Currency</h3>
+                <button
+                  onClick={() => setIsEditCurrencyModalOpen(false)}
+                  className="p-1 hover:bg-gray-100 rounded transition"
+                >
+                  <X size={20} className="text-red-500" />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-red-500 mb-2">Currency Code*</label>
+                  <input
+                    type="text"
+                    value={editCurrencyCode}
+                    onChange={(e) => setEditCurrencyCode(e.target.value)}
+                    className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-red-500 mb-2">Currency Symbol*</label>
+                  <input
+                    type="text"
+                    value={editCurrencySymbol}
+                    onChange={(e) => setEditCurrencySymbol(e.target.value)}
+                    className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-red-500 mb-2">Currency Name*</label>
+                  <input
+                    type="text"
+                    value={editCurrencyName}
+                    onChange={(e) => setEditCurrencyName(e.target.value)}
+                    className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Decimal Places</label>
+                  <SearchableDropdown
+                    value={editCurrencyDecimals}
+                    placeholder="2"
+                    options={["0", "1", "2", "3"]}
+                    onChange={setEditCurrencyDecimals}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Format</label>
+                  <SearchableDropdown
+                    value={editCurrencyFormat}
+                    placeholder="1,234,567.89"
+                    options={["1,234,567.89", "1.234.567,89", "1 234 567.89"]}
+                    onChange={setEditCurrencyFormat}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-4 border-t border-gray-200">
+                <button
+                  onClick={() => setIsEditCurrencyModalOpen(false)}
+                  className="px-4 py-2 rounded-lg border border-gray-300 bg-transparent text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => setIsEditCurrencyModalOpen(false)}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+                >
+                  Save
                 </button>
               </div>
             </div>
