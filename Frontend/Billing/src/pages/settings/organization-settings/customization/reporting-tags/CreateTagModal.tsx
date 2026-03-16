@@ -65,6 +65,7 @@ export default function CreateTagModal({ onClose, onSave }) {
         moduleLevel,
         isMandatory,
         isActive: true,
+        isInactive: false,
       });
 
       if (response.success) {

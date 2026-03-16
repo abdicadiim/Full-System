@@ -104,6 +104,7 @@ export default function AddLocationPage() {
     locationAccess: [],
   });
 
+  const [isChild, setIsChild] = useState(false);
   const [isLogoDropdownOpen, setIsLogoDropdownOpen] = useState(false);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -214,9 +215,9 @@ export default function AddLocationPage() {
     setFormData(prev => ({ ...prev, logo: "Same as Organization Logo" }));
   };
 
-  const handleUserSelect = (userId: string) => {
-    const user = allUsers.find(u => (u._id || u.id) === userId);
-    if (user && !formData.locationAccess.find(access => access.userId === userId)) {
+  const handleAddUser = (user: User) => {
+    const userId = user._id || user.id;
+    if (userId && !formData.locationAccess.find(access => access.userId === userId)) {
       setFormData(prev => ({
         ...prev,
         locationAccess: [
@@ -231,6 +232,7 @@ export default function AddLocationPage() {
       }));
     }
     setIsUserDropdownOpen(false);
+    setUserSearch("");
   };
 
   const handleRemoveUser = (userId: string) => {
@@ -319,8 +321,8 @@ export default function AddLocationPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <label className={`relative flex flex-col p-4 border rounded-lg cursor-pointer transition ${
                     formData.type === "Business"
-                      ? "border-blue-500 bg-blue-50/30"
-                      : "border-gray-200 hover:border-gray-300"
+                      ? "border-blue-500 bg-white"
+                      : "border-gray-200 hover:border-gray-300 bg-white"
                   }`}>
                     <div className="flex items-center gap-3 mb-2">
                       <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
@@ -335,8 +337,8 @@ export default function AddLocationPage() {
                   </label>
                   <label className={`relative flex flex-col p-4 border rounded-lg cursor-pointer transition ${
                     formData.type === "Warehouse"
-                      ? "border-blue-500 bg-blue-50/30"
-                      : "border-gray-200 hover:border-gray-300"
+                      ? "border-blue-500 bg-white"
+                      : "border-gray-200 hover:border-gray-300 bg-white"
                   }`}>
                     <div className="flex items-center gap-3 mb-2">
                       <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
@@ -400,17 +402,38 @@ export default function AddLocationPage() {
                   </div>
 
                   {(formData.logo !== "Same as Organization Logo" || logoPreview) && (
-                    <div className="mt-2 flex items-center gap-4 p-3 border border-gray-100 rounded bg-gray-50/50">
-                      <div className="w-16 h-16 border border-gray-200 rounded bg-white flex items-center justify-center overflow-hidden">
+                    <div className="mt-4 flex items-start gap-6">
+                      <div 
+                        onClick={handleLogoClick}
+                        className="w-48 h-28 border-2 border-dashed border-gray-200 rounded-lg bg-gray-50/30 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors group"
+                      >
                         {logoPreview ? (
-                          <img src={logoPreview} alt="Logo" className="max-w-full max-h-full object-contain" />
+                          <div className="relative w-full h-full flex items-center justify-center p-2">
+                            <img src={logoPreview} alt="Logo" className="max-w-full max-h-full object-contain" />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity rounded-lg">
+                                <Upload size={20} className="text-white" />
+                            </div>
+                          </div>
                         ) : (
-                          <Building2 size={24} className="text-gray-300" />
+                          <>
+                            <Upload size={20} className="text-gray-400 mb-2" />
+                            <span className="text-[11px] text-gray-500 font-medium">Upload your Location Logo</span>
+                          </>
                         )}
                       </div>
-                      <div className="flex flex-col gap-1">
-                        <button type="button" onClick={handleLogoClick} className="text-xs text-blue-600 font-medium hover:underline">Change Logo</button>
-                        <button type="button" onClick={handleRemoveLogo} className="text-xs text-red-500 font-medium hover:underline">Remove</button>
+                      
+                      <div className="flex-1 space-y-1.5 pt-1">
+                        <p className="text-[11px] text-gray-600">
+                          This logo will be displayed in transaction PDFs and email notifications. <span className="text-blue-600 cursor-pointer hover:underline">Preferred Image</span>
+                        </p>
+                        <div className="space-y-0.5">
+                          <p className="text-[10px] text-gray-400">Dimensions: 240 × 240 pixels @ 72 DPI</p>
+                          <p className="text-[10px] text-gray-400">Supported Files: jpg, jpeg, png, gif, bmp</p>
+                          <p className="text-[10px] text-gray-400">Maximum File Size: 1MB</p>
+                        </div>
+                        {logoPreview && (
+                            <button type="button" onClick={handleRemoveLogo} className="text-[10px] text-red-500 font-medium hover:underline pt-1">Remove Logo</button>
+                        )}
                       </div>
                       <input ref={fileInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
                     </div>
@@ -422,62 +445,84 @@ export default function AddLocationPage() {
 
           {/* Name Section */}
           <div className="px-6 py-4 border-b border-gray-200">
-            <div className="grid grid-cols-3 gap-4 items-center">
-              <label className="text-sm font-medium text-gray-700">Location Name*</label>
-              <input
-                type="text"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                placeholder="Name"
-                className="col-span-2 px-3 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
-                required
-              />
+            <div className="grid grid-cols-3 gap-4 items-start">
+              <label className="text-sm font-medium text-red-500 pt-1.5">Name*</label>
+              <div className="col-span-2 space-y-3">
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  placeholder="wrrf"
+                  className="w-full px-3 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+                  required
+                />
+                <label className="flex items-center gap-2 cursor-pointer group">
+                  <div className={`w-4 h-4 rounded border transition-colors flex items-center justify-center ${isChild ? 'bg-blue-600 border-blue-600' : 'border-gray-300 group-hover:border-gray-400'}`}>
+                    {isChild && <Check size={10} className="text-white" />}
+                  </div>
+                  <input 
+                    type="checkbox" 
+                    checked={isChild} 
+                    onChange={(e) => {
+                        const checked = e.target.checked;
+                        setIsChild(checked);
+                        if (!checked) setFormData(prev => ({ ...prev, parentLocation: "None" }));
+                    }} 
+                    className="hidden" 
+                  />
+                  <span className="text-sm text-gray-600">This is a Child Location</span>
+                </label>
+              </div>
             </div>
           </div>
 
           {/* Parent Location Section */}
-          <div className="px-6 py-4 border-b border-gray-200">
-            <div className="grid grid-cols-3 gap-4 items-center">
-              <label className="text-sm font-medium text-gray-700">Parent Location</label>
-              <div className="col-span-2 relative" ref={parentDropdownRef}>
-                <button
-                  type="button"
-                  onClick={() => setIsParentDropdownOpen(!isParentDropdownOpen)}
-                  className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm text-left flex items-center justify-between bg-white"
-                >
-                  <span className="text-gray-700">{formData.parentLocation || "None"}</span>
-                  <ChevronDown size={14} className="text-gray-400" />
-                </button>
-                {isParentDropdownOpen && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg overflow-hidden">
-                      <div className="p-2 border-b border-gray-100">
-                          <div className="relative">
-                            <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
-                            <input 
-                                type="text" 
-                                placeholder="Search" 
-                                className="w-full pl-8 pr-3 py-1 text-sm border-none focus:ring-0" 
-                                value={parentSearch}
-                                onChange={(e) => setParentSearch(e.target.value)}
-                            />
-                          </div>
-                      </div>
-                      <div className="max-h-48 overflow-y-auto py-1">
-                          <button 
-                            type="button" 
-                            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between"
-                            onClick={() => { setFormData(prev => ({ ...prev, parentLocation: "None" })); setIsParentDropdownOpen(false); }}
-                          >
-                              <span>None</span>
-                              {formData.parentLocation === "None" && <Check size={14} className="text-blue-600" />}
-                          </button>
-                      </div>
-                  </div>
-                )}
+          {isChild && (
+            <div className="px-6 py-4 border-b border-gray-200 animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="grid grid-cols-3 gap-4 items-center">
+                <label className="text-sm font-medium text-red-500">Parent Location*</label>
+                <div className="col-span-2 relative" ref={parentDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setIsParentDropdownOpen(!isParentDropdownOpen)}
+                    className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm text-left flex items-center justify-between bg-white overflow-hidden"
+                  >
+                    <span className={formData.parentLocation === "None" || !formData.parentLocation ? "text-gray-400" : "text-gray-700"}>
+                        {formData.parentLocation === "None" || !formData.parentLocation ? "Select Location" : formData.parentLocation}
+                    </span>
+                    <ChevronDown size={14} className="text-gray-400 flex-shrink-0" />
+                  </button>
+                  {isParentDropdownOpen && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg overflow-hidden">
+                        <div className="p-2 border-b border-gray-100">
+                            <div className="relative">
+                              <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+                              <input 
+                                  type="text" 
+                                  placeholder="Search" 
+                                  className="w-full pl-8 pr-3 py-1 text-sm border-none focus:ring-0" 
+                                  value={parentSearch}
+                                  onChange={(e) => setParentSearch(e.target.value)}
+                              />
+                            </div>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto py-1">
+                            <button 
+                              type="button" 
+                              className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between"
+                              onClick={() => { setFormData(prev => ({ ...prev, parentLocation: "None" })); setIsParentDropdownOpen(false); }}
+                            >
+                                <span>None</span>
+                                {formData.parentLocation === "None" && <Check size={14} className="text-blue-600" />}
+                            </button>
+                        </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Address Section */}
           <div className="px-6 py-4 border-b border-gray-200">
@@ -500,7 +545,7 @@ export default function AddLocationPage() {
                     <label className="text-xs text-gray-500">City / Zip</label>
                     <div className="col-span-2 grid grid-cols-2 gap-2">
                         <input type="text" name="address.city" value={formData.address.city} onChange={handleChange} placeholder="City" className="px-3 py-1.5 border border-gray-300 rounded text-sm" />
-                        <input type="text" name="address.zipCode" value={formData.address.zipCode} onChange={handleChange} placeholder="ZIP Code" className="px-3 py-1.5 border border-gray-300 rounded text-sm" />
+                        <input type="text" name="address.zipCode" value={formData.address.zipCode} onChange={handleChange} placeholder="ZIP/Postal Code" className="px-3 py-1.5 border border-gray-300 rounded text-sm" />
                     </div>
                 </div>
                 <div className="grid grid-cols-3 gap-4 items-center">
@@ -510,18 +555,19 @@ export default function AddLocationPage() {
                         <option value="United States">United States</option>
                         <option value="Uganda">Uganda</option>
                         <option value="Kenya">Kenya</option>
+                        <option value="Albania">Albania</option>
                     </select>
                 </div>
                 <div className="grid grid-cols-3 gap-4 items-center">
                     <label className="text-xs text-gray-500">State / Phone</label>
                     <div className="col-span-2 grid grid-cols-2 gap-2">
-                        <input type="text" name="address.state" value={formData.address.state} onChange={handleChange} placeholder="State" className="px-3 py-1.5 border border-gray-300 rounded text-sm" />
+                        <input type="text" name="address.state" value={formData.address.state} onChange={handleChange} placeholder="State/Province" className="px-3 py-1.5 border border-gray-300 rounded text-sm" />
                         <input type="text" name="address.phone" value={formData.address.phone} onChange={handleChange} placeholder="Phone" className="px-3 py-1.5 border border-gray-300 rounded text-sm" />
                     </div>
                 </div>
                 <div className="grid grid-cols-3 gap-4 items-center">
                     <label className="text-xs text-gray-500">Fax</label>
-                    <input type="text" name="address.fax" value={formData.address.fax} onChange={handleChange} placeholder="Fax" className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm" />
+                    <input type="text" name="address.fax" value={formData.address.fax} onChange={handleChange} placeholder="Fax Number" className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm" />
                 </div>
               </div>
             </div>
@@ -535,7 +581,7 @@ export default function AddLocationPage() {
                 name="website"
                 value={formData.website}
                 onChange={handleChange}
-                placeholder="https://example.com"
+                placeholder="Website URL"
                 className="col-span-2 px-3 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
               />
             </div>
@@ -543,7 +589,9 @@ export default function AddLocationPage() {
 
           <div className="px-6 py-4 border-b border-gray-200">
             <div className="grid grid-cols-3 gap-4 items-center">
-              <label className="text-sm font-medium text-gray-700">Primary Contact*</label>
+              <label className={`text-sm font-medium ${formData.type === "Business" ? "text-red-500" : "text-gray-700"}`}>
+                Primary Contact{formData.type === "Business" && "*"}
+              </label>
               <select
                 name="primaryContact"
                 value={formData.primaryContact}
@@ -562,155 +610,148 @@ export default function AddLocationPage() {
             <>
                 <div className="px-6 py-4 border-b border-gray-200">
                     <div className="grid grid-cols-3 gap-4 items-center">
-                        <label className="text-sm font-medium text-gray-700">Transaction Number Series*</label>
-                        <select className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm bg-white">
-                            <option>Select Series</option>
+                        <label className="text-sm font-medium text-red-500">Transaction Number Series*</label>
+                        <select className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm bg-white text-gray-400">
+                            <option>Add Transaction Series</option>
                         </select>
                     </div>
                 </div>
                 <div className="px-6 py-4 border-b border-gray-200">
                     <div className="grid grid-cols-3 gap-4 items-center">
-                        <label className="text-sm font-medium text-gray-700">Default Transaction Number Series*</label>
-                        <select className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm bg-white">
-                            <option>Select Default Series</option>
+                        <label className="text-sm font-medium text-red-500">Default Transaction Number Series*</label>
+                        <select className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm bg-white text-gray-400">
+                            <option>Add Transaction Series</option>
                         </select>
                     </div>
                 </div>
             </>
           )}
 
-          <div className="px-6 py-6 bg-gray-50/50">
+          {/* Location Access Section */}
+          <div className="px-6 py-6 border-b border-gray-200">
             <div className="grid grid-cols-3 gap-4">
-              <div className="flex flex-col gap-1">
+              <div>
                 <label className="text-sm font-medium text-gray-700">Location Access</label>
-                <p className="text-[11px] text-gray-500">Define who can manage this location.</p>
+                <p className="text-[10px] text-gray-400 mt-1">Define who can manage this location.</p>
               </div>
-              <div className="col-span-2">
-                <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-                  <div className="flex items-center justify-between mb-4">
+              <div className="col-span-2 space-y-4">
+                <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${formData.locationAccess?.length > 0 ? 'bg-blue-500' : 'bg-gray-300'}`}></div>
-                      <span className="text-xs font-semibold text-gray-900">
-                        {formData.locationAccess?.length || 0} user(s) selected
-                      </span>
+                        <div className="w-1.5 h-1.5 rounded-full bg-gray-400"></div>
+                        <span className="text-xs font-medium text-gray-700">{formData.locationAccess.length} user(s) selected</span>
                     </div>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={provideAccessToAll} 
-                        onChange={(e) => setProvideAccessToAll(e.target.checked)} 
-                        className="w-3.5 h-3.5 text-blue-600 rounded border-gray-300" 
-                      />
-                      <span className="text-xs text-gray-600">Provide access to all users</span>
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                        <div className={`w-4 h-4 rounded border transition-colors flex items-center justify-center ${provideAccessToAll ? 'bg-blue-600 border-blue-600' : 'border-gray-300 group-hover:border-gray-400'}`}>
+                            {provideAccessToAll && <Check size={10} className="text-white" />}
+                        </div>
+                        <input 
+                            type="checkbox" 
+                            checked={provideAccessToAll}
+                            onChange={(e) => setProvideAccessToAll(e.target.checked)}
+                            className="hidden" 
+                        />
+                        <span className="text-xs text-gray-600">Provide access to all users</span>
                     </label>
-                  </div>
-                  
-                  <p className="text-[11px] text-gray-500 mb-4 italic">
-                    Selected users can create and access transactions for this location.
-                  </p>
+                </div>
 
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-gray-100">
-                        <th className="text-left py-2 px-0 text-[10px] uppercase tracking-wider text-gray-400 font-bold">USERS</th>
-                        <th className="text-left py-2 px-0 text-[10px] uppercase tracking-wider text-gray-400 font-bold">ROLE</th>
+                <div className="border border-gray-200 rounded overflow-hidden">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="px-4 py-2 font-medium text-gray-600 text-[11px] uppercase tracking-wider">Users</th>
+                        <th className="px-4 py-2 font-medium text-gray-600 text-[11px] uppercase tracking-wider">Role</th>
+                        <th className="w-10"></th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {formData.locationAccess?.map((access, index) => {
-                          const user = allUsers.find(u => (u._id || u.id) === access.userId);
-                          return (
-                            <tr key={index} className="group hover:bg-gray-50 transition-colors">
-                              <td className="py-2.5 px-0">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
-                                    {user?.image ? (
-                                        <img src={user.image} alt="" className="w-full h-full object-cover" />
+                    <tbody className="divide-y divide-gray-100">
+                      {formData.locationAccess.map((access, index) => (
+                        <tr key={index} className="hover:bg-gray-50 group">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden border border-gray-200">
+                                {allUsers.find(u => (u._id || u.id) === access.userId)?.image ? (
+                                    <img src={allUsers.find(u => (u._id || u.id) === access.userId)?.image} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                    <User size={16} className="text-gray-400" />
+                                )}
+                              </div>
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">{access.userName}</div>
+                                <div className="text-xs text-gray-500">{access.userEmail}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-gray-600 text-xs text-center italic">
+                            {access.role || "No Role"}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                             <button type="button" onClick={() => handleRemoveUser(access.userId)} className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <X size={14} />
+                             </button>
+                          </td>
+                        </tr>
+                      ))}
+                      <tr>
+                        <td className="px-4 py-2" colSpan={2}>
+                           <div className="relative" ref={userDropdownRef}>
+                             <button 
+                                type="button"
+                                onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
+                                className="w-full px-3 py-1.5 border border-gray-200 rounded text-xs text-left text-gray-400 hover:border-gray-300 transition-colors flex items-center justify-between bg-white"
+                             >
+                                <span>Select users</span>
+                                <ChevronDown size={14} />
+                             </button>
+                             {isUserDropdownOpen && (
+                                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg overflow-hidden">
+                                  <div className="p-2 border-b border-gray-100">
+                                    <div className="relative">
+                                      <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+                                      <input 
+                                          type="text" 
+                                          placeholder="Search" 
+                                          className="w-full pl-8 pr-3 py-1 text-xs border-none focus:ring-0" 
+                                          value={userSearch}
+                                          onChange={(e) => setUserSearch(e.target.value)}
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="max-h-48 overflow-y-auto">
+                                    {filteredUsers.length > 0 ? (
+                                      filteredUsers.map(u => (
+                                        <button 
+                                          key={u._id || u.id} 
+                                          type="button" 
+                                          className="w-full px-4 py-2 text-left text-xs hover:bg-gray-50 flex items-center gap-3"
+                                          onClick={() => handleAddUser(u)}
+                                        >
+                                          <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden border border-gray-200">
+                                            {u.image ? <img src={u.image} alt="" className="w-full h-full object-cover" /> : <User size={12} className="text-gray-400" />}
+                                          </div>
+                                          <div>
+                                            <div className="font-medium text-gray-900">{u.name || `${u.firstName} ${u.lastName}`}</div>
+                                            <div className="text-[10px] text-gray-500">{u.email}</div>
+                                          </div>
+                                        </button>
+                                      ))
                                     ) : (
-                                        <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs font-bold font-sans">
-                                            {(user?.name || user?.firstName || access.userName || '?').charAt(0).toUpperCase()}
-                                        </div>
+                                      <div className="px-4 py-2 text-xs text-gray-500">No users found</div>
                                     )}
                                   </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className="text-sm font-medium text-gray-900 truncate">{access.userName || user?.name || `${user?.firstName} ${user?.lastName}`}</div>
-                                    <div className="text-[11px] text-gray-500 truncate">{access.userEmail || user?.email}</div>
-                                  </div>
                                 </div>
-                              </td>
-                              <td className="py-2.5 px-0">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-sm text-gray-600">{extractRoleString(access.role) || "User"}</span>
-                                  <button type="button" onClick={() => handleRemoveUser(access.userId)} className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-600 text-gray-400 transition-all">
-                                    <X size={14} />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                      })}
-                      <tr>
-                        <td className="py-4 px-0 pr-4">
-                            <div className="relative" ref={userDropdownRef}>
-                                <button
-                                    type="button"
-                                    onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-                                    className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm text-left flex items-center justify-between bg-white hover:border-gray-300 transition-colors"
-                                >
-                                    <span className="text-gray-400 italic">Select users</span>
-                                    <ChevronDown size={14} className="text-gray-400" />
-                                </button>
-
-                                {isUserDropdownOpen && (
-                                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-60 overflow-y-auto">
-                                        <div className="p-2 border-b border-gray-100 sticky top-0 bg-white">
-                                            <div className="relative">
-                                                <Search size={14} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                                                <input
-                                                    type="text"
-                                                    placeholder="Search"
-                                                    value={userSearch}
-                                                    onChange={(e) => setUserSearch(e.target.value)}
-                                                    className="w-full pl-7 pr-3 py-1.5 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
-                                                    onClick={(e) => e.stopPropagation()}
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="py-1">
-                                            {filteredUsers.length === 0 ? (
-                                                <div className="px-3 py-2 text-xs text-gray-400 text-center uppercase tracking-tighter">NO RESULTS FOUND</div>
-                                            ) : (
-                                                filteredUsers.map((user) => (
-                                                    <button
-                                                        key={user._id || user.id}
-                                                        type="button"
-                                                        onClick={() => handleUserSelect(user._id || user.id)}
-                                                        className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
-                                                    >
-                                                        <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-[10px] font-bold">
-                                                            {(user.name || '').charAt(0).toUpperCase()}
-                                                        </div>
-                                                        <div className="overflow-hidden">
-                                                            <div className="font-medium text-gray-900 truncate">{user.name}</div>
-                                                            <div className="text-[10px] text-gray-500 truncate">{user.email}</div>
-                                                        </div>
-                                                    </button>
-                                                ))
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
+                             )}
+                           </div>
                         </td>
-                        <td className="py-4 px-0">
-                            <select className="w-full px-3 py-1.5 border border-gray-200 rounded text-sm bg-white text-gray-400 italic">
-                                <option>User's Role</option>
-                            </select>
+                        <td className="px-4 py-2">
+                           <div className="w-full h-8 flex items-center px-3 border border-gray-200 rounded text-[11px] text-gray-400 bg-gray-50/50 italic">
+                             User's Role
+                           </div>
                         </td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
+                <p className="text-[10px] text-gray-400 italic">Selected users can create and access transactions for this location.</p>
               </div>
             </div>
           </div>

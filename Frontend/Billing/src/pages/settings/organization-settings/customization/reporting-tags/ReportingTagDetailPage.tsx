@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Check, ChevronLeft, Loader2, Pencil, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import toast from "react-hot-toast";
+import { toast } from "react-toastify";
 import { reportingTagsAPI } from "../../../../../services/api";
 
 type Level = "transaction" | "lineItem";
@@ -16,6 +16,9 @@ type Tag = {
   isMandatory?: boolean;
   options?: string[];
   isActive: boolean;
+  isInactive?: boolean;
+  defaultOption?: string;
+  inactiveOptions?: string[];
 };
 
 const MODULE_LABELS: Record<string, string> = {
@@ -56,6 +59,7 @@ export default function ReportingTagDetailPage({ tagId }: { tagId: string }) {
   const [draftModuleLevel, setDraftModuleLevel] = useState<Record<string, Level>>({});
   const [draftMandatory, setDraftMandatory] = useState(false);
   const [draftOptions, setDraftOptions] = useState<string[]>([]);
+  const [openOptionMenu, setOpenOptionMenu] = useState<number | null>(null);
 
   const appliesToModules = useMemo(() => {
     const list = (tag?.appliesTo || []).slice();
@@ -152,7 +156,7 @@ export default function ReportingTagDetailPage({ tagId }: { tagId: string }) {
       if (!res?.success) {
         throw new Error(res?.message || "Failed to mark as ready");
       }
-      toast.success("Marked as ready");
+      toast.success("Reporting tag marked as ready.");
       await load();
     } catch (e: any) {
       toast.error(e?.message || "Failed to mark as ready");
@@ -203,15 +207,62 @@ export default function ReportingTagDetailPage({ tagId }: { tagId: string }) {
 
   if (!tag) return null;
 
-  const statusLabel = tag.isActive ? "Ready" : "Not Ready";
-  const statusClasses = tag.isActive
-    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-    : "bg-amber-50 text-amber-700 border-amber-200";
+  const inactiveOptions = Array.isArray(tag.inactiveOptions) ? tag.inactiveOptions : [];
+  const defaultOption = tag.defaultOption || "";
+
+  const statusLabel = tag.isInactive ? "Inactive" : tag.isActive ? "Ready" : "Not Ready";
+  const statusClasses = tag.isInactive
+    ? "bg-gray-50 text-gray-600 border-gray-200"
+    : tag.isActive
+      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+      : "bg-amber-50 text-amber-700 border-amber-200";
 
   const editingAppliesTo = isEditing ? draftAppliesTo : tag.appliesTo;
   const editingModuleLevel = isEditing ? draftModuleLevel : normalizeModuleLevel(tag.moduleLevel);
   const editingMandatory = isEditing ? draftMandatory : Boolean(tag.isMandatory);
   const editingOptions = isEditing ? draftOptions : (Array.isArray(tag.options) ? tag.options : []);
+  const primaryModules = ["sales", "purchases", "journals", "inventoryAdjustments"];
+  const selectedPrimary = primaryModules.filter((k) => editingAppliesTo.includes(k));
+  const lineItemModules = selectedPrimary.filter(
+    (k) => (editingModuleLevel?.[k] || "transaction") === "lineItem"
+  );
+  const transactionModules = selectedPrimary.filter(
+    (k) => (editingModuleLevel?.[k] || "transaction") === "transaction"
+  );
+  const otherModules = editingAppliesTo.filter((k) => !primaryModules.includes(k));
+
+  const setOptionDefault = async (value: string) => {
+    try {
+      await reportingTagsAPI.update(tagId, { defaultOption: value });
+      setOpenOptionMenu(null);
+      toast.success("The default option for this reporting tag has been updated.");
+      await load();
+    } catch (e) {
+      console.error("Failed to update default option:", e);
+    }
+  };
+
+  const setOptionInactive = async (value: string, inactive: boolean) => {
+    try {
+      if (inactive && defaultOption === value) {
+        toast.error("You cannot mark the default option as inactive.");
+        setOpenOptionMenu(null);
+        return;
+      }
+      const next = new Set(inactiveOptions);
+      if (inactive) {
+        next.add(value);
+      } else {
+        next.delete(value);
+      }
+      await reportingTagsAPI.update(tagId, { inactiveOptions: Array.from(next) });
+      setOpenOptionMenu(null);
+      toast.success(inactive ? "Option marked as inactive." : "Option marked as active.");
+      await load();
+    } catch (e) {
+      console.error("Failed to update inactive option:", e);
+    }
+  };
 
   return (
     <div className="flex flex-col min-h-screen bg-white font-sans">
@@ -236,7 +287,7 @@ export default function ReportingTagDetailPage({ tagId }: { tagId: string }) {
         </div>
 
         <div className="flex items-center gap-2">
-          {!isEditing && !tag.isActive && (
+          {!isEditing && !tag.isActive && !tag.isInactive && (
             <button
               onClick={() => setShowMarkReadyModal(true)}
               disabled={markingReady}
@@ -249,7 +300,7 @@ export default function ReportingTagDetailPage({ tagId }: { tagId: string }) {
 
           {!isEditing ? (
             <button
-              onClick={() => setIsEditing(true)}
+              onClick={() => navigate(`/settings/customization/reporting-tags/${tagId}/edit`)}
               className="px-3 py-2 text-[13px] font-medium text-gray-700 bg-gray-100 rounded hover:bg-gray-200 flex items-center gap-2"
             >
               <Pencil size={14} />
@@ -345,11 +396,48 @@ export default function ReportingTagDetailPage({ tagId }: { tagId: string }) {
               {editingOptions.length === 0 ? (
                 <div className="text-[13px] text-gray-400">No options</div>
               ) : (
-                <div className="space-y-2">
-                  {editingOptions.map((opt, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
+                <div className="divide-y divide-gray-200">
+                  {editingOptions.map((opt, idx) => {
+                    const isInactive = inactiveOptions.includes(opt);
+                    const isDefault = defaultOption === opt;
+                    return (
+                    <div key={idx} className="flex items-center gap-2 group relative py-3">
                       {!isEditing ? (
-                        <div className="text-[13px] text-gray-800">{opt}</div>
+                        <>
+                          <div className="text-[13px] text-gray-800 flex-1 flex items-center gap-2">
+                            <span>{opt}</span>
+                            {isInactive && <span className="text-[12px] text-gray-500">(Inactive)</span>}
+                            {isDefault && <span className="text-[11px] text-blue-600">Default</span>}
+                          </div>
+                          <button
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded border border-gray-300 hover:bg-gray-100 text-gray-600"
+                            title="More"
+                            onClick={() => setOpenOptionMenu((prev) => (prev === idx ? null : idx))}
+                          >
+                            ⋮
+                          </button>
+                          {openOptionMenu === idx && (
+                            <div
+                              className="absolute right-0 top-8 w-44 bg-white border border-gray-200 rounded-md shadow-lg z-20"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {!isInactive && (
+                                <button
+                                  className="w-full text-left px-3 py-2 text-[13px] text-blue-600 hover:bg-gray-50"
+                                  onClick={() => setOptionDefault(isDefault ? "" : opt)}
+                                >
+                                  {isDefault ? "Clear Default" : "Mark as Default"}
+                                </button>
+                              )}
+                              <button
+                                className="w-full text-left px-3 py-2 text-[13px] text-gray-700 hover:bg-gray-50"
+                                onClick={() => setOptionInactive(opt, !isInactive)}
+                              >
+                                {isInactive ? "Mark as Active" : "Mark as Inactive"}
+                              </button>
+                            </div>
+                          )}
+                        </>
                       ) : (
                         <>
                           <input
@@ -367,7 +455,7 @@ export default function ReportingTagDetailPage({ tagId }: { tagId: string }) {
                         </>
                       )}
                     </div>
-                  ))}
+                  )})}
                 </div>
               )}
 
@@ -389,31 +477,79 @@ export default function ReportingTagDetailPage({ tagId }: { tagId: string }) {
             </div>
             <div className="p-5 space-y-5">
               <div>
-                <div className="text-[13px] font-medium text-gray-900 mb-2">
-                  Modules where this tag can be associated at transaction level
-                </div>
-                <div className="space-y-2">
-                  {(Object.keys(MODULE_LABELS) as Array<keyof typeof MODULE_LABELS>).map((key) => {
-                    const checked = editingAppliesTo.includes(key);
-                    return (
-                      <label key={key} className="flex items-center gap-2 text-[13px] text-gray-700">
-                        {isEditing ? (
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleAppliesTo(key)}
-                            className="w-4 h-4"
-                          />
-                        ) : (
-                          <span className={`w-4 h-4 inline-flex items-center justify-center rounded ${checked ? "text-[#156372]" : "text-gray-300"}`}>
-                            <Check size={14} />
-                          </span>
-                        )}
-                        <span>{MODULE_LABELS[key]}</span>
-                      </label>
-                    );
-                  })}
-                </div>
+                {isEditing ? (
+                  <>
+                    <div className="text-[13px] font-medium text-gray-900 mb-2">
+                      Modules where this tag can be associated at transaction level
+                    </div>
+                    <div className="space-y-2">
+                      {(Object.keys(MODULE_LABELS) as Array<keyof typeof MODULE_LABELS>).map((key) => {
+                        const checked = editingAppliesTo.includes(key);
+                        return (
+                          <label key={key} className="flex items-center gap-2 text-[13px] text-gray-700">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleAppliesTo(key)}
+                              className="w-4 h-4"
+                            />
+                            <span>{MODULE_LABELS[key]}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {lineItemModules.length > 0 && (
+                      <div className="mb-4">
+                        <div className="text-[13px] font-medium text-gray-900 mb-2">
+                          Modules where this tag can be associated at line-item level
+                        </div>
+                        <div className="space-y-2">
+                          {lineItemModules.map((key) => (
+                            <div key={key} className="flex items-center gap-2 text-[13px] text-gray-700">
+                              <Check size={14} className="text-[#156372]" />
+                              <span>{MODULE_LABELS[key]}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {transactionModules.length > 0 && (
+                      <div className="mb-4">
+                        <div className="text-[13px] font-medium text-gray-900 mb-2">
+                          Modules where this tag can be associated at transaction level
+                        </div>
+                        <div className="space-y-2">
+                          {transactionModules.map((key) => (
+                            <div key={key} className="flex items-center gap-2 text-[13px] text-gray-700">
+                              <Check size={14} className="text-[#156372]" />
+                              <span>{MODULE_LABELS[key]}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {otherModules.length > 0 && (
+                      <div>
+                        <div className="text-[13px] font-medium text-gray-900 mb-2">
+                          Other modules where this tag can be associated
+                        </div>
+                        <div className="space-y-2">
+                          {otherModules.map((key) => (
+                            <div key={key} className="flex items-center gap-2 text-[13px] text-gray-700">
+                              <Check size={14} className="text-[#156372]" />
+                              <span>{MODULE_LABELS[key] || key}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
 
               <div>

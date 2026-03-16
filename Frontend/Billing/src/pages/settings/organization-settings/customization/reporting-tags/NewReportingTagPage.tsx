@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { reportingTagsAPI } from "../../../../../services/api";
+import { toast } from "react-toastify";
 
 type PrimaryModule = "sales" | "purchases";
 type Level = "transaction" | "lineItem";
@@ -135,9 +136,11 @@ export default function NewReportingTagPage({ tagId, mode }: { tagId?: string; m
         options: options.map((o) => o.trim()).filter(Boolean),
         // Create as "Not Ready" by default so user can review configuration before activating.
         isActive: false,
+        isInactive: false,
       });
 
       if (response?.success) {
+        toast.success("Reporting tag created.");
         let id = response?.data?._id || response?.data?.id;
         if (!id) {
           const latest = await reportingTagsAPI.getAll({ page: 1, limit: 1 });
@@ -174,6 +177,7 @@ export default function NewReportingTagPage({ tagId, mode }: { tagId?: string; m
       };
       const res = await reportingTagsAPI.update(tagId, payload);
       if (res?.success) {
+        toast.success("Reporting tag updated.");
         setStep(2);
       }
     } catch (error: any) {
@@ -191,6 +195,7 @@ export default function NewReportingTagPage({ tagId, mode }: { tagId?: string; m
         options: options.map((o) => o.trim()).filter(Boolean),
       });
       if (res?.success) {
+        toast.success("Reporting tag options updated.");
         navigate(`/settings/customization/reporting-tags/${tagId}`);
       }
     } catch (error: any) {
