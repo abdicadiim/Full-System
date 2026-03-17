@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import { X, Search, ArrowUpDown, ChevronRight, Download, Upload, Settings, RefreshCw, Edit3, Eye, EyeOff, Info, ChevronDown, Play, Pause, Square, Trash2, Plus, MoreVertical, MoreHorizontal, SlidersHorizontal, LayoutGrid, List } from 'lucide-react';
-import { projectsAPI, timeEntriesAPI } from "../../services/api";
-import toast from "react-hot-toast";
+import { projectsAPI, timeEntriesAPI, usersAPI } from "../../services/api";
+import { toast } from "react-toastify";
 import { usePermissions } from "../../hooks/usePermissions";
 import AccessDenied from "../../components/AccessDenied";
 import ProjectsPage from "../home/pages/ProjectsPage";
@@ -154,6 +154,9 @@ function TimesheetTable() {
   const [hoveredEntryId, setHoveredEntryId] = useState(null);
   const [openDropdownEntryId, setOpenDropdownEntryId] = useState(null);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteMode, setDeleteMode] = useState("single"); // "single" | "bulk"
+  const [pendingDeleteIds, setPendingDeleteIds] = useState([]);
   const [sortSubmenuOpen, setSortSubmenuOpen] = useState(false);
   const [importSubmenuOpen, setImportSubmenuOpen] = useState(false);
   const [exportSubmenuOpen, setExportSubmenuOpen] = useState(false);
@@ -194,6 +197,7 @@ function TimesheetTable() {
   const [isEditingEntry, setIsEditingEntry] = useState(false);
   const [showMoreDropdown, setShowMoreDropdown] = useState(false);
   const [editedEntryData, setEditedEntryData] = useState(null);
+  const [showEntryMenu, setShowEntryMenu] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [comments, setComments] = useState([]);
   const [isBold, setIsBold] = useState(false);
@@ -210,6 +214,7 @@ function TimesheetTable() {
   const moreDropdownRef = useRef(null);
   const projectDropdownRef = useRef(null);
   const newLogEntryDropdownRef = useRef(null);
+  const entryMenuRef = useRef(null);
 
   const timesheetViews = [
     { id: 'All', label: 'All' },
@@ -252,16 +257,23 @@ function TimesheetTable() {
     return Array.from(customerSet).map((name, index) => ({ id: index + 1, name }));
   }, [projects]);
 
+  const [systemUsers, setSystemUsers] = useState([]);
+
   // Extract unique users from all projects and time entries
   const users = useMemo(() => {
     const userMap = new Map();
 
     // Add users from projects
     projects.forEach(project => {
-      if (project.users && Array.isArray(project.users)) {
-        project.users.forEach(user => {
-          if (user.name && !userMap.has(user.name)) {
-            userMap.set(user.name, { id: user.id || Date.now() + Math.random(), name: user.name, email: user.email || '' });
+      const projectUsers = project.users || project.assignedTo || [];
+      if (Array.isArray(projectUsers)) {
+        projectUsers.forEach(user => {
+          if (user && typeof user === 'object') {
+            if (user.name) {
+              userMap.set(String(user.id || user._id || user.name), { id: user.id || user._id || user.name, name: user.name, email: user.email || '' });
+            }
+          } else if (typeof user === 'string') {
+            userMap.set(user, { id: user, name: '', email: '' });
           }
         });
       }
@@ -281,6 +293,72 @@ function TimesheetTable() {
 
     return Array.from(userMap.values());
   }, [projects, timeEntries]);
+
+  const userById = useMemo(() => {
+    const map = new Map();
+    users.forEach((user) => {
+      if (user?.id) {
+        map.set(String(user.id), user);
+      }
+    });
+    systemUsers.forEach((user) => {
+      const id = user?._id || user?.id;
+      if (id) {
+        map.set(String(id), {
+          id,
+          name: user?.name || user?.fullName || user?.username || '',
+          email: user?.email || ''
+        });
+      }
+    });
+    return map;
+  }, [users, systemUsers]);
+
+  const isLikelyId = (value) => typeof value === 'string' && /^[a-f0-9]{24}$/i.test(value);
+
+  const getProjectForEntry = (entry) => {
+    if (!entry) return null;
+    return projects.find((p) => (
+      (entry.projectId && (p.id === entry.projectId || p._id === entry.projectId)) ||
+      (entry.projectNumber && p.projectNumber === entry.projectNumber) ||
+      (entry.projectName && p.projectName === entry.projectName)
+    )) || null;
+  };
+
+  const getProjectName = (entry) => {
+    const project = getProjectForEntry(entry);
+    return project?.projectName || entry?.projectName || '--';
+  };
+
+  const getCustomerName = (entry) => {
+    const project = getProjectForEntry(entry);
+    return project?.customerName || '--';
+  };
+
+  const getUserName = (entry) => {
+    if (!entry) return '--';
+    if (entry.userName && entry.userName !== '--') return entry.userName;
+    if (entry.user && !isLikelyId(entry.user) && entry.user !== '--') return entry.user;
+    const byUserId = entry.userId ? userById.get(String(entry.userId)) : null;
+    if (byUserId?.name) return byUserId.name;
+    if (entry.user && isLikelyId(entry.user)) {
+      const byRawId = userById.get(String(entry.user));
+      if (byRawId?.name) return byRawId.name;
+    }
+    return '--';
+  };
+
+  const resolveUserIdForEntry = (entry) => {
+    if (!entry) return '';
+    if (entry.userId) return entry.userId;
+    if (entry.user && isLikelyId(entry.user)) return entry.user;
+    const name = entry.userName || entry.user || '';
+    if (!name) return '';
+    const match = [...systemUsers, ...users].find((u) =>
+      (u?.name || u?.fullName || u?.username || u?.email) === name
+    );
+    return match?._id || match?.id || '';
+  };
 
   // Load comments when entry is selected
   useEffect(() => {
@@ -306,6 +384,89 @@ function TimesheetTable() {
       return `${String(h).padStart(2, "0")} hrs : ${String(m).padStart(2, "0")} mins`;
     }
     return "00 hrs : 00 mins";
+  };
+
+  const toHHMM = (entry) => {
+    if (!entry) return "00:00";
+    if (entry.hours || entry.minutes) {
+      const h = Number(entry.hours || 0);
+      const m = Number(entry.minutes || 0);
+      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    }
+    const match = String(entry.timeSpent || "").match(/(\d+)\s*h.*?(\d+)\s*m/i);
+    if (match) {
+      const h = Number(match[1] || 0);
+      const m = Number(match[2] || 0);
+      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    }
+    if (typeof entry.timeSpent === "string" && entry.timeSpent.includes(":")) {
+      return entry.timeSpent;
+    }
+    return "00:00";
+  };
+
+  const handleCloneSelectedEntry = async () => {
+    if (!selectedEntry) return;
+    try {
+      const projectObj = getProjectForEntry(selectedEntry);
+      const [hours, minutes] = String(toHHMM(selectedEntry)).split(":").map((v) => Number(v) || 0);
+      const payload = {
+        project: selectedEntry.projectId || projectObj?.id || projectObj?._id,
+        user: resolveUserIdForEntry(selectedEntry),
+        date: selectedEntry.date ? new Date(selectedEntry.date).toISOString() : new Date().toISOString(),
+        hours,
+        minutes,
+        description: selectedEntry.notes || selectedEntry.description || '',
+        billable: selectedEntry.billable !== undefined ? selectedEntry.billable : true,
+        task: selectedEntry.taskName || selectedEntry.task || '',
+      };
+      await timeEntriesAPI.create(payload);
+      toast.success("Time entry cloned successfully!");
+      window.dispatchEvent(new CustomEvent('timeEntryUpdated'));
+      setShowEntryMenu(false);
+    } catch (error) {
+      console.error("Error cloning time entry:", error);
+      toast.error("Failed to clone time entry");
+    }
+  };
+
+  const openDeleteConfirm = (mode, ids) => {
+    setDeleteMode(mode);
+    setPendingDeleteIds(ids);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteSelectedEntry = () => {
+    if (!selectedEntry) return;
+    openDeleteConfirm("single", [selectedEntry.id]);
+    setShowEntryMenu(false);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!pendingDeleteIds.length) {
+      setShowDeleteConfirm(false);
+      return;
+    }
+    try {
+      if (deleteMode === "single") {
+        await timeEntriesAPI.delete(pendingDeleteIds[0]);
+        toast.success("Time entry deleted successfully!");
+        setSelectedEntry(null);
+      } else {
+        await Promise.all(pendingDeleteIds.map((entryId) => timeEntriesAPI.delete(entryId)));
+        toast.success("Successfully deleted entries.");
+        setSelectedEntries([]);
+      }
+      const response = await timeEntriesAPI.getAll();
+      setTimeEntries(Array.isArray(response) ? response : (response?.data || []));
+      window.dispatchEvent(new CustomEvent('timeEntryUpdated'));
+    } catch (error) {
+      console.error("Error deleting time entry:", error);
+      toast.error("Failed to delete time entry");
+    } finally {
+      setShowDeleteConfirm(false);
+      setPendingDeleteIds([]);
+    }
   };
 
   const handleAddComment = () => {
@@ -382,6 +543,22 @@ function TimesheetTable() {
     };
   }, []);
 
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const response = await usersAPI.getAll();
+        const data = Array.isArray(response)
+          ? response
+          : (response?.data || []);
+        setSystemUsers(data);
+      } catch (error) {
+        console.error("Error loading users:", error);
+        setSystemUsers([]);
+      }
+    };
+    fetchUsers();
+  }, []);
+
   // Get tasks from selected project
   const selectedProject = projects.find(p => p.projectName === logEntryData.projectName);
   const availableTasks = selectedProject?.tasks || [];
@@ -399,19 +576,23 @@ function TimesheetTable() {
 
         // Transform database entries to match frontend format
         const transformedEntries = data.map(entry => {
-          // Extract user name as string (handle both object and string cases)
-          const userName = typeof entry.user === 'object' && entry.user !== null
-            ? (entry.user.name || '--')
-            : (entry.userName || entry.user || '--');
+          const isUserObject = typeof entry.user === 'object' && entry.user !== null;
+          const userName = isUserObject
+            ? (entry.user.name || entry.userName || '')
+            : (entry.userName || '');
+          const rawUser = !isUserObject ? entry.user : undefined;
+          const projectId = typeof entry.project === 'string'
+            ? entry.project
+            : (entry.project?._id || entry.projectId);
 
           return {
             id: entry._id || entry.id,
-            projectId: entry.project?._id || entry.projectId,
-            projectName: entry.project?.name || entry.projectName,
+            projectId: projectId,
+            projectName: entry.project?.name || entry.projectName || '',
             projectNumber: entry.project?.projectNumber || entry.projectNumber,
-            userId: entry.user?._id || entry.userId,
+            userId: isUserObject ? (entry.user?._id || entry.userId) : (entry.userId || rawUser),
             userName: userName,
-            user: userName, // Ensure user is always a string
+            user: userName || (typeof rawUser === 'string' ? rawUser : ''), // keep fallback string (may be id)
             date: entry.date ? new Date(entry.date).toLocaleDateString() : new Date().toLocaleDateString(),
             hours: entry.hours || 0,
             minutes: entry.minutes || 0,
@@ -482,6 +663,9 @@ function TimesheetTable() {
       if (newLogEntryDropdownRef.current && !newLogEntryDropdownRef.current.contains(event.target)) {
         setShowNewLogEntryDropdown(false);
       }
+      if (entryMenuRef.current && !entryMenuRef.current.contains(event.target)) {
+        setShowEntryMenu(false);
+      }
       // Close row dropdown when clicking outside (will be handled by checking if click target is inside dropdown)
       if (openDropdownEntryId) {
         const dropdownElement = document.querySelector(`[data-dropdown-entry-id="${openDropdownEntryId}"]`);
@@ -491,7 +675,7 @@ function TimesheetTable() {
       }
     }
 
-    if (showDropdown || showMoreMenu || showMoreDropdown || showNewLogEntryDropdown || openDropdownEntryId || sortSubmenuOpen || importSubmenuOpen || exportSubmenuOpen || preferencesSubmenuOpen) {
+    if (showDropdown || showMoreMenu || showMoreDropdown || showNewLogEntryDropdown || openDropdownEntryId || sortSubmenuOpen || importSubmenuOpen || exportSubmenuOpen || preferencesSubmenuOpen || showEntryMenu) {
       setTimeout(() => {
         document.addEventListener('mousedown', handleClickOutside);
       }, 0);
@@ -500,7 +684,11 @@ function TimesheetTable() {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showDropdown, showMoreMenu, showMoreDropdown, showNewLogEntryDropdown, openDropdownEntryId, sortSubmenuOpen, importSubmenuOpen, exportSubmenuOpen, preferencesSubmenuOpen]);
+  }, [showDropdown, showMoreMenu, showMoreDropdown, showNewLogEntryDropdown, openDropdownEntryId, sortSubmenuOpen, importSubmenuOpen, exportSubmenuOpen, preferencesSubmenuOpen, showEntryMenu]);
+
+  useEffect(() => {
+    setShowEntryMenu(false);
+  }, [selectedEntry]);
 
   // Load timer state from localStorage on mount
   useEffect(() => {
@@ -685,7 +873,7 @@ function TimesheetTable() {
         window.dispatchEvent(new CustomEvent('timeEntryUpdated'));
 
         // Show success message
-        toast.success('Time entry saved successfully!');
+        toast.success('Time entry created successfully!');
       } catch (error) {
         console.error("Error saving timer entry:", error);
         toast.error("Failed to save time entry");
@@ -1030,14 +1218,8 @@ function TimesheetTable() {
             </button>
             <button
               onClick={async () => {
-                if (!window.confirm("Are you sure you want to delete selected entries?")) return;
-                try {
-                  await Promise.all(selectedEntries.map(entryId => timeEntriesAPI.delete(entryId)));
-                  const response = await timeEntriesAPI.getAll();
-                  setTimeEntries(Array.isArray(response) ? response : (response?.data || []));
-                  setSelectedEntries([]);
-                  toast.success(`Successfully deleted entries.`);
-                } catch (e) { toast.error("Failed to delete entries"); }
+                if (!selectedEntries.length) return;
+                openDeleteConfirm("bulk", [...selectedEntries]);
               }}
               className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-100 cursor-pointer"
             >
@@ -1098,8 +1280,9 @@ function TimesheetTable() {
               </thead>
               <tbody>
                 {sortedEntries.map((entry) => {
-                  const project = projects?.find((p) => p.projectName === entry.projectName);
-                  const customerName = project?.customerName || '--';
+                  const projectName = getProjectName(entry);
+                  const customerName = getCustomerName(entry);
+                  const userName = getUserName(entry);
                   return (
                     <tr key={entry.id} className="cursor-pointer border-b border-gray-200 hover:bg-gray-50">
                       <td className="px-4 py-3 projects-select-cell">
@@ -1117,10 +1300,10 @@ function TimesheetTable() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-800" onClick={() => typeof setSelectedEntry === 'function' && setSelectedEntry(entry)}>{entry.date}</td>
-                      <td className="px-4 py-3 text-sm text-[#156372]" onClick={() => typeof setSelectedEntry === 'function' && setSelectedEntry(entry)}>{entry.projectName || '--'}</td>
+                      <td className="px-4 py-3 text-sm text-[#156372]" onClick={() => typeof setSelectedEntry === 'function' && setSelectedEntry(entry)}>{projectName}</td>
                       <td className="px-4 py-3 text-sm text-gray-800" onClick={() => typeof setSelectedEntry === 'function' && setSelectedEntry(entry)}>{customerName}</td>
                       <td className="px-4 py-3 text-sm text-gray-800" onClick={() => typeof setSelectedEntry === 'function' && setSelectedEntry(entry)}>{entry.taskName}</td>
-                      <td className="px-4 py-3 text-sm text-gray-800" onClick={() => typeof setSelectedEntry === 'function' && setSelectedEntry(entry)}>{entry.user}</td>
+                      <td className="px-4 py-3 text-sm text-gray-800" onClick={() => typeof setSelectedEntry === 'function' && setSelectedEntry(entry)}>{userName}</td>
                       <td className="px-4 py-3 text-sm text-gray-800" onClick={() => typeof setSelectedEntry === 'function' && setSelectedEntry(entry)}>{entry.timeSpent}</td>
                       <td className="px-4 py-3 text-sm text-gray-800" onClick={() => typeof setSelectedEntry === 'function' && setSelectedEntry(entry)}>{entry.billingStatus || 'Unbilled'}</td>
                       <td className="px-4 py-3" />
@@ -1140,13 +1323,14 @@ function TimesheetTable() {
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-5 p-6">
             {sortedEntries.map((entry) => {
-              const project = projects?.find((p) => p.projectName === entry.projectName);
-              const customerName = project?.customerName || '--';
+              const projectName = getProjectName(entry);
+              const customerName = getCustomerName(entry);
+              const userName = getUserName(entry);
               return (
                 <div key={entry.id} className="cursor-pointer rounded-lg border border-gray-200 bg-white p-5 hover:shadow" onClick={() => typeof setSelectedEntry === 'function' && setSelectedEntry(entry)}>
-                  <div className="mb-2 text-lg font-semibold text-[#156372]">{entry.projectName || 'Unassigned'}</div>
+                  <div className="mb-2 text-lg font-semibold text-[#156372]">{projectName || 'Unassigned'}</div>
                   <div className="text-sm text-gray-600 mb-1">Time: {entry.timeSpent}</div>
-                  <div className="text-sm text-gray-600 mb-1">User: {entry.user}</div>
+                  <div className="text-sm text-gray-600 mb-1">User: {userName}</div>
                   <div className="text-sm text-gray-600">Status: {entry.billingStatus || 'Unbilled'}</div>
                 </div>
               );
@@ -1159,15 +1343,42 @@ function TimesheetTable() {
         <div className="absolute right-0 top-0 h-full w-[360px] border-l border-gray-200 bg-white shadow-lg z-40 flex flex-col">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
             <div className="text-sm font-semibold text-gray-900">
-              {`${selectedEntry.user || "User"}'s Log Entry`}
+              {`${getUserName(selectedEntry) || "User"}'s Log Entry`}
             </div>
-            <div className="flex items-center gap-2">
-              <button className="h-7 w-7 rounded border border-gray-200 text-gray-600 flex items-center justify-center hover:bg-gray-50">
+            <div className="flex items-center gap-2" ref={entryMenuRef}>
+              <button
+                onClick={() => {
+                  setIsEditingEntry(true);
+                  setEditedEntryData(selectedEntry);
+                }}
+                className="h-7 w-7 rounded border border-gray-200 text-gray-600 flex items-center justify-center hover:bg-gray-50"
+              >
                 <Edit3 size={14} />
               </button>
-              <button className="h-7 w-7 rounded border border-gray-200 text-gray-600 flex items-center justify-center hover:bg-gray-50">
+              <div className="relative">
+                <button
+                  onClick={() => setShowEntryMenu((v) => !v)}
+                  className="h-7 w-7 rounded border border-gray-200 text-gray-600 flex items-center justify-center hover:bg-gray-50"
+                >
                 <MoreVertical size={14} />
-              </button>
+                </button>
+                {showEntryMenu && (
+                  <div className="absolute right-0 mt-2 w-32 rounded-md border border-gray-200 bg-white py-1 text-sm shadow-lg">
+                    <button
+                      onClick={handleCloneSelectedEntry}
+                      className="w-full px-3 py-2 text-left text-gray-700 hover:bg-gray-50"
+                    >
+                      Clone
+                    </button>
+                    <button
+                      onClick={handleDeleteSelectedEntry}
+                      className="w-full px-3 py-2 text-left text-red-600 hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
               <button
                 onClick={() => setSelectedEntry(null)}
                 className="h-7 w-7 rounded border border-gray-200 text-red-500 flex items-center justify-center hover:bg-red-50"
@@ -1206,44 +1417,73 @@ function TimesheetTable() {
           <div className="flex-1 overflow-auto px-4 py-3">
             {activeTab === 'otherDetails' && (
               <div className="space-y-3 text-sm text-gray-700">
-                <div className="flex justify-between"><span className="text-gray-500">Project Name :</span><span>{selectedEntry.projectName || "--"}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Customer Name :</span><span>{(projects?.find((p) => p.projectName === selectedEntry.projectName)?.customerName) || "--"}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Project Name :</span><span>{getProjectName(selectedEntry)}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Customer Name :</span><span>{getCustomerName(selectedEntry)}</span></div>
                 <div className="flex justify-between"><span className="text-gray-500">Task Name :</span><span>{selectedEntry.taskName || "--"}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">User Name :</span><span>{selectedEntry.user || "--"}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">User Name :</span><span>{getUserName(selectedEntry)}</span></div>
                 <div className="flex justify-between"><span className="text-gray-500">Total Cost :</span><span>$0.00</span></div>
               </div>
             )}
 
             {activeTab === 'comments' && (
               <div className="space-y-4">
-                <div className="space-y-2">
-                  {comments.length === 0 && (
-                    <div className="text-xs text-gray-500">No comments yet.</div>
-                  )}
-                  {comments.map((c) => (
-                    <div key={c.id} className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-700">
-                      <div>{c.text}</div>
-                      <div className="mt-1 text-[10px] text-gray-400">
-                        {new Date(c.createdAt).toLocaleString()}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div>
+                <div className="rounded-lg border border-gray-200 bg-white">
+                  <div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-2 py-2">
+                    <button
+                      onClick={() => setIsBold((v) => !v)}
+                      className={`h-7 w-7 rounded border ${isBold ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-gray-200 text-gray-600'} text-xs font-semibold`}
+                    >
+                      B
+                    </button>
+                    <button
+                      onClick={() => setIsItalic((v) => !v)}
+                      className={`h-7 w-7 rounded border ${isItalic ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-gray-200 text-gray-600'} text-xs italic`}
+                    >
+                      I
+                    </button>
+                    <button
+                      onClick={() => setIsUnderline((v) => !v)}
+                      className={`h-7 w-7 rounded border ${isUnderline ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-gray-200 text-gray-600'} text-xs underline`}
+                    >
+                      U
+                    </button>
+                  </div>
                   <textarea
                     value={commentText}
                     onChange={(e) => setCommentText(e.target.value)}
-                    className="w-full rounded-md border border-gray-300 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full resize-none border-none px-3 py-2 text-sm focus:outline-none"
                     rows={3}
                     placeholder="Add a comment"
+                    style={{
+                      fontWeight: isBold ? "600" : "400",
+                      fontStyle: isItalic ? "italic" : "normal",
+                      textDecoration: isUnderline ? "underline" : "none",
+                    }}
                   />
-                  <div className="mt-2 flex justify-end">
+                  <div className="flex justify-start border-t border-gray-200 px-2 py-2">
                     <button
                       onClick={handleAddComment}
-                      className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                      className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
                     >
                       Add Comment
                     </button>
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-200 pt-3">
+                  <div className="text-[11px] font-semibold text-gray-500">ALL COMMENTS</div>
+                  <div className="mt-2 space-y-2">
+                    {comments.length === 0 && (
+                      <div className="text-xs text-gray-500">No comments yet.</div>
+                    )}
+                    {comments.map((c) => (
+                      <div key={c.id} className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-700">
+                        <div>{c.text}</div>
+                        <div className="mt-1 text-[10px] text-gray-400">
+                          {new Date(c.createdAt).toLocaleString()}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -1252,7 +1492,300 @@ function TimesheetTable() {
         </div>
       )}
 
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200">
+            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+              <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
+                !
+              </div>
+              <h3 className="text-[15px] font-semibold text-slate-800 flex-1">
+                {deleteMode === "bulk" ? "Delete time entries?" : "Delete time entry?"}
+              </h3>
+              <button
+                type="button"
+                className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                onClick={() => setShowDeleteConfirm(false)}
+                aria-label="Close"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="px-5 py-3 text-[13px] text-slate-600">
+              {deleteMode === "bulk"
+                ? "You cannot retrieve these time entries once they have been deleted."
+                : "You cannot retrieve this time entry once it has been deleted."}
+            </div>
+            <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+              <button
+                type="button"
+                className="px-4 py-1.5 rounded-md bg-blue-600 text-white text-[12px] hover:bg-blue-700"
+                onClick={handleConfirmDelete}
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                className="px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50"
+                onClick={() => setShowDeleteConfirm(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showLogEntryForm && <NewLogEntryForm onClose={() => setShowLogEntryForm(false)} />}
+
+      {isEditingEntry && selectedEntry && (
+        <div
+          className="fixed inset-0 z-[2100] flex items-center justify-center bg-black/50 p-5"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsEditingEntry(false);
+            }
+          }}
+        >
+          <EditLogEntryModal
+            entry={selectedEntry}
+            projects={projects}
+            users={systemUsers.length > 0 ? systemUsers : users}
+            userById={userById}
+            onClose={() => setIsEditingEntry(false)}
+            onSaved={() => {
+              setIsEditingEntry(false);
+              window.dispatchEvent(new CustomEvent('timeEntryUpdated'));
+            }}
+            toHHMM={toHHMM}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EditLogEntryModal({ entry, projects, users, userById, onClose, onSaved, toHHMM }) {
+  const resolveProjectName = () => {
+    const byId = entry?.projectId
+      ? projects.find((p) => p.id === entry.projectId || p._id === entry.projectId)
+      : null;
+    if (byId?.projectName) return byId.projectName;
+    const byNumber = entry?.projectNumber
+      ? projects.find((p) => p.projectNumber === entry.projectNumber)
+      : null;
+    if (byNumber?.projectName) return byNumber.projectName;
+    return entry?.projectName || '';
+  };
+
+  const resolveUserId = () => {
+    if (entry?.userId) return entry.userId;
+    if (entry?.user && userById?.get && userById.get(String(entry.user))) {
+      return entry.user;
+    }
+    if (entry?.userName) {
+      const match = users.find((u) => (u?.name || u?.fullName || u?.username || u?.email) === entry.userName);
+      return match?._id || match?.id || '';
+    }
+    if (entry?.user) {
+      const match = users.find((u) => (u?.name || u?.fullName || u?.username || u?.email) === entry.user);
+      return match?._id || match?.id || '';
+    }
+    return '';
+  };
+
+  const [form, setForm] = useState({
+    date: entry?.date ? new Date(entry.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+    projectName: resolveProjectName(),
+    taskName: entry?.taskName || entry?.task || '',
+    timeSpent: toHHMM(entry),
+    userId: resolveUserId(),
+    notes: entry?.notes || entry?.description || '',
+    billable: entry?.billable !== undefined ? entry.billable : true,
+  });
+
+  const selectedProject = projects.find((p) => p.projectName === form.projectName);
+  const tasks = selectedProject?.tasks || [];
+  const costPerHour = Number(selectedProject?.billingRate || 0);
+  const currencyCode = String(selectedProject?.currency || "USD").substring(0, 3).toUpperCase();
+  const [h, m] = String(form.timeSpent || "00:00").split(":").map((v) => Number(v) || 0);
+  const totalCost = (h + m / 60) * costPerHour;
+
+  return (
+    <div className="w-full max-w-[600px] overflow-hidden rounded-lg bg-white shadow-2xl">
+      <div className="flex items-start justify-between border-b border-gray-200 px-6 pt-6 pb-2">
+        <div>
+          <h2 className="m-0 mb-1 text-xl font-semibold text-gray-900">Edit Log Entry</h2>
+          <p className="m-0 text-xs text-gray-500">Log time instantly using shortcut keys c + t</p>
+        </div>
+        <button onClick={onClose} className="border-none bg-transparent p-1 text-gray-900 hover:text-gray-600">
+          <X size={18} />
+        </button>
+      </div>
+
+      <div className="p-6">
+        <div className="mb-5">
+          <label className="mb-1.5 block text-sm font-medium text-[#ef4444]">
+            Date<span className="text-red-500">*</span>
+          </label>
+          <input
+            type="date"
+            value={form.date}
+            onChange={(e) => setForm({ ...form, date: e.target.value })}
+            className="w-full rounded-md border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+          />
+        </div>
+
+        <div className="mb-5">
+          <label className="mb-1.5 block text-sm font-medium text-[#ef4444]">
+            Project Name<span className="text-red-500">*</span>
+          </label>
+          <div className="relative">
+            <select
+              value={form.projectName}
+              onChange={(e) => setForm({ ...form, projectName: e.target.value, taskName: '' })}
+              className="w-full appearance-none rounded-md border border-blue-500 bg-white px-3 py-2.5 pr-9 text-sm outline-none focus:border-blue-500"
+            >
+              <option value="">Select a project</option>
+              {projects.map((project) => (
+                <option key={project.id || project._id} value={project.projectName}>
+                  {project.projectName}
+                </option>
+              ))}
+            </select>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
+              <ChevronDown size={14} />
+            </span>
+          </div>
+        </div>
+
+        <div className="mb-5">
+          <label className="mb-1.5 block text-sm font-medium text-[#ef4444]">
+            Task Name<span className="text-red-500">*</span>
+          </label>
+          <div className="relative">
+            <select
+              value={form.taskName}
+              onChange={(e) => setForm({ ...form, taskName: e.target.value })}
+              className="w-full appearance-none rounded-md border border-gray-300 bg-white px-3 py-2.5 pr-9 text-sm outline-none focus:border-blue-500"
+              disabled={!form.projectName}
+            >
+              <option value="">{form.projectName ? "Select task" : "Select project first"}</option>
+              {tasks.map((task, idx) => {
+                const name = task.taskName || task.name || `Task ${idx + 1}`;
+                return (
+                  <option key={`${name}-${idx}`} value={name}>
+                    {name}
+                  </option>
+                );
+              })}
+            </select>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
+              <ChevronDown size={14} />
+            </span>
+          </div>
+        </div>
+
+        <div className="mb-5">
+          <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-[#ef4444]">
+            Time Spent<span className="text-red-500">*</span>
+            <div className="flex h-[18px] w-[18px] items-center justify-center rounded-full border border-gray-300 text-xs text-gray-500">?</div>
+          </label>
+          <input
+            type="text"
+            value={form.timeSpent}
+            onChange={(e) => setForm({ ...form, timeSpent: e.target.value })}
+            placeholder="HH:MM"
+            className="w-full rounded-md border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+          />
+        </div>
+
+        <div className="mb-5">
+          <label className="mb-1.5 block text-sm font-medium text-[#ef4444]">
+            User<span className="text-red-500">*</span>
+          </label>
+          <div className="relative">
+            <select
+              value={form.userId}
+              onChange={(e) => setForm({ ...form, userId: e.target.value })}
+              className="w-full appearance-none rounded-md border border-gray-300 bg-white px-3 py-2.5 pr-9 text-sm outline-none focus:border-blue-500"
+            >
+              <option value="">Select user</option>
+              {users.map((u, idx) => {
+                const id = u?._id || u?.id || u?.userId || String(idx);
+                const name = u?.name || u?.fullName || u?.username || u?.email || 'User';
+                return (
+                  <option key={id} value={id}>
+                    {name}
+                  </option>
+                );
+              })}
+            </select>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
+              <ChevronDown size={14} />
+            </span>
+          </div>
+        </div>
+
+        <div className="mb-5 text-sm text-gray-800">
+          <div className="font-medium text-gray-700">Total Cost</div>
+          <div className="mt-1 text-gray-700">
+            {currencyCode} {totalCost.toFixed(2)} for {form.timeSpent || "00:00"} hours (Cost Per Hour: {currencyCode} {costPerHour.toFixed(2)})
+          </div>
+        </div>
+
+        <div className="mb-6">
+          <label className="mb-1.5 block text-sm font-medium text-gray-700">Notes</label>
+          <textarea
+            value={form.notes}
+            onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            placeholder="Add notes"
+            rows={4}
+            className="w-full resize-y rounded-md border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500"
+          />
+        </div>
+
+        <div className="flex items-center gap-3 border-t border-gray-200 pt-4">
+          <button
+            onClick={async () => {
+              if (!form.date || !form.projectName || !form.taskName || !form.timeSpent) {
+                toast.error("Please fill in all required fields");
+                return;
+              }
+              const projectObj = projects.find((p) => p.projectName === form.projectName);
+              const [hours, minutes] = String(form.timeSpent).split(":").map(Number);
+              const payload = {
+                project: projectObj?.id || projectObj?._id || entry.projectId,
+                user: form.userId || entry.userId || entry.user,
+                date: new Date(form.date).toISOString(),
+                hours: hours || 0,
+                minutes: minutes || 0,
+                description: form.notes || '',
+                billable: form.billable,
+                task: form.taskName || '',
+              };
+              try {
+                await timeEntriesAPI.update(entry.id, payload);
+                toast.success("Time entry updated successfully!");
+                onSaved();
+              } catch (error) {
+                toast.error("Failed to update time entry");
+              }
+            }}
+            className="cursor-pointer rounded-md border-none px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90"
+            style={{ background: "#2563eb" }}
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            className="cursor-pointer rounded-md border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

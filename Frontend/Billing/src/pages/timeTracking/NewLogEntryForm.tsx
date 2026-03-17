@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { X, ChevronDown, Clock } from "lucide-react";
 import api, { projectsAPI } from "../../services/api";
 import { getCurrentUser } from "../../services/auth";
-import toast from "react-hot-toast";
+import { toast } from "react-toastify";
 
 const timeEntriesAPI = (api as any).timeEntriesAPI;
 
@@ -529,7 +529,7 @@ export default function NewLogEntryForm({
 
                   await timeEntriesAPI.create(newEntry);
 
-                  toast.success('Time entry saved successfully!');
+                  toast.success('Time entry created successfully!');
 
                   // Dispatch custom event to notify other components
                   window.dispatchEvent(new CustomEvent('timeEntryUpdated'));
