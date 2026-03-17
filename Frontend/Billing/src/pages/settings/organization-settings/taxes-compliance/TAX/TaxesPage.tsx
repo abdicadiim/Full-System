@@ -7,7 +7,7 @@ import TaxBulkPage from "./bulk/TaxBulkPage";
 import TaxImportPage from "./import/TaxImportPage";
 import TaxSettingsPage from "../tax-settings/TaxSettingsPage";
 import TDSRatesPage from "./tds/TDSRatesPage";
-import { readTaxComplianceSettingsLocal } from "./storage";
+import { readTaxComplianceSettingsLocal, syncTaxesFromBackend } from "./storage";
 
 export default function TaxesPage() {
     const navigate = useNavigate();
@@ -35,6 +35,7 @@ export default function TaxesPage() {
             }
         };
 
+        void syncTaxesFromBackend();
         loadTDSState();
         window.addEventListener("taban:tax-settings-storage-updated", loadTDSState);
         return () => window.removeEventListener("taban:tax-settings-storage-updated", loadTDSState);

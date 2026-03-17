@@ -1550,7 +1550,7 @@ export default function NewRecurringExpense() {
               const isBaseCurrency = Boolean(currencyData.isBaseCurrency);
 
               if (!code || !name || !symbol) {
-                alert("Please enter currency code, name, and symbol");
+                toast.error("Please enter currency code, name, and symbol");
                 return;
               }
 
@@ -1560,7 +1560,7 @@ export default function NewRecurringExpense() {
                 String(row?.code || row?.currencyCode || "").trim().toUpperCase() === code
               );
               if (hasDuplicate) {
-                alert("Currency code already exists.");
+                toast.error("Currency code already exists.");
                 return;
               }
 
@@ -1578,9 +1578,10 @@ export default function NewRecurringExpense() {
               const createdId = String(created?.data?._id || created?.data?.id || "");
               setFormData((prev) => ({ ...prev, currency: code, currencyId: createdId || prev.currencyId }));
               setNewCurrencyModalOpen(false);
+              toast.success("Currency created");
             } catch (error) {
               console.error("Error creating currency:", error);
-              alert("Failed to create currency");
+              toast.error("Failed to create currency");
             }
           }}
         />

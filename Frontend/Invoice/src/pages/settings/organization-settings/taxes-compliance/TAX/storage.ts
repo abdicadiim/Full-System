@@ -199,6 +199,111 @@ export const writeTaxesLocal = (rows: LocalTaxRecord[]) => {
   emitStorageEvent(TAXES_STORAGE_EVENT);
 };
 
+const writeTaxesLocalFromBackend = (rows: any[]) => {
+  const normalized = ensureDefaultTax(
+    rows
+      .map(normalizeTaxRecord)
+      .filter(Boolean) as LocalTaxRecord[]
+  );
+  localStorage.setItem(TAXES_STORAGE_KEY, JSON.stringify(normalized));
+  syncLegacyTaxesKey(normalized);
+  emitStorageEvent(TAXES_STORAGE_EVENT);
+};
+
+let taxesSyncInFlight: Promise<void> | null = null;
+
+export const syncTaxesFromBackend = async () => {
+  if (taxesSyncInFlight) return taxesSyncInFlight;
+
+  taxesSyncInFlight = (async () => {
+    try {
+      const res = await fetch("/api/taxes", { credentials: "include" });
+      if (!res.ok) return;
+      const json = await res.json().catch(() => null);
+      const list = Array.isArray(json?.data) ? json.data : [];
+      if (!json?.success) return;
+
+      const mapped = list.map((row: any) => ({
+        _id: String(row?._id || row?.id || ""),
+        id: String(row?._id || row?.id || ""),
+        name: String(row?.name || ""),
+        rate: Number(row?.rate || 0),
+        type: String(row?.type || "both"),
+        description:
+          String(row?.kind || "") === "group" ? TAX_GROUP_MARKER : String(row?.description || ""),
+        groupTaxes: Array.isArray(row?.groupTaxes) ? row.groupTaxes.map((x: any) => String(x)) : [],
+        isActive: row?.isActive !== false,
+        isDefault: !!row?.isDefault,
+        isCompound: !!row?.isCompound,
+        isDigitalServiceTax: !!row?.isDigitalServiceTax,
+        digitalServiceCountry: String(row?.digitalServiceCountry || ""),
+        trackTaxByCountryScheme: !!row?.trackTaxByCountryScheme,
+        accountToTrackSales: String(row?.accountToTrackSales || ""),
+        accountToTrackPurchases: String(row?.accountToTrackPurchases || ""),
+        isValueAddedTax: !!row?.isValueAddedTax,
+        createdAt: String(row?.createdAt || ""),
+        updatedAt: String(row?.updatedAt || ""),
+      }));
+
+      writeTaxesLocalFromBackend(mapped);
+    } catch {
+      // ignore
+    } finally {
+      taxesSyncInFlight = null;
+    }
+  })();
+
+  return taxesSyncInFlight;
+};
+
+const apiUpsertTax = async (tax: LocalTaxRecord) => {
+  const isGroup = isTaxGroupRecord(tax);
+  const payload: any = {
+    _id: tax._id,
+    kind: isGroup ? "group" : "tax",
+    name: tax.name,
+    rate: isGroup ? 0 : Number(tax.rate || 0),
+    type: tax.type || "both",
+    description: isGroup ? "" : String(tax.description || ""),
+    groupTaxes: isGroup ? (tax.groupTaxes || []).map(String) : [],
+    isActive: tax.isActive !== false,
+    isDefault: !!tax.isDefault,
+    isCompound: !!tax.isCompound,
+    isDigitalServiceTax: !!tax.isDigitalServiceTax,
+    digitalServiceCountry: String(tax.digitalServiceCountry || ""),
+    trackTaxByCountryScheme: !!tax.trackTaxByCountryScheme,
+    accountToTrackSales: String(tax.accountToTrackSales || ""),
+    accountToTrackPurchases: String(tax.accountToTrackPurchases || ""),
+    isValueAddedTax: !!tax.isValueAddedTax,
+  };
+
+  try {
+    const existing = await fetch(`/api/taxes/${encodeURIComponent(tax._id)}`, { credentials: "include" });
+    if (existing.ok) {
+      await fetch(`/api/taxes/${encodeURIComponent(tax._id)}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      return;
+    }
+  } catch {
+    // ignore
+  }
+
+  try {
+    await fetch("/api/taxes", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    // ignore
+  }
+};
+
 export const getTaxByIdLocal = (taxId: string) =>
   readTaxesLocal().find((row) => String(row._id) === String(taxId)) || null;
 
@@ -234,6 +339,7 @@ export const createTaxLocal = (payload: Partial<LocalTaxRecord>) => {
   }
   nextRows.unshift(created);
   writeTaxesLocal(nextRows);
+  void apiUpsertTax(created).then(() => syncTaxesFromBackend());
   return created;
 };
 
@@ -268,6 +374,7 @@ export const updateTaxLocal = (taxId: string, payload: Partial<LocalTaxRecord>) 
   }
 
   writeTaxesLocal(updatedRows);
+  void apiUpsertTax(updatedTax).then(() => syncTaxesFromBackend());
   return updatedTax;
 };
 
@@ -283,6 +390,8 @@ export const markDefaultTaxLocal = (taxId: string) => {
     }
   });
   writeTaxesLocal(rows);
+  const updated = rows.find((row) => String(row._id) === String(taxId)) || null;
+  if (updated) void apiUpsertTax(updated).then(() => syncTaxesFromBackend());
   return rows.find((row) => String(row._id) === String(taxId)) || null;
 };
 
@@ -298,6 +407,11 @@ export const deleteTaxesLocal = (ids: string[]) => {
 
   const deletedCount = current.length - nextRows.length;
   writeTaxesLocal(nextRows);
+
+  ids.forEach((id) => {
+    void fetch(`/api/taxes/${encodeURIComponent(String(id))}`, { method: "DELETE", credentials: "include" }).catch(() => undefined);
+  });
+  void syncTaxesFromBackend();
   return deletedCount;
 };
 

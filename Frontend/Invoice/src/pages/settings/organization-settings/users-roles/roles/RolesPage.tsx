@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { Loader2, MoreVertical, Eye, Copy, Trash2 } from "lucide-react";
 import { rolesAPI } from "../../../../../services/api";
+import Skeleton from "../../../../../components/ui/Skeleton";
 import { getCurrentUser } from "../../../../../services/auth";
 
 const STANDARD_ROLES = [
@@ -265,8 +266,25 @@ export default function RolesPage() {
 
       {/* Loading State */}
       {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="animate-spin h-8 w-8 text-gray-400" />
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="bg-gray-50 border-b border-gray-200 px-6 py-3">
+            <div className="grid grid-cols-3 gap-4">
+              <Skeleton className="h-3 w-28" />
+              <Skeleton className="h-3 w-44" />
+              <Skeleton className="h-3 w-10 ml-auto" />
+            </div>
+          </div>
+          <div className="divide-y divide-gray-200">
+            {Array.from({ length: 8 }).map((_, idx) => (
+              <div key={idx} className="px-6 py-4">
+                <div className="grid grid-cols-3 gap-4 items-center">
+                  <Skeleton className="h-4 w-44" />
+                  <Skeleton className="h-4 w-full max-w-[520px]" />
+                  <Skeleton className="h-6 w-6 rounded ml-auto" />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       ) : (
         /* Table */

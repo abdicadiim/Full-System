@@ -47,10 +47,12 @@ export default function AddAdditionalContactModal({
     const fetchUsers = async () => {
       try {
         const token = getToken();
-        if (!token) return;
+        const headers: Record<string, string> = {};
+        if (token) headers.Authorization = `Bearer ${token}`;
 
         const response = await fetch(`${API_BASE_URL}/settings/users?status=active`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          headers,
+          credentials: "include",
         });
         const data = await response.json();
         if (data.success) {
@@ -71,6 +73,7 @@ export default function AddAdditionalContactModal({
   const handleSelectUser = (user: User) => {
     setEmail(user.email);
     setEmailSearch(user.email);
+    if (!editData) setName(user.name);
     setShowEmailDropdown(false);
   };
 
@@ -220,7 +223,11 @@ export default function AddAdditionalContactModal({
                   type="checkbox"
                   id="smtpSecure"
                   checked={smtpSecure}
-                  onChange={(e) => setSmtpSecure(e.target.checked)}
+                  onChange={(e) => {
+                    const next = e.target.checked;
+                    setSmtpSecure(next);
+                    setSmtpPort(next ? 465 : 587);
+                  }}
                   className="w-4 h-4 text-blue-600 rounded"
                 />
                 <label htmlFor="smtpSecure" className="text-xs font-medium text-gray-600">Use SSL/TLS (Port 465)</label>

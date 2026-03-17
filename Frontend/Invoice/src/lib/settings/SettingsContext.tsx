@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import { useUser } from '../auth/UserContext';
 
 const SettingsContext = createContext(null);
 
@@ -57,6 +58,20 @@ function applyThemeColors(theme) {
   root.style.setProperty('--accent', accentRgb);
 }
 
+function setDocumentFavicon(href: string) {
+  if (!href) return;
+  const head = document.head || document.getElementsByTagName("head")[0];
+  const existing =
+    (head.querySelector('link[rel="icon"]') as HTMLLinkElement | null) ||
+    (head.querySelector('link[rel="shortcut icon"]') as HTMLLinkElement | null);
+
+  const link = existing || (document.createElement("link") as HTMLLinkElement);
+  link.rel = existing?.rel || "icon";
+  link.type = "image/png";
+  link.href = href;
+  if (!existing) head.appendChild(link);
+}
+
 export function SettingsProvider({ children }) {
   // Load settings from localStorage or use defaults
   const [settings, setSettings] = useState(() => {
@@ -69,11 +84,13 @@ export function SettingsProvider({ children }) {
             schoolDisplayName: parsed.general?.schoolDisplayName || 'Taban Enterprise',
             shortName: parsed.general?.shortName || 'Taban',
             companyDisplayName: parsed.general?.companyDisplayName || 'Taban Enterprise',
+            organizationEmail: parsed.general?.organizationEmail || "",
           },
           branding: {
             primaryColor: parsed.branding?.primaryColor || DEFAULT_THEME.primaryColor,
             logoUrl: parsed.branding?.logoUrl || '',
             logoFile: parsed.branding?.logoFile || '',
+            appearance: parsed.branding?.appearance || 'dark',
           },
           theme: {
             primaryColor: parsed.theme?.primaryColor || DEFAULT_THEME.primaryColor,
@@ -93,11 +110,13 @@ export function SettingsProvider({ children }) {
         schoolDisplayName: 'Taban Enterprise',
         shortName: 'Taban',
         companyDisplayName: 'Taban Enterprise',
+        organizationEmail: "",
       },
       branding: {
         primaryColor: DEFAULT_THEME.primaryColor,
         logoUrl: '',
         logoFile: '',
+        appearance: 'dark',
       },
       theme: { ...DEFAULT_THEME },
     };
@@ -106,6 +125,132 @@ export function SettingsProvider({ children }) {
   const [campuses, setCampuses] = useState(DEFAULT_CAMPUSES);
   const [currentCampusId, setCurrentCampusId] = useState('all');
   const [loadingCampuses, setLoadingCampuses] = useState(false);
+  const { user, hasChecked } = useUser();
+
+  const applyOrganizationProfileToSettings = (profile: any) => {
+    const name = String(profile?.name || profile?.organizationName || "").trim();
+    const logo = String(profile?.logoUrl || profile?.logo || "").trim();
+    const orgEmail = String(profile?.email || profile?.primaryContactEmail || "").trim();
+
+    if (!name && !logo && !orgEmail) return;
+
+    setSettings((prev) => {
+      const nextName = name || prev.general?.companyDisplayName || prev.general?.schoolDisplayName || "";
+      const shortName = nextName.split(/\s+/).filter(Boolean)[0] || prev.general?.shortName || "";
+      return {
+        ...prev,
+        general: {
+          ...prev.general,
+          ...(nextName ? { companyDisplayName: nextName, schoolDisplayName: nextName, shortName } : {}),
+          ...(orgEmail ? { organizationEmail: orgEmail } : {}),
+        },
+        branding: {
+          ...prev.branding,
+          ...(logo ? { logoUrl: logo } : {}),
+        },
+      };
+    });
+  };
+
+  const applyBrandingToSettings = (branding: any) => {
+    if (!branding) return;
+
+    const appearanceRaw = String(branding?.appearance || "").trim();
+    const appearance = appearanceRaw === "system" ? "dark" : (appearanceRaw || "dark");
+    const accentColor = String(branding?.accentColor || "").trim();
+    const sidebarDarkFrom = String(branding?.sidebarDarkFrom || "").trim();
+    const sidebarLightFrom = String(branding?.sidebarLightFrom || "").trim();
+    const logo = String(branding?.logo || "").trim();
+
+    setSettings((prev) => {
+      const nextSidebarColor =
+        appearance === "light"
+          ? (sidebarLightFrom || prev.theme?.sidebarColor || DEFAULT_THEME.sidebarColor)
+          : (sidebarDarkFrom || prev.theme?.sidebarColor || DEFAULT_THEME.sidebarColor);
+
+      const nextAccent = accentColor || prev.theme?.accentColor || DEFAULT_THEME.accentColor;
+
+      return {
+        ...prev,
+        branding: {
+          ...prev.branding,
+          appearance,
+          ...(logo ? { logoUrl: logo } : {}),
+        },
+        theme: {
+          ...prev.theme,
+          sidebarColor: nextSidebarColor,
+          accentColor: nextAccent,
+          buttonHoverColor: nextAccent,
+        },
+      };
+    });
+  };
+
+  useEffect(() => {
+    if (!hasChecked || !user) return;
+
+    try {
+      const cached = localStorage.getItem("organization_profile");
+      if (cached) applyOrganizationProfileToSettings(JSON.parse(cached));
+    } catch {}
+
+    const token = localStorage.getItem("auth_token") || localStorage.getItem("token") || "";
+    fetch("/api/settings/organization/profile", {
+      credentials: "include",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
+      .then((res) => res.json().catch(() => null))
+      .then((payload) => {
+        const profile = payload?.success ? payload?.data : null;
+        if (!profile) return;
+        try {
+          localStorage.setItem("organization_profile", JSON.stringify(profile));
+        } catch {}
+        applyOrganizationProfileToSettings(profile);
+      })
+      .catch(() => {});
+  }, [hasChecked, user?.id]);
+
+  useEffect(() => {
+    if (!hasChecked || !user) return;
+
+    try {
+      const cached = localStorage.getItem("organization_branding");
+      if (cached) applyBrandingToSettings(JSON.parse(cached));
+    } catch {}
+
+    const token = localStorage.getItem("auth_token") || localStorage.getItem("token") || "";
+    fetch("/api/settings/organization/branding", {
+      credentials: "include",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
+      .then((res) => res.json().catch(() => null))
+      .then((payload) => {
+        const branding = payload?.success ? payload?.data : null;
+        if (!branding) return;
+        try {
+          localStorage.setItem("organization_branding", JSON.stringify(branding));
+        } catch {}
+        applyBrandingToSettings(branding);
+      })
+      .catch(() => {});
+  }, [hasChecked, user?.id]);
+
+  useEffect(() => {
+    const handleBrandingUpdate = (event: any) => {
+      const detail = event?.detail;
+      if (!detail) return;
+      try {
+        localStorage.setItem("organization_branding", JSON.stringify(detail));
+      } catch {}
+      applyBrandingToSettings(detail);
+    };
+
+    window.addEventListener("brandingUpdated" as any, handleBrandingUpdate);
+    return () => window.removeEventListener("brandingUpdated" as any, handleBrandingUpdate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Apply theme colors when settings change
   useEffect(() => {
@@ -113,6 +258,16 @@ export function SettingsProvider({ children }) {
       applyThemeColors(settings.theme);
     }
   }, [settings.theme]);
+
+  useEffect(() => {
+    const title = String(settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "").trim();
+    if (title) document.title = title;
+  }, [settings?.general?.companyDisplayName, settings?.general?.schoolDisplayName]);
+
+  useEffect(() => {
+    const icon = String(settings?.branding?.logoUrl || settings?.branding?.logoFile || "").trim();
+    if (icon) setDocumentFavicon(icon);
+  }, [settings?.branding?.logoUrl, settings?.branding?.logoFile]);
 
   // Save settings to localStorage whenever they change
   useEffect(() => {

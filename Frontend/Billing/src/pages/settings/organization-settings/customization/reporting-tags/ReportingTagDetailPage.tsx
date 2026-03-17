@@ -3,6 +3,7 @@ import { Check, ChevronLeft, Loader2, Pencil, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { reportingTagsAPI } from "../../../../../services/api";
+import Skeleton from "../../../../../components/ui/Skeleton";
 
 type Level = "transaction" | "lineItem";
 
@@ -168,9 +169,29 @@ export default function ReportingTagDetailPage({ tagId }: { tagId: string }) {
   if (loading) {
     return (
       <div className="bg-white min-h-screen font-sans">
-        <div className="px-8 py-5 border-b border-gray-200 flex items-center gap-3">
-          <Loader2 className="animate-spin text-gray-400" size={18} />
-          <span className="text-[13px] text-gray-600">Loading reporting tag...</span>
+        <div className="px-8 py-5 border-b border-gray-200 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-8 w-8 rounded" />
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-44" />
+              <Skeleton className="h-3 w-56" />
+            </div>
+          </div>
+          <Skeleton className="h-8 w-8 rounded" />
+        </div>
+        <div className="p-8 space-y-6">
+          <div className="rounded-lg border border-gray-200 p-6 space-y-4">
+            <Skeleton className="h-4 w-52" />
+            <Skeleton className="h-10 w-full max-w-[520px]" />
+            <Skeleton className="h-4 w-44" />
+            <Skeleton className="h-10 w-full max-w-[640px]" />
+          </div>
+          <div className="rounded-lg border border-gray-200 p-6 space-y-3">
+            <Skeleton className="h-4 w-60" />
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <Skeleton key={idx} className="h-10 w-full" />
+            ))}
+          </div>
         </div>
       </div>
     );

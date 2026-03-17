@@ -6,6 +6,7 @@ import NewEmailTemplateModal from "./NewEmailTemplateModal";
 import SignatureSettingsModal from "./SignatureSettingsModal";
 import AddAdditionalContactModal from "./AddAdditionalContactModal";
 import ShowMailContentModal from "./ShowMailContentModal";
+import Skeleton from "../../components/ui/Skeleton";
 import {
   emailTemplatesAPI,
   senderEmailsAPI,
@@ -13,6 +14,10 @@ import {
   emailRelayAPI,
 } from "../../services/api";
 import { getTemplateKeyFromLabel } from "./emailTemplateUtils";
+import { useSettings } from "../../lib/settings/SettingsContext";
+import { useUser } from "../../lib/auth/UserContext";
+
+const DEFAULT_SYSTEM_SENDER_EMAIL = "message-service@sender.tabanbooks.com";
 
 interface Sender {
   _id?: string;
@@ -42,6 +47,8 @@ interface RelayServer {
 
 export default function EmailNotificationsPage() {
   const navigate = useNavigate();
+  const { settings } = useSettings();
+  const { user } = useUser();
   const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
   const [selectedPreference, setSelectedPreference] = useState<string | null>("Sender Email Preferences");
   const [showNewTemplateModal, setShowNewTemplateModal] = useState(false);
@@ -262,12 +269,21 @@ export default function EmailNotificationsPage() {
     return !domainSenders.some((s) => Boolean(s.isVerified));
   });
   const primarySender = senders.find((sender) => sender.isPrimary);
-  const sendingFromAddress = primarySender?.isVerified
-    ? primarySender.email
-    : "message-service@sender.tabanbooks.com";
-  const sendingFromLabel = primarySender?.isVerified
-    ? "Primary sender email"
-    : "Email address of Taban Books";
+  const orgEmail = String(settings?.general?.organizationEmail || "").trim();
+  const orgName = String(settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "").trim() || "Organization";
+  const sendingFromAddress = primarySender?.isVerified ? primarySender.email : DEFAULT_SYSTEM_SENDER_EMAIL;
+
+  const userPrimaryRow: Sender | null = !primarySender && user?.email
+    ? {
+        id: "user-primary-email",
+        name: String(user?.name || orgName || "User"),
+        email: String(user.email || "").trim().toLowerCase(),
+        isPrimary: true,
+        isVerified: false,
+      }
+    : null;
+  const hasSyntheticPrimary = Boolean(userPrimaryRow);
+  const tableSenders: Sender[] = userPrimaryRow ? [userPrimaryRow, ...senders] : senders;
 
   const markPrimaryContact = async (sender: Sender) => {
     try {
@@ -285,37 +301,7 @@ export default function EmailNotificationsPage() {
     }
   };
 
-  const resendVerification = async (sender: Sender) => {
-    try {
-      setErrorMessage(null);
-      const response = await senderEmailsAPI.update(sender._id || sender.id, { isVerified: true });
-      if (!response?.success) {
-        setErrorMessage(response?.message || "Failed to resend verification.");
-        return;
-      }
-      await fetchSenders();
-      showSuccess("Verification status updated.");
-    } catch (error) {
-      console.error("Error resending verification:", error);
-      setErrorMessage("Failed to resend verification.");
-    }
-  };
-
-  const authenticateDomain = async (domain: string) => {
-    try {
-      setErrorMessage(null);
-      const domainSenders = senders.filter((sender) => getDomain(sender.email) === domain);
-      await Promise.all(
-        domainSenders.map((sender) =>
-          senderEmailsAPI.update(sender._id || sender.id, { isVerified: true })
-        )
-      );
-      await fetchSenders();
-      showSuccess(`Domain ${domain} authenticated.`);
-    } catch (error: any) {
-      setErrorMessage(error?.message || `Failed to authenticate ${domain}.`);
-    }
-  };
+  // Verification emails are not used in this system. SMTP config is treated as ready-to-use.
 
   const toggleRelayServer = async (server: RelayServer, enabled: boolean) => {
     try {
@@ -471,7 +457,7 @@ export default function EmailNotificationsPage() {
         </div>
 
         {/* Right Content - Email Details */}
-        <div className="flex-1 bg-white rounded-lg border border-gray-200 p-6">
+        <div className="flex-1 bg-white rounded-lg border border-gray-200 p-6 max-h-[600px] overflow-y-auto">
           {selectedPreference === "Sender Email Preferences" ? (
             <div>
               <div className="flex items-center justify-between mb-6">
@@ -504,15 +490,7 @@ export default function EmailNotificationsPage() {
                     ) : (
                       <div className="space-y-2">
                         {unauthenticatedDomains.map((domain) => (
-                          <div key={domain} className="flex items-center justify-between">
-                            <span className="text-sm text-gray-800">{domain}</span>
-                            <button
-                              onClick={() => authenticateDomain(domain)}
-                              className="text-xs text-blue-700 hover:underline"
-                            >
-                              Authenticate Now
-                            </button>
-                          </div>
+                          <div key={domain} className="text-sm text-gray-800">{domain}</div>
                         ))}
                       </div>
                     )}
@@ -534,9 +512,47 @@ export default function EmailNotificationsPage() {
 
               {/* Emails Are Sent Through Section */}
               <div className="mb-6">
-                <h3 className="text-sm font-semibold text-gray-900 mb-2">EMAILS ARE SENT THROUGH</h3>
-                <div className="text-sm text-gray-700 mb-1">{sendingFromLabel}</div>
-                <div className="text-sm text-gray-600">{sendingFromAddress}</div>
+                <h3 className="text-sm font-semibold text-gray-900 mb-2">Public Domains</h3>
+                <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+                  <div className="grid grid-cols-1 md:grid-cols-[320px_1fr]">
+                    <div className="p-5 border-b md:border-b-0 md:border-r border-slate-200">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 mb-3">
+                        EMAILS ARE SENT THROUGH
+                      </div>
+                      {loadingSenders ? (
+                        <>
+                          <Skeleton className="h-4 w-44 mb-2" />
+                          <Skeleton className="h-3 w-56" />
+                        </>
+                      ) : (
+                        <>
+                          <div className="text-sm font-semibold text-slate-900">
+                            Email address of {orgName}
+                          </div>
+                          <div className="text-sm text-slate-500">
+                            ({sendingFromAddress})
+                          </div>
+                          {!primarySender?.isVerified && orgEmail ? (
+                            <div className="mt-1 text-xs text-slate-500">
+                              Reply-To: {orgEmail}
+                            </div>
+                          ) : null}
+                        </>
+                      )}
+                    </div>
+                    <div className="p-5 bg-sky-50/60">
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-sky-100 text-sky-700">
+                          <Info size={14} />
+                        </div>
+                        <p className="text-sm text-slate-700 leading-relaxed">
+                          Emails sent from a public domain may be flagged as spam. If you use a public domain address,
+                          the email will be delivered via a system sender. In all cases, the Reply-To address will be set to the from address.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Senders Table */}
@@ -551,28 +567,35 @@ export default function EmailNotificationsPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-200">
                     {loadingSenders && (
-                      <tr>
-                        <td colSpan={3} className="px-4 py-6 text-sm text-gray-500">Loading sender emails...</td>
-                      </tr>
+                      <>
+                        {Array.from({ length: 5 }).map((_, idx) => (
+                          <tr key={idx}>
+                            <td className="px-4 py-3">
+                              <Skeleton className="h-4 w-44" />
+                            </td>
+                            <td className="px-4 py-3">
+                              <Skeleton className="h-4 w-64" />
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <Skeleton className="h-4 w-16 ml-auto" />
+                            </td>
+                          </tr>
+                        ))}
+                      </>
                     )}
-                    {!loadingSenders && senders.length === 0 && (
+                    {!loadingSenders && tableSenders.length === 0 && (
                       <tr>
                         <td colSpan={3} className="px-4 py-6 text-sm text-gray-500">No sender emails found.</td>
                       </tr>
                     )}
-                    {senders.map((sender) => (
+                    {tableSenders.map((sender) => (
                       <tr key={sender._id || sender.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <span className="text-sm text-gray-900">{sender.name}</span>
-                            {sender.isPrimary && (
+                            {(sender.id === "user-primary-email" || (!hasSyntheticPrimary && sender.isPrimary)) && (
                               <span className="px-2 py-0.5 text-xs font-medium text-green-700 bg-green-50 rounded">
                                 PRIMARY
-                              </span>
-                            )}
-                            {!sender.isVerified && (
-                              <span className="px-2 py-0.5 text-xs font-medium text-amber-700 bg-amber-50 rounded">
-                                UNVERIFIED
                               </span>
                             )}
                           </div>
@@ -582,20 +605,14 @@ export default function EmailNotificationsPage() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-2">
+                            {sender.id === "user-primary-email" ? null : (
+                              <>
                             {!sender.isPrimary && (
                               <button
                                 onClick={() => markPrimaryContact(sender)}
                                 className="text-xs text-blue-700 hover:underline"
                               >
                                 Mark as Primary
-                              </button>
-                            )}
-                            {!sender.isVerified && (
-                              <button
-                                onClick={() => resendVerification(sender)}
-                                className="text-xs text-blue-700 hover:underline"
-                              >
-                                Resend Email
                               </button>
                             )}
                             <button
@@ -624,6 +641,8 @@ export default function EmailNotificationsPage() {
                             >
                               <Trash2 size={16} />
                             </button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { X, Download, ChevronRight, Upload, Lightbulb, Info, Check, AlertTriangle } from "lucide-react";
 import { getToken, API_BASE_URL } from "../../../../../services/auth";
 import { parseImportFile } from "../../../../utils/importFileParser";
+import { toast } from "react-toastify";
 
 type ImportField = {
   key: string;
@@ -249,12 +250,12 @@ export default function ImportExchangeRates() {
 
     const extension = `.${String(file.name.split(".").pop() || "").toLowerCase()}`;
     if (![".csv", ".tsv", ".xls", ".xlsx"].includes(extension)) {
-      alert("Please select a CSV, TSV, XLS, or XLSX file.");
+      toast.error("Please select a CSV, TSV, XLS, or XLSX file.");
       return;
     }
 
     if (file.size > 25 * 1024 * 1024) {
-      alert("File size must be less than 25 MB.");
+      toast.error("File size must be less than 25 MB.");
       return;
     }
 
@@ -270,12 +271,12 @@ export default function ImportExchangeRates() {
 
     const extension = `.${String(file.name.split(".").pop() || "").toLowerCase()}`;
     if (![".csv", ".tsv", ".xls", ".xlsx"].includes(extension)) {
-      alert("Please select a CSV, TSV, XLS, or XLSX file.");
+      toast.error("Please select a CSV, TSV, XLS, or XLSX file.");
       return;
     }
 
     if (file.size > 25 * 1024 * 1024) {
-      alert("File size must be less than 25 MB.");
+      toast.error("File size must be less than 25 MB.");
       return;
     }
 
@@ -332,7 +333,7 @@ export default function ImportExchangeRates() {
 
   const handleNext = async () => {
     if (!selectedFile) {
-      alert("Please select a file first.");
+      toast.error("Please select a file first.");
       return;
     }
 
@@ -343,7 +344,7 @@ export default function ImportExchangeRates() {
         const safeRows = Array.isArray(rows) ? rows : [];
 
         if (safeHeaders.length === 0 || safeRows.length === 0) {
-          alert("Could not read any rows from the file.");
+          toast.error("Could not read any rows from the file.");
           return;
         }
 
@@ -362,7 +363,7 @@ export default function ImportExchangeRates() {
         setCurrentStep(2);
       } catch (error: any) {
         console.error("Error parsing currency import file:", error);
-        alert(error?.message || "Failed to parse file.");
+        toast.error(error?.message || "Failed to parse file.");
       }
       return;
     }
@@ -380,7 +381,7 @@ export default function ImportExchangeRates() {
 
   const handleImport = async () => {
     if (!isPreviewReady) {
-      alert("Please fix mapping/validation errors before importing.");
+      toast.error("Please fix mapping/validation errors before importing.");
       return;
     }
 
@@ -457,15 +458,16 @@ export default function ImportExchangeRates() {
       localStorage.setItem("taban_currencies", JSON.stringify(currenciesData));
 
       if (failures.length > 0) {
-        alert(`Imported ${successCount} row(s). ${failures.length} row(s) failed.\n\n${failures.slice(0, 10).join("\n")}`);
+        toast.warning(`Imported ${successCount} row(s). ${failures.length} row(s) failed.`);
+        console.warn("Import failures:", failures);
       } else {
-        alert(`Successfully imported ${successCount} currency row(s).`);
+        toast.success(`Successfully imported ${successCount} currency row(s).`);
       }
 
       navigate("/settings/currencies");
     } catch (error: any) {
       console.error("Currency import failed:", error);
-      alert(error?.message || "Failed to import currencies.");
+      toast.error(error?.message || "Failed to import currencies.");
     } finally {
       setIsImporting(false);
     }

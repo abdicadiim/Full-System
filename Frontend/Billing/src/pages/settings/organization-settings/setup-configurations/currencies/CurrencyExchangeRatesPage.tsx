@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ChevronLeft, Plus, Trash2 } from "lucide-react";
-import { getToken, API_BASE_URL } from "../../../../../services/auth";
+import { toast } from "react-toastify";
+import { currenciesAPI } from "../../../../../services/api";
 import AddExchangeRateModal from "./AddExchangeRateModal";
 
 export default function CurrencyExchangeRatesPage() {
@@ -13,24 +14,36 @@ export default function CurrencyExchangeRatesPage() {
     const [exchangeRates, setExchangeRates] = useState<any[]>([]);
     const [showAddModal, setShowAddModal] = useState(false);
 
-    const fetchData = () => {
+    const fetchData = async () => {
+        setLoading(true);
         try {
-            const stored = localStorage.getItem("taban_currencies");
-            const allCurrenciesData = stored ? JSON.parse(stored) : [];
-
-            const currencyData = allCurrenciesData.find((c: any) => c.id === id || c._id === id);
-
-            if (currencyData) {
-                setCurrency(currencyData);
-                setExchangeRates(currencyData.exchangeRates || []);
+            if (id) {
+                const res = await currenciesAPI.getById(id);
+                if (res?.success && res?.data) {
+                    setCurrency(res.data);
+                    setExchangeRates(res.data.exchangeRates || []);
+                } else {
+                    throw new Error(res?.message || "Currency not found");
+                }
             }
 
-            if (allCurrenciesData.length > 0) {
-                const base = allCurrenciesData.find((c: any) => c.isBase || c.isBaseCurrency);
-                setBaseCurrency(base);
-            }
+            const baseRes = await currenciesAPI.getBaseCurrency();
+            if (baseRes?.success) setBaseCurrency(baseRes.data);
         } catch (err) {
             console.error("Error fetching data:", err);
+            try {
+                const stored = localStorage.getItem("taban_currencies");
+                const allCurrenciesData = stored ? JSON.parse(stored) : [];
+                const currencyData = allCurrenciesData.find((c: any) => c.id === id || c._id === id);
+                if (currencyData) {
+                    setCurrency(currencyData);
+                    setExchangeRates(currencyData.exchangeRates || []);
+                }
+                const base = allCurrenciesData.find((c: any) => c.isBase || c.isBaseCurrency);
+                setBaseCurrency(base || null);
+            } catch {
+                // ignore
+            }
         } finally {
             setLoading(false);
         }
@@ -43,28 +56,21 @@ export default function CurrencyExchangeRatesPage() {
 
     const handleSaveExchangeRate = async (newRate: { date: string; rate: string }) => {
         try {
-            const stored = localStorage.getItem("taban_currencies");
-            const allCurrencies = stored ? JSON.parse(stored) : [];
-            const idx = allCurrencies.findIndex((c: any) => c.id === id || c._id === id);
+            if (!id) return toast.error("Currency not found");
 
-            if (idx >= 0) {
-                const currencyToUpdate = allCurrencies[idx];
-                const rates = currencyToUpdate.exchangeRates || [];
-                const rateWithId = { ...newRate, _id: "rate_" + Date.now() + Math.random().toString(36).substring(2, 9) };
-                rates.push(rateWithId);
-                currencyToUpdate.exchangeRates = rates;
+            const currentRates = Array.isArray(exchangeRates) ? exchangeRates : [];
+            const rateWithId = { ...newRate, _id: "rate_" + Date.now() + Math.random().toString(36).substring(2, 9) };
+            const nextRates = [...currentRates, rateWithId];
 
-                allCurrencies[idx] = currencyToUpdate;
-                localStorage.setItem("taban_currencies", JSON.stringify(allCurrencies));
+            const res = await currenciesAPI.update(id, { exchangeRates: nextRates });
+            if (!res?.success) throw new Error(res?.message || "Failed to add exchange rate");
 
-                fetchData();
-                setShowAddModal(false);
-            } else {
-                alert("Currency not found");
-            }
+            toast.success("Exchange rate added");
+            await fetchData();
+            setShowAddModal(false);
         } catch (err) {
             console.error("Error adding exchange rate:", err);
-            alert("Failed to add exchange rate");
+            toast.error((err as any)?.message || "Failed to add exchange rate");
         }
     };
 
@@ -75,25 +81,18 @@ export default function CurrencyExchangeRatesPage() {
         if (!confirmed) return;
 
         try {
-            const stored = localStorage.getItem("taban_currencies");
-            const allCurrencies = stored ? JSON.parse(stored) : [];
-            const idx = allCurrencies.findIndex((c: any) => c.id === id || c._id === id);
+            if (!id) return toast.error("Currency not found");
+            const currentRates = Array.isArray(exchangeRates) ? exchangeRates : [];
+            const nextRates = currentRates.filter((r: any) => r?._id !== rateId);
 
-            if (idx >= 0) {
-                const currencyToUpdate = allCurrencies[idx];
-                const rates = currencyToUpdate.exchangeRates || [];
-                currencyToUpdate.exchangeRates = rates.filter((r: any) => r._id !== rateId);
+            const res = await currenciesAPI.update(id, { exchangeRates: nextRates });
+            if (!res?.success) throw new Error(res?.message || "Failed to delete exchange rate");
 
-                allCurrencies[idx] = currencyToUpdate;
-                localStorage.setItem("taban_currencies", JSON.stringify(allCurrencies));
-
-                fetchData();
-            } else {
-                throw new Error("Currency not found");
-            }
+            toast.success("Exchange rate deleted");
+            await fetchData();
         } catch (err: any) {
             console.error("Error deleting exchange rate:", err);
-            alert(err.message || "Failed to delete exchange rate");
+            toast.error(err?.message || "Failed to delete exchange rate");
         }
     };
 

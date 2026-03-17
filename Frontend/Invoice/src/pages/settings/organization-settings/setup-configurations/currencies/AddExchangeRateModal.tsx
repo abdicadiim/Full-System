@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { toast } from "react-toastify";
 
 export default function AddExchangeRateModal({ currencyCode, baseCurrencyCode, onClose, onSave }) {
     const [date, setDate] = useState("");
@@ -8,7 +9,7 @@ export default function AddExchangeRateModal({ currencyCode, baseCurrencyCode, o
 
     const handleSave = () => {
         if (!date || !rate) {
-            alert("Please fill in all required fields");
+            toast.error("Please fill in all required fields");
             return;
         }
         onSave({ date, rate });

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { X, Search, ChevronUp, ChevronDown } from "lucide-react";
+import { toast } from "react-toastify";
 
 export default function EditCurrencyModal({ currency, onClose, onSave, onAddExchangeRate }) {
   const [currencyCode, setCurrencyCode] = useState(currency?.code || "");
@@ -87,7 +88,7 @@ export default function EditCurrencyModal({ currency, onClose, onSave, onAddExch
 
   const handleSave = () => {
     if (!currencyCode || !currencySymbol || !currencyName) {
-      alert("Please fill in all required fields");
+      toast.error("Please fill in all required fields");
       return;
     }
     onSave({

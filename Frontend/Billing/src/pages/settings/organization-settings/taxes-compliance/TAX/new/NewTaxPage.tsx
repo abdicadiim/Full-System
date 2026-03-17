@@ -2,6 +2,7 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { Info } from "lucide-react";
 import { createTaxLocal, getTaxByIdLocal, isTaxGroupRecord, updateTaxLocal } from "../storage";
+import { toast } from "react-toastify";
 
 export default function NewTaxPage() {
     const navigate = useNavigate();
@@ -37,7 +38,7 @@ export default function NewTaxPage() {
                 setTrackTaxByCountryScheme(Boolean(tax.trackTaxByCountryScheme));
             } catch (err: any) {
                 console.error("Error loading tax:", err);
-                alert("Failed to load tax");
+                toast.error("Failed to load tax");
                 navigate("/settings/taxes");
             } finally {
                 setIsLoading(false);
@@ -49,7 +50,7 @@ export default function NewTaxPage() {
 
     const handleSave = () => {
         if (!taxName || !taxRate) {
-            alert("Tax name and rate are required.");
+            toast.error("Tax name and rate are required.");
             return;
         }
 
@@ -67,14 +68,16 @@ export default function NewTaxPage() {
             if (isEditMode && id) {
                 const updated = updateTaxLocal(id, payload);
                 if (!updated) throw new Error("Failed to update tax");
+                toast.success("Tax updated");
             } else {
                 createTaxLocal(payload);
+                toast.success("Tax created");
             }
 
             navigate("/settings/taxes");
         } catch (err: any) {
             console.error("Error saving tax:", err);
-            alert(err.message || (isEditMode ? "Failed to update tax" : "Failed to create tax"));
+            toast.error(err.message || (isEditMode ? "Failed to update tax" : "Failed to create tax"));
         }
     };
 

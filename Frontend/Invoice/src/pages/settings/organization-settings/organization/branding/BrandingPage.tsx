@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Upload, X, Moon, Sun, Check } from "lucide-react";
+import { toast } from "react-toastify";
 
 const API_BASE_URL = '/api';
 
@@ -17,9 +18,6 @@ export default function BrandingPage({ onColorChange }) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState(null);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const [showSuccessNotification, setShowSuccessNotification] = useState(false);
-  const [successMessage, setSuccessMessage] = useState("");
-  const notificationTimeoutRef = useRef(null);
   const fileInputRef = useRef(null);
   const colorPickerRef = useRef(null);
   const saveTimeoutRef = useRef(null);
@@ -401,29 +399,20 @@ export default function BrandingPage({ onColorChange }) {
               detail: eventData
             }));
 
-            // Show success notification based on what changed
-            if (changeType === "logo") {
-              setSuccessMessage("Logo has been saved.");
-            } else if (changeType === "appearance") {
-              setSuccessMessage("Theme preference has been saved.");
-            } else if (changeType === "accent") {
-              setSuccessMessage("Accent color has been saved.");
-            } else {
-              setSuccessMessage("Branding preference has been saved.");
-            }
-            setShowSuccessNotification(true);
-
-            // Auto-hide notification after 3 seconds
-            if (notificationTimeoutRef.current) {
-              clearTimeout(notificationTimeoutRef.current as any);
-            }
-            notificationTimeoutRef.current = setTimeout(() => {
-              setShowSuccessNotification(false);
-            }, 3000) as any;
+            const message =
+              changeType === "logo"
+                ? "Logo has been saved."
+                : changeType === "appearance"
+                  ? "Theme preference has been saved."
+                  : changeType === "accent"
+                    ? "Accent color has been saved."
+                    : "Branding preference has been saved.";
+            toast.success(message, { toastId: `branding-${changeType}` });
           }
         }
       } catch (error) {
         console.error('Error auto-saving branding:', error);
+        toast.error("Failed to save branding.", { toastId: "branding-error" });
       } finally {
         setIsSaving(false);
       }
@@ -485,15 +474,6 @@ export default function BrandingPage({ onColorChange }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keepZohoBranding]);
-
-  // Cleanup notification timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (notificationTimeoutRef.current) {
-        clearTimeout(notificationTimeoutRef.current);
-      }
-    };
-  }, []);
 
   return (
     <div className="p-6 max-w-4xl">
@@ -689,32 +669,6 @@ export default function BrandingPage({ onColorChange }) {
       {isSaving && (
         <div className="fixed bottom-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg bg-blue-500 text-white text-sm">
           Saving...
-        </div>
-      )}
-
-      {/* Success notification */}
-      {showSuccessNotification && (
-        <div className="fixed bottom-4 right-4 z-50 transition-all duration-300 ease-in-out">
-          <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 shadow-lg flex items-center gap-3 min-w-[300px] max-w-md">
-            <div className="bg-green-600 rounded-lg p-2 flex-shrink-0">
-              <Check size={20} className="text-white" />
-            </div>
-            <span className="text-sm font-medium text-gray-900 flex-1">
-              {successMessage}
-            </span>
-            <button
-              onClick={() => {
-                setShowSuccessNotification(false);
-                if (notificationTimeoutRef.current) {
-                  clearTimeout(notificationTimeoutRef.current);
-                }
-              }}
-              className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
-              aria-label="Close notification"
-            >
-              <X size={16} />
-            </button>
-          </div>
         </div>
       )}
 

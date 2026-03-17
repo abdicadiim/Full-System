@@ -2,6 +2,7 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { GripVertical, X } from "lucide-react";
 import { TAX_GROUP_MARKER, createTaxLocal, getTaxByIdLocal, isTaxGroupRecord, readTaxesLocal, updateTaxLocal } from "../storage";
+import { toast } from "react-toastify";
 
 type TaxOption = {
   id: string;
@@ -72,10 +73,12 @@ export default function NewTaxGroupPage() {
   const handleSave = () => {
     if (!groupName.trim()) {
       setError("Tax Group Name is required.");
+      toast.error("Tax Group Name is required.");
       return;
     }
     if (selectedTaxIds.length === 0) {
       setError("Select at least one tax for this group.");
+      toast.error("Select at least one tax for this group.");
       return;
     }
 
@@ -93,13 +96,15 @@ export default function NewTaxGroupPage() {
       if (isEditMode && id) {
         const updated = updateTaxLocal(id, payload);
         if (!updated) throw new Error("Failed to update tax group");
+        toast.success("Tax group updated");
       } else {
         createTaxLocal(payload);
+        toast.success("Tax group created");
       }
 
       navigate("/settings/taxes");
     } catch (saveError: any) {
-      alert(saveError.message || (isEditMode ? "Failed to update tax group" : "Failed to create tax group"));
+      toast.error(saveError.message || (isEditMode ? "Failed to update tax group" : "Failed to create tax group"));
     } finally {
       setSaving(false);
     }

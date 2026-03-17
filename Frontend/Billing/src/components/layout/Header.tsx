@@ -35,6 +35,7 @@ function Header({ onToggleSidebar }) {
   const email = user?.email || "";
   const schoolName = settings?.general?.schoolDisplayName || "Taban Billing";
   const avatarInitial = displayName.trim().charAt(0).toUpperCase() || "A";
+  const avatarSrc = String(settings?.branding?.logoUrl || settings?.branding?.logoFile || user?.photoUrl || "").trim();
   const unreadMessages = user?.unreadMessages ?? 0;
   const unreadNotifications = user?.unreadNotifications ?? 0;
 
@@ -166,6 +167,7 @@ function Header({ onToggleSidebar }) {
   }
 
   const headerBg = settings?.theme?.sidebarColor || "#156372";
+  const isLightAppearance = settings?.branding?.appearance === "light";
 
   return (
     <div className="sticky top-0 z-40 bg-white pt-2">
@@ -175,7 +177,12 @@ function Header({ onToggleSidebar }) {
           <button
             type="button"
             onClick={onToggleSidebar}
-            className="hidden h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white transition hover:bg-white/20"
+            className={[
+              "hidden h-8 w-8 items-center justify-center rounded-full border transition",
+              isLightAppearance
+                ? "border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
+                : "border-white/20 bg-white/10 text-white hover:bg-white/20",
+            ].join(" ")}
             aria-label="Toggle sidebar"
           >
             <Menu className="h-4 w-4" />
@@ -183,17 +190,23 @@ function Header({ onToggleSidebar }) {
 
           <div className="relative min-w-0 w-full max-w-[560px]" ref={searchDropdownRef}>
             <div
-              className="flex h-9 min-w-0 w-full items-center rounded-lg border border-white/15 bg-white/10 px-3 shadow-sm"
+              className={[
+                "flex h-9 min-w-0 w-full items-center rounded-lg border px-3 shadow-sm",
+                isLightAppearance ? "border-slate-200 bg-white/90" : "border-white/15 bg-white/10",
+              ].join(" ")}
               onClick={() => setOpenSearchScopeDropdown(true)}
             >
-              <Search className="h-4 w-4 shrink-0 text-white/80" />
+              <Search className={["h-4 w-4 shrink-0", isLightAppearance ? "text-slate-400" : "text-white/80"].join(" ")} />
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   setOpenSearchScopeDropdown((state) => !state);
                 }}
-                className="ml-1 inline-flex items-center justify-center text-white/70 hover:text-white transition-colors"
+                className={[
+                  "ml-1 inline-flex items-center justify-center transition-colors",
+                  isLightAppearance ? "text-slate-500 hover:text-slate-700" : "text-white/70 hover:text-white",
+                ].join(" ")}
                 aria-label="Open search scope dropdown"
               >
                 <ChevronDown className="h-3.5 w-3.5 shrink-0" />
@@ -204,7 +217,10 @@ function Header({ onToggleSidebar }) {
                 value={searchValue}
                 onChange={(e) => setSearchValue(e.target.value)}
                 onFocus={() => setOpenSearchScopeDropdown(true)}
-                className="ml-2 min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-white/70 focus:outline-none"
+                className={[
+                  "ml-2 min-w-0 flex-1 bg-transparent text-sm focus:outline-none",
+                  isLightAppearance ? "text-slate-700 placeholder:text-slate-400" : "text-white placeholder:text-white/70",
+                ].join(" ")}
                 placeholder={`Search in ${searchScope || currentSection} ( / )`}
               />
             </div>
@@ -268,7 +284,10 @@ function Header({ onToggleSidebar }) {
             <button
               type="button"
               onClick={() => setOpenQuickCreate((state) => !state)}
-              className="inline-flex h-8 w-8 items-center justify-center rounded bg-white/10 text-white transition hover:bg-white/20"
+              className={[
+                "inline-flex h-8 w-8 items-center justify-center rounded transition",
+                isLightAppearance ? "bg-white/90 text-slate-700 hover:bg-slate-100 border border-slate-200" : "bg-white/10 text-white hover:bg-white/20",
+              ].join(" ")}
               aria-label="Quick add"
             >
               <Plus className="h-4 w-4" />
@@ -309,7 +328,10 @@ function Header({ onToggleSidebar }) {
 
           <Link
             to="/messages"
-            className="relative inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+            className={[
+              "relative inline-flex h-8 w-8 items-center justify-center rounded-full transition",
+              isLightAppearance ? "bg-white/90 text-slate-700 hover:bg-slate-100 border border-slate-200" : "bg-white/10 text-white hover:bg-white/20",
+            ].join(" ")}
             aria-label="Messages"
           >
             <Users className="h-4 w-4" />
@@ -320,7 +342,10 @@ function Header({ onToggleSidebar }) {
 
           <Link
             to="/notifications"
-            className="relative inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+            className={[
+              "relative inline-flex h-8 w-8 items-center justify-center rounded-full transition",
+              isLightAppearance ? "bg-white/90 text-slate-700 hover:bg-slate-100 border border-slate-200" : "bg-white/10 text-white hover:bg-white/20",
+            ].join(" ")}
             aria-label="Notifications"
           >
             <Bell className="h-4 w-4" />
@@ -332,7 +357,10 @@ function Header({ onToggleSidebar }) {
           <button
             type="button"
             onClick={() => navigate("/settings")}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+            className={[
+              "inline-flex h-8 w-8 items-center justify-center rounded-full transition",
+              isLightAppearance ? "bg-white/90 text-slate-700 hover:bg-slate-100 border border-slate-200" : "bg-white/10 text-white hover:bg-white/20",
+            ].join(" ")}
             aria-label="Open settings"
           >
             <Settings className="h-4 w-4" />
@@ -342,10 +370,17 @@ function Header({ onToggleSidebar }) {
             <button
               type="button"
               onClick={() => setOpenMenu((state) => !state)}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-sm font-semibold text-white transition hover:bg-white/30"
+              className={[
+                "inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-full text-sm font-semibold transition",
+                isLightAppearance ? "bg-slate-200 text-slate-700 hover:bg-slate-300" : "bg-white/20 text-white hover:bg-white/30",
+              ].join(" ")}
               aria-label="Open profile menu"
             >
-              {avatarInitial}
+              {avatarSrc ? (
+                <img src={avatarSrc} alt={`${displayName} avatar`} className="h-full w-full object-cover" />
+              ) : (
+                avatarInitial
+              )}
             </button>
 
             {openMenu && (
@@ -378,7 +413,10 @@ function Header({ onToggleSidebar }) {
 
           <button
             type="button"
-            className="inline-flex h-8 w-8 items-center justify-center text-white/90 transition hover:text-white"
+            className={[
+              "inline-flex h-8 w-8 items-center justify-center transition",
+              isLightAppearance ? "text-slate-600 hover:text-slate-800" : "text-white/90 hover:text-white",
+            ].join(" ")}
             aria-label="Open apps"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">

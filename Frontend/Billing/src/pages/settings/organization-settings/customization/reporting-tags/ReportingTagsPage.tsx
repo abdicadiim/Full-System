@@ -1,8 +1,9 @@
 ﻿import React, { useState, useEffect } from "react";
 import { Plus, MoreVertical } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { reportingTagsAPI } from "../../../../../services/api";
 import { toast } from "react-toastify";
+import { reportingTagsAPI } from "../../../../../services/api";
+import Skeleton from "../../../../../components/ui/Skeleton";
 
 interface Tag {
   _id: string;
@@ -12,7 +13,6 @@ interface Tag {
   appliesTo: string[];
   isMandatory?: boolean;
   isActive: boolean;
-  isInactive?: boolean;
   orderIndex?: number;
   createdBy?: any;
   createdAt?: string;
@@ -22,17 +22,24 @@ interface Tag {
 export default function ReportingTagsPage() {
   const [tags, setTags] = useState<Tag[]>([]);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   // Load tags from API
   useEffect(() => {
     const loadTags = async () => {
       try {
+        setLoading(true);
         const response = await reportingTagsAPI.getAll();
         if (response.success) {
           setTags(response.data || []);
+          return;
         }
+        toast.error((response as any)?.message || "Failed to load reporting tags");
       } catch (error) {
         console.error("Error loading tags:", error);
+        toast.error("Failed to load reporting tags");
+      } finally {
+        setLoading(false);
       }
     };
     loadTags();
@@ -44,31 +51,44 @@ export default function ReportingTagsPage() {
       const response = await reportingTagsAPI.getAll();
       if (response.success) {
         setTags(response.data || []);
+        return;
       }
+      toast.error((response as any)?.message || "Failed to load reporting tags");
     } catch (error) {
       console.error("Error loading tags:", error);
+      toast.error("Failed to load reporting tags");
     }
   };
 
-  const handleSetInactive = async (id: string, isInactive: boolean) => {
+  const handleSetActive = async (id: string, isActive: boolean) => {
     try {
-      await reportingTagsAPI.update(id, { isInactive });
+      const res = await reportingTagsAPI.update(id, { isActive });
+      if (!res?.success) {
+        toast.error(res?.message || "Failed to update reporting tag");
+        return;
+      }
       setOpenMenuId(null);
-      toast.success(isInactive ? "Reporting tag marked as inactive." : "Reporting tag marked as active.");
+      toast.success(isActive ? "Reporting tag marked as active." : "Reporting tag marked as inactive.");
       await refreshTags();
     } catch (error) {
-      console.error("Failed to update inactive status:", error);
+      console.error("Failed to update reporting tag:", error);
+      toast.error("Failed to update reporting tag");
     }
   };
 
   const handleDelete = async (id: string) => {
     try {
-      await reportingTagsAPI.delete(id);
+      const res = await reportingTagsAPI.delete(id);
+      if (!res?.success) {
+        toast.error(res?.message || "Failed to delete tag");
+        return;
+      }
+      toast.success("Reporting tag deleted");
       setOpenMenuId(null);
-      toast.success("Reporting tag deleted.");
       await refreshTags();
     } catch (error) {
       console.error("Failed to delete tag:", error);
+      toast.error("Failed to delete tag");
     }
   };
 
@@ -107,7 +127,32 @@ export default function ReportingTagsPage() {
 
       {/* Content Section */}
       <div className="flex-1">
-        {sortedTags.length === 0 ? (
+        {loading ? (
+          <div className="p-6">
+            <div className="rounded-lg border border-gray-200 overflow-hidden">
+              <div className="bg-[#fafbfc] border-b border-gray-200 px-8 py-3.5">
+                <div className="grid grid-cols-4 gap-6">
+                  <Skeleton className="h-3 w-40" />
+                  <Skeleton className="h-3 w-56" />
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-3 w-10 ml-auto" />
+                </div>
+              </div>
+              <div className="divide-y divide-gray-100 bg-white">
+                {Array.from({ length: 7 }).map((_, idx) => (
+                  <div key={idx} className="px-8 py-4">
+                    <div className="grid grid-cols-4 gap-6 items-center">
+                      <Skeleton className="h-4 w-44" />
+                      <Skeleton className="h-4 w-full max-w-[520px]" />
+                      <Skeleton className="h-4 w-10" />
+                      <Skeleton className="h-4 w-16 ml-auto" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : sortedTags.length === 0 ? (
           <div className="p-16 text-center">
             <p className="text-[14px] text-gray-400">There are no reporting tags</p>
           </div>
@@ -138,13 +183,7 @@ export default function ReportingTagsPage() {
                   <td className="px-8 py-4">
                     <div className="flex items-center gap-2">
                       <span className="text-[13px] text-gray-900">{tag.name}</span>
-                      {tag.isInactive ? (
-                        <span className="text-[12px] text-gray-500">(Inactive)</span>
-                      ) : !tag.isActive ? (
-                        <span className="text-[11px] px-2 py-0.5 rounded-full border border-gray-200 bg-gray-100 text-gray-600">
-                          Not Ready
-                        </span>
-                      ) : null}
+                      {!tag.isActive ? <span className="text-[12px] text-gray-500">(Inactive)</span> : null}
                     </div>
                   </td>
                   <td className="px-8 py-4">
@@ -183,9 +222,9 @@ export default function ReportingTagsPage() {
                         >
                           <button
                             className="w-full text-left px-3 py-2 text-[13px] text-blue-600 hover:bg-gray-50"
-                            onClick={() => handleSetInactive(tag._id, !tag.isInactive)}
+                            onClick={() => handleSetActive(tag._id, !tag.isActive)}
                           >
-                            {tag.isInactive ? "Mark as Active" : "Mark as Inactive"}
+                            {tag.isActive ? "Mark as Inactive" : "Mark as Active"}
                           </button>
                           <button
                             className="w-full text-left px-3 py-2 text-[13px] text-red-600 hover:bg-red-50"

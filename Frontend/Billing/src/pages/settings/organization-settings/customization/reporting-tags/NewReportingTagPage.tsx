@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { reportingTagsAPI } from "../../../../../services/api";
 import { toast } from "react-toastify";
+import { reportingTagsAPI } from "../../../../../services/api";
+import Skeleton from "../../../../../components/ui/Skeleton";
 
 type PrimaryModule = "sales" | "purchases";
 type Level = "transaction" | "lineItem";
@@ -97,7 +98,7 @@ export default function NewReportingTagPage({ tagId, mode }: { tagId?: string; m
 
   const saveAndContinue = () => {
     if (!tagName.trim()) {
-      alert("Please enter reporting tag name");
+      toast.error("Please enter reporting tag name");
       return;
     }
     if (isEditMode) {
@@ -136,20 +137,21 @@ export default function NewReportingTagPage({ tagId, mode }: { tagId?: string; m
         options: options.map((o) => o.trim()).filter(Boolean),
         // Create as "Not Ready" by default so user can review configuration before activating.
         isActive: false,
-        isInactive: false,
       });
 
       if (response?.success) {
-        toast.success("Reporting tag created.");
+        toast.success("Reporting tag created");
         let id = response?.data?._id || response?.data?.id;
         if (!id) {
           const latest = await reportingTagsAPI.getAll({ page: 1, limit: 1 });
           id = latest?.data?.[0]?._id || latest?.data?.[0]?.id;
         }
         navigate(id ? `/settings/customization/reporting-tags/${id}` : "/settings/customization/reporting-tags");
+        return;
       }
+      toast.error(response?.message || "Failed to create reporting tag");
     } catch (error: any) {
-      alert(error?.message || "Failed to create reporting tag");
+      toast.error(error?.message || "Failed to create reporting tag");
     } finally {
       setIsSaving(false);
     }
@@ -177,11 +179,13 @@ export default function NewReportingTagPage({ tagId, mode }: { tagId?: string; m
       };
       const res = await reportingTagsAPI.update(tagId, payload);
       if (res?.success) {
-        toast.success("Reporting tag updated.");
+        toast.success("Reporting tag updated");
         setStep(2);
+        return;
       }
+      toast.error(res?.message || "Failed to update reporting tag");
     } catch (error: any) {
-      alert(error?.message || "Failed to update reporting tag");
+      toast.error(error?.message || "Failed to update reporting tag");
     } finally {
       setIsSaving(false);
     }
@@ -195,11 +199,13 @@ export default function NewReportingTagPage({ tagId, mode }: { tagId?: string; m
         options: options.map((o) => o.trim()).filter(Boolean),
       });
       if (res?.success) {
-        toast.success("Reporting tag options updated.");
+        toast.success("Options updated");
         navigate(`/settings/customization/reporting-tags/${tagId}`);
+        return;
       }
+      toast.error(res?.message || "Failed to update options");
     } catch (error: any) {
-      alert(error?.message || "Failed to update options");
+      toast.error(error?.message || "Failed to update options");
     } finally {
       setIsSaving(false);
     }
@@ -237,7 +243,26 @@ export default function NewReportingTagPage({ tagId, mode }: { tagId?: string; m
 
       <div className="flex-1 overflow-auto p-6">
         <div className="bg-white border border-gray-200 rounded-lg p-6">
-          {step === 1 ? (
+          {loadingEdit ? (
+            <div className="space-y-4 max-w-3xl">
+              <div className="grid grid-cols-[200px_1fr] gap-6 items-center">
+                <Skeleton className="h-4 w-36" />
+                <Skeleton className="h-10 w-full max-w-[380px]" />
+              </div>
+              <div className="grid grid-cols-[200px_1fr] gap-6 items-start">
+                <Skeleton className="h-4 w-28 mt-2" />
+                <Skeleton className="h-24 w-full max-w-[520px]" />
+              </div>
+              <div className="pt-5 border-t border-gray-200">
+                <Skeleton className="h-4 w-60 mb-3" />
+                <div className="grid grid-cols-2 gap-4">
+                  <Skeleton className="h-24 w-full" />
+                  <Skeleton className="h-24 w-full" />
+                </div>
+              </div>
+              <Skeleton className="h-10 w-40" />
+            </div>
+          ) : step === 1 ? (
             <>
               <div className="space-y-4 max-w-3xl">
                 <div className="grid grid-cols-[200px_1fr] gap-6 items-center">

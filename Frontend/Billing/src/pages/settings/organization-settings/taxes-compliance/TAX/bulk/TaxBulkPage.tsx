@@ -2,6 +2,7 @@
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Plus, X, Info, Check } from "lucide-react";
 import { createTaxLocal } from "../storage";
+import { toast } from "react-toastify";
 
 export default function TaxBulkPage() {
     const navigate = useNavigate();
@@ -35,7 +36,10 @@ export default function TaxBulkPage() {
         const validEntries = taxEntries.filter(entry => entry.name && entry.rate);
         const entriesToSave = validEntries.filter(entry => entry.status !== "saved");
 
-        if (entriesToSave.length === 0) return;
+        if (entriesToSave.length === 0) {
+            toast.error("Enter at least one tax name and rate.");
+            return;
+        }
 
         setIsSaving(true);
 
@@ -66,7 +70,10 @@ export default function TaxBulkPage() {
             .every(e => e.status === "saved");
 
         if (allSaved) {
-            setTimeout(() => navigate("/settings/taxes"), 1000);
+            toast.success("Taxes created");
+            navigate("/settings/taxes");
+        } else {
+            toast.error("Some taxes failed to save. Please fix errors and try again.");
         }
     };
 

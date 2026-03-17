@@ -1,6 +1,7 @@
 ﻿import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import { X, Check } from "lucide-react";
+import { toast } from "react-toastify";
 import { reportingTagsAPI } from "../../../../../services/api";
 
 export default function CreateTagModal({ onClose, onSave }) {
@@ -41,7 +42,7 @@ export default function CreateTagModal({ onClose, onSave }) {
 
   const handleSave = async () => {
     if (!tagName.trim()) {
-      alert("Please enter a reporting tag name");
+      toast.error("Please enter a reporting tag name");
       return;
     }
 
@@ -69,11 +70,15 @@ export default function CreateTagModal({ onClose, onSave }) {
       });
 
       if (response.success) {
+        toast.success("Reporting tag created");
         onSave(response.data);
+        onClose();
+        return;
       }
+      toast.error(response.message || "Failed to create reporting tag");
     } catch (error) {
       console.error("Error creating tag:", error);
-      alert("Failed to create reporting tag");
+      toast.error("Failed to create reporting tag");
     }
   };
 

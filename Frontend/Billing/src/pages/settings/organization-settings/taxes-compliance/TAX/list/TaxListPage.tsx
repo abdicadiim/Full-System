@@ -4,6 +4,7 @@ import { Plus, MoreVertical, ChevronDown, ChevronRight, Download, Upload, X, Sea
 import ExportTaxModal from "../../../../ExportTaxModal"; 
 import TaxesAdvancedSearchModal from "../../../../../../components/modals/TaxesAdvancedSearchModal";
 import { deleteTaxesLocal, getAssociatedRecordsLocal, isTaxGroupRecord, markDefaultTaxLocal, readTaxesLocal, updateTaxLocal } from "../storage";
+import { toast } from "react-toastify";
 
 export default function TaxListPage() {
     const navigate = useNavigate();
@@ -114,8 +115,12 @@ export default function TaxListPage() {
         setSelectedIds([]);
         setRowMenuOpenId(null);
         if (deletedCount < targetIds.length) {
-            setError(`Deleted ${deletedCount} of ${targetIds.length} selected tax record(s).`);
+            const msg = `Deleted ${deletedCount} of ${targetIds.length} selected tax record(s).`;
+            setError(msg);
+            toast.error(msg);
+            return;
         }
+        toast.success(targetIds.length === 1 ? "Tax deleted" : "Taxes deleted");
     };
 
     const handleToggleActive = (item: any) => {
@@ -125,6 +130,7 @@ export default function TaxListPage() {
         setTaxGroups(prev => prev.map(group => group.id === item.id ? { ...group, active: !item.active } : group));
         setRowActionLoadingId(null);
         setRowMenuOpenId(null);
+        toast.success(!item.active ? "Marked as active" : "Marked as inactive");
     };
 
     const handleMarkDefault = (item: any) => {
@@ -135,6 +141,7 @@ export default function TaxListPage() {
         setTaxes(prev => prev.map(tax => ({ ...tax, isDefault: tax.id === item.id })));
         setRowActionLoadingId(null);
         setRowMenuOpenId(null);
+        toast.success("Marked as default");
     };
 
     const handleSearch = (criteria: any) => {

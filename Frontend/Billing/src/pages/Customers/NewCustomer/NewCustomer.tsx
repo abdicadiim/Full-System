@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { Info, Phone, Smartphone, Upload, X, Search, ChevronDown, Check, Globe, File, Edit, CheckCircle, Plus, MoreVertical, Folder, Cloud, Box, Layers, HardDrive, Settings, Paperclip, FileText, CreditCard, ChevronUp, Square, Grid3x3, RefreshCw, LayoutGrid, Loader2 } from "lucide-react";
@@ -1432,7 +1432,7 @@ export default function NewCustomer() {
   }
 
   return (
-    <div className="w-full min-h-screen flex flex-col bg-gray-50 overflow-x-hidden">
+    <div className="w-full h-screen flex flex-col bg-gray-50 overflow-hidden">
       {/* Header */}
       <div className="border-b border-gray-200 bg-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
         <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 m-0">{isEditMode ? "Edit Customer" : "New Customer"}</h1>
@@ -2947,7 +2947,7 @@ export default function NewCustomer() {
                 {activeTab === "contact-persons" && (
                   <div className="mt-6">
                     {/* Table Structure */}
-                    <div className="border border-gray-200 rounded-md scrollbar-hide">
+                    <div className="border border-gray-200 rounded-md overflow-x-auto">
                       {/* Table Header */}
                       <div
                         className="bg-gray-50 border-b border-gray-200 grid gap-4 px-4 py-3 items-center"

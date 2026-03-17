@@ -4,6 +4,8 @@ import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import NewCurrencyModal from "./NewCurrencyModal";
 import EditCurrencyModal from "./EditCurrencyModal";
+import { toast } from "react-toastify";
+import { currenciesAPI } from "../../../../../services/api";
 
 const CURRENCIES_STORAGE_KEY = "taban_currencies";
 const EXCHANGE_RATE_FEEDS_STORAGE_KEY = "taban_exchange_rate_feeds_enabled";
@@ -91,6 +93,7 @@ export default function CurrenciesPage() {
   const threeDotsMenuRef = useRef<HTMLDivElement>(null);
 
   const showNotification = (message: string) => {
+    toast.success(message);
     setNotification(message);
     window.setTimeout(() => setNotification(null), 2500);
   };
@@ -103,41 +106,41 @@ export default function CurrenciesPage() {
     );
   }, []);
 
-  const loadCurrencies = useCallback(() => {
+  const loadCurrencies = useCallback(async () => {
     try {
-      const stored = localStorage.getItem(CURRENCIES_STORAGE_KEY);
-      if (!stored) {
-        const fallback = [getDefaultCurrency()];
-        persistCurrencies(fallback);
-        return;
-      }
-
-      const parsed = JSON.parse(stored);
-      const normalized: Currency[] = Array.isArray(parsed) ? parsed.map(toCurrency) : [];
-
+      setLoading(true);
+      const res = await currenciesAPI.getAll({ limit: 2000 });
+      const rows = Array.isArray(res?.data) ? res.data : [];
+      const normalized: Currency[] = rows.map(toCurrency);
       if (normalized.length === 0) {
-        const fallback = [getDefaultCurrency()];
-        persistCurrencies(fallback);
+        persistCurrencies([getDefaultCurrency()]);
         return;
       }
 
-      const hasBase = normalized.some((currency) => currency.isBase);
-      const withSingleBase = hasBase
-        ? normalized.map((currency, index) => ({ ...currency, isBase: currency.isBase && index === normalized.findIndex((c) => c.isBase) }))
-        : normalized.map((currency, index) => ({ ...currency, isBase: index === 0 }));
-
+      const baseIdx = normalized.findIndex((c) => c.isBase);
+      const withSingleBase = normalized.map((currency, index) => ({
+        ...currency,
+        isBase: baseIdx >= 0 ? currency.isBase && index === baseIdx : index === 0,
+      }));
       persistCurrencies(withSingleBase);
     } catch (error) {
       console.error("Error loading currencies:", error);
-      const fallback = [getDefaultCurrency()];
-      persistCurrencies(fallback);
+      // Fallback to localStorage if API fails
+      try {
+        const stored = localStorage.getItem(CURRENCIES_STORAGE_KEY);
+        const parsed = stored ? JSON.parse(stored) : [];
+        const normalized: Currency[] = Array.isArray(parsed) ? parsed.map(toCurrency) : [];
+        persistCurrencies(normalized.length > 0 ? normalized : [getDefaultCurrency()]);
+      } catch {
+        persistCurrencies([getDefaultCurrency()]);
+      }
     } finally {
       setLoading(false);
     }
   }, [persistCurrencies]);
 
   useEffect(() => {
-    loadCurrencies();
+    void loadCurrencies();
   }, [loadCurrencies, location.key]);
 
   useEffect(() => {
@@ -172,38 +175,37 @@ export default function CurrenciesPage() {
   }) => {
     const code = newCurrency.code.trim().toUpperCase();
     if (!code || !newCurrency.name.trim() || !newCurrency.symbol.trim()) {
-      window.alert("Please fill in all required fields.");
+      toast.error("Please fill in all required fields.");
       return;
     }
 
     if (currencies.some((currency) => currency.code.toUpperCase() === code)) {
-      window.alert("Currency code already exists.");
+      toast.error("Currency code already exists.");
       return;
     }
 
-    let next = [...currencies];
-    if (newCurrency.isBaseCurrency) {
-      next = next.map((currency) => ({ ...currency, isBase: false }));
-    }
+    void (async () => {
+      const createdRes = await currenciesAPI.create({
+        _id: makeId(),
+        code,
+        name: newCurrency.name.trim(),
+        symbol: newCurrency.symbol.trim(),
+        decimalPlaces: newCurrency.decimalPlaces || "2",
+        format: newCurrency.format || "1,234,567.89",
+        isBaseCurrency: Boolean(newCurrency.isBaseCurrency),
+        isActive: true,
+        exchangeRates: [],
+      });
 
-    const created: Currency = {
-      id: makeId(),
-      code,
-      name: newCurrency.name.trim(),
-      symbol: newCurrency.symbol.trim(),
-      isBase: Boolean(newCurrency.isBaseCurrency),
-      isActive: true,
-      decimalPlaces: newCurrency.decimalPlaces || "2",
-      format: newCurrency.format || "1,234,567.89",
-      latestRate: null,
-      asOfDate: null,
-      exchangeRates: [],
-      _raw: newCurrency,
-    };
+      if (!createdRes?.success) {
+        toast.error(createdRes?.message || "Failed to create currency");
+        return;
+      }
 
-    persistCurrencies([...next, created]);
-    setShowNewCurrencyModal(false);
-    showNotification("Currency created successfully");
+      setShowNewCurrencyModal(false);
+      toast.success("Currency created successfully");
+      await loadCurrencies();
+    })();
   };
 
   const handleEditCurrency = (currency: Currency) => {
@@ -223,7 +225,7 @@ export default function CurrenciesPage() {
 
     const code = updatedData.code.trim().toUpperCase();
     if (!code || !updatedData.name.trim() || !updatedData.symbol.trim()) {
-      window.alert("Please fill in all required fields.");
+      toast.error("Please fill in all required fields.");
       return;
     }
 
@@ -231,57 +233,63 @@ export default function CurrenciesPage() {
       (currency) => currency.id !== editingCurrency.id && currency.code.toUpperCase() === code
     );
     if (duplicate) {
-      window.alert("Currency code already exists.");
+      toast.error("Currency code already exists.");
       return;
     }
 
-    let next = currencies.map((currency) => {
-      if (currency.id !== editingCurrency.id) return currency;
-      return {
-        ...currency,
+    void (async () => {
+      const res = await currenciesAPI.update(editingCurrency.id, {
         code,
         name: updatedData.name.trim(),
         symbol: updatedData.symbol.trim(),
         decimalPlaces: updatedData.decimalPlaces || "2",
         format: updatedData.format || "1,234,567.89",
-        isBase: Boolean(updatedData.isBaseCurrency),
-      };
-    });
+        isBaseCurrency: Boolean(updatedData.isBaseCurrency),
+      });
 
-    if (updatedData.isBaseCurrency) {
-      next = next.map((currency) =>
-        currency.id === editingCurrency.id ? currency : { ...currency, isBase: false }
-      );
-    }
+      if (!res?.success) {
+        toast.error(res?.message || "Failed to update currency");
+        return;
+      }
 
-    persistCurrencies(next);
-    setShowEditCurrencyModal(false);
-    setEditingCurrency(null);
-    showNotification("Currency updated successfully");
+      setShowEditCurrencyModal(false);
+      setEditingCurrency(null);
+      toast.success("Currency updated successfully");
+      await loadCurrencies();
+    })();
   };
 
   const handleDeleteCurrency = (id: string) => {
     const target = currencies.find((currency) => currency.id === id);
     if (!target) return;
     if (target.isBase) {
-      window.alert("Base currency cannot be deleted.");
+      toast.error("Base currency cannot be deleted.");
       return;
     }
 
     if (!window.confirm("Are you sure you want to delete this currency?")) return;
 
-    const next = currencies.filter((currency) => currency.id !== id);
-    persistCurrencies(next);
-    showNotification("Currency deleted successfully");
+    void (async () => {
+      const res = await currenciesAPI.delete(id);
+      if (!res?.success) {
+        toast.error(res?.message || "Failed to delete currency");
+        return;
+      }
+      toast.success("Currency deleted successfully");
+      await loadCurrencies();
+    })();
   };
 
   const handleMarkAsBase = (id: string) => {
-    const next = currencies.map((currency) => ({
-      ...currency,
-      isBase: currency.id === id,
-    }));
-    persistCurrencies(next);
-    showNotification("Base currency updated successfully");
+    void (async () => {
+      const res = await currenciesAPI.update(id, { isBaseCurrency: true });
+      if (!res?.success) {
+        toast.error(res?.message || "Failed to update base currency");
+        return;
+      }
+      toast.success("Base currency updated successfully");
+      await loadCurrencies();
+    })();
   };
 
   const handleToggleExchangeRateFeeds = () => {

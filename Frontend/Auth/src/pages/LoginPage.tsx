@@ -9,12 +9,21 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const appName = getAppDisplayName();
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    authApi.login(email, password).catch(() => {});
+    setError(null);
+
+    const result = await authApi.login(email, password).catch(() => null);
+    if (!result || !result.success) {
+      setLoading(false);
+      setError(result?.message || "Login failed");
+      return;
+    }
+
     goReturnTo(getFallbackUrl());
   };
 
@@ -46,6 +55,8 @@ export default function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
           />
         </div>
+
+        {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
         <button
           className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-4 font-bold text-white shadow-[0_10px_25px_rgba(18,86,99,0.20)] transition-all hover:bg-primary/90 disabled:opacity-60"

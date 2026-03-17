@@ -2,6 +2,7 @@
 import { Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { reportingTagsAPI } from "../../../../../services/api";
+import Skeleton from "../../../../../components/ui/Skeleton";
 
 interface Tag {
   _id: string;
@@ -18,17 +19,21 @@ interface Tag {
 
 export default function ReportingTagsPage() {
   const [tags, setTags] = useState<Tag[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Load tags from API
   useEffect(() => {
     const loadTags = async () => {
       try {
+        setLoading(true);
         const response = await reportingTagsAPI.getAll();
         if (response.success) {
           setTags(response.data || []);
         }
       } catch (error) {
         console.error("Error loading tags:", error);
+      } finally {
+        setLoading(false);
       }
     };
     loadTags();
@@ -52,7 +57,30 @@ export default function ReportingTagsPage() {
 
       {/* Content Section */}
       <div className="flex-1">
-        {tags.length === 0 ? (
+        {loading ? (
+          <div className="p-6">
+            <div className="rounded-lg border border-gray-200 overflow-hidden">
+              <div className="bg-[#fafbfc] border-b border-gray-200 px-8 py-3.5">
+                <div className="grid grid-cols-3 gap-6">
+                  <Skeleton className="h-3 w-40" />
+                  <Skeleton className="h-3 w-56" />
+                  <Skeleton className="h-3 w-20" />
+                </div>
+              </div>
+              <div className="divide-y divide-gray-100 bg-white">
+                {Array.from({ length: 7 }).map((_, idx) => (
+                  <div key={idx} className="px-8 py-4">
+                    <div className="grid grid-cols-3 gap-6 items-center">
+                      <Skeleton className="h-4 w-44" />
+                      <Skeleton className="h-4 w-full max-w-[520px]" />
+                      <Skeleton className="h-4 w-10" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : tags.length === 0 ? (
           <div className="p-16 text-center">
             <p className="text-[14px] text-gray-400">There are no reporting tags</p>
           </div>

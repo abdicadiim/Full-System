@@ -1,5 +1,6 @@
 ﻿import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 import { reportingTagsAPI } from "../../../../../services/api";
 
 type PrimaryModule = "sales" | "purchases" | "journals" | "inventoryAdjustments";
@@ -51,7 +52,7 @@ export default function NewReportingTagPage() {
 
   const saveAndContinue = () => {
     if (!tagName.trim()) {
-      alert("Please enter reporting tag name");
+      toast.error("Please enter reporting tag name");
       return;
     }
     setStep(2);
@@ -89,11 +90,14 @@ export default function NewReportingTagPage() {
       });
 
       if (response?.success) {
+        toast.success("Reporting tag created");
         const id = response?.data?._id;
         navigate(id ? `/settings/customization/reporting-tags/${id}` : "/settings/customization/reporting-tags");
+        return;
       }
+      toast.error(response?.message || "Failed to create reporting tag");
     } catch (error: any) {
-      alert(error?.message || "Failed to create reporting tag");
+      toast.error(error?.message || "Failed to create reporting tag");
     } finally {
       setIsSaving(false);
     }

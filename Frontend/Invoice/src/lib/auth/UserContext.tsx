@@ -31,34 +31,39 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [hasChecked, setHasChecked] = useState(false);
 
-  const devUser: NonNullable<User> = {
-    id: "dev",
-    name: "Dev User",
-    email: "dev@example.com",
-    phone: "",
-    role: "Admin",
-    roleName: "Admin",
-    photoUrl: null,
-    unreadMessages: 0,
-    unreadNotifications: 0,
-    studentClass: null,
-  };
-
   const refresh = useCallback(async () => {
     setLoading(true);
     const ac = new AbortController();
-    const timeout = setTimeout(() => ac.abort(), 1200);
+    const timeout = setTimeout(() => ac.abort(), 8000);
     try {
-      const res = await fetch("/api/auth/me", { credentials: "include", signal: ac.signal });
+      const token = localStorage.getItem("auth_token") || localStorage.getItem("token") || "";
+      const res = await fetch("/api/auth/me", {
+        credentials: "include",
+        signal: ac.signal,
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
       const payload = await res.json().catch(() => null);
       if (res.ok && payload?.success && payload.data) {
+        const nextToken = payload?.token;
+        if (typeof nextToken === "string" && nextToken) {
+          localStorage.setItem("auth_token", nextToken);
+          localStorage.setItem("token", nextToken);
+        }
         setUser(payload.data);
+        try {
+          localStorage.setItem("user", JSON.stringify(payload.data));
+        } catch {}
         return;
       }
-      // Dev-friendly: allow entering the app even when auth isn't implemented yet.
-      setUser(devUser);
+      try {
+        localStorage.removeItem("auth_token");
+        localStorage.removeItem("token");
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("user");
+      } catch {}
+      setUser(null);
     } catch {
-      setUser(devUser);
+      setUser(null);
     } finally {
       clearTimeout(timeout);
       setLoading(false);
@@ -75,6 +80,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
     } finally {
       setUser(null);
+      try {
+        localStorage.removeItem("user");
+        localStorage.removeItem("auth_token");
+        localStorage.removeItem("token");
+        localStorage.removeItem("accessToken");
+      } catch {}
     }
   }, []);
 

@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { X, ChevronRight, Upload, Check, Info, ChevronDown, Search } from "lucide-react";
 import { parseImportFile } from "../../../../../utils/importFileParser";
 import { TAX_GROUP_MARKER, createTaxLocal, readTaxesLocal } from "../storage";
+import { toast } from "react-toastify";
 
 const toCsvCell = (value: any) => {
     const text = String(value ?? "");
@@ -105,7 +106,7 @@ export default function TaxImportPage() {
     const parseFile = async (file: File) => {
         const extension = `.${String(file.name.split(".").pop() || "").toLowerCase()}`;
         if (extension === ".xls" || extension === ".xlsx") {
-            alert("XLS/XLSX import is temporarily disabled. Please use CSV/TSV for now.");
+            toast.error("XLS/XLSX import is temporarily disabled. Please use CSV/TSV for now.");
             return;
         }
 
@@ -132,7 +133,7 @@ export default function TaxImportPage() {
             setSelectedFile(file);
             parseFile(file).catch((error) => {
                 console.error("Error parsing file:", error);
-                alert("Failed to parse file. Please try CSV/TSV.");
+                toast.error("Failed to parse file. Please try CSV/TSV.");
             });
         }
     };
@@ -145,7 +146,7 @@ export default function TaxImportPage() {
             setSelectedFile(file);
             parseFile(file).catch((error) => {
                 console.error("Error parsing file:", error);
-                alert("Failed to parse file. Please try CSV/TSV.");
+                toast.error("Failed to parse file. Please try CSV/TSV.");
             });
         }
     };
@@ -187,6 +188,7 @@ export default function TaxImportPage() {
                 .filter((row) => row.name.length > 0);
 
             if (rows.length === 0) {
+                toast.error("No rows to import.");
                 navigate("/settings/taxes");
                 return;
             }
@@ -243,9 +245,11 @@ export default function TaxImportPage() {
                 });
             });
 
+            toast.success("Taxes imported");
             navigate("/settings/taxes");
         } catch (error) {
             console.error("Error importing taxes:", error);
+            toast.error("Import failed. Please check your file and mappings.");
         } finally {
             setIsLoading(false);
         }

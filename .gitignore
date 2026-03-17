@@ -4,3 +4,12 @@ node_modules/
 # pnpm store (if used)
 .pnpm-store/
 **/.pnpm-store/
+
+# env files (keep .env.example committed)
+.env
+.env.*
+!.env.example
+
+# build output
+dist/
+**/dist/

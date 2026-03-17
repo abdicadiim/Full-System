@@ -1,8 +1,7 @@
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import AuthShell from "../components/AuthShell";
-import { getAppDisplayName, getFallbackUrl } from "../lib/appBranding";
-import { goReturnTo } from "../lib/returnTo";
+import { getAppDisplayName } from "../lib/appBranding";
 import { authApi } from "../services/authApi";
 
 export default function SignupPage() {
@@ -10,13 +9,27 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const appName = getAppDisplayName();
+  const navigate = useNavigate();
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    authApi.signup(name, email, password).catch(() => {});
-    goReturnTo(getFallbackUrl());
+    setError(null);
+
+    try {
+      sessionStorage.setItem("orgName", name);
+    } catch {}
+
+    const result = await authApi.signup(name, email, password).catch(() => null);
+    if (!result || !result.success) {
+      setLoading(false);
+      setError(result?.message || "Signup failed");
+      return;
+    }
+
+    navigate(`/org-setup${window.location.search}`, { state: { orgName: name } });
   };
 
   return (
@@ -56,6 +69,8 @@ export default function SignupPage() {
             onChange={(e) => setPassword(e.target.value)}
           />
         </div>
+
+        {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
         <button
           className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-4 font-bold text-white shadow-[0_10px_25px_rgba(18,86,99,0.20)] transition-all hover:bg-primary/90 disabled:opacity-60"

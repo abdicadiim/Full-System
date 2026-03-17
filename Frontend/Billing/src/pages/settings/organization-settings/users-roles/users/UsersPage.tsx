@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Play, MoreVertical, ChevronDown, X, Eye, EyeOff, Plus, Check, Search, Minus, ArrowLeft, Info, User as UserIcon, Pencil, Star } from "lucide-react";
 import { usersAPI, rolesAPI, locationsAPI } from "../../../../../services/api";
 import { getCurrentUser } from "../../../../../services/auth";
+import Skeleton from "../../../../../components/ui/Skeleton";
 
 const STANDARD_ROLE_OPTIONS = [
   { value: "admin", label: "Admin" },
@@ -682,6 +683,8 @@ export default function UsersPage() {
           setDefaultBusinessLocation("");
           setDefaultWarehouseLocation("");
           setError(null);
+          setSuccessMessage(sendInviteResponse.message || "Invitation email sent successfully!");
+          setTimeout(() => setSuccessMessage(null), 3000);
           fetchUsers(); // Refresh users list
         } else {
           setError(sendInviteResponse.message || "User created but failed to send invitation email");
@@ -748,6 +751,8 @@ export default function UsersPage() {
           setLocationSearch("");
           setEditData({ name: "", email: "", role: "" });
           setError(null);
+          setSuccessMessage(sendInviteResponse.message || "Invitation email sent successfully!");
+          setTimeout(() => setSuccessMessage(null), 3000);
           fetchUsers(); // Refresh users list
           // Refresh selected user details
           if (userId) {
@@ -825,14 +830,14 @@ export default function UsersPage() {
     <div className="flex gap-0 h-full">
       {/* Error Message */}
       {error && (
-        <div className="absolute top-20 left-6 right-6 z-50 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-2xl p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm break-words whitespace-pre-wrap">
           {error}
         </div>
       )}
 
       {/* Success Message */}
       {successMessage && (
-        <div className="absolute top-20 left-6 right-6 z-50 p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm">
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-2xl p-3 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm break-words whitespace-pre-wrap">
           {successMessage}
         </div>
       )}
@@ -938,9 +943,36 @@ export default function UsersPage() {
           </div>
         )}
         {loading ? (
-          <div className="p-8 text-center">
-            <div className="w-6 h-6 border-2 border-[#156372] border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-            <p className="text-gray-500 text-sm">Loading users...</p>
+          <div className="p-6">
+            <div className="space-y-3">
+              <Skeleton className="h-9 w-64" />
+              <div className="rounded-lg border border-gray-200 overflow-hidden">
+                <div className="bg-gray-50 border-b border-gray-200 px-6 py-3">
+                  <div className="grid grid-cols-3 gap-4">
+                    <Skeleton className="h-3 w-28" />
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-3 w-16" />
+                  </div>
+                </div>
+                <div className="divide-y divide-gray-200 bg-white">
+                  {Array.from({ length: 8 }).map((_, idx) => (
+                    <div key={idx} className="px-6 py-4">
+                      <div className="grid grid-cols-3 gap-4 items-center">
+                        <div className="flex items-center gap-3">
+                          <Skeleton className="h-10 w-10 rounded-full" />
+                          <div className="space-y-2">
+                            <Skeleton className="h-4 w-40" />
+                            <Skeleton className="h-3 w-56" />
+                          </div>
+                        </div>
+                        <Skeleton className="h-4 w-28" />
+                        <Skeleton className="h-6 w-20 rounded-full" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         ) : users.length === 0 ? (
           <div className="p-8 text-center">
@@ -992,13 +1024,13 @@ export default function UsersPage() {
                       <span className="text-sm text-gray-900">{formatRoleLabel(user.roleKey || user.role)}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${user.status === "Active"
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${(user.status === "Active")
                         ? "bg-green-100 text-green-800"
-                        : user.status === "Invited"
-                          ? "bg-blue-100 text-blue-800"
+                        : (user.status === "Invited" || user.status === "Inactive")
+                          ? "bg-gray-100 text-gray-800"
                           : "bg-gray-100 text-gray-800"
                         }`}>
-                        {user.status}
+                        {user.status === "Invited" ? "Inactive" : user.status}
                       </span>
                     </td>
                   </tr>
@@ -1232,7 +1264,7 @@ export default function UsersPage() {
               </div>
 
               {error && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+                <div className="mb-4 mx-auto max-w-2xl p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm break-words whitespace-pre-wrap">
                   {error}
                 </div>
               )}

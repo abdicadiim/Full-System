@@ -28,6 +28,7 @@ import { createTaxLocal } from "../../settings/organization-settings/taxes-compl
 import { useCurrency } from "../../../hooks/useCurrency";
 import { filterActiveRecords } from "../shared/activeFilters";
 import RecordMileage from "./RecordMileage";
+import { toast } from "react-toastify";
 
 // Accounts API
 const accountsAPI = {
@@ -5177,7 +5178,7 @@ export default function RecordExpense() {
                 const isBaseCurrency = Boolean(currencyData.isBaseCurrency);
 
                 if (!code || !name || !symbol) {
-                  alert("Please enter currency code, name, and symbol");
+                  toast.error("Please enter currency code, name, and symbol");
                   return;
                 }
 
@@ -5264,9 +5265,22 @@ export default function RecordExpense() {
                 setFormData((prev) => ({ ...prev, currency: code }));
                 setBulkExpenses((prev) => prev.map((row) => ({ ...row, currency: row.currency || code })));
                 setNewCurrencyModalOpen(false);
+
+                // Best-effort: also persist to backend so other modules see it
+                void dbCurrenciesAPI.create({
+                  code,
+                  symbol,
+                  name,
+                  decimalPlaces,
+                  format,
+                  isBaseCurrency,
+                  isActive: true,
+                  exchangeRates: [],
+                });
+                toast.success("Currency created");
               } catch (error) {
                 console.error("Error saving currency:", error);
-                alert("Error saving currency");
+                toast.error("Error saving currency");
               }
             }}
           />

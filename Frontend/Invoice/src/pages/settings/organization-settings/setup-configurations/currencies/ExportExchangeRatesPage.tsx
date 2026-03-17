@@ -1,7 +1,8 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { X, Info, Eye, EyeOff } from "lucide-react";
-import { getToken, API_BASE_URL } from "../../../../../services/auth";
+import { toast } from "react-toastify";
+import { currenciesAPI } from "../../../../../services/api";
 
 type CurrencyRow = {
   code: string;
@@ -33,10 +34,21 @@ export default function ExportExchangeRatesPage() {
   const [rows, setRows] = useState<CurrencyRow[]>([]);
 
   useEffect(() => {
-    const loadCurrencies = () => {
+    const loadCurrencies = async () => {
       try {
-        const stored = localStorage.getItem("taban_currencies");
-        const currenciesData = stored ? JSON.parse(stored) : [];
+        let currenciesData: any[] = [];
+
+        try {
+          const res = await currenciesAPI.getAll({ limit: 10000 });
+          currenciesData = Array.isArray(res?.data) ? res.data : [];
+        } catch {
+          // fall back
+        }
+
+        if (!currenciesData.length) {
+          const stored = localStorage.getItem("taban_currencies");
+          currenciesData = stored ? JSON.parse(stored) : [];
+        }
 
         const mappedRows: CurrencyRow[] = currenciesData.map((currency: any) => {
           const rates = Array.isArray(currency.exchangeRates) ? currency.exchangeRates : [];
@@ -67,7 +79,7 @@ export default function ExportExchangeRatesPage() {
         setRows(mappedRows);
       } catch (error) {
         console.error("Error loading currencies for export:", error);
-        alert("Failed to load currencies for export.");
+        toast.error("Failed to load currencies for export.");
       } finally {
         setLoading(false);
       }
@@ -102,18 +114,18 @@ export default function ExportExchangeRatesPage() {
 
   const handleExport = () => {
     if (rows.length === 0) {
-      alert("No currency data available to export.");
+      toast.error("No currency data available to export.");
       return;
     }
 
     if (password.trim()) {
-      alert("Password-protected exports are not available yet. Exporting without password.");
+      toast.info("Password-protected exports are not available yet. Exporting without password.");
     }
 
     const fileBase = `currencies_export_${new Date().toISOString().slice(0, 10)}`;
 
     if (fileFormat !== "csv") {
-      alert("XLS/XLSX export is temporarily disabled. Downloading CSV instead.");
+      toast.info("XLS/XLSX export is temporarily disabled. Downloading CSV instead.");
     }
 
     const headers = Object.keys(exportRows[0]);

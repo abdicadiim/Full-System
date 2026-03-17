@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { FileText } from "lucide-react";
 import Card from "../../../components/ui/Card";
 import { RangeSelect } from "../../../components/dashboard/parts/SectionBits";
+import { useUser } from "../../../lib/auth/UserContext";
+import { useSettings } from "../../../lib/settings/SettingsContext";
 
 type MetricLegendItem = {
   label: string;
@@ -352,6 +354,12 @@ function ProjectsCard() {
 function DashboardHero() {
   const [activeTab, setActiveTab] = useState<"dashboard" | "getting-started" | "recent-updates">("dashboard");
   const [pageRange, setPageRange] = useState("Last 12 months");
+  const { user } = useUser();
+  const { settings } = useSettings();
+
+  const displayName = user?.name || "User";
+  const organizationName =
+    settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "Organization";
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -372,8 +380,8 @@ function DashboardHero() {
               <FileText size={22} />
             </div>
             <div>
-              <h1 className="text-[18px] font-medium text-slate-900">Hello, Zouhair Yare</h1>
-              <div className="mt-1 text-[14px] text-slate-500">asddc</div>
+              <h1 className="text-[18px] font-medium text-slate-900">{`Hello, ${displayName}`}</h1>
+              <div className="mt-1 text-[14px] text-slate-500">{organizationName}</div>
             </div>
           </div>
         </div>

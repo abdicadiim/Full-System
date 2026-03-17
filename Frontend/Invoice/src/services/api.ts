@@ -939,7 +939,8 @@ const bankAccountsLocal = localResource(LOCAL_BANK_ACCOUNTS_KEY, "ba", defaultBa
 const paymentModesLocal = localResource(LOCAL_PAYMENT_MODES_KEY, "pm", defaultPaymentModes);
 const chartAccountsLocal = localResource(LOCAL_CHART_ACCOUNTS_KEY, "coa", defaultChartAccounts);
 const txSeriesLocal = localResource(LOCAL_TX_SERIES_KEY, "series", defaultTxSeries);
-const reportingTagsLocal = localResource(LOCAL_REPORTING_TAGS_KEY, "rt");
+const reportingTagsResource = resource("/reporting-tags");
+const currenciesResource = resource("/currencies");
 const locationsLocal = localResource(LOCAL_LOCATIONS_KEY, "loc");
 
 const readSettingsObject = (key: string, fallback: any = {}) => {
@@ -969,9 +970,54 @@ export const taxesAPI = {
 };
 
 export const currenciesAPI = {
-  ...currenciesLocal,
+  getAll: async (params?: Record<string, any>) => {
+    try {
+      const res = await currenciesResource.getAll(params);
+      if (res?.success) return res as any;
+    } catch {
+      // fall back
+    }
+    return currenciesLocal.getAll(params);
+  },
+  list: async (params?: Record<string, any>) => currenciesAPI.getAll(params),
+  getById: async (id: string) => {
+    try {
+      const res = await currenciesResource.getById(id);
+      if (res?.success) return res as any;
+    } catch {
+      // fall back
+    }
+    return currenciesLocal.getById(id);
+  },
+  create: async (data: any) => {
+    try {
+      const res = await currenciesResource.create(data);
+      if (res?.success) return res as any;
+    } catch {
+      // fall back
+    }
+    return currenciesLocal.create(data);
+  },
+  update: async (id: string, data: any) => {
+    try {
+      const res = await currenciesResource.update(id, data);
+      if (res?.success) return res as any;
+    } catch {
+      // fall back
+    }
+    return currenciesLocal.update(id, data);
+  },
+  delete: async (id: string) => {
+    try {
+      const res = await currenciesResource.delete(id);
+      if (res?.success) return res as any;
+    } catch {
+      // fall back
+    }
+    return currenciesLocal.delete(id);
+  },
   getBaseCurrency: async () => {
-    const response = await currenciesLocal.getAll({ limit: 1000 });
+    const response = await currenciesAPI.getAll({ limit: 1000 });
     const list = Array.isArray(response.data) ? response.data : [];
     const base = list.find((currency: any) => Boolean(currency?.isBaseCurrency)) || list[0] || defaultCurrencies[0];
     return { success: true, data: base };
@@ -1630,13 +1676,13 @@ export const authAPI = {
 };
 
 export const usersAPI = {
-  ...resource("/settings/users"),
+  ...resource("/users"),
   sendInvitation: (id: string, data?: any) =>
-    request({ method: "POST", path: `/settings/users/${id}/send-invitation`, data }),
+    request({ method: "POST", path: `/users/${encodeURIComponent(String(id || ""))}/send-invitation`, data }),
 };
 
 export const rolesAPI = {
-  ...resource("/settings/roles"),
+  ...resource("/roles"),
 };
 
 export const accountantAPI = {
@@ -1649,7 +1695,7 @@ export const accountantAPI = {
 };
 
 export const reportingTagsAPI = {
-  ...reportingTagsLocal,
+  ...reportingTagsResource,
 };
 
 export const chartOfAccountsAPI = {

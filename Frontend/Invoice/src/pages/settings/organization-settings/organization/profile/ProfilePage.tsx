@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { Upload, Edit2, X, Search, HelpCircle, Send, Settings as SettingsIcon, Info } from "lucide-react";
+import { toast } from "react-toastify";
+import Skeleton from "../../../../../components/ui/Skeleton";
 import { TIMEZONES } from "../../../../../constants/timezones";
 
 const API_BASE_URL = '/api';
@@ -585,7 +587,7 @@ function DateFormatDropdown({ value, placeholder, onChange }) {
     const s = q.trim().toLowerCase();
     if (!s) return DATE_FORMATS;
 
-    const filtered = {};
+    const filtered: Record<string, string[]> = {};
     Object.entries(DATE_FORMATS).forEach(([category, formats]) => {
       const matching = formats.filter(f => f.toLowerCase().includes(s));
       if (matching.length > 0) {
@@ -770,6 +772,7 @@ export default function ProfilePage() {
   });
   const [logoImage, setLogoImage] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
   const fileInputRef = useRef(null);
   const [street1, setStreet1] = useState(() => {
     const local = localStorage.getItem('org_profile');
@@ -837,7 +840,7 @@ export default function ProfilePage() {
   const [companyIdValue, setCompanyIdValue] = useState("");
   const [additionalFields, setAdditionalFields] = useState<any[]>([{ label: "", value: "" }]);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  // Save feedback uses react-toastify (see `handleSave`).
   const [isEditCurrencyModalOpen, setIsEditCurrencyModalOpen] = useState(false);
   const [editCurrencyCode, setEditCurrencyCode] = useState("USD");
   const [editCurrencySymbol, setEditCurrencySymbol] = useState("$");
@@ -940,6 +943,7 @@ export default function ProfilePage() {
   // Load profile data on mount
   useEffect(() => {
     const loadProfile = async () => {
+      setLoadingProfile(true);
       // Priority 1: Load from local storage (onboarding data)
       const localData = localStorage.getItem('org_profile');
       if (localData) {
@@ -1010,6 +1014,8 @@ export default function ProfilePage() {
         }
       } catch (error) {
         console.error('Error loading profile:', error);
+      } finally {
+        setLoadingProfile(false);
       }
     };
 
@@ -1055,12 +1061,11 @@ export default function ProfilePage() {
   // Save profile function
   const handleSave = async () => {
     setIsSaving(true);
-    setSaveMessage(null);
 
     try {
       const token = localStorage.getItem('auth_token');
       if (!token) {
-        setSaveMessage({ type: 'error', text: 'Not authenticated. Please login again.' });
+        toast.error('Not authenticated. Please login again.');
         setIsSaving(false);
         return;
       }
@@ -1084,10 +1089,7 @@ export default function ProfilePage() {
             reader.readAsDataURL(logoImage);
           });
         } catch (logoError: any) {
-          setSaveMessage({
-            type: 'error',
-            text: logoError.message || 'Error processing logo image.'
-          });
+          toast.error(logoError.message || 'Error processing logo image.');
           setIsSaving(false);
           return;
         }
@@ -1156,10 +1158,7 @@ export default function ProfilePage() {
             data = JSON.parse(text);
           } catch (parseError) {
             console.error('JSON parse error:', parseError);
-            setSaveMessage({
-              type: 'error',
-              text: 'Invalid response from server. Please try again.'
-            });
+            toast.error('Invalid response from server. Please try again.');
             setIsSaving(false);
             return;
           }
@@ -1168,30 +1167,19 @@ export default function ProfilePage() {
         }
       } else {
         const text = await response.text();
-        setSaveMessage({
-          type: 'error',
-          text: text || `Server error: ${response.status} ${response.statusText}`
-        });
+        toast.error(text || `Server error: ${response.status} ${response.statusText}`);
         setIsSaving(false);
         return;
       }
 
       if (response.ok && data.success) {
-        setSaveMessage({ type: 'success', text: 'Profile saved successfully!' });
-        // Clear message after 3 seconds
-        setTimeout(() => setSaveMessage(null), 3000);
+        toast.success('Profile saved successfully!');
       } else {
-        setSaveMessage({
-          type: 'error',
-          text: data.message || data.error || 'Failed to save profile. Please try again.'
-        });
+        toast.error(data.message || data.error || 'Failed to save profile. Please try again.');
       }
     } catch (error: any) {
       console.error('Error saving profile:', error);
-      setSaveMessage({
-        type: 'error',
-        text: 'An error occurred while saving. Please try again.'
-      });
+      toast.error('An error occurred while saving. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -1204,6 +1192,34 @@ export default function ProfilePage() {
     return "Period calculation";
   };
 
+  if (loadingProfile) {
+    return (
+      <div className="p-6 max-w-4xl">
+        <div className="mb-6 space-y-2">
+          <Skeleton className="h-7 w-64" />
+          <Skeleton className="h-4 w-40" />
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-white p-6 mb-6">
+          <div className="flex items-center gap-6">
+            <Skeleton className="h-32 w-32 rounded-lg" />
+            <div className="flex-1 space-y-3">
+              <Skeleton className="h-4 w-56" />
+              <Skeleton className="h-10 w-full max-w-[520px]" />
+              <Skeleton className="h-4 w-44" />
+              <Skeleton className="h-10 w-full max-w-[520px]" />
+            </div>
+          </div>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-white p-6 space-y-4">
+          <Skeleton className="h-4 w-52" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 max-w-4xl">
       <div className="mb-6">
@@ -1215,12 +1231,7 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 mb-6 flex items-start gap-2">
-        <Info size={16} className="text-blue-600 flex-shrink-0 mt-0.5" />
-        <div className="text-sm text-blue-900">
-          You have the same organization in Zoho Invoice. Altering any information on this page will alter it there.
-        </div>
-      </div>
+
 
       {/* Organization Logo */}
       <div className="rounded-lg border-0 p-6 mb-6">
@@ -1407,8 +1418,8 @@ export default function ProfilePage() {
                   <SettingsIcon size={16} className="text-blue-600" />
                 </button>
               </div>
-              <div className="text-sm font-medium text-gray-900">Email address of Taban Books</div>
-              <div className="text-sm text-gray-600">({DEFAULT_SYSTEM_SENDER_EMAIL})</div>
+              <div className="text-sm font-medium text-gray-900">Email address of {orgName || "Organization"}</div>
+              <div className="text-sm text-gray-600">({email || DEFAULT_SYSTEM_SENDER_EMAIL})</div>
             </div>
           </div>
         </div>
@@ -1643,18 +1654,6 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
-
-      {/* Save Message */}
-      {
-        saveMessage && (
-          <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg ${saveMessage.type === 'success'
-            ? 'bg-green-500 text-white'
-            : 'bg-red-500 text-white'
-            }`}>
-            {saveMessage.text}
-          </div>
-        )
-      }
 
       {/* Action Buttons */}
       <div className="flex items-center justify-end gap-3">

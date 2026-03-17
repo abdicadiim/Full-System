@@ -26,7 +26,6 @@ import {
 import { useUser } from "../../lib/auth/UserContext";
 import { useSettings } from "../../lib/settings/SettingsContext";
 import { getNavConfigForRole } from "../../config/roleBasedNav";
-import tabnLogo from "../../assets/tabnlog.png";
 import packageJson from "../../../package.json";
 
 function renderIcon(name) {
@@ -381,6 +380,8 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
   const [companyPrimaryRaw, ...companySecondaryParts] = companyName.split(/\s+/).filter(Boolean);
   const companyPrimary = companyPrimaryRaw || "Billing";
   const companySecondary = companySecondaryParts.join(" ");
+  const sidebarLogoSrc = String(settings?.branding?.logoUrl || settings?.branding?.logoFile || "").trim();
+  const companyInitials = (companyName.match(/[A-Za-z0-9]/g) || []).slice(0, 2).join("").toUpperCase() || "CO";
 
   // === ROLE-BASED NAVIGATION ===
   // Get user role and load appropriate navigation config
@@ -419,24 +420,27 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
     .join(" ");
 
   const sidebarColor = settings?.theme?.sidebarColor || "#1f2647";
+  const isLightAppearance = settings?.branding?.appearance === "light";
 
   const linkClasses = (isActive, isSpecial = false, isDropdownOpen = false, hasSubMenu = false) =>
     [
       "group relative flex items-center rounded-xl transition-colors no-underline",
       isCollapsed ? "flex-col justify-center gap-1 px-2 py-2.5" : "gap-2.5 px-4 py-2 text-[15px]",
       isSpecial
-        ? "border border-[#4f5d83] bg-[#303a5d] text-white hover:bg-[#36406a]"
+        ? (isLightAppearance
+            ? "border border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
+            : "border border-[#4f5d83] bg-[#303a5d] text-white hover:bg-[#36406a]")
         : isActive
-          ? "bg-[#3b82f6] text-white hover:bg-[#3b82f6]"
-          : "text-white hover:bg-white/10",
+          ? (isLightAppearance ? "bg-slate-200 text-slate-900 hover:bg-slate-200" : "bg-[#3b82f6] text-white hover:bg-[#3b82f6]")
+          : (isLightAppearance ? "text-slate-700 hover:bg-slate-200/70" : "text-white hover:bg-white/10"),
     ].join(" ");
 
   const submenuClasses = (isActive) =>
     [
       "block rounded-lg px-3 py-2 text-[14px] font-medium transition-colors no-underline",
       isActive
-        ? "bg-white/10 text-white"
-        : "text-white/90 hover:bg-white/10 hover:text-white",
+        ? (isLightAppearance ? "bg-slate-200 text-slate-900" : "bg-white/10 text-white")
+        : (isLightAppearance ? "text-slate-700 hover:bg-slate-200/70 hover:text-slate-900" : "text-white/90 hover:bg-white/10 hover:text-white"),
     ].join(" ");
 
   // Filter sections based on permissions - only show items if user has view permission
@@ -479,21 +483,46 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
       <div className="flex h-full w-full flex-col">
         <div
           ref={sidebarContainerRef}
-          className="relative flex h-full max-h-screen flex-col border-r border-[#30395f] text-white transition-colors duration-300 lg:rounded-3xl"
+          className={[
+            "relative flex h-full max-h-screen flex-col border-r transition-colors duration-300 lg:rounded-3xl",
+            isLightAppearance ? "border-slate-200 text-slate-900" : "border-[#30395f] text-white",
+          ].join(" ")}
           style={{ backgroundColor: sidebarColor }}
         >
           <div
-            className={`flex items-center border-b border-white/10 px-4 py-4 ${isCollapsed ? "justify-center" : "justify-between"}`}
+            className={[
+              "flex items-center border-b px-4 py-4",
+              isLightAppearance ? "border-slate-200" : "border-white/10",
+              isCollapsed ? "justify-center" : "justify-between",
+            ].join(" ")}
           >
             <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/25 text-white">
-                <img src={tabnLogo} alt="Taban logo" className="h-[18px] w-[18px] object-contain" />
+              <div
+                className={[
+                  "flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border",
+                  isLightAppearance ? "border-slate-200 text-slate-900" : "border-white/25 text-white",
+                ].join(" ")}
+              >
+                {sidebarLogoSrc ? (
+                  <img
+                    src={sidebarLogoSrc}
+                    alt={`${companyName} logo`}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span className="text-[11px] font-bold">{companyInitials}</span>
+                )}
               </div>
               {!isCollapsed && (
                 <div className="min-w-0">
                   <div className="truncate text-lg font-semibold leading-tight tracking-tight">{companyPrimary}</div>
                   {companySecondary ? (
-                    <div className="truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">
+                    <div
+                      className={[
+                        "truncate text-[11px] font-semibold uppercase tracking-[0.18em]",
+                        isLightAppearance ? "text-slate-500" : "text-white/70",
+                      ].join(" ")}
+                    >
                       {companySecondary}
                     </div>
                   ) : null}
@@ -504,7 +533,10 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
             {!isCollapsed && (
               <button
                 type="button"
-                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-transparent text-white transition-colors hover:bg-white/10"
+                className={[
+                  "flex h-10 w-10 items-center justify-center rounded-2xl bg-transparent transition-colors",
+                  isLightAppearance ? "text-slate-700 hover:bg-slate-200/70" : "text-white hover:bg-white/10",
+                ].join(" ")}
                 aria-label="Collapse sidebar"
                 onClick={() => onToggleCollapse?.()}
               >
@@ -541,7 +573,9 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
 
                       const isParentActive = hasSubMenu && isActive;
                       const arrowColorClass = hasSubMenu
-                        ? (isDropdownOpen || isParentActive ? "text-slate-600" : "text-white/45")
+                        ? (isDropdownOpen || isParentActive
+                            ? "text-slate-600"
+                            : (isLightAppearance ? "text-slate-400" : "text-white/45"))
                         : "text-transparent";
 
                       return (
@@ -659,11 +693,16 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
                                         >
                                           <span className="flex items-center justify-between gap-2">
                                             <span className="flex items-center gap-2 min-w-0">
-                                              <Icon size={14} className="text-white/70" />
+                                              <Icon size={14} className={isLightAppearance ? "text-slate-500" : "text-white/70"} />
                                               <span className="truncate">{sub.label}</span>
                                             </span>
                                             {sub.showAddBadge && (
-                                              <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-white/10 text-white text-[14px] leading-none">
+                                              <span
+                                                className={[
+                                                  "inline-flex h-5 w-5 items-center justify-center rounded-md text-[14px] leading-none",
+                                                  isLightAppearance ? "bg-slate-200 text-slate-700" : "bg-white/10 text-white",
+                                                ].join(" ")}
+                                              >
                                                 +
                                               </span>
                                             )}
@@ -693,10 +732,18 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
                 onMouseLeave={scheduleFlyoutClose}
               >
                 <div
-                  className="w-72 rounded-2xl shadow-2xl border border-white/10 overflow-hidden"
+                  className={[
+                    "w-72 rounded-2xl shadow-2xl border overflow-hidden",
+                    isLightAppearance ? "border-slate-200" : "border-white/10",
+                  ].join(" ")}
                   style={{ backgroundColor: sidebarColor }}
                 >
-                  <div className="border-b border-white/10 px-5 py-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">
+                  <div
+                    className={[
+                      "border-b px-5 py-4 text-[11px] font-semibold uppercase tracking-[0.18em]",
+                      isLightAppearance ? "border-slate-200 text-slate-500" : "border-white/10 text-white/55",
+                    ].join(" ")}
+                  >
                     {hoveredParentLabel}
                   </div>
                   <div className="pb-4 px-3 max-h-[70vh] overflow-y-auto">
@@ -713,13 +760,21 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
                           end
                           onClick={handleLinkClick}
                           className={({ isActive }) =>
-                            `group flex items-center justify-between gap-2 rounded-xl px-4 py-2.5 text-[14px] font-medium transition-colors no-underline mb-1 border ${isActive ? "bg-white/10 text-white border-blue-500" : "text-white/90 hover:bg-white/10 border-transparent"}`
+                            `group flex items-center justify-between gap-2 rounded-xl px-4 py-2.5 text-[14px] font-medium transition-colors no-underline mb-1 border ${isActive
+                              ? (isLightAppearance ? "bg-slate-200 text-slate-900 border-slate-300" : "bg-white/10 text-white border-blue-500")
+                              : (isLightAppearance ? "text-slate-700 hover:bg-slate-200/70 border-transparent" : "text-white/90 hover:bg-white/10 border-transparent")
+                            }`
                           }
                           style={{ textDecoration: "none" }}
                         >
                           <span className="min-w-0 truncate">{sub.label}</span>
                           {sub.showAddBadge && (
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-white/10 text-white text-[14px] leading-none">
+                            <span
+                              className={[
+                                "inline-flex h-5 w-5 items-center justify-center rounded-md text-[14px] leading-none",
+                                isLightAppearance ? "bg-slate-200 text-slate-700" : "bg-white/10 text-white",
+                              ].join(" ")}
+                            >
                               +
                             </span>
                           )}
@@ -734,9 +789,16 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
 
           {!isCollapsed && (
             <div className="px-4 pb-6 pt-3">
-              <div className="border-t border-white/10 pt-3">
-                <div className="text-xs font-medium text-white/80">Version {packageJson.version}</div>
-                <div className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-white/70">
+              <div className={["border-t pt-3", isLightAppearance ? "border-slate-200" : "border-white/10"].join(" ")}>
+                <div className={["text-xs font-medium", isLightAppearance ? "text-slate-600" : "text-white/80"].join(" ")}>
+                  Version {packageJson.version}
+                </div>
+                <div
+                  className={[
+                    "mt-1 flex items-center gap-1.5 text-xs font-semibold",
+                    isLightAppearance ? "text-slate-500" : "text-white/70",
+                  ].join(" ")}
+                >
                   <span aria-hidden="true">{"\u00A9"}</span>
                   <span className="truncate">{companyName}</span>
                 </div>
@@ -746,11 +808,14 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
 
           {isCollapsed && (
             <div className="px-4 pb-6 pt-3">
-              <div className="border-t border-white/10 pt-3">
+              <div className={["border-t pt-3", isLightAppearance ? "border-slate-200" : "border-white/10"].join(" ")}>
                 <div className="flex justify-center">
                   <button
                     type="button"
-                    className="flex h-10 w-10 items-center justify-center rounded-2xl bg-transparent text-white transition-colors hover:bg-white/10"
+                    className={[
+                      "flex h-10 w-10 items-center justify-center rounded-2xl bg-transparent transition-colors",
+                      isLightAppearance ? "text-slate-700 hover:bg-slate-200/70" : "text-white hover:bg-white/10",
+                    ].join(" ")}
                     aria-label="Expand sidebar"
                     onClick={() => onToggleCollapse?.()}
                   >
