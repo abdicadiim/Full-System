@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Check, AlertCircle, Building2, User, Star, Plus, ChevronDown, Edit } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 import {
   ensureDemoLocations,
   readLocations,
   readLocationsEnabled,
   writeLocationsEnabled,
+  writeLocations,
 } from "./storage";
+import { locationsAPI } from "../../../../../services/api";
 
 export default function LocationsPage() {
   const navigate = useNavigate();
@@ -21,24 +24,73 @@ export default function LocationsPage() {
   useEffect(() => {
     const enabled = readLocationsEnabled();
     setIsEnabled(enabled);
-    if (enabled) {
-      setLocations(readLocations());
-    }
-    setIsLoading(false);
+
+    const init = async () => {
+      try {
+        if (!enabled) return;
+        setIsLoadingLocations(true);
+        const res = await locationsAPI.getAll({ limit: 10000 });
+        if (res?.success) {
+          const rows = Array.isArray(res.data) ? res.data : [];
+          writeLocations(rows);
+          setLocations(rows);
+          return;
+        }
+        setLocations(readLocations());
+      } catch (e: any) {
+        console.error("Failed to load locations:", e);
+        setLocations(readLocations());
+      } finally {
+        setIsLoadingLocations(false);
+        setIsLoading(false);
+      }
+    };
+
+    void init();
+    if (!enabled) setIsLoading(false);
   }, []);
 
   const loadLocations = () => {
-    setIsLoadingLocations(true);
-    const nextRows = readLocations();
-    setLocations(nextRows);
-    setIsLoadingLocations(false);
+    void (async () => {
+      setIsLoadingLocations(true);
+      try {
+        const res = await locationsAPI.getAll({ limit: 10000 });
+        if (res?.success) {
+          const rows = Array.isArray(res.data) ? res.data : [];
+          writeLocations(rows);
+          setLocations(rows);
+        } else {
+          setLocations(readLocations());
+        }
+      } catch {
+        setLocations(readLocations());
+      } finally {
+        setIsLoadingLocations(false);
+      }
+    })();
   };
 
   const handleEnableLocations = () => {
-    ensureDemoLocations();
+    const demo = ensureDemoLocations();
     setIsEnabled(true);
     writeLocationsEnabled(true);
-    loadLocations();
+    // best-effort seed demo locations in backend (admin only)
+    void (async () => {
+      try {
+        for (const row of demo) {
+          const res = await locationsAPI.create(row);
+          if (!res?.success && res?.status !== 409) {
+            // ignore duplicates; surface other errors once
+            console.warn("Failed to seed location:", res);
+          }
+        }
+      } catch (e) {
+        console.warn("Location seed skipped:", e);
+      } finally {
+        loadLocations();
+      }
+    })();
+    toast.success("Locations enabled");
   };
 
   // Handle location click (for editing)

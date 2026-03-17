@@ -2,6 +2,9 @@
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { getCurrentUser } from "../../../../../../services/auth";
 import { Upload, X, ChevronDown, ChevronUp, Search, Check, Plus } from "lucide-react";
+import { toast } from "react-toastify";
+import { locationsAPI } from "../../../../../../services/api";
+import { COUNTRIES } from "../../../../../../constants/countries";
 import {
   getDemoUsers,
   getLocationById,
@@ -68,63 +71,89 @@ export default function EditLocationPage() {
   useEffect(() => {
     setIsLoading(true);
     try {
-      const localLocation = getLocationById(String(id));
-      if (!localLocation) {
-        setError('Location not found');
-        setIsLoading(false);
-        return;
-      }
+      // prefer backend, fall back to local cache
+      // (this page can be opened after refresh where local cache is empty)
+      let localLocation: any = null;
+      void (async () => {
+        try {
+          const apiRes = await locationsAPI.getById(String(id));
+          if (apiRes?.success) {
+            localLocation = apiRes.data;
+          } else {
+            localLocation = getLocationById(String(id));
+          }
 
-      const currentUser = getCurrentUser();
-      const demoUsers = getDemoUsers(currentUser);
-      let website = "";
-      if (localLocation.notes && String(localLocation.notes).includes("Website: ")) {
-        website = String(localLocation.notes).split("Website: ")[1].split("\n")[0].trim();
-      }
+          if (!localLocation) {
+            setError('Location not found');
+            setIsLoading(false);
+            return;
+          }
 
-      const isChild = !!localLocation.parentLocation;
-      let logoOption = "Same as Organization Logo";
-      let preview = null;
-      if (localLocation.logo && String(localLocation.logo).trim()) {
-        logoOption = "Upload a New Logo";
-        preview = localLocation.logo;
-      }
+          const currentUser = getCurrentUser();
+          const demoUsers = getDemoUsers(currentUser);
+          let website = "";
+          if (localLocation.notes && String(localLocation.notes).includes("Website: ")) {
+            website = String(localLocation.notes).split("Website: ")[1].split("\n")[0].trim();
+          }
 
-      const matchedPrimaryContact =
-        demoUsers.find((u: any) => u.email === localLocation.contactPerson?.email)?.id || demoUsers[0]?.id || "";
+          const isChild = !!localLocation.parentLocation;
+          let logoOption = "Same as Organization Logo";
+          let preview = null;
+          if (localLocation.logo && String(localLocation.logo).trim()) {
+            logoOption = "Upload a New Logo";
+            preview = localLocation.logo;
+          }
 
-      setUsers(demoUsers);
-      setAllUsers(demoUsers);
-      setLogoPreview(preview);
-      setFormData({
-        type: localLocation.type || "Business",
-        logo: logoOption,
-        name: localLocation.name || "",
-        isChildLocation: isChild,
-        parentLocation: localLocation.parentLocation ? String(localLocation.parentLocation) : "",
-        address: {
-          attention: localLocation.address?.attention || "",
-          street1: localLocation.address?.street1 || "",
-          street2: localLocation.address?.street2 || "",
-          city: localLocation.address?.city || "",
-          zipCode: localLocation.address?.zipCode || "",
-          country: localLocation.address?.country || "United Kingdom",
-          state: localLocation.address?.state || "",
-          phone: localLocation.address?.phone || "",
-          fax: localLocation.address?.fax || "",
-        },
-        website,
-        primaryContact: matchedPrimaryContact,
-        transactionSeries: localLocation.defaultTransactionSeries || "",
-        defaultTransactionSeries: localLocation.defaultTransactionSeries || "Default Transaction Series",
-        locationAccess: [],
-      });
-      setError(null);
+          const matchedPrimaryContact =
+            demoUsers.find((u: any) => u.email === localLocation.contactPerson?.email)?.id || demoUsers[0]?.id || "";
+
+          setUsers(demoUsers);
+          setAllUsers(demoUsers);
+          setLogoPreview(preview);
+          setFormData({
+            type: localLocation.type || "Business",
+            logo: logoOption,
+            name: localLocation.name || "",
+            isChildLocation: isChild,
+            parentLocation: localLocation.parentLocation ? String(localLocation.parentLocation) : "",
+            address: {
+              attention: localLocation.address?.attention || "",
+              street1: localLocation.address?.street1 || "",
+              street2: localLocation.address?.street2 || "",
+              city: localLocation.address?.city || "",
+              zipCode: localLocation.address?.zipCode || "",
+              country: localLocation.address?.country || "United Kingdom",
+              state: localLocation.address?.state || "",
+              phone: localLocation.address?.phone || "",
+              fax: localLocation.address?.fax || "",
+            },
+            website,
+            primaryContact: matchedPrimaryContact,
+            transactionSeries: localLocation.defaultTransactionSeries || "",
+            defaultTransactionSeries: localLocation.defaultTransactionSeries || "Default Transaction Series",
+            locationAccess: Array.isArray(localLocation.locationAccess) ? localLocation.locationAccess : [],
+          });
+          setError(null);
+
+          // refresh cache
+          try {
+            const list = await locationsAPI.getAll({ limit: 10000 });
+            if (list?.success) writeLocations(Array.isArray(list.data) ? list.data : []);
+          } catch {
+            // ignore
+          }
+        } catch (e) {
+          console.error('Error loading location:', e);
+          setError('An error occurred while loading the location');
+        } finally {
+          setIsLoading(false);
+        }
+      })();
     } catch (error) {
       console.error('Error loading location:', error);
       setError('An error occurred while loading the location');
     } finally {
-      setIsLoading(false);
+      // loading is handled in async IIFE above
     }
   }, [id]);
 
@@ -137,9 +166,22 @@ export default function EditLocationPage() {
       return;
     }
 
-    setParentLocations(
-      readLocations().filter((loc: any) => String(loc?._id || loc?.id) !== String(id) && loc?.isActive !== false)
-    );
+    void (async () => {
+      try {
+        const res = await locationsAPI.getAll({ limit: 10000 });
+        if (res?.success) {
+          const rows = Array.isArray(res.data) ? res.data : [];
+          writeLocations(rows);
+          setParentLocations(rows.filter((loc: any) => String(loc?._id || loc?.id) !== String(id) && loc?.isActive !== false));
+          return;
+        }
+      } catch {
+        // ignore
+      }
+      setParentLocations(
+        readLocations().filter((loc: any) => String(loc?._id || loc?.id) !== String(id) && loc?.isActive !== false)
+      );
+    })();
   }, [formData.type, formData.isChildLocation, id]);
 
   // Close dropdowns when clicking outside (same as AddLocationPage)
@@ -390,24 +432,20 @@ export default function EditLocationPage() {
         parentLocation: (formData.type === "Warehouse" || (formData.type === "Business" && formData.isChildLocation)) ? formData.parentLocation : null,
         logo: formData.type === "Business" && formData.logo === "Upload a New Logo" && logoPreview ? logoPreview : "",
       };
-      const existingRows = readLocations();
-      const now = new Date().toISOString();
-      const nextRows = Array.isArray(existingRows)
-        ? existingRows.map((row: any) =>
-            String(row?._id || row?.id) === String(id)
-              ? {
-                  ...row,
-                  ...locationData,
-                  _id: String(row?._id || row?.id || id),
-                  id: String(row?._id || row?.id || id),
-                  updatedAt: now,
-                }
-              : row
-          )
-        : [];
 
-      writeLocations(nextRows);
+      const updated = await locationsAPI.update(String(id), {
+        ...locationData,
+        parentLocation: locationData.parentLocation || "",
+      });
+      if (!updated?.success) {
+        throw new Error(updated?.message || "Failed to update location");
+      }
+
+      const list = await locationsAPI.getAll({ limit: 10000 });
+      if (list?.success) writeLocations(Array.isArray(list.data) ? list.data : []);
+
       writeLocationsEnabled(true);
+      toast.success("Location updated successfully.");
       navigate('/settings/locations');
     } catch (error) {
       console.error('Error updating location:', error);
@@ -779,14 +817,11 @@ export default function EditLocationPage() {
                 onChange={handleChange}
                 className="col-span-2 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               >
-                <option value="United Kingdom">United Kingdom</option>
-                <option value="United States">United States</option>
-                <option value="Canada">Canada</option>
-                <option value="Australia">Australia</option>
-                <option value="Germany">Germany</option>
-                <option value="France">France</option>
-                <option value="India">India</option>
-                <option value="Kenya">Kenya</option>
+                {COUNTRIES.map((country) => (
+                  <option key={country} value={country}>
+                    {country}
+                  </option>
+                ))}
               </select>
             </div>
 

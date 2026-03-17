@@ -5,6 +5,7 @@
  */
 
 import { db } from "../store/db";
+import { customersAPI } from "../services/api";
 
 const STORAGE_KEYS = {
   CUSTOM_VIEWS: 'taban_custom_views',
@@ -17,44 +18,24 @@ const STORAGE_KEYS = {
  * Get all customers from db
  * @returns {Array} Array of customer objects
  */
-export const getCustomers = () => {
-  try {
-    return db.customers.list({});
-  } catch (error) {
-    console.error("Error getting customers:", error);
-    return [];
-  }
+export const getCustomers = async (params: any = {}) => {
+  const res: any = await customersAPI.getAll(params);
+  return res?.success ? res.data || [] : [];
 };
 
-export const getCustomersPaginated = ({
+export const getCustomersPaginated = async ({
   page = 1,
   limit = 50,
   search = "",
 } = {}) => {
-  const allCustomers = getCustomers();
-  const q = String(search || "").trim().toLowerCase();
-
-  const filtered = q
-    ? allCustomers.filter((customer) =>
-        Object.values(customer || {}).some((value) =>
-          String(value ?? "")
-            .toLowerCase()
-            .includes(q)
-        )
-      )
-    : allCustomers;
-
-  const safeLimit = Math.max(1, Number(limit || 50));
-  const safePage = Math.max(1, Number(page || 1));
-  const start = (safePage - 1) * safeLimit;
-  const data = filtered.slice(start, start + safeLimit);
-
+  const res: any = await customersAPI.getAll({ page, limit, search });
+  if (!res?.success) throw new Error(res?.message || "Failed to load customers");
   return {
-    data,
-    total: filtered.length,
-    page: safePage,
-    limit: safeLimit,
-    totalPages: Math.max(1, Math.ceil(filtered.length / safeLimit)),
+    data: res.data || [],
+    total: res.total || 0,
+    page: res.page || page,
+    limit: res.limit || limit,
+    totalPages: res.totalPages || 1,
   };
 };
 
@@ -75,38 +56,10 @@ export type SalesReceipt = any;
  * @param {Object} customerData - Customer data object
  * @returns {Object} Saved customer with generated ID
  */
-export const saveCustomer = (customerData) => {
-  try {
-    const newCustomer = {
-      ...customerData,
-      id: customerData.id || db.utils.uid("cus"),
-      createdAt: customerData.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    
-    // Ensure required fields have defaults
-    if (!newCustomer.name) {
-      newCustomer.name = newCustomer.displayName || newCustomer.companyName || "Unnamed Customer";
-    }
-    if (!newCustomer.currency) {
-      newCustomer.currency = "USD";
-    }
-    if (!newCustomer.receivables) {
-      newCustomer.receivables = parseFloat(newCustomer.openingBalance) || 0;
-    }
-    if (!newCustomer.paymentMethods) {
-      newCustomer.paymentMethods = [];
-    }
-    if (!newCustomer.credits) {
-      newCustomer.credits = 0;
-    }
-    
-    db.customers.add(newCustomer);
-    return newCustomer;
-  } catch (error) {
-    console.error("Error saving customer:", error);
-    throw error;
-  }
+export const saveCustomer = async (customerData) => {
+  const res: any = await customersAPI.create(customerData);
+  if (!res?.success) throw new Error(res?.message || "Failed to save customer");
+  return res.data;
 };
 
 /**
@@ -114,13 +67,9 @@ export const saveCustomer = (customerData) => {
  * @param {string} id - Customer ID
  * @returns {Object|null} Customer object or null if not found
  */
-export const getCustomerById = (id) => {
-  try {
-    return db.customers.get(id) || null;
-  } catch (error) {
-    console.error("Error getting customer by ID:", error);
-    return null;
-  }
+export const getCustomerById = async (id) => {
+  const res: any = await customersAPI.getById(id);
+  return res?.success ? res.data : null;
 };
 
 /**
@@ -129,27 +78,9 @@ export const getCustomerById = (id) => {
  * @param {Object} customerData - Updated customer data
  * @returns {Object|null} Updated customer or null if not found
  */
-export const updateCustomer = (id, customerData) => {
-  try {
-    const existing = db.customers.get(id);
-    if (!existing) {
-      console.warn(`Customer with ID ${id} not found`);
-      return null;
-    }
-    
-    const updatedCustomer = {
-      ...existing,
-      ...customerData,
-      id, // Ensure ID doesn't change
-      updatedAt: new Date().toISOString()
-    };
-    
-    db.customers.update(id, updatedCustomer);
-    return updatedCustomer;
-  } catch (error) {
-    console.error("Error updating customer:", error);
-    throw error;
-  }
+export const updateCustomer = async (id, customerData) => {
+  const res: any = await customersAPI.update(id, customerData);
+  return res?.success ? res.data : null;
 };
 
 /**
@@ -157,18 +88,9 @@ export const updateCustomer = (id, customerData) => {
  * @param {string} id - Customer ID
  * @returns {boolean} True if deleted, false if not found
  */
-export const deleteCustomer = (id) => {
-  try {
-    const existing = db.customers.get(id);
-    if (!existing) {
-      return false;
-    }
-    db.customers.remove(id);
-    return true;
-  } catch (error) {
-    console.error("Error deleting customer:", error);
-    throw error;
-  }
+export const deleteCustomer = async (id) => {
+  const res: any = await customersAPI.delete(id);
+  return Boolean(res?.success);
 };
 
 /**
@@ -249,9 +171,8 @@ export const getCustomerTransactions = (customerId) => {
       return allTransactions.filter(t => t.customerId === customerId);
     }
     // Initialize with sample data if customer has invoices
-    const customer = db.customers.get(customerId);
-    if (customer) {
-      const invoices = db.invoices.list({}).filter(inv => inv.customerId === customerId || inv.customer === customer.name);
+    const invoices = db.invoices.list({}).filter((inv) => inv.customerId === customerId);
+    if (invoices.length) {
       const sampleTransactions = invoices.map(inv => {
         const totals = db.invoices.calc(inv);
         return {
@@ -264,7 +185,7 @@ export const getCustomerTransactions = (customerId) => {
           amount: totals.total,
           balanceDue: totals.total,
           status: inv.status || "Sent",
-          currency: inv.currency || customer.currency || "USD"
+          currency: inv.currency || "USD"
         };
       });
       if (sampleTransactions.length > 0) {

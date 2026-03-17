@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Info, ChevronDown, HelpCircle, Loader2 } from "lucide-react";
 import { getToken, API_BASE_URL } from "../../../../../services/auth";
-import toast from "react-hot-toast";
+import { toast } from "react-toastify";
 
 export default function CustomersVendorsPage() {
   const navigate = useNavigate();

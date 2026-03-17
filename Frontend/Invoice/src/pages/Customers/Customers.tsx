@@ -26,7 +26,6 @@ const defaultCustomerViews = [
 export default function Customers() {
   const navigate = useNavigate();
   const location = useLocation();
-  const LOCAL_CUSTOMERS_CACHE_KEY = "taban_customers_cache";
   const LOCAL_COLUMNS_LAYOUT_KEY = "taban_customers_columns";
   const [customers, setCustomers] = useState<any[]>([]);
   const [selectedCustomers, setSelectedCustomers] = useState(new Set<string>());
@@ -102,8 +101,6 @@ export default function Customers() {
 
   const handleSaveLayout = () => {
     localStorage.setItem(LOCAL_COLUMNS_LAYOUT_KEY, JSON.stringify(columns));
-    const cachedWithCurrentColumns = customers.map(mapCustomerForList).filter(Boolean);
-    localStorage.setItem(LOCAL_CUSTOMERS_CACHE_KEY, JSON.stringify(cachedWithCurrentColumns));
     setHasResized(false);
     setOriginalColumns(null);
   };
@@ -1130,20 +1127,12 @@ export default function Customers() {
     };
   };
 
-  const getCachedCustomers = () => {
-    try {
-      const raw = localStorage.getItem(LOCAL_CUSTOMERS_CACHE_KEY);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
-      return parsed.map(mapCustomerForList).filter(Boolean);
-    } catch {
-      return [];
-    }
-  };
-
   // Load customers from API when component mounts or when navigating back
   useEffect(() => {
+    // Clean up legacy local cache (DB is the source of truth now).
+    try {
+      localStorage.removeItem("taban_customers_cache");
+    } catch { }
     loadCustomers();
     const refreshCustomViews = () => {
       setCustomViews(getCustomViews());
@@ -1422,13 +1411,6 @@ export default function Customers() {
       }
       setIsRefreshing(true);
 
-      if (customers.length === 0) {
-        const cachedCustomers = getCachedCustomers();
-        if (cachedCustomers.length > 0) {
-          setCustomers(cachedCustomers as any);
-        }
-      }
-
       const response = await getCustomersPaginated({
         page,
         limit,
@@ -1442,7 +1424,6 @@ export default function Customers() {
       const mappedCustomers = customersArray.map(mapCustomerForList).filter(Boolean);
 
       setCustomers(mappedCustomers);
-      localStorage.setItem(LOCAL_CUSTOMERS_CACHE_KEY, JSON.stringify(mappedCustomers));
     } catch (error) {
 
       if (error.status === 401 || error.message?.includes('authorized') || error.message?.includes('Unauthorized')) {
@@ -1454,8 +1435,7 @@ export default function Customers() {
       }
 
       toast.error("Error loading customers: " + (error?.message || "Unknown error."));
-      const cachedCustomers = getCachedCustomers();
-      setCustomers(cachedCustomers.length > 0 ? (cachedCustomers as any) : []);
+      setCustomers([]);
     } finally {
       if (!rowRefreshOnly) {
         setIsLoading(false);

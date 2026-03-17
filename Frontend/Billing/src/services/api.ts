@@ -583,215 +583,53 @@ const customersBase = resource("/customers");
 
 export const customersAPI = {
   getAll: async (params?: Record<string, any>) => {
-    await ensureCustomersDbReady();
-
-    const query = String(params?.search || params?.q || "").trim().toLowerCase();
-    const status = String(params?.status || "").trim().toLowerCase();
-    const limit = Number(params?.limit || 0);
-    const page = Math.max(1, Number(params?.page || 1));
-
-    let customers = readAllCustomersLocal();
-
-    if (status) {
-      customers = customers.filter(
-        (customer: any) => String(customer?.status || "active").toLowerCase() === status
-      );
-    }
-    if (query) {
-      customers = customers.filter((customer: any) => customerMatchesQuery(customer, query));
-    }
-    if (limit > 0) {
-      const start = (page - 1) * limit;
-      customers = customers.slice(start, start + limit);
-    }
-
-    return { success: true, data: customers };
+    return (await customersBase.getAll(params)) as any;
   },
   list: async (params?: Record<string, any>) => customersAPI.getAll(params),
   getNextCustomerNumber: async (options?: { prefix?: string; start?: string | number }) => {
-    await ensureCustomersDbReady();
-    const customers = readAllCustomersLocal();
-    return getNextCustomerNumberFromCustomers(customers, options);
+    const remote = await request({
+      path: "/customers/next-number",
+      params: {
+        prefix: options?.prefix,
+        start: options?.start,
+      },
+    });
+    if (remote?.success) return (remote as any).data as string;
+    throw new Error(remote?.message || "Failed to get next customer number");
   },
   getById: async (id: string) => {
-    await ensureCustomersDbReady();
-    const customerId = toCustomerId(id);
-    const found = db.customers.get(customerId);
-    if (!found) {
-      return { success: false, message: "Customer not found", data: null };
-    }
-    return { success: true, data: normalizeCustomer(found, customerId) };
+    return (await customersBase.getById(String(id))) as any;
   },
   create: async (data: any) => {
-    await ensureCustomersDbReady();
-    const input = { ...(data || {}) };
-    const desiredCustomerNumber = String(input?.customerNumber ?? "").trim();
-    const customers = readAllCustomersLocal();
-    const existingNumbers = new Set(
-      customers.map((c: any) => String(c?.customerNumber ?? "").trim()).filter(Boolean)
-    );
-
-    if (!desiredCustomerNumber || existingNumbers.has(desiredCustomerNumber)) {
-      const desiredPrefix = detectCustomerNumberPrefix(desiredCustomerNumber);
-      input.customerNumber = getNextCustomerNumberFromCustomers(customers, {
-        prefix: desiredPrefix || undefined,
-      });
-    }
-
-    const created = writeCustomerLocal(input);
-    recordEvent("customer_created", { customer: created });
-    return { success: true, data: created, message: "Customer saved locally" };
+    return (await customersBase.create(data)) as any;
   },
   update: async (id: string, data: any) => {
-    await ensureCustomersDbReady();
-    const customerId = toCustomerId(id);
-    const updated = updateCustomerLocal(customerId, data || {});
-    if (!updated) {
-      return { success: false, message: "Customer not found", data: null };
-    }
-    recordEvent("customer_updated", { customer: updated });
-    return { success: true, data: updated, message: "Customer updated locally" };
+    return (await customersBase.update(String(id), data)) as any;
   },
   delete: async (id: string) => {
-    await ensureCustomersDbReady();
-    const customerId = toCustomerId(id);
-    const existing = db.customers.get(customerId);
-    if (!existing) {
-      return { success: false, message: "Customer not found", data: null };
-    }
-    db.customers.remove(customerId);
-    recordEvent("customer_deleted", { customer_id: customerId, customer_name: buildCustomerName(existing) });
-    return { success: true, data: { id: customerId }, message: "Customer deleted locally" };
+    return (await customersBase.delete(String(id))) as any;
   },
   bulkUpdate: async (ids: string[], data: any) => {
-    await ensureCustomersDbReady();
-    const updated: any[] = [];
-    for (const rawId of ids || []) {
-      const customerId = toCustomerId(rawId);
-      const item = updateCustomerLocal(customerId, data || {});
-      if (item) updated.push(item);
-    }
-    return {
-      success: true,
-      data: updated,
-      message: `Updated ${updated.length} customer(s) locally`,
-    };
+    return (await request({ method: "POST", path: "/customers/bulk-update", data: { ids, data } })) as any;
   },
   bulkDelete: async (ids: string[]) => {
-    await ensureCustomersDbReady();
-    const deletedIds: string[] = [];
-    for (const rawId of ids || []) {
-      const customerId = toCustomerId(rawId);
-      if (db.customers.get(customerId)) {
-        db.customers.remove(customerId);
-        deletedIds.push(customerId);
-      }
-    }
-    return {
-      success: true,
-      data: { ids: deletedIds },
-      message: `Deleted ${deletedIds.length} customer(s) locally`,
-    };
+    return (await request({ method: "POST", path: "/customers/bulk-delete", data: { ids } })) as any;
   },
   merge: async (targetCustomerId: string, sourceCustomerIds: string[]) => {
-    await ensureCustomersDbReady();
-    const targetId = toCustomerId(targetCustomerId);
-    const target = db.customers.get(targetId);
-    if (!target) {
-      return { success: false, message: "Target customer not found", data: null };
-    }
-
-    const sourceIds = Array.from(new Set((sourceCustomerIds || []).map(toCustomerId))).filter(
-      (id) => id && id !== targetId
-    );
-    const sources = sourceIds.map((id) => db.customers.get(id)).filter(Boolean) as any[];
-    if (!sources.length) {
-      return { success: false, message: "No source customers found to merge", data: null };
-    }
-
-    const merged = normalizeCustomer(
-      {
-        ...target,
-        receivables:
-          asNumber(target?.receivables || target?.openingBalance) +
-          sources.reduce((sum, source) => sum + asNumber(source?.receivables || source?.openingBalance), 0),
-        unusedCredits:
-          asNumber(target?.unusedCredits || target?.unused_credits) +
-          sources.reduce((sum, source) => sum + asNumber(source?.unusedCredits || source?.unused_credits), 0),
-        contactPersons: [
-          ...(Array.isArray(target?.contactPersons) ? target.contactPersons : []),
-          ...sources.flatMap((source) =>
-            Array.isArray(source?.contactPersons) ? source.contactPersons : []
-          ),
-        ],
-        documents: [
-          ...(Array.isArray(target?.documents) ? target.documents : []),
-          ...sources.flatMap((source) => (Array.isArray(source?.documents) ? source.documents : [])),
-        ],
-        comments: [
-          ...(Array.isArray(target?.comments) ? target.comments : []),
-          ...sources.flatMap((source) => (Array.isArray(source?.comments) ? source.comments : [])),
-        ],
-      },
-      targetId
-    );
-
-    db.customers.update(targetId, merged);
-    sourceIds.forEach((sourceId) => {
-      const source = db.customers.get(sourceId);
-      if (!source) return;
-      db.customers.update(sourceId, {
-        ...source,
-        status: "inactive",
-        mergedInto: targetId,
-        updatedAt: new Date().toISOString(),
-      });
-    });
-
-    return {
-      success: true,
-      data: merged,
-      message: `Merged ${sources.length} customer(s) into ${buildCustomerName(merged)}`,
-    };
+    return (await request({
+      method: "POST",
+      path: `/customers/${encodeURIComponent(String(targetCustomerId))}/merge`,
+      data: { sourceCustomerIds },
+    })) as any;
   },
   sendInvitation: async (id: string, data: any) => {
-    await ensureCustomersDbReady();
-    const customerId = toCustomerId(id);
-    const existing = db.customers.get(customerId);
-    if (!existing) return { success: false, message: "Customer not found", data: null };
-
-    const invitations = Array.isArray(existing?.portalInvitations)
-      ? existing.portalInvitations
-      : [];
-    const nextInvitation = {
-      email: data?.email || existing?.email || "",
-      method: data?.method || "email",
-      sentAt: new Date().toISOString(),
-    };
-    db.customers.update(customerId, {
-      ...existing,
-      enablePortal: true,
-      portalInvitations: [nextInvitation, ...invitations],
-      updatedAt: new Date().toISOString(),
-    });
-    logCustomerMailAction(customerId, "send-invitation", data);
-    return { success: true, data: nextInvitation, message: "Invitation recorded locally" };
+    return { success: false, message: "Not implemented for DB-backed customers yet", data: null };
   },
   sendReviewRequest: async (id: string, data: any) => {
-    await ensureCustomersDbReady();
-    const customerId = toCustomerId(id);
-    const existing = db.customers.get(customerId);
-    if (!existing) return { success: false, message: "Customer not found", data: null };
-    logCustomerMailAction(customerId, "request-review", data);
-    return { success: true, data: { queued: true }, message: "Review request recorded locally" };
+    return { success: false, message: "Not implemented for DB-backed customers yet", data: null };
   },
   sendStatement: async (id: string, data: any) => {
-    await ensureCustomersDbReady();
-    const customerId = toCustomerId(id);
-    const existing = db.customers.get(customerId);
-    if (!existing) return { success: false, message: "Customer not found", data: null };
-    logCustomerMailAction(customerId, "send-statement", data);
-    return { success: true, data: { queued: true }, message: "Statement send recorded locally" };
+    return { success: false, message: "Not implemented for DB-backed customers yet", data: null };
   },
 };
 
@@ -971,6 +809,8 @@ const defaultReportingTags = [
 const reportingTagsLocal = localResource(LOCAL_REPORTING_TAGS_KEY, "rt", defaultReportingTags);
 const reportingTagsResource = resource("/reporting-tags");
 const currenciesResource = resource("/currencies");
+const txSeriesResource = resource("/transaction-number-series");
+const locationsResource = resource("/locations");
 const locationsLocal = localResource(LOCAL_LOCATIONS_KEY, "loc");
 
 const readSettingsObject = (key: string, fallback: any = {}) => {
@@ -1004,6 +844,8 @@ export const currenciesAPI = {
     try {
       const res = await currenciesResource.getAll(params);
       if (res?.success) return res as any;
+      // If the server responded (e.g. 401/403), surface it to the caller.
+      if (typeof (res as any)?.status === "number") return res as any;
     } catch {
       // fall back
     }
@@ -1014,6 +856,7 @@ export const currenciesAPI = {
     try {
       const res = await currenciesResource.getById(id);
       if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
     } catch {
       // fall back
     }
@@ -1023,6 +866,8 @@ export const currenciesAPI = {
     try {
       const res = await currenciesResource.create(data);
       if (res?.success) return res as any;
+      // If the server responded (e.g. 401/403/409), do not fall back to local writes.
+      if (typeof (res as any)?.status === "number") return res as any;
     } catch {
       // fall back
     }
@@ -1032,6 +877,7 @@ export const currenciesAPI = {
     try {
       const res = await currenciesResource.update(id, data);
       if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
     } catch {
       // fall back
     }
@@ -1041,6 +887,7 @@ export const currenciesAPI = {
     try {
       const res = await currenciesResource.delete(id);
       if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
     } catch {
       // fall back
     }
@@ -1610,7 +1457,45 @@ export const approvalRulesAPI = {
 
 export const transactionNumberSeriesAPI = {
   ...txSeriesLocal,
+  getAll: async (params?: Record<string, any>) => {
+    try {
+      const res = await txSeriesResource.getAll(params);
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+    return txSeriesLocal.getAll(params);
+  },
+  getById: async (id: string) => {
+    try {
+      const res = await txSeriesResource.getById(id);
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+    return txSeriesLocal.getById(id);
+  },
+  delete: async (id: string) => {
+    try {
+      const res = await txSeriesResource.delete(id);
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+    return txSeriesLocal.delete(id);
+  },
   createMultiple: async (data: any) => {
+    try {
+      const res = await request({ method: "POST", path: "/transaction-number-series/bulk", data });
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+
     const seriesName = data?.seriesName || "Standard";
     const locationIds = data?.locationIds || [];
     const modules = data?.modules || (Array.isArray(data) ? data : data?.series || data?.rows || []);
@@ -1629,6 +1514,14 @@ export const transactionNumberSeriesAPI = {
     return { success: true, data: created };
   },
   updateMultiple: async (data: any) => {
+    try {
+      const res = await request({ method: "PUT", path: "/transaction-number-series/bulk", data });
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+
     const seriesName = data?.seriesName || "Standard";
     const locationIds = data?.locationIds || [];
     const modules = data?.modules || [];
@@ -1660,23 +1553,55 @@ export const transactionNumberSeriesAPI = {
     return { success: true, data: created };
   },
   getNextNumber: async (seriesId?: string) => {
+    try {
+      const id = String(seriesId || "").trim();
+      const path = id ? `/transaction-number-series/${encodeURIComponent(id)}/next-number` : "/transaction-number-series/next-number";
+      const res = await request({ path });
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+
     const all = await txSeriesLocal.getAll({ limit: 10000 });
     const rows = all.data || [];
     const selected =
       rows.find((row: any) => String(getEntityId(row)) === String(seriesId || "")) ||
       rows[0] ||
       defaultTxSeries[0];
-    const nextValue = Number(selected?.nextNumber || 1);
-    const nextNumber = `${selected?.prefix || ""}${String(nextValue).padStart(5, "0")}`;
-    await txSeriesLocal.update(getEntityId(selected), { ...selected, nextNumber: nextValue + 1 });
-    return { success: true, data: { seriesId: getEntityId(selected), nextNumber } };
+
+    const starting = String(selected?.startingNumber || selected?.nextNumber || "1");
+    const parsed = parseInt(starting, 10);
+    const current = Number(selected?.nextNumber) > 0 ? Number(selected.nextNumber) : Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+    const width = /^\d+$/.test(starting) ? starting.length : 5;
+    const padded = width > 1 ? String(current).padStart(width, "0") : String(current);
+    const nextNumber = `${selected?.prefix || ""}${padded}`;
+    await txSeriesLocal.update(getEntityId(selected), { ...selected, nextNumber: current + 1 });
+
+    return { success: true, data: { seriesId: getEntityId(selected), nextNumber, next_number: nextNumber } };
   },
   getSettings: async () => {
+    try {
+      const res = await request({ path: "/transaction-number-series/settings" });
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+
     const defaults = { preventDuplicates: "all_fiscal_years" };
     const data = readSettingsObject("taban_books_tx_number_settings", defaults);
     return { success: true, data };
   },
   updateSettings: async (data: any) => {
+    try {
+      const res = await request({ method: "PUT", path: "/transaction-number-series/settings", data });
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+
     const current = readSettingsObject("taban_books_tx_number_settings", {});
     const updated = { ...current, ...data };
     writeSettingsObject("taban_books_tx_number_settings", updated);
@@ -1686,6 +1611,60 @@ export const transactionNumberSeriesAPI = {
 
 export const locationsAPI = {
   ...locationsLocal,
+  getAll: async (params?: Record<string, any>) => {
+    try {
+      const res = await locationsResource.getAll(params);
+      if (res?.success) {
+        const rows = Array.isArray((res as any).data) ? (res as any).data : [];
+        writeLocalCollection(LOCAL_LOCATIONS_KEY, rows);
+        return res as any;
+      }
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+    return locationsLocal.getAll(params);
+  },
+  getById: async (id: string) => {
+    try {
+      const res = await locationsResource.getById(id);
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+    return locationsLocal.getById(id);
+  },
+  create: async (data: any) => {
+    try {
+      const res = await locationsResource.create(data);
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+    return locationsLocal.create(data);
+  },
+  update: async (id: string, data: any) => {
+    try {
+      const res = await locationsResource.update(id, data);
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+    return locationsLocal.update(id, data);
+  },
+  delete: async (id: string) => {
+    try {
+      const res = await locationsResource.delete(id);
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+    return locationsLocal.delete(id);
+  },
 };
 
 export const settingsAPI = {
@@ -1695,6 +1674,18 @@ export const settingsAPI = {
     return { success: true, data: { ownerEmail } };
   },
   getOrganizationProfile: async () => {
+    try {
+      const res = await request({ path: "/settings/organization/profile" });
+      if (res?.success) {
+        const normalized = res.data && typeof res.data === "object" ? res.data : {};
+        writeSettingsObject("organization_profile", normalized);
+        return { success: true, data: normalized };
+      }
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+
     const existing = readSettingsObject("organization_profile", {});
     const normalized = {
       baseCurrency: existing?.baseCurrency || "AMD",
@@ -1706,6 +1697,18 @@ export const settingsAPI = {
     return { success: true, data: normalized };
   },
   updateOrganizationProfile: async (data: any) => {
+    try {
+      const res = await request({ method: "PUT", path: "/settings/organization/profile", data });
+      if (res?.success) {
+        const updated = res.data && typeof res.data === "object" ? res.data : data;
+        writeSettingsObject("organization_profile", updated);
+        return { success: true, data: updated };
+      }
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+
     const existing = readSettingsObject("organization_profile", {});
     const updated = { ...existing, ...(data || {}) };
     writeSettingsObject("organization_profile", updated);

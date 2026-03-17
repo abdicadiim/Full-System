@@ -18,8 +18,9 @@ import {
   ArrowLeft
 } from "lucide-react";
 import { getToken, API_BASE_URL } from "../../../../../../services/auth";
-import { settingsAPI } from "../../../../../../services/api";
+import { locationsAPI, settingsAPI, transactionNumberSeriesAPI } from "../../../../../../services/api";
 import { toast } from "react-toastify";
+import { COUNTRIES } from "../../../../../../constants/countries";
 import {
   readLocations,
   writeLocations,
@@ -122,6 +123,8 @@ export default function AddLocationPage() {
 
   const [provideAccessToAll, setProvideAccessToAll] = useState(false);
   const [orgCountry, setOrgCountry] = useState<string>("");
+  const [txSeriesNames, setTxSeriesNames] = useState<string[]>([]);
+  const [loadingTxSeries, setLoadingTxSeries] = useState(false);
   const allUsersSelected =
     allUsers.length > 0 && formData.locationAccess.length === allUsers.length;
 
@@ -211,14 +214,62 @@ export default function AddLocationPage() {
 
   useEffect(() => {
     if (formData.type !== "Business") return;
+    void (async () => {
+      try {
+        setLoadingTxSeries(true);
+        const res = await transactionNumberSeriesAPI.getAll({ limit: 10000 });
+        const rows = Array.isArray(res?.data) ? res.data : [];
+        const names = Array.from(
+          new Set(
+            rows
+              .map((r: any) => String(r?.seriesName || r?.name || "").trim())
+              .filter(Boolean)
+          )
+        ).sort((a, b) => a.localeCompare(b));
+        setTxSeriesNames(names);
+        if (!formData.transactionNumberSeriesId && names.length > 0) {
+          setFormData((prev) => ({ ...prev, transactionNumberSeriesId: names[0] }));
+        }
+        if (!formData.defaultTransactionNumberSeriesId && names.length > 0) {
+          setFormData((prev) => ({ ...prev, defaultTransactionNumberSeriesId: names[0] }));
+        }
+      } catch (e) {
+        console.warn("Failed to load transaction series:", e);
+      } finally {
+        setLoadingTxSeries(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.type]);
+
+  useEffect(() => {
+    // Sync locations cache from backend so parent dropdown is accurate
+    void (async () => {
+      try {
+        const res = await locationsAPI.getAll({ limit: 10000 });
+        if (res?.success) {
+          const rows = Array.isArray(res.data) ? res.data : [];
+          writeLocations(rows);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
     if (!orgCountry) return;
-    setFormData((prev) => ({
-      ...prev,
-      address: {
-        ...prev.address,
-        country: orgCountry,
-      },
-    }));
+    setFormData((prev) =>
+      prev?.address?.country && String(prev.address.country).trim() && String(prev.address.country).trim() !== "United Kingdom"
+        ? prev
+        : {
+            ...prev,
+            address: {
+              ...prev.address,
+              country: orgCountry,
+            },
+          }
+    );
   }, [formData.type, orgCountry]);
 
   useEffect(() => {
@@ -328,20 +379,28 @@ export default function AddLocationPage() {
     try {
       setIsSaving(true);
       setError(null);
-      
-      const existingRows = readLocations();
-      const now = new Date().toISOString();
+
       const newId = `loc-${Date.now()}`;
-      
-      const newLocation = {
-          ...formData,
-          _id: newId,
-          id: newId,
-          createdAt: now,
-          updatedAt: now,
+      const payload: any = {
+        ...formData,
+        _id: newId,
+        id: newId,
+        parentLocation: formData.parentLocation === "None" ? "" : formData.parentLocation,
+        isActive: true,
+        status: "Active",
+        defaultTransactionSeries: formData.defaultTransactionNumberSeriesId || formData.transactionNumberSeriesId || "",
       };
 
-      writeLocations([...existingRows, newLocation]);
+      const created = await locationsAPI.create(payload);
+      if (!created?.success) {
+        throw new Error(created?.message || "Failed to create location");
+      }
+
+      const list = await locationsAPI.getAll({ limit: 10000 });
+      if (list?.success) {
+        writeLocations(Array.isArray(list.data) ? list.data : []);
+      }
+
       writeLocationsEnabled(true);
       toast.success("Location created successfully.");
       navigate('/settings/locations');
@@ -654,11 +713,11 @@ export default function AddLocationPage() {
                       disabled={formData.type === "Business"}
                       className={`col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm ${formData.type === "Business" ? "bg-gray-50 text-gray-500 cursor-not-allowed" : "bg-white"}`}
                     >
-                        <option value="United Kingdom">United Kingdom</option>
-                        <option value="United States">United States</option>
-                        <option value="Uganda">Uganda</option>
-                        <option value="Kenya">Kenya</option>
-                        <option value="Albania">Albania</option>
+                        {COUNTRIES.map((country) => (
+                          <option key={country} value={country}>
+                            {country}
+                          </option>
+                        ))}
                     </select>
                 </div>
                 <div className="grid grid-cols-3 gap-4 items-center">
@@ -712,16 +771,34 @@ export default function AddLocationPage() {
                 <div className="px-6 py-4 border-b border-gray-200">
                     <div className="grid grid-cols-3 gap-4 items-center">
                         <label className="text-sm font-medium text-red-500">Transaction Number Series*</label>
-                        <select className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm bg-white text-gray-400">
-                            <option>Add Transaction Series</option>
+                        <select
+                          name="transactionNumberSeriesId"
+                          value={formData.transactionNumberSeriesId}
+                          onChange={handleChange}
+                          disabled={loadingTxSeries}
+                          className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm bg-white"
+                        >
+                            <option value="">{loadingTxSeries ? "Loading..." : "Select Transaction Series"}</option>
+                            {txSeriesNames.map((name) => (
+                              <option key={name} value={name}>{name}</option>
+                            ))}
                         </select>
                     </div>
                 </div>
                 <div className="px-6 py-4 border-b border-gray-200">
                     <div className="grid grid-cols-3 gap-4 items-center">
                         <label className="text-sm font-medium text-red-500">Default Transaction Number Series*</label>
-                        <select className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm bg-white text-gray-400">
-                            <option>Add Transaction Series</option>
+                        <select
+                          name="defaultTransactionNumberSeriesId"
+                          value={formData.defaultTransactionNumberSeriesId}
+                          onChange={handleChange}
+                          disabled={loadingTxSeries}
+                          className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm bg-white"
+                        >
+                            <option value="">{loadingTxSeries ? "Loading..." : "Select Default Series"}</option>
+                            {txSeriesNames.map((name) => (
+                              <option key={name} value={name}>{name}</option>
+                            ))}
                         </select>
                     </div>
                 </div>

@@ -28,6 +28,10 @@ import {
   upsertEmailTemplateByKey,
 } from "../controllers/emailSettingsController.js";
 import { listUsersForSettings } from "../controllers/usersController.js";
+import {
+  getCustomersVendorsSettings,
+  upsertCustomersVendorsSettings,
+} from "../controllers/customersVendorsSettingsController.js";
 
 export const settingsRoutes = Router();
 
@@ -39,6 +43,10 @@ settingsRoutes.get("/organization/owner-email", requireAuth, getOrganizationOwne
 
 // Organization users (for dropdowns in settings UI)
 settingsRoutes.get("/users", requireAuth, requireOrgAdmin, listUsersForSettings);
+
+// Customers & Vendors (module settings)
+settingsRoutes.get("/customers-vendors", requireAuth, getCustomersVendorsSettings);
+settingsRoutes.put("/customers-vendors", requireAuth, requireOrgAdmin, upsertCustomersVendorsSettings);
 
 // Sender emails
 settingsRoutes.get("/sender-emails", requireAuth, listSenderEmails);

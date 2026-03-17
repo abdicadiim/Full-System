@@ -2,8 +2,15 @@ import express from "express";
 import mongoose from "mongoose";
 import { Currency } from "../models/Currency.js";
 
-const pickString = (v: unknown) => (typeof v === "string" ? v : "");
+const pickString = (v: unknown) => (typeof v === "string" ? v : typeof v === "number" ? String(v) : "");
 const pickBoolean = (v: unknown) => (typeof v === "boolean" ? v : undefined);
+
+const pickFromBody = (body: any, ...keys: string[]) => {
+  for (const key of keys) {
+    if (typeof body?.[key] !== "undefined") return body[key];
+  }
+  return undefined;
+};
 
 const requireOrgId = (req: express.Request, res: express.Response) => {
   const orgId = req.user?.organizationId;
@@ -49,15 +56,17 @@ export const createCurrency = async (req: express.Request, res: express.Response
   const orgId = requireOrgId(req, res);
   if (!orgId) return;
 
-  const code = pickString(req.body?.code).trim().toUpperCase();
-  const name = pickString(req.body?.name).trim();
-  const symbol = pickString(req.body?.symbol).trim();
+  const body: any = req.body || {};
+  const codeRaw = pickString(pickFromBody(body, "code", "currencyCode")).trim();
+  const code = codeRaw.split(" - ")[0].trim().toUpperCase();
+  const name = pickString(pickFromBody(body, "name", "currencyName")).trim();
+  const symbol = pickString(pickFromBody(body, "symbol", "currencySymbol")).trim();
 
   if (!code || code.length > 10) return res.status(400).json({ success: false, message: "Invalid currency code", data: null });
   if (!name) return res.status(400).json({ success: false, message: "Currency name required", data: null });
   if (!symbol) return res.status(400).json({ success: false, message: "Currency symbol required", data: null });
 
-  const requestedId = pickString(req.body?._id).trim();
+  const requestedId = pickString(pickFromBody(body, "_id", "id")).trim();
   if (requestedId && requestedId.length > 120) {
     return res.status(400).json({ success: false, message: "Invalid currency id", data: null });
   }
@@ -68,11 +77,14 @@ export const createCurrency = async (req: express.Request, res: express.Response
     code,
     name: name.slice(0, 120),
     symbol: symbol.slice(0, 20),
-    decimalPlaces: pickString(req.body?.decimalPlaces).trim() || "2",
-    format: pickString(req.body?.format).trim() || "1,234,567.89",
-    isBaseCurrency: Boolean(pickBoolean(req.body?.isBaseCurrency) ?? false),
-    isActive: Boolean(pickBoolean(req.body?.isActive) ?? true),
-    exchangeRates: Array.isArray(req.body?.exchangeRates) ? req.body.exchangeRates : [],
+    decimalPlaces: pickString(pickFromBody(body, "decimalPlaces", "decimals")).trim() || "2",
+    format: pickString(pickFromBody(body, "format")).trim() || "1,234,567.89",
+    isBaseCurrency: Boolean(pickBoolean(pickFromBody(body, "isBaseCurrency", "isBase")) ?? false),
+    isActive: Boolean(
+      pickBoolean(pickFromBody(body, "isActive")) ??
+        (typeof body?.status === "string" ? String(body.status).toLowerCase() !== "inactive" : true)
+    ),
+    exchangeRates: Array.isArray(pickFromBody(body, "exchangeRates")) ? body.exchangeRates : [],
   };
 
   try {
@@ -102,27 +114,33 @@ export const updateCurrency = async (req: express.Request, res: express.Response
   const id = String(req.params.id || "").trim();
   if (!id) return res.status(400).json({ success: false, message: "Invalid currency id", data: null });
 
+  const body: any = req.body || {};
   const patch: Record<string, unknown> = {};
 
-  const code = pickString(req.body?.code).trim().toUpperCase();
+  const codeRaw = pickString(pickFromBody(body, "code", "currencyCode")).trim();
+  const code = codeRaw.split(" - ")[0].trim().toUpperCase();
   if (code) patch.code = code.slice(0, 10);
 
-  const name = pickString(req.body?.name).trim();
+  const name = pickString(pickFromBody(body, "name", "currencyName")).trim();
   if (name) patch.name = name.slice(0, 120);
 
-  const symbol = pickString(req.body?.symbol).trim();
+  const symbol = pickString(pickFromBody(body, "symbol", "currencySymbol")).trim();
   if (symbol) patch.symbol = symbol.slice(0, 20);
 
-  if (typeof req.body?.decimalPlaces === "string") patch.decimalPlaces = pickString(req.body.decimalPlaces).trim() || "2";
-  if (typeof req.body?.format === "string") patch.format = pickString(req.body.format).trim() || "1,234,567.89";
+  if (typeof pickFromBody(body, "decimalPlaces", "decimals") !== "undefined") {
+    patch.decimalPlaces = pickString(pickFromBody(body, "decimalPlaces", "decimals")).trim() || "2";
+  }
+  if (typeof pickFromBody(body, "format") !== "undefined") {
+    patch.format = pickString(pickFromBody(body, "format")).trim() || "1,234,567.89";
+  }
 
-  const isBaseCurrency = pickBoolean(req.body?.isBaseCurrency);
+  const isBaseCurrency = pickBoolean(pickFromBody(body, "isBaseCurrency", "isBase"));
   if (typeof isBaseCurrency === "boolean") patch.isBaseCurrency = isBaseCurrency;
 
-  const isActive = pickBoolean(req.body?.isActive);
+  const isActive = pickBoolean(pickFromBody(body, "isActive"));
   if (typeof isActive === "boolean") patch.isActive = isActive;
 
-  if (Array.isArray(req.body?.exchangeRates)) patch.exchangeRates = req.body.exchangeRates;
+  if (Array.isArray(pickFromBody(body, "exchangeRates"))) patch.exchangeRates = body.exchangeRates;
 
   try {
     const updated: any = await Currency.findOneAndUpdate({ _id: id, organizationId: orgId }, { $set: patch }, { new: true }).lean();
@@ -163,4 +181,3 @@ export const deleteCurrency = async (req: express.Request, res: express.Response
   await Currency.deleteOne({ _id: id, organizationId: orgId });
   return res.json({ success: true, data: { id } });
 };
-

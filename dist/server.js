@@ -13,6 +13,9 @@ import { rolesRoutes } from "./routes/rolesRoutes.js";
 import { usersRoutes } from "./routes/usersRoutes.js";
 import { taxesRoutes } from "./routes/taxesRoutes.js";
 import { currenciesRoutes } from "./routes/currenciesRoutes.js";
+import { transactionNumberSeriesRoutes } from "./routes/transactionNumberSeriesRoutes.js";
+import { locationsRoutes } from "./routes/locationsRoutes.js";
+import { customersRoutes } from "./routes/customersRoutes.js";
 if (!MONGO_URI) {
     // eslint-disable-next-line no-console
     console.warn("Missing MONGO_URI/MONGODB_URI. Server will start, but DB features will fail.");
@@ -56,6 +59,9 @@ app.use("/api/roles", rolesRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/taxes", taxesRoutes);
 app.use("/api/currencies", currenciesRoutes);
+app.use("/api/transaction-number-series", transactionNumberSeriesRoutes);
+app.use("/api/locations", locationsRoutes);
+app.use("/api/customers", customersRoutes);
 // Example Mongo model + routes (minimal)
 const InvoiceSchema = new mongoose.Schema({
     number: { type: String, required: true, index: true },

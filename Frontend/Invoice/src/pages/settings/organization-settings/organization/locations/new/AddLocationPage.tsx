@@ -2,6 +2,9 @@
 import { useNavigate } from "react-router-dom";
 import { getCurrentUser } from "../../../../../../services/auth";
 import { Upload, X, ChevronDown, ChevronUp, Search, Check, Plus } from "lucide-react";
+import { toast } from "react-toastify";
+import { locationsAPI, settingsAPI } from "../../../../../../services/api";
+import { COUNTRIES } from "../../../../../../constants/countries";
 import {
   getDemoUsers,
   readLocations,
@@ -11,6 +14,7 @@ import {
 
 export default function AddLocationPage() {
   const navigate = useNavigate();
+  const [orgCountry, setOrgCountry] = useState("");
   const [formData, setFormData] = useState({
     type: "Business",
     logo: "Same as Organization Logo",
@@ -91,7 +95,20 @@ export default function AddLocationPage() {
       return;
     }
 
-    setParentLocations(readLocations().filter((row: any) => row?.isActive !== false));
+    void (async () => {
+      try {
+        const res = await locationsAPI.getAll({ limit: 10000 });
+        if (res?.success) {
+          const rows = Array.isArray(res.data) ? res.data : [];
+          writeLocations(rows);
+          setParentLocations(rows.filter((row: any) => row?.isActive !== false));
+          return;
+        }
+      } catch {
+        // ignore
+      }
+      setParentLocations(readLocations().filter((row: any) => row?.isActive !== false));
+    })();
   }, [formData.type, formData.isChildLocation]);
 
   // Close dropdowns when clicking outside
@@ -119,6 +136,38 @@ export default function AddLocationPage() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  useEffect(() => {
+    const loadOrgCountry = async () => {
+      try {
+        const res = await settingsAPI.getOrganizationProfile();
+        const country =
+          res?.data?.location ||
+          res?.data?.address?.country ||
+          res?.data?.country ||
+          "";
+        if (country) setOrgCountry(String(country));
+      } catch {
+        // ignore
+      }
+    };
+    void loadOrgCountry();
+  }, []);
+
+  useEffect(() => {
+    if (!orgCountry) return;
+    setFormData((prev) =>
+      prev?.address?.country && String(prev.address.country).trim() && String(prev.address.country).trim() !== "United Kingdom"
+        ? prev
+        : {
+            ...prev,
+            address: {
+              ...prev.address,
+              country: orgCountry,
+            },
+          }
+    );
+  }, [orgCountry]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -356,10 +405,19 @@ export default function AddLocationPage() {
         updatedAt: now,
       };
 
-      const existingRows = readLocations();
-      const nextRows = Array.isArray(existingRows) ? [localRow, ...existingRows] : [localRow];
-      writeLocations(nextRows);
+      const created = await locationsAPI.create(localRow);
+      if (!created?.success) {
+        throw new Error(created?.message || "Failed to create location");
+      }
+
+      const list = await locationsAPI.getAll({ limit: 10000 });
+      if (list?.success) {
+        const rows = Array.isArray(list.data) ? list.data : [];
+        writeLocations(rows);
+      }
+
       writeLocationsEnabled(true);
+      toast.success("Location created successfully.");
       navigate('/settings/locations');
     } catch (error) {
       console.error('Error creating location:', error);
@@ -721,14 +779,11 @@ export default function AddLocationPage() {
                 onChange={handleChange}
                 className="col-span-2 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               >
-                <option value="United Kingdom">United Kingdom</option>
-                <option value="United States">United States</option>
-                <option value="Canada">Canada</option>
-                <option value="Australia">Australia</option>
-                <option value="Germany">Germany</option>
-                <option value="France">France</option>
-                <option value="India">India</option>
-                <option value="Kenya">Kenya</option>
+                {COUNTRIES.map((country) => (
+                  <option key={country} value={country}>
+                    {country}
+                  </option>
+                ))}
               </select>
             </div>
 

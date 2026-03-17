@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getCustomerById } from "../../salesModel";
 import { getMe, getCurrentUser } from "../../../services/auth";
 import { customersAPI } from "../../../services/api";
 import { toast } from "react-toastify";
@@ -74,20 +73,9 @@ export default function RequestReview() {
         const response = await customersAPI.getById(id);
         if (response && response.data) {
           setCustomer(response.data);
-        } else {
-          // Fallback to local model
-          const localCustomer = getCustomerById(id);
-          if (localCustomer) {
-            setCustomer(localCustomer);
-          }
         }
       } catch (error) {
         console.error('Error fetching customer:', error);
-        // Fallback to local model
-        const localCustomer = getCustomerById(id);
-        if (localCustomer) {
-          setCustomer(localCustomer);
-        }
       }
     };
 
@@ -245,7 +233,7 @@ ${orgName}`;
           navigate(`/sales/customers/${id}`);
         }, 1500);
       } else {
-        throw new Error(response?.message || response?.error || 'Failed to send email');
+        throw new Error((response as any)?.message || 'Failed to send email');
       }
     } catch (error) {
       console.error('Error sending review request email:', error);
@@ -598,10 +586,13 @@ ${orgName}`;
                     const text = e.clipboardData.getData('text/plain');
                     if (emailBodyRef.current) {
                       const selection = window.getSelection();
-                      if (selection.rangeCount > 0) {
-                        selection.deleteContents();
-                        selection.getRangeAt(0).insertNode(document.createTextNode(text));
-                        selection.collapseToEnd();
+                      if (selection && selection.rangeCount > 0) {
+                        const range = selection.getRangeAt(0);
+                        range.deleteContents();
+                        range.insertNode(document.createTextNode(text));
+                        range.collapse(false);
+                        selection.removeAllRanges();
+                        selection.addRange(range);
                       }
                     }
                     // Update after paste

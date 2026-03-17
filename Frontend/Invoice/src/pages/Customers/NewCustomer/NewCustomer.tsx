@@ -112,7 +112,6 @@ export default function NewCustomer() {
   const location = useLocation();
   const { id } = useParams();
   const isEditMode = !!id;
-  const LOCAL_CUSTOMERS_CACHE_KEY = "taban_customers_cache";
   const [isLoading, setIsLoading] = useState(isEditMode);
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("other-details");
@@ -1023,7 +1022,6 @@ export default function NewCustomer() {
       if (response && response.success) {
         // Ensure the customer data has name properly set
         const savedCustomer = response.data;
-        upsertCustomerCache(savedCustomer);
         toast.success(isEditMode ? "Customer updated successfully." : "Customer created successfully.");
 
         const searchParams = new URLSearchParams(location.search);
@@ -1326,42 +1324,6 @@ export default function NewCustomer() {
   const filteredMobilePrefixes = countryPhoneCodes.filter(cp =>
     cp.code.includes(mobilePrefixSearch) || cp.name.toLowerCase().includes(mobilePrefixSearch.toLowerCase())
   );
-
-  const upsertCustomerCache = (customer: any) => {
-    try {
-      const customerId = String(customer?._id || customer?.id || "").trim();
-      if (!customerId) return;
-
-      const raw = localStorage.getItem(LOCAL_CUSTOMERS_CACHE_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      const existing = Array.isArray(parsed) ? parsed : [];
-
-      const normalizedCustomer = {
-        ...customer,
-        id: customerId,
-        _id: customer?._id || customerId,
-        name:
-          customer?.name ||
-          customer?.displayName ||
-          customer?.companyName ||
-          `${customer?.firstName || ""} ${customer?.lastName || ""}`.trim() ||
-          "Customer",
-      };
-
-      const existingIndex = existing.findIndex((item: any) => {
-        const itemId = String(item?._id || item?.id || "").trim();
-        return itemId === customerId;
-      });
-
-      if (existingIndex >= 0) {
-        existing[existingIndex] = { ...existing[existingIndex], ...normalizedCustomer };
-      } else {
-        existing.unshift(normalizedCustomer);
-      }
-
-      localStorage.setItem(LOCAL_CUSTOMERS_CACHE_KEY, JSON.stringify(existing));
-    } catch (error) { }
-  };
 
   // Close dropdowns when clicking outside
   useEffect(() => {

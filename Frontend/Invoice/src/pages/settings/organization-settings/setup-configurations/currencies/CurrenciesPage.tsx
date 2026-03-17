@@ -110,6 +110,9 @@ export default function CurrenciesPage() {
     try {
       setLoading(true);
       const res = await currenciesAPI.getAll({ limit: 2000 });
+      if (!res?.success) {
+        throw new Error(res?.message || "Failed to load currencies");
+      }
       const rows = Array.isArray(res?.data) ? res.data : [];
       const normalized: Currency[] = rows.map(toCurrency);
       if (normalized.length === 0) {
@@ -125,6 +128,7 @@ export default function CurrenciesPage() {
       persistCurrencies(withSingleBase);
     } catch (error) {
       console.error("Error loading currencies:", error);
+      toast.error((error as any)?.message || "Failed to load currencies");
       // Fallback to localStorage if API fails
       try {
         const stored = localStorage.getItem(CURRENCIES_STORAGE_KEY);
@@ -173,7 +177,7 @@ export default function CurrenciesPage() {
     format: string;
     isBaseCurrency: boolean;
   }) => {
-    const code = newCurrency.code.trim().toUpperCase();
+    const code = String(newCurrency.code || "").split(" - ")[0].trim().toUpperCase();
     if (!code || !newCurrency.name.trim() || !newCurrency.symbol.trim()) {
       toast.error("Please fill in all required fields.");
       return;
@@ -198,6 +202,7 @@ export default function CurrenciesPage() {
       });
 
       if (!createdRes?.success) {
+        console.error("Create currency failed:", createdRes);
         toast.error(createdRes?.message || "Failed to create currency");
         return;
       }
@@ -223,7 +228,7 @@ export default function CurrenciesPage() {
   }) => {
     if (!editingCurrency) return;
 
-    const code = updatedData.code.trim().toUpperCase();
+    const code = String(updatedData.code || "").split(" - ")[0].trim().toUpperCase();
     if (!code || !updatedData.name.trim() || !updatedData.symbol.trim()) {
       toast.error("Please fill in all required fields.");
       return;
