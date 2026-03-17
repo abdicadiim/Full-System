@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Loader2, Plus, Settings, ChevronRight, Trash2 } from "lucide-react";
-import { transactionNumberSeriesAPI } from "../../services/api";
+import { transactionNumberSeriesAPI, locationsAPI } from "../../services/api";
 import { toast } from "react-toastify";
 import NewTransactionNumberSeriesPage from "./NewTransactionNumberSeriesPage";
 import PreventDuplicatesModal from "./PreventDuplicatesModal";
@@ -12,11 +13,35 @@ export default function TransactionNumberSeriesPage() {
   const [selectedSeriesToEdit, setSelectedSeriesToEdit] = useState<any[] | null>(null);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [currentSetting, setCurrentSetting] = useState("all_fiscal_years");
+  const [locations, setLocations] = useState<any[]>([]);
+  const [activePopoverSeries, setActivePopoverSeries] = useState<string | null>(null);
+  const [popoverCoords, setPopoverCoords] = useState<{ top: number; left: number; width: number } | null>(null);
 
   useEffect(() => {
     fetchSeries();
     fetchSettings();
+    fetchLocations();
   }, []);
+
+  // Handle outside click to close popover
+  useEffect(() => {
+    const handleClickOutside = () => setActivePopoverSeries(null);
+    if (activePopoverSeries) {
+      window.addEventListener("click", handleClickOutside);
+    }
+    return () => window.removeEventListener("click", handleClickOutside);
+  }, [activePopoverSeries]);
+
+  const fetchLocations = async () => {
+    try {
+      const response = await locationsAPI.getAll();
+      if (response && response.success) {
+        setLocations(response.data || []);
+      }
+    } catch (e) {
+      console.error("Error fetching locations:", e);
+    }
+  };
 
   const fetchSettings = async () => {
     try {
@@ -194,17 +219,23 @@ export default function TransactionNumberSeriesPage() {
                 const locationCount = Array.isArray(firstItem.locationIds) ? firstItem.locationIds.length : 1;
                 
                 return (
-                  <tr key={name} className="hover:bg-[#fcfdff] transition-colors group">
+                  <tr 
+                    key={name} 
+                    className="hover:bg-[#fcfdff] transition-colors group cursor-pointer"
+                    onClick={() => handleEditSeries(name)}
+                  >
                     <td className="px-5 py-4 border-r border-[#eff2f7] relative">
                       <div className="flex items-center justify-between group/name">
                         <button 
-                          onClick={() => handleEditSeries(name)}
                           className="text-[13.5px] font-medium text-[#1e5e6e] hover:underline text-left"
                         >
                           {name}
                         </button>
                         <button 
-                          onClick={() => handleDeleteSeries(name)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteSeries(name);
+                          }}
                           className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 text-red-400 hover:text-red-600 rounded transition-all ml-2"
                           title="Delete Series"
                         >
@@ -232,10 +263,64 @@ export default function TransactionNumberSeriesPage() {
                         </td>
                       );
                     })}
-                    <td className="px-5 py-4 border-r border-[#eff2f7]">
-                      <button className="text-[13px] text-[#1e5e6e] font-medium ml-1 text-center block w-full">
+                    <td className="px-5 py-4 border-r border-[#eff2f7] relative">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setPopoverCoords({
+                            top: rect.bottom + window.scrollY,
+                            left: rect.left + rect.width / 2 + window.scrollX,
+                            width: rect.width
+                          });
+                          setActivePopoverSeries(activePopoverSeries === name ? null : name);
+                        }}
+                        className="text-[13px] text-[#3b82f6] font-medium ml-1 text-center block w-full hover:underline"
+                      >
                         {locationCount}
                       </button>
+
+                      {/* Associated Locations Popover - Rendered via Portal */}
+                      {activePopoverSeries === name && popoverCoords && createPortal(
+                        <div 
+                          className="fixed z-[9999] w-[200px] bg-white border border-[#3b82f6] rounded shadow-xl animate-in fade-in slide-in-from-top-2 duration-200"
+                          style={{ 
+                            top: `${popoverCoords.top + 8}px`, 
+                            left: `${popoverCoords.left}px`,
+                            transform: 'translateX(-50%)'
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {/* Triangle Pointer (Top) */}
+                          <div className="absolute bottom-[100%] left-1/2 -translate-x-1/2 w-0 h-0 border-l-[7px] border-l-transparent border-r-[7px] border-r-transparent border-b-[7px] border-b-[#3b82f6]">
+                             {/* Inner triangle to hide the blue border inside */}
+                             <div className="absolute top-[1px] left-[-7px] w-0 h-0 border-l-[7px] border-l-transparent border-r-[7px] border-r-transparent border-b-[7px] border-b-white"></div>
+                          </div>
+                          
+                          <div className="p-4 text-left">
+                            <h3 className="text-[12px] font-bold text-[#4a5568] uppercase tracking-wide mb-3">
+                              ASSOCIATED LOCATIONS
+                            </h3>
+                            <div className="space-y-2">
+                              {firstItem.locationIds?.length > 0 ? (
+                                firstItem.locationIds.map((locId: string) => {
+                                  const loc = locations.find(l => (l._id || l.id) === locId);
+                                  return (
+                                    <div key={locId} className="text-[13.5px] text-gray-700 font-medium">
+                                      {loc ? (loc.locationName || loc.name) : "Head Office"}
+                                    </div>
+                                  );
+                                })
+                              ) : (
+                                <div className="text-[13.5px] text-gray-700 font-medium whitespace-nowrap">
+                                  Head Office
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>,
+                        document.body
+                      )}
                     </td>
                   </tr>
                 );

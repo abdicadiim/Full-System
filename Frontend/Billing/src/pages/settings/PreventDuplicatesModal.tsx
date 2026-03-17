@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 interface PreventDuplicatesModalProps {
@@ -21,8 +22,8 @@ export default function PreventDuplicatesModal({
     setIsSaving(false);
   };
 
-  return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+  return createPortal(
+    <div className="fixed inset-0 z-[200] flex items-start justify-center p-4 pt-20">
       {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" 
@@ -126,6 +127,7 @@ export default function PreventDuplicatesModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

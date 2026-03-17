@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, MoreVertical, Download, Upload, Trash2 } from "lucide-react";
+import { Plus, MoreVertical, Download, Upload, Trash2, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import NewCurrencyModal from "./NewCurrencyModal";
@@ -88,6 +88,14 @@ export default function CurrenciesPage() {
   const [threeDotsPosition, setThreeDotsPosition] = useState({ top: 0, left: 0, width: 220 });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [pendingDeleteCurrency, setPendingDeleteCurrency] = useState<Currency | null>(null);
+  const [showChangeBaseModal, setShowChangeBaseModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportModule, setExportModule] = useState("Exchange Rates");
+  const [exportTemplate, setExportTemplate] = useState("");
+  const [decimalFormat, setDecimalFormat] = useState("1234567.89");
+  const [exportFormat, setExportFormat] = useState("CSV");
+  const [exportPassword, setExportPassword] = useState("");
+  const [showExportPassword, setShowExportPassword] = useState(false);
 
   const threeDotsRef = useRef<HTMLDivElement>(null);
   const threeDotsMenuRef = useRef<HTMLDivElement>(null);
@@ -145,6 +153,13 @@ export default function CurrenciesPage() {
     const enabled = localStorage.getItem(EXCHANGE_RATE_FEEDS_STORAGE_KEY) === "true";
     setExchangeRateFeedsEnabled(enabled);
   }, []);
+
+  useEffect(() => {
+    if (showExportModal) {
+      setExportPassword("");
+      setShowExportPassword(false);
+    }
+  }, [showExportModal]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -304,7 +319,7 @@ export default function CurrenciesPage() {
 
   const handleExportExchangeRates = () => {
     setShowThreeDotsMenu(false);
-    navigate("/settings/currencies/export");
+    setShowExportModal(true);
   };
 
   const handleThreeDotsClick = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -336,6 +351,207 @@ export default function CurrenciesPage() {
 
   return (
     <div className="p-6">
+      {showExportModal && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-[10000] pt-12"
+          onClick={() => setShowExportModal(false)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Export Exchange Rates</h3>
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="p-1 rounded transition hover:bg-gray-100"
+              >
+                <X size={18} className="text-red-500" />
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-5 text-sm text-gray-700">
+              <div className="flex items-start gap-3 rounded-md bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                <span className="mt-0.5 text-blue-500">i</span>
+                <span>You can export your data from Zoho Billing in CSV, XLS or XLSX format.</span>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-red-600 mb-2">Module*</label>
+                <select
+                  value={exportModule}
+                  onChange={(e) => setExportModule(e.target.value)}
+                  className="w-full h-10 rounded-lg border border-gray-300 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option>Exchange Rates</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Export Template
+                </label>
+                <select
+                  value={exportTemplate}
+                  onChange={(e) => setExportTemplate(e.target.value)}
+                  className="w-full h-10 rounded-lg border border-gray-300 px-3 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select an Export Template</option>
+                  <option>Default Template</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-red-600 mb-2">
+                  Decimal Format*
+                </label>
+                <select
+                  value={decimalFormat}
+                  onChange={(e) => setDecimalFormat(e.target.value)}
+                  className="w-full h-10 rounded-lg border border-gray-300 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option>1234567.89</option>
+                  <option>1,234,567.89</option>
+                  <option>1.234.567,89</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-red-600 mb-2">
+                  Export File Format*
+                </label>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="export-format"
+                      value="CSV"
+                      checked={exportFormat === "CSV"}
+                      onChange={() => setExportFormat("CSV")}
+                    />
+                    CSV (Comma Separated Value)
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="export-format"
+                      value="XLS"
+                      checked={exportFormat === "XLS"}
+                      onChange={() => setExportFormat("XLS")}
+                    />
+                    XLS (Microsoft Excel 1997-2004 Compatible)
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="export-format"
+                      value="XLSX"
+                      checked={exportFormat === "XLSX"}
+                      onChange={() => setExportFormat("XLSX")}
+                    />
+                    XLSX (Microsoft Excel)
+                  </label>
+                </div>
+              </div>
+
+              <div className="max-w-sm">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  File Protection Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showExportPassword ? "text" : "password"}
+                    value={exportPassword}
+                    onChange={(e) => setExportPassword(e.target.value)}
+                    autoComplete="new-password"
+                    className="w-full h-10 rounded-lg border border-gray-300 px-3 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowExportPassword((prev) => !prev)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-xs"
+                  >
+                    {showExportPassword ? "🙈" : "👁"}
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  Your password must be at least 12 characters and include one uppercase letter, lowercase
+                  letter, number, and special character.
+                </p>
+              </div>
+
+              <p className="text-xs text-gray-500">
+                Note: You can export only the first 25,000 rows. If you have more rows, please initiate a
+                backup for the data in your Zoho Billing organization, and download it.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 px-6 py-4 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setShowExportModal(false);
+                  showNotification("Export started");
+                }}
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                Export
+              </button>
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showChangeBaseModal && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-[10000] pt-16"
+          onClick={() => setShowChangeBaseModal(false)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Change Base Currency</h3>
+              <button
+                onClick={() => setShowChangeBaseModal(false)}
+                className="p-1 rounded transition hover:bg-gray-100"
+              >
+                <X size={18} className="text-red-500" />
+              </button>
+            </div>
+            <div className="px-6 py-5 text-sm text-gray-700 space-y-4">
+              <p>
+                Changing the base currency is possible only if there are no transactions recorded in that
+                currency. The following transactions are recorded:
+              </p>
+              <ul className="list-disc pl-5 space-y-1 text-gray-700">
+                <li>Quotes</li>
+                <li>Invoice</li>
+                <li>Subscriptions</li>
+                <li>Subscriptions</li>
+                <li>Credit Note</li>
+                <li>Customer Payment</li>
+                <li>Projects</li>
+                <li>Chart Of Accounts</li>
+              </ul>
+              <p>Please delete these transactions, to change the base currency.</p>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200">
+              <button
+                onClick={() => setShowChangeBaseModal(false)}
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                Okay
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {showDeleteModal && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-[10000] pt-16"
@@ -479,11 +695,11 @@ export default function CurrenciesPage() {
                       <span className="text-sm font-medium text-gray-900">
                         {currency.code} - {currency.name}
                       </span>
-                      {currency.isBase ? (
-                        <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
-                          Base Currency
-                        </span>
-                      ) : null}
+                        {currency.isBase ? (
+                          <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                            Base Currency
+                          </span>
+                        ) : null}
                     </div>
                   </td>
 
@@ -521,9 +737,12 @@ export default function CurrenciesPage() {
                         {currency.isBase ? (
                           <>
                             <span className="text-gray-300">|</span>
-                            <span className="rounded px-2 py-1 text-xs font-medium text-blue-600">
+                            <button
+                              onClick={() => setShowChangeBaseModal(true)}
+                              className="rounded px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50"
+                            >
                               change base currency
-                            </span>
+                            </button>
                           </>
                         ) : (
                           <>
@@ -537,7 +756,7 @@ export default function CurrenciesPage() {
                           </>
                         )}
 
-                        {!exchangeRateFeedsEnabled && (
+                        {!exchangeRateFeedsEnabled && !currency.isBase && (
                           <>
                             <span className="text-gray-300">|</span>
                             <button
