@@ -293,6 +293,37 @@ function TimesheetTable() {
     }
   }, [selectedEntry]);
 
+  const formatDuration = (entry) => {
+    const hours = Number(entry?.hours ?? 0);
+    const minutes = Number(entry?.minutes ?? 0);
+    if (Number.isFinite(hours) && Number.isFinite(minutes) && (hours > 0 || minutes > 0)) {
+      return `${String(hours).padStart(2, "0")} hrs : ${String(minutes).padStart(2, "0")} mins`;
+    }
+    const match = String(entry?.timeSpent || "").match(/(\d+)\s*h.*?(\d+)\s*m/i);
+    if (match) {
+      const h = Number(match[1] || 0);
+      const m = Number(match[2] || 0);
+      return `${String(h).padStart(2, "0")} hrs : ${String(m).padStart(2, "0")} mins`;
+    }
+    return "00 hrs : 00 mins";
+  };
+
+  const handleAddComment = () => {
+    if (!selectedEntry || !commentText.trim()) return;
+    const newComment = {
+      id: Date.now(),
+      text: commentText.trim(),
+      createdAt: new Date().toISOString(),
+    };
+    const allComments = JSON.parse(localStorage.getItem('timesheetComments') || '{}');
+    const entryComments = allComments[selectedEntry.id] || [];
+    const nextComments = [...entryComments, newComment];
+    allComments[selectedEntry.id] = nextComments;
+    localStorage.setItem('timesheetComments', JSON.stringify(allComments));
+    setComments(nextComments);
+    setCommentText('');
+  };
+
   // Load projects from database
   const [loadingProjects, setLoadingProjects] = useState(true);
 
@@ -1123,6 +1154,103 @@ function TimesheetTable() {
           </div>
         )}
       </div>
+
+      {selectedEntry && (
+        <div className="absolute right-0 top-0 h-full w-[360px] border-l border-gray-200 bg-white shadow-lg z-40 flex flex-col">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+            <div className="text-sm font-semibold text-gray-900">
+              {`${selectedEntry.user || "User"}'s Log Entry`}
+            </div>
+            <div className="flex items-center gap-2">
+              <button className="h-7 w-7 rounded border border-gray-200 text-gray-600 flex items-center justify-center hover:bg-gray-50">
+                <Edit3 size={14} />
+              </button>
+              <button className="h-7 w-7 rounded border border-gray-200 text-gray-600 flex items-center justify-center hover:bg-gray-50">
+                <MoreVertical size={14} />
+              </button>
+              <button
+                onClick={() => setSelectedEntry(null)}
+                className="h-7 w-7 rounded border border-gray-200 text-red-500 flex items-center justify-center hover:bg-red-50"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+
+          <div className="p-4 border-b border-gray-200">
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-4 text-center">
+              <div className="text-xs text-gray-500">
+                {selectedEntry.date || "--"}
+              </div>
+              <div className="text-xl font-semibold text-gray-900 mt-1">
+                {formatDuration(selectedEntry)}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-6 px-4 pt-3 text-sm">
+            <button
+              onClick={() => setActiveTab('otherDetails')}
+              className={`pb-2 border-b-2 ${activeTab === 'otherDetails' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-600'}`}
+            >
+              Other Details
+            </button>
+            <button
+              onClick={() => setActiveTab('comments')}
+              className={`pb-2 border-b-2 ${activeTab === 'comments' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-600'}`}
+            >
+              Comments
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-auto px-4 py-3">
+            {activeTab === 'otherDetails' && (
+              <div className="space-y-3 text-sm text-gray-700">
+                <div className="flex justify-between"><span className="text-gray-500">Project Name :</span><span>{selectedEntry.projectName || "--"}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Customer Name :</span><span>{(projects?.find((p) => p.projectName === selectedEntry.projectName)?.customerName) || "--"}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Task Name :</span><span>{selectedEntry.taskName || "--"}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">User Name :</span><span>{selectedEntry.user || "--"}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Total Cost :</span><span>$0.00</span></div>
+              </div>
+            )}
+
+            {activeTab === 'comments' && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  {comments.length === 0 && (
+                    <div className="text-xs text-gray-500">No comments yet.</div>
+                  )}
+                  {comments.map((c) => (
+                    <div key={c.id} className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-700">
+                      <div>{c.text}</div>
+                      <div className="mt-1 text-[10px] text-gray-400">
+                        {new Date(c.createdAt).toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <textarea
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    className="w-full rounded-md border border-gray-300 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows={3}
+                    placeholder="Add a comment"
+                  />
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      onClick={handleAddComment}
+                      className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                    >
+                      Add Comment
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {showLogEntryForm && <NewLogEntryForm onClose={() => setShowLogEntryForm(false)} />}
     </div>

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Country, State } from "country-state-city";
+import { Country, State, type ICountry, type IState } from "country-state-city";
 import { iso6393 } from "iso-639-3";
 import SetupHeader from "../components/SetupHeader";
 import SearchableSelect, { type SelectOption } from "../components/SearchableSelect";
@@ -8,9 +8,11 @@ import { getAppDisplayName } from "../lib/appBranding";
 import { TIME_ZONES } from "./timezones";
 import { orgApi } from "../services/orgApi";
 
+type IsoLanguage = (typeof iso6393)[number];
+
 const COUNTRIES: SelectOption[] = Country.getAllCountries()
-  .map((c) => ({ value: c.isoCode, label: c.name }))
-  .sort((a, b) => a.label.localeCompare(b.label));
+  .map((c: ICountry) => ({ value: c.isoCode, label: c.name }))
+  .sort((a: SelectOption, b: SelectOption) => a.label.localeCompare(b.label));
 
 const getDefaultCountryIso = () => {
   const somalia = COUNTRIES.find((c) => c.label === "Somalia")?.value;
@@ -211,8 +213,8 @@ const FISCAL_YEARS: SelectOption[] = [
 ];
 
 const LANGUAGE_OPTIONS: SelectOption[] = iso6393
-  .map((l) => ({ value: l.iso6393, label: l.name }))
-  .sort((a, b) => a.label.localeCompare(b.label));
+  .map((l: IsoLanguage) => ({ value: l.iso6393, label: l.name }))
+  .sort((a: SelectOption, b: SelectOption) => a.label.localeCompare(b.label));
 
 export default function OrgSetupPage() {
   const appName = getAppDisplayName();
@@ -238,11 +240,11 @@ export default function OrgSetupPage() {
   const [language, setLanguage] = useState("eng");
   const [timeZone, setTimeZone] = useState("Africa/Nairobi");
 
-  const currencyOptions = useMemo<SelectOption[]>(() => CURRENCIES.map((c) => ({ value: c, label: c })), []);
+  const currencyOptions = useMemo<SelectOption[]>(() => CURRENCIES.map((c: string) => ({ value: c, label: c })), []);
 
   const stateOptions = useMemo(() => {
-    const list = State.getStatesOfCountry(countryIso).map((s) => s.name);
-    return list.sort((a, b) => a.localeCompare(b));
+    const list = State.getStatesOfCountry(countryIso).map((s: IState) => s.name);
+    return list.sort((a: string, b: string) => a.localeCompare(b));
   }, [countryIso]);
 
   useEffect(() => {
@@ -387,7 +389,7 @@ export default function OrgSetupPage() {
                 <SearchableSelect
                   label={undefined}
                   value={state}
-                  options={stateOptions.map((s) => ({ value: s, label: s }))}
+                  options={stateOptions.map((s: string) => ({ value: s, label: s }))}
                   placeholder="Select"
                   onChange={setState}
                 />
