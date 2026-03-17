@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate, useLocation, Routes, Route, Navigate } from "react-router-dom";
 import TaxListPage from "./list/TaxListPage";
 import NewTaxPage from "./new/NewTaxPage";
@@ -20,6 +20,10 @@ export default function TaxesPage() {
         return "tax-rates";
     };
 
+    const isListView = !location.pathname.includes("/new") && 
+                       !location.pathname.includes("/bulk") && 
+                       !location.pathname.includes("/import") && 
+                       !location.pathname.includes("/detail");
     const activeTab = getActiveTab();
 
     useEffect(() => {
@@ -37,67 +41,64 @@ export default function TaxesPage() {
     }, [location.pathname, navigate]);
 
     return (
-        <div className="p-6">
-            <div className="flex items-center gap-4 mb-6">
-                <h1 className="text-2xl font-semibold text-gray-900">Taxes & Compliance</h1>
-                {(location.pathname.includes("/new") || location.pathname.includes("/new-group")) && (
-                    <>
-                        <span className="text-gray-400">|</span>
-                        <span className="text-sm text-gray-600">
-                            {location.pathname.includes("/new-group") ? "New Tax Group" : "New Tax"}
-                        </span>
-                    </>
+        <div className="p-0 bg-white">
+            <div className="flex items-stretch min-h-[calc(100vh-76px)]">
+                {/* Vertical Navigation - Only show when on list or settings */}
+                {isListView && (
+                    <div className="w-52 shrink-0 flex flex-col border-r border-gray-200 bg-white">
+                        <div className="px-6 py-6 text-xl font-semibold text-gray-900">
+                            Taxes
+                        </div>
+                        <div className="flex flex-col">
+                            <button
+                                onClick={() => navigate("/settings/taxes")}
+                                className={`flex items-center px-6 py-2.5 text-sm font-medium transition-colors ${activeTab === "tax-rates"
+                                        ? "bg-gray-100 text-gray-900"
+                                        : "text-gray-600 hover:bg-gray-50"
+                                    }`}
+                            >
+                                Tax Rates
+                            </button>
+                            {isTDSEnabled && (
+                                <button
+                                    onClick={() => navigate("/settings/taxes/tds-rates")}
+                                    className={`flex items-center px-6 py-2.5 text-sm font-medium transition-colors ${activeTab === "tds-rates"
+                                            ? "bg-gray-100 text-gray-900"
+                                            : "text-gray-600 hover:bg-gray-50"
+                                        }`}
+                                >
+                                    TDS Rates
+                                </button>
+                            )}
+                            <button
+                                onClick={() => navigate("/settings/taxes/tax-settings")}
+                                className={`flex items-center px-6 py-2.5 text-sm font-medium transition-colors ${activeTab === "tax-settings"
+                                        ? "bg-gray-100 text-gray-900"
+                                        : "text-gray-600 hover:bg-gray-50"
+                                    }`}
+                            >
+                                Tax Settings
+                            </button>
+                        </div>
+                    </div>
                 )}
-            </div>
 
-            {/* Tabs - Only show when on list or settings */}
-            {(!location.pathname.includes("/new") && !location.pathname.includes("/bulk") && !location.pathname.includes("/import") && !location.pathname.includes("/detail")) && (
-                <div className="flex gap-4 border-b border-gray-200 mb-6">
-                    <button
-                        onClick={() => navigate("/settings/taxes")}
-                        className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === "tax-rates"
-                                ? "border-[#156372] text-[#156372]"
-                                : "border-transparent text-gray-600 hover:text-gray-900"
-                            }`}
-                    >
-                        Tax Rates
-                    </button>
-                    {isTDSEnabled && (
-                        <button
-                            onClick={() => navigate("/settings/taxes/tds-rates")}
-                            className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === "tds-rates"
-                                    ? "border-[#156372] text-[#156372]"
-                                    : "border-transparent text-gray-600 hover:text-gray-900"
-                                }`}
-                        >
-                            TDS Rates
-                        </button>
-                    )}
-                    <button
-                        onClick={() => navigate("/settings/taxes/tax-settings")}
-                        className={`px-4 py-2 text-sm font-medium border-b-2 transition ${activeTab === "tax-settings"
-                                ? "border-[#156372] text-[#156372]"
-                                : "border-transparent text-gray-600 hover:text-gray-900"
-                            }`}
-                    >
-                        Tax Settings
-                    </button>
+                {/* Content Area */}
+                <div className="flex-1 min-w-0 px-4 pt-8">
+                    <Routes>
+                        <Route index element={<TaxListPage />} />
+                        <Route path="new" element={<NewTaxPage />} />
+                        <Route path="new-group" element={<NewTaxGroupPage />} />
+                        <Route path="new-group/:id" element={<NewTaxGroupPage />} />
+                        <Route path="create-bulk" element={<TaxBulkPage />} />
+                        <Route path="import" element={<TaxImportPage />} />
+                        <Route path="tax-settings" element={<TaxSettingsPage />} />
+                        <Route path="tds-rates" element={isTDSEnabled ? <TDSRatesPage /> : <Navigate to="/settings/taxes" replace />} />
+                        <Route path="detail/:id" element={<NewTaxPage />} />
+                        <Route path="*" element={<Navigate to="/settings/taxes" replace />} />
+                    </Routes>
                 </div>
-            )}
-
-            {/* Content Routes */}
-            <Routes>
-                <Route index element={<TaxListPage />} />
-                <Route path="new" element={<NewTaxPage />} />
-                <Route path="new-group" element={<NewTaxGroupPage />} />
-                <Route path="new-group/:id" element={<NewTaxGroupPage />} />
-                <Route path="create-bulk" element={<TaxBulkPage />} />
-                <Route path="import" element={<TaxImportPage />} />
-                <Route path="tax-settings" element={<TaxSettingsPage />} />
-                <Route path="tds-rates" element={isTDSEnabled ? <TDSRatesPage /> : <Navigate to="/settings/taxes" replace />} />
-                <Route path="detail/:id" element={<NewTaxPage />} />
-                <Route path="*" element={<Navigate to="/settings/taxes" replace />} />
-            </Routes>
+            </div>
         </div>
     );
 }

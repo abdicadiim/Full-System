@@ -1161,6 +1161,59 @@ export default function ProfilePage() {
 
       if (response.ok && data.success) {
         setSaveMessage({ type: 'success', text: 'Profile saved successfully!' });
+        try {
+          const localOrgProfile = {
+            organizationName: orgName,
+            industry: industry,
+            location: location,
+            street1: street1,
+            street2: street2,
+            city: city,
+            zipCode: zipCode,
+            state: state,
+            currency: baseCurrency,
+            language: orgLanguage,
+            timezone: timeZone,
+            email: email,
+            website: website,
+          };
+          localStorage.setItem('org_profile', JSON.stringify(localOrgProfile));
+
+          const existingOrgProfile = (() => {
+            try {
+              return JSON.parse(localStorage.getItem('organization_profile') || '{}');
+            } catch {
+              return {};
+            }
+          })();
+          const updatedOrgProfile = {
+            ...existingOrgProfile,
+            organizationName: orgName,
+            industry: industry,
+            location: location,
+            email: email,
+            website: website,
+            baseCurrency: baseCurrency.split(' - ')[0],
+            orgLanguage: orgLanguage,
+            timeZone: timeZone,
+            dateFormat: dateFormat,
+            dateSeparator: dateSeparator,
+            address: {
+              ...(existingOrgProfile?.address || {}),
+              street1: street1,
+              street2: street2,
+              city: city,
+              zipCode: zipCode,
+              state: state,
+              country: location,
+              phone: phone,
+              fax: fax,
+            },
+          };
+          localStorage.setItem('organization_profile', JSON.stringify(updatedOrgProfile));
+        } catch {
+          // ignore local storage sync failures
+        }
         // Clear message after 3 seconds
         setTimeout(() => setSaveMessage(null), 3000);
       } else {

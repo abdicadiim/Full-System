@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { ArrowLeft, Plus, Trash2, X, Info, ChevronDown, Search, Check } from "lucide-react";
 import { transactionNumberSeriesAPI, locationsAPI } from "../../services/api";
+import { toast } from "react-toastify";
 
 // Transaction Number Series - New Series Page
 interface Module {
@@ -13,9 +14,11 @@ interface Module {
 
 interface NewTransactionNumberSeriesPageProps {
   onBack: () => void;
+  editSeriesItems?: any[];
 }
 
-export default function NewTransactionNumberSeriesPage({ onBack }: NewTransactionNumberSeriesPageProps) {
+export default function NewTransactionNumberSeriesPage({ onBack, editSeriesItems }: NewTransactionNumberSeriesPageProps) {
+  const isEditMode = !!editSeriesItems && editSeriesItems.length > 0;
   const [seriesName, setSeriesName] = useState("");
   const [selectedLocations, setSelectedLocations] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -28,24 +31,42 @@ export default function NewTransactionNumberSeriesPage({ onBack }: NewTransactio
   // Default list based on the image
   const defaultModules: Module[] = [
     { module: "Credit Note", prefix: "CN-", startingNumber: "00001", restartNumbering: "None", preview: "CN-00001" },
-    { module: "Journal", prefix: "", startingNumber: "1", restartNumbering: "None", preview: "1" },
     { module: "Customer Payment", prefix: "", startingNumber: "1", restartNumbering: "None", preview: "1" },
-    { module: "Vendor Payment", prefix: "", startingNumber: "1", restartNumbering: "None", preview: "1" },
-    { module: "Purchase Order", prefix: "MO-%FYE_YY%%YYYY%%DD%", startingNumber: "00001", restartNumbering: "Yearly", preview: "MO-2620261200001" },
     { module: "Sales Order", prefix: "SO-", startingNumber: "00001", restartNumbering: "None", preview: "SO-00001" },
     { module: "Retainer Invoice", prefix: "RET-", startingNumber: "00001", restartNumbering: "None", preview: "RET-00001" },
-    { module: "Vendor Credits", prefix: "DN-", startingNumber: "00001", restartNumbering: "None", preview: "DN-00001" },
     { module: "Debit Note", prefix: "CDN-", startingNumber: "000001", restartNumbering: "None", preview: "CDN-000001" },
     { module: "Invoice", prefix: "INV-", startingNumber: "000001", restartNumbering: "None", preview: "INV-000001" },
     { module: "Quote", prefix: "QT-", startingNumber: "000001", restartNumbering: "None", preview: "QT-000001" },
     { module: "Sales Receipt", prefix: "SR-", startingNumber: "00001", restartNumbering: "None", preview: "SR-00001" },
-    { module: "Sales Return", prefix: "RMA-", startingNumber: "00001", restartNumbering: "None", preview: "RMA-00001" },
+    { module: "Subscriptions", prefix: "SUB-", startingNumber: "00001", restartNumbering: "None", preview: "SUB-00001" },
   ];
 
   const [modules, setModules] = useState<Module[]>(defaultModules);
 
   useEffect(() => {
     fetchLocations();
+
+    if (isEditMode && editSeriesItems) {
+      const firstItem = editSeriesItems[0];
+      setSeriesName(firstItem.seriesName || "");
+      
+      // Initialize modules with existing data
+      const updatedModules = defaultModules.map(dm => {
+        const existing = editSeriesItems.find(item => 
+          String(item.module || "").toLowerCase().replace(/s$/, "") === dm.module.toLowerCase().replace(/s$/, "")
+        );
+        if (existing) {
+          return {
+            ...dm,
+            prefix: existing.prefix || "",
+            startingNumber: String(existing.startingNumber || existing.nextNumber || "1"),
+            preview: (existing.prefix || "") + (existing.startingNumber || existing.nextNumber || "1")
+          };
+        }
+        return dm;
+      });
+      setModules(updatedModules);
+    }
 
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -61,7 +82,15 @@ export default function NewTransactionNumberSeriesPage({ onBack }: NewTransactio
       setFetchingLocations(true);
       const response = await locationsAPI.getAll();
       if (response && response.success) {
-        setLocations(response.data || []);
+        const locs = response.data || [];
+        setLocations(locs);
+        
+        // If editing, set selected locations based on locationIds
+        if (isEditMode && editSeriesItems?.[0]?.locationIds) {
+          const ids = editSeriesItems[0].locationIds;
+          const selected = locs.filter((l: any) => ids.includes(l._id || l.id));
+          setSelectedLocations(selected);
+        }
       }
     } catch (error) {
       console.error("Error fetching locations:", error);
@@ -111,7 +140,16 @@ export default function NewTransactionNumberSeriesPage({ onBack }: NewTransactio
         }))
       };
 
-      await transactionNumberSeriesAPI.createMultiple(payload);
+      if (isEditMode) {
+        await transactionNumberSeriesAPI.updateMultiple({
+          ...payload,
+          originalName: editSeriesItems?.[0]?.seriesName
+        });
+        toast.success(`Transaction series "${seriesName}" updated.`);
+      } else {
+        await transactionNumberSeriesAPI.createMultiple(payload);
+        toast.success(`Transaction series "${seriesName}" created.`);
+      }
       onBack();
     } catch (error: any) {
       console.error("Error creating transaction number series:", error);
@@ -121,21 +159,22 @@ export default function NewTransactionNumberSeriesPage({ onBack }: NewTransactio
     }
   };
 
-  const filteredLocations = locations.filter(loc =>
-    loc.name.toLowerCase().includes(locationSearch.toLowerCase())
-  );
-
-  const getDisplayValue = () => {
-    if (selectedLocations.length === 0) return 'Add Location';
-    if (selectedLocations.length === 1) return selectedLocations[0].name;
-    return `${selectedLocations[0].name} (+${selectedLocations.length - 1})`;
+  const removeLocation = (e: React.MouseEvent, locId: string) => {
+    e.stopPropagation();
+    setSelectedLocations(selectedLocations.filter(loc => (loc._id || loc.id) !== locId));
   };
+
+  const filteredLocations = locations.filter(loc =>
+    String(loc.name || "").toLowerCase().includes(locationSearch.toLowerCase())
+  );
 
   return (
     <div className="flex flex-col font-sans">
       {/* Title with Close icon */}
       <div className="flex items-center justify-between mb-8">
-        <h2 className="text-[17px] font-semibold text-gray-800">New Series</h2>
+        <h2 className="text-[17px] font-semibold text-gray-800">
+          {isEditMode ? "Edit Series" : "New Series"}
+        </h2>
         <button
           onClick={onBack}
           className="p-1 hover:bg-gray-100 rounded-md text-red-500 transition-colors"
@@ -146,8 +185,8 @@ export default function NewTransactionNumberSeriesPage({ onBack }: NewTransactio
 
       {/* Main Content */}
       <div className="space-y-6 mb-10">
-        <div className="flex items-start">
-          <label className="w-[180px] text-[13px] font-medium text-red-400 mt-2">
+        <div className="flex items-center">
+          <label className="w-[180px] text-[13px] font-medium text-red-500">
             Series Name*
           </label>
           <div className="flex-1 max-w-[420px]">
@@ -155,24 +194,40 @@ export default function NewTransactionNumberSeriesPage({ onBack }: NewTransactio
               type="text"
               value={seriesName}
               onChange={(e) => setSeriesName(e.target.value)}
-              className="w-full h-[36px] bg-white border border-[#e2e8f0] rounded px-3 text-[14px] text-gray-700 focus:outline-none focus:border-blue-400 transition-all"
+              className="w-full h-[36px] bg-white border border-gray-200 rounded px-3 text-[14px] text-gray-700 focus:outline-none focus:border-[#1e5e6e] transition-all shadow-sm"
             />
           </div>
         </div>
 
-        <div className="flex items-start">
-          <label className="w-[180px] text-[13px] font-medium text-gray-500 mt-2">
+        <div className="flex items-center">
+          <label className="w-[180px] text-[13px] font-medium text-gray-700">
             Location
           </label>
           <div className="flex-1 max-w-[420px] relative" ref={dropdownRef}>
             <div
               onClick={() => setShowLocationDropdown(!showLocationDropdown)}
-              className={`w-full h-[36px] bg-white border ${showLocationDropdown ? 'border-blue-400 ring-2 ring-blue-50' : 'border-[#e2e8f0]'} rounded px-3 flex items-center justify-between text-[14px] text-gray-600 cursor-pointer transition-all`}
+              className={`w-full min-h-[36px] bg-white border ${showLocationDropdown ? 'border-[#1e5e6e] ring-2 ring-blue-50' : 'border-gray-200'} rounded px-2 py-1 flex flex-wrap gap-1.5 items-center justify-between text-[14px] cursor-pointer transition-all shadow-sm`}
             >
-              <span className={selectedLocations.length > 0 ? 'text-gray-900' : 'text-gray-400'}>
-                {getDisplayValue()}
-              </span>
-              <ChevronDown size={14} className={`text-gray-400 transition-transform ${showLocationDropdown ? 'rotate-180' : ''}`} />
+              <div className="flex flex-wrap gap-1.5 items-center">
+                {selectedLocations.length > 0 ? (
+                  selectedLocations.map((loc) => (
+                    <span 
+                      key={loc._id || loc.id} 
+                      className="inline-flex items-center gap-1.5 bg-[#f0f9fa] text-[#1e5e6e] text-[12px] px-2 py-0.5 rounded border border-[#c9e1e6]"
+                    >
+                      {loc.name}
+                      <X 
+                        size={12} 
+                        className="hover:text-red-500 transition-colors" 
+                        onClick={(e) => removeLocation(e, loc._id || loc.id)}
+                      />
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-gray-400 ml-1">Add Location</span>
+                )}
+              </div>
+              <ChevronDown size={14} className={`text-gray-400 mr-1 transition-transform ${showLocationDropdown ? 'rotate-180' : ''}`} />
             </div>
 
             {showLocationDropdown && (
@@ -186,7 +241,7 @@ export default function NewTransactionNumberSeriesPage({ onBack }: NewTransactio
                       placeholder="Search"
                       value={locationSearch}
                       onChange={(e) => setLocationSearch(e.target.value)}
-                      className="w-full h-[36px] pl-9 pr-3 bg-white border border-gray-200 rounded-md text-[13px] focus:outline-none focus:border-blue-400"
+                      className={`w-full h-[36px] pl-9 pr-3 bg-white border border-gray-200 rounded-md text-[13px] focus:outline-none focus:border-[#1e5e6e]`}
                     />
                   </div>
                 </div>
@@ -195,18 +250,18 @@ export default function NewTransactionNumberSeriesPage({ onBack }: NewTransactio
                     <div className="p-3 text-center text-gray-400 text-[13px]">Loading locations...</div>
                   ) : filteredLocations.length > 0 ? (
                     filteredLocations.map((loc) => {
-                      const isSelected = selectedLocations.some(item => item._id === loc._id);
+                      const isSelected = selectedLocations.some(item => (item._id || item.id) === (loc._id || loc.id));
                       return (
                         <div
-                          key={loc._id}
+                          key={loc._id || loc.id}
                           onClick={() => toggleLocation(loc)}
                           className={`flex items-center justify-between px-3 py-2.5 text-[14px] rounded cursor-pointer transition-colors ${isSelected
-                            ? 'bg-blue-50 text-blue-700 font-medium'
+                            ? 'bg-[#f0f9fa] text-[#1e5e6e] font-medium'
                             : 'text-gray-700 hover:bg-gray-50'
                             }`}
                         >
                           <span>{loc.name}</span>
-                          {isSelected && <Check size={16} className="text-blue-600" />}
+                          {isSelected && <Check size={16} className="text-[#1e5e6e]" />}
                         </div>
                       );
                     })
@@ -221,75 +276,54 @@ export default function NewTransactionNumberSeriesPage({ onBack }: NewTransactio
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded border border-[#edf2f7] shadow-sm overflow-hidden mb-12">
-        <table className="w-full text-left border-collapse">
-          <thead className="bg-[#f8fafc] border-b border-[#edf2f7]">
+      <div className="bg-white rounded border-l border-t border-[#eff2f7] overflow-hidden mb-12">
+        <table className="w-full text-left border-collapse whitespace-nowrap">
+          <thead className="bg-[#fcfdff] border-b border-[#eff2f7]">
             <tr>
-              <th className="px-5 py-3.5 text-[11px] font-bold text-gray-400 uppercase tracking-wider w-[22%]">MODULE</th>
-              <th className="px-5 py-3.5 text-[11px] font-bold text-gray-400 uppercase tracking-wider w-[22%]">PREFIX</th>
-              <th className="px-5 py-3.5 text-[11px] font-bold text-gray-400 uppercase tracking-wider w-[18%]">
-                <div className="flex items-center gap-1.5">
+              <th className="px-5 py-2.5 text-[10.5px] font-bold text-[#718096] uppercase tracking-wider border-r border-[#eff2f7] w-[250px]">MODULE</th>
+              <th className="px-5 py-2.5 text-[10.5px] font-bold text-[#718096] uppercase tracking-wider border-r border-[#eff2f7] w-[180px]">PREFIX</th>
+              <th className="px-5 py-2.5 text-[10.5px] font-bold text-[#718096] uppercase tracking-wider border-r border-[#eff2f7] w-[200px]">
+                <div className="flex items-center gap-1">
                   STARTING NUMBER
-                  <Info size={13} className="text-gray-400" />
+                  <Info size={12} className="text-gray-400" />
                 </div>
               </th>
-              <th className="px-5 py-3.5 text-[11px] font-bold text-gray-400 uppercase tracking-wider w-[18%]">
-                <div className="flex items-center gap-1.5">
-                  RESTART NUMBERING
-                  <Info size={13} className="text-gray-400" />
-                </div>
-              </th>
-              <th className="px-5 py-3.5 text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-                <div className="flex items-center gap-1.5">
+              <th className="px-5 py-2.5 text-[10.5px] font-bold text-[#718096] uppercase tracking-wider border-r border-[#eff2f7]">
+                <div className="flex items-center gap-1">
                   PREVIEW
-                  <Info size={13} className="text-gray-400" />
+                  <Info size={12} className="text-gray-400" />
                 </div>
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#f1f5f9]">
+          <tbody className="divide-y divide-[#eff2f7]">
             {modules.map((item, index) => (
-              <tr key={index} className="hover:bg-[#fcfdff] transition-colors group">
-                <td className="px-5 py-4">
-                  <span className="text-[14px] font-medium text-gray-700">{item.module}</span>
+              <tr key={index} className="hover:bg-[#fcfdff] transition-colors border-b border-[#eff2f7] last:border-b-0">
+                <td className="px-5 py-3 border-r border-[#eff2f7]">
+                  <span className="text-[13px] font-medium text-gray-700">{item.module}</span>
                 </td>
-                <td className="px-5 py-4">
-                  <div className="relative flex items-center">
+                <td className="px-5 py-3 border-r border-[#eff2f7]">
+                  <div className="max-w-[150px]">
                     <input
                       type="text"
                       value={item.prefix}
                       onChange={(e) => handleModuleChange(index, 'prefix', e.target.value)}
-                      className="w-full h-[32px] bg-white border border-[#e2e8f0] rounded px-2 pr-8 text-[13px] text-gray-600 focus:outline-none focus:border-blue-400 transition-all"
+                      className="w-full h-[28px] border border-transparent hover:border-gray-200 focus:border-[#1e5e6e] focus:bg-white rounded px-1.5 transition-all text-[13px] text-[#4a5568] outline-none"
                     />
-                    <button className="absolute right-2 text-blue-500 hover:text-blue-600 p-0.5 rounded">
-                      <Plus size={14} strokeWidth={3} />
-                    </button>
                   </div>
                 </td>
-                <td className="px-5 py-4">
-                  <input
-                    type="text"
-                    value={item.startingNumber}
-                    onChange={(e) => handleModuleChange(index, 'startingNumber', e.target.value)}
-                    className="w-full h-[32px] bg-white border border-[#e2e8f0] rounded px-2 text-[13px] text-gray-600 focus:outline-none focus:border-blue-400 transition-all"
-                  />
-                </td>
-                <td className="px-5 py-4">
-                  <div className="relative">
-                    <select
-                      value={item.restartNumbering}
-                      onChange={(e) => handleModuleChange(index, 'restartNumbering', e.target.value)}
-                      className="w-full h-[32px] bg-white border border-[#e2e8f0] rounded px-2 pr-8 text-[13px] text-gray-600 focus:outline-none focus:border-blue-400 transition-all appearance-none"
-                    >
-                      <option value="None">None</option>
-                      <option value="Yearly">Yearly</option>
-                      <option value="Monthly">Monthly</option>
-                    </select>
-                    <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <td className="px-5 py-3 border-r border-[#eff2f7]">
+                  <div className="max-w-[120px]">
+                    <input
+                      type="text"
+                      value={item.startingNumber}
+                      onChange={(e) => handleModuleChange(index, 'startingNumber', e.target.value)}
+                      className="w-full h-[28px] border border-transparent hover:border-gray-200 focus:border-[#1e5e6e] focus:bg-white rounded px-1.5 transition-all text-[13px] text-[#4a5568] outline-none"
+                    />
                   </div>
                 </td>
-                <td className="px-5 py-4">
-                  <span className="text-[13px] text-gray-500">{item.preview}</span>
+                <td className="px-5 py-3 border-r border-[#eff2f7]">
+                  <span className="text-[13px] text-[#4a5568]">{item.preview}</span>
                 </td>
               </tr>
             ))}
@@ -298,17 +332,17 @@ export default function NewTransactionNumberSeriesPage({ onBack }: NewTransactio
       </div>
 
       {/* Footer Actions */}
-      <div className="flex items-center gap-3 pt-6 border-t border-gray-100">
+      <div className="flex items-center gap-3 pt-4">
         <button
           onClick={handleSave}
           disabled={isLoading}
-          className="px-6 h-[34px] bg-[#3b82f6] text-white text-[13px] font-medium rounded hover:bg-blue-600 transition-colors shadow-sm disabled:bg-gray-300 min-w-[80px]"
+          className="px-6 h-[32px] bg-[#1e5e6e] text-white text-[13px] font-bold rounded hover:bg-[#164a58] transition-colors shadow-sm disabled:bg-gray-300 min-w-[70px]"
         >
           {isLoading ? "Saving..." : "Save"}
         </button>
         <button
           onClick={onBack}
-          className="px-5 h-[34px] bg-white border border-[#e2e8f0] text-[13px] font-medium text-gray-700 rounded hover:bg-gray-50 transition-colors"
+          className="px-6 h-[32px] bg-white border border-gray-300 text-[13px] font-medium text-gray-700 rounded hover:bg-gray-50 transition-colors shadow-sm"
         >
           Cancel
         </button>

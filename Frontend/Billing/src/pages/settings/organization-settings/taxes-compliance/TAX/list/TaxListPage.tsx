@@ -1,20 +1,19 @@
-﻿import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, MoreVertical, ChevronDown, ChevronRight, Download, Upload, X, Search, Eye, Pencil, Trash2, CircleOff, CheckCircle2, RotateCw, ReceiptText } from "lucide-react";
-import ExportTaxModal from "../../../../ExportTaxModal"; // Assuming we might move this too but for now point to old or siblings
+import ExportTaxModal from "../../../../ExportTaxModal"; 
+import TaxesAdvancedSearchModal from "../../../../../../components/modals/TaxesAdvancedSearchModal";
 import { deleteTaxesLocal, getAssociatedRecordsLocal, isTaxGroupRecord, markDefaultTaxLocal, readTaxesLocal, updateTaxLocal } from "../storage";
 
 export default function TaxListPage() {
     const navigate = useNavigate();
     const [taxes, setTaxes] = useState<any[]>([]);
     const [taxGroups, setTaxGroups] = useState<any[]>([]);
-    const [filterType, setFilterType] = useState("All");
+    const [filterType, setFilterType] = useState("Active");
     const [showNewTaxDropdown, setShowNewTaxDropdown] = useState(false);
     const [showMoreMenu, setShowMoreMenu] = useState(false);
     const [selectedIds, setSelectedIds] = useState<any[]>([]);
     const [showSearchModal, setShowSearchModal] = useState(false);
-    const [searchTaxName, setSearchTaxName] = useState("");
-    const [searchTaxRate, setSearchTaxRate] = useState("");
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [showExportModal, setShowExportModal] = useState(false);
     const [exportType, setExportType] = useState("tax");
@@ -138,20 +137,19 @@ export default function TaxListPage() {
         setRowMenuOpenId(null);
     };
 
-    const handleSearch = () => {
+    const handleSearch = (criteria: any) => {
+        const { taxName, taxRate, status } = criteria;
         const items = [...taxes, ...taxGroups];
         const results = items.filter(item => {
-            const nameMatch = !searchTaxName || item.name.toLowerCase().includes(searchTaxName.toLowerCase());
-            const rateMatch = !searchTaxRate || (item.rate && item.rate.toString().includes(searchTaxRate));
-            return nameMatch && rateMatch;
+            const nameMatch = !taxName || item.name.toLowerCase().includes(taxName.toLowerCase());
+            const rateMatch = !taxRate || (item.rate && item.rate.toString().includes(taxRate));
+            const statusMatch = status === "All" || (status === "Active" ? item.active : !item.active);
+            return nameMatch && rateMatch && statusMatch;
         });
         setSearchResults(results.map(item => item.id));
-        setShowSearchModal(false);
     };
 
     const handleClearSearch = () => {
-        setSearchTaxName("");
-        setSearchTaxRate("");
         setSearchResults([]);
     };
 
@@ -179,207 +177,203 @@ export default function TaxListPage() {
     return (
         <div className="space-y-4">
             {/* Search Modal */}
-            {showSearchModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[11000]">
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-semibold">Search Taxes</h3>
-                            <button onClick={() => setShowSearchModal(false)}><X size={20} /></button>
-                        </div>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Tax Name</label>
-                                <input
-                                    type="text"
-                                    value={searchTaxName}
-                                    onChange={(e) => setSearchTaxName(e.target.value)}
-                                    className="w-full h-10 px-3 rounded-lg border border-gray-300"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Rate (%)</label>
-                                <input
-                                    type="text"
-                                    value={searchTaxRate}
-                                    onChange={(e) => setSearchTaxRate(e.target.value)}
-                                    className="w-full h-10 px-3 rounded-lg border border-gray-300"
-                                />
-                            </div>
-                            <div className="flex justify-end gap-3 mt-6">
-                                <button onClick={() => setShowSearchModal(false)} className="px-4 py-2 text-sm border rounded-lg">Cancel</button>
-                                <button onClick={handleSearch} className="px-4 py-2 text-sm text-white bg-[#156372] rounded-lg">Search</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <TaxesAdvancedSearchModal 
+                isOpen={showSearchModal}
+                onClose={() => setShowSearchModal(false)}
+                onSearch={handleSearch}
+            />
 
             {/* Header Actions */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <div className="relative">
-                        <select
-                            value={filterType}
-                            onChange={(e) => {
-                                setFilterType(e.target.value);
-                                handleClearSearch();
-                                setSelectedIds([]);
-                            }}
-                            className="h-9 px-3 pr-8 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white min-w-[140px]"
-                        >
-                            <option value="All">All taxes</option>
-                            <option value="Active">Active</option>
-                            <option value="Inactive">Inactive</option>
-                            <option value="Tax">Tax</option>
-                            <option value="Tax Group">Tax Group</option>
-                        </select>
-                        <ChevronDown size={16} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                    <div className="relative" ref={newTaxDropdownRef}>
-                        <div className="flex">
-                            <button
-                                onClick={() => navigate("/settings/taxes/new")}
-                                className="px-4 py-2 text-sm font-medium text-white bg-[#156372] rounded-l-lg hover:bg-[#0f4e5a] flex items-center gap-2"
+            <div className="flex items-center justify-between mb-3 min-h-[40px]">
+                {selectedIds.length === 0 ? (
+                    <>
+                        <div className="flex items-center gap-1.5 cursor-pointer group">
+                            <select
+                                value={filterType}
+                                onChange={(e) => {
+                                    setFilterType(e.target.value);
+                                    handleClearSearch();
+                                    setSelectedIds([]);
+                                }}
+                                className="text-lg font-medium text-[#1e5e6e] hover:text-[#164a58] bg-transparent outline-none appearance-none cursor-pointer pr-1"
                             >
-                                <Plus size={16} />
-                                New Tax
-                            </button>
-                            <button
-                                onClick={() => setShowNewTaxDropdown(!showNewTaxDropdown)}
-                                className="px-2 py-2 text-sm font-medium text-white bg-[#156372] rounded-r-lg hover:bg-[#0f4e5a] border-l border-[#0f4e5a]"
-                            >
-                                <ChevronDown size={16} />
-                            </button>
+                                <option value="All">All taxes</option>
+                                <option value="Active">Active taxes</option>
+                                <option value="Inactive">Inactive taxes</option>
+                                <option value="Tax">Taxes</option>
+                                <option value="Tax Group">Tax groups</option>
+                            </select>
+                            <ChevronDown size={14} className="text-[#1e5e6e] group-hover:text-[#164a58] mt-0.5" />
                         </div>
-                        {showNewTaxDropdown && (
-                            <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 z-50 min-w-[200px]">
-                                <button
-                                    onClick={() => navigate("/settings/taxes/new-group")}
-                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600"
-                                >
-                                    New Tax Group
-                                </button>
-                                <button
-                                    onClick={() => navigate("/settings/taxes/create-bulk")}
-                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600"
-                                >
-                                    Create Taxes in Bulk
-                                </button>
-                            </div>
-                        )}
-                    </div>
 
-                    <div className="relative" ref={moreMenuRef}>
-                        <button
-                            onClick={() => setShowMoreMenu(!showMoreMenu)}
-                            className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg border border-gray-300"
-                        >
-                            <MoreVertical size={18} />
-                        </button>
-                        {showMoreMenu && (
-                            <div className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 z-50 min-w-[200px]">
+                        <div className="flex items-center gap-2">
+                            <div className="relative flex" ref={newTaxDropdownRef}>
                                 <button
-                                    onClick={() => navigate("/settings/taxes/import", { state: { type: "taxes", autoDownload: true } })}
-                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 flex items-center gap-2"
+                                    onClick={() => navigate("/settings/taxes/new")}
+                                    className="px-4 py-1.5 text-sm font-medium text-white bg-[#1e5e6e] rounded-l-md hover:bg-[#164a58] flex items-center gap-1.5"
                                 >
-                                    <Download size={16} /> Import Taxes
+                                    <Plus size={16} />
+                                    New Tax
                                 </button>
                                 <button
-                                    onClick={() => navigate("/settings/taxes/import", { state: { type: "tax-group", autoDownload: true } })}
-                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 flex items-center gap-2"
+                                    onClick={() => setShowNewTaxDropdown(!showNewTaxDropdown)}
+                                    className="px-2 py-1.5 text-sm font-medium text-white bg-[#1e5e6e] rounded-r-md hover:bg-[#164a58] border-l border-white/20"
                                 >
-                                    <Download size={16} /> Import Tax Group
+                                    <ChevronDown size={16} />
                                 </button>
-                                <button
-                                    onClick={() => { setExportType("tax"); setShowExportModal(true); setShowMoreMenu(false); }}
-                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 flex items-center gap-2"
-                                >
-                                    <Upload size={16} /> Export Taxes
-                                </button>
-                                <button
-                                    onClick={() => { setExportType("tax-group"); setShowExportModal(true); setShowMoreMenu(false); }}
-                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 flex items-center gap-2"
-                                >
-                                    <Upload size={16} /> Export Tax Group
-                                </button>
+                                {showNewTaxDropdown && (
+                                    <div className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 z-50 min-w-[200px]">
+                                        <button
+                                            onClick={() => navigate("/settings/taxes/new-group")}
+                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                                        >
+                                            New Tax Group
+                                        </button>
+                                        <button
+                                            onClick={() => navigate("/settings/taxes/create-bulk")}
+                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600"
+                                        >
+                                            Create Taxes in Bulk
+                                        </button>
+                                    </div>
+                                )}
                             </div>
-                        )}
-                    </div>
-                </div>
+
+                            <div className="relative" ref={moreMenuRef}>
+                                <button
+                                    onClick={() => setShowMoreMenu(!showMoreMenu)}
+                                    className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-md border border-gray-200"
+                                >
+                                    <MoreVertical size={18} />
+                                </button>
+                                {showMoreMenu && (
+                                    <div className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 z-50 min-w-[200px]">
+                                        <button
+                                            onClick={() => navigate("/settings/taxes/import", { state: { type: "taxes", autoDownload: true } })}
+                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 flex items-center gap-2"
+                                        >
+                                            <Download size={16} /> Import Taxes
+                                        </button>
+                                        <button
+                                            onClick={() => navigate("/settings/taxes/import", { state: { type: "tax-group", autoDownload: true } })}
+                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 flex items-center gap-2"
+                                        >
+                                            <Download size={16} /> Import Tax Group
+                                        </button>
+                                        <button
+                                            onClick={() => { setExportType("tax"); setShowExportModal(true); setShowMoreMenu(false); }}
+                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 flex items-center gap-2"
+                                        >
+                                            <Upload size={16} /> Export Taxes
+                                        </button>
+                                        <button
+                                            onClick={() => { setExportType("tax-group"); setShowExportModal(true); setShowMoreMenu(false); }}
+                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 flex items-center gap-2"
+                                        >
+                                            <Upload size={16} /> Export Tax Group
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <div className="flex items-center gap-6">
+                            <button
+                                onClick={() => handleDelete()}
+                                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-200 rounded-md hover:bg-gray-100 transition-colors shadow-sm"
+                            >
+                                <Trash2 size={16} className="text-gray-500" />
+                                Delete
+                            </button>
+                            <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                                <div className="w-2 h-2 rounded-full bg-[#1e5e6e]" />
+                                <span>{selectedIds.length} Taxes Selected</span>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => setSelectedIds([])}
+                            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+                        >
+                            <X size={20} />
+                        </button>
+                    </>
+                )}
             </div>
 
+            <div className="h-px bg-gray-100 w-full mb-1" />
+
             {error && (
-                <div className="px-4 py-3 rounded-lg border border-red-200 bg-red-50 text-sm text-red-700">
+                <div className="px-4 py-3 rounded-lg border border-red-200 bg-red-50 text-sm text-red-700 mb-4">
                     {error}
                 </div>
             )}
 
             {/* Table */}
-            <div className="bg-white rounded-lg border border-gray-200 overflow-visible">
-                <table className="w-full">
-                    <thead className="bg-gray-50 border-b">
-                        <tr>
-                            <th className="px-4 py-3 text-left w-10">
+            <div className="overflow-visible">
+                <table className="w-full text-left border-collapse">
+                    <thead>
+                        <tr className="border-b border-gray-100">
+                            <th className="px-4 py-4 w-10">
                                 <input
                                     type="checkbox"
                                     checked={filteredItems().length > 0 && selectedIds.length === filteredItems().length}
                                     onChange={(e) => handleSelectAll(e.target.checked)}
-                                    className="h-4 w-4 text-[#156372] border-gray-300 rounded"
+                                    className="h-4 w-4 border-gray-300 rounded"
                                 />
                             </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Tax Name</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Country/Region</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Rate (%)</th>
-                            <th className="px-4 py-3 text-right">
-                                <button onClick={() => setShowSearchModal(true)} className="text-gray-400"><Search size={14} /></button>
+                            <th className="px-4 py-4 text-[11px] font-semibold text-gray-500 uppercase tracking-[1px]">TAX NAME</th>
+                            <th className="px-4 py-4 text-[11px] font-semibold text-gray-500 uppercase tracking-[1px] text-center">COUNTRY/REGION</th>
+                            <th className="px-4 py-4 text-[11px] font-semibold text-gray-500 uppercase tracking-[1px] text-right">RATE (%)</th>
+                            <th className="px-4 py-4 text-right w-10">
+                                <button onClick={() => setShowSearchModal(true)} className="text-[#1e5e6e] p-1 hover:text-[#164a58]">
+                                    <Search size={15} strokeWidth={2.5} />
+                                </button>
                             </th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-200">
+                    <tbody className="divide-y divide-gray-100">
                         {loading ? (
-                            <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-500">Loading taxes...</td></tr>
+                            <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">Loading taxes...</td></tr>
                         ) : filteredItems().length === 0 ? (
-                            <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-500">No taxes found.</td></tr>
+                            <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">No taxes found.</td></tr>
                         ) : (
                             filteredItems().map(item => (
-                                <tr key={item.id} className="hover:bg-gray-50 group">
-                                    <td className="px-4 py-3">
+                                <tr key={item.id} className="group hover:bg-gray-50/50">
+                                    <td className="px-4 py-4">
                                         <input
                                             type="checkbox"
                                             checked={selectedIds.includes(item.id)}
                                             onChange={(e) => handleSelectItem(item.id, e.target.checked)}
-                                            className="h-4 w-4 text-[#156372] border-gray-300 rounded"
+                                            className="h-4 w-4 border-gray-300 rounded"
                                         />
                                     </td>
-                                    <td className="px-4 py-3 text-sm">
-                                        {item.type === "tax-group" ? (
-                                            <div className="flex items-center gap-1.5">
-                                                <span className="text-blue-500 hover:underline cursor-pointer">{item.name}</span>
-                                                <span className="text-gray-400 text-xs italic">(Tax Group)</span>
-                                            </div>
-                                        ) : (
-                                            <div className="flex items-center gap-1.5">
-                                                <span className="text-blue-500 hover:underline cursor-pointer">{item.name}</span>
-                                                {item.isCompound && <span className="text-gray-400 text-xs italic">(Compound tax)</span>}
-                                                {item.isDefault && <span className="text-gray-400 text-xs italic">- Default Tax</span>}
-                                            </div>
-                                        )}
+                                    <td className="px-4 py-4">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm text-[#3b82f6] hover:underline cursor-pointer font-medium">{item.name}</span>
+                                            {item.type === "tax-group" ? (
+                                                <span className="text-[12px] text-green-600">(Tax Group)</span>
+                                            ) : (
+                                                <>
+                                                    {item.isCompound && <span className="text-[12px] text-green-600">(Compound tax)</span>}
+                                                    {item.isDefault && <span className="text-[12px] text-gray-400 italic font-light">- Default Tax</span>}
+                                                </>
+                                            )}
+                                        </div>
                                     </td>
-                                    <td className="px-4 py-3 text-sm text-gray-500">{item.country}</td>
-                                    <td className="px-4 py-3 text-sm text-gray-900">{item.rate}</td>
-                                    <td className="px-4 py-3 text-right">
+                                    <td className="px-4 py-4 text-center text-sm text-gray-500">{item.country || '—'}</td>
+                                    <td className="px-4 py-4 text-right text-sm text-gray-700">{item.rate}</td>
+                                    <td className="px-4 py-4 text-right">
                                         <div className="relative inline-block tax-row-actions">
                                             <button
                                                 onClick={() => setRowMenuOpenId(rowMenuOpenId === item.id ? null : item.id)}
-                                                className={`h-6 w-6 rounded-full bg-[#3b82f6] text-white items-center justify-center transition ${rowMenuOpenId === item.id ? "inline-flex" : "hidden group-hover:inline-flex"}`}
+                                                className={`h-7 w-7 rounded-full flex items-center justify-center shadow-sm transition-all ${rowMenuOpenId === item.id ? "bg-gray-300 text-gray-700 opacity-100" : "bg-gray-200 text-gray-600 opacity-0 group-hover:opacity-100 hover:bg-gray-300 hover:text-gray-700"}`}
                                             >
                                                 <ChevronDown size={14} />
                                             </button>
                                             {rowMenuOpenId === item.id && (
-                                                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-[9999] py-1">
+                                                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-gray-200 z-[9999] py-1">
                                                     <button
                                                         onClick={() => {
                                                             setRowMenuOpenId(null);
@@ -406,11 +400,12 @@ export default function TaxListPage() {
                                                     </button>
                                                     <button
                                                         onClick={() => handleDelete([item.id])}
-                                                        className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 text-gray-700 flex items-center gap-2"
+                                                        className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 text-red-600 flex items-center gap-2"
                                                     >
                                                         <Trash2 size={16} />
                                                         Delete
                                                     </button>
+                                                    <div className="h-px bg-gray-100 my-1" />
                                                     <button
                                                         disabled={rowActionLoadingId === item.id}
                                                         onClick={() => handleToggleActive(item)}

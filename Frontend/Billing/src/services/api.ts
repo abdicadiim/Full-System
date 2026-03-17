@@ -289,7 +289,7 @@ const LOCAL_CONTACT_PERSONS_KEY = "taban_books_contact_persons";
 const LOCAL_BANK_ACCOUNTS_KEY = "taban_books_bank_accounts";
 const LOCAL_PAYMENT_MODES_KEY = "taban_books_payment_modes";
 const LOCAL_CHART_ACCOUNTS_KEY = "taban_books_chart_accounts";
-const LOCAL_TX_SERIES_KEY = "taban_books_tx_series";
+const LOCAL_TX_SERIES_KEY = "taban_books_tx_series_v2";
 const LOCAL_QUOTES_SETTINGS_KEY = "taban_books_settings_quotes";
 const LOCAL_RECURRING_SETTINGS_KEY = "taban_books_settings_recurring_invoices";
 const LOCAL_VENDORS_KEY = "taban_books_vendors";
@@ -459,10 +459,27 @@ const defaultChartAccounts = [
 ];
 
 const defaultTxSeries = [
-  { id: "series-inv", _id: "series-inv", module: "invoices", prefix: "INV-", nextNumber: 1, status: "Active" },
-  { id: "series-quote", _id: "series-quote", module: "quotes", prefix: "QU-", nextNumber: 1, status: "Active" },
-  { id: "series-sr", _id: "series-sr", module: "sales-receipts", prefix: "SR-", nextNumber: 1, status: "Active" },
-  { id: "series-cn", _id: "series-cn", module: "credit-notes", prefix: "CN-", nextNumber: 1, status: "Active" },
+  // Default Transaction Series
+  { id: "s1-ri", _id: "s1-ri", seriesName: "Default Transaction Series", module: "Retainer Invoice", prefix: "RET-", startingNumber: "00003", locationIds: ["loc-1"], status: "Active" },
+  { id: "s1-cn", _id: "s1-cn", seriesName: "Default Transaction Series", module: "Credit Note", prefix: "CN-", startingNumber: "00002", locationIds: ["loc-1"], status: "Active" },
+  { id: "s1-cp", _id: "s1-cp", seriesName: "Default Transaction Series", module: "Customer Payment", prefix: "", startingNumber: "4", locationIds: ["loc-1"], status: "Active" },
+  { id: "s1-sub", _id: "s1-sub", seriesName: "Default Transaction Series", module: "Subscriptions", prefix: "SUB-", startingNumber: "00010", locationIds: ["loc-1"], status: "Active" },
+  { id: "s1-dn", _id: "s1-dn", seriesName: "Default Transaction Series", module: "Debit Note", prefix: "CDN-", startingNumber: "000002", locationIds: ["loc-1"], status: "Active" },
+  { id: "s1-inv", _id: "s1-inv", seriesName: "Default Transaction Series", module: "Invoice", prefix: "INV-", startingNumber: "000025", locationIds: ["loc-1"], status: "Active" },
+  { id: "s1-so", _id: "s1-so", seriesName: "Default Transaction Series", module: "Sales Order", prefix: "SO-", startingNumber: "00001", locationIds: ["loc-1"], status: "Active" },
+  { id: "s1-qt", _id: "s1-qt", seriesName: "Default Transaction Series", module: "Quote", prefix: "QT-", startingNumber: "000004", locationIds: ["loc-1"], status: "Active" },
+  { id: "s1-sr", _id: "s1-sr", seriesName: "Default Transaction Series", module: "Sales Receipt", prefix: "SR-", startingNumber: "00004", locationIds: ["loc-1"], status: "Active" },
+
+  // MAXAMED Series
+  { id: "s2-ri", _id: "s2-ri", seriesName: "MAXAMED", module: "Retainer Invoice", prefix: "RET-", startingNumber: "00001", locationIds: ["loc-1"], status: "Active" },
+  { id: "s2-cn", _id: "s2-cn", seriesName: "MAXAMED", module: "Credit Note", prefix: "CN-", startingNumber: "00001", locationIds: ["loc-1"], status: "Active" },
+  { id: "s2-cp", _id: "s2-cp", seriesName: "MAXAMED", module: "Customer Payment", prefix: "", startingNumber: "1", locationIds: ["loc-1"], status: "Active" },
+  { id: "s2-sub", _id: "s2-sub", seriesName: "MAXAMED", module: "Subscriptions", prefix: "SUB-", startingNumber: "00001", locationIds: ["loc-1"], status: "Active" },
+  { id: "s2-dn", _id: "s2-dn", seriesName: "MAXAMED", module: "Debit Note", prefix: "CDN-", startingNumber: "000001", locationIds: ["loc-1"], status: "Active" },
+  { id: "s2-inv", _id: "s2-inv", seriesName: "MAXAMED", module: "Invoice", prefix: "INV-", startingNumber: "000001", locationIds: ["loc-1"], status: "Active" },
+  { id: "s2-so", _id: "s2-so", seriesName: "MAXAMED", module: "Sales Order", prefix: "SO-", startingNumber: "00001", locationIds: ["loc-1"], status: "Active" },
+  { id: "s2-qt", _id: "s2-qt", seriesName: "MAXAMED", module: "Quote", prefix: "QT-", startingNumber: "000001", locationIds: ["loc-1"], status: "Active" },
+  { id: "s2-sr", _id: "s2-sr", seriesName: "MAXAMED", module: "Sales Receipt", prefix: "SR-", startingNumber: "00001", locationIds: ["loc-1"], status: "Active" },
 ];
 
 export const recordEvent = async (type: string, data: any, source: string = "user") => {
@@ -939,7 +956,19 @@ const bankAccountsLocal = localResource(LOCAL_BANK_ACCOUNTS_KEY, "ba", defaultBa
 const paymentModesLocal = localResource(LOCAL_PAYMENT_MODES_KEY, "pm", defaultPaymentModes);
 const chartAccountsLocal = localResource(LOCAL_CHART_ACCOUNTS_KEY, "coa", defaultChartAccounts);
 const txSeriesLocal = localResource(LOCAL_TX_SERIES_KEY, "series", defaultTxSeries);
-const reportingTagsLocal = localResource(LOCAL_REPORTING_TAGS_KEY, "rt");
+const defaultReportingTags = [
+  { id: "rt-xsed", _id: "rt-xsed", name: "xsed", options: ["Option A", "Option B"], status: "Active" },
+  { id: "rt-x21", _id: "rt-x21", name: "x21", options: ["Value 1", "Value 2"], status: "Active" },
+  { id: "rt-zxc", _id: "rt-zxc", name: "zxc", options: ["High", "Medium", "Low"], status: "Active" },
+  { id: "rt-frf", _id: "rt-frf", name: "frf", options: ["Primary", "Secondary"], status: "Active" },
+  { id: "rt-x22", _id: "rt-x22", name: "x22", options: ["Type X", "Type Y"], status: "Active" },
+  { id: "rt-wwwwwe", _id: "rt-wwwwwe", name: "wwwwwe", options: ["N/A", "Complete"], status: "Active" },
+  { id: "rt-rt1", _id: "rt-rt1", name: "rt1", options: ["Sample 1", "Sample 2"], status: "Active" },
+  { id: "rt-asd", _id: "rt-asd", name: "asd", options: ["Active", "Inactive"], status: "Active" },
+  { id: "rt-dd1", _id: "rt-dd1", name: "dd1", options: ["Group A", "Group B"], status: "Active" },
+];
+
+const reportingTagsLocal = localResource(LOCAL_REPORTING_TAGS_KEY, "rt", defaultReportingTags);
 const locationsLocal = localResource(LOCAL_LOCATIONS_KEY, "loc");
 
 const readSettingsObject = (key: string, fallback: any = {}) => {
@@ -1535,9 +1564,49 @@ export const approvalRulesAPI = {
 export const transactionNumberSeriesAPI = {
   ...txSeriesLocal,
   createMultiple: async (data: any) => {
-    const rows = Array.isArray(data) ? data : data?.series || data?.rows || [];
+    const seriesName = data?.seriesName || "Standard";
+    const locationIds = data?.locationIds || [];
+    const modules = data?.modules || (Array.isArray(data) ? data : data?.series || data?.rows || []);
+    
     const created: any[] = [];
-    for (const row of rows) {
+    for (const mod of modules) {
+      const row = {
+        ...mod,
+        seriesName,
+        locationIds,
+        status: "Active"
+      };
+      const response = await txSeriesLocal.create(row);
+      if (response.success && response.data) created.push(response.data);
+    }
+    return { success: true, data: created };
+  },
+  updateMultiple: async (data: any) => {
+    const seriesName = data?.seriesName || "Standard";
+    const locationIds = data?.locationIds || [];
+    const modules = data?.modules || [];
+    const originalName = data?.originalName || seriesName;
+
+    // Get all existing rows for this series
+    const all = await txSeriesLocal.getAll({ limit: 10000 });
+    const existingRows = (all.data || []).filter((row: any) => 
+      String(row.seriesName || "").toLowerCase() === originalName.toLowerCase()
+    );
+
+    // Delete existing rows
+    for (const row of existingRows) {
+      await txSeriesLocal.delete(getEntityId(row));
+    }
+
+    // Create new rows
+    const created: any[] = [];
+    for (const mod of modules) {
+      const row = {
+        ...mod,
+        seriesName,
+        locationIds,
+        status: "Active"
+      };
       const response = await txSeriesLocal.create(row);
       if (response.success && response.data) created.push(response.data);
     }
@@ -1554,6 +1623,17 @@ export const transactionNumberSeriesAPI = {
     const nextNumber = `${selected?.prefix || ""}${String(nextValue).padStart(5, "0")}`;
     await txSeriesLocal.update(getEntityId(selected), { ...selected, nextNumber: nextValue + 1 });
     return { success: true, data: { seriesId: getEntityId(selected), nextNumber } };
+  },
+  getSettings: async () => {
+    const defaults = { preventDuplicates: "all_fiscal_years" };
+    const data = readSettingsObject("taban_books_tx_number_settings", defaults);
+    return { success: true, data };
+  },
+  updateSettings: async (data: any) => {
+    const current = readSettingsObject("taban_books_tx_number_settings", {});
+    const updated = { ...current, ...data };
+    writeSettingsObject("taban_books_tx_number_settings", updated);
+    return { success: true, data: updated };
   },
 };
 

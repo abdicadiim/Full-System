@@ -43,6 +43,7 @@ export default function LocationsPage() {
 
   // Handle location click (for editing)
   const handleLocationClick = (locationId) => {
+    if (!locationId) return;
     // Navigate to edit location page
     navigate(`/settings/locations/edit/${locationId}`);
   };
@@ -51,6 +52,7 @@ export default function LocationsPage() {
   const handleEdit = (locationId, e) => {
     e.stopPropagation();
     // Navigate to edit location page
+    if (!locationId) return;
     navigate(`/settings/locations/edit/${locationId}`);
   };
 
@@ -253,14 +255,15 @@ export default function LocationsPage() {
               <div className="flex items-center gap-4">
                 <button
                   onClick={() => navigate('/settings/customization/transaction-number-series')}
-                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                  className="px-3 py-2 text-sm font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition"
                 >
                   Transaction Series Preferences
                 </button>
                 <button
                   onClick={() => navigate('/settings/locations/new')}
-                  className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition"
+                  className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition inline-flex items-center gap-2"
                 >
+                  <Plus size={14} />
                   Add Location
                 </button>
               </div>
@@ -308,7 +311,7 @@ export default function LocationsPage() {
                       locations.map((location) => (
                         <tr
                           key={location._id}
-                          data-location-id={location._id}
+                          data-location-id={location._id || location.id}
                           className="group relative"
                           onMouseEnter={() => setHoveredRowId(location._id)}
                           onMouseLeave={() => setHoveredRowId(null)}
@@ -316,7 +319,7 @@ export default function LocationsPage() {
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center gap-2">
                               <button
-                                onClick={() => handleLocationClick(location._id)}
+                                onClick={() => handleLocationClick(location._id || location.id)}
                                 className="text-sm font-medium text-blue-600 hover:text-blue-700 cursor-pointer"
                               >
                                 {location.name}
@@ -341,7 +344,7 @@ export default function LocationsPage() {
                                 {/* Red Dropdown Icon - always visible on hover */}
                                 <button
                                   onClick={(e) => handleDropdownClick(location._id, e)}
-                                  className="w-6 h-6 rounded-full bg-red-600 flex items-center justify-center hover:bg-red-700 transition text-white shadow-sm"
+                                  className="w-6 h-6 rounded-full bg-gray-400 flex items-center justify-center hover:bg-gray-500 transition text-white shadow-sm"
                                   aria-label="More options"
                                 >
                                   <ChevronDown size={14} className="text-white" />
@@ -350,7 +353,7 @@ export default function LocationsPage() {
                                 {openDropdownId === location._id && (
                                   <div className="absolute right-0 top-8 z-30 w-44 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
                                     <button
-                                      onClick={(e) => handleEdit(location._id, e)}
+                                      onClick={(e) => handleEdit(location._id || location.id, e)}
                                       aria-label="Edit"
                                       className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                                     >

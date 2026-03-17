@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, MoreVertical, Download, Upload, Check, Trash2 } from "lucide-react";
+import { Plus, MoreVertical, Download, Upload, Trash2 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import NewCurrencyModal from "./NewCurrencyModal";
 import EditCurrencyModal from "./EditCurrencyModal";
+import { toast } from "react-toastify";
 
 const CURRENCIES_STORAGE_KEY = "taban_currencies";
 const EXCHANGE_RATE_FEEDS_STORAGE_KEY = "taban_exchange_rate_feeds_enabled";
@@ -85,14 +86,14 @@ export default function CurrenciesPage() {
   const [editingCurrency, setEditingCurrency] = useState<Currency | null>(null);
   const [showThreeDotsMenu, setShowThreeDotsMenu] = useState(false);
   const [threeDotsPosition, setThreeDotsPosition] = useState({ top: 0, left: 0, width: 220 });
-  const [notification, setNotification] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [pendingDeleteCurrency, setPendingDeleteCurrency] = useState<Currency | null>(null);
 
   const threeDotsRef = useRef<HTMLDivElement>(null);
   const threeDotsMenuRef = useRef<HTMLDivElement>(null);
 
   const showNotification = (message: string) => {
-    setNotification(message);
-    window.setTimeout(() => setNotification(null), 2500);
+    toast.success(message);
   };
 
   const persistCurrencies = useCallback((nextCurrencies: Currency[]) => {
@@ -267,11 +268,16 @@ export default function CurrenciesPage() {
       window.alert("Base currency cannot be deleted.");
       return;
     }
+    setPendingDeleteCurrency(target);
+    setShowDeleteModal(true);
+  };
 
-    if (!window.confirm("Are you sure you want to delete this currency?")) return;
-
-    const next = currencies.filter((currency) => currency.id !== id);
+  const confirmDeleteCurrency = () => {
+    if (!pendingDeleteCurrency) return;
+    const next = currencies.filter((currency) => currency.id !== pendingDeleteCurrency.id);
     persistCurrencies(next);
+    setShowDeleteModal(false);
+    setPendingDeleteCurrency(null);
     showNotification("Currency deleted successfully");
   };
 
@@ -330,42 +336,50 @@ export default function CurrenciesPage() {
 
   return (
     <div className="p-6">
-      {notification && (
+      {showDeleteModal && (
         <div
-          style={{
-            position: "fixed",
-            top: 20,
-            left: "50%",
-            transform: "translateX(-50%)",
-            backgroundColor: "#d1fae5",
-            border: "1px solid #10b981",
-            borderRadius: 8,
-            padding: "12px 16px",
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            zIndex: 10001,
-            boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1),0 2px 4px -1px rgba(0,0,0,0.06)",
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-[10000] pt-16"
+          onClick={() => {
+            setShowDeleteModal(false);
+            setPendingDeleteCurrency(null);
           }}
         >
           <div
-            style={{
-              width: 24,
-              height: 24,
-              borderRadius: 4,
-              backgroundColor: "#10b981",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-            }}
+            className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4"
+            onClick={(e) => e.stopPropagation()}
           >
-            <Check size={16} style={{ color: "#fff" }} />
+            <div className="p-5 border-b border-gray-200">
+              <div className="flex items-start gap-3">
+                <div className="text-orange-500 text-lg leading-none">⚠️</div>
+                <div>
+                  <div className="text-sm font-semibold text-gray-900">Delete this currency?</div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    This action cannot be undone. Are you sure you want to delete
+                    {pendingDeleteCurrency ? ` ${pendingDeleteCurrency.code}` : ""}?
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 p-4">
+              <button
+                onClick={confirmDeleteCurrency}
+                className="px-3 py-2 rounded-md bg-blue-600 text-white text-sm"
+              >
+                Delete
+              </button>
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setPendingDeleteCurrency(null);
+                }}
+                className="px-3 py-2 rounded-md bg-gray-100 border border-gray-300 text-gray-600 text-sm"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
-          <span style={{ fontSize: 14, color: "#065f46", fontWeight: 500 }}>{notification}</span>
         </div>
       )}
-
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-gray-900">Currencies</h1>
         <div className="flex items-center gap-3">
@@ -469,14 +483,7 @@ export default function CurrenciesPage() {
                         <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
                           Base Currency
                         </span>
-                      ) : (
-                        <button
-                          onClick={() => handleMarkAsBase(currency.id)}
-                          className="text-xs font-medium text-blue-600 opacity-0 transition-opacity duration-200 hover:underline group-hover:opacity-100"
-                        >
-                          change base currency
-                        </button>
-                      )}
+                      ) : null}
                     </div>
                   </td>
 
@@ -511,7 +518,14 @@ export default function CurrenciesPage() {
                           Edit
                         </button>
 
-                        {!currency.isBase && (
+                        {currency.isBase ? (
+                          <>
+                            <span className="text-gray-300">|</span>
+                            <span className="rounded px-2 py-1 text-xs font-medium text-blue-600">
+                              change base currency
+                            </span>
+                          </>
+                        ) : (
                           <>
                             <span className="text-gray-300">|</span>
                             <button

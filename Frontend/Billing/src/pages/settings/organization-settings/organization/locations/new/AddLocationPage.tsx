@@ -18,6 +18,8 @@ import {
   ArrowLeft
 } from "lucide-react";
 import { getToken, API_BASE_URL } from "../../../../../../services/auth";
+import { settingsAPI } from "../../../../../../services/api";
+import { toast } from "react-toastify";
 import {
   readLocations,
   writeLocations,
@@ -119,6 +121,37 @@ export default function AddLocationPage() {
   const parentDropdownRef = useRef<HTMLDivElement>(null);
 
   const [provideAccessToAll, setProvideAccessToAll] = useState(false);
+  const [orgCountry, setOrgCountry] = useState<string>("");
+  const allUsersSelected =
+    allUsers.length > 0 && formData.locationAccess.length === allUsers.length;
+
+  const buildAccessFromUser = (user: User) => ({
+    userId: user._id || user.id,
+    userName: user.name || `${user.firstName} ${user.lastName}`,
+    userEmail: user.email,
+    role: extractRoleString(user.role),
+  });
+
+  const setAllUsersAccess = () => {
+    const accessList = allUsers
+      .map(buildAccessFromUser)
+      .filter((access) => access.userId);
+    setFormData((prev) => ({ ...prev, locationAccess: accessList }));
+  };
+  const readProfileCountry = () => {
+    const local = localStorage.getItem("org_profile");
+    if (!local) return "";
+    try {
+      const parsed = JSON.parse(local);
+      return (
+        parsed?.location ||
+        parsed?.address?.country ||
+        ""
+      );
+    } catch {
+      return "";
+    }
+  };
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -155,6 +188,54 @@ export default function AddLocationPage() {
 
     fetchUsers();
   }, []);
+
+  useEffect(() => {
+    const loadOrgCountry = async () => {
+      try {
+        let country = readProfileCountry();
+        if (!country) {
+          const res = await settingsAPI.getOrganizationProfile();
+          country =
+            res?.data?.location ||
+            res?.data?.address?.country ||
+            res?.data?.country ||
+            "";
+        }
+        if (country) setOrgCountry(country);
+      } catch {
+        // ignore
+      }
+    };
+    loadOrgCountry();
+  }, []);
+
+  useEffect(() => {
+    if (formData.type !== "Business") return;
+    if (!orgCountry) return;
+    setFormData((prev) => ({
+      ...prev,
+      address: {
+        ...prev.address,
+        country: orgCountry,
+      },
+    }));
+  }, [formData.type, orgCountry]);
+
+  useEffect(() => {
+    if (!provideAccessToAll) return;
+    setAllUsersAccess();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allUsers]);
+
+  useEffect(() => {
+    if (!provideAccessToAll) return;
+    const allSelected =
+      allUsers.length > 0 && formData.locationAccess.length === allUsers.length;
+    if (!allSelected) {
+      setProvideAccessToAll(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.locationAccess, allUsers.length]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -222,12 +303,7 @@ export default function AddLocationPage() {
         ...prev,
         locationAccess: [
           ...prev.locationAccess,
-          {
-            userId,
-            userName: user.name || `${user.firstName} ${user.lastName}`,
-            userEmail: user.email,
-            role: extractRoleString(user.role),
-          }
+          buildAccessFromUser(user)
         ]
       }));
     }
@@ -267,6 +343,7 @@ export default function AddLocationPage() {
 
       writeLocations([...existingRows, newLocation]);
       writeLocationsEnabled(true);
+      toast.success("Location created successfully.");
       navigate('/settings/locations');
     } catch (error: any) {
       console.error('Error saving location:', error);
@@ -283,6 +360,14 @@ export default function AddLocationPage() {
   const filteredUsers = allUsers.filter(user => 
     (user.name || `${user.firstName} ${user.lastName}` || '').toLowerCase().includes(userSearch.toLowerCase()) ||
     (user.email || '').toLowerCase().includes(userSearch.toLowerCase())
+  );
+  const selectedUserIds = new Set(formData.locationAccess.map(a => String(a.userId)));
+  const availableUsers = filteredUsers.filter(u => !selectedUserIds.has(String(u._id || u.id)));
+  const parentOptions = readLocations().filter((loc: any) => loc?.name);
+  const filteredParentOptions = parentOptions.filter((loc: any) =>
+    String(loc.name || "")
+      .toLowerCase()
+      .includes(parentSearch.toLowerCase())
   );
 
   if (isLoading) {
@@ -315,44 +400,40 @@ export default function AddLocationPage() {
         <form onSubmit={handleSubmit}>
           {/* Location Type Section */}
           <div className="px-6 py-4 border-b border-gray-200">
-            <div className="grid grid-cols-3 gap-4">
-              <label className="text-sm font-medium text-gray-700 pt-2">Location Type</label>
-              <div className="col-span-2">
-                <div className="grid grid-cols-2 gap-4">
-                  <label className={`relative flex flex-col p-4 border rounded-lg cursor-pointer transition ${
-                    formData.type === "Business"
-                      ? "border-blue-500 bg-white"
-                      : "border-gray-200 hover:border-gray-300 bg-white"
+            <div className="text-sm font-medium text-gray-700 mb-3">Location Type</div>
+            <div className="grid grid-cols-2 gap-4">
+              <label className={`relative flex flex-col p-4 border rounded-lg cursor-pointer transition ${
+                formData.type === "Business"
+                  ? "border-blue-500 ring-1 ring-blue-500/20 bg-white"
+                  : "border-gray-200 hover:border-gray-300 bg-white"
+              }`}>
+                <div className="flex items-center gap-3 mb-2">
+                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                      formData.type === "Business" ? "border-blue-500" : "border-gray-300"
                   }`}>
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                          formData.type === "Business" ? "border-blue-500" : "border-gray-300"
-                      }`}>
-                          {formData.type === "Business" && <div className="w-2 h-2 rounded-full bg-blue-500"></div>}
-                      </div>
-                      <input type="radio" name="type" value="Business" checked={formData.type === "Business"} onChange={handleChange} className="hidden" />
-                      <span className="text-sm font-medium text-gray-900">Business Location</span>
-                    </div>
-                    <p className="text-[11px] leading-relaxed text-gray-500 ml-7">A Business Location represents your organization or office's operational location. It is used to record transactions, assess regional performance, and monitor stock levels for items stored at this location.</p>
-                  </label>
-                  <label className={`relative flex flex-col p-4 border rounded-lg cursor-pointer transition ${
-                    formData.type === "Warehouse"
-                      ? "border-blue-500 bg-white"
-                      : "border-gray-200 hover:border-gray-300 bg-white"
-                  }`}>
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                          formData.type === "Warehouse" ? "border-blue-500" : "border-gray-300"
-                      }`}>
-                          {formData.type === "Warehouse" && <div className="w-2 h-2 rounded-full bg-blue-500"></div>}
-                      </div>
-                      <input type="radio" name="type" value="Warehouse" checked={formData.type === "Warehouse"} onChange={handleChange} className="hidden" />
-                      <span className="text-sm font-medium text-gray-900">Warehouse Only Location</span>
-                    </div>
-                    <p className="text-[11px] leading-relaxed text-gray-500 ml-7">A Warehouse Only Location refers to where your items are stored. It helps track and monitor stock levels for items stored at this location.</p>
-                  </label>
+                      {formData.type === "Business" && <div className="w-2 h-2 rounded-full bg-blue-500"></div>}
+                  </div>
+                  <input type="radio" name="type" value="Business" checked={formData.type === "Business"} onChange={handleChange} className="hidden" />
+                  <span className="text-sm font-medium text-gray-900">Business Location</span>
                 </div>
-              </div>
+                <p className="text-[12px] leading-relaxed text-gray-500 ml-7">A Business Location represents your organization or office's operational location. It is used to record transactions, assess regional performance, and monitor stock levels for items stored at this location.</p>
+              </label>
+              <label className={`relative flex flex-col p-4 border rounded-lg cursor-pointer transition ${
+                formData.type === "Warehouse"
+                  ? "border-blue-500 ring-1 ring-blue-500/20 bg-white"
+                  : "border-gray-200 hover:border-gray-300 bg-white"
+              }`}>
+                <div className="flex items-center gap-3 mb-2">
+                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                      formData.type === "Warehouse" ? "border-blue-500" : "border-gray-300"
+                  }`}>
+                      {formData.type === "Warehouse" && <div className="w-2 h-2 rounded-full bg-blue-500"></div>}
+                  </div>
+                  <input type="radio" name="type" value="Warehouse" checked={formData.type === "Warehouse"} onChange={handleChange} className="hidden" />
+                  <span className="text-sm font-medium text-gray-900">Warehouse Only Location</span>
+                </div>
+                <p className="text-[12px] leading-relaxed text-gray-500 ml-7">A Warehouse Only Location refers to where your items are stored. It helps track and monitor stock levels for items stored at this location.</p>
+              </label>
             </div>
           </div>
 
@@ -457,6 +538,7 @@ export default function AddLocationPage() {
                   className="w-full px-3 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
                   required
                 />
+                {formData.type === "Business" && (
                 <label className="flex items-center gap-2 cursor-pointer group">
                   <div className={`w-4 h-4 rounded border transition-colors flex items-center justify-center ${isChild ? 'bg-blue-600 border-blue-600' : 'border-gray-300 group-hover:border-gray-400'}`}>
                     {isChild && <Check size={10} className="text-white" />}
@@ -473,12 +555,13 @@ export default function AddLocationPage() {
                   />
                   <span className="text-sm text-gray-600">This is a Child Location</span>
                 </label>
+                )}
               </div>
             </div>
           </div>
 
           {/* Parent Location Section */}
-          {isChild && (
+          {(isChild || formData.type === "Warehouse") && (
             <div className="px-6 py-4 border-b border-gray-200 animate-in fade-in slide-in-from-top-1 duration-200">
               <div className="grid grid-cols-3 gap-4 items-center">
                 <label className="text-sm font-medium text-red-500">Parent Location*</label>
@@ -508,14 +591,33 @@ export default function AddLocationPage() {
                             </div>
                         </div>
                         <div className="max-h-48 overflow-y-auto py-1">
-                            <button 
-                              type="button" 
-                              className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between"
-                              onClick={() => { setFormData(prev => ({ ...prev, parentLocation: "None" })); setIsParentDropdownOpen(false); }}
-                            >
-                                <span>None</span>
-                                {formData.parentLocation === "None" && <Check size={14} className="text-blue-600" />}
-                            </button>
+                            {parentOptions.length === 0 && (
+                              <button 
+                                type="button" 
+                                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between"
+                                onClick={() => { setFormData(prev => ({ ...prev, parentLocation: "None" })); setIsParentDropdownOpen(false); }}
+                              >
+                                  <span>None</span>
+                                  {formData.parentLocation === "None" && <Check size={14} className="text-blue-600" />}
+                              </button>
+                            )}
+                            {filteredParentOptions.map((loc: any) => (
+                              <button
+                                key={String(loc._id || loc.id || loc.name)}
+                                type="button"
+                                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between"
+                                onClick={() => {
+                                  setFormData(prev => ({ ...prev, parentLocation: loc.name }));
+                                  setIsParentDropdownOpen(false);
+                                }}
+                              >
+                                <span>{loc.name}</span>
+                                {formData.parentLocation === loc.name && <Check size={14} className="text-blue-600" />}
+                              </button>
+                            ))}
+                            {filteredParentOptions.length === 0 && (
+                              <div className="px-4 py-2 text-sm text-gray-400">No locations found</div>
+                            )}
                         </div>
                     </div>
                   )}
@@ -530,27 +632,28 @@ export default function AddLocationPage() {
               <label className="text-sm font-medium text-gray-700 pt-2">Address</label>
               <div className="col-span-2 space-y-3">
                 <div className="grid grid-cols-3 gap-4 items-center">
-                    <label className="text-xs text-gray-500">Attention</label>
                     <input type="text" name="address.attention" value={formData.address.attention} onChange={handleChange} placeholder="Attention" className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm" />
                 </div>
                 <div className="grid grid-cols-3 gap-4 items-center">
-                    <label className="text-xs text-gray-500">Street 1</label>
                     <input type="text" name="address.street1" value={formData.address.street1} onChange={handleChange} placeholder="Street 1" className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm" />
                 </div>
                 <div className="grid grid-cols-3 gap-4 items-center">
-                    <label className="text-xs text-gray-500">Street 2</label>
                     <input type="text" name="address.street2" value={formData.address.street2} onChange={handleChange} placeholder="Street 2" className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm" />
                 </div>
                 <div className="grid grid-cols-3 gap-4 items-center">
-                    <label className="text-xs text-gray-500">City / Zip</label>
                     <div className="col-span-2 grid grid-cols-2 gap-2">
                         <input type="text" name="address.city" value={formData.address.city} onChange={handleChange} placeholder="City" className="px-3 py-1.5 border border-gray-300 rounded text-sm" />
                         <input type="text" name="address.zipCode" value={formData.address.zipCode} onChange={handleChange} placeholder="ZIP/Postal Code" className="px-3 py-1.5 border border-gray-300 rounded text-sm" />
                     </div>
                 </div>
                 <div className="grid grid-cols-3 gap-4 items-center">
-                    <label className="text-xs text-gray-500">Country</label>
-                    <select name="address.country" value={formData.address.country} onChange={handleChange} className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm bg-white">
+                    <select
+                      name="address.country"
+                      value={formData.address.country}
+                      onChange={handleChange}
+                      disabled={formData.type === "Business"}
+                      className={`col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm ${formData.type === "Business" ? "bg-gray-50 text-gray-500 cursor-not-allowed" : "bg-white"}`}
+                    >
                         <option value="United Kingdom">United Kingdom</option>
                         <option value="United States">United States</option>
                         <option value="Uganda">Uganda</option>
@@ -559,14 +662,12 @@ export default function AddLocationPage() {
                     </select>
                 </div>
                 <div className="grid grid-cols-3 gap-4 items-center">
-                    <label className="text-xs text-gray-500">State / Phone</label>
                     <div className="col-span-2 grid grid-cols-2 gap-2">
                         <input type="text" name="address.state" value={formData.address.state} onChange={handleChange} placeholder="State/Province" className="px-3 py-1.5 border border-gray-300 rounded text-sm" />
                         <input type="text" name="address.phone" value={formData.address.phone} onChange={handleChange} placeholder="Phone" className="px-3 py-1.5 border border-gray-300 rounded text-sm" />
                     </div>
                 </div>
                 <div className="grid grid-cols-3 gap-4 items-center">
-                    <label className="text-xs text-gray-500">Fax</label>
                     <input type="text" name="address.fax" value={formData.address.fax} onChange={handleChange} placeholder="Fax Number" className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm" />
                 </div>
               </div>
@@ -634,27 +735,35 @@ export default function AddLocationPage() {
                 <label className="text-sm font-medium text-gray-700">Location Access</label>
                 <p className="text-[10px] text-gray-400 mt-1">Define who can manage this location.</p>
               </div>
-              <div className="col-span-2 space-y-4">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-gray-400"></div>
-                        <span className="text-xs font-medium text-gray-700">{formData.locationAccess.length} user(s) selected</span>
+              <div className="col-span-2">
+                <div className="border border-gray-200 rounded-lg bg-white">
+                  <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs text-gray-600">
+                      <div className="w-2 h-2 rounded-full bg-blue-600"></div>
+                      <span className="font-medium">{formData.locationAccess.length} user(s) selected</span>
                     </div>
-                    <label className="flex items-center gap-2 cursor-pointer group">
+                    {!allUsersSelected && (
+                      <label className="flex items-center gap-2 cursor-pointer group text-xs text-gray-600">
                         <div className={`w-4 h-4 rounded border transition-colors flex items-center justify-center ${provideAccessToAll ? 'bg-blue-600 border-blue-600' : 'border-gray-300 group-hover:border-gray-400'}`}>
-                            {provideAccessToAll && <Check size={10} className="text-white" />}
+                          {provideAccessToAll && <Check size={10} className="text-white" />}
                         </div>
                         <input 
-                            type="checkbox" 
-                            checked={provideAccessToAll}
-                            onChange={(e) => setProvideAccessToAll(e.target.checked)}
-                            className="hidden" 
+                          type="checkbox" 
+                          checked={provideAccessToAll}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setProvideAccessToAll(checked);
+                            if (checked) {
+                              setAllUsersAccess();
+                            }
+                          }}
+                          className="hidden" 
                         />
-                        <span className="text-xs text-gray-600">Provide access to all users</span>
-                    </label>
-                </div>
+                        <span>Provide access to all users</span>
+                      </label>
+                    )}
+                  </div>
 
-                <div className="border border-gray-200 rounded overflow-hidden">
                   <table className="w-full text-left text-sm">
                     <thead className="bg-gray-50 border-b border-gray-200">
                       <tr>
@@ -670,9 +779,9 @@ export default function AddLocationPage() {
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden border border-gray-200">
                                 {allUsers.find(u => (u._id || u.id) === access.userId)?.image ? (
-                                    <img src={allUsers.find(u => (u._id || u.id) === access.userId)?.image} alt="" className="w-full h-full object-cover" />
+                                  <img src={allUsers.find(u => (u._id || u.id) === access.userId)?.image} alt="" className="w-full h-full object-cover" />
                                 ) : (
-                                    <User size={16} className="text-gray-400" />
+                                  <User size={16} className="text-gray-400" />
                                 )}
                               </div>
                               <div>
@@ -681,73 +790,75 @@ export default function AddLocationPage() {
                               </div>
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-gray-600 text-xs text-center italic">
-                            {access.role || "No Role"}
+                          <td className="px-4 py-3 text-gray-600 text-xs italic">
+                            {access.role || "User's Role"}
                           </td>
                           <td className="px-4 py-3 text-right">
-                             <button type="button" onClick={() => handleRemoveUser(access.userId)} className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <X size={14} />
-                             </button>
+                            <button type="button" onClick={() => handleRemoveUser(access.userId)} className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <X size={14} />
+                            </button>
                           </td>
                         </tr>
                       ))}
-                      <tr>
-                        <td className="px-4 py-2" colSpan={2}>
-                           <div className="relative" ref={userDropdownRef}>
-                             <button 
+                      {!provideAccessToAll && (
+                        <tr>
+                          <td className="px-4 py-2">
+                            <div className="relative" ref={userDropdownRef}>
+                              <button 
                                 type="button"
                                 onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-                                className="w-full px-3 py-1.5 border border-gray-200 rounded text-xs text-left text-gray-400 hover:border-gray-300 transition-colors flex items-center justify-between bg-white"
-                             >
+                                className="w-full px-3 py-2 border border-gray-200 rounded text-xs text-left text-gray-500 hover:border-gray-300 transition-colors flex items-center justify-between bg-white"
+                              >
                                 <span>Select users</span>
                                 <ChevronDown size={14} />
-                             </button>
-                             {isUserDropdownOpen && (
-                                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg overflow-hidden">
+                              </button>
+                              {isUserDropdownOpen && (
+                                <div className="absolute z-50 w-full bottom-full mb-1 bg-white border border-gray-200 rounded shadow-lg overflow-hidden">
                                   <div className="p-2 border-b border-gray-100">
                                     <div className="relative">
                                       <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
                                       <input 
-                                          type="text" 
-                                          placeholder="Search" 
-                                          className="w-full pl-8 pr-3 py-1 text-xs border-none focus:ring-0" 
-                                          value={userSearch}
-                                          onChange={(e) => setUserSearch(e.target.value)}
+                                        type="text" 
+                                        placeholder="Search" 
+                                        className="w-full pl-8 pr-3 py-1 text-xs border-none focus:ring-0" 
+                                        value={userSearch}
+                                        onChange={(e) => setUserSearch(e.target.value)}
                                       />
                                     </div>
                                   </div>
                                   <div className="max-h-48 overflow-y-auto">
-                                    {filteredUsers.length > 0 ? (
-                                      filteredUsers.map(u => (
-                                        <button 
-                                          key={u._id || u.id} 
-                                          type="button" 
-                                          className="w-full px-4 py-2 text-left text-xs hover:bg-gray-50 flex items-center gap-3"
-                                          onClick={() => handleAddUser(u)}
-                                        >
-                                          <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden border border-gray-200">
-                                            {u.image ? <img src={u.image} alt="" className="w-full h-full object-cover" /> : <User size={12} className="text-gray-400" />}
-                                          </div>
-                                          <div>
-                                            <div className="font-medium text-gray-900">{u.name || `${u.firstName} ${u.lastName}`}</div>
-                                            <div className="text-[10px] text-gray-500">{u.email}</div>
-                                          </div>
-                                        </button>
-                                      ))
+                                    {availableUsers.length > 0 ? (
+                                        availableUsers.map(u => (
+                                          <button 
+                                            key={u._id || u.id} 
+                                            type="button" 
+                                            className="w-full px-4 py-2 text-left text-xs hover:bg-gray-50 flex items-center gap-3"
+                                            onClick={() => handleAddUser(u)}
+                                          >
+                                            <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden border border-gray-200">
+                                              {u.image ? <img src={u.image} alt="" className="w-full h-full object-cover" /> : <User size={12} className="text-gray-400" />}
+                                            </div>
+                                            <div>
+                                              <div className="font-medium text-gray-900">{u.name || `${u.firstName} ${u.lastName}`}</div>
+                                              <div className="text-[10px] text-gray-500">{u.email}</div>
+                                            </div>
+                                          </button>
+                                        ))
                                     ) : (
-                                      <div className="px-4 py-2 text-xs text-gray-500">No users found</div>
+                                        <div className="px-4 py-2 text-xs text-gray-500">All users selected</div>
                                     )}
+                                    </div>
                                   </div>
-                                </div>
-                             )}
-                           </div>
-                        </td>
-                        <td className="px-4 py-2">
-                           <div className="w-full h-8 flex items-center px-3 border border-gray-200 rounded text-[11px] text-gray-400 bg-gray-50/50 italic">
-                             User's Role
-                           </div>
-                        </td>
-                      </tr>
+                               )}
+                             </div>
+                          </td>
+                          <td className="px-4 py-2">
+                            <div className="w-full h-8 flex items-center px-3 border border-gray-200 rounded text-[11px] text-gray-400 bg-gray-50/50 italic">
+                              User's Role
+                            </div>
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>

@@ -11,8 +11,7 @@ export default function TDSRatesPage() {
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-semibold text-gray-900">TDS Rates</h2>
+            <div className="flex items-center justify-end">
                 <button
                     type="button"
                     className="inline-flex items-center gap-2 rounded-lg bg-[#156372] px-4 py-2 text-sm font-medium text-white hover:bg-[#0f4e5a]"
