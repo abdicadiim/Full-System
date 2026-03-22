@@ -18,6 +18,7 @@ import { transactionNumberSeriesRoutes } from "./routes/transactionNumberSeriesR
 import { locationsRoutes } from "./routes/locationsRoutes.js";
 import { customersRoutes } from "./routes/customersRoutes.js";
 import { itemsRoutes } from "./routes/itemsRoutes.js";
+import { productsRoutes } from "./routes/productsRoutes.js";
 
 if (!MONGO_URI) {
   // eslint-disable-next-line no-console
@@ -73,6 +74,7 @@ app.use("/api/transaction-number-series", transactionNumberSeriesRoutes);
 app.use("/api/locations", locationsRoutes);
 app.use("/api/customers", customersRoutes);
 app.use("/api/items", itemsRoutes);
+app.use("/api/products", productsRoutes);
 
 // Example Mongo model + routes (minimal)
 const InvoiceSchema = new mongoose.Schema(

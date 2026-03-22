@@ -18,6 +18,7 @@ import PlansCustomizeColumnsModal, { ColumnConfig } from "./components/PlansCust
 import PlansBulkActions from "./components/PlansBulkActions";
 import PlansBulkUpdateModal from "./components/PlansBulkUpdateModal";
 import NewProductModal from "./newProduct/NewProductModal";
+import { productsAPI } from "../../../services/api";
 
 type TabType = "plans" | "products";
 type ImportEntity = "plans" | "products";
@@ -54,7 +55,7 @@ type ProductRow = {
 };
 
 const PLANS_STORAGE_KEY = "inv_plans_v1";
-const PRODUCTS_STORAGE_KEY = "inv_products_v1";
+const PRODUCTS_STORAGE_KEY = "inv_products_v1"; // legacy fallback only
 const ADDONS_STORAGE_KEY = "inv_addons_v1";
 const COUPONS_STORAGE_KEY = "inv_coupons_v1";
 const PLAN_COLUMNS_STORAGE_KEY = "taban_plan_columns_v1";
@@ -245,6 +246,7 @@ export default function PlansPage() {
 
     const [plans, setPlans] = useState<PlanRow[]>([]);
     const [products, setProducts] = useState<ProductRow[]>([]);
+    const [productsLoading, setProductsLoading] = useState(false);
     const [addons, setAddons] = useState<any[]>([]);
     const [coupons, setCoupons] = useState<any[]>([]);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -267,20 +269,34 @@ export default function PlansPage() {
     const resizingRef = useRef<{ key: string; startX: number; startWidth: number } | null>(null);
 
     useEffect(() => {
-        const loadData = () => {
+        const refreshProducts = async () => {
+            setProductsLoading(true);
+            try {
+                const res: any = await productsAPI.getAll({ limit: 1000 });
+                const rows = Array.isArray(res?.data) ? res.data : [];
+                setProducts(rows.map(normalizeProduct).filter((row: ProductRow) => row.name));
+            } catch {
+                const localProducts = readLocalRows(PRODUCTS_STORAGE_KEY).map(normalizeProduct).filter((row: ProductRow) => row.name);
+                setProducts(localProducts);
+            } finally {
+                setProductsLoading(false);
+            }
+        };
+
+        const loadData = async () => {
             const localPlans = readLocalRows(PLANS_STORAGE_KEY).map(normalizePlan).filter((row: PlanRow) => row.plan);
-            const localProducts = readLocalRows(PRODUCTS_STORAGE_KEY).map(normalizeProduct).filter((row: ProductRow) => row.name);
             const localAddons = readLocalRows(ADDONS_STORAGE_KEY);
             const localCoupons = readLocalRows(COUPONS_STORAGE_KEY);
             setPlans(localPlans);
-            setProducts(localProducts);
+
+            await refreshProducts();
             setAddons(Array.isArray(localAddons) ? localAddons : []);
             setCoupons(Array.isArray(localCoupons) ? localCoupons : []);
         };
 
         loadData();
 
-        const onStorage = () => loadData();
+        const onStorage = () => { void loadData(); };
         window.addEventListener("storage", onStorage);
         return () => window.removeEventListener("storage", onStorage);
     }, []);
@@ -512,21 +528,31 @@ export default function PlansPage() {
             setPlans([...prepared, ...existing].map(normalizePlan).filter((r) => r.plan));
             toast.success(`${prepared.length} plan(s) imported`);
         } else {
-            const existing = readLocalRows(PRODUCTS_STORAGE_KEY);
-            const prepared = rows.map((row) => ({
-                id: `prod-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-                name: row.name || "",
-                description: row.description || "",
-                status: row.status || "Active",
-                plans: 0,
-                addons: 0,
-                coupons: 0,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-            }));
-            writeLocalRows(PRODUCTS_STORAGE_KEY, [...prepared, ...existing]);
-            setProducts([...prepared, ...existing].map(normalizeProduct).filter((r) => r.name));
-            toast.success(`${prepared.length} product(s) imported`);
+            void (async () => {
+                try {
+                    for (const row of rows) {
+                        const payload = {
+                            name: row.name || "",
+                            description: row.description || "",
+                            status: row.status || "Active",
+                        };
+                        // best-effort create
+                        // eslint-disable-next-line no-await-in-loop
+                        await productsAPI.create(payload);
+                    }
+                    const res: any = await productsAPI.getAll({ limit: 1000 });
+                    const list = Array.isArray(res?.data) ? res.data : [];
+                    setProducts(list.map(normalizeProduct).filter((r: ProductRow) => r.name));
+                    toast.success(`${rows.length} product(s) imported`);
+                } catch (e) {
+                    toast.error("Failed to import products");
+                } finally {
+                    setImportEntity(null);
+                    setMoreDropdownOpen(false);
+                    setSortSubMenuOpen(false);
+                }
+            })();
+            return;
         }
         setImportEntity(null);
         setMoreDropdownOpen(false);
@@ -534,7 +560,23 @@ export default function PlansPage() {
     };
 
     const handleBulkMarkStatus = (status: string) => {
-        const storageKey = tab === "plans" ? PLANS_STORAGE_KEY : PRODUCTS_STORAGE_KEY;
+        if (tab === "products") {
+            void (async () => {
+                try {
+                    await Promise.all(selectedIds.map((id) => productsAPI.update(id, { status })));
+                    const res: any = await productsAPI.getAll({ limit: 1000 });
+                    const list = Array.isArray(res?.data) ? res.data : [];
+                    setProducts(list.map(normalizeProduct).filter((r: ProductRow) => r.name));
+                    setSelectedIds([]);
+                    toast.success(`Selected products marked as ${status}`);
+                } catch {
+                    toast.error("Failed to update products");
+                }
+            })();
+            return;
+        }
+
+        const storageKey = PLANS_STORAGE_KEY;
         const currentItems = readLocalRows(storageKey);
         const updated = currentItems.map((item: any) => {
             const id = String(item.id || item._id);
@@ -544,73 +586,92 @@ export default function PlansPage() {
             return item;
         });
         writeLocalRows(storageKey, updated);
-        if (tab === "plans") {
-            setPlans(updated.map(normalizePlan).filter((r: PlanRow) => r.plan));
-        } else {
-            setProducts(updated.map(normalizeProduct).filter((r: ProductRow) => r.name));
-        }
+        setPlans(updated.map(normalizePlan).filter((r: PlanRow) => r.plan));
         setSelectedIds([]);
-        toast.success(`Selected ${tab} marked as ${status}`);
+        toast.success(`Selected plans marked as ${status}`);
     };
 
     const handleBulkDelete = () => {
         if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} selected ${tab}?`)) return;
-        const storageKey = tab === "plans" ? PLANS_STORAGE_KEY : PRODUCTS_STORAGE_KEY;
+        if (tab === "products") {
+            void (async () => {
+                try {
+                    await Promise.all(selectedIds.map((id) => productsAPI.delete(id)));
+                    const res: any = await productsAPI.getAll({ limit: 1000 });
+                    const list = Array.isArray(res?.data) ? res.data : [];
+                    setProducts(list.map(normalizeProduct).filter((r: ProductRow) => r.name));
+                    setSelectedIds([]);
+                    toast.success("Selected products deleted");
+                } catch {
+                    toast.error("Failed to delete products");
+                }
+            })();
+            return;
+        }
+
+        const storageKey = PLANS_STORAGE_KEY;
         const currentItems = readLocalRows(storageKey);
         const updated = currentItems.filter((item: any) => {
             const id = String(item.id || item._id);
             return !selectedIds.includes(id);
         });
         writeLocalRows(storageKey, updated);
-        if (tab === "plans") {
-            setPlans(updated.map(normalizePlan).filter((r: PlanRow) => r.plan));
-        } else {
-            setProducts(updated.map(normalizeProduct).filter((r: ProductRow) => r.name));
-        }
+        setPlans(updated.map(normalizePlan).filter((r: PlanRow) => r.plan));
         setSelectedIds([]);
-        toast.success(`Selected ${tab} deleted`);
+        toast.success("Selected plans deleted");
     };
 
     const handleBulkUpdate = (field: string, newValue: string) => {
-        const storageKey = tab === "plans" ? PLANS_STORAGE_KEY : PRODUCTS_STORAGE_KEY;
+        if (tab === "products") {
+            void (async () => {
+                try {
+                    await Promise.all(selectedIds.map((id) => productsAPI.update(id, { [field]: newValue })));
+                    const res: any = await productsAPI.getAll({ limit: 1000 });
+                    const list = Array.isArray(res?.data) ? res.data : [];
+                    setProducts(list.map(normalizeProduct).filter((r: ProductRow) => r.name));
+                    setBulkUpdateOpen(false);
+                    setSelectedIds([]);
+                    toast.success("Selected products updated successfully");
+                } catch {
+                    toast.error("Bulk update failed");
+                }
+            })();
+            return;
+        }
+
+        const storageKey = PLANS_STORAGE_KEY;
         const currentItems = readLocalRows(storageKey);
         const now = new Date().toISOString();
         const updated = currentItems.map((item: any) => {
             const id = String(item.id || item._id);
             if (selectedIds.includes(id)) {
-                if (tab === "plans") {
-                    if (field === "description") {
-                        return { ...item, planDescription: newValue, description: newValue, updatedAt: now };
-                    }
-                    if (field === "salesAccount") {
-                        return { ...item, account: newValue, salesAccount: newValue, updatedAt: now };
-                    }
-                    if (field === "showInWidget") {
-                        const boolValue = String(newValue).toLowerCase() === "true";
-                        return { ...item, showInWidget: boolValue, includeInWidget: boolValue, updatedAt: now };
-                    }
-                    if (field === "showInPortal") {
-                        const boolValue = String(newValue).toLowerCase() === "true";
-                        return { ...item, showInPortal: boolValue, updatedAt: now };
-                    }
-                    if (field === "price") {
-                        const parsedPrice = Number(newValue);
-                        return { ...item, price: Number.isFinite(parsedPrice) ? parsedPrice : item?.price, updatedAt: now };
-                    }
+                if (field === "description") {
+                    return { ...item, planDescription: newValue, description: newValue, updatedAt: now };
+                }
+                if (field === "salesAccount") {
+                    return { ...item, account: newValue, salesAccount: newValue, updatedAt: now };
+                }
+                if (field === "showInWidget") {
+                    const boolValue = String(newValue).toLowerCase() === "true";
+                    return { ...item, showInWidget: boolValue, includeInWidget: boolValue, updatedAt: now };
+                }
+                if (field === "showInPortal") {
+                    const boolValue = String(newValue).toLowerCase() === "true";
+                    return { ...item, showInPortal: boolValue, updatedAt: now };
+                }
+                if (field === "price") {
+                    const parsedPrice = Number(newValue);
+                    return { ...item, price: Number.isFinite(parsedPrice) ? parsedPrice : item?.price, updatedAt: now };
                 }
                 return { ...item, [field]: newValue, updatedAt: now };
             }
             return item;
         });
         writeLocalRows(storageKey, updated);
-        if (tab === "plans") {
-            setPlans(updated.map(normalizePlan).filter((r: PlanRow) => r.plan));
-        } else {
-            setProducts(updated.map(normalizeProduct).filter((r: ProductRow) => r.name));
-        }
+        setPlans(updated.map(normalizePlan).filter((r: PlanRow) => r.plan));
         setBulkUpdateOpen(false);
         setSelectedIds([]);
-        toast.success(`Selected ${tab} updated successfully`);
+        toast.success("Selected plans updated successfully");
     };
 
     const sortFields =
@@ -955,7 +1016,7 @@ export default function PlansPage() {
                                     if (tab === "plans") {
                                         navigate(`/products/plans/${row.id}`);
                                     } else {
-                                        navigate(`/products/products/${row.id}`);
+                                        navigate(`/products/products/${row.id}`, { state: { initialProduct: row } });
                                     }
                                 }}
                                 className={`text-[13px] group transition-all hover:bg-[#f8fafc] cursor-pointer h-[50px] border-b border-[#eef1f6] ${tab === "plans" ? "text-black" : ""}`}
@@ -992,13 +1053,27 @@ export default function PlansPage() {
                                 <td className="px-4 py-3 sticky right-0 bg-white/95 backdrop-blur-sm group-hover:bg-[#f8fafc] transition-colors" />
                             </tr>
                         ))}
-                        {currentRows.length === 0 && (
+                        {currentRows.length === 0 && tab === "products" && productsLoading ? (
+                            Array.from({ length: 6 }).map((_, idx) => (
+                                <tr key={`prod-skel-${idx}`} className="h-[50px] border-b border-[#eef1f6]">
+                                    <td className="px-4 py-3">
+                                        <div className="h-4 w-4 rounded bg-slate-200 animate-pulse" />
+                                    </td>
+                                    {visibleColumns.map((col) => (
+                                        <td key={col.key} className="px-4 py-3">
+                                            <div className="h-4 w-[80%] rounded bg-slate-200 animate-pulse" />
+                                        </td>
+                                    ))}
+                                    <td className="px-4 py-3 sticky right-0 bg-white/95" />
+                                </tr>
+                            ))
+                        ) : currentRows.length === 0 ? (
                             <tr>
                                 <td colSpan={visibleColumns.length + (tab === "plans" ? 3 : 2)} className="px-6 py-10 text-center text-sm text-slate-500">
                                     No {tab === "plans" ? "plans" : "products"} found.
                                 </td>
                             </tr>
-                        )}
+                        ) : null}
                     </tbody>
                 </table>
             </div>
@@ -1028,11 +1103,20 @@ export default function PlansPage() {
                 isOpen={newProductModalOpen}
                 onClose={() => setNewProductModalOpen(false)}
                 onSaveSuccess={() => {
-                    const localProducts = readLocalRows(PRODUCTS_STORAGE_KEY).map(normalizeProduct).filter((row: ProductRow) => row.name);
-                    setProducts(localProducts);
+                    void (async () => {
+                        try {
+                            const res: any = await productsAPI.getAll({ limit: 1000 });
+                            const list = Array.isArray(res?.data) ? res.data : [];
+                            setProducts(list.map(normalizeProduct).filter((row: ProductRow) => row.name));
+                        } catch {
+                            const localProducts = readLocalRows(PRODUCTS_STORAGE_KEY).map(normalizeProduct).filter((row: ProductRow) => row.name);
+                            setProducts(localProducts);
+                        }
+                    })();
                     toast.success("Products list updated");
                 }}
             />
+
         </div>
     );
 }

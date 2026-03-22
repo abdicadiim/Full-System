@@ -25,6 +25,7 @@ import { toast } from "react-toastify";
 import CommentsDrawer from "../components/CommentsDrawer";
 import PlansBulkUpdateModal from "../components/PlansBulkUpdateModal";
 import { buildCloneName } from "../../utils/cloneName";
+import { productsAPI } from "../../../../services/api";
 
 const PLANS_STORAGE_KEY = "inv_plans_v1";
 const ADDONS_STORAGE_KEY = "inv_addons_v1";
@@ -85,6 +86,7 @@ export default function PlanDetailPage() {
   const [bulkUpdateOpen, setBulkUpdateOpen] = useState(false);
   const [showPriceListCount, setShowPriceListCount] = useState(false);
   const [isSidebarMenuOpen, setIsSidebarMenuOpen] = useState(false);
+  const [productIdByName, setProductIdByName] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadPlans = () => {
@@ -128,6 +130,29 @@ export default function PlanDetailPage() {
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadProducts = async () => {
+      try {
+        const res: any = await productsAPI.getAll({ limit: 1000 });
+        const rows = Array.isArray(res?.data) ? res.data : [];
+        const map: Record<string, string> = {};
+        rows.forEach((p: any) => {
+          const key = String(p?.name || "").trim().toLowerCase();
+          const id = String(p?.id || p?._id || "").trim();
+          if (key && id) map[key] = id;
+        });
+        if (mounted) setProductIdByName(map);
+      } catch {
+        // ignore
+      }
+    };
+    void loadProducts();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -609,6 +634,7 @@ export default function PlanDetailPage() {
             const planRowId = getPlanId(plan);
             const active = planRowId === getPlanId(selectedPlan);
             const checked = selectedIds.includes(planRowId);
+            const productName = String(plan?.product || "").trim();
             return (
               <button
                 key={planRowId}
@@ -626,7 +652,12 @@ export default function PlanDetailPage() {
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
-                      <div className="truncate text-sm font-medium text-[#111827]">{planNameOf(plan)}</div>
+                      <div className="min-w-0">
+                        {productName ? (
+                          <div className="truncate text-[12px] text-[#64748b]">{productName}</div>
+                        ) : null}
+                        <div className="truncate text-sm font-medium text-[#111827]">{planNameOf(plan)}</div>
+                      </div>
                       <div className="text-right text-sm text-[#111827]">{String(plan?.unitName || "Unit")}</div>
                     </div>
                     <div className="mt-1 flex items-start justify-between gap-2">
@@ -786,7 +817,27 @@ export default function PlanDetailPage() {
                       <span className="text-[#64748b]">Plan Code</span>
                       <span className="text-[#111827]">{planCodeOf(selectedPlan)}</span>
                       <span className="text-[#64748b]">Product Name</span>
-                      <span className="text-[#2563eb]">{String(selectedPlan?.product || "-")}</span>
+                      {String(selectedPlan?.product || "").trim() ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const key = String(selectedPlan?.product || "").trim().toLowerCase();
+                            const targetId = productIdByName[key];
+                            if (targetId) {
+                              navigate(`/products/products/${targetId}`);
+                            } else {
+                              navigate("/products/plans?tab=products");
+                              toast.info("Open Products and select the product.");
+                            }
+                          }}
+                          className="text-left text-[#2563eb] hover:underline"
+                          title="Open product details"
+                        >
+                          {String(selectedPlan?.product || "-")}
+                        </button>
+                      ) : (
+                        <span className="text-[#2563eb]">-</span>
+                      )}
                       <span className="text-[#64748b]">Creation Date</span>
                       <span className="text-[#111827]">{formatDate(String(selectedPlan?.createdAt || selectedPlan?.createdOn || ""))}</span>
                       <span className="text-[#64748b]">Billing Cycles</span>

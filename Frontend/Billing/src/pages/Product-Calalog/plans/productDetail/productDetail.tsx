@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, CirclePlus, Download, MoreVertical, Pencil, Upload, X } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import NewProductModal from "../newProduct/NewProductModal";
+import { productsAPI } from "../../../../services/api";
 
 const PRODUCTS_STORAGE_KEY = "inv_products_v1";
 const PLANS_STORAGE_KEY = "inv_plans_v1";
@@ -76,11 +77,18 @@ const toCsv = (headers: string[], rows: string[][]) => {
 export default function ProductDetailPage() {
   const navigate = useNavigate();
   const { productId } = useParams();
+  const location = useLocation();
   const actionsRef = useRef<HTMLDivElement>(null);
   const sidebarFilterRef = useRef<HTMLDivElement>(null);
   const sidebarMoreRef = useRef<HTMLDivElement>(null);
+  const mountedRef = useRef(true);
 
   const [products, setProducts] = useState<any[]>([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [initialSelectedProduct, setInitialSelectedProduct] = useState<any | null>(() => {
+    const state: any = (location as any)?.state;
+    return state?.initialProduct ?? null;
+  });
   const [plans, setPlans] = useState<any[]>([]);
   const [addons, setAddons] = useState<any[]>([]);
   const [coupons, setCoupons] = useState<any[]>([]);
@@ -104,18 +112,47 @@ export default function ProductDetailPage() {
     setShowTabCount((prev) => ({ ...prev, [tab]: true }));
   };
 
+  const refreshProducts = async (silent = false) => {
+    if (!silent && mountedRef.current) setProductsLoading(true);
+    try {
+      const res: any = await productsAPI.getAll({ limit: 1000 });
+      const rows = Array.isArray(res?.data) ? res.data : [];
+      if (mountedRef.current) setProducts(rows);
+    } catch {
+      if (mountedRef.current) setProducts(readRows(PRODUCTS_STORAGE_KEY));
+    } finally {
+      if (!silent && mountedRef.current) setProductsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const load = () => {
-      setProducts(readRows(PRODUCTS_STORAGE_KEY));
+    mountedRef.current = true;
+    const state: any = (location as any)?.state;
+    if (state?.initialProduct) {
+      setInitialSelectedProduct(state.initialProduct);
+    }
+    const load = async () => {
+      await refreshProducts(true);
+
       setPlans(readRows(PLANS_STORAGE_KEY));
       setAddons(readRows(ADDONS_STORAGE_KEY));
       setCoupons(readRows(COUPONS_STORAGE_KEY));
     };
-    load();
-    const onStorage = () => load();
+    void load();
+    const onStorage = () => { void load(); };
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    return () => {
+      mountedRef.current = false;
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
+
+  useEffect(() => {
+    const state: any = (location as any)?.state;
+    if (state?.initialProduct) {
+      setInitialSelectedProduct(state.initialProduct);
+    }
+  }, [location.state]);
 
   useEffect(() => {
     const onOutside = (event: MouseEvent) => {
@@ -135,8 +172,13 @@ export default function ProductDetailPage() {
   }, []);
 
   const selectedProduct = useMemo(() => {
-    return products.find((row) => getId(row) === productId) || products[0] || null;
-  }, [products, productId]);
+    const fromList = products.find((row) => getId(row) === productId);
+    if (fromList) return fromList;
+    const fromState = initialSelectedProduct && getId(initialSelectedProduct) === String(productId || "") ? initialSelectedProduct : null;
+    if (fromState) return fromState;
+    if (!productId) return products[0] || null;
+    return null;
+  }, [products, productId, initialSelectedProduct]);
 
   const selectedProductName = String(selectedProduct?.name || "").trim();
   const emailTemplateStorageKey = selectedProduct ? `taban_product_email_templates_${getId(selectedProduct)}` : "";
@@ -190,12 +232,7 @@ export default function ProductDetailPage() {
     });
   }, [products, productFilter]);
 
-  const writeProducts = (nextRows: any[]) => {
-    localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(nextRows));
-    setProducts(nextRows);
-  };
-
-  const handleToggleStatus = () => {
+  const handleToggleStatus = async () => {
     if (!selectedProduct) return;
     const currentlyActive = isActive(selectedProduct);
     const hasActiveAssociations =
@@ -209,21 +246,19 @@ export default function ProductDetailPage() {
     }
     const targetId = getId(selectedProduct);
     const nextStatus = currentlyActive ? "Inactive" : "Active";
-    const nextRows = products.map((row) =>
-      getId(row) === targetId
-        ? {
-            ...row,
-            status: nextStatus,
-            updatedAt: new Date().toISOString(),
-          }
-        : row
-    );
-    writeProducts(nextRows);
-    setActionsOpen(false);
-    toast.success(`Product marked as ${nextStatus.toLowerCase()}`);
+
+    try {
+      const res: any = await productsAPI.update(targetId, { status: nextStatus });
+      if (res?.success === false) throw new Error(res?.message || "Failed to update product");
+      await refreshProducts(true);
+      setActionsOpen(false);
+      toast.success(`Product marked as ${nextStatus.toLowerCase()}`);
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to update product");
+    }
   };
 
-  const handleDeleteProduct = () => {
+  const handleDeleteProduct = async () => {
     if (!selectedProduct) return;
     const hasTransactions = productPlans.length > 0 || productAddons.length > 0 || productCoupons.length > 0;
     if (hasTransactions) {
@@ -233,14 +268,22 @@ export default function ProductDetailPage() {
     }
     if (!window.confirm("Delete this product?")) return;
     const targetId = getId(selectedProduct);
-    const nextRows = products.filter((row) => getId(row) !== targetId);
-    writeProducts(nextRows);
-    setActionsOpen(false);
-    toast.success("Product deleted");
-    if (nextRows.length > 0) {
-      navigate(`/products/products/${getId(nextRows[0])}`);
-    } else {
-      navigate("/products/plans?tab=products");
+
+    try {
+      const res: any = await productsAPI.delete(targetId);
+      if (res?.success === false) throw new Error(res?.message || "Failed to delete product");
+      await refreshProducts(true);
+      setActionsOpen(false);
+      toast.success("Product deleted");
+
+      const remaining = products.filter((row) => getId(row) !== targetId);
+      if (remaining.length > 0) {
+        navigate(`/products/products/${getId(remaining[0])}`);
+      } else {
+        navigate("/products/plans?tab=products");
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to delete product");
     }
   };
 
@@ -273,7 +316,7 @@ export default function ProductDetailPage() {
     return (
       <div className="min-h-[calc(100vh-100px)] rounded-lg border border-[#d8deea] bg-white p-8">
         <h1 className="text-2xl font-semibold text-[#111827]">Products</h1>
-        <p className="mt-2 text-sm text-[#64748b]">No products found.</p>
+        <p className="mt-2 text-sm text-[#64748b]">{productsLoading ? "Loading product..." : "No products found."}</p>
         <button
           type="button"
           onClick={() => navigate("/products/products/new")}
@@ -286,8 +329,8 @@ export default function ProductDetailPage() {
   }
 
   return (
-    <div className="relative flex min-h-[calc(100vh-100px)] overflow-hidden rounded-lg border border-[#d8deea] bg-[#f6f7fb]">
-      <aside className="flex w-[360px] flex-col border-r border-[#d8deea] bg-white">
+    <div className="flex min-h-[calc(100vh-100px)] w-full overflow-hidden bg-white">
+      <aside className="flex w-[360px] flex-col border-r border-gray-200 bg-white">
         <div className="flex items-center justify-between border-b border-[#e5e7eb] px-4 py-3">
           <div className="relative" ref={sidebarFilterRef}>
             <button
@@ -321,7 +364,7 @@ export default function ProductDetailPage() {
             <button
               type="button"
               onClick={() => navigate("/products/products/new")}
-              className="inline-flex h-8 w-8 items-center justify-center rounded bg-[#22b573] text-white hover:opacity-90"
+              className="inline-flex h-8 w-8 items-center justify-center rounded bg-[#1b5e6a] text-white hover:opacity-90"
             >
               +
             </button>
@@ -371,8 +414,8 @@ export default function ProductDetailPage() {
               <button
                 key={getId(row)}
                 type="button"
-                onClick={() => navigate(`/products/products/${getId(row)}`)}
-                className={`w-full border-b border-[#eef1f6] px-4 py-3 text-left ${active ? "bg-[#f3f6ff]" : "hover:bg-[#f8fafc]"}`}
+                onClick={() => navigate(`/products/products/${getId(row)}`, { state: { initialProduct: row } })}
+                className={`w-full border-b border-gray-100 px-4 py-3 text-left ${active ? "bg-gray-100" : "hover:bg-gray-50"}`}
               >
                 <div className="text-[14px] font-medium text-[#1e293b]">{row?.name || "-"}</div>
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -386,15 +429,15 @@ export default function ProductDetailPage() {
         </div>
       </aside>
 
-      <main className="flex flex-1 flex-col">
-        <div className="flex items-center justify-between border-b border-[#e5e7eb] bg-white px-4 py-3">
-          <h1 className="text-[24px] font-semibold text-[#111827]">{selectedProduct.name}</h1>
+      <main className="flex flex-1 flex-col bg-white overflow-auto">
+        <div className="flex items-center justify-between border-b border-gray-100 bg-white px-6 py-6 shadow-sm">
+          <h1 className="text-[20px] font-semibold text-[#111827]">{selectedProduct.name}</h1>
           <button type="button" onClick={() => navigate("/products/plans?tab=products")} className="text-[#ef4444] hover:text-[#dc2626]">
             <X size={18} />
           </button>
         </div>
 
-        <div className="flex items-center gap-4 border-b border-[#e5e7eb] bg-white px-4 py-2">
+        <div className="flex items-center gap-4 border-b border-gray-100 bg-white px-6 py-3">
           <button
             type="button"
             onClick={() => setEditProductOpen(true)}
@@ -480,9 +523,9 @@ export default function ProductDetailPage() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="rounded-xl border border-[#d8deea] bg-white p-5 shadow-[0_8px_18px_rgba(15,23,42,0.05)]">
-            <span className={`inline-block rounded px-3 py-1 text-xs font-semibold ${isActive(selectedProduct) ? "bg-[#228b22] text-white" : "bg-[#6b7280] text-white"}`}>
+        <div className="flex-1 p-6">
+          <div className="rounded-lg border border-gray-100 bg-white p-6 shadow-sm">
+            <span className={`inline-block rounded px-3 py-1 text-xs font-semibold ${isActive(selectedProduct) ? "bg-[#1b5e6a] text-white" : "bg-[#6b7280] text-white"}`}>
               {selectedProduct.status || "Active"}
             </span>
             <div className="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -497,7 +540,7 @@ export default function ProductDetailPage() {
             </div>
           </div>
 
-          <div className="mt-3 rounded-xl border border-[#d8deea] bg-white shadow-[0_8px_18px_rgba(15,23,42,0.05)]">
+          <div className="mt-4 rounded-lg border border-gray-100 bg-white shadow-sm">
             <div className="border-b border-[#e5e7eb] px-5 pt-3">
               <div className="flex items-center gap-6">
                 <button type="button" onClick={() => setActiveTab("details")} className={`border-b-2 pb-3 text-sm ${activeTab === "details" ? "border-[#3b82f6] font-semibold text-[#111827]" : "border-transparent text-[#475569]"}`}>
@@ -577,7 +620,7 @@ export default function ProductDetailPage() {
                           const rowId = getId(row);
                           const status = String(row.status || "Active");
                           const statusClass =
-                            status.toLowerCase() === "active" ? "text-[#16a34a]" : "text-[#64748b]";
+                            status.toLowerCase() === "active" ? "text-[#1b5e6a]" : "text-[#64748b]";
                           return (
                             <tr key={rowId} className="border-b border-[#e3e7f2] text-[14px] text-[#111827]">
                               <td className="px-4 py-3">
@@ -658,7 +701,7 @@ export default function ProductDetailPage() {
                           const rowId = getId(row);
                           const status = String(row.status || "Active");
                           const statusClass =
-                            status.toLowerCase() === "active" ? "text-[#16a34a]" : "text-[#64748b]";
+                            status.toLowerCase() === "active" ? "text-[#1b5e6a]" : "text-[#64748b]";
                           return (
                             <tr key={rowId} className="border-b border-[#e3e7f2] text-[14px] text-[#111827]">
                               <td className="px-4 py-3">
@@ -739,7 +782,7 @@ export default function ProductDetailPage() {
                           const rowId = getId(row);
                           const status = String(row.status || "Active");
                           const statusClass =
-                            status.toLowerCase() === "active" ? "text-[#16a34a]" : "text-[#64748b]";
+                            status.toLowerCase() === "active" ? "text-[#1b5e6a]" : "text-[#64748b]";
                           return (
                             <tr key={rowId} className="border-b border-[#e3e7f2] text-[14px] text-[#111827]">
                               <td className="px-4 py-3">{row.couponName || "-"}</td>
@@ -783,7 +826,15 @@ export default function ProductDetailPage() {
         initialProduct={selectedProduct}
         onClose={() => setEditProductOpen(false)}
         onSaveSuccess={() => {
-          setProducts(readRows(PRODUCTS_STORAGE_KEY));
+          void (async () => {
+            try {
+              const res: any = await productsAPI.getAll({ limit: 1000 });
+              const rows = Array.isArray(res?.data) ? res.data : [];
+              setProducts(rows);
+            } catch {
+              setProducts(readRows(PRODUCTS_STORAGE_KEY));
+            }
+          })();
         }}
       />
 
@@ -829,7 +880,7 @@ export default function ProductDetailPage() {
                     setEmailTemplatesOpen(false);
                     toast.success("Email templates saved");
                   }}
-                  className="rounded bg-[#22b573] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+                  className="rounded bg-[#1b5e6a] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
                 >
                   Save
                 </button>

@@ -3,8 +3,7 @@ import { HelpCircle, Info } from "lucide-react";
 import { toast } from "react-toastify";
 import Modal from "../../../../components/ui/Modal";
 import { useOrganizationBranding } from "../../../../hooks/useOrganizationBranding";
-
-const PRODUCTS_STORAGE_KEY = "inv_products_v1";
+import { productsAPI } from "../../../../services/api";
 
 interface NewProductModalProps {
     isOpen: boolean;
@@ -79,12 +78,8 @@ export default function NewProductModal({
         }
         setIsSaving(true);
         try {
-            const raw = localStorage.getItem(PRODUCTS_STORAGE_KEY);
-            const rows = raw ? JSON.parse(raw) : [];
-            const list = Array.isArray(rows) ? rows : [];
             const editingId = String(initialProduct?.id || initialProduct?._id || "");
-            const record = {
-                id: isEditMode ? editingId : `prod-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+            const record: any = {
                 name: form.name.trim(),
                 description: form.description.trim(),
                 emailRecipients: form.emailRecipients.trim(),
@@ -93,17 +88,17 @@ export default function NewProductModal({
                 prefix: form.autoGenerateSubscriptionNumbers ? form.prefix : "",
                 nextNumber: form.autoGenerateSubscriptionNumbers ? form.nextNumber : "",
                 status: String(initialProduct?.status || "Active"),
-                createdAt: String(initialProduct?.createdAt || new Date().toISOString()),
-                updatedAt: new Date().toISOString(),
             };
-            const nextRows = isEditMode
-                ? list.map((row: any) => {
-                    const rowId = String(row?.id || row?._id || "");
-                    return rowId === editingId ? { ...row, ...record } : row;
-                })
-                : [record, ...list];
-            localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(nextRows));
-            toast.success(isEditMode ? "Product updated" : "Product saved");
+
+            if (isEditMode && editingId) {
+                const res: any = await productsAPI.update(editingId, record);
+                if (res?.success === false) throw new Error(res?.message || "Failed to update product");
+                toast.success("Product updated");
+            } else {
+                const res: any = await productsAPI.create(record);
+                if (res?.success === false) throw new Error(res?.message || "Failed to create product");
+                toast.success("Product saved");
+            }
             onSaveSuccess?.();
             onClose();
         } catch (error) {

@@ -643,6 +643,16 @@ export const itemsAPI = {
   delete: async (id: string) => itemsBase.delete(String(id)),
 };
 
+const productsBase = resource("/products");
+export const productsAPI = {
+  getAll: async (params?: Record<string, any>) => productsBase.getAll(params),
+  list: async (params?: Record<string, any>) => productsAPI.getAll(params),
+  getById: async (id: string) => productsBase.getById(String(id)),
+  create: async (data: any) => productsBase.create(data),
+  update: async (id: string, data: any) => productsBase.update(String(id), data),
+  delete: async (id: string) => productsBase.delete(String(id)),
+};
+
 export const plansAPI = {
   getAll: async (params?: Record<string, any>) => {
     const query = String(params?.search || params?.q || "").trim().toLowerCase();
