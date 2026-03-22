@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { ChevronDown, Plus, Clock, MoreHorizontal, ArrowUpDown } from 'lucide-react';
-import NewApprovalForm from './NewApprovalForm'; // Importing the form
+import NewApprovalForm from './NewApproval/NewApprovalFom'; // Importing the form
+import StartTimerModal from '../StartTimerModal';
 
 const Approvals = () => {
   const [showForm, setShowForm] = useState(false);
+  const [showTimerModal, setShowTimerModal] = useState(false);
 
   if (showForm) {
     return <NewApprovalForm onClose={() => setShowForm(false)} />;
@@ -19,7 +21,10 @@ const Approvals = () => {
         </div>
         
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 rounded text-sm font-medium hover:bg-slate-50">
+          <button
+            onClick={() => setShowTimerModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 rounded text-sm font-medium hover:bg-slate-50"
+          >
             <Clock size={14} /> Start
           </button>
           <div className="flex shadow-sm">
@@ -69,6 +74,11 @@ const Approvals = () => {
           <p className="text-slate-300 text-xl font-light">There are no Approvals</p>
         </div>
       </div>
+
+      <StartTimerModal
+        open={showTimerModal}
+        onClose={() => setShowTimerModal(false)}
+      />
     </div>
   );
 };

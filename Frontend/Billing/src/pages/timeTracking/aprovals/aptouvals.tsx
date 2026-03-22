@@ -7,6 +7,7 @@ import {
   AlertTriangle, Clock, CheckCircle, XCircle 
 } from "lucide-react";
 import { toast } from "react-toastify";
+import StartTimerModal from "../StartTimerModal";
 
 interface ApprovalEntry {
   id: string;
@@ -52,6 +53,7 @@ export default function Aptouvals() {
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showNewDropdown, setShowNewDropdown] = useState(false);
+  const [showTimerModal, setShowTimerModal] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
@@ -156,6 +158,7 @@ export default function Aptouvals() {
             </div>
 
             <button
+              onClick={() => setShowTimerModal(true)}
               className="flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 transition-colors"
             >
               <Clock size={16} />
@@ -393,6 +396,10 @@ export default function Aptouvals() {
           </div>
         )}
       </div>
+      <StartTimerModal
+        open={showTimerModal}
+        onClose={() => setShowTimerModal(false)}
+      />
     </div>
   );
 }

@@ -57,7 +57,7 @@ export default function ProjectsCustomizeColumnsModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex h-7 w-7 items-center justify-center rounded border border-gray-300 text-gray-500 hover:bg-gray-50"
+              className="flex h-7 w-7 items-center justify-center rounded text-gray-500 hover:bg-gray-50"
               aria-label="Close"
             >
               <X size={14} />
@@ -119,7 +119,7 @@ export default function ProjectsCustomizeColumnsModal({
               onSave(draftSelected);
               onClose();
             }}
-            className="rounded-md bg-[#16a34a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#15803d]"
+            className="rounded-md bg-[#156372] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0f4f5c]"
           >
             Save
           </button>

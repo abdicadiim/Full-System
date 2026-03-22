@@ -3,9 +3,13 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { 
   X, Search, ChevronDown, Download, Upload, 
   List, LayoutGrid, SlidersHorizontal, 
-  MoreHorizontal, Plus, Clock, Users, Calendar, Mail, CheckSquare, FileText, XCircle, CheckCircle2 
+  MoreHorizontal, Plus, Clock, Pause, Square, Trash2, Users, Calendar, Mail, CheckSquare, FileText, XCircle, CheckCircle2 
 } from "lucide-react";
 import { toast } from "react-toastify";
+import { projectsAPI, timeEntriesAPI } from "../../../services/api";
+import { getCurrentUser } from "../../../services/auth";
+import StartTimerModal from "../StartTimerModal";
+import { calculateElapsedTime } from "../../../lib/timeTracking/timerService";
 
 interface CustomerApprovalEntry {
   id: string;
@@ -48,6 +52,13 @@ export default function CustomerApproval() {
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showNewDropdown, setShowNewDropdown] = useState(false);
+  const [showTimerModal, setShowTimerModal] = useState(false);
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [timerNotes, setTimerNotes] = useState("");
+  const [selectedProjectForTimer, setSelectedProjectForTimer] = useState("");
+  const [selectedTaskForTimer, setSelectedTaskForTimer] = useState("");
+  const [isBillable, setIsBillable] = useState(true);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
@@ -91,6 +102,150 @@ export default function CustomerApproval() {
     });
   }, [approvals, searchTerm, selectedView]);
 
+  const selectedApproval = useMemo(() => {
+    if (selectedApprovals.length !== 1) return null;
+    return filteredApprovals.find((approval) => approval.id === selectedApprovals[0]) || null;
+  }, [filteredApprovals, selectedApprovals]);
+
+  useEffect(() => {
+    const syncTimer = () => {
+      const savedTimerState = localStorage.getItem("timerState");
+      if (!savedTimerState) {
+        setIsTimerRunning(false);
+        setElapsedTime(0);
+        setTimerNotes("");
+        setSelectedProjectForTimer("");
+        setSelectedTaskForTimer("");
+        setIsBillable(true);
+        return;
+      }
+
+      try {
+        const timerState = JSON.parse(savedTimerState);
+        setIsTimerRunning(Boolean(timerState.isTimerRunning));
+        setElapsedTime(calculateElapsedTime(timerState));
+        setTimerNotes(timerState.timerNotes || "");
+        setSelectedProjectForTimer(timerState.associatedProject || timerState.selectedProjectForTimer || "");
+        setSelectedTaskForTimer(timerState.selectedTaskForTimer || "");
+        setIsBillable(timerState.isBillable !== undefined ? timerState.isBillable : true);
+      } catch {
+        setIsTimerRunning(false);
+        setElapsedTime(0);
+        setTimerNotes("");
+        setSelectedProjectForTimer("");
+        setSelectedTaskForTimer("");
+        setIsBillable(true);
+      }
+    };
+
+    syncTimer();
+    window.addEventListener("timerStateUpdated", syncTimer);
+    window.addEventListener("storage", syncTimer);
+    const interval = window.setInterval(syncTimer, 1000);
+
+    return () => {
+      window.removeEventListener("timerStateUpdated", syncTimer);
+      window.removeEventListener("storage", syncTimer);
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  const formatTime = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
+
+  const handlePauseTimer = () => {
+    const savedTimerState = localStorage.getItem("timerState");
+    if (!savedTimerState) return;
+
+    try {
+      const timerState = JSON.parse(savedTimerState);
+      const finalElapsedTime = calculateElapsedTime(timerState);
+      const updatedState = {
+        ...timerState,
+        elapsedTime: finalElapsedTime,
+        pausedElapsedTime: finalElapsedTime,
+        isTimerRunning: false,
+        lastUpdated: Date.now(),
+      };
+      delete updatedState.startTime;
+      localStorage.setItem("timerState", JSON.stringify(updatedState));
+      window.dispatchEvent(new CustomEvent("timerStateUpdated"));
+      toast.success("The timer has been paused.");
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleStopTimer = async () => {
+    const savedTimerState = localStorage.getItem("timerState");
+    if (!savedTimerState) return;
+
+    let timerState: any = {};
+    try {
+      timerState = JSON.parse(savedTimerState);
+    } catch {
+      timerState = {};
+    }
+
+    const finalElapsedTime = calculateElapsedTime(timerState);
+    if (finalElapsedTime > 0) {
+      try {
+        const projectsResponse = await projectsAPI.getAll();
+        const projects = Array.isArray(projectsResponse) ? projectsResponse : (projectsResponse?.data || []);
+        const projectName = selectedProjectForTimer || timerState.associatedProject || timerState.selectedProjectForTimer || "";
+        const projectObj = projects.find((project: any) => (project.name || project.projectName) === projectName);
+        const currentUser = getCurrentUser();
+
+        if (projectObj && currentUser) {
+          const hoursMatch = formatTime(finalElapsedTime).match(/(\d+):(\d+):(\d+)/);
+          const hours = hoursMatch ? Math.floor(finalElapsedTime / 3600) : 0;
+          const minutes = hoursMatch ? Math.floor((finalElapsedTime % 3600) / 60) : 0;
+
+          await timeEntriesAPI.create({
+            project: projectObj.id || projectObj._id,
+            user: currentUser.id,
+            date: new Date().toISOString(),
+            hours,
+            minutes,
+            description: timerNotes || timerState.timerNotes || "",
+            billable: timerState.isBillable !== undefined ? timerState.isBillable : isBillable,
+            task: selectedTaskForTimer || timerState.selectedTaskForTimer || "",
+          });
+
+          window.dispatchEvent(new CustomEvent("timeEntryUpdated"));
+          toast.success("Time entry created successfully!");
+        }
+      } catch (error) {
+        console.error("Error saving timer entry:", error);
+        toast.error("Failed to save time entry");
+      }
+    }
+
+    setIsTimerRunning(false);
+    setElapsedTime(0);
+    setTimerNotes("");
+    setSelectedProjectForTimer("");
+    setSelectedTaskForTimer("");
+    setIsBillable(true);
+    localStorage.removeItem("timerState");
+    window.dispatchEvent(new CustomEvent("timerStateUpdated"));
+  };
+
+  const handleDeleteTimer = () => {
+    setIsTimerRunning(false);
+    setElapsedTime(0);
+    setTimerNotes("");
+    setSelectedProjectForTimer("");
+    setSelectedTaskForTimer("");
+    setIsBillable(true);
+    localStorage.removeItem("timerState");
+    window.dispatchEvent(new CustomEvent("timerStateUpdated"));
+  };
+
   const handleBulkStatusUpdate = (status: 'Approved' | 'Rejected') => {
     const updated = approvals.map(app => 
       selectedApprovals.includes(app.id) ? { ...app, status } : app
@@ -108,10 +263,10 @@ export default function CustomerApproval() {
           <div ref={dropdownRef} className="relative">
             <button
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-              className="flex items-center gap-2 border-none bg-transparent p-0 text-[32px] font-semibold text-gray-800 hover:text-gray-900 cursor-pointer"
+              className="flex items-center gap-1.5 border-none bg-transparent p-0 text-[26px] font-semibold text-gray-800 hover:text-gray-900 cursor-pointer"
             >
               {selectedViewLabel}
-              <ChevronDown className={`transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} size={24} />
+              <ChevronDown className={`transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} size={12} />
             </button>
             {isDropdownOpen && (
               <div className="absolute left-0 top-full z-[1200] mt-2 min-w-[240px] rounded-md border border-gray-200 bg-white py-2 shadow-xl">
@@ -144,17 +299,50 @@ export default function CustomerApproval() {
               </button>
             </div>
 
-            <button
-              className="flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 transition-colors"
-            >
-              <Clock size={16} />
-              Start
-            </button>
+            {!(isTimerRunning || elapsedTime > 0) && (
+              <button
+                onClick={() => setShowTimerModal(true)}
+                className="flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 transition-colors"
+              >
+                <Clock size={16} />
+                Start
+              </button>
+            )}
+
+            {(isTimerRunning || elapsedTime > 0) && (
+              <div className="flex items-center overflow-hidden rounded-md border border-gray-200 bg-white">
+                <div className="flex h-9 items-center gap-1.5 border-r border-gray-200 px-3 text-xs font-medium text-gray-800">
+                  <Clock size={13} />
+                  {formatTime(elapsedTime)}
+                </div>
+                <button
+                  onClick={isTimerRunning ? handlePauseTimer : () => setShowTimerModal(true)}
+                  className="flex h-9 w-8 items-center justify-center border-none border-r border-gray-200 bg-white text-[#2563eb] hover:bg-gray-50"
+                  title={isTimerRunning ? "Pause timer" : "Resume timer"}
+                >
+                  {isTimerRunning ? <Pause size={13} /> : <Plus size={13} />}
+                </button>
+                <button
+                  onClick={handleStopTimer}
+                  className="flex h-9 w-8 items-center justify-center border-none border-r border-gray-200 bg-white text-red-500 hover:bg-gray-50"
+                  title="Stop timer"
+                >
+                  <Square size={12} />
+                </button>
+                <button
+                  onClick={handleDeleteTimer}
+                  className="flex h-9 w-8 items-center justify-center border-none bg-white text-gray-500 hover:bg-gray-50"
+                  title="Delete timer"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            )}
 
             <div ref={newDropdownRef} className="relative flex items-center">
               <button
                 onClick={() => navigate('/time-tracking/customer-approvals/new')}
-                className="flex h-9 items-center gap-1.5 rounded-l-md border-none bg-[#408dfb] px-3.5 text-sm font-semibold text-white hover:bg-[#307deb] cursor-pointer"
+                className="flex h-9 items-center gap-1.5 rounded-l-md border-none bg-[#156372] px-3.5 text-sm font-semibold text-white hover:bg-[#0f4f5c] cursor-pointer"
               >
                 <Plus size={15} />
                 New
@@ -164,7 +352,7 @@ export default function CustomerApproval() {
                   e.stopPropagation();
                   setShowNewDropdown(!showNewDropdown);
                 }}
-                className="flex h-9 w-9 items-center justify-center rounded-r-md border-none border-l border-white/20 bg-[#408dfb] text-white hover:bg-[#307deb] cursor-pointer"
+                className="flex h-9 w-9 items-center justify-center rounded-r-md border-none border-l border-white/20 bg-[#156372] text-white hover:bg-[#0f4f5c] cursor-pointer"
               >
                 <ChevronDown size={14} />
               </button>
@@ -400,6 +588,12 @@ export default function CustomerApproval() {
           </div>
         )}
       </div>
+      <StartTimerModal
+        open={showTimerModal}
+        onClose={() => setShowTimerModal(false)}
+        defaultProjectName={selectedApproval?.projectName || ""}
+        defaultTaskName={selectedApproval?.description || "Approval Review"}
+      />
     </div>
   );
 }

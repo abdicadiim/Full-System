@@ -4,6 +4,7 @@ import {
   Bell,
   Check,
   ChevronDown,
+  Clock,
   Menu,
   Plus,
   Search,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 import { useUser } from "../../lib/auth/UserContext";
 import { useSettings } from "../../lib/settings/SettingsContext";
+import { calculateElapsedTime } from "../../lib/timeTracking/timerService";
 
 function Header({ onToggleSidebar }) {
   const { user, logout } = useUser();
@@ -24,7 +26,8 @@ function Header({ onToggleSidebar }) {
   const [openSearchScopeDropdown, setOpenSearchScopeDropdown] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [searchScope, setSearchScope] = useState("");
-
+  const [runningTimer, setRunningTimer] = useState(null);
+  const [runningElapsed, setRunningElapsed] = useState(0);
   const menuRef = useRef(null);
   const quickCreateRef = useRef(null);
   const searchDropdownRef = useRef(null);
@@ -161,6 +164,37 @@ function Header({ onToggleSidebar }) {
     return () => window.removeEventListener("keydown", onSlashShortcut);
   }, []);
 
+  useEffect(() => {
+    const syncTimer = () => {
+      const savedTimerState = localStorage.getItem("timerState");
+      if (!savedTimerState) {
+        setRunningTimer(null);
+        setRunningElapsed(0);
+        return;
+      }
+
+      try {
+        const timerState = JSON.parse(savedTimerState);
+        setRunningTimer(timerState);
+        setRunningElapsed(calculateElapsedTime(timerState));
+      } catch {
+        setRunningTimer(null);
+        setRunningElapsed(0);
+      }
+    };
+
+    syncTimer();
+    window.addEventListener("timerStateUpdated", syncTimer);
+    window.addEventListener("storage", syncTimer);
+    const interval = window.setInterval(syncTimer, 1000);
+
+    return () => {
+      window.removeEventListener("timerStateUpdated", syncTimer);
+      window.removeEventListener("storage", syncTimer);
+      window.clearInterval(interval);
+    };
+  }, []);
+
   function handleLogout() {
     logout();
     navigate("/login", { replace: true });
@@ -170,7 +204,7 @@ function Header({ onToggleSidebar }) {
   const isLightAppearance = settings?.branding?.appearance === "light";
 
   return (
-    <div className="sticky top-0 z-40 bg-white pt-2">
+    <div className="sticky top-0 z-40 bg-white">
       <header className="relative rounded-2xl shadow-md" style={{ backgroundColor: headerBg }}>
       <div className="flex h-14 w-full items-center justify-between gap-2 px-3 sm:px-5">
         <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -280,6 +314,25 @@ function Header({ onToggleSidebar }) {
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2">
+          {runningTimer?.isTimerRunning && (
+            <button
+              type="button"
+              onClick={() => navigate("/time-tracking/projects")}
+              className={[
+                "hidden sm:inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-[11px] font-semibold transition",
+                isLightAppearance
+                  ? "border-slate-200 bg-white/90 text-slate-700 hover:bg-slate-100"
+                  : "border-white/20 bg-white/10 text-white hover:bg-white/20",
+              ].join(" ")}
+              title="Open time tracking"
+            >
+              <Clock className="h-3.5 w-3.5" />
+              <span>
+                {`${String(Math.floor(runningElapsed / 3600)).padStart(2, "0")}:${String(Math.floor((runningElapsed % 3600) / 60)).padStart(2, "0")}:${String(runningElapsed % 60).padStart(2, "0")}`}
+              </span>
+            </button>
+          )}
+
           <div className="relative" ref={quickCreateRef}>
             <button
               type="button"

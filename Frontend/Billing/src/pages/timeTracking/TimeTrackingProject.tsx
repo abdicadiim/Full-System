@@ -7,11 +7,13 @@ import NewCustomViewForm from "./NewCustomViewForm";
 import NewLogEntryForm from "./NewLogEntryForm";
 import BulkUpdateModal, { BulkFieldOption } from "../Expense/shared/BulkUpdateModal";
 import ProjectsCustomizeColumnsModal from "./components/ProjectsCustomizeColumnsModal";
+import StartTimerModal from "./StartTimerModal";
 import { useCurrency } from "../../hooks/useCurrency";
 
 export default function TimeTrackingProject() {
   const navigate = useNavigate();
   const location = useLocation();
+  const LOCAL_PROJECT_COLUMNS_KEY = "taban_projects_columns";
   const { code: rawCurrencyCode } = useCurrency();
   const baseCurrencyCode = rawCurrencyCode ? rawCurrencyCode.split(' ')[0].substring(0, 3).toUpperCase() : "KES";
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -69,6 +71,7 @@ export default function TimeTrackingProject() {
   const [projectsColumnsMenuPos, setProjectsColumnsMenuPos] = useState({ top: 0, left: 0 });
   const [showProjectsCustomizeModal, setShowProjectsCustomizeModal] = useState(false);
   const [taskSearchTerm, setTaskSearchTerm] = useState("");
+  const [isTimerHydrated, setIsTimerHydrated] = useState(false);
   const bodyOverflowRef = useRef<string | null>(null);
   const [isCreatingTaskInline, setIsCreatingTaskInline] = useState(false);
   const [showBulkUpdateModal, setShowBulkUpdateModal] = useState(false);
@@ -290,10 +293,13 @@ export default function TimeTrackingProject() {
         localStorage.setItem('timerState', JSON.stringify(updatedTimerState));
       }
     }
+    setIsTimerHydrated(true);
   }, []);
 
   // Save timer state to localStorage whenever it changes
   useEffect(() => {
+    if (!isTimerHydrated) return;
+
     const savedTimerState = localStorage.getItem('timerState');
     let timerState;
 
@@ -328,7 +334,7 @@ export default function TimeTrackingProject() {
     }
 
     localStorage.setItem('timerState', JSON.stringify(updatedState));
-  }, [elapsedTime, isTimerRunning, timerNotes, selectedProjectForTimer, selectedTaskForTimer, isBillable]);
+  }, [isTimerHydrated, elapsedTime, isTimerRunning, timerNotes, selectedProjectForTimer, selectedTaskForTimer, isBillable]);
 
   // Listen for storage changes (when timer is updated from other page)
   useEffect(() => {
@@ -504,9 +510,12 @@ export default function TimeTrackingProject() {
     // Calculate final elapsed time before stopping
     const savedTimerState = localStorage.getItem('timerState');
     let finalElapsedTime = elapsedTime;
+    const timerState = savedTimerState ? JSON.parse(savedTimerState) : {};
+    const activeProjectName = selectedProjectForTimer || timerState.associatedProject || timerState.selectedProjectForTimer || '';
+    const activeTaskName = selectedTaskForTimer || timerState.selectedTaskForTimer || '';
+    const activeBillable = timerState.isBillable !== undefined ? timerState.isBillable : isBillable;
 
     if (savedTimerState) {
-      const timerState = JSON.parse(savedTimerState);
       if (timerState.isTimerRunning && timerState.startTime) {
         finalElapsedTime = calculateElapsedTime(timerState);
       } else {
@@ -522,10 +531,10 @@ export default function TimeTrackingProject() {
       const newEntry = {
         id: Date.now().toString(),
         date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-        projectName: selectedProjectForTimer || '',
-        taskName: selectedTaskForTimer || '',
+        projectName: activeProjectName || '',
+        taskName: activeTaskName || '',
         timeSpent: formatTimeShort(finalElapsedTime),
-        billable: isBillable,
+        billable: activeBillable,
         user: '',
         notes: timerNotes,
         createdAt: new Date().toISOString()
@@ -552,7 +561,6 @@ export default function TimeTrackingProject() {
     // Clear from localStorage
     localStorage.removeItem('timerState');
     window.dispatchEvent(new CustomEvent('timerStateUpdated'));
-    toast.success('The timer has been deleted.');
   };
 
   const handleDeleteTimer = () => {
@@ -656,8 +664,33 @@ export default function TimeTrackingProject() {
     { key: "status", label: "Project Status" },
   ];
 
-  const [selectedProjectColumns, setSelectedProjectColumns] = useState(
-    projectColumnOptions.map((col) => col.key)
+  const [selectedProjectColumns, setSelectedProjectColumns] = useState<string[]>(() => {
+    const saved = localStorage.getItem(LOCAL_PROJECT_COLUMNS_KEY);
+    const fallback = projectColumnOptions.map((col) => col.key);
+
+    if (!saved) return fallback;
+
+    try {
+      const parsed = JSON.parse(saved);
+      const nextKeys = Array.isArray(parsed)
+        ? parsed.map((key) => String(key)).filter((key) => projectColumnOptions.some((col) => col.key === key))
+        : fallback;
+      return Array.from(new Set([
+        ...nextKeys,
+        ...projectColumnOptions.filter((col) => col.locked).map((col) => col.key),
+      ]));
+    } catch {
+      return fallback;
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem(LOCAL_PROJECT_COLUMNS_KEY, JSON.stringify(selectedProjectColumns));
+  }, [selectedProjectColumns]);
+
+  const visibleProjectColumns = useMemo(
+    () => projectColumnOptions.filter((col) => selectedProjectColumns.includes(col.key)),
+    [selectedProjectColumns]
   );
 
   const handleViewSelect = (viewId) => {
@@ -1717,36 +1750,26 @@ export default function TimeTrackingProject() {
     <div className="flex flex-col w-full relative h-[calc(100vh-64px)] overflow-hidden">
       {/* Header */}
       {selectedProjects.length === 0 && (
-        <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-3 sticky top-0 z-30 shadow-sm">
+        <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3 sticky top-0 z-30 shadow-sm">
           <div ref={dropdownRef} className="relative">
             <button
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-              className="flex items-center gap-2 border-none bg-transparent p-0 text-[32px] font-semibold text-gray-800"
+              className="flex items-center gap-1.5 border-none bg-transparent p-0 text-[26px] font-semibold text-gray-800 outline-none focus:outline-none"
             >
               All Projects
-              <ChevronDown size={14} className="text-[#156372]" />
+              <ChevronDown size={12} className="text-[#156372]" />
             </button>
             {isDropdownOpen && (
-              <div className="absolute left-0 top-full z-[1200] mt-2 min-w-[210px] rounded-md border border-gray-200 bg-white py-2 shadow-lg">
+              <div className="absolute left-0 top-full z-[1200] mt-2 min-w-[180px] rounded-md bg-white py-2 shadow-lg">
                 {views.map((view) => (
                   <button
                     key={view.id}
                     onClick={() => handleViewSelect(view.id)}
-                    className={`mx-2 mb-1 flex w-[calc(100%-16px)] items-center justify-between rounded border px-3 py-2 text-left text-sm ${selectedView === view.id ? "border-[#156372] bg-[#156372]/10 text-gray-800" : "border-transparent text-gray-700 hover:bg-gray-50"}`}
+                    className={`mx-2 mb-1 flex w-[calc(100%-16px)] items-center justify-between rounded px-3 py-2 text-left text-sm ${selectedView === view.id ? "bg-[#156372]/10 text-gray-800" : "text-gray-700 hover:bg-gray-50"}`}
                   >
                     {view.label}
                   </button>
                 ))}
-                <button
-                  onClick={() => {
-                    setIsDropdownOpen(false);
-                    setShowCustomViewForm(true);
-                  }}
-                  className="mx-2 mt-1 flex w-[calc(100%-16px)] items-center gap-2 border-t border-gray-200 px-3 py-2 text-left text-sm text-[#156372]"
-                >
-                  <Plus size={14} />
-                  New Custom View
-                </button>
               </div>
             )}
           </div>
@@ -1816,9 +1839,9 @@ export default function TimeTrackingProject() {
             <div ref={newDropdownRef} className="relative flex items-center">
               <button
                 onClick={() => navigate('/time-tracking/projects/new')}
-                className="flex h-9 items-center gap-1.5 rounded-l-md border-none bg-[#408dfb] px-3.5 text-sm font-semibold text-white hover:bg-[#307deb] cursor-pointer"
+                className="flex h-9 items-center gap-1 whitespace-nowrap rounded-l-md border-none bg-[#156372] px-2.5 text-[12px] font-semibold text-white hover:bg-[#0f4f5c] cursor-pointer"
               >
-                <Plus size={15} />
+                <Plus size={14} />
                 New
               </button>
               <button
@@ -1826,17 +1849,17 @@ export default function TimeTrackingProject() {
                   e.stopPropagation();
                   setShowNewDropdown(!showNewDropdown);
                 }}
-                className="flex h-9 w-9 items-center justify-center rounded-r-md border-none border-l border-white/20 bg-[#408dfb] text-white hover:bg-[#307deb] cursor-pointer"
+                className="flex h-9 w-9 items-center justify-center rounded-r-md border-none border-l border-white/20 bg-[#156372] text-white hover:bg-[#0f4f5c] cursor-pointer"
               >
                 <ChevronDown size={14} />
               </button>
               {showNewDropdown && (
-                <div className="absolute right-0 top-full z-[1200] mt-2 min-w-[210px] rounded-md border border-gray-200 bg-white py-2 shadow-lg">
+                <div className="absolute right-0 top-full z-[1200] mt-2 w-max min-w-[160px] rounded-md border border-gray-200 bg-white py-2 shadow-lg">
                   <button
                     onClick={() => { navigate('/time-tracking/timesheet/weekly'); setShowNewDropdown(false); }}
-                    className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 border-none bg-transparent cursor-pointer"
+                    className="flex w-full items-center gap-2 whitespace-nowrap px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-50 border-none bg-transparent cursor-pointer"
                   >
-                    <Plus size={14} />
+                    <Plus size={13} />
                     New Weekly Time Log
                   </button>
                 </div>
@@ -1961,10 +1984,21 @@ export default function TimeTrackingProject() {
                       />
                     </div>
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">CUSTOMER NAME</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">PROJECT NAME</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">BILLING METHOD</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">RATE</th>
+                  {visibleProjectColumns.some((col) => col.key === "customerName") && (
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">CUSTOMER NAME</th>
+                  )}
+                  {visibleProjectColumns.some((col) => col.key === "projectName") && (
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">PROJECT NAME</th>
+                  )}
+                  {visibleProjectColumns.some((col) => col.key === "billingMethod") && (
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">BILLING METHOD</th>
+                  )}
+                  {visibleProjectColumns.some((col) => col.key === "rate") && (
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">RATE</th>
+                  )}
+                  {visibleProjectColumns.some((col) => col.key === "status") && (
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">PROJECT STATUS</th>
+                  )}
                   <th className="w-[40px] px-4 py-3 text-right">
                     <button onClick={() => setIsSearchModalOpen(true)} className="border-none bg-transparent p-0 text-gray-500">
                       <Search size={16} />
@@ -1988,16 +2022,31 @@ export default function TimeTrackingProject() {
                         />
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-800" onClick={() => navigate(`/time-tracking/projects/${project.id}`)}>{project.customerName || '--'}</td>
-                    <td className="px-4 py-3 text-sm text-[#156372]" onClick={() => navigate(`/time-tracking/projects/${project.id}`)}>{project.projectName || '--'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-800" onClick={() => navigate(`/time-tracking/projects/${project.id}`)}>{getBillingMethodText(project.billingMethod)}</td>
-                    <td className="px-4 py-3 text-sm text-gray-800" onClick={() => navigate(`/time-tracking/projects/${project.id}`)}>{getProjectRateDisplay(project)}</td>
+                    {visibleProjectColumns.some((col) => col.key === "customerName") && (
+                      <td className="px-4 py-3 text-sm text-gray-800" onClick={() => navigate(`/time-tracking/projects/${project.id}`)}>{project.customerName || '--'}</td>
+                    )}
+                    {visibleProjectColumns.some((col) => col.key === "projectName") && (
+                      <td className="px-4 py-3 text-sm text-[#156372]" onClick={() => navigate(`/time-tracking/projects/${project.id}`)}>{project.projectName || '--'}</td>
+                    )}
+                    {visibleProjectColumns.some((col) => col.key === "billingMethod") && (
+                      <td className="px-4 py-3 text-sm text-gray-800" onClick={() => navigate(`/time-tracking/projects/${project.id}`)}>{getBillingMethodText(project.billingMethod)}</td>
+                    )}
+                    {visibleProjectColumns.some((col) => col.key === "rate") && (
+                      <td className="px-4 py-3 text-sm text-gray-800" onClick={() => navigate(`/time-tracking/projects/${project.id}`)}>{getProjectRateDisplay(project)}</td>
+                    )}
+                    {visibleProjectColumns.some((col) => col.key === "status") && (
+                      <td className="px-4 py-3 text-sm text-gray-800" onClick={() => navigate(`/time-tracking/projects/${project.id}`)}>
+                        <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+                          {String(project.status || '--').replace(/^\w/, (c) => c.toUpperCase())}
+                        </span>
+                      </td>
+                    )}
                     <td className="px-4 py-3" />
                   </tr>
                 ))}
                 {projects.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-500">
+                    <td colSpan={visibleProjectColumns.length + 2} className="px-4 py-10 text-center text-sm text-gray-500">
                       No projects found. Click "+ New" to create your first project.
                     </td>
                   </tr>
@@ -2081,236 +2130,13 @@ export default function TimeTrackingProject() {
       </div>
 
       {/* Timer Modal - START TIMER */}
-      {showTimerModal && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setShowTimerModal(false);
-            }
-          }}
-          className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/55 p-5"
-        >
-          <div className="w-full max-w-[450px] overflow-hidden rounded-lg bg-white shadow-2xl">
-            <div className="relative border-b border-gray-200 px-5 py-3">
-              <div className="flex flex-col items-center gap-1">
-                <svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="10" cy="10" r="8.5" stroke="#6b7280" strokeWidth="1.5" />
-                  <path d="M10 6v4l3 2" stroke="#6b7280" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-                <h2 className="m-0 text-sm font-medium tracking-wide text-gray-700">START TIMER</h2>
-              </div>
-              <button
-                onClick={() => setShowTimerModal(false)}
-                className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded bg-transparent p-0 text-gray-800 hover:bg-gray-100"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="px-5 py-4">
-              <div className="mb-5 text-center">
-                <div className="text-[40px] font-semibold leading-none tracking-wide text-gray-800">
-                  {formatTimeVerbose(elapsedTime)}
-                </div>
-              </div>
-
-              {!showProjectFields && (
-                <div className="mb-5">
-                  <a
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setShowProjectFields(true);
-                    }}
-                    className="flex items-center gap-2 text-sm text-[#156372] no-underline hover:no-underline"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M8 2l4 4-4 4M4 8h8" stroke="#156372" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    Associate Project
-                  </a>
-                </div>
-              )}
-
-              {showProjectFields && (
-                <div className="mb-5 space-y-3.5">
-                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                      Project Name<span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={selectedProjectForTimer}
-                      onChange={(e) => {
-                        setSelectedProjectForTimer(e.target.value);
-                        setSelectedTaskForTimer("");
-                        setTaskSearchTerm("");
-                        setShowTaskDropdown(false);
-                        setIsCreatingTaskInline(false);
-                      }}
-                      className="w-full rounded-md border border-gray-300 py-2.5 pl-3 pr-9 text-sm outline-none focus:border-[#156372]"
-                    >
-                      <option value="">Select a project</option>
-                      {projects.map((project) => (
-                        <option key={project.id} value={project.projectName}>
-                          {project.projectName}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <div className="mb-1.5 flex items-center justify-between">
-                      <label className="block text-sm font-medium text-gray-700">
-                        Task Name<span className="text-red-500">*</span>
-                      </label>
-                      {isCreatingTaskInline && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsCreatingTaskInline(false);
-                            setShowTaskDropdown(false);
-                          }}
-                          className="border-none bg-transparent p-0 text-sm text-[#2563eb]"
-                        >
-                          Select from list
-                        </button>
-                      )}
-                    </div>
-
-                    {isCreatingTaskInline ? (
-                      <div className="w-[70%] bg-gray-50 p-2">
-                        <input
-                          type="text"
-                          value={selectedTaskForTimer}
-                          onChange={(e) => setSelectedTaskForTimer(e.target.value)}
-                          placeholder="Enter task name"
-                          className="w-full rounded-md border border-gray-300 bg-white py-2.5 pl-3 pr-3 text-sm outline-none focus:border-[#156372]"
-                        />
-                      </div>
-                    ) : (
-                      <div className="relative" ref={taskDropdownRef}>
-                        <button
-                          type="button"
-                          onClick={() => setShowTaskDropdown((prev) => !prev)}
-                          className="flex w-full items-center justify-between rounded-md border border-gray-300 bg-white py-2.5 pl-3 pr-3 text-sm text-left outline-none focus:border-[#156372]"
-                        >
-                          <span className={selectedTaskForTimer ? "text-gray-800" : "text-gray-400"}>
-                            {selectedTaskForTimer || "Select task"}
-                          </span>
-                          <ChevronDown
-                            size={16}
-                            className={`text-gray-500 transition-transform ${showTaskDropdown ? "rotate-180" : ""}`}
-                          />
-                        </button>
-
-                        {showTaskDropdown && (
-                          <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-20 overflow-hidden rounded-md border border-gray-200 bg-white shadow-lg">
-                            <div className="border-b border-gray-200 p-2">
-                              <div className="flex items-center gap-2 rounded-md border border-[#3b82f6] px-2 py-1.5">
-                                <Search size={14} className="text-gray-400" />
-                                <input
-                                  type="text"
-                                  value={taskSearchTerm}
-                                  onChange={(e) => setTaskSearchTerm(e.target.value)}
-                                  placeholder="Search"
-                                  className="w-full border-none bg-transparent p-0 text-sm outline-none"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="max-h-36 overflow-y-auto px-3 py-2 text-sm">
-                              {timerTaskOptions
-                                .filter((name) => name.toLowerCase().includes(taskSearchTerm.toLowerCase()))
-                                .map((taskName, idx) => (
-                                  <button
-                                    key={`${taskName}-${idx}`}
-                                    type="button"
-                                    onClick={() => {
-                                      setSelectedTaskForTimer(taskName);
-                                      setShowTaskDropdown(false);
-                                    }}
-                                    className="block w-full border-none bg-transparent px-0 py-1.5 text-left text-gray-700 hover:text-[#156372]"
-                                  >
-                                    {taskName}
-                                  </button>
-                                ))}
-
-                              {timerTaskOptions.filter((name) => name.toLowerCase().includes(taskSearchTerm.toLowerCase())).length === 0 && (
-                                <div className="py-1 text-gray-500">NO RESULTS FOUND</div>
-                              )}
-                            </div>
-
-                            <div className="border-t border-gray-200 px-3 py-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setShowTaskDropdown(false);
-                                  setIsCreatingTaskInline(true);
-                                  setSelectedTaskForTimer(taskSearchTerm.trim());
-                                  setTaskSearchTerm("");
-                                }}
-                                className="flex items-center gap-2 border-none bg-transparent p-0 text-sm text-[#2563eb]"
-                              >
-                                <Plus size={14} />
-                                New Task
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <label className="flex items-center gap-2 text-sm text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={isBillable}
-                      onChange={(e) => setIsBillable(e.target.checked)}
-                    />
-                    Billable
-                  </label>
-                </div>
-              )}
-
-              <div className="mb-5">
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">Notes</label>
-                <textarea
-                  value={timerNotes}
-                  onChange={(e) => setTimerNotes(e.target.value)}
-                  placeholder="Add notes"
-                  rows={2}
-                  className="w-full resize-y rounded-md border border-gray-300 p-2.5 text-sm outline-none focus:border-[#156372]"
-                />
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleStartTimer}
-                  className="rounded-md border-none bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600"
-                >
-                  Start Timer
-                </button>
-                <button
-                  onClick={() => {
-                    setShowTimerModal(false);
-                    setTimerNotes('');
-                    setSelectedProjectForTimer('');
-                    setSelectedTaskForTimer('');
-                    setTaskSearchTerm('');
-                    setIsBillable(true);
-                    setShowProjectFields(false);
-                    setShowTaskDropdown(false);
-                    setIsCreatingTaskInline(false);
-                  }}
-                  className="rounded-md border border-gray-300 bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <StartTimerModal
+        open={showTimerModal}
+        onClose={() => setShowTimerModal(false)}
+        elapsedTime={elapsedTime}
+        defaultProjectName={selectedProjectForTimer}
+        defaultTaskName={selectedTaskForTimer}
+      />
 
       <BulkUpdateModal
         isOpen={showBulkUpdateModal}

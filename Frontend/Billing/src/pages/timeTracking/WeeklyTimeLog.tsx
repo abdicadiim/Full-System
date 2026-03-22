@@ -215,67 +215,70 @@ export default function WeeklyTimeLog() {
   const grandTotalFormatted = formatMinutesToTime(grandTotal);
 
   return (
-    <div className="flex flex-col h-screen bg-white overflow-hidden font-sans">
+    <div className="flex min-h-[calc(100vh-64px)] flex-col overflow-hidden bg-white font-sans text-slate-900">
       {/* Top Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white">
+      <div className="mt-6 flex items-center justify-between rounded-t-2xl bg-white px-4 py-4 shadow-sm">
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate("/time-tracking/timesheet")}
-            className="flex items-center text-[#2563eb] hover:bg-gray-50 p-1.5 rounded-full transition-colors border-none bg-transparent cursor-pointer"
+            className="flex items-center rounded-full border-none bg-transparent p-1.5 text-[#2563eb] transition-colors hover:bg-slate-50 cursor-pointer"
           >
             <ChevronLeft size={24} strokeWidth={2.5} />
           </button>
-          <h1 className="text-[22px] font-semibold text-slate-800 m-0">Weekly Time Log</h1>
+          <h1 className="m-0 text-[22px] font-semibold text-slate-800">Weekly Time Log</h1>
         </div>
         <button
           onClick={() => navigate("/time-tracking/timesheet")}
-          className="text-gray-400 hover:text-red-500 transition-colors p-1.5 border-none bg-transparent cursor-pointer"
+          className="border-none bg-transparent p-1.5 text-gray-400 transition-colors hover:text-red-500 cursor-pointer"
         >
           <X size={24} />
         </button>
       </div>
 
       {/* Navigation Sub-header */}
-      <div className="px-10 py-6">
-        <div className="text-sm font-medium text-slate-500 mb-6">Year : {year}</div>
-        <div className="flex items-center justify-center gap-8 mb-4">
-          <button
-            onClick={goToPreviousWeek}
-            className="text-slate-700 hover:text-[#2563eb] border-none bg-transparent cursor-pointer transition-colors"
-          >
-            <ChevronLeft size={20} />
-          </button>
-          <div className="text-[17px] font-bold text-slate-800 tracking-tight flex items-center gap-3">
-             {formatWeekRange()}
+      <div className="bg-white px-4 py-5 shadow-sm">
+        <div className="flex items-center justify-between gap-4">
+          <div className="text-sm font-medium text-slate-500">Year : {year}</div>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={goToPreviousWeek}
+              className="border-none bg-transparent p-1 text-slate-500 transition-colors hover:text-[#2563eb] cursor-pointer"
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <div className="flex items-center gap-4 text-[16px] font-semibold tracking-tight text-slate-800">
+              {formatWeekRange()}
+            </div>
+            <button
+              onClick={goToNextWeek}
+              className="border-none bg-transparent p-1 text-slate-500 transition-colors hover:text-[#2563eb] cursor-pointer"
+            >
+              <ChevronRight size={18} />
+            </button>
           </div>
-          <button
-            onClick={goToNextWeek}
-            className="text-slate-700 hover:text-[#2563eb] border-none bg-transparent cursor-pointer transition-colors"
-          >
-            <ChevronRight size={20} />
-          </button>
+          <div className="w-[72px]" />
         </div>
       </div>
 
       {/* Table Container */}
-      <div className="flex-1 overflow-auto px-10 pb-20">
-        <div className="border border-slate-200 rounded-[4px] overflow-hidden shadow-sm">
+      <div className="flex-1 overflow-auto bg-white px-4 pb-24">
+        <div className="overflow-hidden rounded-b-2xl border border-slate-200 border-t-0 shadow-sm">
           <table className="w-full border-collapse text-left">
             <thead>
-              <tr className="bg-[#f8fafc] border-b border-slate-200">
+              <tr className="border-b border-slate-200 bg-[#f8fafc]">
                 <th className="px-4 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest w-[220px]">PROJECT</th>
                 <th className="px-4 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest w-[220px]">TASK</th>
                 {weekDates.map((date, index) => {
                   const f = formatDateDisplay(date);
                   return (
-                    <th key={index} className="px-3 py-4 text-center border-l border-slate-100 min-w-[80px]">
-                      <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{f.day}</div>
-                      <div className="text-[11px] font-medium text-slate-400 mt-1">{f.date} {f.monthShort}</div>
+                    <th key={index} className="min-w-[80px] border-l border-slate-100 px-3 py-4 text-center">
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{f.day}</div>
+                      <div className="mt-1 text-[11px] font-medium text-slate-400">{f.date} {f.monthShort}</div>
                     </th>
-                  );
-                })}
-                <th className="px-4 py-4 text-center text-[10px] font-bold text-slate-500 uppercase tracking-widest border-l border-slate-100 min-w-[70px]">BILLABLE</th>
-                <th className="px-4 py-4 text-center text-[10px] font-bold text-slate-500 uppercase tracking-widest border-l border-slate-100 min-w-[90px]">TOTAL</th>
+                );
+              })}
+                <th className="min-w-[70px] border-l border-slate-100 px-4 py-4 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500">BILLABLE</th>
+                <th className="min-w-[90px] border-l border-slate-100 px-4 py-4 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500">TOTAL</th>
                 <th className="w-[45px] border-l border-slate-100"></th>
               </tr>
             </thead>
@@ -283,10 +286,10 @@ export default function WeeklyTimeLog() {
               {rows.map((row) => {
                 const tasks = row.project ? getTasksForProject(row.project) : [];
                 return (
-                  <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50/50 group">
+                  <tr key={row.id} className="group border-b border-slate-100 hover:bg-slate-50/50">
                     <td className="p-3">
                       <select
-                        className="w-full h-11 px-3 border border-slate-200 rounded text-[13px] text-slate-700 bg-white focus:border-[#2563eb] outline-none cursor-pointer appearance-none transition-all"
+                        className="h-11 w-full appearance-none rounded border border-slate-200 bg-white px-3 text-[13px] text-slate-700 outline-none transition-all focus:border-[#2563eb] cursor-pointer"
                         value={row.project}
                         onChange={(e) => updateRow(row.id, "project", e.target.value)}
                       >
@@ -300,7 +303,7 @@ export default function WeeklyTimeLog() {
                     </td>
                     <td className="p-3">
                       <select
-                        className="w-full h-11 px-3 border border-slate-200 rounded text-[13px] text-slate-700 bg-white focus:border-[#2563eb] outline-none cursor-pointer appearance-none transition-all disabled:bg-slate-50 disabled:cursor-not-allowed"
+                        className="h-11 w-full appearance-none rounded border border-slate-200 bg-white px-3 text-[13px] text-slate-700 outline-none transition-all focus:border-[#2563eb] disabled:cursor-not-allowed disabled:bg-slate-50 cursor-pointer"
                         value={row.task}
                         onChange={(e) => updateRow(row.id, "task", e.target.value)}
                         disabled={!row.project}
@@ -313,10 +316,10 @@ export default function WeeklyTimeLog() {
                       </select>
                     </td>
                     {row.days.map((day, dayIndex) => (
-                      <td key={dayIndex} className="p-2 border-l border-slate-100">
+                      <td key={dayIndex} className="border-l border-slate-100 p-2">
                         <input
                           type="text"
-                          className="w-full h-11 text-center border-none bg-transparent text-[13px] text-slate-900 placeholder-slate-300 focus:bg-white focus:ring-1 focus:ring-[#2563eb] rounded transition-all outline-none"
+                          className="h-11 w-full rounded border-none bg-transparent text-center text-[13px] text-slate-900 outline-none transition-all placeholder:text-slate-300 focus:bg-white focus:ring-1 focus:ring-[#2563eb]"
                           value={day}
                           onChange={(e) => updateRow(row.id, `day${dayIndex}`, e.target.value, false)}
                           onBlur={(e) => updateRow(row.id, `day${dayIndex}`, e.target.value, true)}
@@ -324,21 +327,21 @@ export default function WeeklyTimeLog() {
                         />
                       </td>
                     ))}
-                    <td className="p-3 text-center border-l border-slate-100">
+                    <td className="border-l border-slate-100 p-3 text-center">
                       <input
                         type="checkbox"
-                        className="w-4 h-4 rounded border-slate-300 text-[#2563eb] focus:ring-[#2563eb] cursor-pointer"
+                        className="h-4 w-4 cursor-pointer rounded border-slate-300 text-[#2563eb] focus:ring-[#2563eb]"
                         checked={row.billable}
                         onChange={(e) => updateRow(row.id, "billable", e.target.checked)}
                       />
                     </td>
-                    <td className="p-3 text-center text-[13px] font-semibold text-slate-700 border-l border-slate-100 bg-[#f8fafc]/30">
+                    <td className="border-l border-slate-100 bg-[#f8fafc]/30 p-3 text-center text-[13px] font-semibold text-slate-700">
                       {row.total}
                     </td>
-                    <td className="p-3 text-center border-l border-slate-100">
+                    <td className="border-l border-slate-100 p-3 text-center">
                       <button 
                         onClick={() => deleteRow(row.id)}
-                        className="p-1.5 text-slate-300 hover:text-red-500 transition-colors border-none bg-transparent cursor-pointer"
+                        className="cursor-pointer border-none bg-transparent p-1.5 text-slate-300 transition-colors hover:text-red-500"
                       >
                         <Trash2 size={16} />
                       </button>
@@ -348,17 +351,17 @@ export default function WeeklyTimeLog() {
               })}
 
               {/* Total Footer Row */}
-              <tr className="bg-[#f8fafc] font-bold border-t border-slate-200">
-                <td className="px-6 py-4 text-[11px] font-bold text-slate-600 uppercase tracking-wider text-right" colSpan={2}>
+              <tr className="border-t border-slate-200 bg-[#f8fafc] font-bold">
+                <td className="px-6 py-4 text-right text-[11px] font-bold uppercase tracking-wider text-slate-600" colSpan={2}>
                   TOTAL
                 </td>
                 {dayTotals.map((total, index) => (
-                  <td key={index} className="px-3 py-4 text-center border-l border-slate-100 text-[13px] text-slate-700">
+                  <td key={index} className="border-l border-slate-100 px-3 py-4 text-center text-[13px] text-slate-700">
                     {total}
                   </td>
                 ))}
                 <td className="border-l border-slate-100"></td>
-                <td className="px-4 py-4 text-center border-l border-slate-100 text-[13px] text-slate-800">
+                <td className="border-l border-slate-100 px-4 py-4 text-center text-[13px] text-slate-800">
                   {grandTotalFormatted}
                 </td>
                 <td className="border-l border-slate-100"></td>
@@ -368,10 +371,10 @@ export default function WeeklyTimeLog() {
         </div>
 
         {/* Action Buttons Below Table */}
-        <div className="flex items-center justify-between mt-6">
+        <div className="mt-5 flex items-center justify-between">
           <button 
             onClick={addNewRow}
-            className="flex items-center gap-2 bg-[#2563eb] text-white px-4 py-2 rounded text-[13px] font-medium hover:bg-[#1d4ed8] transition-all border-none bg-transparent cursor-pointer shadow-sm"
+            className="flex items-center gap-2 rounded border-none bg-[#3b82f6] px-4 py-2 text-[13px] font-medium text-white shadow-sm transition-all hover:bg-[#2563eb] cursor-pointer"
           >
             <Plus size={16} />
             Add New Row
@@ -381,7 +384,7 @@ export default function WeeklyTimeLog() {
             onClick={() => {
               toast((t) => (
                 <div className="flex flex-col gap-2 p-1">
-                  <div className="font-bold text-[#1e40af] flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 font-bold text-[#1e40af]">
                     <Info size={16} /> Supported Time Formats
                   </div>
                   <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-slate-600">
@@ -395,7 +398,7 @@ export default function WeeklyTimeLog() {
                 </div>
               ), { duration: 6000, style: { padding: '12px', borderRadius: '8px', border: '1px solid #bfdbfe' }});
             }}
-            className="flex items-center gap-1.5 text-[#2563eb] text-[13px] font-medium hover:underline border-none bg-transparent cursor-pointer"
+            className="flex items-center gap-1.5 border-none bg-transparent text-[13px] font-medium text-[#2563eb] hover:underline cursor-pointer"
           >
             <Info size={16} className="text-[#2563eb]" />
             Supported Time Formats
@@ -404,7 +407,7 @@ export default function WeeklyTimeLog() {
       </div>
 
       {/* Persistent Footer Actions */}
-      <div className="px-10 py-5 border-t border-gray-100 bg-white flex items-center gap-4 fixed bottom-0 left-0 right-0 z-50">
+      <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center gap-4 border-t border-slate-200 bg-white px-6 py-4 shadow-[0_-1px_3px_rgba(15,23,42,0.08)]">
         <button
           onClick={async () => {
              try {
@@ -441,13 +444,13 @@ export default function WeeklyTimeLog() {
                 navigate("/time-tracking/timesheet");
               } catch (error) { toast.error("Failed to save entries"); }
           }}
-          className="h-10 px-8 bg-[#2563eb] text-white text-[14px] font-bold rounded hover:bg-[#1d4ed8] transition-all border-none cursor-pointer shadow-md"
+          className="h-10 rounded border-none bg-[#2563eb] px-8 text-[14px] font-bold text-white shadow-md transition-all hover:bg-[#1d4ed8] cursor-pointer"
         >
           Save
         </button>
         <button
           onClick={() => navigate("/time-tracking/timesheet")}
-          className="h-10 px-8 bg-white text-slate-600 text-[14px] font-medium rounded border border-slate-300 hover:bg-slate-50 transition-all cursor-pointer"
+          className="h-10 rounded border border-slate-300 bg-white px-8 text-[14px] font-medium text-slate-600 transition-all hover:bg-slate-50 cursor-pointer"
         >
           Cancel
         </button>

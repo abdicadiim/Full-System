@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Routes, Route, useLocation, useNavigate } from "react-router-dom";
-import { X, Search, ArrowUpDown, ChevronRight, Download, Upload, Settings, RefreshCw, Edit3, Eye, EyeOff, Info, ChevronDown, Play, Pause, Square, Trash2, Plus, MoreVertical, MoreHorizontal, SlidersHorizontal, LayoutGrid, List } from 'lucide-react';
+import { X, Search, ArrowUpDown, ChevronLeft, ChevronRight, Download, Upload, Settings, RefreshCw, Edit3, Eye, EyeOff, Info, ChevronDown, Play, Pause, Square, Trash2, Plus, MoreVertical, MoreHorizontal, SlidersHorizontal, LayoutGrid, List } from 'lucide-react';
 import { projectsAPI, timeEntriesAPI, usersAPI } from "../../services/api";
+import { getCurrentUser } from "../../services/auth";
 import { toast } from "react-toastify";
 import { usePermissions } from "../../hooks/usePermissions";
 import AccessDenied from "../../components/AccessDenied";
@@ -11,6 +12,7 @@ import ProjectDetailPage from "./ProjectDetailPage";
 import EditProjectForm from "./EditProjectForm";
 import NewLogEntryForm from "./NewLogEntryForm";
 import WeeklyTimeLog from "./WeeklyTimeLog";
+import StartTimerModal from "./StartTimerModal";
 import ImportProjects from "./ImportProjects";
 import ImportTimesheets from "./ImportTimesheets";
 import ImportProjectTasks from "./ImportProjectTasks";
@@ -18,6 +20,120 @@ import TimeTrackingProject from "./TimeTrackingProject";
 import Aptouvals from "./aprovals/aptouvals";
 import CustomerApproval from "./CustomerApproval/CustomerApproval";
 import NewCustomerApproval from "./CustomerApproval/NewCustomerApproval";
+
+const getUserDisplayName = (user) => {
+  if (!user || typeof user !== "object") return "";
+  const firstName = String(user.firstName || "").trim();
+  const lastName = String(user.lastName || "").trim();
+  return String(
+    user.name ||
+    user.fullName ||
+    user.username ||
+    [firstName, lastName].filter(Boolean).join(" ") ||
+    user.email ||
+    ""
+  ).trim();
+};
+
+const getUserDisplayId = (user) => {
+  if (!user || typeof user !== "object") return "";
+  return String(user._id || user.id || user.userId || "").trim();
+};
+
+const isLikelyId = (value) => typeof value === "string" && /^[a-f0-9]{24}$/i.test(value);
+
+const getEntryUserLabel = (entry, userById, currentUser = null) => {
+  if (!entry) return "--";
+
+  if (entry.userName && entry.userName !== "--") {
+    return entry.userName;
+  }
+
+  if (entry.user && typeof entry.user === "object") {
+    const objectName = getUserDisplayName(entry.user);
+    if (objectName) return objectName;
+  }
+
+  const currentUserId = getUserDisplayId(currentUser);
+  const currentUserName = getUserDisplayName(currentUser);
+  const entryUserId = String(entry.userId || "").trim();
+  const rawUser = String(entry.user || "").trim();
+
+  if (currentUserId && entryUserId && entryUserId === currentUserId && currentUserName) {
+    return currentUserName;
+  }
+
+  for (const candidate of [entryUserId, rawUser].filter(Boolean)) {
+    const match = userById?.get?.(String(candidate));
+    const matchName = getUserDisplayName(match) || String(match?.name || "").trim();
+    if (matchName) return matchName;
+  }
+
+  if (currentUserId && rawUser === currentUserId && currentUserName) {
+    return currentUserName;
+  }
+
+  if (entry.user && !isLikelyId(entry.user) && entry.user !== "--") {
+    return entry.user;
+  }
+
+  return "--";
+};
+
+const pad2 = (value) => String(value).padStart(2, "0");
+
+const formatCalendarKey = (date) => {
+  if (!date) return "";
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
+
+type TimerState = {
+  elapsedTime?: number;
+  isTimerRunning?: boolean;
+  timerNotes?: string;
+  associatedProject?: string;
+  selectedProjectForTimer?: string;
+  selectedTaskForTimer?: string;
+  isBillable?: boolean;
+  lastUpdated?: number;
+  startTime?: number;
+  pausedElapsedTime?: number;
+};
+
+const getMonthStart = (date) => {
+  const d = new Date(date);
+  d.setDate(1);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+const getCalendarWeeks = (date) => {
+  const monthStart = getMonthStart(date);
+  const monthEnd = new Date(monthStart);
+  monthEnd.setMonth(monthEnd.getMonth() + 1);
+  monthEnd.setDate(0);
+
+  const cells = [];
+  for (let day = 1; day <= monthEnd.getDate(); day++) {
+    const cellDate = new Date(monthStart);
+    cellDate.setDate(day);
+    cells.push(cellDate);
+  }
+
+  return cells;
+};
+
+const getMonthLabel = (date) => {
+  if (!date) return "";
+  return new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).format(new Date(date));
+};
+
+const getLongMonthLabel = (date) => {
+  if (!date) return "";
+  return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(new Date(date));
+};
 
 
 
@@ -35,12 +151,10 @@ function TimeEntriesPage() {
         const data = Array.isArray(response)
           ? response
           : (response?.data || []);
+        const currentUser = getCurrentUser();
 
         const transformedEntries = data.map(entry => {
-          // Extract user name as string (handle both object and string cases)
-          const userName = typeof entry.user === 'object' && entry.user !== null
-            ? (entry.user.name || entry.userName || '--')
-            : (entry.userName || entry.user || '--');
+          const userName = getEntryUserLabel(entry, new Map(), currentUser);
 
           return {
             id: entry._id || entry.id,
@@ -118,7 +232,7 @@ function TimeEntriesPage() {
                     <td className="px-4 py-3 text-sm text-gray-900">{entry.projectName || '--'}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">{entry.taskName || '--'}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">{entry.timeSpent || '--'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{entry.user || '--'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{getEntryUserLabel(entry, new Map(), getCurrentUser())}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">{entry.billable ? 'Yes' : 'No'}</td>
                     <td className="px-4 py-3 text-sm text-gray-900 max-w-[200px] truncate">{entry.notes || '--'}</td>
                   </tr>
@@ -150,6 +264,9 @@ function TimesheetTable() {
   const [selectedTaskForTimer, setSelectedTaskForTimer] = useState('');
   const [isBillable, setIsBillable] = useState(true);
   const [showProjectFields, setShowProjectFields] = useState(false);
+  const [showTaskDropdown, setShowTaskDropdown] = useState(false);
+  const [isCreatingTaskInline, setIsCreatingTaskInline] = useState(false);
+  const [taskSearchTerm, setTaskSearchTerm] = useState('');
   const [hoveredMenu, setHoveredMenu] = useState(null); // 'sort', 'import', 'export', 'preferences'
   const [hoveredEntryId, setHoveredEntryId] = useState(null);
   const [openDropdownEntryId, setOpenDropdownEntryId] = useState(null);
@@ -186,10 +303,10 @@ function TimesheetTable() {
   const importSubmenuRef = useRef(null);
   const exportSubmenuRef = useRef(null);
   const preferencesSubmenuRef = useRef(null);
+  const LOCAL_TIMESHEET_COLUMNS_KEY = "taban_timesheet_columns";
   const [selectedView, setSelectedView] = useState('All');
   const [showNewDropdown, setShowNewDropdown] = useState(false);
   const [criteria, setCriteria] = useState([{ id: 1, field: '', comparator: '', value: '' }]);
-  const [selectedColumns, setSelectedColumns] = useState(['Project']);
   const [visibility, setVisibility] = useState('only-me');
   const [isFavorite, setIsFavorite] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState(null);
@@ -207,6 +324,10 @@ function TimesheetTable() {
   const [calendarDate, setCalendarDate] = useState(new Date()); // Current month/year for calendar
   const [selectedDateForLogEntry, setSelectedDateForLogEntry] = useState(null); // Selected date for new log entry
   const [selectedEntries, setSelectedEntries] = useState([]); // Selected time entries for bulk actions
+  const [isTimerHydrated, setIsTimerHydrated] = useState(false);
+  const [showTimesheetColumnsModal, setShowTimesheetColumnsModal] = useState(false);
+  const [draftTimesheetColumns, setDraftTimesheetColumns] = useState<string[]>([]);
+  const [timesheetColumnsSearchTerm, setTimesheetColumnsSearchTerm] = useState("");
   const dropdownRef = useRef(null);
   const moreMenuRef = useRef(null);
   const statusDropdownRef = useRef(null);
@@ -215,13 +336,64 @@ function TimesheetTable() {
   const projectDropdownRef = useRef(null);
   const newLogEntryDropdownRef = useRef(null);
   const entryMenuRef = useRef(null);
+  const taskDropdownRef = useRef(null);
+  const customerFilterRef = useRef(null);
+  const projectFilterRef = useRef(null);
+  const userFilterRef = useRef(null);
 
   const timesheetViews = [
     { id: 'All', label: 'All' },
     { id: 'Invoiced', label: 'Invoiced' },
     { id: 'Unbilled', label: 'Unbilled' }
   ];
-  const availableColumns = ['Date', 'Customer', 'Task', 'User', 'Time', 'Billing Status'];
+  const timesheetColumnOptions = [
+    { key: 'date', label: 'Date', locked: true },
+    { key: 'project', label: 'Project' },
+    { key: 'customer', label: 'Customer' },
+    { key: 'task', label: 'Task' },
+    { key: 'user', label: 'User' },
+    { key: 'time', label: 'Time' },
+    { key: 'totalCost', label: 'Total Cost' },
+    { key: 'approvals', label: 'Approvals' },
+    { key: 'customerApprovals', label: 'Customer Approvals' },
+    { key: 'billingStatus', label: 'Billing Status' },
+    { key: 'projectHead', label: 'Project Head' },
+  ];
+
+  const [selectedColumns, setSelectedColumns] = useState<string[]>(() => {
+    const saved = localStorage.getItem(LOCAL_TIMESHEET_COLUMNS_KEY);
+    const fallback = timesheetColumnOptions.map((col) => col.key).filter((key) => key !== "projectHead");
+
+    if (!saved) return fallback;
+
+    try {
+      const parsed = JSON.parse(saved);
+      const validKeys = Array.isArray(parsed)
+        ? parsed.filter((key) => timesheetColumnOptions.some((col) => col.key === key))
+        : fallback;
+      return Array.from(new Set([
+        ...validKeys,
+        ...timesheetColumnOptions.filter((col) => col.locked).map((col) => col.key),
+      ]));
+    } catch {
+      return fallback;
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem(LOCAL_TIMESHEET_COLUMNS_KEY, JSON.stringify(selectedColumns));
+  }, [selectedColumns]);
+
+  const visibleTimesheetColumns = useMemo(
+    () => timesheetColumnOptions.filter((col) => selectedColumns.includes(col.key)),
+    [selectedColumns]
+  );
+
+  const filteredTimesheetColumnOptions = useMemo(() => {
+    const query = timesheetColumnsSearchTerm.trim().toLowerCase();
+    if (!query) return timesheetColumnOptions;
+    return timesheetColumnOptions.filter((column) => column.label.toLowerCase().includes(query));
+  }, [timesheetColumnsSearchTerm]);
 
   // Log Entry Form State
   const [logEntryData, setLogEntryData] = useState({
@@ -238,6 +410,12 @@ function TimesheetTable() {
   const [selectedCustomer, setSelectedCustomer] = useState('');
   const [selectedProjectFilter, setSelectedProjectFilter] = useState('');
   const [selectedUserFilter, setSelectedUserFilter] = useState('');
+  const [selectedPeriodFilter, setSelectedPeriodFilter] = useState('All');
+  const [periodSearchTerm, setPeriodSearchTerm] = useState('');
+  const [showPeriodDropdown, setShowPeriodDropdown] = useState(false);
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [showProjectFilterDropdown, setShowProjectFilterDropdown] = useState(false);
+  const [showUserFilterDropdown, setShowUserFilterDropdown] = useState(false);
 
   // Get projects from localStorage for dropdown
   const [projects, setProjects] = useState([]);
@@ -245,6 +423,15 @@ function TimesheetTable() {
   // Load time entries from database (declare before useMemo that uses it)
   const [timeEntries, setTimeEntries] = useState([]);
   const [loadingEntries, setLoadingEntries] = useState(false);
+  const currentUser = useMemo(() => getCurrentUser(), []);
+
+  const timerTaskOptions = useMemo(() => {
+    const selectedProject = projects.find((project) => project.projectName === selectedProjectForTimer);
+    const tasks = selectedProject?.tasks || [];
+    return tasks
+      .map((task) => task?.taskName || task?.name || task?.title || "")
+      .filter((name) => Boolean(name));
+  }, [projects, selectedProjectForTimer]);
 
   // Extract unique customers from projects
   const customers = useMemo(() => {
@@ -263,17 +450,31 @@ function TimesheetTable() {
   const users = useMemo(() => {
     const userMap = new Map();
 
+    const addUser = (user) => {
+      if (!user || typeof user !== 'object') return;
+      const id = getUserDisplayId(user);
+      const name = getUserDisplayName(user);
+      if (!id || !name) return;
+      userMap.set(id, {
+        id,
+        name,
+        email: String(user.email || '').trim()
+      });
+    };
+
+    addUser(currentUser);
+
     // Add users from projects
     projects.forEach(project => {
       const projectUsers = project.users || project.assignedTo || [];
       if (Array.isArray(projectUsers)) {
         projectUsers.forEach(user => {
           if (user && typeof user === 'object') {
-            if (user.name) {
-              userMap.set(String(user.id || user._id || user.name), { id: user.id || user._id || user.name, name: user.name, email: user.email || '' });
-            }
+            addUser(user);
           } else if (typeof user === 'string') {
-            userMap.set(user, { id: user, name: '', email: '' });
+            if (!isLikelyId(user)) {
+              userMap.set(user, { id: user, name: user, email: '' });
+            }
           }
         });
       }
@@ -281,13 +482,16 @@ function TimesheetTable() {
 
     // Add users from time entries
     timeEntries.forEach(entry => {
-      const userName = entry.userName || entry.user || '';
+      const userName = entry.userName || (typeof entry.user === 'string' && !isLikelyId(entry.user) ? entry.user : '');
       if (userName && userName !== '--' && !userMap.has(userName)) {
-        userMap.set(userName, {
-          id: entry.userId || Date.now() + Math.random(),
-          name: userName,
-          email: ''
-        });
+        const userId = String(entry.userId || entry.user || '').trim();
+        if (userId) {
+          userMap.set(userId, {
+            id: userId,
+            name: userName,
+            email: ''
+          });
+        }
       }
     });
 
@@ -306,15 +510,13 @@ function TimesheetTable() {
       if (id) {
         map.set(String(id), {
           id,
-          name: user?.name || user?.fullName || user?.username || '',
+          name: getUserDisplayName(user),
           email: user?.email || ''
         });
       }
     });
     return map;
   }, [users, systemUsers]);
-
-  const isLikelyId = (value) => typeof value === 'string' && /^[a-f0-9]{24}$/i.test(value);
 
   const getProjectForEntry = (entry) => {
     if (!entry) return null;
@@ -336,16 +538,62 @@ function TimesheetTable() {
   };
 
   const getUserName = (entry) => {
-    if (!entry) return '--';
-    if (entry.userName && entry.userName !== '--') return entry.userName;
-    if (entry.user && !isLikelyId(entry.user) && entry.user !== '--') return entry.user;
-    const byUserId = entry.userId ? userById.get(String(entry.userId)) : null;
-    if (byUserId?.name) return byUserId.name;
-    if (entry.user && isLikelyId(entry.user)) {
-      const byRawId = userById.get(String(entry.user));
-      if (byRawId?.name) return byRawId.name;
+    return getEntryUserLabel(entry, userById, currentUser);
+  };
+
+  const getTimesheetColumnValue = (entry, key) => {
+    switch (key) {
+      case 'date':
+        return entry?.date || '--';
+      case 'project':
+        return getProjectName(entry);
+      case 'customer':
+        return getCustomerName(entry);
+      case 'task':
+        return entry?.taskName || entry?.task || '--';
+      case 'user':
+        return getUserName(entry);
+      case 'time':
+        return entry?.timeSpent || '00:00';
+      case 'totalCost': {
+        const cost = Number(entry?.totalCost ?? entry?.billingCost ?? entry?.cost ?? 0);
+        return `$${cost.toFixed(2)}`;
+      }
+      case 'approvals':
+        return entry?.approvals || '--';
+      case 'customerApprovals':
+        return entry?.customerApprovals || entry?.customerApproval || '--';
+      case 'billingStatus':
+        return entry?.billingStatus || 'Unbilled';
+      case 'projectHead':
+        return entry?.projectHead || '--';
+      default:
+        return '--';
     }
-    return '--';
+  };
+
+  const handleOpenTimesheetColumnsModal = () => {
+    setTimesheetColumnsSearchTerm("");
+    setShowTimesheetColumnsModal(true);
+  };
+
+  const handleCloseTimesheetColumnsModal = () => {
+    setShowTimesheetColumnsModal(false);
+    setTimesheetColumnsSearchTerm("");
+  };
+
+  const handleSaveTimesheetColumns = () => {
+    const lockedColumns = timesheetColumnOptions.filter((column) => column.locked).map((column) => column.key);
+    setSelectedColumns(Array.from(new Set([...draftTimesheetColumns, ...lockedColumns])));
+    handleCloseTimesheetColumnsModal();
+  };
+
+  const handleToggleTimesheetColumn = (key: string) => {
+    const column = timesheetColumnOptions.find((item) => item.key === key);
+    if (!column || column.locked) return;
+    setDraftTimesheetColumns((current) =>
+      current.includes(key) ? current.filter((item) => item !== key) : [...current, key]
+    );
   };
 
   const resolveUserIdForEntry = (entry) => {
@@ -434,6 +682,22 @@ function TimesheetTable() {
     setDeleteMode(mode);
     setPendingDeleteIds(ids);
     setShowDeleteConfirm(true);
+  };
+
+  const getDeleteConfirmTitle = () => {
+    if (deleteMode === "bulk") {
+      return `Delete ${pendingDeleteIds.length} time entries?`;
+    }
+    const userName = selectedEntry && getUserName(selectedEntry) !== "--" ? getUserName(selectedEntry) : "this user";
+    return `Delete ${userName}'s log entry?`;
+  };
+
+  const getDeleteConfirmMessage = () => {
+    if (deleteMode === "bulk") {
+      return "You cannot retrieve these time entries once they have been deleted.";
+    }
+    const userName = selectedEntry && getUserName(selectedEntry) !== "--" ? getUserName(selectedEntry) : "this log entry";
+    return `You cannot retrieve ${userName}'s log entry once it has been deleted.`;
   };
 
   const handleDeleteSelectedEntry = () => {
@@ -563,6 +827,81 @@ function TimesheetTable() {
   const selectedProject = projects.find(p => p.projectName === logEntryData.projectName);
   const availableTasks = selectedProject?.tasks || [];
 
+  const periodOptions = useMemo(() => ([
+    {
+      group: "Current",
+      items: [
+        { id: 'Today', label: 'Today' },
+        { id: 'This Week', label: 'This Week' },
+        { id: 'This Month', label: 'This Month' },
+        { id: 'This Quarter', label: 'This Quarter' },
+        { id: 'This Year', label: 'This Year' },
+      ],
+    },
+    {
+      group: "Previous",
+      items: [
+        { id: 'Yesterday', label: 'Yesterday' },
+        { id: 'Previous Week', label: 'Previous Week' },
+        { id: 'Previous Month', label: 'Previous Month' },
+        { id: 'Previous Quarter', label: 'Previous Quarter' },
+        { id: 'Previous Year', label: 'Previous Year' },
+      ],
+    },
+  ]), []);
+
+  const filterCustomers = useMemo(() => {
+    const unique = new Map();
+    projects.forEach((project) => {
+      const customerName = String(project.customerName || '').trim();
+      if (customerName) unique.set(customerName, customerName);
+    });
+    timeEntries.forEach((entry) => {
+      const customerName = String(entry.customerName || '').trim();
+      if (customerName && customerName !== '--') unique.set(customerName, customerName);
+    });
+    return Array.from(unique.values()).sort((a, b) => a.localeCompare(b));
+  }, [projects, timeEntries]);
+
+  const filterProjects = useMemo(() => {
+    const unique = new Map();
+    projects.forEach((project) => {
+      const projectName = String(project.projectName || '').trim();
+      if (projectName) unique.set(projectName, projectName);
+    });
+    timeEntries.forEach((entry) => {
+      const projectName = String(entry.projectName || '').trim();
+      if (projectName && projectName !== '--') unique.set(projectName, projectName);
+    });
+    return Array.from(unique.values()).sort((a, b) => a.localeCompare(b));
+  }, [projects, timeEntries]);
+
+  const filterUsers = useMemo(() => {
+    const unique = new Map();
+    const normalizeLabel = (value) => String(value || "").trim().toLowerCase();
+
+    [...users, ...systemUsers].forEach((user) => {
+      const userName = getUserDisplayName(user);
+      const userId = getUserDisplayId(user);
+      if (!userName) return;
+      const key = normalizeLabel(userName);
+      if (!unique.has(key)) {
+        unique.set(key, userName);
+      }
+    });
+
+    timeEntries.forEach((entry) => {
+      const userName = String(getUserName(entry) || '').trim();
+      if (!userName || userName === '--') return;
+      const key = normalizeLabel(userName);
+      if (!unique.has(key)) {
+        unique.set(key, userName);
+      }
+    });
+
+    return Array.from(unique.values()).sort((a, b) => a.localeCompare(b));
+  }, [users, systemUsers, timeEntries]);
+
   // Load entries on mount and when needed
   useEffect(() => {
     const fetchTimeEntries = async () => {
@@ -573,13 +912,14 @@ function TimesheetTable() {
         const data = Array.isArray(response)
           ? response
           : (response?.data || []);
+        const currentUser = getCurrentUser();
 
         // Transform database entries to match frontend format
         const transformedEntries = data.map(entry => {
           const isUserObject = typeof entry.user === 'object' && entry.user !== null;
           const userName = isUserObject
-            ? (entry.user.name || entry.userName || '')
-            : (entry.userName || '');
+            ? (getUserDisplayName(entry.user) || entry.userName || '')
+            : getEntryUserLabel(entry, new Map(), currentUser);
           const rawUser = !isUserObject ? entry.user : undefined;
           const projectId = typeof entry.project === 'string'
             ? entry.project
@@ -590,6 +930,8 @@ function TimesheetTable() {
             projectId: projectId,
             projectName: entry.project?.name || entry.projectName || '',
             projectNumber: entry.project?.projectNumber || entry.projectNumber,
+            customerName: entry.project?.customer?.name || entry.customerName || '',
+            dateValue: entry.date ? new Date(entry.date) : new Date(),
             userId: isUserObject ? (entry.user?._id || entry.userId) : (entry.userId || rawUser),
             userName: userName,
             user: userName || (typeof rawUser === 'string' ? rawUser : ''), // keep fallback string (may be id)
@@ -666,6 +1008,18 @@ function TimesheetTable() {
       if (entryMenuRef.current && !entryMenuRef.current.contains(event.target)) {
         setShowEntryMenu(false);
       }
+      if (periodDropdownRef.current && !periodDropdownRef.current.contains(event.target)) {
+        setShowPeriodDropdown(false);
+      }
+      if (customerFilterRef.current && !customerFilterRef.current.contains(event.target)) {
+        setShowCustomerDropdown(false);
+      }
+      if (projectFilterRef.current && !projectFilterRef.current.contains(event.target)) {
+        setShowProjectFilterDropdown(false);
+      }
+      if (userFilterRef.current && !userFilterRef.current.contains(event.target)) {
+        setShowUserFilterDropdown(false);
+      }
       // Close row dropdown when clicking outside (will be handled by checking if click target is inside dropdown)
       if (openDropdownEntryId) {
         const dropdownElement = document.querySelector(`[data-dropdown-entry-id="${openDropdownEntryId}"]`);
@@ -694,35 +1048,79 @@ function TimesheetTable() {
   useEffect(() => {
     const savedTimerState = localStorage.getItem('timerState');
     if (savedTimerState) {
-      const timerState = JSON.parse(savedTimerState);
-      setElapsedTime(timerState.elapsedTime || 0);
+      const timerState = JSON.parse(savedTimerState) as TimerState;
+      const computedElapsed = calculateElapsedTime(timerState);
+      setElapsedTime(computedElapsed);
       setIsTimerRunning(timerState.isTimerRunning || false);
       setTimerNotes(timerState.timerNotes || '');
       setAssociatedProject(timerState.associatedProject || '');
+      setSelectedProjectForTimer(timerState.selectedProjectForTimer || timerState.associatedProject || '');
+      setSelectedTaskForTimer(timerState.selectedTaskForTimer || '');
+      setIsBillable(timerState.isBillable !== undefined ? timerState.isBillable : true);
+      if (timerState.isTimerRunning && !timerState.startTime) {
+        const updatedTimerState = {
+          ...timerState,
+          startTime: Date.now(),
+          pausedElapsedTime: computedElapsed,
+        };
+        localStorage.setItem('timerState', JSON.stringify(updatedTimerState));
+      }
     }
+    setIsTimerHydrated(true);
   }, []);
 
   // Save timer state to localStorage whenever it changes
   useEffect(() => {
-    const timerState = {
+    if (!isTimerHydrated) return;
+
+    const savedTimerState = localStorage.getItem('timerState');
+    let timerState: TimerState = {};
+
+    if (savedTimerState) {
+      try {
+        timerState = (JSON.parse(savedTimerState) || {}) as TimerState;
+      } catch {
+        timerState = {};
+      }
+    }
+
+    const updatedState: TimerState = {
+      ...timerState,
       elapsedTime,
       isTimerRunning,
       timerNotes,
       associatedProject,
-      lastUpdated: Date.now()
+      selectedProjectForTimer,
+      selectedTaskForTimer,
+      isBillable,
+      lastUpdated: Date.now(),
     };
-    localStorage.setItem('timerState', JSON.stringify(timerState));
-  }, [elapsedTime, isTimerRunning, timerNotes, associatedProject]);
+
+    if (isTimerRunning) {
+      if (!updatedState.startTime) {
+        updatedState.startTime = Date.now();
+        updatedState.pausedElapsedTime = elapsedTime;
+      }
+    } else if (updatedState.startTime) {
+      updatedState.pausedElapsedTime = elapsedTime;
+      delete updatedState.startTime;
+    }
+
+    localStorage.setItem('timerState', JSON.stringify(updatedState));
+  }, [isTimerHydrated, elapsedTime, isTimerRunning, timerNotes, associatedProject, selectedProjectForTimer, selectedTaskForTimer, isBillable]);
 
   // Listen for storage changes (when timer is updated from other page)
   useEffect(() => {
     const handleStorageChange = (e) => {
       if (e.key === 'timerState' && e.newValue) {
-        const timerState = JSON.parse(e.newValue);
-        setElapsedTime(timerState.elapsedTime || 0);
+        const timerState = JSON.parse(e.newValue) as TimerState;
+        setElapsedTime(calculateElapsedTime(timerState));
         setIsTimerRunning(timerState.isTimerRunning || false);
         setTimerNotes(timerState.timerNotes || '');
         setAssociatedProject(timerState.associatedProject || '');
+        setSelectedProjectForTimer(timerState.selectedProjectForTimer || timerState.associatedProject || '');
+        setSelectedTaskForTimer(timerState.selectedTaskForTimer || '');
+        setIsBillable(timerState.isBillable !== undefined ? timerState.isBillable : true);
       }
     };
 
@@ -730,11 +1128,14 @@ function TimesheetTable() {
     const handleCustomStorage = () => {
       const savedTimerState = localStorage.getItem('timerState');
       if (savedTimerState) {
-        const timerState = JSON.parse(savedTimerState);
-        setElapsedTime(timerState.elapsedTime || 0);
+        const timerState = JSON.parse(savedTimerState) as TimerState;
+        setElapsedTime(calculateElapsedTime(timerState));
         setIsTimerRunning(timerState.isTimerRunning || false);
         setTimerNotes(timerState.timerNotes || '');
         setAssociatedProject(timerState.associatedProject || '');
+        setSelectedProjectForTimer(timerState.selectedProjectForTimer || timerState.associatedProject || '');
+        setSelectedTaskForTimer(timerState.selectedTaskForTimer || '');
+        setIsBillable(timerState.isBillable !== undefined ? timerState.isBillable : true);
       }
     };
 
@@ -745,9 +1146,9 @@ function TimesheetTable() {
     const pollInterval = setInterval(() => {
       const savedTimerState = localStorage.getItem('timerState');
       if (savedTimerState) {
-        const timerState = JSON.parse(savedTimerState);
+        const timerState = JSON.parse(savedTimerState) as TimerState;
         if (timerState.lastUpdated && timerState.lastUpdated > (Date.now() - 2000)) {
-          setElapsedTime(timerState.elapsedTime || 0);
+          setElapsedTime(calculateElapsedTime(timerState));
           setIsTimerRunning(timerState.isTimerRunning || false);
         }
       }
@@ -765,20 +1166,32 @@ function TimesheetTable() {
     let interval = null;
     if (isTimerRunning) {
       interval = setInterval(() => {
-        setElapsedTime(prev => {
-          const newTime = prev + 1;
-          // Update localStorage on each tick
-          const timerState = {
-            elapsedTime: newTime,
-            isTimerRunning: true,
-            timerNotes,
-            associatedProject,
-            lastUpdated: Date.now()
-          };
-          localStorage.setItem('timerState', JSON.stringify(timerState));
-          window.dispatchEvent(new CustomEvent('timerStateUpdated'));
-          return newTime;
-        });
+        const savedTimerState = localStorage.getItem('timerState');
+        if (!savedTimerState) return;
+
+        const timerState = JSON.parse(savedTimerState) as TimerState;
+        const newTime = calculateElapsedTime(timerState);
+        setElapsedTime(newTime);
+
+        const updatedTimerState: TimerState = {
+          ...timerState,
+          elapsedTime: newTime,
+          isTimerRunning: true,
+          timerNotes,
+          associatedProject,
+          selectedProjectForTimer,
+          selectedTaskForTimer,
+          isBillable,
+          lastUpdated: Date.now(),
+        };
+
+        if (!updatedTimerState.startTime) {
+          updatedTimerState.startTime = Date.now();
+          updatedTimerState.pausedElapsedTime = timerState.pausedElapsedTime || timerState.elapsedTime || 0;
+        }
+
+        localStorage.setItem('timerState', JSON.stringify(updatedTimerState));
+        window.dispatchEvent(new CustomEvent('timerStateUpdated'));
       }, 1000);
       setTimerInterval(interval);
     } else {
@@ -793,7 +1206,13 @@ function TimesheetTable() {
         clearInterval(interval);
       }
     };
-  }, [isTimerRunning, timerNotes, associatedProject]);
+  }, [isTimerRunning, timerNotes, associatedProject, selectedProjectForTimer, selectedTaskForTimer, isBillable]);
+
+  useEffect(() => {
+    if (showTimesheetColumnsModal) {
+      setDraftTimesheetColumns([...selectedColumns]);
+    }
+  }, [showTimesheetColumnsModal, selectedColumns]);
 
   // Format time as HH:MM:SS
   const formatTime = (seconds) => {
@@ -811,30 +1230,126 @@ function TimesheetTable() {
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
-  const handleStartTimer = () => {
+  const formatTimeVerbose = (seconds) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${String(hours).padStart(2, "0")}h : ${String(minutes).padStart(2, "0")}m : ${String(secs).padStart(2, "0")}s`;
+  };
+
+  const calculateElapsedTime = (timerState) => {
+    if (!timerState) return 0;
+
+    if (timerState.isTimerRunning && timerState.startTime) {
+      const elapsedFromStart = Math.floor((Date.now() - timerState.startTime) / 1000);
+      return (timerState.pausedElapsedTime || 0) + Math.max(0, elapsedFromStart);
+    }
+
+    return timerState.pausedElapsedTime || timerState.elapsedTime || 0;
+  };
+
+  const handleResumeTimer = () => {
+    const savedTimerState = localStorage.getItem('timerState');
+    const timerState = savedTimerState ? (JSON.parse(savedTimerState) as TimerState) : {};
+    const pausedElapsed = timerState.pausedElapsedTime || timerState.elapsedTime || elapsedTime || 0;
+
+    const updatedTimerState: TimerState = {
+      ...timerState,
+      startTime: Date.now(),
+      pausedElapsedTime: pausedElapsed,
+      elapsedTime: pausedElapsed,
+      isTimerRunning: true,
+      timerNotes,
+      associatedProject,
+      selectedProjectForTimer,
+      selectedTaskForTimer,
+      isBillable,
+      lastUpdated: Date.now(),
+    };
+
+    localStorage.setItem('timerState', JSON.stringify(updatedTimerState));
+    setElapsedTime(pausedElapsed);
     setIsTimerRunning(true);
+    window.dispatchEvent(new CustomEvent('timerStateUpdated'));
+  };
+
+  const handleStartTimerFromModal = () => {
+    if (!selectedProjectForTimer || !selectedTaskForTimer) {
+      toast.error("Please select a project and task");
+      return;
+    }
+
+    const timerState: TimerState = {
+      startTime: Date.now(),
+      pausedElapsedTime: 0,
+      elapsedTime: 0,
+      isTimerRunning: true,
+      timerNotes,
+      associatedProject: selectedProjectForTimer,
+      selectedProjectForTimer,
+      selectedTaskForTimer,
+      isBillable,
+      lastUpdated: Date.now(),
+    };
+
+    localStorage.setItem('timerState', JSON.stringify(timerState));
+    setElapsedTime(0);
+    setIsTimerRunning(true);
+    setAssociatedProject(selectedProjectForTimer);
+    setShowTimerModal(false);
+    setShowProjectFields(false);
+    setShowTaskDropdown(false);
+    setIsCreatingTaskInline(false);
+    setTaskSearchTerm('');
+    window.dispatchEvent(new CustomEvent('timerStateUpdated'));
+    toast.success('The timer has been started.');
   };
 
   const handlePauseTimer = () => {
+    const savedTimerState = localStorage.getItem('timerState');
+    const timerState = savedTimerState ? (JSON.parse(savedTimerState) as TimerState) : {};
+    const finalElapsedTime = calculateElapsedTime(timerState);
+
     setIsTimerRunning(false);
-    const timerState = {
-      elapsedTime,
+    setElapsedTime(finalElapsedTime);
+
+    const updatedState: TimerState = {
+      ...timerState,
+      elapsedTime: finalElapsedTime,
+      pausedElapsedTime: finalElapsedTime,
       isTimerRunning: false,
       timerNotes,
       associatedProject,
-      lastUpdated: Date.now()
+      selectedProjectForTimer,
+      selectedTaskForTimer,
+      isBillable,
+      lastUpdated: Date.now(),
     };
-    localStorage.setItem('timerState', JSON.stringify(timerState));
+
+    if (updatedState.startTime) {
+      delete updatedState.startTime;
+    }
+
+    localStorage.setItem('timerState', JSON.stringify(updatedState));
     window.dispatchEvent(new CustomEvent('timerStateUpdated'));
   };
 
   const handleStopTimer = async () => {
+    const savedTimerState = localStorage.getItem('timerState');
+    const timerState = savedTimerState ? (JSON.parse(savedTimerState) as TimerState) : {};
+    const finalElapsedTime = calculateElapsedTime(timerState);
+    const activeProjectName = associatedProject || selectedProjectForTimer || timerState.associatedProject || timerState.selectedProjectForTimer || '';
+    const activeTaskName = selectedTaskForTimer || timerState.selectedTaskForTimer || '';
+    const activeBillable = timerState.isBillable !== undefined ? timerState.isBillable : isBillable;
+
     setIsTimerRunning(false);
+    setElapsedTime(finalElapsedTime);
+
     // Save the time entry
-    if (elapsedTime > 0 && associatedProject) {
+    if (finalElapsedTime > 0 && activeProjectName) {
       try {
         // Find project
-        const projectObj = projects.find(p => p.projectName === associatedProject);
+        const projectObj = projects.find(p => p.projectName === activeProjectName);
         if (!projectObj) {
           toast.error('Invalid project selected');
           return;
@@ -849,7 +1364,7 @@ function TimesheetTable() {
         }
 
         // Parse time (formatTimeShort returns "Xh Ym" format)
-        const timeStr = formatTimeShort(elapsedTime);
+        const timeStr = formatTimeShort(finalElapsedTime);
         const hoursMatch = timeStr.match(/(\d+)h/);
         const minutesMatch = timeStr.match(/(\d+)m/);
         const hours = hoursMatch ? parseInt(hoursMatch[1]) : 0;
@@ -863,8 +1378,8 @@ function TimesheetTable() {
           hours: hours,
           minutes: minutes,
           description: timerNotes || '',
-          billable: true,
-          task: '',
+          billable: activeBillable,
+          task: activeTaskName,
         };
 
         await timeEntriesAPI.create(newEntry);
@@ -872,7 +1387,6 @@ function TimesheetTable() {
         // Dispatch custom event to notify other components
         window.dispatchEvent(new CustomEvent('timeEntryUpdated'));
 
-        // Show success message
         toast.success('Time entry created successfully!');
       } catch (error) {
         console.error("Error saving timer entry:", error);
@@ -883,6 +1397,9 @@ function TimesheetTable() {
     setElapsedTime(0);
     setTimerNotes('');
     setAssociatedProject('');
+    setSelectedProjectForTimer('');
+    setSelectedTaskForTimer('');
+    setIsBillable(true);
     setShowTimerModal(false);
     // Clear from localStorage
     localStorage.removeItem('timerState');
@@ -894,6 +1411,9 @@ function TimesheetTable() {
     setElapsedTime(0);
     setTimerNotes('');
     setAssociatedProject('');
+    setSelectedProjectForTimer('');
+    setSelectedTaskForTimer('');
+    setIsBillable(true);
     // Clear from localStorage
     localStorage.removeItem('timerState');
     window.dispatchEvent(new CustomEvent('timerStateUpdated'));
@@ -919,8 +1439,8 @@ function TimesheetTable() {
           bValue = (b.projectName || "").toLowerCase();
           break;
         case 'user':
-          aValue = (a.user || "").toLowerCase();
-          bValue = (b.user || "").toLowerCase();
+          aValue = getUserName(a).toLowerCase();
+          bValue = getUserName(b).toLowerCase();
           break;
         case 'time':
           // Parse time strings like "2h 30m" to minutes
@@ -951,6 +1471,50 @@ function TimesheetTable() {
     return sorted;
   };
 
+  const getPeriodRange = (period) => {
+    const now = new Date();
+    const start = new Date(now);
+    const end = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+
+    if (period === "Today") {
+      // already set to today
+    } else if (period === "This Week") {
+      const day = start.getDay();
+      const diff = (day + 6) % 7;
+      start.setDate(start.getDate() - diff);
+    } else if (period === "This Month") {
+      start.setDate(1);
+    } else if (period === "This Quarter") {
+      const quarterStartMonth = Math.floor(start.getMonth() / 3) * 3;
+      start.setMonth(quarterStartMonth, 1);
+    } else if (period === "This Year") {
+      start.setMonth(0, 1);
+    } else if (period === "Yesterday") {
+      start.setDate(start.getDate() - 1);
+      end.setDate(end.getDate() - 1);
+    } else if (period === "Last Month") {
+      start.setMonth(start.getMonth() - 1, 1);
+      end.setMonth(end.getMonth(), 0);
+      end.setHours(23, 59, 59, 999);
+    } else if (period === "Previous Week") {
+      const day = start.getDay();
+      const diff = (day + 6) % 7;
+      start.setDate(start.getDate() - diff - 7);
+      end.setDate(start.getDate() + 6);
+    } else if (period === "Previous Quarter") {
+      const quarterStartMonth = Math.floor(start.getMonth() / 3) * 3 - 3;
+      start.setMonth(quarterStartMonth, 1);
+      end.setMonth(quarterStartMonth + 3, 0);
+    } else if (period === "Previous Year") {
+      start.setFullYear(start.getFullYear() - 1, 0, 1);
+      end.setFullYear(end.getFullYear() - 1, 11, 31);
+    }
+
+    return { start, end };
+  };
+
   // Filter entries based on selected filters
   const getFilteredEntries = (entries) => {
     let filtered = [...entries];
@@ -959,6 +1523,28 @@ function TimesheetTable() {
     } else if (selectedView === 'Unbilled') {
       filtered = filtered.filter(e => e.billingStatus === 'Unbilled' || !e.billingStatus);
     }
+
+    if (selectedPeriodFilter !== "All") {
+      const { start, end } = getPeriodRange(selectedPeriodFilter);
+      filtered = filtered.filter((entry) => {
+        const entryDate = entry?.dateValue ? new Date(entry.dateValue) : new Date(entry?.date || "");
+        if (Number.isNaN(entryDate.getTime())) return false;
+        return entryDate >= start && entryDate <= end;
+      });
+    }
+
+    if (selectedCustomer) {
+      filtered = filtered.filter((entry) => String(entry.customerName || "").trim() === selectedCustomer);
+    }
+
+    if (selectedProjectFilter) {
+      filtered = filtered.filter((entry) => String(entry.projectName || "").trim() === selectedProjectFilter);
+    }
+
+    if (selectedUserFilter) {
+      filtered = filtered.filter((entry) => String(getUserName(entry) || "").trim() === selectedUserFilter);
+    }
+
     return filtered;
   };
 
@@ -966,7 +1552,62 @@ function TimesheetTable() {
   const sortedEntries = useMemo(() => {
     const filtered = getFilteredEntries(timeEntries);
     return getSortedEntries(filtered);
-  }, [timeEntries, selectedSort, sortDirection, selectedView]);
+  }, [timeEntries, selectedSort, sortDirection, selectedView, selectedPeriodFilter, selectedCustomer, selectedProjectFilter, selectedUserFilter]);
+
+  const calendarEntries = useMemo(() => getFilteredEntries(timeEntries), [timeEntries, selectedView, selectedPeriodFilter, selectedCustomer, selectedProjectFilter, selectedUserFilter]);
+
+  const calendarCells = useMemo(() => getCalendarWeeks(calendarDate), [calendarDate]);
+
+  const calendarEntryMap = useMemo(() => {
+    const map = new Map();
+    calendarEntries.forEach((entry) => {
+      const key = formatCalendarKey(entry?.date);
+      if (!key) return;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(entry);
+    });
+    return map;
+  }, [calendarEntries]);
+
+  const selectedCalendarDateKey = selectedDateForLogEntry ? formatCalendarKey(selectedDateForLogEntry) : "";
+  const selectedCalendarEntries = selectedCalendarDateKey ? (calendarEntryMap.get(selectedCalendarDateKey) || []) : [];
+  const selectedCalendarTotalMinutes = selectedCalendarEntries.reduce((sum, entry) => sum + (Number(entry.hours || 0) * 60) + Number(entry.minutes || 0), 0);
+  const selectedCalendarTotalLabel = `${String(Math.floor(selectedCalendarTotalMinutes / 60)).padStart(2, "0")}:${String(selectedCalendarTotalMinutes % 60).padStart(2, "0")}`;
+  const selectedCalendarUniqueUsers = new Set(selectedCalendarEntries.map((entry) => getUserName(entry)).filter((name) => name && name !== "--")).size;
+
+  const monthDayTotals = useMemo(() => {
+    const totals = new Map();
+    calendarEntries.forEach((entry) => {
+      const key = formatCalendarKey(entry?.date);
+      if (!key) return;
+      const current = totals.get(key) || 0;
+      totals.set(key, current + (Number(entry.hours || 0) * 60) + Number(entry.minutes || 0));
+    });
+    return totals;
+  }, [calendarEntries]);
+
+  const goToPreviousMonth = () => {
+    setCalendarDate((prev) => {
+      const next = new Date(prev);
+      next.setMonth(next.getMonth() - 1, 1);
+      return next;
+    });
+  };
+
+  const goToNextMonth = () => {
+    setCalendarDate((prev) => {
+      const next = new Date(prev);
+      next.setMonth(next.getMonth() + 1, 1);
+      return next;
+    });
+  };
+
+  const moveSelectedCalendarDate = (days) => {
+    if (!selectedDateForLogEntry) return;
+    const next = new Date(selectedDateForLogEntry);
+    next.setDate(next.getDate() + days);
+    setSelectedDateForLogEntry(next);
+  };
 
   // Handle sort selection
   const handleSortSelect = (sortOption) => {
@@ -1002,7 +1643,7 @@ function TimesheetTable() {
           `"${(entry.projectName || "").replace(/"/g, '""')}"`,
           `"${(entry.taskName || "").replace(/"/g, '""')}"`,
           `"${(entry.timeSpent || "").replace(/"/g, '""')}"`,
-          `"${(entry.user || "").replace(/"/g, '""')}"`,
+          `"${getUserName(entry).replace(/"/g, '""')}"`,
           entry.billable ? "Yes" : "No",
           `"${(entry.notes || "").replace(/"/g, '""')}"`,
         ];
@@ -1040,10 +1681,10 @@ function TimesheetTable() {
           <div ref={dropdownRef} className="relative">
             <button
               onClick={() => setShowDropdown(!showDropdown)}
-              className="flex items-center gap-2 border-none bg-transparent p-0 text-[32px] font-semibold text-gray-800 hover:text-gray-900 cursor-pointer"
+              className="flex items-center gap-1.5 border-none bg-transparent p-0 text-[26px] font-semibold text-gray-800 hover:text-gray-900 cursor-pointer"
             >
               All Timesheets
-              <ChevronDown size={14} className="text-[#156372]" />
+              <ChevronDown size={12} className="text-[#156372]" />
             </button>
             {showDropdown && (
               <div className="absolute left-0 top-full z-[1200] mt-2 min-w-[210px] rounded-md border border-gray-200 bg-white py-2 shadow-lg">
@@ -1099,7 +1740,7 @@ function TimesheetTable() {
                   {formatTime(elapsedTime)}
                 </div>
                 <button
-                  onClick={isTimerRunning ? handlePauseTimer : handleStartTimer}
+                  onClick={isTimerRunning ? handlePauseTimer : handleResumeTimer}
                   className="flex h-9 w-8 items-center justify-center border-none border-r border-gray-200 bg-white text-[#2563eb] hover:bg-gray-50 cursor-pointer"
                 >
                   {isTimerRunning ? <Pause size={13} /> : <Play size={13} />}
@@ -1124,9 +1765,9 @@ function TimesheetTable() {
             <div className="relative flex items-center">
               <button
                 onClick={() => setShowLogEntryForm(true)}
-                className="flex h-9 items-center gap-1.5 rounded-l-md border-none bg-[#408dfb] px-3.5 text-sm font-semibold text-white hover:bg-[#307deb] cursor-pointer"
+                className="flex h-9 items-center gap-1 whitespace-nowrap rounded-l-md border-none bg-[#156372] px-2.5 text-[12px] font-semibold text-white hover:bg-[#0f4f5c] cursor-pointer"
               >
-                <Plus size={15} />
+                <Plus size={14} />
                 New Log Entry
               </button>
               <button
@@ -1134,17 +1775,17 @@ function TimesheetTable() {
                   e.stopPropagation();
                   setShowNewDropdown(!showNewDropdown);
                 }}
-                className="flex h-9 w-9 items-center justify-center rounded-r-md border-none border-l border-white/20 bg-[#408dfb] text-white hover:bg-[#307deb] cursor-pointer"
+                className="flex h-9 w-9 items-center justify-center rounded-r-md border-none border-l border-white/20 bg-[#156372] text-white hover:bg-[#0f4f5c] cursor-pointer"
               >
                 <ChevronDown size={14} />
               </button>
               {showNewDropdown && (
-                <div className="absolute right-0 top-full z-[1200] mt-2 min-w-[210px] rounded-md border border-gray-200 bg-white py-2 shadow-lg">
+                <div className="absolute right-0 top-full z-[1200] mt-2 w-max min-w-[160px] rounded-md border border-gray-200 bg-white py-2 shadow-lg">
                   <button
                     onClick={() => { navigate('/time-tracking/timesheet/weekly'); setShowNewDropdown(false); }}
-                    className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 border-none bg-transparent cursor-pointer"
+                    className="flex w-full items-center gap-2 whitespace-nowrap px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-50 border-none bg-transparent cursor-pointer"
                   >
-                    <Plus size={14} />
+                    <Plus size={13} />
                     New Weekly Time Log
                   </button>
                 </div>
@@ -1240,6 +1881,196 @@ function TimesheetTable() {
         </div>
       )}
 
+      {selectedEntries.length === 0 && viewMode === 'list' && (
+        <div className="flex items-center gap-4 border-b border-gray-200 bg-white px-6 py-3 text-sm text-gray-700">
+          <div className="flex items-center gap-2 font-semibold uppercase text-gray-500">
+            <span>VIEW BY:</span>
+          </div>
+
+          <div className="relative" ref={periodDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setShowPeriodDropdown((value) => !value)}
+              className="flex items-center gap-2 rounded-md border-none bg-transparent px-0 py-0 text-sm text-gray-700 cursor-pointer"
+            >
+              <span className="text-gray-500">Period:</span>
+              <span className="font-medium text-gray-800">{selectedPeriodFilter}</span>
+              <ChevronDown size={12} className="text-gray-500" />
+            </button>
+            {showPeriodDropdown && (
+              <div className="absolute left-0 top-full z-[1200] mt-2 min-w-[220px] max-h-[320px] overflow-y-auto rounded-md bg-white py-2 shadow-lg">
+                <div className="px-2 pb-2">
+                  <div className="relative">
+                    <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={periodSearchTerm}
+                      onChange={(e) => setPeriodSearchTerm(e.target.value)}
+                      placeholder="Search"
+                      className="w-full rounded-md border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-[#156372]"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedPeriodFilter('All');
+                    setShowPeriodDropdown(false);
+                  }}
+                  className={`mx-2 mb-1 flex w-[calc(100%-16px)] items-center justify-between rounded px-3 py-2 text-left text-sm ${selectedPeriodFilter === 'All' ? "bg-[#156372]/10 text-gray-800" : "text-gray-700 hover:bg-gray-50"}`}
+                >
+                  All
+                </button>
+                {periodOptions.map((group) => {
+                  const filteredItems = group.items.filter((option) =>
+                    option.label.toLowerCase().includes(periodSearchTerm.trim().toLowerCase())
+                  );
+
+                  if (filteredItems.length === 0) return null;
+
+                  return (
+                    <div key={group.group} className="mt-1">
+                      <div className="px-4 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                        {group.group}
+                      </div>
+                      {filteredItems.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedPeriodFilter(option.id);
+                            setShowPeriodDropdown(false);
+                          }}
+                          className={`mx-2 mb-1 flex w-[calc(100%-16px)] items-center justify-between rounded px-3 py-2 text-left text-sm ${selectedPeriodFilter === option.id ? "bg-[#156372]/10 text-gray-800" : "text-gray-700 hover:bg-gray-50"}`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="h-4 w-px bg-gray-200" />
+
+          <div className="relative" ref={customerFilterRef}>
+            <button
+              type="button"
+              onClick={() => setShowCustomerDropdown((value) => !value)}
+              className="flex items-center gap-2 rounded-md border-none bg-transparent px-0 py-0 text-sm text-gray-700 cursor-pointer"
+            >
+              <span className={selectedCustomer ? "text-gray-800" : "text-gray-500"}>{selectedCustomer || "Select customer"}</span>
+              <ChevronDown size={12} className="text-gray-500" />
+            </button>
+            {showCustomerDropdown && (
+              <div className="absolute left-0 top-full z-[1200] mt-2 min-w-[180px] rounded-md bg-white py-2 shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCustomer('');
+                    setShowCustomerDropdown(false);
+                  }}
+                  className="mx-2 mb-1 flex w-[calc(100%-16px)] items-center rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  All customers
+                </button>
+                {filterCustomers.map((customer) => (
+                  <button
+                    key={customer}
+                    type="button"
+                    onClick={() => {
+                      setSelectedCustomer(customer);
+                      setShowCustomerDropdown(false);
+                    }}
+                    className={`mx-2 mb-1 flex w-[calc(100%-16px)] items-center rounded px-3 py-2 text-left text-sm ${selectedCustomer === customer ? "bg-[#156372]/10 text-gray-800" : "text-gray-700 hover:bg-gray-50"}`}
+                  >
+                    {customer}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="relative" ref={projectFilterRef}>
+            <button
+              type="button"
+              onClick={() => setShowProjectFilterDropdown((value) => !value)}
+              className="flex items-center gap-2 rounded-md border-none bg-transparent px-0 py-0 text-sm text-gray-700 cursor-pointer"
+            >
+              <span className={selectedProjectFilter ? "text-gray-800" : "text-gray-500"}>{selectedProjectFilter || "Select a project"}</span>
+              <ChevronDown size={12} className="text-gray-500" />
+            </button>
+            {showProjectFilterDropdown && (
+              <div className="absolute left-0 top-full z-[1200] mt-2 min-w-[180px] rounded-md bg-white py-2 shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedProjectFilter('');
+                    setShowProjectFilterDropdown(false);
+                  }}
+                  className="mx-2 mb-1 flex w-[calc(100%-16px)] items-center rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  All projects
+                </button>
+                {filterProjects.map((project) => (
+                  <button
+                    key={project}
+                    type="button"
+                    onClick={() => {
+                      setSelectedProjectFilter(project);
+                      setShowProjectFilterDropdown(false);
+                    }}
+                    className={`mx-2 mb-1 flex w-[calc(100%-16px)] items-center rounded px-3 py-2 text-left text-sm ${selectedProjectFilter === project ? "bg-[#156372]/10 text-gray-800" : "text-gray-700 hover:bg-gray-50"}`}
+                  >
+                    {project}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="relative" ref={userFilterRef}>
+            <button
+              type="button"
+              onClick={() => setShowUserFilterDropdown((value) => !value)}
+              className="flex items-center gap-2 rounded-md border-none bg-transparent px-0 py-0 text-sm text-gray-700 cursor-pointer"
+            >
+              <span className={selectedUserFilter ? "text-gray-800" : "text-gray-500"}>{selectedUserFilter || "Select user"}</span>
+              <ChevronDown size={12} className="text-gray-500" />
+            </button>
+            {showUserFilterDropdown && (
+              <div className="absolute left-0 top-full z-[1200] mt-2 min-w-[180px] rounded-md bg-white py-2 shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedUserFilter('');
+                    setShowUserFilterDropdown(false);
+                  }}
+                  className="mx-2 mb-1 flex w-[calc(100%-16px)] items-center rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  All users
+                </button>
+                {filterUsers.map((user) => (
+                  <button
+                    key={user}
+                    type="button"
+                    onClick={() => {
+                      setSelectedUserFilter(user);
+                      setShowUserFilterDropdown(false);
+                    }}
+                    className={`mx-2 mb-1 flex w-[calc(100%-16px)] items-center rounded px-3 py-2 text-left text-sm ${selectedUserFilter === user ? "bg-[#156372]/10 text-gray-800" : "text-gray-700 hover:bg-gray-50"}`}
+                  >
+                    {user}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 overflow-hidden bg-white flex flex-col">
         {viewMode === 'list' ? (
           <div className="flex-1 overflow-auto border-t border-gray-200 bg-white">
@@ -1248,7 +2079,12 @@ function TimesheetTable() {
                 <tr className="border-b border-gray-200 bg-gray-50">
                   <th className="w-[60px] px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500 projects-select-header">
                     <div className="flex items-center gap-2 projects-select-header-actions">
-                      <button className="border-none bg-transparent p-0 text-[#156372] cursor-pointer">
+                      <button
+                        type="button"
+                        onClick={handleOpenTimesheetColumnsModal}
+                        className="border-none bg-transparent p-0 text-[#156372] cursor-pointer"
+                        aria-label="Customize columns"
+                      >
                         <SlidersHorizontal size={14} />
                       </button>
                     </div>
@@ -1264,13 +2100,14 @@ function TimesheetTable() {
                       />
                     </div>
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">DATE</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">PROJECT</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">CUSTOMER</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">TASK</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">USER</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">TIME</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">BILLING STATUS</th>
+                  {visibleTimesheetColumns.map((column) => (
+                    <th
+                      key={column.key}
+                      className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500"
+                    >
+                      {column.label}
+                    </th>
+                  ))}
                   <th className="w-[40px] px-4 py-3 text-right">
                     <button className="border-none bg-transparent p-0 text-gray-500 cursor-pointer">
                       <Search size={16} />
@@ -1280,9 +2117,6 @@ function TimesheetTable() {
               </thead>
               <tbody>
                 {sortedEntries.map((entry) => {
-                  const projectName = getProjectName(entry);
-                  const customerName = getCustomerName(entry);
-                  const userName = getUserName(entry);
                   return (
                     <tr key={entry.id} className="cursor-pointer border-b border-gray-200 hover:bg-gray-50">
                       <td className="px-4 py-3 projects-select-cell">
@@ -1299,20 +2133,34 @@ function TimesheetTable() {
                           />
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-800" onClick={() => typeof setSelectedEntry === 'function' && setSelectedEntry(entry)}>{entry.date}</td>
-                      <td className="px-4 py-3 text-sm text-[#156372]" onClick={() => typeof setSelectedEntry === 'function' && setSelectedEntry(entry)}>{projectName}</td>
-                      <td className="px-4 py-3 text-sm text-gray-800" onClick={() => typeof setSelectedEntry === 'function' && setSelectedEntry(entry)}>{customerName}</td>
-                      <td className="px-4 py-3 text-sm text-gray-800" onClick={() => typeof setSelectedEntry === 'function' && setSelectedEntry(entry)}>{entry.taskName}</td>
-                      <td className="px-4 py-3 text-sm text-gray-800" onClick={() => typeof setSelectedEntry === 'function' && setSelectedEntry(entry)}>{userName}</td>
-                      <td className="px-4 py-3 text-sm text-gray-800" onClick={() => typeof setSelectedEntry === 'function' && setSelectedEntry(entry)}>{entry.timeSpent}</td>
-                      <td className="px-4 py-3 text-sm text-gray-800" onClick={() => typeof setSelectedEntry === 'function' && setSelectedEntry(entry)}>{entry.billingStatus || 'Unbilled'}</td>
+                      {visibleTimesheetColumns.map((column) => {
+                        const value = getTimesheetColumnValue(entry, column.key);
+                        const cellClassName =
+                          column.key === "project"
+                            ? "px-4 py-3 text-sm text-[#156372]"
+                            : column.key === "customerApprovals"
+                              ? "px-4 py-3 text-sm text-[#10b981]"
+                              : column.key === "billingStatus"
+                                ? "px-4 py-3 text-sm text-gray-800"
+                                : "px-4 py-3 text-sm text-gray-800";
+
+                        return (
+                          <td
+                            key={`${entry.id}-${column.key}`}
+                            className={cellClassName}
+                            onClick={() => typeof setSelectedEntry === 'function' && setSelectedEntry(entry)}
+                          >
+                            {value}
+                          </td>
+                        );
+                      })}
                       <td className="px-4 py-3" />
                     </tr>
                   );
                 })}
                 {sortedEntries.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-4 py-10 text-center text-sm text-gray-500">
+                    <td colSpan={visibleTimesheetColumns.length + 2} className="px-4 py-10 text-center text-sm text-gray-500">
                       No log entries found. Click "+ New" to create your first log entry.
                     </td>
                   </tr>
@@ -1321,25 +2169,194 @@ function TimesheetTable() {
             </table>
           </div>
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-5 p-6">
-            {sortedEntries.map((entry) => {
-              const projectName = getProjectName(entry);
-              const customerName = getCustomerName(entry);
-              const userName = getUserName(entry);
-              return (
-                <div key={entry.id} className="cursor-pointer rounded-lg border border-gray-200 bg-white p-5 hover:shadow" onClick={() => typeof setSelectedEntry === 'function' && setSelectedEntry(entry)}>
-                  <div className="mb-2 text-lg font-semibold text-[#156372]">{projectName || 'Unassigned'}</div>
-                  <div className="text-sm text-gray-600 mb-1">Time: {entry.timeSpent}</div>
-                  <div className="text-sm text-gray-600 mb-1">User: {userName}</div>
-                  <div className="text-sm text-gray-600">Status: {entry.billingStatus || 'Unbilled'}</div>
+          <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-white">
+            <div className="flex items-center justify-center gap-4 border-b border-gray-200 bg-white px-6 py-4">
+              <button
+                onClick={goToPreviousMonth}
+                className="rounded-full border-none bg-transparent p-1 text-gray-500 hover:text-[#156372] cursor-pointer"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <div className="text-[18px] font-semibold text-gray-800">{getMonthLabel(calendarDate)}</div>
+              <button
+                onClick={goToNextMonth}
+                className="rounded-full border-none bg-transparent p-1 text-gray-500 hover:text-[#156372] cursor-pointer"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+
+            <div className={`flex-1 min-h-0 overflow-auto ${selectedDateForLogEntry ? "pr-[380px]" : ""}`}>
+              <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50 text-[11px] font-semibold uppercase text-gray-500">
+                {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day) => (
+                  <div key={day} className="px-3 py-3 text-center">{day}</div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-7">
+                {calendarCells.map((cell) => {
+                  const key = formatCalendarKey(cell);
+                  const entries = calendarEntryMap.get(key) || [];
+                  const totalMinutes = monthDayTotals.get(key) || 0;
+                  const totalHours = `${String(Math.floor(totalMinutes / 60)).padStart(2, "0")}:${String(totalMinutes % 60).padStart(2, "0")}`;
+                  const isSelected = selectedCalendarDateKey === key;
+                  const hasEntries = entries.length > 0;
+
+                  return (
+                    <div
+                      key={key || cell.toISOString()}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => {
+                        setSelectedDateForLogEntry(new Date(cell));
+                        setSelectedEntry(null);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setSelectedDateForLogEntry(new Date(cell));
+                          setSelectedEntry(null);
+                        }
+                      }}
+                      className={`group relative min-h-[150px] border-b border-r border-gray-200 bg-white px-3 py-2 text-left transition-colors hover:bg-[#f7fbff] ${
+                        isSelected ? "ring-1 ring-inset ring-[#4a8cf7] bg-[#f2f7ff]" : ""
+                      } cursor-pointer`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <span className="text-[13px] font-medium text-gray-800">
+                          {cell.getDate()}
+                        </span>
+                        <span className={`opacity-0 transition-opacity group-hover:opacity-100 ${isSelected ? "opacity-100" : ""}`}>
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setSelectedDateForLogEntry(new Date(cell));
+                              setSelectedEntry(null);
+                              setShowLogEntryForm(true);
+                            }}
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-[#156372] text-white hover:bg-[#0f4f5c] cursor-pointer"
+                            title="Add log entry"
+                          >
+                            <Plus size={11} />
+                          </button>
+                        </span>
+                      </div>
+
+                      <div className="mt-8 space-y-1">
+                        {hasEntries ? (
+                          <>
+                            <div className="border-l-2 border-[#d7dff1] pl-2 text-[12px] font-medium text-gray-800">
+                              {totalHours}
+                            </div>
+                            <div className="border-l-2 border-[#d7dff1] pl-2 text-[11px] text-gray-500">
+                              Total Logged Hours
+                            </div>
+                            <div className="pl-2 text-[11px] text-[#156372]">
+                              {entries.length} Timesheets
+                              <ChevronRight size={12} className="inline-block align-middle" />
+                            </div>
+                          </>
+                        ) : (
+                          <div className="opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                            <div className="border-l-2 border-[#d7dff1] pl-2 text-[12px] text-gray-500">
+                              No logged hours
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {selectedDateForLogEntry && (
+              <div className="absolute right-0 top-0 z-40 flex h-full w-[380px] flex-col border-l border-gray-200 bg-white shadow-lg">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                  <div className="text-sm font-medium text-gray-700">
+                    {selectedDateForLogEntry.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setShowLogEntryForm(true)}
+                      className="flex h-8 w-8 items-center justify-center rounded-md border-none bg-[#156372] text-white hover:bg-[#0f4f5c] cursor-pointer"
+                      title="Add log entry"
+                    >
+                      <Plus size={14} />
+                    </button>
+                    <button
+                      onClick={() => moveSelectedCalendarDate(-1)}
+                      className="flex h-8 w-8 items-center justify-center rounded border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 cursor-pointer"
+                      title="Previous day"
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
+                    <button
+                      onClick={() => moveSelectedCalendarDate(1)}
+                      className="flex h-8 w-8 items-center justify-center rounded border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 cursor-pointer"
+                      title="Next day"
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                    <button
+                      onClick={() => setSelectedDateForLogEntry(null)}
+                      className="flex h-8 w-8 items-center justify-center rounded border border-gray-200 bg-white text-red-500 hover:bg-red-50 cursor-pointer"
+                      title="Close"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
                 </div>
-              );
-            })}
+
+                <div className="border-b border-gray-200 px-4 py-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-lg border border-gray-200 bg-white px-3 py-3">
+                      <div className="text-xs text-gray-500">Total Logged Hours</div>
+                      <div className="mt-1 text-[18px] font-semibold text-gray-900">{selectedCalendarTotalLabel}</div>
+                    </div>
+                    <div className="rounded-lg border border-gray-200 bg-white px-3 py-3">
+                      <div className="text-xs text-gray-500">Total Users</div>
+                      <div className="mt-1 text-[18px] font-semibold text-gray-900">{selectedCalendarUniqueUsers}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-auto">
+                  {selectedCalendarEntries.length === 0 ? (
+                    <div className="px-4 py-6 text-sm text-gray-500">No entries for this date.</div>
+                  ) : (
+                    <div className="divide-y divide-gray-200">
+                      {selectedCalendarEntries.map((entry) => (
+                        <button
+                          key={entry.id}
+                          type="button"
+                          onClick={() => setSelectedEntry(entry)}
+                          className="flex w-full items-start gap-3 px-4 py-4 text-left hover:bg-gray-50"
+                        >
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-200 text-sm font-medium text-gray-600">
+                            {String(getUserName(entry) || "U").charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[13px] font-medium text-gray-900">
+                              {toHHMM(entry)} hrs
+                            </div>
+                            <div className="truncate text-[12px] text-gray-500">
+                              {getProjectName(entry)} • {getUserName(entry)}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {selectedEntry && (
+      {viewMode === 'list' && selectedEntry && (
         <div className="absolute right-0 top-0 h-full w-[360px] border-l border-gray-200 bg-white shadow-lg z-40 flex flex-col">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
             <div className="text-sm font-semibold text-gray-900">
@@ -1492,6 +2509,93 @@ function TimesheetTable() {
         </div>
       )}
 
+      {showTimesheetColumnsModal && (
+        <div
+          className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16"
+          onClick={handleCloseTimesheetColumnsModal}
+        >
+          <div
+            className="w-full max-w-[450px] rounded-lg bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+              <div className="flex items-center gap-2 text-[15px] font-medium text-slate-800">
+                <SlidersHorizontal size={14} className="text-slate-500" />
+                <span>Customize Columns</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] text-slate-500">
+                  {new Set([
+                    ...draftTimesheetColumns,
+                    ...timesheetColumnOptions.filter((column) => column.locked).map((column) => column.key),
+                  ]).size} of {timesheetColumnOptions.length} Selected
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCloseTimesheetColumnsModal}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  aria-label="Close"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+
+            <div className="px-5 py-4">
+              <div className="relative">
+                <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={timesheetColumnsSearchTerm}
+                  onChange={(event) => setTimesheetColumnsSearchTerm(event.target.value)}
+                  placeholder="Search"
+                  className="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
+                />
+              </div>
+
+              <div className="mt-3 max-h-[320px] overflow-y-auto pr-1">
+                {filteredTimesheetColumnOptions.map((column) => {
+                  const checked = column.locked || draftTimesheetColumns.includes(column.key);
+                  return (
+                    <label
+                      key={column.key}
+                      className="mb-2 flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                    >
+                      <span className="flex h-4 w-4 items-center justify-center text-slate-400">⋮⋮</span>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={column.locked}
+                        onChange={() => handleToggleTimesheetColumn(column.key)}
+                        className="h-4 w-4 cursor-pointer accent-[#156372] disabled:cursor-not-allowed disabled:accent-slate-400"
+                      />
+                      <span className={column.locked ? "text-slate-400" : "text-slate-700"}>{column.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 border-t border-slate-200 px-5 py-4">
+              <button
+                type="button"
+                onClick={handleSaveTimesheetColumns}
+                className="rounded-md bg-[#156372] px-4 py-2 text-sm font-medium text-white hover:bg-[#0f4f5c]"
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={handleCloseTimesheetColumnsModal}
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16">
           <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200">
@@ -1500,7 +2604,7 @@ function TimesheetTable() {
                 !
               </div>
               <h3 className="text-[15px] font-semibold text-slate-800 flex-1">
-                {deleteMode === "bulk" ? "Delete time entries?" : "Delete time entry?"}
+                {getDeleteConfirmTitle()}
               </h3>
               <button
                 type="button"
@@ -1512,9 +2616,7 @@ function TimesheetTable() {
               </button>
             </div>
             <div className="px-5 py-3 text-[13px] text-slate-600">
-              {deleteMode === "bulk"
-                ? "You cannot retrieve these time entries once they have been deleted."
-                : "You cannot retrieve this time entry once it has been deleted."}
+              {getDeleteConfirmMessage()}
             </div>
             <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
               <button
@@ -1536,7 +2638,20 @@ function TimesheetTable() {
         </div>
       )}
 
-      {showLogEntryForm && <NewLogEntryForm onClose={() => setShowLogEntryForm(false)} />}
+      {showLogEntryForm && (
+        <NewLogEntryForm
+          onClose={() => setShowLogEntryForm(false)}
+          defaultDate={selectedDateForLogEntry}
+        />
+      )}
+
+      <StartTimerModal
+        open={showTimerModal}
+        onClose={() => setShowTimerModal(false)}
+        elapsedTime={elapsedTime}
+        defaultProjectName={associatedProject || selectedProjectForTimer}
+        defaultTaskName={selectedTaskForTimer}
+      />
 
       {isEditingEntry && selectedEntry && (
         <div
@@ -1854,4 +2969,3 @@ export default function TimeTrackingPage() {
     </div>
   );
 }
-

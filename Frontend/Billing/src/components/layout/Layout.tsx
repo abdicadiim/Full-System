@@ -1,8 +1,9 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import Header from './Header'
 import Sidebar from './Sidebar'
 import { OrgsProvider } from '../../state/orgsContext'
+import { ensureTimerTicker } from '../../lib/timeTracking/timerService'
 
 export default function Layout({ children }) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -15,6 +16,7 @@ export default function Layout({ children }) {
     location.pathname.startsWith("/products/checkout-button") ||
     location.pathname.startsWith("/products/pricing-widgets/new");
   const isFullWidthPage =
+    location.pathname.startsWith("/time-tracking") ||
     location.pathname.startsWith("/sales/subscriptions") ||
     location.pathname.startsWith("/sales/customers") ||
     location.pathname.startsWith("/sales/quotes") ||
@@ -27,6 +29,10 @@ export default function Layout({ children }) {
     location.pathname.startsWith("/products/pricing-widgets") ||
     location.pathname.startsWith("/products/price-lists") ||
     location.pathname.startsWith("/products/items");
+
+  useEffect(() => {
+    ensureTimerTicker();
+  }, []);
 
   if (hideAppChrome) {
     return (
