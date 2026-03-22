@@ -1,30 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { CircleDot, ChevronDown, ChevronLeft, ChevronRight, CirclePlus, Copy, Download, ImageIcon, MessageSquare, MoreHorizontal, Pencil, Plus, RotateCcw, Trash2, Upload, X } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
-import { readAddons, writeAddons } from "../storage";
 import type { AddonRecord } from "../types";
 import { toast } from "react-toastify";
 import { buildCloneName } from "../../utils/cloneName";
 import CommentsDrawer from "../../plans/components/CommentsDrawer";
+import { addonsAPI } from "../../../../services/api";
 
 const PLANS_STORAGE_KEY = "inv_plans_v1";
 const PRICE_LISTS_STORAGE_KEY = "inv_price_lists_v1";
-
-const FALLBACK_ADDON: AddonRecord = {
-  id: "sample-addon-1",
-  addonName: "ASC",
-  product: "asddc",
-  addonCode: "AS",
-  description: "ASC",
-  status: "Active",
-  addonType: "Recurring",
-  pricingModel: "Unit",
-  price: 12,
-  account: "Sales",
-  taxName: "",
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-};
 
 const formatDate = (value: string) => {
   const d = new Date(value);
@@ -78,7 +62,16 @@ export default function AddonDetailPage() {
   const bulkActionsRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const loadAddons = () => setAddons(readAddons());
+  const loadAddons = async () => {
+    try {
+      const res: any = await addonsAPI.getAll({ limit: 1000 });
+      const rows = Array.isArray(res?.data) ? res.data : [];
+      setAddons(rows);
+    } catch (e) {
+      console.warn("Failed to load addons", e);
+      setAddons([]);
+    }
+  };
 
   const readRows = (storageKey: string): any[] => {
     try {
@@ -94,19 +87,12 @@ export default function AddonDetailPage() {
   const loadPriceLists = () => setPriceLists(readRows(PRICE_LISTS_STORAGE_KEY));
 
   useEffect(() => {
-    loadAddons();
+    void loadAddons();
     loadPlans();
     loadPriceLists();
-    const onStorage = () => {
-      loadAddons();
-      loadPlans();
-      loadPriceLists();
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  const resolvedAddons = useMemo(() => (addons.length > 0 ? addons : [FALLBACK_ADDON]), [addons]);
+  const resolvedAddons = useMemo(() => addons, [addons]);
 
   const sidebarAddons = useMemo(
     () =>
@@ -127,10 +113,10 @@ export default function AddonDetailPage() {
 
   const addon = useMemo(() => {
     const found = resolvedAddons.find((row) => String(row.id) === String(addonId));
-    return found || (String(addonId) === FALLBACK_ADDON.id ? FALLBACK_ADDON : resolvedAddons[0] || FALLBACK_ADDON);
+    return found || resolvedAddons[0] || null;
   }, [resolvedAddons, addonId]);
 
-  const statusIsActive = String(addon.status || "").toLowerCase() === "active";
+  const statusIsActive = String(addon?.status || "").toLowerCase() === "active";
   const pricingInterval = String((addon as any)?.billingFrequency || (addon as any)?.pricingInterval || "Monthly");
   const unitName = String((addon as any)?.unit || "SAV");
   const associatedPlans = String((addon as any)?.plan || "All Plans");
@@ -143,6 +129,7 @@ export default function AddonDetailPage() {
     .trim()
     .toLowerCase();
   const addonSelectedPlanNames = useMemo(() => {
+    if (!addon) return [];
     if (Array.isArray((addon as any)?.selectedPlans)) {
       return (addon as any).selectedPlans
         .map((name: any) => String(name || "").trim().toLowerCase())
@@ -156,6 +143,7 @@ export default function AddonDetailPage() {
   }, [addon]);
   const planAssociationLabel = associatedTypeRaw === "all plans" ? "All Plans" : "Optional";
   const addonPlans = useMemo(() => {
+    if (!addon) return [];
     const productMatched = plans.filter((row) => {
       const planProduct = String(row?.product || "").trim().toLowerCase();
       if (!selectedAddonProduct || !planProduct) return true;
@@ -170,28 +158,32 @@ export default function AddonDetailPage() {
       const rowName = String(row?.planName || row?.plan || row?.name || "").trim().toLowerCase();
       return addonSelectedPlanNames.includes(rowName);
     });
-  }, [plans, selectedAddonProduct, associatedTypeRaw, addonSelectedPlanNames]);
+  }, [addon, plans, selectedAddonProduct, associatedTypeRaw, addonSelectedPlanNames]);
   const addonPriceLists = useMemo(() => {
+    if (!addon) return [];
     return priceLists.filter((priceList) => {
       const relatedProduct = String(priceList?.product || priceList?.productName || "").trim().toLowerCase();
       if (!relatedProduct || !selectedAddonProduct) return true;
       return relatedProduct === selectedAddonProduct;
     });
-  }, [priceLists, selectedAddonProduct]);
+  }, [addon, priceLists, selectedAddonProduct]);
   const activityLogs = useMemo(
-    () => [
-      {
-        id: "status-change",
-        when: formatDateTime(addon.updatedAt),
-        message: `Addon ${addon.addonCode || addon.addonName || "-"} has been marked as ${statusIsActive ? "active" : "inactive"}.`,
-      },
-      {
-        id: "created",
-        when: formatDateTime(addon.createdAt),
-        message: `Addon ${addon.addonCode || addon.addonName || "-"} Added.`,
-      },
-    ],
-    [addon]
+    () =>
+      !addon
+        ? []
+        : [
+          {
+            id: "status-change",
+            when: formatDateTime(addon.updatedAt),
+            message: `Addon ${addon.addonCode || addon.addonName || "-"} has been marked as ${statusIsActive ? "active" : "inactive"}.`,
+          },
+          {
+            id: "created",
+            when: formatDateTime(addon.createdAt),
+            message: `Addon ${addon.addonCode || addon.addonName || "-"} Added.`,
+          },
+        ],
+    [addon, statusIsActive]
   );
 
   useEffect(() => {
@@ -205,9 +197,10 @@ export default function AddonDetailPage() {
   }, [selectedIds.length]);
 
   useEffect(() => {
+    if (!addon) return;
     setShowPlanCount(false);
     setShowPriceListCount(false);
-  }, [addon.id]);
+  }, [addon?.id]);
 
   useEffect(() => {
     const onClickOutside = (event: MouseEvent) => {
@@ -229,11 +222,18 @@ export default function AddonDetailPage() {
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
+  if (!addon) {
+    return (
+      <div className="flex h-[calc(100vh-100px)] w-full items-center justify-center rounded-lg border border-gray-100 bg-white text-[13px] text-slate-600">
+        No addons found.
+      </div>
+    );
+  }
+
   const handleClone = () => {
-    const rows = readAddons();
-    const source = rows.find((row) => String(row.id) === String(addon.id)) || addon;
+    const rows = resolvedAddons;
+    const source = addon;
     const now = new Date().toISOString();
-    const cloneId = `addon-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const cloneName = buildCloneName(
       source.addonName || "",
       rows.map((row) => row.addonName),
@@ -241,36 +241,41 @@ export default function AddonDetailPage() {
     );
     const cloneCode = source.addonCode ? `${source.addonCode}-clone` : `addon-${Date.now().toString(36).slice(-4)}`;
 
-    const clonedAddon: AddonRecord = {
-      ...source,
-      id: cloneId,
-      addonName: cloneName,
-      addonCode: cloneCode,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    const updatedRows = [clonedAddon, ...rows];
-    writeAddons(updatedRows);
-    setAddons(updatedRows);
-    setActionsOpen(false);
-    navigate(`/products/addons/${clonedAddon.id}`);
+    void (async () => {
+      try {
+        const payload: any = {
+          ...source,
+          addonName: cloneName,
+          addonCode: cloneCode,
+          createdAt: now,
+          updatedAt: now,
+        };
+        delete payload.id;
+        delete payload._id;
+        const res: any = await addonsAPI.create(payload);
+        await loadAddons();
+        setActionsOpen(false);
+        const id = String(res?.data?.id || res?.data?._id || "");
+        navigate(id ? `/products/addons/${id}` : "/products/addons");
+      } catch (e: any) {
+        console.error("Failed to clone addon", e);
+        toast.error(e?.message || "Failed to clone addon");
+      }
+    })();
   };
 
   const handleDelete = () => {
-    const rows = readAddons();
-    const exists = rows.some((row) => String(row.id) === String(addon.id));
-    if (!exists) {
-      setActionsOpen(false);
-      navigate("/products/addons");
-      return;
-    }
-
-    const updated = rows.filter((row) => String(row.id) !== String(addon.id));
-    writeAddons(updated);
-    setAddons(updated);
-    setActionsOpen(false);
-    navigate("/products/addons");
+    void (async () => {
+      try {
+        await addonsAPI.delete(String(addon.id));
+        await loadAddons();
+        setActionsOpen(false);
+        navigate("/products/addons");
+      } catch (e: any) {
+        console.error("Failed to delete addon", e);
+        toast.error(e?.message || "Failed to delete addon");
+      }
+    })();
   };
 
   const handleEdit = () => {
@@ -279,20 +284,15 @@ export default function AddonDetailPage() {
 
   const handleToggleStatus = () => {
     const nextStatus: AddonRecord["status"] = statusIsActive ? "Inactive" : "Active";
-    const now = new Date().toISOString();
-    const rows = readAddons();
-    const existingIndex = rows.findIndex((row) => String(row.id) === String(addon.id));
-
-    if (existingIndex === -1) {
-      const created = { ...addon, status: nextStatus, updatedAt: now };
-      writeAddons([created]);
-      setAddons([created]);
-      return;
-    }
-
-    const updatedRows = rows.map((row) => (String(row.id) === String(addon.id) ? { ...row, status: nextStatus, updatedAt: now } : row));
-    writeAddons(updatedRows);
-    setAddons(updatedRows);
+    void (async () => {
+      try {
+        await addonsAPI.update(String(addon.id), { status: nextStatus });
+        await loadAddons();
+      } catch (e: any) {
+        console.error("Failed to update addon status", e);
+        toast.error(e?.message || "Failed to update addon status");
+      }
+    })();
   };
 
   const toggleRowSelection = (id: string) => {
@@ -323,16 +323,17 @@ export default function AddonDetailPage() {
 
   const handleBulkMarkStatus = (status: "Active" | "Inactive") => {
     if (selectedIds.length === 0) return;
-    const selectedSet = new Set(selectedIds);
-    const now = new Date().toISOString();
-    const rows = readAddons();
-    const updatedRows = rows.map((row) =>
-      selectedSet.has(String(row.id)) ? { ...row, status, updatedAt: now } : row
-    );
-    writeAddons(updatedRows);
-    setAddons(updatedRows);
-    clearSelection();
-    toast.success(`Selected addons marked as ${status.toLowerCase()}`);
+    void (async () => {
+      try {
+        await Promise.all(selectedIds.map((id) => addonsAPI.update(String(id), { status })));
+        await loadAddons();
+        clearSelection();
+        toast.success(`Selected addons marked as ${status.toLowerCase()}`);
+      } catch (e: any) {
+        console.error("Failed to update addons", e);
+        toast.error(e?.message || "Failed to update addons");
+      }
+    })();
   };
 
   const handleBulkDelete = () => {
@@ -341,23 +342,30 @@ export default function AddonDetailPage() {
     const selectedSet = new Set(selectedIds);
     const currentAddonId = String(addon.id);
     const deletingCurrentAddon = selectedSet.has(currentAddonId);
-    const rows = readAddons();
-    const updatedRows = rows.filter((row) => !selectedSet.has(String(row.id)));
-    writeAddons(updatedRows);
-    setAddons(updatedRows);
-    clearSelection();
-    toast.success("Selected addons deleted");
-    if (updatedRows.length === 0) {
-      navigate("/products/addons");
-      return;
-    }
-    if (deletingCurrentAddon) {
-      navigate(`/products/addons/${updatedRows[0].id}`);
-    }
+    void (async () => {
+      try {
+        await Promise.all(selectedIds.map((id) => addonsAPI.delete(String(id))));
+        const res: any = await addonsAPI.getAll({ limit: 1000 });
+        const remainingRows = Array.isArray(res?.data) ? res.data : [];
+        setAddons(remainingRows);
+        clearSelection();
+        toast.success("Selected addons deleted");
+        if (remainingRows.length === 0) {
+          navigate("/products/addons");
+          return;
+        }
+        if (deletingCurrentAddon) {
+          navigate(`/products/addons/${String(remainingRows[0]?.id || "")}`);
+        }
+      } catch (e: any) {
+        console.error("Failed to delete addons", e);
+        toast.error(e?.message || "Failed to delete addons");
+      }
+    })();
   };
 
   const handleExport = () => {
-    const rows = readAddons();
+    const rows = resolvedAddons;
     if (!rows.length) return;
     const headers = [
       "Product",
@@ -408,10 +416,15 @@ export default function AddonDetailPage() {
     reader.onload = (event) => {
       const result = event.target?.result;
       if (typeof result === "string") {
-        const rows = readAddons();
-        const updated = rows.map((r) => String(r.id) === String(addon.id) ? { ...r, imageUrl: result } : r);
-        writeAddons(updated);
-        setAddons(updated);
+        void (async () => {
+          try {
+            await addonsAPI.update(String(addon.id), { imageUrl: result });
+            await loadAddons();
+          } catch (err: any) {
+            console.error("Failed to update addon image", err);
+            toast.error(err?.message || "Failed to update image");
+          }
+        })();
       }
     };
     reader.readAsDataURL(file);
@@ -419,16 +432,21 @@ export default function AddonDetailPage() {
   };
 
   const handleDeleteImage = () => {
-    const rows = readAddons();
-    const updated = rows.map((r) => String(r.id) === String(addon.id) ? { ...r, imageUrl: "" } : r);
-    writeAddons(updated);
-    setAddons(updated);
+    void (async () => {
+      try {
+        await addonsAPI.update(String(addon.id), { imageUrl: "" });
+        await loadAddons();
+      } catch (err: any) {
+        console.error("Failed to delete addon image", err);
+        toast.error(err?.message || "Failed to update image");
+      }
+    })();
   };
 
   return (
-    <div className="relative flex h-[calc(100vh-100px)] w-full flex-col overflow-hidden rounded-lg border border-gray-100 bg-[#f5f6fb] shadow-sm">
+    <div className="relative flex h-[calc(100vh-100px)] w-full flex-col overflow-hidden rounded-lg border border-[#d8deea] bg-[#f5f6fb] shadow-sm">
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-[320px] shrink-0 flex-col overflow-hidden border-r border-gray-200 bg-white">
+        <aside className="flex w-[360px] shrink-0 flex-col overflow-hidden border-r border-[#d8deea] bg-white">
           {selectedIds.length > 0 ? (
             <div className="border-b border-[#e5e7eb] bg-[#f8fafc] px-2 py-2">
               <div className="flex items-center justify-between rounded-lg border border-[#e5e7eb] bg-white px-2 py-1.5">
@@ -488,7 +506,7 @@ export default function AddonDetailPage() {
               </div>
             </div>
           ) : (
-            <div className="shrink-0 flex items-center justify-between border-b border-gray-200 px-4 py-4">
+            <div className="shrink-0 flex items-center justify-between border-b border-[#d8deea] px-4 py-4">
               <div className="relative" ref={addonFilterRef}>
                 <button
                   type="button"
@@ -580,10 +598,10 @@ export default function AddonDetailPage() {
               const active = String(row.id) === String(addon.id);
               const rowPricingInterval = String((row as any)?.billingFrequency || (row as any)?.pricingInterval || "Monthly");
               return (
-                <button
-                  key={row.id}
-                  onClick={() => navigate(`/products/addons/${row.id}`)}
-                  className={`w-full border-b border-gray-100 px-4 py-3 text-left ${active ? "bg-[#f8fbff]" : "bg-white hover:bg-slate-50"}`}
+                  <button
+                    key={row.id}
+                    onClick={() => navigate(`/products/addons/${row.id}`)}
+                  className={`w-full border-b border-gray-100 px-4 py-3 text-left transition-colors ${active ? "bg-gray-100" : "bg-white hover:bg-gray-50"}`}
                 >
                   <div className="grid grid-cols-[20px_1fr_auto] items-start gap-2">
                     <input

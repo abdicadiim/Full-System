@@ -19,11 +19,12 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useOrganizationBranding } from '../../../hooks/useOrganizationBranding';
 import { useCurrency } from '../../../hooks/useCurrency';
+import Skeleton from '../../../components/ui/Skeleton';
 import NewCouponPage from './NewCouponPage';
 import CouponDetail, { type CouponDetailRecord } from './CouponDetail';
 import type { CouponRecord } from './types';
-import { readCoupons, writeCoupons } from './storage';
 import { buildCloneName } from '../utils/cloneName';
+import { couponsAPI } from '../../../services/api';
 
 type CouponStatusFilter = 'All' | 'Active' | 'Inactive' | 'Expired';
 type CouponSortKey = 'couponName' | 'couponCode' | 'status' | 'discountValue' | 'createdAt';
@@ -70,46 +71,10 @@ const DEFAULT_COLUMNS: Column[] = [
 ];
 
 const cloneDefaultColumns = () => DEFAULT_COLUMNS.map((c) => ({ ...c }));
-const createId = () => `coupon-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
-const seedCoupons = (): CouponRecord[] => {
-  const now = new Date().toISOString();
-  return [
-    {
-      id: createId(),
-      product: 'Cloud Box',
-      couponName: 'dsffg',
-      couponCode: 'ASF',
-      discountType: 'Flat',
-      discountValue: 2,
-      redemptionType: 'One Time',
-      limitedCycles: 0,
-      maxRedemption: 0,
-      associatedPlans: 'All Plans',
-      associatedAddons: 'All Recurring Addons',
-      expirationDate: '',
-      status: 'Expired',
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: createId(),
-      product: 'asddc',
-      couponName: 'rgtegt5g',
-      couponCode: 'RGREG',
-      discountType: 'Flat',
-      discountValue: 3434,
-      redemptionType: 'One Time',
-      limitedCycles: 0,
-      maxRedemption: 0,
-      associatedPlans: 'All Plans',
-      associatedAddons: 'All Recurring Addons',
-      expirationDate: '',
-      status: 'Active',
-      createdAt: now,
-      updatedAt: now,
-    },
-  ];
+const loadCouponsFromDb = async (): Promise<CouponRecord[]> => {
+  const res: any = await couponsAPI.getAll({ limit: 1000 });
+  return Array.isArray(res?.data) ? res.data : [];
 };
 
 const formatDate = (iso: string) => {
@@ -127,7 +92,7 @@ const asCurrency = (currencyCode: string, amount: number) => {
   })}`;
 };
 
-const toCouponRow = (record: CouponRecord, currencySymbol: string): CouponRow => ({
+const toCouponRow = (record: CouponRecord, currencyCode: string): CouponRow => ({
   id: record.id,
   name: record.couponName,
   code: record.couponCode,
@@ -135,7 +100,7 @@ const toCouponRow = (record: CouponRecord, currencySymbol: string): CouponRow =>
   value:
     record.discountType === 'Percentage'
       ? `${record.discountValue}%`
-      : asCurrency(currencySymbol, record.discountValue),
+      : asCurrency(currencyCode, record.discountValue),
   product: record.product || '-',
   redemptionType: record.redemptionType || '-',
   discountType: record.discountType || '-',
@@ -145,27 +110,6 @@ const toCouponRow = (record: CouponRecord, currencySymbol: string): CouponRow =>
   maximumRedemptions: record.maxRedemption > 0 ? String(record.maxRedemption) : 'Unlimited',
   createdOn: formatDate(record.createdAt),
 });
-
-const resolveProductLabel = (value: string) => {
-  const rawValue = String(value || "").trim();
-  if (!rawValue) return "";
-  try {
-    const raw = localStorage.getItem("inv_products_v1");
-    const parsed = raw ? JSON.parse(raw) : [];
-    const rows = Array.isArray(parsed) ? parsed : [];
-    const key = rawValue.toLowerCase();
-    const matched = rows.find((row: any) => {
-      const id = String(row?.id || row?._id || "").trim().toLowerCase();
-      const name = String(row?.name || row?.displayName || row?.product || "").trim().toLowerCase();
-      return key === id || key === name;
-    });
-    if (!matched) return rawValue;
-    const label = String(matched?.name || matched?.displayName || matched?.product || rawValue).trim();
-    return label || rawValue;
-  } catch {
-    return rawValue;
-  }
-};
 
 const downloadCsv = (name: string, headers: string[], rows: string[][]) => {
   const escape = (value: string) => {
@@ -192,7 +136,7 @@ const CouponsPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { accentColor } = useOrganizationBranding();
-  const { baseCurrency } = useCurrency();
+  const { baseCurrency, code: baseCurrencyCode } = useCurrency();
 
   const [view, setView] = useState<'list' | 'create'>('list');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -222,6 +166,7 @@ const CouponsPage: React.FC = () => {
   });
 
   const [records, setRecords] = useState<CouponRecord[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const visibleColumns = useMemo(() => columns.filter((c) => c.visible), [columns]);
 
@@ -258,13 +203,13 @@ const CouponsPage: React.FC = () => {
   }, [activeFilter, records, sortKey, sortOrder]);
 
   const filteredCoupons = useMemo(
-    () => filteredRecords.map((record) => toCouponRow(record, baseCurrency.symbol || '$')),
-    [filteredRecords, baseCurrency.symbol]
+    () => filteredRecords.map((record) => toCouponRow(record, baseCurrencyCode || baseCurrency.code || "USD")),
+    [filteredRecords, baseCurrencyCode, baseCurrency.code]
   );
 
   const allCouponRows = useMemo(
-    () => records.map((record) => toCouponRow(record, baseCurrency.symbol || '$')),
-    [records, baseCurrency.symbol]
+    () => records.map((record) => toCouponRow(record, baseCurrencyCode || baseCurrency.code || "USD")),
+    [records, baseCurrencyCode, baseCurrency.code]
   );
 
   const resizingRef = useRef<{ col: string; startX: number; startWidth: number } | null>(null);
@@ -276,14 +221,20 @@ const CouponsPage: React.FC = () => {
   }, [columns]);
 
   useEffect(() => {
-    const rows = readCoupons();
-    if (rows.length > 0) {
-      setRecords(rows);
-      return;
-    }
-    const seeded = seedCoupons();
-    writeCoupons(seeded);
-    setRecords(seeded);
+    let mounted = true;
+    setLoading(true);
+    void (async () => {
+      try {
+        const rows = await loadCouponsFromDb();
+        if (mounted) setRecords(rows);
+      } catch (e) {
+        console.warn('Failed to load coupons', e);
+        if (mounted) setRecords([]);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
   }, [location.key]);
 
   useEffect(() => {
@@ -319,11 +270,6 @@ const CouponsPage: React.FC = () => {
     document.addEventListener('mousedown', onClickOutside);
     return () => document.removeEventListener('mousedown', onClickOutside);
   }, []);
-
-  const persistRecords = (next: CouponRecord[]) => {
-    setRecords(next);
-    writeCoupons(next);
-  };
 
   const startResizing = (key: string, e: React.MouseEvent) => {
     e.preventDefault();
@@ -364,17 +310,17 @@ const CouponsPage: React.FC = () => {
     const current = records.find(r => r.id === id);
     if (!current) return;
     const nextStatus = current.status === 'Active' ? 'Inactive' : 'Active';
-    const now = new Date().toISOString();
-    const next = records.map((record) => {
-      if (record.id !== id) return record;
-      return {
-        ...record,
-        status: nextStatus as any,
-        updatedAt: now,
-      };
-    });
-    persistRecords(next);
-    toast.success(`Coupon status updated to ${nextStatus}`);
+    void (async () => {
+      try {
+        await couponsAPI.update(id, { status: nextStatus });
+        const rows = await loadCouponsFromDb();
+        setRecords(rows);
+        toast.success(`Coupon status updated to ${nextStatus}`);
+      } catch (e: any) {
+        console.error('Failed to update coupon status', e);
+        toast.error(e?.message || 'Failed to update coupon');
+      }
+    })();
   };
 
   const handleCloneCoupon = (id: string) => {
@@ -382,9 +328,8 @@ const CouponsPage: React.FC = () => {
     if (!target) return;
 
     const now = new Date().toISOString();
-    const cloned: CouponRecord = {
+    const clonedPayload: any = {
       ...target,
-      id: createId(),
       couponName: buildCloneName(
         target.couponName,
         records.map((record) => record.couponName),
@@ -395,21 +340,40 @@ const CouponsPage: React.FC = () => {
       createdAt: now,
       updatedAt: now,
     };
+    delete clonedPayload.id;
+    delete clonedPayload._id;
 
-    const next = [cloned, ...records];
-    persistRecords(next);
-    toast.success('Coupon cloned successfully');
-    setSelectedCouponId(cloned.id);
+    void (async () => {
+      try {
+        const res: any = await couponsAPI.create(clonedPayload);
+        const rows = await loadCouponsFromDb();
+        setRecords(rows);
+        toast.success('Coupon cloned successfully');
+        const newId = String(res?.data?.id || res?.data?._id || '');
+        setSelectedCouponId(newId || null);
+      } catch (e: any) {
+        console.error('Failed to clone coupon', e);
+        toast.error(e?.message || 'Failed to clone coupon');
+      }
+    })();
   };
 
   const handleDeleteCoupon = (id: string) => {
     if (!window.confirm('Delete this coupon?')) return;
-    const next = records.filter((record) => record.id !== id);
-    persistRecords(next);
-    toast.success('Coupon deleted successfully');
-    if (selectedCouponId === id) {
-      setSelectedCouponId(next.length ? next[0].id : null);
-    }
+    void (async () => {
+      try {
+        await couponsAPI.delete(id);
+        const rows = await loadCouponsFromDb();
+        setRecords(rows);
+        toast.success('Coupon deleted successfully');
+        if (selectedCouponId === id) {
+          setSelectedCouponId(rows.length ? String(rows[0]?.id || rows[0]?._id || '') : null);
+        }
+      } catch (e: any) {
+        console.error('Failed to delete coupon', e);
+        toast.error(e?.message || 'Failed to delete coupon');
+      }
+    })();
   };
 
   const clearBulkSelection = () => {
@@ -419,33 +383,39 @@ const CouponsPage: React.FC = () => {
 
   const handleBulkMarkStatus = (status: 'Active' | 'Inactive') => {
     if (selectedIds.length === 0) return;
-    const selectedSet = new Set(selectedIds);
-    const now = new Date().toISOString();
-    const next = records.map((record) =>
-      selectedSet.has(record.id)
-        ? {
-          ...record,
-          status,
-          updatedAt: now,
-        }
-        : record
-    );
-    persistRecords(next);
-    toast.success(`${selectedIds.length} coupons marked as ${status}`);
-    clearBulkSelection();
+    void (async () => {
+      try {
+        await Promise.all(selectedIds.map((couponId) => couponsAPI.update(couponId, { status })));
+        const rows = await loadCouponsFromDb();
+        setRecords(rows);
+        toast.success(`${selectedIds.length} coupons marked as ${status}`);
+        clearBulkSelection();
+      } catch (e: any) {
+        console.error('Failed bulk update', e);
+        toast.error(e?.message || 'Failed to update coupons');
+      }
+    })();
   };
 
   const handleBulkDelete = () => {
     if (selectedIds.length === 0) return;
     if (!window.confirm(`Delete ${selectedIds.length} selected coupon(s)?`)) return;
     const selectedSet = new Set(selectedIds);
-    const next = records.filter((record) => !selectedSet.has(record.id));
-    persistRecords(next);
-    toast.success(`${selectedIds.length} coupons deleted successfully`);
-    if (selectedCouponId && selectedSet.has(selectedCouponId)) {
-      setSelectedCouponId(next.length ? next[0].id : null);
-    }
-    clearBulkSelection();
+    void (async () => {
+      try {
+        await Promise.all(selectedIds.map((couponId) => couponsAPI.delete(couponId)));
+        const rows = await loadCouponsFromDb();
+        setRecords(rows);
+        toast.success(`${selectedIds.length} coupons deleted successfully`);
+        if (selectedCouponId && selectedSet.has(selectedCouponId)) {
+          setSelectedCouponId(rows.length ? String(rows[0]?.id || rows[0]?._id || '') : null);
+        }
+        clearBulkSelection();
+      } catch (e: any) {
+        console.error('Failed bulk delete', e);
+        toast.error(e?.message || 'Failed to delete coupons');
+      }
+    })();
   };
 
   const handleExportCoupons = () => {
@@ -507,16 +477,47 @@ const CouponsPage: React.FC = () => {
   }) => {
     const numeric = Number(String(payload.value).replace(/[^0-9.-]/g, ''));
     const now = new Date().toISOString();
-    const productLabel = resolveProductLabel(payload.productId);
 
     if (editingCouponId) {
-      const next = records.map((record) => {
-        if (record.id !== editingCouponId) return record;
-        return {
-          ...record,
-          product: productLabel || record.product || '',
-          couponName: payload.name || record.couponName,
-          couponCode: (payload.code || record.couponCode || '').toUpperCase(),
+      void (async () => {
+        try {
+          const patch: any = {
+            productId: payload.productId || '',
+            couponName: payload.name || '',
+            couponCode: (payload.code || '').toUpperCase(),
+            discountType: String(payload.type || '').toLowerCase().includes('flat') ? 'Flat' : 'Percentage',
+            discountValue: Number.isFinite(numeric) ? numeric : 0,
+            redemptionType: String(payload.redemption || '').toLowerCase().includes('limited')
+              ? 'Limited Cycles'
+              : String(payload.redemption || '').toLowerCase().includes('unlimited')
+                ? 'Unlimited'
+                : 'One Time',
+            limitedCycles: Number(payload.cycles) > 0 ? Number(payload.cycles) : 0,
+            associatedPlans: payload.associatePlans || 'All Plans',
+            associatedAddons: payload.associateAddons || 'All Addons',
+            updatedAt: now,
+          };
+          await couponsAPI.update(editingCouponId, patch);
+          const rows = await loadCouponsFromDb();
+          setRecords(rows);
+          toast.success('Coupon updated successfully');
+          setSelectedCouponId(editingCouponId);
+          setEditingCouponId(null);
+          setView('list');
+        } catch (e: any) {
+          console.error('Failed to update coupon', e);
+          toast.error(e?.message || 'Failed to update coupon');
+        }
+      })();
+      return;
+    }
+
+    void (async () => {
+      try {
+        const payloadToCreate: any = {
+          productId: payload.productId || '',
+          couponName: payload.name || 'New Coupon',
+          couponCode: (payload.code || '').toUpperCase(),
           discountType: String(payload.type || '').toLowerCase().includes('flat') ? 'Flat' : 'Percentage',
           discountValue: Number.isFinite(numeric) ? numeric : 0,
           redemptionType: String(payload.redemption || '').toLowerCase().includes('limited')
@@ -525,47 +526,27 @@ const CouponsPage: React.FC = () => {
               ? 'Unlimited'
               : 'One Time',
           limitedCycles: Number(payload.cycles) > 0 ? Number(payload.cycles) : 0,
-          associatedPlans: payload.associatePlans || record.associatedPlans || 'All Plans',
-          associatedAddons: payload.associateAddons || record.associatedAddons || 'All Addons',
+          maxRedemption: 0,
+          associatedPlans: payload.associatePlans || 'All Plans',
+          associatedAddons: payload.associateAddons || 'All Addons',
+          expirationDate: '',
+          status: payload.status === 'Expired' ? 'Expired' : 'Active',
+          createdAt: now,
           updatedAt: now,
-        } as CouponRecord;
-      });
-      persistRecords(next);
-      toast.success('Coupon updated successfully');
-      setSelectedCouponId(editingCouponId);
-      setEditingCouponId(null);
-      setView('list');
-      return;
-    }
-
-    const created: CouponRecord = {
-      id: createId(),
-      product: productLabel || '',
-      couponName: payload.name || 'New Coupon',
-      couponCode: (payload.code || '').toUpperCase(),
-      discountType: String(payload.type || '').toLowerCase().includes('flat') ? 'Flat' : 'Percentage',
-      discountValue: Number.isFinite(numeric) ? numeric : 0,
-      redemptionType: String(payload.redemption || '').toLowerCase().includes('limited')
-        ? 'Limited Cycles'
-        : String(payload.redemption || '').toLowerCase().includes('unlimited')
-          ? 'Unlimited'
-          : 'One Time',
-      limitedCycles: Number(payload.cycles) > 0 ? Number(payload.cycles) : 0,
-      maxRedemption: 0,
-      associatedPlans: payload.associatePlans || 'All Plans',
-      associatedAddons: payload.associateAddons || 'All Addons',
-      expirationDate: '',
-      status: payload.status === 'Expired' ? 'Expired' : 'Active',
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    const next = [created, ...records];
-    persistRecords(next);
-    toast.success('Coupon created successfully');
-    setSelectedCouponId(created.id);
-    setEditingCouponId(null);
-    setView('list');
+        };
+        const res: any = await couponsAPI.create(payloadToCreate);
+        const rows = await loadCouponsFromDb();
+        setRecords(rows);
+        toast.success('Coupon created successfully');
+        const id = String(res?.data?.id || res?.data?._id || '');
+        setSelectedCouponId(id || null);
+        setEditingCouponId(null);
+        setView('list');
+      } catch (e: any) {
+        console.error('Failed to create coupon', e);
+        toast.error(e?.message || 'Failed to create coupon');
+      }
+    })();
   };
 
   const getCell = (coupon: CouponRow, key: string) => {
@@ -833,7 +814,30 @@ const CouponsPage: React.FC = () => {
                 </thead>
 
                 <tbody className="divide-y divide-gray-100">
-                  {filteredCoupons.map((coupon) => (
+                  {loading ? (
+                    Array.from({ length: 8 }).map((_, idx) => (
+                      <tr key={`skeleton-${idx}`} className="h-[50px] border-b border-[#eef1f6]">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className="h-6 w-6 shrink-0" aria-hidden />
+                            <span className="h-5 w-px shrink-0 bg-transparent" aria-hidden />
+                            <Skeleton className="h-4 w-4 rounded" />
+                          </div>
+                        </td>
+                        {visibleColumns.map((col) => (
+                          <td
+                            key={`skeleton-${idx}-${col.key}`}
+                            className="px-4 py-3"
+                            style={{ width: col.width, maxWidth: col.width }}
+                          >
+                            <Skeleton className="h-4 w-[70%]" />
+                          </td>
+                        ))}
+                        <td className="px-4 py-3 sticky right-0 bg-white/95 backdrop-blur-sm shadow-[-4px_0_4px_-2px_rgba(0,0,0,0.05)]" />
+                      </tr>
+                    ))
+                  ) : (
+                    filteredCoupons.map((coupon) => (
                     <tr
                       key={coupon.id}
                       className="text-[13px] group transition-all hover:bg-[#f8fafc] cursor-pointer h-[50px] border-b border-[#eef1f6]"
@@ -861,7 +865,8 @@ const CouponsPage: React.FC = () => {
 
                       <td className="px-4 py-3 sticky right-0 bg-white/95 backdrop-blur-sm group-hover:bg-[#f8fafc] transition-colors shadow-[-4px_0_4px_-2px_rgba(0,0,0,0.05)]" />
                     </tr>
-                  ))}
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

@@ -4,6 +4,7 @@ export type CouponRedemptionType = "One Time" | "Unlimited" | "Limited Cycles";
 
 export interface CouponRecord {
   id: string;
+  productId?: string;
   product: string;
   couponName: string;
   couponCode: string;

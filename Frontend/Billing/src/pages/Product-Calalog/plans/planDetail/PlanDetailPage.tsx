@@ -25,7 +25,7 @@ import { toast } from "react-toastify";
 import CommentsDrawer from "../components/CommentsDrawer";
 import PlansBulkUpdateModal from "../components/PlansBulkUpdateModal";
 import { buildCloneName } from "../../utils/cloneName";
-import { productsAPI } from "../../../../services/api";
+import { addonsAPI, productsAPI, plansAPI } from "../../../../services/api";
 
 const PLANS_STORAGE_KEY = "inv_plans_v1";
 const ADDONS_STORAGE_KEY = "inv_addons_v1";
@@ -87,23 +87,33 @@ export default function PlanDetailPage() {
   const [showPriceListCount, setShowPriceListCount] = useState(false);
   const [isSidebarMenuOpen, setIsSidebarMenuOpen] = useState(false);
   const [productIdByName, setProductIdByName] = useState<Record<string, string>>({});
+  const [plansLoading, setPlansLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const loadPlans = () => {
+  const loadPlans = async () => {
+    setPlansLoading(true);
     try {
-      const raw = localStorage.getItem(PLANS_STORAGE_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      setPlans(Array.isArray(parsed) ? parsed : []);
+      const res: any = await plansAPI.getAll({ limit: 1000 });
+      const rows = Array.isArray(res?.data) ? res.data : [];
+      setPlans(rows);
     } catch {
-      setPlans([]);
+      try {
+        const raw = localStorage.getItem(PLANS_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        setPlans(Array.isArray(parsed) ? parsed : []);
+      } catch {
+        setPlans([]);
+      }
+    } finally {
+      setPlansLoading(false);
     }
   };
 
-  const loadAddons = () => {
+  const loadAddons = async () => {
     try {
-      const raw = localStorage.getItem(ADDONS_STORAGE_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      setAddons(Array.isArray(parsed) ? parsed : []);
+      const res: any = await addonsAPI.getAll({ limit: 1000 });
+      const rows = Array.isArray(res?.data) ? res.data : [];
+      setAddons(rows);
     } catch {
       setAddons([]);
     }
@@ -120,12 +130,12 @@ export default function PlanDetailPage() {
   };
 
   useEffect(() => {
-    loadPlans();
-    loadAddons();
+    void loadPlans();
+    void loadAddons();
     loadPriceLists();
     const onStorage = () => {
-      loadPlans();
-      loadAddons();
+      void loadPlans();
+      void loadAddons();
       loadPriceLists();
     };
     window.addEventListener("storage", onStorage);
@@ -247,9 +257,8 @@ export default function PlanDetailPage() {
     setShowPriceListCount(false);
   }, [planId]);
 
-  const savePlans = (nextPlans: any[]) => {
-    localStorage.setItem(PLANS_STORAGE_KEY, JSON.stringify(nextPlans));
-    setPlans(nextPlans);
+  const refreshPlans = async () => {
+    await loadPlans();
   };
 
   const toggleRowSelection = (id: string) => {
@@ -283,149 +292,139 @@ export default function PlanDetailPage() {
     navigate(`/products/plans/new?edit=${getPlanId(selectedPlan)}`);
   };
 
-  const handleToggleStatus = () => {
+  const handleToggleStatus = async () => {
     if (!selectedPlan) return;
     const nextStatus = isPlanActive(selectedPlan) ? "Inactive" : "Active";
     const targetId = getPlanId(selectedPlan);
-    const nextPlans = plans.map((plan) =>
-      getPlanId(plan) === targetId
-        ? {
-          ...plan,
-          status: nextStatus,
-          updatedAt: new Date().toISOString(),
-        }
-        : plan
-    );
-    savePlans(nextPlans);
-    toast.success(`Plan marked as ${nextStatus.toLowerCase()}`);
-    setIsActionsOpen(false);
+    try {
+      const res: any = await plansAPI.update(targetId, { status: nextStatus });
+      if (res?.success === false) throw new Error(res?.message || "Failed to update plan");
+      await refreshPlans();
+      toast.success(`Plan marked as ${nextStatus.toLowerCase()}`);
+      setIsActionsOpen(false);
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to update plan");
+    }
   };
 
-  const handleClone = () => {
+  const handleClone = async () => {
     if (!selectedPlan) return;
-    const now = new Date().toISOString();
-    const cloneId = `plan-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const clone = {
       ...selectedPlan,
-      id: cloneId,
       planName: buildCloneName(
         planNameOf(selectedPlan),
         plans.map((plan) => planNameOf(plan)),
         "Plan"
       ),
       planCode: `${planCodeOf(selectedPlan)}-clone`,
-      createdAt: now,
-      updatedAt: now,
     };
-    const nextPlans = [clone, ...plans];
-    savePlans(nextPlans);
-    toast.success("Plan cloned successfully");
-    setIsActionsOpen(false);
-    navigate(`/products/plans/${cloneId}`);
+    try {
+      const res: any = await plansAPI.create(clone);
+      if (res?.success === false) throw new Error(res?.message || "Failed to clone plan");
+      await refreshPlans();
+      toast.success("Plan cloned successfully");
+      setIsActionsOpen(false);
+      const createdId = String(res?.data?.id || res?.data?._id || "");
+      if (createdId) navigate(`/products/plans/${createdId}`);
+      else navigate("/products/plans");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to clone plan");
+    }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!selectedPlan) return;
     if (!window.confirm("Are you sure you want to delete this plan?")) return;
     const targetId = getPlanId(selectedPlan);
-    const nextPlans = plans.filter((plan) => getPlanId(plan) !== targetId);
-    savePlans(nextPlans);
-    toast.success("Plan deleted");
-    setIsActionsOpen(false);
-    if (nextPlans.length > 0) navigate(`/products/plans/${getPlanId(nextPlans[0])}`);
-    else navigate("/products/plans");
+    try {
+      const res: any = await plansAPI.delete(targetId);
+      if (res?.success === false) throw new Error(res?.message || "Failed to delete plan");
+      await refreshPlans();
+      toast.success("Plan deleted");
+      setIsActionsOpen(false);
+      const remaining = plans.filter((p) => getPlanId(p) !== targetId);
+      if (remaining.length > 0) navigate(`/products/plans/${getPlanId(remaining[0])}`);
+      else navigate("/products/plans");
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to delete plan");
+    }
   };
 
-  const handleBulkMarkStatus = (status: "Active" | "Inactive") => {
+  const handleBulkMarkStatus = async (status: "Active" | "Inactive") => {
     if (selectedIds.length === 0) return;
-    const selectedSet = new Set(selectedIds);
-    const nextPlans = plans.map((plan) =>
-      selectedSet.has(getPlanId(plan))
-        ? {
-          ...plan,
-          status,
-          updatedAt: new Date().toISOString(),
-        }
-        : plan
-    );
-    savePlans(nextPlans);
-    clearSelection();
-    toast.success(`Selected plans marked as ${status.toLowerCase()}`);
+    try {
+      await Promise.all(selectedIds.map((id) => plansAPI.update(id, { status })));
+      await refreshPlans();
+      clearSelection();
+      toast.success(`Selected plans marked as ${status.toLowerCase()}`);
+    } catch {
+      toast.error("Bulk update failed");
+    }
   };
 
-  const handleBulkDelete = () => {
+  const handleBulkDelete = async () => {
     if (selectedIds.length === 0) return;
     if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} selected plans?`)) return;
 
     const selectedSet = new Set(selectedIds);
     const currentSelectedPlanId = getPlanId(selectedPlan);
     const deletingCurrentPlan = selectedSet.has(currentSelectedPlanId);
-    const nextPlans = plans.filter((plan) => !selectedSet.has(getPlanId(plan)));
+    try {
+      await Promise.all(selectedIds.map((id) => plansAPI.delete(id)));
+      await refreshPlans();
+      clearSelection();
+      toast.success("Selected plans deleted");
 
-    savePlans(nextPlans);
-    clearSelection();
-    toast.success("Selected plans deleted");
-
-    if (nextPlans.length === 0) {
-      navigate("/products/plans");
-      return;
-    }
-
-    if (deletingCurrentPlan) {
-      navigate(`/products/plans/${getPlanId(nextPlans[0])}`);
+      const remaining = plans.filter((p) => !selectedSet.has(getPlanId(p)));
+      if (remaining.length === 0) {
+        navigate("/products/plans");
+        return;
+      }
+      if (deletingCurrentPlan) {
+        navigate(`/products/plans/${getPlanId(remaining[0])}`);
+      }
+    } catch {
+      toast.error("Bulk delete failed");
     }
   };
 
-  const handleBulkUpdate = (field: string, newValue: string) => {
+  const handleBulkUpdate = async (field: string, newValue: string) => {
     if (selectedIds.length === 0) return;
-    const selectedSet = new Set(selectedIds);
-    const now = new Date().toISOString();
-
-    const nextPlans = plans.map((plan) => {
-      if (!selectedSet.has(getPlanId(plan))) return plan;
-
-      if (field === "description") {
-        return { ...plan, planDescription: newValue, description: newValue, updatedAt: now };
+    try {
+      const patch: any = {};
+      if (field === "description") patch.planDescription = newValue;
+      else if (field === "salesAccount") patch.planAccount = newValue;
+      else if (field === "showInWidget") patch.widgetsPreference = String(newValue).toLowerCase() === "true";
+      else if (field === "showInPortal") patch.showInPortal = String(newValue).toLowerCase() === "true";
+      else if (field === "price") {
+        const parsed = Number(newValue);
+        if (!Number.isFinite(parsed) || parsed <= 0) {
+          toast.error("Invalid price");
+          return;
+        }
+        patch.price = parsed;
       }
-      if (field === "salesAccount") {
-        return { ...plan, account: newValue, salesAccount: newValue, planAccount: newValue, updatedAt: now };
-      }
-      if (field === "showInWidget") {
-        const boolValue = String(newValue).toLowerCase() === "true";
-        return { ...plan, showInWidget: boolValue, includeInWidget: boolValue, widgetsPreference: boolValue, updatedAt: now };
-      }
-      if (field === "showInPortal") {
-        const boolValue = String(newValue).toLowerCase() === "true";
-        return { ...plan, showInPortal: boolValue, updatedAt: now };
-      }
-      if (field === "price") {
-        const parsedPrice = Number(newValue);
-        return { ...plan, price: Number.isFinite(parsedPrice) ? parsedPrice : Number(plan?.price || 0), updatedAt: now };
-      }
-
-      return { ...plan, [field]: newValue, updatedAt: now };
-    });
-
-    savePlans(nextPlans);
-    setBulkUpdateOpen(false);
-    clearSelection();
-    toast.success("Selected plans updated successfully");
+      else patch[field] = newValue;
+      await Promise.all(selectedIds.map((id) => plansAPI.update(id, patch)));
+      await refreshPlans();
+      setBulkUpdateOpen(false);
+      clearSelection();
+      toast.success("Selected plans updated successfully");
+    } catch {
+      toast.error("Bulk update failed");
+    }
   };
 
-  const setSelectedPlanImage = (image: string) => {
+  const setSelectedPlanImage = async (image: string) => {
     if (!selectedPlan) return;
     const selectedId = getPlanId(selectedPlan);
-    const now = new Date().toISOString();
-    const nextPlans = plans.map((plan) =>
-      getPlanId(plan) === selectedId
-        ? {
-          ...plan,
-          image,
-          updatedAt: now,
-        }
-        : plan
-    );
-    savePlans(nextPlans);
+    try {
+      const res: any = await plansAPI.update(selectedId, { image });
+      if (res?.success === false) throw new Error(res?.message || "Failed to update image");
+      await refreshPlans();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to update plan image");
+    }
   };
 
   const handleShareHostedPaymentPage = async () => {
@@ -472,7 +471,7 @@ export default function PlanDetailPage() {
   const showPortal = Boolean(selectedPlan?.showInPortal);
 
   return (
-    <div className="relative flex h-[calc(100vh-100px)] overflow-hidden rounded-lg border border-[#d8deea] bg-[#f3f5fa]">
+    <div className="relative flex h-[calc(100vh-100px)] overflow-hidden rounded-lg border border-[#d8deea] bg-[#f5f6fb]">
       <aside className="flex w-[360px] min-h-0 flex-col border-r border-[#d8deea] bg-white">
         {selectedIds.length > 0 ? (
           <div className="border-b border-[#e5e7eb] bg-[#f8fafc] px-2 py-2">
@@ -640,7 +639,7 @@ export default function PlanDetailPage() {
                 key={planRowId}
                 type="button"
                 onClick={() => navigate(`/products/plans/${planRowId}`)}
-                className={`w-full border-b border-gray-100 px-4 py-3 text-left transition-colors ${active ? "bg-[#f0f4ff]" : "bg-white hover:bg-gray-50"}`}
+                className={`w-full border-b border-gray-100 px-4 py-3 text-left transition-colors ${active ? "bg-gray-100" : "bg-white hover:bg-gray-50"}`}
               >
                 <div className="flex items-start gap-3">
                   <input

@@ -35,20 +35,7 @@ export const useCurrency = () => {
     let isMounted = true;
 
     const loadBaseCurrency = async () => {
-      try {
-        const stored = localStorage.getItem("taban_currencies");
-        if (stored) {
-          const currencies = JSON.parse(stored);
-          const base = currencies.find((c: any) => c.isBase);
-          if (base && isMounted) {
-            setBaseCurrency(normalizeCurrency(base));
-            return;
-          }
-        }
-      } catch {
-        // ignore and fall back to API
-      }
-
+      // Prefer DB-backed base currency first (source of truth).
       try {
         const res = await currenciesAPI.getBaseCurrency();
         const base = (res as any)?.data;
@@ -60,14 +47,42 @@ export const useCurrency = () => {
         // ignore
       }
 
+      try {
+        const stored = localStorage.getItem("taban_currencies");
+        if (stored) {
+          const currencies = JSON.parse(stored);
+          const base = currencies.find((c: any) => Boolean(c?.isBase || c?.isBaseCurrency));
+          if (base && isMounted) {
+            setBaseCurrency(normalizeCurrency(base));
+            return;
+          }
+        }
+      } catch {
+        // ignore and fall back to API
+      }
+
       if (isMounted) {
         setBaseCurrency(DEFAULT_CURRENCY);
       }
     };
 
-    loadBaseCurrency();
+    const onCurrencyChanged = () => {
+      void loadBaseCurrency();
+    };
+
+    const onVisibilityChange = () => {
+      if (!document.hidden) void loadBaseCurrency();
+    };
+
+    void loadBaseCurrency();
+    window.addEventListener("taban:currency-changed", onCurrencyChanged as EventListener);
+    window.addEventListener("focus", onCurrencyChanged);
+    document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       isMounted = false;
+      window.removeEventListener("taban:currency-changed", onCurrencyChanged as EventListener);
+      window.removeEventListener("focus", onCurrencyChanged);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);
 

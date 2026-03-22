@@ -8,7 +8,8 @@ import NewProductModal from '../plans/newProduct/NewProductModal';
 import SearchableDropdown from '../../../components/ui/SearchableDropdown';
 import MultiSelectDropdown from '../../../components/ui/MultiSelectDropdown';
 import type { CouponRecord } from './types';
-import { createCoupon, updateCoupon } from './storage';
+import { addonsAPI, plansAPI, productsAPI } from '../../../services/api';
+import { couponsAPI } from '../../../services/api';
 
 type CouponPayload = {
   name: string;
@@ -32,13 +33,25 @@ type NewCouponPageProps = {
   initialCoupon?: CouponRecord | null;
 };
 
-const PRODUCTS_STORAGE_KEY = "inv_products_v1";
-const PLANS_STORAGE_KEY = "inv_plans_v1";
-const ADDONS_STORAGE_KEY = "inv_addons_v1";
-
 type DropdownOption = {
   value: string;
   label: string;
+};
+
+type PlanRow = {
+  id: string;
+  name: string;
+  product: string;
+  productId?: string;
+  status?: string;
+};
+
+type AddonRow = {
+  id: string;
+  name: string;
+  product: string;
+  productId?: string;
+  status?: string;
 };
 
 const findProductOption = (input: string, options: DropdownOption[]) => {
@@ -233,82 +246,128 @@ const NewCouponPage: React.FC<NewCouponPageProps> = ({ onCancel, onClose, onSave
   });
 
   const [products, setProducts] = useState<DropdownOption[]>([]);
-  const [plans, setPlans] = useState<string[]>([]);
-  const [addons, setAddons] = useState<string[]>([]);
+  const [planRows, setPlanRows] = useState<PlanRow[]>([]);
+  const [addonRows, setAddonRows] = useState<AddonRow[]>([]);
   const [isNewProductModalOpen, setIsNewProductModalOpen] = useState(false);
   const isEditMode = Boolean(initialCoupon);
 
-  const fetchProducts = () => {
-    try {
-      const raw = localStorage.getItem(PRODUCTS_STORAGE_KEY);
-      const rows = raw ? JSON.parse(raw) : [];
-      if (Array.isArray(rows)) {
-        const activeProducts: DropdownOption[] = rows
-          .filter(p => (p.status || 'Active').toLowerCase() === 'active')
-          .map(p => ({
-            value: String(p.id || p._id || p.name || '').trim(),
-            label: String(p.name || p.displayName || p.product || '').trim(),
-          }))
-          .filter((option) => option.value && option.label);
+  const selectedProductLabel = (() => {
+    const matched = findProductOption(form.productId, products);
+    return String(matched?.label || matched?.value || "").trim();
+  })();
+  const selectedProductKey = selectedProductLabel.toLowerCase();
+  const selectedProductId = (() => {
+    const matched = findProductOption(form.productId, products);
+    return String(matched?.value || "").trim();
+  })();
 
-        if (productPrefill) {
-          const prefillKey = productPrefill.toLowerCase();
-          const hasPrefill = activeProducts.some(
-            (option) =>
-              String(option.value).toLowerCase() === prefillKey ||
-              String(option.label).toLowerCase() === prefillKey
-          );
-          if (!hasPrefill) {
-            activeProducts.unshift({ value: productPrefill, label: productPrefill });
-          }
-        }
-        setProducts(activeProducts);
-      }
+  const planOptionsForProduct = React.useMemo(() => {
+    const rows = Array.isArray(planRows) ? planRows : [];
+    const filtered = rows.filter((row) => {
+      const status = String(row?.status || "Active").toLowerCase();
+      if (status === "inactive") return false;
+      if (!selectedProductId && !selectedProductKey) return true;
+      if (selectedProductId) return String(row?.productId || "").trim() === selectedProductId;
+      return String(row?.product || "").trim().toLowerCase() === selectedProductKey;
+    });
+    return Array.from(new Set(filtered.map((row) => row.name).filter(Boolean)));
+  }, [planRows, selectedProductId, selectedProductKey]);
+
+  const addonOptionsForProduct = React.useMemo(() => {
+    const rows = Array.isArray(addonRows) ? addonRows : [];
+    const filtered = rows.filter((row) => {
+      const status = String(row?.status || "Active").toLowerCase();
+      if (status === "inactive") return false;
+      if (!selectedProductId && !selectedProductKey) return true;
+      if (selectedProductId) return String(row?.productId || "").trim() === selectedProductId;
+      return String(row?.product || "").trim().toLowerCase() === selectedProductKey;
+    });
+    return Array.from(new Set(filtered.map((row) => row.name).filter(Boolean)));
+  }, [addonRows, selectedProductId, selectedProductKey]);
+
+  const fetchProducts = async () => {
+    try {
+      const res: any = await productsAPI.getAll({ limit: 1000 });
+      const apiRows = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+
+      const activeProducts: DropdownOption[] = apiRows
+        .filter((row: any) => String(row?.status || "Active").toLowerCase() === "active")
+        .map((row: any) => {
+          const id = String(row?.id || row?._id || "").trim();
+          const name = String(row?.name || "").trim();
+          return { value: id, label: name };
+        })
+        .filter((option) => option.value && option.label);
+
+      setProducts(activeProducts);
     } catch (err) {
       console.error("Failed to load products", err);
+      setProducts([]);
     }
   };
 
-  const fetchPlans = () => {
+  const fetchPlans = async () => {
     try {
-      const raw = localStorage.getItem(PLANS_STORAGE_KEY);
-      const rows = raw ? JSON.parse(raw) : [];
-      if (Array.isArray(rows)) {
-        const names = Array.from(new Set(rows.map((row: any) => String(row?.planName || row?.name || row?.plan || '').trim()).filter(Boolean)));
-        setPlans(names);
-      }
+      const res: any = await plansAPI.getAll({ limit: 2000 });
+      const apiRows = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+
+      const merged: PlanRow[] = apiRows
+        .map((row: any) => ({
+          id: String(row?.id || row?._id || "").trim(),
+          name: String(row?.planName || row?.plan || row?.name || "").trim(),
+          product: String(row?.product || "").trim(),
+          productId: String(row?.productId || "").trim(),
+          status: String(row?.status || "Active").trim(),
+        }))
+        .filter((row: PlanRow) => row.id && row.name);
+
+      setPlanRows(merged);
     } catch (err) {
       console.error("Failed to load plans", err);
+      setPlanRows([]);
     }
   };
 
-  const fetchAddons = () => {
+  const fetchAddons = async () => {
     try {
-      const raw = localStorage.getItem(ADDONS_STORAGE_KEY);
-      const rows = raw ? JSON.parse(raw) : [];
-      if (Array.isArray(rows)) {
-        const names = Array.from(
-          new Set(
-            rows
-              .map((row: any) => String(row?.addonName || row?.name || '').trim())
-              .filter(Boolean)
-          )
-        );
-        setAddons(names);
-      } else {
-        setAddons([]);
-      }
+      const res: any = await addonsAPI.getAll({ limit: 2000 });
+      const apiRows = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+
+      const merged: AddonRow[] = apiRows
+        .map((row: any) => ({
+          id: String(row?.id || row?._id || "").trim(),
+          name: String(row?.addonName || row?.name || "").trim(),
+          product: String(row?.product || "").trim(),
+          productId: String(row?.productId || "").trim(),
+          status: String(row?.status || "Active").trim(),
+        }))
+        .filter((row: AddonRow) => row.id && row.name);
+
+      setAddonRows(merged);
     } catch (err) {
       console.error("Failed to load addons", err);
-      setAddons([]);
+      setAddonRows([]);
     }
   };
 
   useEffect(() => {
-    fetchProducts();
-    fetchPlans();
-    fetchAddons();
+    void fetchProducts();
+    void fetchPlans();
+    void fetchAddons();
   }, [productPrefill]);
+
+  useEffect(() => {
+    if (!selectedProductKey) return;
+    setForm((prev) => {
+      const allowedPlans = new Set(planOptionsForProduct.map((p) => p.toLowerCase()));
+      const allowedAddons = new Set(addonOptionsForProduct.map((a) => a.toLowerCase()));
+      const nextPlans = Array.isArray(prev.selectedPlans) ? prev.selectedPlans.filter((p) => allowedPlans.has(String(p).toLowerCase())) : [];
+      const nextAddons = Array.isArray(prev.selectedAddons) ? prev.selectedAddons.filter((a) => allowedAddons.has(String(a).toLowerCase())) : [];
+      if (nextPlans === prev.selectedPlans && nextAddons === prev.selectedAddons) return prev;
+      return { ...prev, selectedPlans: nextPlans, selectedAddons: nextAddons };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProductKey, planOptionsForProduct.join("|"), addonOptionsForProduct.join("|")]);
 
   useEffect(() => {
     if (!initialCoupon) return;
@@ -341,7 +400,7 @@ const NewCouponPage: React.FC<NewCouponPageProps> = ({ onCancel, onClose, onSave
       ...prev,
       name: initialCoupon.couponName || '',
       code: initialCoupon.couponCode || '',
-      productId: initialCoupon.product || '',
+      productId: (initialCoupon as any)?.productId || initialCoupon.product || '',
       discountValue: String(initialCoupon.discountValue ?? ''),
       discountType: initialCoupon.discountType === 'Percentage' ? '%' : 'Flat',
       redemptionType:
@@ -456,11 +515,18 @@ const NewCouponPage: React.FC<NewCouponPageProps> = ({ onCancel, onClose, onSave
     }
 
     const numeric = Number(String(form.discountValue || '').replace(/[^0-9.-]/g, ''));
-    const selectedProductLabel = products.find((option) => String(option.value) === String(form.productId))?.label || form.productId || '';
+    const matchedProduct = findProductOption(form.productId, products);
+    const selectedProductId = String(matchedProduct?.value || "").trim();
+    const selectedProductLabel = String(matchedProduct?.label || "").trim();
+    if (!selectedProductId || !selectedProductLabel) {
+      toast.error("Please select a valid product.");
+      return;
+    }
     const normalizedRedemptionType =
       form.redemptionType === 'Limited Cycles' ? 'Limited Cycles' : form.redemptionType === 'Unlimited' ? 'Unlimited' : 'One Time';
 
     const payload = {
+      productId: selectedProductId,
       product: selectedProductLabel,
       couponName: form.name || 'New Coupon',
       couponCode: (form.code || 'CODE').toUpperCase(),
@@ -475,15 +541,23 @@ const NewCouponPage: React.FC<NewCouponPageProps> = ({ onCancel, onClose, onSave
       status: 'Active' as const,
     };
 
-    if (isEditMode && initialCoupon?.id) {
-      updateCoupon(initialCoupon.id, payload);
-      toast.success('Coupon updated successfully');
-    } else {
-      createCoupon(payload);
-      toast.success('Coupon created successfully');
-    }
-
-    handleClose();
+    void (async () => {
+      try {
+        if (isEditMode && initialCoupon?.id) {
+          const res: any = await couponsAPI.update(initialCoupon.id, payload);
+          if (res?.success === false) throw new Error(res?.message || "Failed to update coupon");
+          toast.success('Coupon updated successfully');
+        } else {
+          const res: any = await couponsAPI.create(payload);
+          if (res?.success === false) throw new Error(res?.message || "Failed to create coupon");
+          toast.success('Coupon created successfully');
+        }
+        handleClose();
+      } catch (e: any) {
+        console.error("Failed to save coupon", e);
+        toast.error(e?.message || "Failed to save coupon");
+      }
+    })();
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -522,7 +596,7 @@ const NewCouponPage: React.FC<NewCouponPageProps> = ({ onCancel, onClose, onSave
               <input type="text" name="code" value={form.code} onChange={handleChange} className="w-full h-[38px] rounded-md border border-gray-300 bg-white px-3 text-[14px] outline-none focus:border-blue-400" />
             </FormRow>
 
-            <FormRow label={form.discountType === 'Flat' ? `Discount (${baseCurrency.symbol || 'USD'}) *` : 'Discount *'} required>
+            <FormRow label={form.discountType === 'Flat' ? `Discount (${baseCurrency.code || 'USD'}) *` : 'Discount *'} required>
               <div className="flex">
                 <input type="text" name="discountValue" value={form.discountValue} onChange={handleChange} className="h-[38px] flex-1 rounded-l-md border border-gray-300 border-r-0 px-3 text-[14px] outline-none focus:border-blue-400" />
                 <div className="relative w-[96px]">
@@ -567,7 +641,12 @@ const NewCouponPage: React.FC<NewCouponPageProps> = ({ onCancel, onClose, onSave
               <div />
               {form.associatePlans === 'Selected Plans' && (
                 <FormRow label="Select Plans*" required>
-                  <MultiSelectDropdown values={form.selectedPlans} options={plans} onChange={(vals) => setForm(prev => ({ ...prev, selectedPlans: vals }))} placeholder="Choose Plans" />
+                  <MultiSelectDropdown
+                    values={form.selectedPlans}
+                    options={planOptionsForProduct}
+                    onChange={(vals) => setForm(prev => ({ ...prev, selectedPlans: vals }))}
+                    placeholder="Choose Plans"
+                  />
                 </FormRow>
               )}
               {form.associatePlans === 'Selected Plans' && <div />}
@@ -597,7 +676,7 @@ const NewCouponPage: React.FC<NewCouponPageProps> = ({ onCancel, onClose, onSave
                 <FormRow label="Select Addons*" required>
                   <MultiSelectDropdown
                     values={form.selectedAddons}
-                    options={addons}
+                    options={addonOptionsForProduct}
                     onChange={(vals) => setForm(prev => ({ ...prev, selectedAddons: vals }))}
                     placeholder="Choose Addons"
                   />
@@ -632,7 +711,11 @@ const NewCouponPage: React.FC<NewCouponPageProps> = ({ onCancel, onClose, onSave
         <button onClick={handleClose} className="rounded border border-gray-300 bg-white px-6 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50">Cancel</button>
       </footer>
 
-      <NewProductModal isOpen={isNewProductModalOpen} onClose={() => setIsNewProductModalOpen(false)} onSaveSuccess={fetchProducts} />
+      <NewProductModal
+        isOpen={isNewProductModalOpen}
+        onClose={() => setIsNewProductModalOpen(false)}
+        onSaveSuccess={() => void fetchProducts()}
+      />
     </div>
   );
 };

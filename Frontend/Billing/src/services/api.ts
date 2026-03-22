@@ -649,32 +649,41 @@ export const productsAPI = {
   list: async (params?: Record<string, any>) => productsAPI.getAll(params),
   getById: async (id: string) => productsBase.getById(String(id)),
   create: async (data: any) => productsBase.create(data),
+  bulkCreate: async (rows: any[]) => request({ method: "POST", path: "/products/bulk", data: rows }),
   update: async (id: string, data: any) => productsBase.update(String(id), data),
   delete: async (id: string) => productsBase.delete(String(id)),
 };
 
+const plansBase = resource("/plans");
 export const plansAPI = {
-  getAll: async (params?: Record<string, any>) => {
-    const query = String(params?.search || params?.q || "").trim().toLowerCase();
-    let plans = readLocalCollection(PLANS_STORAGE_KEY);
-    if (query) {
-      plans = plans.filter((plan: any) =>
-        Object.values(plan || {}).some((value) =>
-          String(value ?? "")
-            .toLowerCase()
-            .includes(query)
-        )
-      );
-    }
-    return { success: true, data: plans };
-  },
+  getAll: async (params?: Record<string, any>) => plansBase.getAll(params),
   list: async (params?: Record<string, any>) => plansAPI.getAll(params),
-  getById: async (id: string) => {
-    const plans = readLocalCollection(PLANS_STORAGE_KEY);
-    const found = plans.find((p: any) => String(p.id || p._id) === String(id));
-    if (!found) return { success: false, message: "Plan not found", data: null };
-    return { success: true, data: found };
-  },
+  getById: async (id: string) => plansBase.getById(String(id)),
+  create: async (data: any) => plansBase.create(data),
+  bulkCreate: async (rows: any[]) => request({ method: "POST", path: "/plans/bulk", data: rows }),
+  update: async (id: string, data: any) => plansBase.update(String(id), data),
+  delete: async (id: string) => plansBase.delete(String(id)),
+};
+const addonsBase = resource("/addons");
+export const addonsAPI = {
+  getAll: async (params?: Record<string, any>) => addonsBase.getAll(params),
+  list: async (params?: Record<string, any>) => addonsAPI.getAll(params),
+  getById: async (id: string) => addonsBase.getById(String(id)),
+  create: async (data: any) => addonsBase.create(data),
+  bulkCreate: async (rows: any[]) => request({ method: "POST", path: "/addons/bulk", data: rows }),
+  update: async (id: string, data: any) => addonsBase.update(String(id), data),
+  delete: async (id: string) => addonsBase.delete(String(id)),
+};
+
+const couponsBase = resource("/coupons");
+export const couponsAPI = {
+  getAll: async (params?: Record<string, any>) => couponsBase.getAll(params),
+  list: async (params?: Record<string, any>) => couponsAPI.getAll(params),
+  getById: async (id: string) => couponsBase.getById(String(id)),
+  create: async (data: any) => couponsBase.create(data),
+  bulkCreate: async (rows: any[]) => request({ method: "POST", path: "/coupons/bulk", data: rows }),
+  update: async (id: string, data: any) => couponsBase.update(String(id), data),
+  delete: async (id: string) => couponsBase.delete(String(id)),
 };
 
 
@@ -970,35 +979,16 @@ export const creditNotesAPI = {
     }),
 };
 
+const quotesBase = resource("/quotes");
 export const quotesAPI = {
-  ...quotesLocal,
-  bulkDelete: async (ids: string[]) => {
-    const rows = readLocalCollection(LOCAL_QUOTES_KEY);
-    const idsSet = new Set((ids || []).map((id) => String(id)));
-    const filtered = rows.filter((row: any) => !idsSet.has(getEntityId(row)));
-    writeLocalCollection(LOCAL_QUOTES_KEY, filtered);
-    return { success: true, data: { deletedCount: rows.length - filtered.length } };
-  },
-  getNextNumber: async (prefix?: string) => {
-    const all = await quotesLocal.getAll({ limit: 100000 });
-    const next = (all.pagination?.total || 0) + 1;
-    return { success: true, data: { nextNumber: `${prefix || "QU-"}${String(next).padStart(5, "0")}` } };
-  },
-  create: async (data: any) => {
-    const res = await quotesLocal.create(data);
-    if (res.success) recordEvent("quote_created", { quote: res.data });
-    return res;
-  },
-  update: async (id: string, data: any) => {
-    const res = await quotesLocal.update(id, data);
-    if (res.success) recordEvent("quote_updated", { quote: res.data });
-    return res;
-  },
-  delete: async (id: string) => {
-    const res = await quotesLocal.delete(id);
-    if (res.success) recordEvent("quote_deleted", { quote_id: id });
-    return res;
-  },
+  getAll: (params?: any) => quotesBase.getAll(params),
+  list: (params?: any) => quotesAPI.getAll(params),
+  getById: (id: string) => quotesBase.getById(id),
+  create: (data: any) => quotesBase.create(data),
+  update: (id: string, data: any) => quotesBase.update(id, data),
+  delete: (id: string) => quotesBase.delete(id),
+  getNextNumber: (prefix?: string) => request({ path: "/quotes/next-number", params: { prefix } }),
+  bulkDelete: (ids: string[]) => request({ method: "POST", path: "/quotes/bulk-delete", data: { ids } }),
   sendEmail: async (id: string, data: any) => ({
     success: true,
     data: { id, queued: true, type: "quote", ...data },
@@ -1814,6 +1804,14 @@ export const automationAPI = {
   schedules: automationResource("schedules"),
 };
 
+export const priceListsAPI = {
+  list: (params?: any) => request({ path: "/price-lists", params }),
+  getById: (id: string) => request({ path: `/price-lists/${id}` }),
+  create: (data: any) => request({ method: "POST", path: "/price-lists", data }),
+  update: (id: string, data: any) => request({ method: "PUT", path: `/price-lists/${id}`, data }),
+  delete: (id: string) => request({ method: "DELETE", path: `/price-lists/${id}` }),
+};
+
 export default {
   API_BASE_URL,
   apiRequest,
@@ -1847,6 +1845,8 @@ export default {
   vendorCreditsAPI,
   documentsAPI,
   plansAPI,
+  addonsAPI,
+  priceListsAPI,
   emailTemplatesAPI,
 
   senderEmailsAPI,

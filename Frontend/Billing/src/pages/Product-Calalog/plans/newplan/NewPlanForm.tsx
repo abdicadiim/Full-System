@@ -4,7 +4,7 @@ import { toast } from "react-toastify";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useOrganizationBranding } from "../../../../hooks/useOrganizationBranding";
 import { useCurrency } from "../../../../hooks/useCurrency";
-import { taxesAPI, unitsAPI } from "../../../../services/api";
+import { plansAPI, productsAPI, reportingTagsAPI, taxesAPI, unitsAPI } from "../../../../services/api";
 import NewProductModal from "../newProduct/NewProductModal";
 import ManageUnitsModal from "../../items/components/modals/ManageUnitsModal";
 
@@ -47,27 +47,80 @@ const ACCOUNT_GROUPS: Array<{ label: string; options: string[] }> = [
   },
   { label: "Cost Of Goods Sold", options: ["Cost of Goods Sold"] },
 ];
-const PRODUCTS_STORAGE_KEY = "inv_products_v1";
-const PLANS_STORAGE_KEY = "inv_plans_v1";
 const TAX_GROUP_MARKER = "__taban_tax_group__";
 
-const normalizeTaxOptions = (rows: any[]) =>
-  rows
-    .filter((tax) => {
-      if (!tax) return false;
-      if (tax.isActive === false) return false;
-      if (tax.description === TAX_GROUP_MARKER) return false;
-      if (tax.isGroup === true || String(tax.type || "").toLowerCase() === "group") return false;
-      return true;
-    })
-    .map((tax) => {
-      const name = String(tax.name || tax.taxName || "").trim();
-      const rate = Number(tax.rate ?? tax.taxRate ?? 0);
-      if (!name) return "";
-      const safeRate = Number.isFinite(rate) ? rate : 0;
-      return `${name} [${safeRate}%]`;
-    })
+const normalizeReportingTagOptions = (tag: any): string[] => {
+  const raw = Array.isArray(tag?.options) ? tag.options : [];
+  return raw
+    .map((value: any) => String(value ?? "").trim())
     .filter(Boolean);
+};
+
+const getGroupedTaxes = (rows: any[]) => {
+  const rateById = new Map<string, number>();
+
+  rows.forEach((tax) => {
+    if (!tax) return;
+    const id = String(tax._id || tax.id || "");
+    if (!id) return;
+    const rate = Number(tax.rate ?? tax.taxRate ?? 0);
+    rateById.set(id, Number.isFinite(rate) ? rate : 0);
+  });
+
+  const taxes: string[] = [];
+  const compoundTaxes: string[] = [];
+  const taxGroups: string[] = [];
+
+  const computeTaxLabel = (tax: any) => {
+    const name = String(tax?.name || tax?.taxName || "").trim();
+    const rate = Number(tax?.rate ?? tax?.taxRate ?? 0);
+    const groupTaxes = Array.isArray(tax?.groupTaxes) ? tax.groupTaxes.map((x: any) => String(x)) : [];
+
+    const isGroup =
+      tax?.isGroup === true ||
+      String(tax?.kind || "").toLowerCase() === "group" ||
+      String(tax?.type || "").toLowerCase() === "group" ||
+      tax?.description === TAX_GROUP_MARKER ||
+      groupTaxes.length > 0;
+
+    const computedRate = isGroup
+      ? Number(groupTaxes.reduce((sum: number, taxId: string) => sum + (rateById.get(taxId) || 0), 0).toFixed(2))
+      : (Number.isFinite(rate) ? rate : 0);
+
+    const taxTypeRaw = String(tax?.taxType || tax?.tax_type || tax?.typeRaw || tax?.type_raw || "").toLowerCase();
+    const nameLower = name.toLowerCase();
+    const isCompoundFlag = tax?.isCompound ?? tax?.is_compound;
+    const isCompound =
+      isCompoundFlag === true ||
+      String(isCompoundFlag).toLowerCase() === "true" ||
+      taxTypeRaw.includes("compound") ||
+      nameLower.includes("(compound tax)") ||
+      nameLower.includes("compound tax");
+
+    return { name, isGroup, isCompound, computedRate, label: `${name} [${computedRate}%]` };
+  };
+
+  rows.forEach((tax) => {
+    if (!tax) return;
+    if (tax.isActive === false) return;
+
+    const id = String(tax._id || tax.id || "");
+    if (!id) return;
+
+    const { name, isGroup, isCompound, label } = computeTaxLabel(tax);
+    if (!name) return;
+
+    if (isGroup) taxGroups.push(label);
+    else if (isCompound) compoundTaxes.push(label);
+    else taxes.push(label);
+  });
+
+  return [
+    { label: "Tax", options: Array.from(new Set(taxes)) },
+    { label: "Compound tax", options: Array.from(new Set(compoundTaxes)) },
+    { label: "Tax Group", options: Array.from(new Set(taxGroups)) },
+  ].filter((g) => g.options.length > 0);
+};
 
 interface DropdownOption {
   value: string;
@@ -86,6 +139,7 @@ interface StyledDropdownProps {
   onFooterActionClick?: () => void;
   selectedStyle?: "default" | "blue";
   groupLabel?: string;
+  accentColor?: string;
 }
 
 function StyledDropdown({
@@ -100,9 +154,11 @@ function StyledDropdown({
   onFooterActionClick,
   selectedStyle = "default",
   groupLabel,
+  accentColor = "#3b82f6",
 }: StyledDropdownProps) {
   const [open, setOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [direction, setDirection] = useState<"down" | "up">("down");
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const normalizedOptions: DropdownOption[] = options.map((opt) =>
@@ -126,6 +182,9 @@ function StyledDropdown({
         .filter((group) => group.options.length > 0)
       : [];
 
+  const isBlueStyle = selectedStyle === "blue";
+  const highlightColor = isBlueStyle ? accentColor : "#3b82f6";
+
   useEffect(() => {
     const handleOutside = (event: MouseEvent) => {
       if (!wrapperRef.current?.contains(event.target as Node)) {
@@ -136,11 +195,34 @@ function StyledDropdown({
     return () => document.removeEventListener("mousedown", handleOutside);
   }, []);
 
+  const computeDirection = () => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    // dropdown panel is roughly ~280px tall (search + list + footer)
+    const estimated = 280;
+    if (spaceBelow < estimated && spaceAbove > spaceBelow) {
+      setDirection("up");
+    } else {
+      setDirection("down");
+    }
+  };
+
   return (
-    <div ref={wrapperRef} className="relative">
+    <div ref={wrapperRef} className={`relative ${open ? "z-[1200]" : ""}`}>
       <button
         type="button"
-        onClick={() => !disabled && setOpen((prev) => !prev)}
+        onClick={() => {
+          if (disabled) return;
+          setOpen((prev) => {
+            const next = !prev;
+            if (next) computeDirection();
+            return next;
+          });
+        }}
         disabled={disabled}
         className={`h-[36px] w-full rounded border px-3 text-left text-[13px] transition-colors ${disabled
           ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400"
@@ -148,39 +230,58 @@ function StyledDropdown({
             ? "border-gray-300 bg-white text-[#1f2937]"
             : "border-gray-200 bg-white text-[#1f2937] hover:border-gray-300"
           }`}
+        style={open && !disabled && isBlueStyle ? { borderColor: highlightColor, boxShadow: `0 0 0 1px ${highlightColor}` } : undefined}
       >
         <div className="flex items-center justify-between gap-2">
           <span className={selected ? "text-[#1f2937]" : "text-[#6b7280]"}>{selected?.label || placeholder}</span>
-          <ChevronDown size={14} className={`text-[#64748b] transition-transform ${open ? "rotate-180" : ""}`} />
+          <ChevronDown
+            size={14}
+            className={`transition-transform ${open ? "rotate-180" : ""}`}
+            style={{ color: open && isBlueStyle ? highlightColor : "#64748b" }}
+          />
         </div>
       </button>
 
       {open && !disabled && (
-        <div className="absolute left-0 top-full z-[120] mt-1 w-full rounded-xl border border-gray-200 bg-white p-2 shadow-xl animate-in fade-in zoom-in-95 duration-200">
+        <div
+          className={`absolute left-0 z-[180] w-full rounded-xl border border-gray-200 bg-white p-2 shadow-xl animate-in fade-in zoom-in-95 duration-200 ${
+            direction === "up"
+              ? "bottom-full mb-1 origin-bottom"
+              : "top-full mt-1 origin-top"
+          }`}
+        >
           {searchable && (
-            <div className="mb-2 flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 focus-within:border-gray-300 transition-colors">
+            <div
+              className="mb-2 flex items-center gap-2 rounded-lg border bg-gray-50 px-3 py-2 transition-colors focus-within:bg-white focus-within:border-gray-300"
+              style={isBlueStyle ? { borderColor: highlightColor } : undefined}
+            >
               <Search size={14} className="text-gray-400" />
               <input
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search"
                 className="w-full border-none bg-transparent text-[13px] text-gray-700 outline-none placeholder:text-gray-400"
+                autoFocus
               />
             </div>
           )}
 
-          {groupLabel ? <div className="px-2 pb-1 text-[13px] font-semibold text-gray-700">{groupLabel}</div> : null}
+          {groupLabel ? (
+            <div className="px-4 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{groupLabel}</div>
+          ) : null}
 
-          <div className="max-h-52 overflow-auto rounded-lg bg-white">
+          <div className="max-h-64 overflow-y-auto custom-scrollbar py-1">
             {normalizedGroups.length > 0 ? (
               filteredGroups.length === 0 ? (
                 <div className="px-3 py-2 text-[13px] text-gray-400">No options found</div>
               ) : (
                 filteredGroups.map((group) => (
                   <div key={group.label} className="mb-1 last:mb-0">
-                    <div className="px-2 pb-1 text-[13px] font-semibold text-gray-700">{group.label}</div>
+                    <div className="px-4 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{group.label}</div>
                     {group.options.map((opt) => {
                       const isSelected = value === opt.value;
+                      const isIndented = true;
+                      const selectedBlue = isSelected && selectedStyle === "blue";
                       return (
                         <button
                           type="button"
@@ -190,14 +291,17 @@ function StyledDropdown({
                             setOpen(false);
                             setSearchTerm("");
                           }}
-                          className={`mb-1 flex w-full items-center justify-between rounded-lg px-4 py-2 text-[13px] transition-colors last:mb-0 ${isSelected
-                            ? "bg-slate-50 text-slate-900 font-medium"
-                            : "text-gray-600 hover:bg-slate-50 hover:text-slate-900"
+                          className={`mb-1 flex w-full items-center justify-between rounded-lg py-2 text-[13px] transition-colors last:mb-0 ${isIndented ? "pl-8 pr-4" : "px-4"} ${selectedBlue
+                            ? "font-medium text-white"
+                            : isSelected
+                              ? "bg-slate-50 text-slate-900 font-medium"
+                              : "text-slate-700 hover:bg-slate-50"
                             }`}
+                          style={selectedBlue ? { backgroundColor: highlightColor } : undefined}
                         >
                           <span>{opt.label}</span>
                           {isSelected ? (
-                            <Check size={14} className="text-gray-500" />
+                            <Check size={14} className={selectedBlue ? "text-white" : "text-gray-500"} />
                           ) : null}
                         </button>
                       );
@@ -210,6 +314,7 @@ function StyledDropdown({
             ) : (
               filteredOptions.map((opt) => {
                 const isSelected = value === opt.value;
+                const selectedBlue = isSelected && selectedStyle === "blue";
                 return (
                   <button
                     type="button"
@@ -219,14 +324,17 @@ function StyledDropdown({
                       setOpen(false);
                       setSearchTerm("");
                     }}
-                    className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-[13px] transition-colors last:mb-0 ${isSelected
-                      ? "bg-slate-50 text-slate-900 font-medium"
-                      : "text-gray-600 hover:bg-slate-50 hover:text-slate-900"
+                    className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-[13px] transition-colors last:mb-0 ${selectedBlue
+                      ? "font-medium text-white"
+                      : isSelected
+                        ? "bg-slate-50 text-slate-900 font-medium"
+                        : "text-slate-700 hover:bg-slate-50"
                       }`}
+                    style={selectedBlue ? { backgroundColor: highlightColor } : undefined}
                   >
                     <span>{opt.label}</span>
                     {isSelected ? (
-                      <Check size={14} className="text-gray-500" />
+                      <Check size={14} className={selectedBlue ? "text-white" : "text-gray-500"} />
                     ) : null}
                   </button>
                 );
@@ -253,28 +361,6 @@ function StyledDropdown({
     </div>
   );
 }
-
-const getActiveProductNames = (): string[] => {
-  try {
-    const productRaw = localStorage.getItem(PRODUCTS_STORAGE_KEY);
-    const productParsed = productRaw ? JSON.parse(productRaw) : [];
-    const rows = Array.isArray(productParsed) ? productParsed : [];
-    return Array.from(
-      new Set(
-        rows
-          .filter((row: any) => {
-            const isInactive =
-              row?.active === false || String(row?.status || "").toLowerCase() === "inactive";
-            return !isInactive;
-          })
-          .map((row: any) => String(row?.name || row?.displayName || "").trim())
-          .filter(Boolean)
-      )
-    );
-  } catch {
-    return [];
-  }
-};
 
 const dedupeOptions = (rows: string[]) => {
   const seen = new Set<string>();
@@ -316,13 +402,22 @@ export default function NewPlanForm() {
   const isEditMode = Boolean(editPlanId);
 
   const [products, setProducts] = useState<string[]>([]);
+  const [productNameToId, setProductNameToId] = useState<Record<string, string>>({});
   const [newProductModalOpen, setNewProductModalOpen] = useState(false);
   const [isUnitModalOpen, setIsUnitModalOpen] = useState(false);
   const [unitOptions, setUnitOptions] = useState<string[]>([]);
-  const [taxOptions, setTaxOptions] = useState<string[]>([]);
+  const [taxRows, setTaxRows] = useState<any[]>([]);
+  const groupedTaxOptions = React.useMemo(() => getGroupedTaxes(taxRows), [taxRows]);
   const [images, setImages] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<"pricing" | "hosted" | "details">("pricing");
   const [isSaving, setIsSaving] = useState(false);
+  const [availableReportingTags, setAvailableReportingTags] = useState<any[]>([]);
+  const [reportingTagValues, setReportingTagValues] = useState<Record<string, string>>({});
+  const planReportingTags = React.useMemo(() => {
+    // Show all active reporting tags here (same behavior user expects from Settings),
+    // regardless of appliesTo config.
+    return availableReportingTags.filter((tag: any) => tag?.isActive !== false);
+  }, [availableReportingTags]);
   const [form, setForm] = useState({
     product: "",
     planName: "",
@@ -349,10 +444,11 @@ export default function NewPlanForm() {
   const hasSelectedProduct = Boolean(form.product);
   const lockDependentFields = !hasSelectedProduct;
   const mergedUnitOptions = dedupeOptions([form.unitName, ...UNIT_NAMES, ...unitOptions]);
-  const mergedTaxOptions = dedupeOptions([form.salesTax, ...taxOptions]);
   const pricePeriodLabel = toPricePeriodLabel(form.billingFrequencyPeriod);
   const isFlatPricing = form.pricingModel === "Flat";
   const currencyCode = String(baseCurrency?.code || "USD").split(" - ")[0].trim().toUpperCase() || "USD";
+  // Use code (e.g. ARS) to clearly indicate the base currency (symbol like "$" can be ambiguous).
+  const currencyPrefix = currencyCode;
 
   const toBillingPeriod = (value: string) => {
     const v = String(value || "").toLowerCase();
@@ -372,16 +468,33 @@ export default function NewPlanForm() {
     };
   };
 
+  const loadActiveProducts = async (): Promise<string[]> => {
+    try {
+      const res: any = await productsAPI.getAll({ limit: 1000 });
+      const rows = Array.isArray(res?.data) ? res.data : [];
+      const map: Record<string, string> = {};
+      const names = rows
+        .filter((p: any) => String(p?.status || "Active").toLowerCase() === "active")
+        .map((p: any): string => {
+          const name = String(p?.name || "").trim();
+          const id = String(p?.id || p?._id || "").trim();
+          if (name && id) map[name.toLowerCase()] = id;
+          return name;
+        })
+        .filter((v: string) => v.length > 0);
+      const unique = Array.from(new Set<string>(names));
+      setProductNameToId(map);
+      setProducts(unique);
+      return unique;
+    } catch {
+      setProductNameToId({});
+      setProducts([]);
+      return [];
+    }
+  };
+
   useEffect(() => {
-    const loadActiveProducts = () => {
-      setProducts(getActiveProductNames());
-    };
-
-    loadActiveProducts();
-
-    const onStorage = () => loadActiveProducts();
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    void loadActiveProducts();
   }, []);
 
   const refreshUnits = async () => {
@@ -401,16 +514,33 @@ export default function NewPlanForm() {
     try {
       const response: any = await taxesAPI.getAll({ limit: 1000 });
       const apiRows = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
-      let options = normalizeTaxOptions(apiRows);
-      if (options.length === 0) {
-        const settingsRows = JSON.parse(localStorage.getItem("taban_settings_taxes_v1") || "[]");
-        if (Array.isArray(settingsRows)) {
-          options = normalizeTaxOptions(settingsRows);
-        }
+
+      let settingsRows: any[] = [];
+      try {
+        const local = localStorage.getItem("taban_settings_taxes_v1");
+        const parsed = local ? JSON.parse(local) : [];
+        settingsRows = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        settingsRows = [];
       }
-      setTaxOptions(Array.from(new Set(options)));
+
+      // Merge API/local tax lists (tax groups often live under settings storage).
+      const merged: any[] = [];
+      const seen = new Set<string>();
+      [...apiRows, ...settingsRows].forEach((row: any) => {
+        if (!row) return;
+        const id = String(row?._id || row?.id || "").trim();
+        const name = String(row?.name || row?.taxName || "").trim().toLowerCase();
+        const key = id ? `id:${id}` : name ? `name:${name}` : "";
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        merged.push(row);
+      });
+
+      setTaxRows(merged);
     } catch (error) {
       console.warn("Failed to fetch taxes", error);
+      setTaxRows([]);
     }
   };
 
@@ -419,12 +549,36 @@ export default function NewPlanForm() {
     refreshTaxes();
   }, []);
 
+  useEffect(() => {
+    const handleTaxesUpdated = () => {
+      void refreshTaxes();
+    };
+    window.addEventListener("taban:taxes-storage-updated", handleTaxesUpdated);
+    return () => window.removeEventListener("taban:taxes-storage-updated", handleTaxesUpdated);
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadTags = async () => {
+      try {
+        const res: any = await reportingTagsAPI.getAll({ limit: 1000 });
+        const rows = Array.isArray(res?.data) ? res.data : [];
+        if (mounted) setAvailableReportingTags(rows);
+      } catch {
+        if (mounted) setAvailableReportingTags([]);
+      }
+    };
+    void loadTags();
+    return () => { mounted = false; };
+  }, []);
+
   const handleNewProductSaved = () => {
-    const names = getActiveProductNames();
-    setProducts(names);
-    if (names.length > 0) {
-      setForm((prev) => ({ ...prev, product: names[0] }));
-    }
+    void (async () => {
+      const names = await loadActiveProducts();
+      if (names.length > 0) {
+        setForm((prev) => ({ ...prev, product: prev.product || names[0] }));
+      }
+    })();
   };
 
   useEffect(() => {
@@ -435,44 +589,45 @@ export default function NewPlanForm() {
   useEffect(() => {
     const sourceId = editPlanId || clonePlanId;
     if (!sourceId) return;
-    try {
-      const raw = localStorage.getItem(PLANS_STORAGE_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      const rows = Array.isArray(parsed) ? parsed : [];
-      const source = rows.find((row: any) => String(row?.id || row?._id) === sourceId);
-      if (!source) return;
+    void (async () => {
+      try {
+        const res: any = await plansAPI.getById(sourceId);
+        const source = res?.data;
+        if (!source) return;
 
-      const parsedFrequency = parseFrequency(source?.billingFrequency || "");
-      setForm({
-        product: String(source?.product || ""),
-        planName: String(source?.planName || source?.plan || ""),
-        planCode: String(source?.planCode || ""),
-        billingFrequencyValue: String(source?.billingFrequencyValue || parsedFrequency.frequencyValue || "1"),
-        billingFrequencyPeriod: String(source?.billingFrequencyPeriod || parsedFrequency.frequencyPeriod || "Month(s)"),
-        billingCyclesType:
-          source?.billingCyclesType ||
-          (String(source?.billingCyclesCount || "").trim() ? "Fixed number of cycles" : "Auto-renews until canceled"),
-        billingCyclesCount: String(source?.billingCyclesCount || ""),
-        planDescription: String(source?.planDescription || source?.description || ""),
-        pricingModel: normalizePricingModel(String(source?.pricingModel || source?.pricingScheme || "Per Unit")),
-        unitName: String(source?.unitName || ""),
-        price: String(source?.price || ""),
-        freeTrialDays: String(source?.freeTrialDays || source?.trialDays || ""),
-        setupFee: String(source?.setupFee || ""),
-        type: source?.type === "Goods" ? "Goods" : "Service",
-        salesTax: String(source?.salesTax || source?.taxName || ""),
-        widgetsPreference: source?.widgetsPreference || false,
-        planFeatures: source?.planFeatures || [{ name: "", tooltip: "", addNewTag: false }],
-        planChange: source?.planChange || false,
-        planAccount: source?.planAccount || "Sales",
-        setupFeeAccount: source?.setupFeeAccount || "Sales",
-      });
+        const parsedFrequency = parseFrequency(source?.billingFrequency || "");
+        setForm({
+          product: String(source?.product || ""),
+          planName: String(source?.planName || source?.plan || ""),
+          planCode: String(source?.planCode || ""),
+          billingFrequencyValue: String(source?.billingFrequencyValue || parsedFrequency.frequencyValue || "1"),
+          billingFrequencyPeriod: String(source?.billingFrequencyPeriod || parsedFrequency.frequencyPeriod || "Month(s)"),
+          billingCyclesType:
+            source?.billingCyclesType ||
+            (String(source?.billingCyclesCount || "").trim() ? "Fixed number of cycles" : "Auto-renews until canceled"),
+          billingCyclesCount: String(source?.billingCyclesCount || ""),
+          planDescription: String(source?.planDescription || source?.description || ""),
+          pricingModel: normalizePricingModel(String(source?.pricingModel || source?.pricingScheme || "Per Unit")),
+          unitName: String(source?.unitName || ""),
+          price: String(source?.price || ""),
+          freeTrialDays: String(source?.freeTrialDays || source?.trialDays || ""),
+          setupFee: String(source?.setupFee || ""),
+          type: source?.type === "Goods" ? "Goods" : "Service",
+          salesTax: String(source?.salesTax || source?.taxName || ""),
+          widgetsPreference: source?.widgetsPreference || false,
+          planFeatures: source?.planFeatures || [{ name: "", tooltip: "", addNewTag: false }],
+          planChange: source?.planChange || false,
+          planAccount: source?.planAccount || "Sales",
+          setupFeeAccount: source?.setupFeeAccount || "Sales",
+        });
 
-      const image = String(source?.image || "");
-      setImages(image ? [image] : []);
-    } catch (error) {
-      console.error("Failed to prefill plan form", error);
-    }
+        const image = String(source?.image || "");
+        setImages(image ? [image] : []);
+        setReportingTagValues(source?.reportingTagValues && typeof source.reportingTagValues === "object" ? source.reportingTagValues : {});
+      } catch (error) {
+        console.error("Failed to prefill plan form", error);
+      }
+    })();
   }, [editPlanId, clonePlanId]);
 
   const inputClass =
@@ -497,6 +652,11 @@ export default function NewPlanForm() {
       toast.error("Product is required.");
       return;
     }
+    const productId = productNameToId[String(form.product || "").trim().toLowerCase()];
+    if (!productId) {
+      toast.error("Invalid product. Please select a product from the list.");
+      return;
+    }
     if (!form.planName.trim()) {
       toast.error("Plan Name is required.");
       return;
@@ -512,55 +672,34 @@ export default function NewPlanForm() {
 
     setIsSaving(true);
     try {
-      const raw = localStorage.getItem(PLANS_STORAGE_KEY);
-      const current = raw ? JSON.parse(raw) : [];
-      const rows = Array.isArray(current) ? current : [];
-      const now = new Date().toISOString();
-
-      if (isEditMode && editPlanId) {
-        const idx = rows.findIndex((row: any) => String(row?.id || row?._id) === editPlanId);
-        if (idx === -1) {
-          toast.error("Plan not found for editing.");
-          return;
-        }
-
-        const existing = rows[idx];
-        const updatedRecord = {
-          ...existing,
-          ...form,
-          price: Number(form.price),
-          setupFee: Number(form.setupFee || 0),
-          freeTrialDays: Number(form.freeTrialDays || 0),
-          image: images[0] || existing?.image || "",
-          createdAt: existing?.createdAt || now,
-          updatedAt: now,
-        };
-        const nextRows = [...rows];
-        nextRows[idx] = updatedRecord;
-        localStorage.setItem(PLANS_STORAGE_KEY, JSON.stringify(nextRows));
-        toast.success("Plan updated successfully");
-        navigate(`/products/plans/${updatedRecord.id}`);
-        return;
-      }
-
-      const id = `plan-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-      const record = {
-        id,
+      const payload: any = {
         ...form,
+        productId,
         price: Number(form.price),
         setupFee: Number(form.setupFee || 0),
         freeTrialDays: Number(form.freeTrialDays || 0),
         image: images[0] || "",
-        status: "Active",
-        createdAt: now,
-        updatedAt: now,
+        reportingTagValues,
       };
-      localStorage.setItem(PLANS_STORAGE_KEY, JSON.stringify([record, ...rows]));
+
+      if (isEditMode && editPlanId) {
+        const res: any = await plansAPI.update(editPlanId, payload);
+        if (res?.success === false) throw new Error(res?.message || "Failed to update plan");
+        toast.success("Plan updated successfully");
+        const id = String(res?.data?.id || res?.data?._id || editPlanId);
+        navigate(`/products/plans/${id}`);
+        return;
+      }
+
+      const res: any = await plansAPI.create({ ...payload, status: "Active" });
+      if (res?.success === false) throw new Error(res?.message || "Failed to save plan");
       toast.success(clonePlanId ? "Plan cloned successfully" : "Plan saved successfully");
-      navigate("/products/plans");
+      const id = String(res?.data?.id || res?.data?._id || "");
+      if (id) navigate(`/products/plans/${id}`);
+      else navigate("/products/plans");
     } catch (error) {
       console.error("Failed to save plan:", error);
-      toast.error("Failed to save plan");
+      toast.error((error as any)?.message || "Failed to save plan");
     } finally {
       setIsSaving(false);
     }
@@ -744,7 +883,7 @@ export default function NewPlanForm() {
                 <div className="grid grid-cols-1 items-center gap-4 md:grid-cols-[180px_340px] xl:col-start-2 xl:row-start-1">
                   <label className="text-[13px] text-[#ef4444]">Price*</label>
                   <div className="grid grid-cols-[54px_1fr]">
-                    <span className="flex h-[36px] items-center justify-center rounded-l border border-r-0 border-gray-200 bg-gray-50 text-[13px]">{currencyCode}</span>
+                    <span className="flex h-[36px] items-center justify-center rounded-l border border-r-0 border-gray-200 bg-gray-50 text-[13px]">{currencyPrefix}</span>
                     <input name="price" value={form.price} onChange={onFieldChange} className={`${inputClass} rounded-l-none`} disabled={lockDependentFields} />
                   </div>
                 </div>
@@ -769,7 +908,7 @@ export default function NewPlanForm() {
                 <div className="grid grid-cols-1 items-center gap-4 md:grid-cols-[180px_340px]">
                   <label className="text-[13px] text-[#ef4444]">Price*</label>
                   <div className="grid grid-cols-[54px_1fr_105px]">
-                    <span className="flex h-[36px] items-center justify-center rounded-l border border-r-0 border-gray-200 bg-gray-50 text-[13px]">{currencyCode}</span>
+                    <span className="flex h-[36px] items-center justify-center rounded-l border border-r-0 border-gray-200 bg-gray-50 text-[13px]">{currencyPrefix}</span>
                     <input name="price" value={form.price} onChange={onFieldChange} className={`${inputClass} rounded-none`} disabled={lockDependentFields} />
                     <span className="flex h-[36px] items-center justify-center rounded-r border border-l-0 border-gray-200 bg-gray-50 text-[13px]">{`/unit /${pricePeriodLabel}`}</span>
                   </div>
@@ -824,14 +963,14 @@ export default function NewPlanForm() {
                 <div>
                   <StyledDropdown
                     value={form.salesTax}
-                    options={mergedTaxOptions}
+                    groupedOptions={groupedTaxOptions}
                     onChange={(newValue) => setForm((prev) => ({ ...prev, salesTax: newValue }))}
                     placeholder="Select a Tax"
                     disabled={lockDependentFields}
-                    groupLabel="Compound tax"
                     footerActionLabel="New Tax"
                     onFooterActionClick={() => navigate("/settings/taxes/new")}
                     selectedStyle="blue"
+                    accentColor={accentColor}
                   />
                   <p className="mt-2 text-[12px] text-[#64748b]">
                     Add tax to your Plan or Addon. Use tax group for more than one tax.
@@ -1005,6 +1144,38 @@ export default function NewPlanForm() {
                   />
                   <HelpCircle size={16} className="text-gray-400" />
                 </div>
+              </div>
+
+              <div className="mt-10 border-t border-gray-200 pt-8">
+                <h2 className="mb-5 text-[15px] font-medium text-gray-800">Reporting Tags</h2>
+                {planReportingTags.length === 0 ? (
+                  <div className="text-[13px] text-gray-500">No reporting tags found for Plans.</div>
+                ) : (
+                  <div className="space-y-4">
+                    {planReportingTags.map((tag: any) => {
+                      const id = String(tag?._id || "");
+                      const name = String(tag?.name || "Reporting Tag").trim() || "Reporting Tag";
+                      const options = normalizeReportingTagOptions(tag);
+                      const value = reportingTagValues[id] || "";
+                      const required = Boolean(tag?.isMandatory);
+                      return (
+                        <div key={id || name} className="grid grid-cols-1 items-center gap-4 md:grid-cols-[180px_340px]">
+                          <label className={`text-[13px] ${required ? "text-[#ef4444]" : "text-[#111827]"}`}>
+                            {name}{required ? " *" : ""}
+                          </label>
+                          <StyledDropdown
+                            value={value}
+                            options={[{ value: "", label: "None" }, ...options.map((opt) => ({ value: opt, label: opt }))]}
+                            onChange={(nextValue) => setReportingTagValues((prev) => ({ ...prev, [id]: nextValue }))}
+                            placeholder="None"
+                            disabled={lockDependentFields}
+                            selectedStyle="blue"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           )}

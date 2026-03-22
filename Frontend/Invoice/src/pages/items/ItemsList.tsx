@@ -28,7 +28,6 @@ import {
 import ExportItemsModal from "./components/modals/ExportItemsModal";
 import ExportCurrentViewModal from "./components/modals/ExportCurrentViewModal";
 import AdvancedSearchModal from "../../components/modals/AdvancedSearchModal";
-import { useCurrency } from "../../hooks/useCurrency";
 import { useOrganizationBranding } from "../../hooks/useOrganizationBranding";
 
 const TableRowSkeleton = ({ columns }: { columns: any[] }) => (
@@ -70,12 +69,12 @@ const ItemsList = ({
 }: any) => {
   const COLUMNS_STORAGE_KEY = "taban_items_columns_v4";
   const navigate = useNavigate();
-  const { symbol: currencySymbol } = useCurrency();
   const { accentColor } = useOrganizationBranding();
 
-  const fmtMoney = (amount: number) => {
+  const fmtMoney = (amount: number, currency?: string) => {
     const val = typeof amount === "number" ? amount : Number(amount || 0);
-    return `${currencySymbol || 'AED'}${val.toLocaleString(undefined, {
+    const code = String(currency || baseCurrency?.code || "USD").trim() || "USD";
+    return `${code}${val.toLocaleString(undefined, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
@@ -753,7 +752,7 @@ const ItemsList = ({
                             <span className="text-[13px] font-medium text-[#1b5e6a] no-underline cursor-pointer truncate">{item.name}</span>
                           </div>
                         ) : col.key === 'rate' ? (
-                          <span className="text-[13px] text-slate-600">{fmtMoney(item.sellingPrice || 0)}</span>
+                          <span className="text-[13px] text-slate-600">{fmtMoney(item.sellingPrice || 0, (item as any)?.currency)}</span>
                         ) : col.key === 'accountName' ? (
                           <span className="text-[13px] text-slate-600">
                             {item.salesAccount

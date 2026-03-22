@@ -107,7 +107,7 @@ export default function CouponDetail({
               key={coupon.id}
               type="button"
               onClick={() => onSelectCoupon(coupon.id)}
-              className={`w-full text-left px-4 py-3 border-b border-[#e7e9f2] transition-colors ${coupon.id === selectedCoupon.id ? 'bg-[#eef0fa]' : 'bg-white hover:bg-[#f8f9ff]'
+              className={`w-full text-left px-4 py-3 border-b border-[#e7e9f2] transition-colors ${coupon.id === selectedCoupon.id ? 'bg-gray-100' : 'bg-white hover:bg-gray-50'
                 }`}
             >
               <div className="flex items-start justify-between gap-4">

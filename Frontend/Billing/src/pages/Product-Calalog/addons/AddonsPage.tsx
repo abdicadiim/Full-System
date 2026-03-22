@@ -3,8 +3,10 @@ import { ChevronDown, MoreHorizontal, Plus, Search, SlidersHorizontal, ArrowDown
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import PlansCustomizeColumnsModal, { ColumnConfig } from "../plans/components/PlansCustomizeColumnsModal";
-import { readAddons, writeAddons } from "./storage";
 import type { AddonRecord } from "./types";
+import { addonsAPI } from "../../../services/api";
+import { useCurrency } from "../../../hooks/useCurrency";
+import Skeleton from "../../../components/ui/Skeleton";
 
 const ADDONS_COLUMNS_STORAGE_KEY = "taban_addons_columns_v1";
 const MIN_ADDON_COLUMN_WIDTH = 110;
@@ -30,22 +32,6 @@ const DEFAULT_ADDON_COLUMNS: ColumnConfig[] = [
   { key: "creationDate", label: "Creation Date", visible: false, width: 170 },
   { key: "unit", label: "Unit", visible: false, width: 130 },
 ];
-
-const FALLBACK_ADDON: AddonRecord = {
-  id: "sample-addon-1",
-  addonName: "ASC",
-  product: "asddc",
-  addonCode: "AS",
-  description: "ASC",
-  status: "Active",
-  addonType: "Recurring",
-  pricingModel: "Unit",
-  price: 0,
-  account: "Sales",
-  taxName: "",
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-};
 
 const BULK_ACCOUNT_OPTIONS = [
   "Advance Tax",
@@ -98,7 +84,9 @@ const loadAddonColumns = () => {
 
 export default function AddonsPage() {
   const navigate = useNavigate();
+  const { code: baseCurrencyCode } = useCurrency();
   const [addons, setAddons] = useState<AddonRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [columns, setColumns] = useState<ColumnConfig[]>(() => loadAddonColumns());
@@ -137,17 +125,29 @@ export default function AddonsPage() {
   }, []);
 
   useEffect(() => {
-    const load = () => setAddons(readAddons());
-    load();
-    window.addEventListener("storage", load);
-    return () => window.removeEventListener("storage", load);
+    let mounted = true;
+    const load = async () => {
+      if (mounted) setIsLoading(true);
+      try {
+        const res: any = await addonsAPI.getAll({ limit: 1000 });
+        const rows = Array.isArray(res?.data) ? res.data : [];
+        if (mounted) setAddons(rows);
+      } catch (e) {
+        console.warn("Failed to load addons", e);
+        if (mounted) setAddons([]);
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
+    };
+    void load();
+    return () => { mounted = false; };
   }, []);
 
   useEffect(() => {
     localStorage.setItem(ADDONS_COLUMNS_STORAGE_KEY, JSON.stringify(columns));
   }, [columns]);
 
-  const rows = useMemo(() => (addons.length > 0 ? addons : [FALLBACK_ADDON]), [addons]);
+  const rows = useMemo(() => addons, [addons]);
   const visibleColumns = useMemo(() => columns.filter((col) => col.visible), [columns]);
   const tableWidth = useMemo(() => {
     const dynamicColumnsWidth = visibleColumns.reduce(
@@ -277,22 +277,36 @@ export default function AddonsPage() {
 
   const handleMarkStatus = (status: "Active" | "Inactive") => {
     if (selectedIds.length === 0) return;
-    const current = readAddons();
-    const updated = current.map(a => selectedIds.includes(a.id) ? { ...a, status } : a);
-    writeAddons(updated);
-    setAddons(updated);
-    setSelectedIds([]);
-    toast.success(`Marked ${selectedIds.length} addons as ${status}`);
+    void (async () => {
+      try {
+        await Promise.all(selectedIds.map((id) => addonsAPI.update(id, { status })));
+        const res: any = await addonsAPI.getAll({ limit: 1000 });
+        setAddons(Array.isArray(res?.data) ? res.data : []);
+        toast.success(`Marked ${selectedIds.length} addons as ${status}`);
+      } catch (e: any) {
+        console.error("Failed to update addon status", e);
+        toast.error(e?.message || "Failed to update addons");
+      } finally {
+        setSelectedIds([]);
+      }
+    })();
   };
 
   const handleBulkDelete = () => {
     if (selectedIds.length === 0) return;
-    const current = readAddons();
-    const updated = current.filter(a => !selectedIds.includes(a.id));
-    writeAddons(updated);
-    setAddons(updated);
-    setSelectedIds([]);
-    toast.success(`Deleted ${selectedIds.length} addons`);
+    void (async () => {
+      try {
+        await Promise.all(selectedIds.map((id) => addonsAPI.delete(id)));
+        const res: any = await addonsAPI.getAll({ limit: 1000 });
+        setAddons(Array.isArray(res?.data) ? res.data : []);
+        toast.success(`Deleted ${selectedIds.length} addons`);
+      } catch (e: any) {
+        console.error("Failed to delete addons", e);
+        toast.error(e?.message || "Failed to delete addons");
+      } finally {
+        setSelectedIds([]);
+      }
+    })();
   };
 
   const handleApplyBulkUpdate = () => {
@@ -307,30 +321,31 @@ export default function AddonsPage() {
     }
 
     const boolValue = bulkBooleanValue === "check";
-    const now = new Date().toISOString();
+    const patch: any = {};
+    if (bulkUpdateField === "description") patch.description = bulkTextValue;
+    if (bulkUpdateField === "account") patch.account = bulkAccountValue;
+    if (bulkUpdateField === "showInWidget") patch.includeInWidget = boolValue;
+    if (bulkUpdateField === "showInPortal") patch.showInPortal = boolValue;
 
-    const current = readAddons();
-    const updated = current.map((a) => {
-      if (selectedIds.includes(a.id)) {
-        if (bulkUpdateField === "description") return { ...a, description: bulkTextValue, updatedAt: now };
-        if (bulkUpdateField === "account") return { ...a, account: bulkAccountValue, updatedAt: now };
-        if (bulkUpdateField === "showInWidget") return { ...(a as any), showInWidget: boolValue, includeInWidget: boolValue, updatedAt: now };
-        if (bulkUpdateField === "showInPortal") return { ...(a as any), showInPortal: boolValue, updatedAt: now };
+    void (async () => {
+      try {
+        await Promise.all(selectedIds.map((id) => addonsAPI.update(id, patch)));
+        const res: any = await addonsAPI.getAll({ limit: 1000 });
+        setAddons(Array.isArray(res?.data) ? res.data : []);
+        toast.success(`Updated ${selectedIds.length} addons successfully.`);
+        setBulkUpdateOpen(false);
+        setBulkUpdateField("");
+        setBulkTextValue("");
+        setBulkBooleanValue("check");
+        setBulkAccountValue("");
+        setBulkAccountSearch("");
+        setBulkAccountOpen(false);
+        setSelectedIds([]);
+      } catch (e: any) {
+        console.error("Failed to bulk update addons", e);
+        toast.error(e?.message || "Failed to update addons");
       }
-      return a;
-    });
-
-    writeAddons(updated);
-    setAddons(updated);
-    setBulkUpdateOpen(false);
-    setBulkUpdateField("");
-    setBulkTextValue("");
-    setBulkBooleanValue("check");
-    setBulkAccountValue("");
-    setBulkAccountSearch("");
-    setBulkAccountOpen(false);
-    setSelectedIds([]);
-    toast.success(`Updated ${selectedIds.length} addons successfully.`);
+    })();
   };
 
   const renderCell = (row: AddonRecord, key: string) => {
@@ -342,7 +357,7 @@ export default function AddonsPage() {
       const statusColor = status === "active" ? "#1b5e6a" : "#64748b";
       return <span style={{ color: statusColor }}>{row.status || "-"}</span>;
     }
-    if (key === "price") return `AMD${Number(row.price || 0).toFixed(2)}`;
+    if (key === "price") return `${baseCurrencyCode || "USD"}${Number(row.price || 0).toFixed(2)}`;
     if (key === "creationDate") return row.createdAt || "-";
 
     return data?.[key] || "-";
@@ -572,45 +587,79 @@ export default function AddonsPage() {
           </thead>
 
           <tbody className="divide-y divide-gray-100">
-            {rows.map((row) => (
-              <tr
-                key={row.id}
-                onClick={() => navigate(`/products/addons/${row.id}`)}
-                className="cursor-pointer hover:bg-slate-50/50"
-              >
-                <td className="px-4 py-3" />
-                <td className="px-2 py-3">
-                  <div className="flex items-center gap-2">
-                    <div className="h-5 w-px bg-transparent" />
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.includes(row.id)}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => {
-                        setSelectedIds((prev) =>
-                          e.target.checked ? [...prev, row.id] : prev.filter((id) => id !== row.id)
-                        );
-                      }}
-                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                  </div>
-                </td>
-                {visibleColumns.map((col) => (
-                  <td
-                    key={col.key}
-                    className={`px-4 py-3 text-[13px] ${col.key === "name" ? "font-medium text-[#1b5e6a]" : "text-slate-600"}`}
-                    style={{
-                      width: clampAddonColumnWidth(col.width, 160),
-                      minWidth: clampAddonColumnWidth(col.width, 160),
-                      maxWidth: clampAddonColumnWidth(col.width, 160),
-                    }}
-                  >
-                    {renderCell(row, col.key)}
+            {isLoading ? (
+              Array.from({ length: 7 }).map((_, index) => (
+                <tr key={`skeleton-${index}`} className="bg-white">
+                  <td className="px-4 py-3" />
+                  <td className="px-2 py-3">
+                    <div className="flex items-center gap-2">
+                      <div className="h-5 w-px bg-transparent" />
+                      <Skeleton className="h-4 w-4 rounded" />
+                    </div>
                   </td>
-                ))}
-                <td className="sticky right-0 bg-white/95 px-4 py-3 backdrop-blur-sm shadow-[-4px_0_4px_-2px_rgba(0,0,0,0.05)]" />
+                  {visibleColumns.map((col) => (
+                    <td
+                      key={`skeleton-${index}-${col.key}`}
+                      className="px-4 py-3"
+                      style={{
+                        width: clampAddonColumnWidth(col.width, 160),
+                        minWidth: clampAddonColumnWidth(col.width, 160),
+                        maxWidth: clampAddonColumnWidth(col.width, 160),
+                      }}
+                    >
+                      <Skeleton className="h-4 w-full max-w-[240px]" />
+                    </td>
+                  ))}
+                  <td className="sticky right-0 bg-white/95 px-4 py-3 backdrop-blur-sm shadow-[-4px_0_4px_-2px_rgba(0,0,0,0.05)]" />
+                </tr>
+              ))
+            ) : rows.length === 0 ? (
+              <tr>
+                <td colSpan={visibleColumns.length + 3} className="px-6 py-10 text-center text-[13px] text-slate-500">
+                  No addons found.
+                </td>
               </tr>
-            ))}
+            ) : (
+              rows.map((row) => (
+                <tr
+                  key={row.id}
+                  onClick={() => navigate(`/products/addons/${row.id}`)}
+                  className="cursor-pointer hover:bg-slate-50/50"
+                >
+                  <td className="px-4 py-3" />
+                  <td className="px-2 py-3">
+                    <div className="flex items-center gap-2">
+                      <div className="h-5 w-px bg-transparent" />
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(row.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          setSelectedIds((prev) =>
+                            e.target.checked ? [...prev, row.id] : prev.filter((id) => id !== row.id)
+                          );
+                        }}
+                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                    </div>
+                  </td>
+                  {visibleColumns.map((col) => (
+                    <td
+                      key={col.key}
+                      className={`px-4 py-3 text-[13px] ${col.key === "name" ? "font-medium text-[#1b5e6a]" : "text-slate-600"}`}
+                      style={{
+                        width: clampAddonColumnWidth(col.width, 160),
+                        minWidth: clampAddonColumnWidth(col.width, 160),
+                        maxWidth: clampAddonColumnWidth(col.width, 160),
+                      }}
+                    >
+                      {renderCell(row, col.key)}
+                    </td>
+                  ))}
+                  <td className="sticky right-0 bg-white/95 px-4 py-3 backdrop-blur-sm shadow-[-4px_0_4px_-2px_rgba(0,0,0,0.05)]" />
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

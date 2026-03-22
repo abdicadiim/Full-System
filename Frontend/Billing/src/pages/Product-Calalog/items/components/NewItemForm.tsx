@@ -288,7 +288,9 @@ const isReportingTagRequired = (tag: any) =>
 export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialData, formTitle = "New Item" }: NewItemFormProps) {
   const navigate = useNavigate();
   const { accentColor } = useOrganizationBranding();
-  const currencyCode = baseCurrency?.code || baseCurrency?.symbol || "USD";
+  const currencyCode = String(baseCurrency?.code || "USD").trim() || "USD";
+  // Use code (e.g. ARS) to clearly indicate the base currency (symbol like "$" can be ambiguous).
+  const currencyPrefix = currencyCode;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
@@ -792,7 +794,7 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
               <div className="grid grid-cols-[180px_1fr] items-center gap-4">
                 <Label required dotted>Selling Price</Label>
                 <div className="flex">
-                  <span className="h-[34px] flex items-center px-3 bg-gray-50 border border-r-0 border-gray-300 text-[12px] text-gray-500 rounded-l">{currencyCode}</span>
+                  <span className="h-[34px] flex items-center px-3 bg-gray-50 border border-r-0 border-gray-300 text-[12px] text-gray-500 rounded-l">{currencyPrefix}</span>
                   <input name="sellingPrice" type="number" value={form.sellingPrice} onChange={handleChange} className={`${inputBaseClass} rounded-l-none`} />
                 </div>
               </div>

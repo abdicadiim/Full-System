@@ -283,7 +283,9 @@ const getGroupedTaxes = (rows: any[]) => {
 
 export default function EditItemForm({ item, onCancel, onUpdate, baseCurrency }: EditItemFormProps) {
     const navigate = useNavigate();
-    const currencyCode = baseCurrency?.symbol || baseCurrency?.code || "USD";
+    const currencyCode = String(baseCurrency?.code || "USD").trim() || "USD";
+    // Use code (e.g. ARS) to clearly indicate the base currency (symbol like "$" can be ambiguous).
+    const currencyPrefix = currencyCode;
     const accentColor = "#1b5e6a";
     const [form, setForm] = useState({
         type: item.type || "Goods",
@@ -534,7 +536,7 @@ export default function EditItemForm({ item, onCancel, onUpdate, baseCurrency }:
                         <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4">
                             <Label required>Selling Price</Label>
                             <div className="flex w-full max-w-[400px] group">
-                                <span className={`h-9 px-3 border border-r-0 rounded-l flex items-center bg-slate-50 text-slate-400 text-[11px] font-medium transition-colors group-focus-within:border-teal-400 group-focus-within:bg-white ${errors.sellingPrice ? "border-red-500" : "border-slate-200"}`}>{currencyCode}</span>
+                                <span className={`h-9 px-3 border border-r-0 rounded-l flex items-center bg-slate-50 text-slate-400 text-[11px] font-medium transition-colors group-focus-within:border-teal-400 group-focus-within:bg-white ${errors.sellingPrice ? "border-red-500" : "border-slate-200"}`}>{currencyPrefix}</span>
                                 <Input name="sellingPrice" type="number" value={form.sellingPrice} onChange={handleChange} className="rounded-l-none" error={errors.sellingPrice} />
                             </div>
                         </div>
@@ -597,7 +599,7 @@ export default function EditItemForm({ item, onCancel, onUpdate, baseCurrency }:
                         <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4">
                             <Label required>Cost Price</Label>
                             <div className="flex w-full max-w-[400px] group">
-                                <span className={`h-9 px-3 border border-r-0 rounded-l flex items-center bg-slate-50 text-slate-400 text-[11px] font-medium transition-colors group-focus-within:border-teal-400 group-focus-within:bg-white ${errors.costPrice ? "border-red-500" : "border-slate-200"}`}>{currencyCode}</span>
+                                <span className={`h-9 px-3 border border-r-0 rounded-l flex items-center bg-slate-50 text-slate-400 text-[11px] font-medium transition-colors group-focus-within:border-teal-400 group-focus-within:bg-white ${errors.costPrice ? "border-red-500" : "border-slate-200"}`}>{currencyPrefix}</span>
                                 <Input name="costPrice" type="number" value={form.costPrice} onChange={handleChange} className="rounded-l-none" error={errors.costPrice} />
                             </div>
                         </div>

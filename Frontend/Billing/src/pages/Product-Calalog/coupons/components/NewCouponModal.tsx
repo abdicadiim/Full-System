@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { toast } from "react-toastify";
-import { createCoupon } from "../storage";
 import type { CouponDiscountType, CouponRedemptionType, CouponStatus } from "../types";
+import { couponsAPI, productsAPI } from "../../../../services/api";
 
 interface NewCouponModalProps {
   open: boolean;
@@ -11,10 +11,9 @@ interface NewCouponModalProps {
   initialProduct?: string;
 }
 
-const PRODUCTS_STORAGE_KEY = "inv_products_v1";
-
 export default function NewCouponModal({ open, onClose, onSaved, initialProduct = "" }: NewCouponModalProps) {
   const [isSaving, setIsSaving] = useState(false);
+  const [productOptions, setProductOptions] = useState<string[]>([]);
   const [form, setForm] = useState({
     product: initialProduct,
     couponName: "",
@@ -31,14 +30,36 @@ export default function NewCouponModal({ open, onClose, onSaved, initialProduct 
   });
 
   const products = useMemo(() => {
-    try {
-      const raw = localStorage.getItem(PRODUCTS_STORAGE_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      const rows = Array.isArray(parsed) ? parsed : [];
-      return Array.from(new Set(rows.map((row: any) => String(row?.name || "").trim()).filter(Boolean)));
-    } catch {
-      return [];
-    }
+    return productOptions;
+  }, [productOptions]);
+
+  useEffect(() => {
+    if (!open) return;
+    let mounted = true;
+    void (async () => {
+      try {
+        const res: any = await productsAPI.getAll({ limit: 1000 });
+        const apiRows = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+
+        const names: string[] = Array.from(
+          new Set<string>(
+            apiRows
+              .filter((row: any) => {
+                const status = String(row?.status || "Active").toLowerCase();
+                return !(row?.active === false || status === "inactive");
+              })
+              .map((row: any) => String(row?.name || row?.displayName || row?.product || "").trim())
+              .filter((value: string) => Boolean(value))
+          )
+        );
+        if (mounted) setProductOptions(names);
+      } catch {
+        if (mounted) setProductOptions([]);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
   }, [open]);
 
   useEffect(() => {
@@ -61,30 +82,34 @@ export default function NewCouponModal({ open, onClose, onSaved, initialProduct 
     if (!form.discountValue || Number(form.discountValue) <= 0) return toast.error("Discount value must be greater than 0.");
 
     setIsSaving(true);
-    try {
-      createCoupon({
-        product: form.product,
-        couponName: form.couponName.trim(),
-        couponCode: form.couponCode.trim().toUpperCase(),
-        discountType: form.discountType,
-        discountValue: Number(form.discountValue),
-        redemptionType: form.redemptionType,
-        limitedCycles: Number(form.limitedCycles || 0),
-        maxRedemption: Number(form.maxRedemption || 0),
-        expirationDate: form.expirationDate,
-        status: form.status,
-        associatedPlans: form.associatedPlans,
-        associatedAddons: form.associatedAddons,
-      });
-      toast.success("Coupon created successfully");
-      onSaved();
-      onClose();
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to create coupon");
-    } finally {
-      setIsSaving(false);
-    }
+    void (async () => {
+      try {
+        const payload: any = {
+          product: form.product,
+          couponName: form.couponName.trim(),
+          couponCode: form.couponCode.trim().toUpperCase(),
+          discountType: form.discountType,
+          discountValue: Number(form.discountValue),
+          redemptionType: form.redemptionType,
+          limitedCycles: Number(form.limitedCycles || 0),
+          maxRedemption: Number(form.maxRedemption || 0),
+          expirationDate: form.expirationDate,
+          status: form.status,
+          associatedPlans: form.associatedPlans,
+          associatedAddons: form.associatedAddons,
+        };
+        const res: any = await couponsAPI.create(payload);
+        if (res?.success === false) throw new Error(res?.message || "Failed to create coupon");
+        toast.success("Coupon created successfully");
+        onSaved();
+        onClose();
+      } catch (error: any) {
+        console.error(error);
+        toast.error(error?.message || "Failed to create coupon");
+      } finally {
+        setIsSaving(false);
+      }
+    })();
   };
 
   const inputClass = "h-10 w-full rounded border border-[#cfd5e3] bg-white px-3 text-sm text-[#1f2937] outline-none focus:border-[#3b82f6]";

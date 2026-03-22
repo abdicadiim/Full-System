@@ -17,6 +17,12 @@ import { transactionNumberSeriesRoutes } from "./routes/transactionNumberSeriesR
 import { locationsRoutes } from "./routes/locationsRoutes.js";
 import { customersRoutes } from "./routes/customersRoutes.js";
 import { itemsRoutes } from "./routes/itemsRoutes.js";
+import { productsRoutes } from "./routes/productsRoutes.js";
+import { plansRoutes } from "./routes/plansRoutes.js";
+import { addonsRoutes } from "./routes/addonsRoutes.js";
+import { couponsRoutes } from "./routes/couponsRoutes.js";
+import priceListsRoutes from "./routes/priceListsRoutes.js";
+import quotesRoutes from "./routes/quotesRoutes.js";
 if (!MONGO_URI) {
     // eslint-disable-next-line no-console
     console.warn("Missing MONGO_URI/MONGODB_URI. Server will start, but DB features will fail.");
@@ -64,6 +70,12 @@ app.use("/api/transaction-number-series", transactionNumberSeriesRoutes);
 app.use("/api/locations", locationsRoutes);
 app.use("/api/customers", customersRoutes);
 app.use("/api/items", itemsRoutes);
+app.use("/api/products", productsRoutes);
+app.use("/api/plans", plansRoutes);
+app.use("/api/addons", addonsRoutes);
+app.use("/api/coupons", couponsRoutes);
+app.use("/api/price-lists", priceListsRoutes);
+app.use("/api/quotes", quotesRoutes);
 // Example Mongo model + routes (minimal)
 const InvoiceSchema = new mongoose.Schema({
     number: { type: String, required: true, index: true },

@@ -5,12 +5,15 @@ import {
     MoreHorizontal,
     Download,
     Upload,
+    Box,
+    ChevronUp,
     Settings,
     Trash2,
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import NewPriceForm from './NewPriceList/NewPriceForm';
+import { priceListsAPI } from '../../../services/api';
 
 type PriceListRecord = {
     id: string;
@@ -38,7 +41,6 @@ type Column = {
 type PriceListSortKey = 'name' | 'description' | 'status' | 'currency' | 'createdOn';
 
 const COLUMNS_STORAGE_KEY = 'taban_price_lists_columns_v2';
-const PRICE_LISTS_STORAGE_KEY = 'inv_price_lists_v1';
 
 const DEFAULT_COLUMNS: Column[] = [
     { key: 'name', label: 'NAME AND DESCRIPTION', visible: true, width: 350, locked: true },
@@ -66,8 +68,8 @@ export default function PriceListPage() {
     const [editingPriceList, setEditingPriceList] = useState<any | null>(null);
     const [view, setView] = useState<'list' | 'form'>('list');
     const [moreOpen, setMoreOpen] = useState(false);
-    const sortKey: PriceListSortKey = 'createdOn';
-    const sortOrder: 'asc' | 'desc' = 'desc';
+    const [sortKey] = useState<PriceListSortKey>('createdOn');
+    const [sortOrder] = useState<'asc' | 'desc'>('desc');
 
     const [columns, setColumns] = useState<Column[]>(() => {
         const saved = localStorage.getItem(COLUMNS_STORAGE_KEY);
@@ -83,27 +85,8 @@ export default function PriceListPage() {
         }
     });
 
-    const [priceLists, setPriceLists] = useState<PriceListRecord[]>(() => {
-        try {
-            const raw = localStorage.getItem(PRICE_LISTS_STORAGE_KEY);
-            const parsed = raw ? JSON.parse(raw) : [];
-            if (!Array.isArray(parsed)) return [];
-            return parsed.map((row: any) => ({
-                id: String(row?.id || row?._id || ''),
-                name: String(row?.name || ''),
-                description: String(row?.description || ''),
-                status: String(row?.status || 'Active'),
-                currency: String(row?.currency || '-'),
-                priceListType: String(row?.priceListType || row?.type || ''),
-                pricingScheme: String(row?.pricingScheme || '-'),
-                discountEnabled: row?.discountEnabled ? 'Yes' : 'No',
-                roundOffTo: String(row?.roundOffTo || 'Never mind'),
-                createdOn: String(row?.createdOn || row?.createdAt || ''),
-            }));
-        } catch {
-            return [];
-        }
-    });
+    const [priceLists, setPriceLists] = useState<PriceListRecord[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
 
     const visibleColumns = useMemo(() => columns.filter((c) => c.visible), [columns]);
     const sortedPriceLists = useMemo(() => {
@@ -172,11 +155,11 @@ export default function PriceListPage() {
         return () => document.removeEventListener('mousedown', onClickOutside);
     }, []);
 
-    const loadPriceLists = () => {
+    const loadPriceLists = async () => {
+        setIsLoading(true);
         try {
-            const raw = localStorage.getItem(PRICE_LISTS_STORAGE_KEY);
-            const parsed = raw ? JSON.parse(raw) : [];
-            if (!Array.isArray(parsed)) return [];
+            const res: any = await priceListsAPI.list();
+            const parsed = res.success && Array.isArray(res.data) ? res.data : [];
             const normalized = parsed.map((row: any) => ({
                 id: String(row?.id || row?._id || ''),
                 name: String(row?.name || ''),
@@ -192,8 +175,11 @@ export default function PriceListPage() {
                 createdOn: String(row?.createdOn || row?.createdAt || ''),
             }));
             setPriceLists(normalized);
-        } catch {
+        } catch (error) {
+            console.error('Failed to load price lists', error);
             setPriceLists([]);
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -248,26 +234,23 @@ export default function PriceListPage() {
         toast.success('Price lists exported successfully');
     };
 
-    const handleDisablePriceLists = () => {
+    const handleDisablePriceLists = async () => {
         try {
-            const raw = localStorage.getItem(PRICE_LISTS_STORAGE_KEY);
-            const parsed = raw ? JSON.parse(raw) : [];
-            const currentLists = Array.isArray(parsed) ? parsed : [];
-            if (!currentLists.length) {
+            if (!priceLists.length) {
                 toast.info('No price lists available to disable.');
                 setMoreOpen(false);
                 return;
             }
+            if (!window.confirm('Are you sure you want to disable all active price lists?')) return;
+            
             let affected = 0;
-            const updated = currentLists.map((item: any) => {
-                const status = String(item?.status || '').toLowerCase();
-                if (status !== 'inactive') {
+            for (const list of priceLists) {
+                if (list.status.toLowerCase() !== 'inactive') {
+                    await priceListsAPI.update(list.id, { status: 'Inactive' });
                     affected += 1;
-                    return { ...item, status: 'Inactive', updatedAt: new Date().toISOString() };
                 }
-                return item;
-            });
-            localStorage.setItem(PRICE_LISTS_STORAGE_KEY, JSON.stringify(updated));
+            }
+            
             loadPriceLists();
             setMoreOpen(false);
             if (affected === 0) {
@@ -280,20 +263,18 @@ export default function PriceListPage() {
         }
     };
 
-    const handleEdit = (row: PriceListRecord) => {
-        const targetId = String(row?.id || '');
-        const fullRows = (() => {
-            try {
-                const raw = localStorage.getItem(PRICE_LISTS_STORAGE_KEY);
-                const parsed = raw ? JSON.parse(raw) : [];
-                return Array.isArray(parsed) ? parsed : [];
-            } catch {
-                return [];
+    const handleEdit = async (row: PriceListRecord) => {
+        try {
+            const res: any = await priceListsAPI.getById(row.id);
+            if (res.success) {
+                setEditingPriceList(res.data);
+                setView('form');
+            } else {
+                toast.error('Failed to fetch price list details');
             }
-        })();
-        const full = fullRows.find((r: any) => String(r?.id || r?._id || '') === targetId);
-        setEditingPriceList(full ? { ...full, id: String(full.id || full._id || targetId) } : row);
-        setView('form');
+        } catch (error) {
+            toast.error('Failed to load price list');
+        }
     };
 
     const openNewPriceList = () => {
@@ -301,34 +282,31 @@ export default function PriceListPage() {
         setView('form');
     };
 
-    const handleToggleStatus = (row: PriceListRecord) => {
+    const handleToggleStatus = async (row: PriceListRecord) => {
         try {
-            const raw = localStorage.getItem(PRICE_LISTS_STORAGE_KEY);
-            const currentLists = raw ? JSON.parse(raw) : [];
-            const updated = currentLists.map((item: any) => {
-                const itemId = String(item.id || item._id);
-                if (itemId === row.id) {
-                    return { ...item, status: row.status.toLowerCase() === 'active' ? 'Inactive' : 'Active' };
-                }
-                return item;
-            });
-            localStorage.setItem(PRICE_LISTS_STORAGE_KEY, JSON.stringify(updated));
-            loadPriceLists();
-            toast.success(`Price list marked as ${row.status.toLowerCase() === 'active' ? 'Inactive' : 'Active'}`);
+            const newStatus = row.status.toLowerCase() === 'active' ? 'Inactive' : 'Active';
+            const res: any = await priceListsAPI.update(row.id, { status: newStatus });
+            if (res.success) {
+                loadPriceLists();
+                toast.success(`Price list marked as ${newStatus}`);
+            } else {
+                toast.error(res.message || 'Failed to update price list status');
+            }
         } catch (error) {
             toast.error('Failed to update price list status');
         }
     };
 
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
         if (!window.confirm('Are you sure you want to delete this price list?')) return;
         try {
-            const raw = localStorage.getItem(PRICE_LISTS_STORAGE_KEY);
-            const currentLists = raw ? JSON.parse(raw) : [];
-            const updated = currentLists.filter((item: any) => String(item.id || item._id) !== id);
-            localStorage.setItem(PRICE_LISTS_STORAGE_KEY, JSON.stringify(updated));
-            loadPriceLists();
-            toast.success('Price list deleted successfully');
+            const res: any = await priceListsAPI.delete(id);
+            if (res.success) {
+                loadPriceLists();
+                toast.success('Price list deleted successfully');
+            } else {
+                toast.error(res.message || 'Failed to delete price list');
+            }
         } catch (error) {
             toast.error('Failed to delete price list');
         }
@@ -444,51 +422,86 @@ export default function PriceListPage() {
 	                                    </tr>
 	                                </thead>
 	                                <tbody className="divide-y divide-gray-100">
-	                                    {sortedPriceLists.map((row) => (
-	                                        <tr
-	                                            key={row.id}
-	                                            className="text-[13px] group transition-all hover:bg-[#f8fafc] h-[50px] border-b border-[#eef1f6]"
-	                                        >
-	                                            {visibleColumns.map((col) => (
-	                                                <td key={col.key} className="px-4 py-3 truncate whitespace-nowrap overflow-hidden text-ellipsis" style={{ width: col.width, maxWidth: col.width }}>
-	                                                    {getCell(row, col.key)}
-	                                                </td>
-	                                            ))}
-	                                            <td className="px-4 py-3 text-right sticky right-0 bg-white/95 backdrop-blur-sm group-hover:bg-[#f8fafc] transition-colors">
-	                                                <div className="invisible group-hover:visible flex items-center justify-end gap-2 text-[12px] whitespace-nowrap">
-	                                                    <button onClick={() => handleEdit(row)} className="text-blue-500 hover:text-blue-600 font-medium transition-colors">Edit</button>
-	                                                    <span className="text-slate-300">|</span>
-	                                                    <button
-                                                        onClick={() => handleToggleStatus(row)}
-                                                        className="text-blue-500 hover:text-blue-600 font-medium transition-colors"
-                                                    >
-                                                        {row.status.toLowerCase() === 'active' ? 'Mark as Inactive' : 'Mark as Active'}
-                                                    </button>
-                                                    <span className="text-slate-300">|</span>
-                                                    <button
-                                                        onClick={() => handleDelete(row.id)}
-                                                        className="text-red-500 hover:text-red-700 font-medium flex items-center gap-1 transition-colors"
-                                                    >
-                                                        <Trash2 size={14} />
-                                                        Delete
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
+	                                    {isLoading ? (
+                                            Array.from({ length: 5 }).map((_, i) => (
+                                                <tr key={`skeleton-${i}`} className="animate-pulse border-b border-[#eef1f6] h-[55px]">
+                                                    {visibleColumns.map((col) => (
+                                                        <td key={col.key} className="px-4 py-4">
+                                                            <div className="h-4 bg-gray-100 rounded w-full border border-gray-50 flex items-center justify-center">
+                                                                <div className="w-1/2 h-2 bg-gray-50/50 rounded" />
+                                                            </div>
+                                                        </td>
+                                                    ))}
+                                                    <td className="px-4 py-4 sticky right-0 bg-white" />
+                                                </tr>
+                                            ))
+                                        ) : sortedPriceLists.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={visibleColumns.length + 1} className="px-4 py-20 text-center">
+                                                    <div className="flex flex-col items-center gap-3">
+                                                        <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center text-gray-300">
+                                                            <Box size={32} />
+                                                        </div>
+                                                        <p className="text-gray-500 font-medium">No price lists found</p>
+                                                        <button 
+                                                            onClick={openNewPriceList}
+                                                            className="text-blue-600 hover:text-blue-700 font-semibold text-sm"
+                                                        >
+                                                            Create your first price list
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            sortedPriceLists.map((row) => (
+                                                <tr
+                                                    key={row.id}
+                                                    className="text-[13px] group transition-all hover:bg-[#f8fafc] h-[50px] border-b border-[#eef1f6]"
+                                                >
+                                                    {visibleColumns.map((col) => (
+                                                        <td key={col.key} className="px-4 py-3 truncate whitespace-nowrap overflow-hidden text-ellipsis" style={{ width: col.width, maxWidth: col.width }}>
+                                                            {getCell(row, col.key)}
+                                                        </td>
+                                                    ))}
+                                                    <td className="px-4 py-3 text-right sticky right-0 bg-white/95 backdrop-blur-sm group-hover:bg-[#f8fafc] transition-colors">
+                                                        <div className="invisible group-hover:visible flex items-center justify-end gap-2 text-[12px] whitespace-nowrap">
+                                                            <button onClick={() => handleEdit(row)} className="text-blue-500 hover:text-blue-600 font-medium transition-colors">Edit</button>
+                                                            <span className="text-slate-300">|</span>
+                                                            <button
+                                                                onClick={() => handleToggleStatus(row)}
+                                                                className="text-blue-500 hover:text-blue-600 font-medium transition-colors"
+                                                            >
+                                                                {row.status.toLowerCase() === 'active' ? 'Mark as Inactive' : 'Mark as Active'}
+                                                            </button>
+                                                            <span className="text-slate-300">|</span>
+                                                            <button
+                                                                onClick={() => handleDelete(row.id)}
+                                                                className="text-red-500 hover:text-red-700 font-medium flex items-center gap-1 transition-colors"
+                                                            >
+                                                                <Trash2 size={14} />
+                                                                Delete
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+	                                </tbody>
                             </table>
 
-                            {sortedPriceLists.length === 0 && (
-                                <div className="flex flex-col items-center justify-center text-center py-20">
+                            {(!isLoading && sortedPriceLists.length === 0) && (
+                                <div className="flex flex-col items-center justify-center text-center py-20 px-4">
+                                    <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center text-gray-200 mb-6">
+                                        <Box size={48} />
+                                    </div>
                                     <h2 className="text-[26px] font-medium text-slate-800 mb-2">Customize Your Item Pricing with Flexibility</h2>
-                                    <p className="text-slate-500 text-[14px] mb-8">Create and manage multiple pricelists tailored to different customer segments.</p>
+                                    <p className="text-slate-500 text-[14px] mb-8 max-w-md mx-auto">Create and manage multiple pricelists tailored to different customer segments, currencies, and pricing schemes.</p>
                                     <button
                                         onClick={openNewPriceList}
-                                        className="text-white px-10 py-2.5 rounded font-bold text-[13px] uppercase tracking-widest mb-20 transition-all hover:brightness-110 active:scale-95 shadow-md border-b-[4px] border-[#0D4A52]"
+                                        className="text-white px-10 py-2.5 rounded font-bold text-[13px] uppercase tracking-widest mb-10 transition-all hover:brightness-110 active:scale-95 shadow-md border-b-[4px] border-[#0D4A52]"
                                         style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
                                     >
-                                        Create Price List
+                                        Create New Pricelist
                                     </button>
 
                                     <div className="w-full max-w-5xl px-8 opacity-90">

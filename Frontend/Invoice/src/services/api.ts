@@ -929,35 +929,17 @@ export const creditNotesAPI = {
     }),
 };
 
+const quotesBase = resource("/quotes");
 export const quotesAPI = {
   ...quotesLocal,
-  bulkDelete: async (ids: string[]) => {
-    const rows = readLocalCollection(LOCAL_QUOTES_KEY);
-    const idsSet = new Set((ids || []).map((id) => String(id)));
-    const filtered = rows.filter((row: any) => !idsSet.has(getEntityId(row)));
-    writeLocalCollection(LOCAL_QUOTES_KEY, filtered);
-    return { success: true, data: { deletedCount: rows.length - filtered.length } };
-  },
-  getNextNumber: async (prefix?: string) => {
-    const all = await quotesLocal.getAll({ limit: 100000 });
-    const next = (all.pagination?.total || 0) + 1;
-    return { success: true, data: { nextNumber: `${prefix || "QU-"}${String(next).padStart(5, "0")}` } };
-  },
-  create: async (data: any) => {
-    const res = await quotesLocal.create(data);
-    if (res.success) recordEvent("quote_created", { quote: res.data });
-    return res;
-  },
-  update: async (id: string, data: any) => {
-    const res = await quotesLocal.update(id, data);
-    if (res.success) recordEvent("quote_updated", { quote: res.data });
-    return res;
-  },
-  delete: async (id: string) => {
-    const res = await quotesLocal.delete(id);
-    if (res.success) recordEvent("quote_deleted", { quote_id: id });
-    return res;
-  },
+  getAll: (params?: any) => quotesBase.getAll(params),
+  list: (params?: any) => quotesBase.getAll(params),
+  getById: (id: string) => quotesBase.getById(id),
+  create: (data: any) => quotesBase.create(data),
+  update: (id: string, data: any) => quotesBase.update(id, data),
+  delete: (id: string) => quotesBase.delete(id),
+  getNextNumber: (prefix?: string) => request({ path: "/quotes/next-number", params: { prefix } }),
+  bulkDelete: (ids: string[]) => request({ method: "POST", path: "/quotes/bulk-delete", data: { ids } }),
   sendEmail: async (id: string, data: any) => ({
     success: true,
     data: { id, queued: true, type: "quote", ...data },
@@ -1649,4 +1631,3 @@ export default {
   automationAPI,
   eventsAPI,
 };
-

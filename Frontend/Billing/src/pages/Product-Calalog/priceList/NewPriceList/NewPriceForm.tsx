@@ -19,6 +19,7 @@ import { useCurrency } from '../../../../hooks/useCurrency';
 import { useOrganizationBranding } from '../../../../hooks/useOrganizationBranding';
 import SearchableDropdown from '../../../../components/ui/SearchableDropdown';
 import { toast } from 'react-toastify';
+import { itemsAPI, productsAPI, plansAPI, addonsAPI, priceListsAPI, currenciesAPI } from '../../../../services/api';
 
 interface NewPriceFormProps {
     onClose: () => void;
@@ -96,110 +97,117 @@ export default function NewPriceForm({ onClose, editData }: NewPriceFormProps) {
     }, []);
 
     useEffect(() => {
-        const loadData = () => {
-            // Load Items
-            const rawItems = localStorage.getItem('inv_items_v1');
-            const loadedItems = rawItems ? JSON.parse(rawItems) : [];
-            if (loadedItems.length === 0) {
-                setItems([{ id: 'item-sample', name: 'mohamed', sku: 'sdv', salesRate: 11.00, status: 'Active', customRate: '', discount: '' }]);
-            } else {
-                const normalized = loadedItems
-                    .filter((i: any) => i?.status === 'Active')
-                    .map((row: any, idx: number) => {
-                        const id = String(row?.id || row?._id || `item-${idx}`);
-                        const name = String(row?.name || row?.itemName || '').trim();
-                        const sku = String(row?.sku || '').trim();
-                        const salesRate = Number(row?.sellingPrice ?? row?.rate ?? row?.salesRate ?? 0) || 0;
-                        return { ...row, id, name, sku, salesRate, customRate: '', discount: '' };
-                    })
-                    .filter((row: any) => row?.name);
-                setItems(normalized);
+        const loadData = async () => {
+            try {
+                // Load Items
+                const itemsRes: any = await itemsAPI.list({ limit: 1000, status: 'Active' });
+                const loadedItems = Array.isArray(itemsRes?.data) ? itemsRes.data : [];
+                
+                if (loadedItems.length === 0) {
+                    setItems([{ id: 'item-sample', name: 'mohamed', sku: 'sdv', salesRate: 11.00, status: 'Active', customRate: '', discount: '' }]);
+                } else {
+                    const normalized = loadedItems
+                        .map((row: any, idx: number) => {
+                            const id = String(row?.id || row?._id || `item-${idx}`);
+                            const name = String(row?.name || row?.itemName || '').trim();
+                            const sku = String(row?.sku || '').trim();
+                            const salesRate = Number(row?.sellingPrice ?? row?.rate ?? row?.salesRate ?? 0) || 0;
+                            return { ...row, id, name, sku, salesRate, customRate: '', discount: '' };
+                        })
+                        .filter((row: any) => row?.name);
+                    setItems(normalized);
+                }
+
+                // Load Products, Plans, Addons
+                const [productsRes, plansRes, addonsRes, currenciesRes]: any[] = await Promise.all([
+                    productsAPI.getAll({ limit: 1000 }),
+                    plansAPI.getAll({ limit: 2000 }),
+                    addonsAPI.getAll({ limit: 2000 }),
+                    currenciesAPI.list()
+                ]);
+
+                const productRows = Array.isArray(productsRes?.data) ? productsRes.data : [];
+                const planRows = Array.isArray(plansRes?.data) ? plansRes.data : Array.isArray(plansRes) ? plansRes : [];
+                const addonRows = Array.isArray(addonsRes?.data) ? addonsRes.data : Array.isArray(addonsRes) ? addonsRes : [];
+                const parsedCurrencies = Array.isArray(currenciesRes?.data) ? currenciesRes.data : [];
+
+                const normalize = (value: any) => String(value || '').trim().toLowerCase();
+
+                const mappedProducts = (productRows || [])
+                    .map((row: any, idx: number) => ({
+                        id: String(row?.id || row?._id || `prod-${idx}`),
+                        name: String(row?.name || row?.productName || row?.product || '').trim(),
+                        plans: [] as any[],
+                        addons: [] as any[]
+                    }))
+                    .filter((row: any) => row.name);
+
+                const planByProduct = (planRows || []).reduce((acc: any, row: any) => {
+                    const productId = String(row?.productId || row?.product_id || row?.product?._id || row?.product?.id || row?.product || '');
+                    const productName = String(row?.productName || row?.product?.name || row?.product || '');
+                    const key = productId || productName;
+                    if (!key) return acc;
+                    acc[key] = acc[key] || [];
+                    acc[key].push({
+                        id: String(row?.id || row?._id || ''),
+                        name: String(row?.planName || row?.name || '').trim(),
+                        setupFee: Number(row?.setupFee || row?.setup_fee || 0) || 0,
+                        price: Number(row?.price || row?.rate || 0) || 0,
+                        priceListRate: ""
+                    });
+                    return acc;
+                }, {});
+
+                const addonByProduct = (addonRows || []).reduce((acc: any, row: any) => {
+                    const productId = String(row?.productId || row?.product_id || row?.product?._id || row?.product?.id || row?.product || '');
+                    const productName = String(row?.productName || row?.product?.name || row?.product || '');
+                    const key = productId || productName;
+                    if (!key) return acc;
+                    acc[key] = acc[key] || [];
+                    acc[key].push({
+                        id: String(row?.id || row?._id || ''),
+                        name: String(row?.addonName || row?.name || '').trim(),
+                        price: Number(row?.price || row?.rate || row?.recurringPrice || 0) || 0,
+                        priceListRate: ""
+                    });
+                    return acc;
+                }, {});
+
+                const mergedProducts = mappedProducts.map((prod: any) => {
+                    const plans =
+                        planByProduct[prod.id] ||
+                        planByProduct[prod.name] ||
+                        planByProduct[normalize(prod.id)] ||
+                        planByProduct[normalize(prod.name)] ||
+                        [];
+                    const addons =
+                        addonByProduct[prod.id] ||
+                        addonByProduct[prod.name] ||
+                        addonByProduct[normalize(prod.id)] ||
+                        addonByProduct[normalize(prod.name)] ||
+                        [];
+                    return { ...prod, plans, addons };
+                });
+
+                setAllProducts(mergedProducts);
+                const initialProducts = mergedProducts.slice(0, 1);
+                setProducts(initialProducts);
+                setExpandedProducts(initialProducts.map((p: any) => p.id));
+
+                if (parsedCurrencies.length > 0) {
+                    setCurrencies(parsedCurrencies);
+                    const base = parsedCurrencies.find((c: any) => c.isBase);
+                    if (base) setCurrency(base.code);
+                    else if (baseCurrency.code) setCurrency(baseCurrency.code);
+                } else if (baseCurrency.code) {
+                    setCurrency(baseCurrency.code);
+                    setCurrencies([{ code: baseCurrency.code, name: baseCurrency.name, isBase: true }]);
+                }
+            } catch (error) {
+                console.error("Failed to load price list data", error);
+                toast.error("Failed to load items or products");
             }
-
-            const rawProducts = localStorage.getItem('inv_products_v1');
-            const productRows = rawProducts ? JSON.parse(rawProducts) : [];
-            const rawPlans = localStorage.getItem('inv_plans_v1');
-            const planRows = rawPlans ? JSON.parse(rawPlans) : [];
-            const rawAddons = localStorage.getItem('inv_addons_v1');
-            const addonRows = rawAddons ? JSON.parse(rawAddons) : [];
-
-            const normalize = (value: any) => String(value || '').trim().toLowerCase();
-
-            const mappedProducts = (productRows || [])
-                .map((row: any, idx: number) => ({
-                    id: String(row?.id || row?._id || `prod-${idx}`),
-                    name: String(row?.name || row?.productName || row?.product || '').trim(),
-                    plans: [] as any[],
-                    addons: [] as any[]
-                }))
-                .filter((row: any) => row.name);
-
-            const planByProduct = (planRows || []).reduce((acc: any, row: any) => {
-                const productId = String(row?.productId || row?.product_id || row?.product?._id || row?.product?.id || '');
-                const productName = String(row?.productName || row?.product?.name || row?.product || '');
-                const key = productId || productName;
-                if (!key) return acc;
-                acc[key] = acc[key] || [];
-                acc[key].push({
-                    id: String(row?.id || row?._id || ''),
-                    name: String(row?.planName || row?.name || '').trim(),
-                    setupFee: Number(row?.setupFee || row?.setup_fee || 0) || 0,
-                    price: Number(row?.price || row?.rate || 0) || 0,
-                    priceListRate: ""
-                });
-                return acc;
-            }, {});
-
-            const addonByProduct = (addonRows || []).reduce((acc: any, row: any) => {
-                const productId = String(row?.productId || row?.product_id || row?.product?._id || row?.product?.id || '');
-                const productName = String(row?.productName || row?.product?.name || row?.product || '');
-                const key = productId || productName;
-                if (!key) return acc;
-                acc[key] = acc[key] || [];
-                acc[key].push({
-                    id: String(row?.id || row?._id || ''),
-                    name: String(row?.addonName || row?.name || '').trim(),
-                    price: Number(row?.price || row?.rate || row?.recurringPrice || 0) || 0,
-                    priceListRate: ""
-                });
-                return acc;
-            }, {});
-
-            const mergedProducts = mappedProducts.map((prod: any) => {
-                const plans =
-                    planByProduct[prod.id] ||
-                    planByProduct[prod.name] ||
-                    planByProduct[normalize(prod.id)] ||
-                    planByProduct[normalize(prod.name)] ||
-                    [];
-                const addons =
-                    addonByProduct[prod.id] ||
-                    addonByProduct[prod.name] ||
-                    addonByProduct[normalize(prod.id)] ||
-                    addonByProduct[normalize(prod.name)] ||
-                    [];
-                return { ...prod, plans, addons };
-            });
-
-            setAllProducts(mergedProducts);
-            const initialProducts = mergedProducts.slice(0, 1);
-            setProducts(initialProducts);
-            setExpandedProducts(initialProducts.map((p: any) => p.id));
         };
-
-        // Load Currencies
-        const rawCurrencies = localStorage.getItem('taban_currencies');
-        if (rawCurrencies) {
-            const parsed = JSON.parse(rawCurrencies);
-            setCurrencies(parsed);
-            const base = parsed.find((c: any) => c.isBase);
-            if (base) {
-                setCurrency(base.code);
-            }
-        } else if (baseCurrency.code) {
-            setCurrency(baseCurrency.code);
-            setCurrencies([{ code: baseCurrency.code, name: baseCurrency.name, isBase: true }]);
-        }
 
         loadData();
     }, [baseCurrency]);
@@ -347,16 +355,13 @@ export default function NewPriceForm({ onClose, editData }: NewPriceFormProps) {
         );
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!name.trim()) {
             toast.error('Name is required');
             return;
         }
 
         try {
-            const raw = localStorage.getItem('inv_price_lists_v1');
-            const currentLists = raw ? JSON.parse(raw) : [];
-
             const itemRates = (items || [])
                 .map((it: any, idx: number) => {
                     const id = String(it?.id || it?._id || `item-${idx}`);
@@ -383,8 +388,7 @@ export default function NewPriceForm({ onClose, editData }: NewPriceFormProps) {
                 }))
             }));
 
-            const newList = {
-                id: editData ? editData.id : `pl-${Date.now()}`,
+            const payload = {
                 name: name,
                 description: description,
                 status: editData ? editData.status : 'Active',
@@ -396,24 +400,33 @@ export default function NewPriceForm({ onClose, editData }: NewPriceFormProps) {
                 markup: `${markupPercentage}%`,
                 markupType: markupType,
                 itemRates,
-                productRates,
-                createdOn: editData ? editData.createdOn : new Date().toISOString(),
-                createdAt: editData ? (editData.createdAt || editData.createdOn) : new Date().toISOString(),
-                updatedAt: new Date().toISOString()
+                productRates
             };
 
-            let updatedLists;
+            let res: any;
             if (editData) {
-                updatedLists = currentLists.map((item: any) =>
-                    (String(item.id || item._id) === String(editData.id)) ? newList : item
-                );
+                const id = editData.id || editData._id;
+                res = await priceListsAPI.update(String(id), payload);
             } else {
-                updatedLists = [newList, ...currentLists];
+                res = await priceListsAPI.create(payload);
             }
-            localStorage.setItem('inv_price_lists_v1', JSON.stringify(updatedLists));
 
-            toast.success(editData ? 'Price list updated successfully' : 'Price list saved successfully');
-            onClose();
+            if (res.success) {
+                // Sync back to localStorage for other pages that haven't migrated yet
+                try {
+                    const listRes: any = await priceListsAPI.list({ limit: 1000 });
+                    if (listRes.success) {
+                        localStorage.setItem('inv_price_lists_v1', JSON.stringify(listRes.data));
+                    }
+                } catch (e) {
+                    console.error("Failed to sync price lists to local storage", e);
+                }
+
+                toast.success(editData ? 'Price list updated successfully' : 'Price list saved successfully');
+                onClose();
+            } else {
+                toast.error(res.message || 'Failed to save price list');
+            }
         } catch (error) {
             console.error('Error saving price list:', error);
             toast.error('Failed to save price list');

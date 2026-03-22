@@ -3,12 +3,8 @@ import { ChevronDown, ChevronLeft, ChevronRight, CirclePlus, Download, MoreVerti
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import NewProductModal from "../newProduct/NewProductModal";
-import { productsAPI } from "../../../../services/api";
+import { addonsAPI, couponsAPI, plansAPI, productsAPI } from "../../../../services/api";
 
-const PRODUCTS_STORAGE_KEY = "inv_products_v1";
-const PLANS_STORAGE_KEY = "inv_plans_v1";
-const ADDONS_STORAGE_KEY = "inv_addons_v1";
-const COUPONS_STORAGE_KEY = "inv_coupons_v1";
 const EMAIL_TEMPLATE_EVENTS = [
   "Update Subscription",
   "Cancel Subscription",
@@ -24,15 +20,7 @@ const EMAIL_TEMPLATE_EVENTS = [
   "Quote Notification",
 ] as const;
 
-const readRows = (key: string) => {
-  try {
-    const raw = localStorage.getItem(key);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-};
+const safeArray = (value: any) => (Array.isArray(value) ? value : []);
 
 const getId = (row: any) => String(row?.id || row?._id || "");
 const isActive = (row: any) => String(row?.status || "Active").toLowerCase() === "active";
@@ -119,7 +107,7 @@ export default function ProductDetailPage() {
       const rows = Array.isArray(res?.data) ? res.data : [];
       if (mountedRef.current) setProducts(rows);
     } catch {
-      if (mountedRef.current) setProducts(readRows(PRODUCTS_STORAGE_KEY));
+      if (mountedRef.current) setProducts([]);
     } finally {
       if (!silent && mountedRef.current) setProductsLoading(false);
     }
@@ -133,17 +121,28 @@ export default function ProductDetailPage() {
     }
     const load = async () => {
       await refreshProducts(true);
-
-      setPlans(readRows(PLANS_STORAGE_KEY));
-      setAddons(readRows(ADDONS_STORAGE_KEY));
-      setCoupons(readRows(COUPONS_STORAGE_KEY));
+      try {
+        const plansRes: any = await plansAPI.getAll({ limit: 1000 });
+        setPlans(safeArray(plansRes?.data));
+      } catch {
+        setPlans([]);
+      }
+      try {
+        const addonsRes: any = await addonsAPI.getAll({ limit: 1000 });
+        setAddons(safeArray(addonsRes?.data));
+      } catch {
+        setAddons([]);
+      }
+      try {
+        const couponsRes: any = await couponsAPI.getAll({ limit: 1000 });
+        setCoupons(safeArray(couponsRes?.data));
+      } catch {
+        setCoupons([]);
+      }
     };
     void load();
-    const onStorage = () => { void load(); };
-    window.addEventListener("storage", onStorage);
     return () => {
       mountedRef.current = false;
-      window.removeEventListener("storage", onStorage);
     };
   }, []);
 
@@ -832,7 +831,7 @@ export default function ProductDetailPage() {
               const rows = Array.isArray(res?.data) ? res.data : [];
               setProducts(rows);
             } catch {
-              setProducts(readRows(PRODUCTS_STORAGE_KEY));
+              setProducts([]);
             }
           })();
         }}

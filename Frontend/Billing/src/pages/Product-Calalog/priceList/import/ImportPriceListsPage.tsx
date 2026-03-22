@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import ThreePhaseImportWizard, { ImportFieldDef, ImportMappedRecord } from '../../shared/ThreePhaseImportWizard';
 
 const PRICE_LISTS_STORAGE_KEY = 'inv_price_lists_v1';
+import { priceListsAPI } from '../../../../services/api';
 
 const IMPORT_FIELDS: ImportFieldDef[] = [
   { key: 'name', label: 'Name', required: true, aliases: ['name', 'price list name', 'price list'] },
@@ -40,14 +41,9 @@ const normalizeMarkup = (markupRaw: string) => {
 export default function ImportPriceListsPage() {
   const navigate = useNavigate();
 
-  const handleImport = (rows: ImportMappedRecord[]) => {
+  const handleImport = async (rows: ImportMappedRecord[]) => {
     try {
-      const raw = localStorage.getItem(PRICE_LISTS_STORAGE_KEY);
-      const existing = raw ? JSON.parse(raw) : [];
-      const safeExisting = Array.isArray(existing) ? existing : [];
-
       const prepared = rows.map((row) => ({
-        id: `pl-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
         name: String(row.name || '').trim(),
         description: String(row.description || '').trim(),
         status: toBooleanStatus(row.status),
@@ -58,13 +54,25 @@ export default function ImportPriceListsPage() {
         roundOffTo: String(row.roundOffTo || 'Never mind').trim() || 'Never mind',
         markup: normalizeMarkup(row.markup),
         markupType: String(row.markupType || 'Markup').trim() || 'Markup',
-        createdOn: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
       }));
 
-      localStorage.setItem(PRICE_LISTS_STORAGE_KEY, JSON.stringify([...prepared, ...safeExisting]));
-      toast.success(`${prepared.length} price list(s) imported successfully.`);
+      let successCount = 0;
+      for (const payload of prepared) {
+        const res: any = await priceListsAPI.create(payload);
+        if (res.success) successCount++;
+      }
+
+      // Sync back to localStorage for other pages that haven't migrated yet
+      try {
+        const listRes: any = await priceListsAPI.list({ limit: 1000 });
+        if (listRes.success) {
+          localStorage.setItem(PRICE_LISTS_STORAGE_KEY, JSON.stringify(listRes.data));
+        }
+      } catch (e) {
+        console.error("Failed to sync price lists to local storage", e);
+      }
+
+      toast.success(`${successCount} price list(s) imported successfully.`);
       navigate('/products/price-lists');
     } catch (error) {
       console.error(error);

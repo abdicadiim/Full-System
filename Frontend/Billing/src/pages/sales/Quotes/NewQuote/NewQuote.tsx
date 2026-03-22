@@ -6,7 +6,8 @@ import {
   MessageSquare, Briefcase, User, Calendar, Plus, Paperclip, Minus, Check,
   Trash2, MoreVertical, Edit2, Edit3, Settings, Info, Tag, HelpCircle, HardDrive,
   Layers, Box, Folder, Cloud, CheckCircle, Calculator, Image as ImageIcon, GripVertical,
-  FileText, CreditCard, Square, Upload, Loader2, LayoutGrid, PlusCircle, Mail, Building2
+  FileText, CreditCard, Square, Upload, Loader2, LayoutGrid, PlusCircle, Mail, Building2,
+  Package, Layout
 } from "lucide-react";
 import { getCustomers, saveQuote, getQuotes, getQuoteById, updateQuote, getProjects, getSalespersonsFromAPI, updateSalesperson, getItemsFromAPI, getTaxes, Customer, Tax, Salesperson, Quote, ContactPerson, Project } from "../../salesModel";
 
@@ -54,6 +55,7 @@ const NewQuote = () => {
   const isEditMode = !!quoteId;
   const isSubscriptionMode = location.pathname.includes("/sales/quotes/subscription/new");
   const clonedDataFromState = location.state?.clonedData || null;
+  const [isLoading, setIsLoading] = useState(true);
   const [saveLoading, setSaveLoading] = useState<null | "draft" | "send">(null);
   const [taxes, setTaxes] = useState<Tax[]>([]);
   const [enabledSettings, setEnabledSettings] = useState<any>(null);
@@ -762,6 +764,7 @@ const NewQuote = () => {
 
   useEffect(() => {
     const loadData = async () => {
+      setIsLoading(true);
       try {
         // Load heavy dropdown data in parallel.
         const [
@@ -958,13 +961,17 @@ const NewQuote = () => {
           setQuoteDateCalendar(new Date(year, month, day));
         }
 
+        if (!isEditMode) {
+          setIsLoading(false);
+        }
       } catch (error) {
         console.error('Error loading data:', error);
+        setIsLoading(false);
       }
     };
 
     loadData();
-  }, []);
+  }, [isEditMode]);
 
   // Centralized totals calculation
   useEffect(() => {
@@ -1015,6 +1022,7 @@ const NewQuote = () => {
   useEffect(() => {
     const loadQuote = async () => {
       if (isEditMode && quoteId && salespersons.length >= 0) {
+        setIsLoading(true);
         try {
           let quote = await getQuoteById(quoteId);
 
@@ -1031,7 +1039,7 @@ const NewQuote = () => {
 
           if (quote) {
             // Format dates for display
-            const formatDateForInput = (dateString) => {
+            const formatDateForInput = (dateString: any) => {
               if (!dateString) return "";
               try {
                 const date = new Date(dateString);
@@ -1048,7 +1056,7 @@ const NewQuote = () => {
 
             // Map quote items to form items format
             // Map quote items to form items format
-            const mappedItems = (quote.items || []).map((item, index) => {
+            const mappedItems = (quote.items || []).map((item: any, index: number) => {
               const quantity = parseFloat(item.quantity) || 1;
               const rate = parseFloat(item.unitPrice || item.rate || item.price) || 0;
               const amount = parseFloat(item.total || item.amount || (quantity * rate)) || 0;
@@ -1098,10 +1106,10 @@ const NewQuote = () => {
               const resolvedTaxRate = matchedTax ? (Number((matchedTax as any).rate) || derivedTaxRate) : derivedTaxRate;
 
               return {
-                id: item.item?._id || item.item || item._id || item.id || index + 1, // Map product ID if available
+                id: item.item?._id || item.item?.id || item.item || item._id || item.id || index + 1, // Map product ID if available
                 itemType: item.itemType || "item",
-                itemDetails: item.name || item.itemName || item.itemDetails || "",
-                name: item.name || item.itemName || "",
+                itemDetails: item.item?.name || item.item?.itemName || item.name || item.itemName || item.itemDetails || "",
+                name: item.item?.name || item.item?.itemName || item.name || item.itemName || "",
                 quantity,
                 rate,
                 tax: String(resolvedTaxId || normalizedRawTax || (resolvedTaxRate > 0 ? resolvedTaxRate : "")),
@@ -1252,6 +1260,8 @@ const NewQuote = () => {
           }
         } catch (error) {
           console.error("Error loading quote for edit:", error);
+        } finally {
+          setIsLoading(false);
         }
       }
     };
@@ -3626,6 +3636,92 @@ const NewQuote = () => {
     // You can add custom logic here for what "Other" should do
     // For example: open a modal with more options, or perform a specific action
   };
+
+  if (isLoading) {
+    return (
+      <div className="w-screen h-screen bg-slate-50 flex flex-col overflow-hidden">
+        {/* Upper Toolbar Skeleton */}
+        <div className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 animate-pulse shrink-0">
+          <div className="flex gap-8 h-full">
+            <div className="w-20 h-full border-b-[3px] border-[#156372]/30 flex items-center justify-center">
+              <div className="w-12 h-3 bg-slate-100 rounded"></div>
+            </div>
+            <div className="w-32 h-full flex items-center justify-center">
+              <div className="w-20 h-3 bg-slate-50 rounded"></div>
+            </div>
+          </div>
+          <div className="w-8 h-8 rounded-lg bg-slate-100"></div>
+        </div>
+
+        {/* Scrollable Form Body Skeleton */}
+        <div className="flex-1 overflow-auto p-8 space-y-8 animate-pulse">
+          <div className="max-w-7xl mx-auto space-y-8">
+            {/* Header Identity Section */}
+            <div className="bg-white border rounded-2xl p-8 shadow-sm space-y-8 border-slate-200">
+              <div className="flex items-center gap-6">
+                <div className="w-48 h-4 bg-slate-100 rounded"></div>
+                <div className="w-96 h-11 bg-slate-50 rounded-xl border border-slate-100"></div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-x-16 gap-y-7 max-w-5xl">
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <div key={i} className="flex gap-6 items-center">
+                    <div className="w-36 h-3 bg-slate-100/60 rounded shrink-0"></div>
+                    <div className="flex-1 h-10 bg-slate-50/50 rounded-lg border border-slate-100"></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Line Items Matrix Skeleton */}
+            <div className="bg-white border rounded-2xl shadow-sm border-slate-200 overflow-hidden">
+              <div className="bg-slate-50 border-b h-12 flex px-6 items-center gap-4 border-slate-200">
+                <div className="w-8 h-8 rounded bg-slate-200/50 shrink-0"></div>
+                <div className="flex-1 h-3 bg-slate-200/40 rounded max-w-[40%]"></div>
+                <div className="w-24 h-3 bg-slate-200/40 rounded ml-auto"></div>
+                <div className="w-24 h-3 bg-slate-200/40 rounded"></div>
+              </div>
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-24 border-b border-slate-50 flex items-center px-6 gap-6">
+                  <div className="w-7 h-7 rounded bg-slate-100 shrink-0"></div>
+                  <div className="flex-1 space-y-3">
+                    <div className="w-1/2 h-3.5 bg-slate-100 rounded"></div>
+                    <div className="w-1/3 h-2.5 bg-slate-50/80 rounded"></div>
+                  </div>
+                  <div className="w-24 h-9 bg-slate-50 rounded-lg border border-slate-100"></div>
+                  <div className="w-24 h-9 bg-slate-50 rounded-lg border border-slate-100"></div>
+                  <div className="w-24 h-9 bg-slate-50 rounded-lg border border-slate-100"></div>
+                </div>
+              ))}
+            </div>
+
+            {/* Summary Panel Skeleton */}
+            <div className="flex justify-end gap-12">
+              <div className="w-80 space-y-3">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="flex justify-between items-center py-2 h-8">
+                    <div className="w-20 h-3 bg-slate-100 rounded"></div>
+                    <div className="w-16 h-4 bg-slate-50 rounded"></div>
+                  </div>
+                ))}
+                <div className="pt-4 border-t border-slate-200 flex justify-between h-10">
+                  <div className="w-24 h-5 bg-slate-200 rounded"></div>
+                  <div className="w-20 h-6 bg-slate-200 rounded"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer Actions Flyout Skeleton */}
+        <div className="h-20 bg-white border-t border-slate-200 shadow-[0_-1px_10px_rgba(0,0,0,0.02)] shrink-0 flex items-center px-10 gap-4">
+          <div className="w-32 h-11 bg-slate-100 rounded-xl"></div>
+          <div className="w-10 h-11 bg-slate-50 rounded-lg border border-slate-100 ml-auto"></div>
+          <div className="w-32 h-11 bg-[#156372]/10 rounded-xl border border-[#156372]/20"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>

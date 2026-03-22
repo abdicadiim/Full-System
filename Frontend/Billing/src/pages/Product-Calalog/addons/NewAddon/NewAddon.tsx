@@ -4,8 +4,8 @@ import { toast } from "react-toastify";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useCurrency } from "../../../../hooks/useCurrency";
 import NewProductModal from "../../plans/newProduct/NewProductModal";
-import { readAddons, writeAddons } from "../storage";
 import type { AddonRecord } from "../types";
+import { addonsAPI, plansAPI, productsAPI, taxesAPI } from "../../../../services/api";
 
 type FormState = {
   product: string;
@@ -45,9 +45,6 @@ type VolumeBracket = {
   price: string;
 };
 
-const PRODUCTS_STORAGE_KEY = "inv_products_v1";
-const TAX_STORAGE_KEY = "taban_settings_taxes_v1";
-const PLANS_STORAGE_KEY = "inv_plans_v1";
 const BILLING_INTERVALS = ["Week(s)", "Month(s)", "Year(s)", "Day(s)"];
 const PRICING_MODELS: Array<FormState["pricingModel"]> = ["Per Unit", "Volume", "Tier", "Package"];
 const UNIT_OPTIONS = ["box", "cm", "dz", "ft", "g", "in", "kg", "km", "lb", "mg", "ml", "m", "pcs", "SAV"];
@@ -118,47 +115,12 @@ const normModel = (v: string): FormState["pricingModel"] => {
 };
 const periodLabel = (v: string) => (v.toLowerCase().includes("day") ? "day" : v.toLowerCase().includes("week") ? "week" : v.toLowerCase().includes("year") ? "year" : "month");
 
-const readActiveProductNames = (): string[] => {
-  try {
-    const rows = JSON.parse(localStorage.getItem(PRODUCTS_STORAGE_KEY) || "[]");
-    return dedupe(
-      (Array.isArray(rows) ? rows : [])
-        .filter((row: any) => !(row?.active === false || String(row?.status || "").toLowerCase() === "inactive"))
-        .map((row: any) => String(row?.name || row?.displayName || row?.product || ""))
-    );
-  } catch {
-    return [];
-  }
-};
-
-const readTaxOptions = (): string[] => {
-  try {
-    const rows = JSON.parse(localStorage.getItem(TAX_STORAGE_KEY) || "[]");
-    const list = (Array.isArray(rows) ? rows : [])
-      .filter((tax: any) => tax && tax.isActive !== false && tax.isGroup !== true && String(tax.type || "").toLowerCase() !== "group")
-      .map((tax: any) => {
-        const name = String(tax.name || tax.taxName || "").trim();
-        const rate = Number(tax.rate ?? tax.taxRate ?? 0);
-        return name ? `${name} [${Number.isFinite(rate) ? rate : 0}%]` : "";
-      });
-    return dedupe(list);
-  } catch {
-    return [];
-  }
-};
-
-const readPlanNames = (): string[] => {
-  try {
-    const rows = JSON.parse(localStorage.getItem(PLANS_STORAGE_KEY) || "[]");
-    const parsed = Array.isArray(rows) ? rows : [];
-    return dedupe(
-      parsed
-        .map((row: any) => String(row?.planName || row?.plan || row?.name || "").trim())
-        .filter(Boolean)
-    );
-  } catch {
-    return [];
-  }
+type PlanRow = {
+  id: string;
+  name: string;
+  product: string;
+  productId?: string;
+  status?: string;
 };
 
 const toForm = (row: AddonRecord): FormState => ({
@@ -433,7 +395,8 @@ export default function NewAddonPage() {
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [editingAddon, setEditingAddon] = useState<AddonRecord | null>(null);
   const [products, setProducts] = useState<string[]>([]);
-  const [plans, setPlans] = useState<string[]>([]);
+  const [productNameToId, setProductNameToId] = useState<Record<string, string>>({});
+  const [planRows, setPlanRows] = useState<PlanRow[]>([]);
   const [taxes, setTaxes] = useState<string[]>([]);
   const [newProductOpen, setNewProductOpen] = useState(false);
   const [volumeBrackets, setVolumeBrackets] = useState<VolumeBracket[]>(DEFAULT_VOLUME_BRACKETS);
@@ -444,10 +407,23 @@ export default function NewAddonPage() {
   const isTierPricing = form.pricingModel === "Tier";
   const isPackagePricing = form.pricingModel === "Package";
   const isBracketPricing = isVolumePricing || isTierPricing || isPackagePricing;
-  const code = String(baseCurrency?.code || "AMD").split(" - ")[0].trim().toUpperCase() || "AMD";
+  const currencyCode = String(baseCurrency?.code || "USD").split(" - ")[0].trim().toUpperCase() || "USD";
+  const currencyPrefix = currencyCode;
 
   const unitOptions = useMemo(() => dedupe([form.unit, ...UNIT_OPTIONS]), [form.unit]);
   const taxOptions = useMemo(() => dedupe([form.taxName, ...taxes]), [form.taxName, taxes]);
+  const plansForSelectedProduct = useMemo(() => {
+    const selectedProduct = String(form.product || "").trim().toLowerCase();
+    const rows = Array.isArray(planRows) ? planRows : [];
+    const filtered = rows.filter((row) => {
+      if (!row) return false;
+      const status = String(row.status || "Active").toLowerCase();
+      if (status === "inactive") return false;
+      if (!selectedProduct) return true;
+      return String(row.product || "").trim().toLowerCase() === selectedProduct;
+    });
+    return dedupe(filtered.map((row) => row.name));
+  }, [planRows, form.product]);
   const freqLabel = useMemo(() => periodLabel(form.billingFrequency), [form.billingFrequency]);
   const recurringSuffix = form.addonType === "Recurring" ? ` /${freqLabel}` : "";
 
@@ -495,20 +471,29 @@ export default function NewAddonPage() {
   };
 
   useEffect(() => {
-    const load = () => {
-      const names = readActiveProductNames();
-      if (
-        productPrefill &&
-        !names.some((name) => name.toLowerCase() === productPrefill.toLowerCase())
-      ) {
-        setProducts([productPrefill, ...names]);
-        return;
+    void (async () => {
+      try {
+        const res: any = await productsAPI.getAll({ limit: 1000 });
+        const rows = Array.isArray(res?.data) ? res.data : [];
+        const map: Record<string, string> = {};
+        const names = rows
+          .filter((row: any) => String(row?.status || "Active").toLowerCase() === "active")
+          .map((row: any) => {
+            const id = String(row?.id || row?._id || "").trim();
+            const name = String(row?.name || "").trim();
+            if (id && name) map[name.toLowerCase()] = id;
+            return name;
+          })
+          .filter(Boolean);
+        const unique = dedupe(names);
+        setProductNameToId(map);
+        setProducts(unique);
+      } catch (e) {
+        console.error("Failed to load products", e);
+        setProductNameToId({});
+        setProducts([]);
       }
-      setProducts(names);
-    };
-    load();
-    window.addEventListener("storage", load);
-    return () => window.removeEventListener("storage", load);
+    })();
   }, [productPrefill]);
 
   useEffect(() => {
@@ -517,18 +502,61 @@ export default function NewAddonPage() {
   }, [productPrefill, isEditMode]);
 
   useEffect(() => {
-    const load = () => setPlans(readPlanNames());
-    load();
-    window.addEventListener("storage", load);
-    return () => window.removeEventListener("storage", load);
+    void (async () => {
+      try {
+        const res: any = await plansAPI.getAll({ limit: 2000 });
+        const rows = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+        const merged: PlanRow[] = rows
+          .map((row: any): PlanRow | null => {
+            const id = String(row?.id || row?._id || "").trim();
+            const name = String(row?.planName || row?.plan || row?.name || "").trim();
+            const product = String(row?.product || "").trim();
+            const productId = String(row?.productId || "").trim();
+            const status = String(row?.status || "Active").trim();
+            if (!id || !name) return null;
+            return { id, name, product, productId, status };
+          })
+          .filter(Boolean) as PlanRow[];
+        setPlanRows(merged);
+      } catch (e) {
+        console.error("Failed to load plans", e);
+        setPlanRows([]);
+      }
+    })();
   }, []);
 
   useEffect(() => {
-    const load = () => setTaxes(readTaxOptions());
-    load();
-    window.addEventListener("storage", load);
-    return () => window.removeEventListener("storage", load);
+    void (async () => {
+      try {
+        const res: any = await taxesAPI.getAll({ limit: 1000 });
+        const rows = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+        const options = rows
+          .filter((tax: any) => tax && tax.isActive !== false && tax.isGroup !== true && String(tax.type || "").toLowerCase() !== "group")
+          .map((tax: any) => {
+            const name = String(tax.name || tax.taxName || "").trim();
+            const rate = Number(tax.rate ?? tax.taxRate ?? 0);
+            return name ? `${name} [${Number.isFinite(rate) ? rate : 0}%]` : "";
+          })
+          .filter(Boolean);
+        setTaxes(dedupe(options));
+      } catch (e) {
+        console.error("Failed to load taxes", e);
+        setTaxes([]);
+      }
+    })();
   }, []);
+
+  useEffect(() => {
+    if (form.associatedPlans !== "Selected Plans") return;
+    const allowed = new Set(plansForSelectedProduct.map((p) => String(p).toLowerCase()));
+    setForm((prev) => ({
+      ...prev,
+      selectedPlans: Array.isArray(prev.selectedPlans)
+        ? prev.selectedPlans.filter((p) => allowed.has(String(p).toLowerCase()))
+        : [],
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.product, form.associatedPlans, plansForSelectedProduct.join("|")]);
 
   useEffect(() => {
     if (!isEditMode || !addonId) {
@@ -541,50 +569,59 @@ export default function NewAddonPage() {
       setImageUrl("");
       return;
     }
-    const found = readAddons().find((row) => String(row.id) === String(addonId));
-    if (!found) return navigate("/products/addons", { replace: true });
-    setEditingAddon(found);
-    setForm(toForm(found));
-    setImageUrl(String((found as any).imageUrl || ""));
-    const rawBrackets = Array.isArray((found as any).pricingBrackets)
-      ? (found as any).pricingBrackets
-      : Array.isArray((found as any).volumeBrackets)
-        ? (found as any).volumeBrackets
-        : [];
-    const mappedBrackets: VolumeBracket[] = rawBrackets
-      .map((row: any) => ({
-        startingQty: String(row?.startingQty ?? row?.startingQuantity ?? ""),
-        endingQty: String(row?.endingQty ?? row?.endingQuantity ?? ""),
-        price: String(row?.price ?? ""),
-      }))
-      .filter((row: VolumeBracket) => row.startingQty || row.endingQty || row.price);
-    if (mappedBrackets.length > 0) {
-      setVolumeBrackets(mappedBrackets);
-      return;
-    }
-    if (["Volume", "Tier", "Package"].includes(normModel(found.pricingModel))) {
-      setVolumeBrackets([
-        {
-          startingQty: normModel(found.pricingModel) === "Package" ? "" : String((found as any).startingQuantity ?? "1"),
-          endingQty: String((found as any).endingQuantity ?? (normModel(found.pricingModel) === "Package" ? "" : "2")),
-          price: Number.isFinite(Number(found.price)) ? String(found.price) : "",
-        },
-      ]);
-      return;
-    }
-    setVolumeBrackets(DEFAULT_VOLUME_BRACKETS);
+    void (async () => {
+      try {
+        const res: any = await addonsAPI.getById(String(addonId));
+        const found = (res as any)?.data as AddonRecord | null;
+        if (!found) return navigate("/products/addons", { replace: true });
+        setEditingAddon(found);
+        setForm(toForm(found));
+        setImageUrl(String((found as any).imageUrl || ""));
+        const rawBrackets = Array.isArray((found as any).pricingBrackets)
+          ? (found as any).pricingBrackets
+          : Array.isArray((found as any).volumeBrackets)
+            ? (found as any).volumeBrackets
+            : [];
+        const mappedBrackets: VolumeBracket[] = rawBrackets
+          .map((row: any) => ({
+            startingQty: String(row?.startingQty ?? row?.startingQuantity ?? ""),
+            endingQty: String(row?.endingQty ?? row?.endingQuantity ?? ""),
+            price: String(row?.price ?? ""),
+          }))
+          .filter((row: VolumeBracket) => row.startingQty || row.endingQty || row.price);
+        if (mappedBrackets.length > 0) {
+          setVolumeBrackets(mappedBrackets);
+          return;
+        }
+        if (["Volume", "Tier", "Package"].includes(normModel(found.pricingModel))) {
+          setVolumeBrackets([
+            {
+              startingQty: normModel(found.pricingModel) === "Package" ? "" : String((found as any).startingQuantity ?? "1"),
+              endingQty: String((found as any).endingQuantity ?? (normModel(found.pricingModel) === "Package" ? "" : "2")),
+              price: Number.isFinite(Number(found.price)) ? String(found.price) : "",
+            },
+          ]);
+          return;
+        }
+        setVolumeBrackets(DEFAULT_VOLUME_BRACKETS);
+      } catch (e) {
+        console.error("Failed to load addon", e);
+        navigate("/products/addons", { replace: true });
+      }
+    })();
   }, [addonId, isEditMode, navigate, productPrefill]);
 
   const handleSave = () => {
     const product = form.product.trim();
+    const productId = productNameToId[product.toLowerCase()];
     const addonName = form.addonName.trim();
     const addonCode = form.addonCode.trim();
     const selectedPlans = dedupe(form.selectedPlans);
     const planSummary = form.associatedPlans === "Selected Plans" ? (selectedPlans.join(", ") || "Selected Plans") : "All Plans";
     if (!product) return toast.error("Please select a product.");
+    if (!productId) return toast.error("Invalid product. Please select a product from the list.");
     if (!addonName || !addonCode) return toast.error("Addon Name and Addon Code are required.");
     if (form.associatedPlans === "Selected Plans" && selectedPlans.length === 0) return toast.error("Please select at least one plan.");
-    const rows = readAddons();
     const now = new Date().toISOString();
     const cleanVolumeBrackets = volumeBrackets
       .map((row, index) => ({
@@ -599,80 +636,109 @@ export default function NewAddonPage() {
     const startingQuantity = isBracketPricing && !isPackagePricing ? firstVolumeBracket?.startingQty || "" : "";
     const endingQuantity = isBracketPricing ? firstVolumeBracket?.endingQty || "" : "";
     if (isEditMode && editingAddon) {
-      const updated: AddonRecord = {
-        ...editingAddon,
-        product,
-        addonName,
-        addonCode,
-        description: form.description.trim(),
-        addonType: form.addonType,
-        billingFrequency: form.billingFrequency,
-        pricingModel: form.pricingModel,
-        price,
-        unit: form.unit.trim(),
-        imageUrl: imageUrl || "",
-        account: form.account || "Sales",
-        associatedPlans: form.associatedPlans,
-        selectedPlans,
-        plan: planSummary,
-        includeInWidget: form.includeInWidget,
-        showInPortal: form.showInPortal,
-        taxName: form.taxName.trim(),
-        startingQuantity,
-        endingQuantity,
-        updatedAt: now,
-      };
-      const updatedWithBrackets: any = {
-        ...updated,
-        volumeBrackets: isBracketPricing ? cleanVolumeBrackets : undefined,
-        pricingBrackets: isBracketPricing ? cleanVolumeBrackets : undefined,
-      };
-      writeAddons(rows.map((row) => (String(row.id) === String(editingAddon.id) ? ({ ...updatedWithBrackets, type: form.type } as any) : row)));
-      toast.success("Addon updated successfully.");
-      return navigate(`/products/addons/${editingAddon.id}`);
+      void (async () => {
+        try {
+          const payload: any = {
+            productId,
+            product,
+            addonName,
+            addonCode,
+            description: form.description.trim(),
+            addonType: form.addonType,
+            billingFrequency: form.billingFrequency,
+            pricingModel: form.pricingModel,
+            price,
+            unit: form.unit.trim(),
+            imageUrl: imageUrl || "",
+            account: form.account || "Sales",
+            associatedPlans: form.associatedPlans,
+            selectedPlans,
+            plan: planSummary,
+            includeInWidget: form.includeInWidget,
+            showInPortal: form.showInPortal,
+            taxName: form.taxName.trim(),
+            startingQuantity,
+            endingQuantity,
+            updatedAt: now,
+            type: form.type,
+            volumeBrackets: isBracketPricing ? cleanVolumeBrackets : [],
+            pricingBrackets: isBracketPricing ? cleanVolumeBrackets : [],
+          };
+          await addonsAPI.update(editingAddon.id, payload);
+          toast.success("Addon updated successfully.");
+          navigate(`/products/addons/${editingAddon.id}`);
+        } catch (e: any) {
+          console.error("Failed to update addon", e);
+          toast.error(e?.message || "Failed to update addon");
+        }
+      })();
+      return;
     }
-    const id = `addon-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    const created: AddonRecord = {
-      id,
-      product,
-      addonName,
-      addonCode,
-      description: form.description.trim(),
-      status: "Active",
-      addonType: form.addonType,
-      billingFrequency: form.billingFrequency,
-      pricingModel: form.pricingModel,
-      price,
-      unit: form.unit.trim(),
-      imageUrl: imageUrl || "",
-      account: form.account || "Sales",
-      associatedPlans: form.associatedPlans,
-      selectedPlans,
-      plan: planSummary,
-      includeInWidget: form.includeInWidget,
-      showInPortal: form.showInPortal,
-      taxName: form.taxName.trim(),
-      startingQuantity,
-      endingQuantity,
-      createdAt: now,
-      updatedAt: now,
-    };
-    const createdWithBrackets: any = {
-      ...(created as any),
-      type: form.type,
-      volumeBrackets: isBracketPricing ? cleanVolumeBrackets : undefined,
-      pricingBrackets: isBracketPricing ? cleanVolumeBrackets : undefined,
-    };
-    writeAddons([createdWithBrackets, ...rows]);
-    toast.success("Addon created successfully.");
-    navigate(`/products/addons/${id}`);
+    void (async () => {
+      try {
+        const payload: any = {
+          productId,
+          product,
+          addonName,
+          addonCode,
+          description: form.description.trim(),
+          status: "Active",
+          addonType: form.addonType,
+          billingFrequency: form.billingFrequency,
+          pricingModel: form.pricingModel,
+          price,
+          unit: form.unit.trim(),
+          imageUrl: imageUrl || "",
+          account: form.account || "Sales",
+          associatedPlans: form.associatedPlans,
+          selectedPlans,
+          plan: planSummary,
+          includeInWidget: form.includeInWidget,
+          showInPortal: form.showInPortal,
+          taxName: form.taxName.trim(),
+          startingQuantity,
+          endingQuantity,
+          createdAt: now,
+          updatedAt: now,
+          type: form.type,
+          volumeBrackets: isBracketPricing ? cleanVolumeBrackets : [],
+          pricingBrackets: isBracketPricing ? cleanVolumeBrackets : [],
+        };
+        const res: any = await addonsAPI.create(payload);
+        const id = String(res?.data?.id || res?.data?._id || "");
+        toast.success("Addon created successfully.");
+        navigate(id ? `/products/addons/${id}` : "/products/addons");
+      } catch (e: any) {
+        console.error("Failed to create addon", e);
+        toast.error(e?.message || "Failed to create addon");
+      }
+    })();
   };
 
   const handleCancel = () => navigate(isEditMode && addonId ? `/products/addons/${addonId}` : "/products/addons");
   const onNewProductSaved = () => {
-    const names = readActiveProductNames();
-    setProducts(names);
-    if (names.length > 0) setField("product", names[0]);
+    void (async () => {
+      try {
+        const res: any = await productsAPI.getAll({ limit: 1000 });
+        const rows = Array.isArray(res?.data) ? res.data : [];
+        const map: Record<string, string> = {};
+        const names = rows
+          .filter((row: any) => String(row?.status || "Active").toLowerCase() === "active")
+          .map((row: any) => {
+            const id = String(row?.id || row?._id || "").trim();
+            const name = String(row?.name || "").trim();
+            if (id && name) map[name.toLowerCase()] = id;
+            return name;
+          })
+          .filter(Boolean);
+        const unique = dedupe(names);
+        setProductNameToId(map);
+        setProducts(unique);
+        if (unique.length > 0) setField("product", unique[0]);
+      } catch {
+        // ignore
+      }
+    })();
   };
 
   const labelRequiredClass = "mb-1 block text-[13px] font-normal text-[#ef4444]";
@@ -681,15 +747,15 @@ export default function NewAddonPage() {
   const textareaBaseClass = "w-full rounded border border-gray-300 bg-white p-2 text-[13px] outline-none focus:border-blue-400 transition-all disabled:cursor-not-allowed disabled:bg-gray-100 resize-none";
 
   return (
-    <div className="w-full min-h-screen flex flex-col bg-gray-50 overflow-x-hidden">
-      <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
+    <div className="w-full min-h-full flex flex-col bg-gray-50">
+      <div className="flex-none flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
         <h1 className="text-[18px] font-semibold text-slate-900">{isEditMode ? "Edit Addon" : "New Addon"}</h1>
         <button onClick={handleCancel} className="text-gray-400 hover:text-gray-600 transition-colors" aria-label="Close">
           <X size={20} />
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto overflow-x-hidden bg-gray-50">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-gray-50 pb-6">
 	        <div className="w-full max-w-[1120px] px-6 py-8">
 	          <div className="overflow-visible rounded-lg bg-transparent">
 	            <div className="space-y-6 p-6">
@@ -866,7 +932,7 @@ export default function NewAddonPage() {
                   <div className="relative max-w-[780px] overflow-hidden rounded-md border border-[#d9deea]">
                     <div className="grid grid-cols-2 border-b border-[#d9deea] bg-[#f8fafc] text-[13px] font-medium uppercase tracking-wide text-[#64748b]">
                       <div className="border-r border-[#d9deea] px-3 py-2">Ending Qty</div>
-                      <div className="px-3 py-2">{`Price (${code})${recurringSuffix}`}</div>
+                      <div className="px-3 py-2">{`Price (${currencyPrefix})${recurringSuffix}`}</div>
                     </div>
 
                     {volumeBrackets.map((row, index) => (
@@ -904,7 +970,7 @@ export default function NewAddonPage() {
                     <div className="grid grid-cols-3 border-b border-[#d9deea] bg-[#f8fafc] text-[13px] font-medium uppercase tracking-wide text-[#64748b]">
                       <div className="border-r border-[#d9deea] px-3 py-2">Starting Qty</div>
                       <div className="border-r border-[#d9deea] px-3 py-2">Ending Qty</div>
-                      <div className="px-3 py-2">{`Price (${code}) /unit${recurringSuffix}`}</div>
+                      <div className="px-3 py-2">{`Price (${currencyPrefix}) /unit${recurringSuffix}`}</div>
                     </div>
 
                     {volumeBrackets.map((row, index) => (
@@ -978,12 +1044,12 @@ export default function NewAddonPage() {
                     <label className="mb-1 block text-sm font-medium text-red-600">Price*</label>
                     {isFlatPricing ? (
                       <div className="grid grid-cols-[54px_1fr] overflow-hidden rounded-md border border-gray-300">
-                        <span className="border-r bg-gray-50 px-3 py-2 text-sm text-gray-500">{code}</span>
+                        <span className="border-r bg-gray-50 px-3 py-2 text-sm text-gray-500">{currencyPrefix}</span>
                         <input type="text" value={form.price} disabled={inputsDisabled} onChange={(e) => setField("price", e.target.value)} className="flex-1 p-2 text-sm outline-none disabled:cursor-not-allowed disabled:bg-gray-100" />
                       </div>
                     ) : (
                       <div className="grid grid-cols-[54px_1fr_105px] overflow-hidden rounded-md border border-gray-300">
-                        <span className="border-r bg-gray-50 px-3 py-2 text-sm text-gray-500">{code}</span>
+                        <span className="border-r bg-gray-50 px-3 py-2 text-sm text-gray-500">{currencyPrefix}</span>
                         <input type="text" value={form.price} disabled={inputsDisabled} onChange={(e) => setField("price", e.target.value)} className="flex-1 p-2 text-sm outline-none disabled:cursor-not-allowed disabled:bg-gray-100" />
                         <span className="border-l bg-gray-50 px-3 py-2 text-sm text-gray-500">{`/unit${recurringSuffix}`}</span>
                       </div>
@@ -1034,7 +1100,7 @@ export default function NewAddonPage() {
                 <div className="w-full max-w-[320px]">
                   <MultiSelectPlansDropdown
                     values={form.selectedPlans}
-                    options={plans}
+                    options={plansForSelectedProduct}
                     onChange={(values) => setField("selectedPlans", values)}
                     placeholder="Choose Plans"
                     disabled={inputsDisabled}
@@ -1093,25 +1159,25 @@ export default function NewAddonPage() {
           </div>
         ) : null}
       </div>
+    </div>
+  </div>
+</div>
 
-	            <div className="flex gap-3 border-t border-gray-200 bg-transparent px-6 py-4">
-              <button
-                onClick={handleSave}
-                disabled={inputsDisabled}
-                className="cursor-pointer transition-all text-white px-8 py-1.5 rounded-lg border-[#0D4A52] border-b-[4px] hover:brightness-110 hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:brightness-90 active:translate-y-[2px] flex items-center gap-2 text-[13px] font-semibold disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none disabled:border-b-[4px]"
-                style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-              >
-                {isEditMode ? "Save Changes" : "Save"}
-              </button>
-              <button
-                onClick={handleCancel}
-                className="cursor-pointer transition-all bg-white text-slate-600 px-8 py-1.5 rounded-lg border-slate-200 border border-b-[4px] hover:bg-slate-50 active:border-b-[2px] active:translate-y-[2px] text-[13px] font-semibold"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+      <div className="sticky bottom-0 z-[200] flex-none flex gap-3 border-t border-gray-200 bg-white px-8 py-4 shadow-[0_-1px_3px_0_rgba(0,0,0,0.1)]">
+        <button
+          onClick={handleSave}
+          disabled={inputsDisabled}
+          className="cursor-pointer transition-all text-white px-8 py-1.5 rounded-lg border-[#0D4A52] border-b-[4px] hover:brightness-110 hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:brightness-90 active:translate-y-[2px] flex items-center gap-2 text-[13px] font-semibold disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none disabled:border-b-[4px]"
+          style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
+        >
+          {isEditMode ? "Save Changes" : "Save"}
+        </button>
+        <button
+          onClick={handleCancel}
+          className="cursor-pointer transition-all bg-white text-slate-600 px-8 py-1.5 rounded-lg border-slate-200 border border-b-[4px] hover:bg-slate-50 active:border-b-[2px] active:translate-y-[2px] text-[13px] font-semibold"
+        >
+          Cancel
+        </button>
       </div>
 
       <NewProductModal isOpen={newProductOpen} onClose={() => setNewProductOpen(false)} onSaveSuccess={onNewProductSaved} />

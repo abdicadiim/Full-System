@@ -36,7 +36,7 @@ export const clearSessionCookie = (res: express.Response) => {
 
 export const getAuthedUser = async (req: express.Request): Promise<AuthedUser | null> => {
   if (AUTH_BYPASS) {
-    return { id: "dev", name: "Dev User", email: "dev@example.com", organizationId: "dev_org", role: "admin", photoUrl: "" };
+    return { id: "000000000000000000000001", name: "Dev User", email: "dev@example.com", organizationId: "00000000000000000000000a", role: "admin", photoUrl: "" };
   }
 
   const header = req.headers.authorization;

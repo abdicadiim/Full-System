@@ -23,6 +23,8 @@ const normalizeRow = (row: any) => {
   return { ...row, id: String(row._id) };
 };
 
+const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 export const listProducts: express.RequestHandler = async (req, res) => {
   const orgId = requireOrgId(req, res);
   if (!orgId) return;
@@ -35,7 +37,7 @@ export const listProducts: express.RequestHandler = async (req, res) => {
   const filter: any = { organizationId: orgId };
   if (status) filter.status = new RegExp(`^${status}$`, "i");
   if (q) {
-    const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    const re = new RegExp(escapeRegex(q), "i");
     filter.$or = [{ name: re }, { description: re }];
   }
 
@@ -147,3 +149,80 @@ export const deleteProduct: express.RequestHandler = async (req, res) => {
   return res.json({ success: true, data: { id } });
 };
 
+export const bulkCreateProducts: express.RequestHandler = async (req, res) => {
+  const orgId = requireOrgId(req, res);
+  if (!orgId) return;
+
+  const input = Array.isArray(req.body) ? req.body : req.body?.rows;
+  if (!Array.isArray(input)) {
+    return res.status(400).json({ success: false, message: "Expected an array of products (or { rows: [...] })", data: null });
+  }
+
+  const invalid: { index: number; message: string }[] = [];
+  const prepared: any[] = [];
+  const seenNames = new Set<string>();
+
+  input.forEach((row, index) => {
+    const name = asString(row?.name).trim();
+    if (!name) {
+      invalid.push({ index, message: "Name is required" });
+      return;
+    }
+    const key = name.toLowerCase();
+    if (seenNames.has(key)) {
+      invalid.push({ index, message: `Duplicate product name in import: ${name}` });
+      return;
+    }
+    seenNames.add(key);
+    prepared.push({
+      organizationId: orgId,
+      name: name.slice(0, 220),
+      description: asString(row?.description).trim().slice(0, 5000),
+      status: asString(row?.status).trim().slice(0, 40) || "Active",
+      emailRecipients: asString(row?.emailRecipients).trim().slice(0, 1000),
+      redirectionUrl: asString(row?.redirectionUrl).trim().slice(0, 2000),
+      autoGenerateSubscriptionNumbers: Boolean(row?.autoGenerateSubscriptionNumbers ?? false),
+      prefix: asString(row?.prefix).trim().slice(0, 30),
+      nextNumber: asString(row?.nextNumber).trim().slice(0, 30),
+    });
+  });
+
+  if (prepared.length === 0) {
+    return res.status(400).json({ success: false, message: "No valid products to import", data: { invalid } });
+  }
+
+  const existing = await Product.find({ organizationId: orgId }).select({ name: 1 }).lean();
+  const existingSet = new Set(existing.map((p: any) => String(p?.name || "").toLowerCase()));
+  const filtered = prepared.filter((p) => !existingSet.has(String(p.name || "").toLowerCase()));
+  const skippedExisting = prepared.length - filtered.length;
+
+  if (filtered.length === 0) {
+    return res.status(409).json({ success: false, message: "All product names already exist", data: { insertedCount: 0, skippedExisting, invalid } });
+  }
+
+  try {
+    const insertedDocs = await Product.insertMany(filtered, { ordered: false });
+    return res.status(201).json({
+      success: true,
+      data: {
+        insertedCount: insertedDocs.length,
+        skippedExisting,
+        invalid,
+        inserted: insertedDocs.map((d: any) => normalizeRow(d.toObject ? d.toObject() : d)),
+      },
+    });
+  } catch (e: any) {
+    const insertedDocs = Array.isArray(e?.insertedDocs) ? e.insertedDocs : [];
+    const writeErrors = Array.isArray(e?.writeErrors) ? e.writeErrors : [];
+    return res.status(207).json({
+      success: true,
+      data: {
+        insertedCount: insertedDocs.length,
+        skippedExisting,
+        skippedDuplicates: writeErrors.length,
+        invalid,
+        inserted: insertedDocs.map((d: any) => normalizeRow(d.toObject ? d.toObject() : d)),
+      },
+    });
+  }
+};

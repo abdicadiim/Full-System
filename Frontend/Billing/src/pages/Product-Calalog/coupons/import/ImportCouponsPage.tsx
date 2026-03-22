@@ -2,8 +2,8 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import ThreePhaseImportWizard, { ImportFieldDef, ImportMappedRecord } from "../../shared/ThreePhaseImportWizard";
-import { readCoupons, writeCoupons } from "../storage";
 import type { CouponDiscountType, CouponRedemptionType, CouponStatus } from "../types";
+import { couponsAPI } from "../../../../services/api";
 
 const IMPORT_FIELDS: ImportFieldDef[] = [
   { key: "productName", label: "Product Name", aliases: ["product name", "product", "applicable entity name"] },
@@ -88,40 +88,41 @@ export default function ImportCouponsPage() {
   const navigate = useNavigate();
 
   const handleImport = (rows: ImportMappedRecord[]) => {
-    try {
-      const existing = readCoupons();
-      const prepared = rows.map((row) => {
-        const associations = mapAssociations(row.productName, row.appliedAddons);
-        const discountType = toDiscountType(row.discountBy);
-        const redemptionType = toRedemptionType(row.couponType);
-        const maxRedemption = toNum(row.maximumRedemption);
-        const durationCycles = toNum(row.duration);
+    const prepared = rows.map((row) => {
+      const associations = mapAssociations(row.productName, row.appliedAddons);
+      const discountType = toDiscountType(row.discountBy);
+      const redemptionType = toRedemptionType(row.couponType);
+      const maxRedemption = toNum(row.maximumRedemption);
+      const durationCycles = toNum(row.duration);
 
-        return {
-          id: `coupon-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-          product: row.productName || "",
-          couponName: row.couponName || "",
-          couponCode: String(row.couponCode || "").toUpperCase(),
-          discountType,
-          discountValue: toNum(row.discountValue),
-          redemptionType,
-          limitedCycles: redemptionType === "Limited Cycles" ? durationCycles : 0,
-          maxRedemption,
-          expirationDate: row.validTill || "",
-          status: toStatus(row.status),
-          associatedPlans: row.appliedPlans || associations.associatedPlans,
-          associatedAddons: row.appliedAddons || associations.associatedAddons,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-      });
-      writeCoupons([...prepared, ...existing]);
-      toast.success(`${prepared.length} coupon(s) imported successfully.`);
-      navigate("/products/coupons");
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to import coupons.");
-    }
+      return {
+        product: row.productName || "",
+        couponName: row.couponName || "",
+        couponCode: String(row.couponCode || "").toUpperCase(),
+        discountType,
+        discountValue: toNum(row.discountValue),
+        redemptionType,
+        limitedCycles: redemptionType === "Limited Cycles" ? durationCycles : 0,
+        maxRedemption,
+        expirationDate: row.validTill || "",
+        status: toStatus(row.status),
+        associatedPlans: row.appliedPlans || associations.associatedPlans,
+        associatedAddons: row.appliedAddons || associations.associatedAddons,
+      };
+    });
+
+    void (async () => {
+      try {
+        const res: any = await couponsAPI.bulkCreate(prepared);
+        if (res?.success === false) throw new Error(res?.message || "Failed to import coupons");
+        const insertedCount = Number(res?.data?.insertedCount ?? 0) || 0;
+        toast.success(`${insertedCount || prepared.length} coupon(s) imported successfully.`);
+        navigate("/products/coupons");
+      } catch (error: any) {
+        console.error(error);
+        toast.error(error?.message || "Failed to import coupons.");
+      }
+    })();
   };
 
   return (
