@@ -20,6 +20,7 @@ export default function Layout({ children }) {
     location.pathname.startsWith("/sales/retainer-invoices") ||
     location.pathname.startsWith("/sales/invoices") ||
     location.pathname.startsWith("/sales/recurring-invoices") ||
+    location.pathname.startsWith("/time-tracking") ||
     location.pathname.startsWith("/products/plans") ||
     location.pathname.startsWith("/products/products") ||
     location.pathname.startsWith("/products/coupons") ||
@@ -67,7 +68,7 @@ export default function Layout({ children }) {
               <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Navigation Menu</div>
             </div>
 
-            <main className={`w-full min-w-0 flex-1 min-h-0 ${isFullWidthPage ? "p-0 overflow-y-auto" : "p-4 md:p-6 overflow-y-auto"}`}>{children}</main>
+            <main className={`w-full min-w-0 flex-1 min-h-0 ${isFullWidthPage ? "p-0" : "p-4 md:p-6 overflow-y-auto"}`}>{children}</main>
           </div>
         </div>
       </div>

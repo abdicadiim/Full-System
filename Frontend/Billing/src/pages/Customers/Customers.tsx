@@ -7,7 +7,7 @@ import { usePaymentTermsDropdown } from "../../../hooks/usePaymentTermsDropdown"
 import { toast } from "react-toastify";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
-import { ChevronDown, ChevronUp, Plus, MoreVertical, Search, ArrowUpDown, Filter, Star, X, Trash2, Download, Upload, Settings, RefreshCw, ChevronRight, ChevronLeft, GripVertical, Lock, Users, FileText, Check, Eye, EyeOff, Info, Layers, Edit, ClipboardList, SlidersHorizontal, Layout, AlignLeft, RotateCcw, Pin, PinOff, Loader2, AlertTriangle } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, MoreVertical, Search, ArrowUpDown, Filter, Star, X, Trash2, Download, Upload, Settings, RefreshCw, ChevronRight, ChevronLeft, GripVertical, Lock, Users, Check, Eye, EyeOff, Info, Layers, Edit, ClipboardList, SlidersHorizontal, Layout, AlignLeft, RotateCcw, Pin, PinOff, Loader2, AlertTriangle } from "lucide-react";
 import SearchableDropdown from "../../components/ui/SearchableDropdown";
 
 const defaultCustomerViews = [
@@ -514,23 +514,6 @@ export default function Customers() {
     customerNotes: "Thank you for the payment. You just made our day."
   });
   const mergeCustomerDropdownRef = useRef(null);
-  const [isAssociateTemplatesModalOpen, setIsAssociateTemplatesModalOpen] = useState(false);
-  const [templateData, setTemplateData] = useState({
-    pdfTemplates: {
-      customerStatement: "Standard Template",
-      quotes: "Standard Template",
-      invoices: "Standard Template",
-      creditNotes: "Standard Template",
-      paymentThankYou: "Elite Template"
-    },
-    emailNotifications: {
-      quotes: "Default",
-      invoices: "Default",
-      creditNotes: "Default",
-      paymentThankYou: "Default"
-    },
-    pdfAndEmailBothGo: false
-  });
   const [isMoreOptionsDropdownOpen, setIsMoreOptionsDropdownOpen] = useState(false);
   const moreOptionsDropdownRef = useRef(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -1247,14 +1230,14 @@ export default function Customers() {
       }
     };
 
-    if (isDropdownOpen || isMoreMenuOpen || isDecimalFormatDropdownOpen || isModuleDropdownOpen || Object.keys(isFieldDropdownOpen).length > 0 || Object.keys(isComparatorDropdownOpen).length > 0 || isMergeCustomerDropdownOpen || isMoreOptionsDropdownOpen || isSearchTypeDropdownOpen || isFilterDropdownOpen || isStatusDropdownOpen || isCustomerTypeDropdownOpen || openReceivablesDropdownId !== null || isSearchHeaderDropdownOpen) {
+    if (isDropdownOpen || isMoreMenuOpen || isBulkMoreMenuOpen || isDecimalFormatDropdownOpen || isModuleDropdownOpen || Object.keys(isFieldDropdownOpen).length > 0 || Object.keys(isComparatorDropdownOpen).length > 0 || isMergeCustomerDropdownOpen || isMoreOptionsDropdownOpen || isSearchTypeDropdownOpen || isFilterDropdownOpen || isStatusDropdownOpen || isCustomerTypeDropdownOpen || openReceivablesDropdownId !== null || isSearchHeaderDropdownOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isDropdownOpen, isMoreMenuOpen, isDecimalFormatDropdownOpen, isModuleDropdownOpen, isFieldDropdownOpen, isComparatorDropdownOpen, openReceivablesDropdownId, isSearchHeaderDropdownOpen]);
+  }, [isDropdownOpen, isMoreMenuOpen, isBulkMoreMenuOpen, isDecimalFormatDropdownOpen, isModuleDropdownOpen, isFieldDropdownOpen, isComparatorDropdownOpen, isMergeCustomerDropdownOpen, isMoreOptionsDropdownOpen, isSearchTypeDropdownOpen, isFilterDropdownOpen, isStatusDropdownOpen, isCustomerTypeDropdownOpen, openReceivablesDropdownId, isSearchHeaderDropdownOpen]);
 
   const handleViewSelect = (view) => {
     setSelectedView(view);
@@ -1605,15 +1588,6 @@ export default function Customers() {
     }
   };
 
-  const handleBulkAssociateTemplates = async () => {
-    if (selectedCustomers.size === 0) {
-      toast.error("Please select at least one customer.");
-      return;
-    }
-
-    setIsAssociateTemplatesModalOpen(true);
-  };
-
   const handleBulkEnableConsolidatedBilling = async () => {
     if (selectedCustomers.size === 0) {
       toast.error("Please select at least one customer.");
@@ -1657,23 +1631,6 @@ export default function Customers() {
       toast.error(`Failed to ${enabled ? "enable" : "disable"} consolidated billing. Please try again.`);
     } finally {
       setIsBulkConsolidatedUpdating(false);
-    }
-  };
-
-  const handleSaveTemplates = async () => {
-    // Save template associations for selected customers
-    try {
-      await customersAPI.bulkUpdate(Array.from(selectedCustomers), {
-        pdfTemplates: templateData.pdfTemplates,
-        emailTemplates: templateData.emailNotifications,
-        pdfAndEmailBothGo: templateData.pdfAndEmailBothGo
-      });
-      await loadCustomers();
-      toast.success(`Template associations saved for ${selectedCustomers.size} customer(s).${templateData.pdfAndEmailBothGo ? ' PDF and Email both go option enabled.' : ''}`);
-      setIsAssociateTemplatesModalOpen(false);
-      setSelectedCustomers(new Set());
-    } catch (error) {
-      toast.error("Failed to save template associations. Please try again.");
     }
   };
 
@@ -2204,7 +2161,7 @@ export default function Customers() {
               {isDownloading ? (
                 <Loader2 size={16} className="text-gray-600 animate-spin" />
               ) : (
-                <FileText size={16} className="text-gray-600" />
+                <Download size={16} className="text-gray-600" />
               )}
             </button>
 
@@ -2228,13 +2185,6 @@ export default function Customers() {
             >
               Merge
             </button>
-            <button
-              className="flex items-center gap-1.5 py-1.5 px-4 bg-white border border-gray-200 rounded-md text-sm font-medium text-gray-700 cursor-pointer transition-all hover:bg-gray-50"
-              onClick={() => toast.info("Associate Templates is not set up yet.")}
-            >
-              Associate Templates
-            </button>
-
             <div className="relative" ref={bulkMoreMenuRef}>
               <button
                 className="h-[34px] w-[34px] flex items-center justify-center bg-white border border-gray-200 rounded-md cursor-pointer transition-all hover:bg-gray-50"
@@ -2644,6 +2594,7 @@ export default function Customers() {
             const customerId = getCustomerIdForNavigation(customer);
             const receivables = parseFloat(customer.receivables || 0);
             const unusedCredits = parseFloat(customer.unusedCredits || 0);
+            const isInactiveCustomer = customer.status?.toLowerCase() === "inactive" || customer.isInactive === true;
             const initials = (customer.name || customer.displayName || 'C')
               .split(' ')
               .map(n => n[0])
@@ -2675,7 +2626,7 @@ export default function Customers() {
 
                 {/* Name and Company Section */}
                 <div className="flex-1 min-w-0">
-                  <div className="text-slate-900 font-bold truncate text-[15px]">
+                  <div className={`${isInactiveCustomer ? "text-slate-400" : "text-slate-900"} font-bold truncate text-[15px]`}>
                     {customer.name || customer.displayName || 'Customer'}
                   </div>
                   <div className="text-slate-400 text-xs truncate">
@@ -2814,6 +2765,7 @@ export default function Customers() {
             ) : (
               displayedCustomers.map((customer, index) => {
                 const isSelected = selectedCustomers.has(customer.id);
+                const isInactiveCustomer = customer.status?.toLowerCase() === "inactive" || customer.isInactive === true;
                 return (
                   <tr
                     key={`${customer.id}-${index}`}
@@ -2862,7 +2814,7 @@ export default function Customers() {
                         {col.key === 'name' ? (
                           <div className="flex items-center gap-2">
                             <div className="flex flex-col min-w-0">
-                              <span className="text-[#1b5e6a] font-medium truncate">
+                              <span className={`${isInactiveCustomer ? "text-slate-400" : "text-[#1b5e6a]"} font-medium truncate`}>
                                 {customer.name || customer.displayName || 'Customer'}
                               </span>
                               <span className="text-[11px] text-gray-400 truncate md:hidden">{customer.email || 'No email provided'}</span>
@@ -3603,156 +3555,6 @@ export default function Customers() {
                     setMergeTargetCustomer(null);
                     setMergeCustomerSearch("");
                   }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )
-      }
-
-      {/* Associate Templates Modal */}
-      {
-        isAssociateTemplatesModalOpen && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[2000] overflow-y-auto py-10">
-            <div className="bg-white rounded-lg shadow-lg w-full max-w-[700px] mx-4 my-10">
-              <div className="flex items-center justify-between py-4 px-6 border-b border-gray-200">
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900 m-0">Associate Templates</h2>
-                  <p className="text-sm text-gray-600 mt-1">Associate PDF and notification templates to this customer.</p>
-                </div>
-                <button
-                  className="flex items-center justify-center w-7 h-7 bg-white border-2 border-blue-600 rounded text-red-500 cursor-pointer hover:bg-red-50"
-                  onClick={() => setIsAssociateTemplatesModalOpen(false)}
-                >
-                  <X size={18} />
-                </button>
-              </div>
-              <div className="p-6 max-h-[60vh] overflow-y-auto">
-                {/* PDF and Email Both Go Option */}
-                <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      id="pdfAndEmailBothGo"
-                      checked={templateData.pdfAndEmailBothGo}
-                      onChange={(e) => setTemplateData(prev => ({
-                        ...prev,
-                        pdfAndEmailBothGo: e.target.checked
-                      }))}
-                      className="w-4 h-4 text-blue-600 bg-white border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
-                    />
-                    <label htmlFor="pdfAndEmailBothGo" className="text-sm font-medium text-gray-900 cursor-pointer">
-                      PDF and Email both go
-                    </label>
-                  </div>
-                  <p className="text-xs text-gray-600 mt-2 ml-7">
-                    When enabled, both PDF and email will be sent together for all transactions associated with this customer.
-                  </p>
-                </div>
-
-                {/* PDF Templates Section */}
-                <div className="mb-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-base font-semibold text-gray-900">PDF Templates</h3>
-                    <button
-                      className="flex items-center gap-1.5 py-1.5 px-3 text-white rounded-md text-sm font-medium cursor-pointer transition-colors"
-                      style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                      onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.9")}
-                      onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-                      onClick={() => navigate("/settings/customization/pdf-templates")}
-                    >
-                      <Plus size={14} />
-                      New PDF Template
-                    </button>
-                  </div>
-                  <div className="space-y-3">
-                    {Object.entries(templateData.pdfTemplates).map(([key, value]) => (
-                      <div key={key} className="flex items-center justify-between">
-                        <label className="text-sm text-gray-700 capitalize">
-                          {key.replace(/([A-Z])/g, ' $1').trim()}
-                        </label>
-                        <div className="flex-1 max-w-[300px] ml-4 relative">
-                          <select
-                            className="w-full py-2 px-3 text-sm text-gray-700 bg-white border border-gray-300 rounded-md appearance-none cursor-pointer transition-colors hover:border-gray-400 focus:outline-none focus:border-blue-600"
-                            value={value}
-                            onChange={(e) => setTemplateData(prev => ({
-                              ...prev,
-                              pdfTemplates: { ...prev.pdfTemplates, [key]: e.target.value }
-                            }))}
-                          >
-                            <option value="Standard Template">Standard Template</option>
-                            <option value="Elite Template">Elite Template</option>
-                            <option value="Professional Template">Professional Template</option>
-                            <option value="Modern Template">Modern Template</option>
-                            <option value="New PDF Template">New PDF Template</option>
-                          </select>
-                          <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Email Notifications Section */}
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-base font-semibold text-gray-900">Email Notifications</h3>
-                    <button
-                      className="flex items-center gap-1.5 py-1.5 px-3 text-white rounded-md text-sm font-medium cursor-pointer transition-colors"
-                      style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                      onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.9")}
-                      onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-                      onClick={() => navigate("/settings/customization/email-notifications")}
-                    >
-                      <Plus size={14} />
-                      New Email Template
-                    </button>
-                  </div>
-                  <div className="space-y-3">
-                    {Object.entries(templateData.emailNotifications).map(([key, value]) => (
-                      <div key={key} className="flex items-center justify-between">
-                        <label className="text-sm text-gray-700 capitalize">
-                          {key.replace(/([A-Z])/g, ' $1').trim()}
-                        </label>
-                        <div className="flex-1 max-w-[300px] ml-4 relative">
-                          <select
-                            className="w-full py-2 px-3 text-sm text-gray-700 bg-white border border-gray-300 rounded-md appearance-none cursor-pointer transition-colors hover:border-gray-400 focus:outline-none focus:border-blue-600"
-                            value={value}
-                            onChange={(e) => {
-                              setTemplateData(prev => ({
-                                ...prev,
-                                emailNotifications: { ...prev.emailNotifications, [key]: e.target.value }
-                              }));
-                            }}
-                          >
-                            <option value="Default">Default</option>
-                            <option value="Standard">Standard</option>
-                            <option value="Professional">Professional</option>
-                            <option value="Custom">Custom</option>
-                            <option value="New Email Template">New Email Template</option>
-                          </select>
-                          <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center justify-start gap-3 py-4 px-6 bg-gray-50 border-t border-gray-200 rounded-b-lg">
-                <button
-                  className="py-2.5 px-5 text-sm font-medium text-white border-none rounded-md cursor-pointer transition-colors"
-                  style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.9")}
-                  onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-                  onClick={handleSaveTemplates}
-                >
-                  Save
-                </button>
-                <button
-                  className="py-2.5 px-5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md cursor-pointer transition-all hover:bg-gray-50 hover:border-gray-400"
-                  onClick={() => setIsAssociateTemplatesModalOpen(false)}
                 >
                   Cancel
                 </button>
@@ -5725,41 +5527,51 @@ export default function Customers() {
       {/* Delete Customer Confirmation Modal */}
       {
         isDeleteModalOpen && (
-          <div
-            className="fixed inset-0 bg-transparent flex items-center justify-center z-[2000]"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) {
-                setIsDeleteModalOpen(false);
-                setDeleteCustomerId(null);
-              }
-            }}
-          >
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-              <div className="p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Delete Customer</h2>
-                <p className="text-gray-700 mb-6">
-                  Are you sure you want to delete this customer? This action cannot be undone.
-                </p>
-                <div className="flex items-center justify-end gap-3">
-                  <button
-                    onClick={() => {
-                      setIsDeleteModalOpen(false);
-                      setDeleteCustomerId(null);
-                    }}
-                    disabled={isDeletingCustomer}
-                    className={`px-6 py-2.5 bg-gray-200 text-gray-700 rounded-md text-sm font-medium cursor-pointer transition-colors hover:bg-gray-300 ${isDeletingCustomer ? "opacity-70 cursor-not-allowed" : ""}`}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={confirmDeleteCustomer}
-                    disabled={isDeletingCustomer}
-                    className={`px-6 py-2.5 bg-red-600 text-white rounded-md text-sm font-medium cursor-pointer transition-colors hover:bg-red-700 flex items-center gap-2 ${isDeletingCustomer ? "opacity-70 cursor-not-allowed" : ""}`}
-                  >
-                    {isDeletingCustomer && <Loader2 size={14} className="animate-spin" />}
-                    {isDeletingCustomer ? "Deleting..." : "Delete"}
-                  </button>
+          <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16">
+            <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200">
+              <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+                <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
+                  !
                 </div>
+                <h3 className="text-[15px] font-semibold text-slate-800 flex-1">
+                  Delete customer?
+                </h3>
+                <button
+                  type="button"
+                  className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  onClick={() => {
+                    setIsDeleteModalOpen(false);
+                    setDeleteCustomerId(null);
+                  }}
+                  aria-label="Close"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="px-5 py-3 text-[13px] text-slate-600">
+                You cannot retrieve this customer once they have been deleted.
+              </div>
+              <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+                <button
+                  type="button"
+                  className={`px-4 py-1.5 rounded-md bg-blue-600 text-white text-[12px] hover:bg-blue-700 ${isDeletingCustomer ? "opacity-70 cursor-not-allowed" : ""}`}
+                  onClick={confirmDeleteCustomer}
+                  disabled={isDeletingCustomer}
+                >
+                  {isDeletingCustomer && <Loader2 size={14} className="animate-spin" />}
+                  {isDeletingCustomer ? "Deleting..." : "Delete"}
+                </button>
+                <button
+                  type="button"
+                  className={`px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50 ${isDeletingCustomer ? "opacity-70 cursor-not-allowed" : ""}`}
+                  onClick={() => {
+                    setIsDeleteModalOpen(false);
+                    setDeleteCustomerId(null);
+                  }}
+                  disabled={isDeletingCustomer}
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           </div>
@@ -5769,41 +5581,51 @@ export default function Customers() {
       {/* Bulk Delete Confirmation Modal */}
       {
         isBulkDeleteModalOpen && (
-          <div
-            className="fixed inset-0 bg-transparent flex items-center justify-center z-[2000]"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) {
-                setIsBulkDeleteModalOpen(false);
-                setDeleteCustomerIds([]);
-              }
-            }}
-          >
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-              <div className="p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Delete Customers</h2>
-                <p className="text-gray-700 mb-6">
-                  Are you sure you want to delete {deleteCustomerIds.length} customer(s)? This action cannot be undone.
-                </p>
-                <div className="flex items-center justify-end gap-3">
-                  <button
-                    onClick={() => {
-                      setIsBulkDeleteModalOpen(false);
-                      setDeleteCustomerIds([]);
-                    }}
-                    disabled={isBulkDeletingCustomers}
-                    className={`px-6 py-2.5 bg-gray-200 text-gray-700 rounded-md text-sm font-medium cursor-pointer transition-colors hover:bg-gray-300 ${isBulkDeletingCustomers ? "opacity-70 cursor-not-allowed" : ""}`}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={confirmBulkDelete}
-                    disabled={isBulkDeletingCustomers}
-                    className={`px-6 py-2.5 bg-red-600 text-white rounded-md text-sm font-medium cursor-pointer transition-colors hover:bg-red-700 flex items-center gap-2 ${isBulkDeletingCustomers ? "opacity-70 cursor-not-allowed" : ""}`}
-                  >
-                    {isBulkDeletingCustomers && <Loader2 size={14} className="animate-spin" />}
-                    {isBulkDeletingCustomers ? "Deleting..." : `Delete ${deleteCustomerIds.length} Customer(s)`}
-                  </button>
+          <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16">
+            <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200">
+              <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+                <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
+                  !
                 </div>
+                <h3 className="text-[15px] font-semibold text-slate-800 flex-1">
+                  Delete {deleteCustomerIds.length} customer{deleteCustomerIds.length === 1 ? "" : "s"}?
+                </h3>
+                <button
+                  type="button"
+                  className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  onClick={() => {
+                    setIsBulkDeleteModalOpen(false);
+                    setDeleteCustomerIds([]);
+                  }}
+                  aria-label="Close"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="px-5 py-3 text-[13px] text-slate-600">
+                You cannot retrieve these customers once they have been deleted.
+              </div>
+              <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+                <button
+                  type="button"
+                  className={`px-4 py-1.5 rounded-md bg-blue-600 text-white text-[12px] hover:bg-blue-700 ${isBulkDeletingCustomers ? "opacity-70 cursor-not-allowed" : ""}`}
+                  onClick={confirmBulkDelete}
+                  disabled={isBulkDeletingCustomers}
+                >
+                  {isBulkDeletingCustomers && <Loader2 size={14} className="animate-spin" />}
+                  {isBulkDeletingCustomers ? "Deleting..." : "Delete"}
+                </button>
+                <button
+                  type="button"
+                  className={`px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50 ${isBulkDeletingCustomers ? "opacity-70 cursor-not-allowed" : ""}`}
+                  onClick={() => {
+                    setIsBulkDeleteModalOpen(false);
+                    setDeleteCustomerIds([]);
+                  }}
+                  disabled={isBulkDeletingCustomers}
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           </div>

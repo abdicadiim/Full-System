@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, ChevronRight, X, Plus, Trash2, Info } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Plus, Trash2, Download } from "lucide-react";
 import { projectsAPI, timeEntriesAPI } from "../../services/api";
 import { getCurrentUser } from "../../services/auth";
 import { toast } from "react-toastify";
@@ -247,7 +247,7 @@ export default function WeeklyTimeLog() {
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate("/time-tracking/timesheet")}
-            className="flex items-center rounded-full border-none bg-transparent p-1.5 text-[#2563eb] transition-colors hover:bg-slate-50 cursor-pointer"
+            className="flex items-center rounded-full border-none bg-transparent p-1.5 text-[#156372] transition-colors hover:bg-slate-50 cursor-pointer"
           >
             <ChevronLeft size={24} strokeWidth={2.5} />
           </button>
@@ -268,7 +268,7 @@ export default function WeeklyTimeLog() {
           <div className="flex items-center gap-4">
             <button
               onClick={goToPreviousWeek}
-              className="border-none bg-transparent p-1 text-slate-500 transition-colors hover:text-[#2563eb] cursor-pointer"
+              className="border-none bg-transparent p-1 text-slate-500 transition-colors hover:text-[#156372] cursor-pointer"
             >
               <ChevronLeft size={18} />
             </button>
@@ -277,7 +277,7 @@ export default function WeeklyTimeLog() {
             </div>
             <button
               onClick={goToNextWeek}
-              className="border-none bg-transparent p-1 text-slate-500 transition-colors hover:text-[#2563eb] cursor-pointer"
+              className="border-none bg-transparent p-1 text-slate-500 transition-colors hover:text-[#156372] cursor-pointer"
             >
               <ChevronRight size={18} />
             </button>
@@ -315,7 +315,7 @@ export default function WeeklyTimeLog() {
                   <tr key={row.id} className="group border-b border-slate-100 hover:bg-slate-50/50">
                     <td className="p-3">
                       <select
-                        className="h-11 w-full appearance-none rounded border border-slate-200 bg-white px-3 text-[13px] text-slate-700 outline-none transition-all focus:border-[#2563eb] cursor-pointer"
+                        className="h-11 w-full appearance-none rounded border border-slate-200 bg-white px-3 text-[13px] text-slate-700 outline-none transition-all focus:border-[#156372] cursor-pointer"
                         value={row.project}
                         onChange={(e) => updateRow(row.id, "project", e.target.value)}
                       >
@@ -329,7 +329,7 @@ export default function WeeklyTimeLog() {
                     </td>
                     <td className="p-3">
                       <select
-                        className="h-11 w-full appearance-none rounded border border-slate-200 bg-white px-3 text-[13px] text-slate-700 outline-none transition-all focus:border-[#2563eb] disabled:cursor-not-allowed disabled:bg-slate-50 cursor-pointer"
+                        className="h-11 w-full appearance-none rounded border border-slate-200 bg-white px-3 text-[13px] text-slate-700 outline-none transition-all focus:border-[#156372] disabled:cursor-not-allowed disabled:bg-slate-50 cursor-pointer"
                         value={row.task}
                         onChange={(e) => updateRow(row.id, "task", e.target.value)}
                         disabled={!row.project}
@@ -345,7 +345,7 @@ export default function WeeklyTimeLog() {
                       <td key={dayIndex} className="border-l border-slate-100 p-2">
                         <input
                           type="text"
-                          className="h-11 w-full rounded border-none bg-transparent text-center text-[13px] text-slate-900 outline-none transition-all placeholder:text-slate-300 focus:bg-white focus:ring-1 focus:ring-[#2563eb]"
+                          className="h-11 w-full rounded border-none bg-transparent text-center text-[13px] text-slate-900 outline-none transition-all placeholder:text-slate-300 focus:bg-white focus:ring-1 focus:ring-[#156372]"
                           value={day}
                           onFocus={(e) => {
                             const currentValue = e.target.value;
@@ -367,7 +367,7 @@ export default function WeeklyTimeLog() {
                     <td className="border-l border-slate-100 p-3 text-center">
                       <input
                         type="checkbox"
-                        className="h-4 w-4 cursor-pointer rounded border-slate-300 text-[#2563eb] focus:ring-[#2563eb]"
+                        className="h-4 w-4 cursor-pointer rounded border-slate-300 text-[#156372] focus:ring-[#156372]"
                         checked={row.billable}
                         onChange={(e) => updateRow(row.id, "billable", e.target.checked)}
                       />
@@ -420,9 +420,9 @@ export default function WeeklyTimeLog() {
           <div className="relative group">
             <button
               type="button"
-              className="flex items-center gap-1.5 border-none bg-transparent p-0 text-[12px] font-medium text-black cursor-pointer"
+              className="flex items-center gap-1.5 border-none bg-transparent p-0 text-[12px] font-medium text-[#156372] hover:text-[#0f4f5c] cursor-pointer"
             >
-              <Info size={14} className="text-black" />
+              <Download size={14} className="text-[#156372]" />
               Supported Time Formats
             </button>
             <div className="pointer-events-none absolute right-0 top-full z-50 mt-2 w-[260px] rounded-lg border border-slate-200 bg-[#1f2940] p-3 text-white opacity-0 shadow-lg transition-all group-hover:pointer-events-auto group-hover:opacity-100">

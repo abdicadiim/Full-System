@@ -37,7 +37,6 @@ import {
   HelpCircle,
   SlidersHorizontal,
   GripVertical,
-  FileDown,
   RotateCcw
 } from "lucide-react";
 import { getInvoices, getInvoicesPaginated, getInvoiceById, updateInvoice, deleteInvoice, Invoice } from "../salesModel";
@@ -2030,7 +2029,7 @@ export default function Invoices() {
                   title="Export Options"
                   disabled={isGeneratingPdf}
                 >
-                  {isGeneratingPdf ? <RefreshCw size={14} className="animate-spin" /> : <FileDown size={16} className="text-gray-500" />}
+                  {isGeneratingPdf ? <RefreshCw size={14} className="animate-spin" /> : <Download size={16} className="text-gray-500" />}
                   <span>Export PDF</span>
                   <ChevronDown size={14} className="text-gray-400" />
                 </button>

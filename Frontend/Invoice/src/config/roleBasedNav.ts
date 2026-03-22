@@ -28,7 +28,7 @@ const baseSections: NavSection[] = [
       { label: "Payments Received", to: "/payments/payments-received", icon: "payments-received" },
       { label: "Credit Notes", to: "/sales/credit-notes", icon: "credit-notes" },
       { label: "Expenses", to: "/expenses", icon: "expenses" },
-      { label: "Time Tracking", to: "/time-tracking", icon: "time-tracking" },
+      { label: "Time Tracking", to: "/time-tracking/projects", icon: "time-tracking" },
       { label: "Reports", to: "/reports", icon: "reports" },
     ],
   },

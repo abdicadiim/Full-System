@@ -3177,6 +3177,7 @@ export default function CustomerDetail() {
 
     const isCustomerActive = (c: any) => {
         const status = String(c?.status ?? "").toLowerCase().trim();
+        if (status === "inactive" || c?.isInactive === true) return false;
         return status === "active" || c?.isActive === true || (!status && c?.isInactive !== true);
     };
 
@@ -3328,7 +3329,7 @@ export default function CustomerDetail() {
                                             Merge
                                         </div>
                                         <div
-                                            className="px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-[#156372] hover:text-white transition-colors"
+                                            className="px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50 transition-colors"
                                             onClick={handleAssociateTemplates}
                                         >
                                             Associate Templates
@@ -3666,9 +3667,26 @@ export default function CustomerDetail() {
                                     </button>
                                 </div>
                                 {isNewTransactionDropdownOpen && (
-                                    <div className="absolute top-full right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                                    <div className="absolute top-full right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-[360px] overflow-y-auto">
                                         <div className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-200">SALES</div>
-                                        {/* Invoice hidden */}
+                                        <div
+                                            className="px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
+                                            onClick={() => {
+                                                setIsNewTransactionDropdownOpen(false);
+                                                navigate("/subscriptions/new", { state: { customerId: customer?.id, customerName: customer?.name } });
+                                            }}
+                                        >
+                                            Subscription
+                                        </div>
+                                        <div
+                                            className="px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
+                                            onClick={() => {
+                                                setIsNewTransactionDropdownOpen(false);
+                                                navigate("/sales/invoices/new", { state: { customerId: customer?.id, customerName: customer?.name } });
+                                            }}
+                                        >
+                                            Invoice
+                                        </div>
                                         <div
                                             className="px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
                                             onClick={() => {
@@ -3682,10 +3700,37 @@ export default function CustomerDetail() {
                                             className="px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
                                             onClick={() => {
                                                 setIsNewTransactionDropdownOpen(false);
+                                                navigate("/payments/payment-links/new", { state: { customerId: customer?.id, customerName: customer?.name } });
+                                            }}
+                                        >
+                                            Payment Link
+                                        </div>
+                                        <div
+                                            className="px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
+                                            onClick={() => {
+                                                setIsNewTransactionDropdownOpen(false);
                                                 navigate("/sales/quotes/new", { state: { customerId: customer?.id, customerName: customer?.name } });
                                             }}
                                         >
                                             Quote
+                                        </div>
+                                        <div
+                                            className="px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
+                                            onClick={() => {
+                                                setIsNewTransactionDropdownOpen(false);
+                                                navigate("/sales/quotes/subscription/new", { state: { customerId: customer?.id, customerName: customer?.name, forSubscription: true } });
+                                            }}
+                                        >
+                                            Quote for Subscription
+                                        </div>
+                                        <div
+                                            className="px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
+                                            onClick={() => {
+                                                setIsNewTransactionDropdownOpen(false);
+                                                navigate("/sales/retainer-invoices/new", { state: { customerId: customer?.id, customerName: customer?.name } });
+                                            }}
+                                        >
+                                            Retainer Invoice
                                         </div>
                                         <div
                                             className="px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
@@ -3741,6 +3786,7 @@ export default function CustomerDetail() {
                                         >
                                             Sales Receipt
                                         </div>
+                                        <div className="my-1 h-px bg-gray-200" />
                                         <div
                                             className="px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
                                             onClick={() => {
@@ -3764,7 +3810,7 @@ export default function CustomerDetail() {
                                 {isMoreDropdownOpen && (
                                     <div className="absolute top-full right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
                                         <button
-                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 font-medium cursor-pointer hover:bg-[#156372] hover:text-white transition-colors"
+                                            className="w-full text-left px-4 py-2 text-sm text-gray-700 font-medium cursor-pointer hover:bg-gray-50 transition-colors"
                                             onClick={handleAssociateTemplates}
                                         >
                                             Associate Templates
@@ -3837,6 +3883,7 @@ export default function CustomerDetail() {
                                         >
                                             {isCustomerActive(customer) ? "Mark as Inactive" : "Mark as Active"}
                                         </button>
+                                        <div className="my-1 h-px bg-gray-200" />
                                         <button
                                             className="w-full text-left px-4 py-2 text-sm text-red-600 cursor-pointer hover:bg-red-50 transition-colors"
                                             onClick={() => {
@@ -6804,7 +6851,7 @@ export default function CustomerDetail() {
                                         onClick={handleDownloadPDF}
                                         disabled={isStatementDownloading}
                                     >
-                                        {isStatementDownloading ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />}
+                                        {isStatementDownloading ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
                                     </button>
                                     <button
                                         className="flex items-center gap-2 px-4 py-2 bg-[#156372] text-white rounded-md text-sm font-medium cursor-pointer hover:bg-[#0D4A52] transition-colors shadow-sm"
@@ -8783,43 +8830,51 @@ export default function CustomerDetail() {
             {/* Delete Customer Confirmation Modal */}
             {
                 isDeleteModalOpen && (
-                    <div
-                        className="fixed inset-0 bg-black/50 flex items-center justify-center z-[2000]"
-                        onClick={(e) => {
-                            if (e.target === e.currentTarget) {
-                                setIsDeleteModalOpen(false);
-                            }
-                        }}
-                    >
-                        <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-                            <div className="p-6">
-                                <h2 className="text-xl font-semibold text-gray-900 mb-4">Delete Customer</h2>
-                                <p className="text-gray-700 mb-6">
-                                    Are you sure you want to delete this customer? This action cannot be undone.
-                                </p>
-                                <div className="flex items-center justify-end gap-3">
-                                    <button
-                                        onClick={() => setIsDeleteModalOpen(false)}
-                                        className="px-6 py-2.5 bg-gray-200 text-gray-700 rounded-md text-sm font-medium cursor-pointer transition-colors hover:bg-gray-300"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        onClick={async () => {
-                                            try {
-                                                await customersAPI.delete(id);
-                                                setIsDeleteModalOpen(false);
-                                                navigate("/sales/customers");
-                                                toast.success('Customer deleted successfully');
-                                            } catch (error) {
-                                                toast.error('Failed to delete customer: ' + (error.message || 'Unknown error'));
-                                            }
-                                        }}
-                                        className="px-6 py-2.5 bg-red-600 text-white rounded-md text-sm font-medium cursor-pointer transition-colors hover:bg-red-700"
-                                    >
-                                        Delete
-                                    </button>
+                    <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16">
+                        <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200">
+                            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+                                <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
+                                    !
                                 </div>
+                                <h3 className="text-[15px] font-semibold text-slate-800 flex-1">
+                                    Delete customer?
+                                </h3>
+                                <button
+                                    type="button"
+                                    className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                                    onClick={() => setIsDeleteModalOpen(false)}
+                                    aria-label="Close"
+                                >
+                                    <X size={14} />
+                                </button>
+                            </div>
+                            <div className="px-5 py-3 text-[13px] text-slate-600">
+                                You cannot retrieve this customer once they have been deleted.
+                            </div>
+                            <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+                                <button
+                                    type="button"
+                                    className="px-4 py-1.5 rounded-md bg-blue-600 text-white text-[12px] hover:bg-blue-700"
+                                    onClick={async () => {
+                                        try {
+                                            await customersAPI.delete(id);
+                                            setIsDeleteModalOpen(false);
+                                            navigate("/sales/customers");
+                                            toast.success("Customer deleted successfully");
+                                        } catch (error) {
+                                            toast.error("Failed to delete customer: " + ((error as any)?.message || "Unknown error"));
+                                        }
+                                    }}
+                                >
+                                    Delete
+                                </button>
+                                <button
+                                    type="button"
+                                    className="px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50"
+                                    onClick={() => setIsDeleteModalOpen(false)}
+                                >
+                                    Cancel
+                                </button>
                             </div>
                         </div>
                     </div>
