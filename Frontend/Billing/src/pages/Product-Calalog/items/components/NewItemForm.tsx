@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { Check, ChevronDown, HelpCircle, Image as ImageIcon, PlusCircle, Search, X, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -53,22 +53,48 @@ const normalizeReportingTagAppliesTo = (tag: any): string[] => {
 };
 
 const getGroupedTaxes = (rows: any[]) => {
+  const rateById = new Map<string, number>();
+
+  rows.forEach((tax) => {
+    if (!tax) return;
+    const id = String(tax._id || tax.id || "");
+    if (!id) return;
+    const rate = Number(tax.rate ?? tax.taxRate ?? 0);
+    rateById.set(id, Number.isFinite(rate) ? rate : 0);
+  });
+
   const taxes: string[] = [];
   const compoundTaxes: string[] = [];
   const taxGroups: string[] = [];
 
+  const computeTaxLabel = (tax: any) => {
+    const name = String(tax?.name || tax?.taxName || "").trim();
+    const rate = Number(tax?.rate ?? tax?.taxRate ?? 0);
+    const groupTaxes = Array.isArray(tax?.groupTaxes) ? tax.groupTaxes.map((x: any) => String(x)) : [];
+
+    const isGroup =
+      tax?.isGroup === true ||
+      String(tax?.kind || "").toLowerCase() === "group" ||
+      String(tax?.type || "").toLowerCase() === "group" ||
+      tax?.description === TAX_GROUP_MARKER ||
+      groupTaxes.length > 0;
+
+    const computedRate = isGroup
+      ? Number(groupTaxes.reduce((sum: number, taxId: string) => sum + (rateById.get(taxId) || 0), 0).toFixed(2))
+      : (Number.isFinite(rate) ? rate : 0);
+
+    return { name, isGroup, isCompound: !!tax?.isCompound, computedRate, label: `${name} [${computedRate}%]` };
+  };
+
   rows.forEach((tax) => {
     if (!tax) return;
     if (tax.isActive === false) return;
-    if (tax.description === "__taban_tax_group__") return;
 
-    const name = String(tax.name || tax.taxName || "").trim();
-    const rate = Number(tax.rate ?? tax.taxRate ?? 0);
+    const id = String(tax._id || tax.id || "");
+    if (!id) return;
+
+    const { name, isGroup, isCompound, label } = computeTaxLabel(tax);
     if (!name) return;
-    const label = `${name} [${rate}%]`;
-
-    const isGroup = tax.isGroup === true || String(tax.type || "").toLowerCase() === "group";
-    const isCompound = tax.isCompound === true || String(tax.type || "").toLowerCase() === "compound";
 
     if (isGroup) {
       taxGroups.push(label);
@@ -158,16 +184,17 @@ const SearchableDropdown = ({
           setOpen(false);
           setSearchTerm("");
         }}
-        className={`flex w-full items-center justify-between rounded-lg py-2 text-[13px] transition-colors hover:bg-slate-50 ${isIndented ? "pl-8 pr-4" : "px-4"} ${isSelected ? "font-medium text-slate-900" : "text-slate-700"}`}
+        className={`flex w-full items-center justify-between rounded-lg py-2 text-[13px] transition-colors ${isIndented ? "pl-8 pr-4" : "px-4"} ${isSelected ? "font-medium text-white" : "text-slate-700 hover:bg-slate-50"}`}
+        style={isSelected ? { backgroundColor: accentColor } : undefined}
       >
         <span>{opt.label}</span>
-        {isSelected ? <Check size={14} style={{ color: accentColor }} /> : null}
+        {isSelected ? <Check size={14} className="text-white" /> : null}
       </button>
     );
   };
 
   return (
-    <div ref={wrapperRef} className="relative">
+    <div ref={wrapperRef} className={`relative ${open ? "z-[9999]" : ""}`}>
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
@@ -181,7 +208,7 @@ const SearchableDropdown = ({
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-[140] mt-1 w-full rounded-xl border border-[#d6dbe8] bg-white p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+        <div className="absolute left-0 top-full z-[9999] mt-1 w-full rounded-xl border border-[#d6dbe8] bg-white p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
           <div className="p-2">
             <div className="flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-all focus-within:bg-white" style={{ borderColor: accentColor }}>
               <Search size={14} className="text-slate-400" />
@@ -261,7 +288,7 @@ const isReportingTagRequired = (tag: any) =>
 export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialData, formTitle = "New Item" }: NewItemFormProps) {
   const navigate = useNavigate();
   const { accentColor } = useOrganizationBranding();
-  const currencyCode = baseCurrency?.symbol || baseCurrency?.code || "AMD";
+  const currencyCode = baseCurrency?.code || baseCurrency?.symbol || "USD";
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
@@ -280,7 +307,11 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
     salesDescription: initialData?.salesDescription || initialData?.description || "",
     isDigitalService: initialData?.isDigitalService || false,
   });
-  const [taxOptions, setTaxOptions] = useState<any[]>([]);
+  const initialSalesTaxLabel = String(
+    initialData?.salesTax ||
+    (initialData?.taxInfo ? `${initialData.taxInfo.taxName} [${initialData.taxInfo.taxRate}%]` : "")
+  ).trim();
+  const [taxRows, setTaxRows] = useState<any[]>([]);
   const [availableReportingTags, setAvailableReportingTags] = useState<any[]>([]);
   const [reportingTagValues, setReportingTagValues] = useState<Record<string, string>>({});
 
@@ -308,8 +339,55 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
     return out;
   };
   const salesAccountOptions = dedupeOptions([form.salesAccount, ...SALES_ACCOUNTS, ...extraSalesAccounts]);
-  const mergedTaxOptions = taxOptions;
+  const mergedTaxOptions = useMemo(() => getGroupedTaxes(taxRows), [taxRows]);
   const mergedUnitOptions = dedupeOptions([form.unit, ...BUILTIN_UNITS, ...unitOptions]);
+
+  useEffect(() => {
+    const taxId = String(initialData?.taxId || initialData?.taxInfo?.taxId || "").trim();
+    const taxNameFallback = String(initialData?.taxInfo?.taxName || "").trim();
+    const parsedName = String(initialSalesTaxLabel.split("[")[0] || "").trim();
+    const desiredName = taxNameFallback || parsedName;
+    if (!taxId && !desiredName) return;
+    if (!Array.isArray(taxRows) || taxRows.length === 0) return;
+
+    const rateById = new Map<string, number>();
+    taxRows.forEach((row: any) => {
+      const rowId = String(row?._id || row?.id || "");
+      if (!rowId) return;
+      const rowRate = Number(row?.rate ?? row?.taxRate ?? 0);
+      rateById.set(rowId, Number.isFinite(rowRate) ? rowRate : 0);
+    });
+
+    const row = taxId
+      ? taxRows.find((t: any) => String(t?._id || t?.id || "") === taxId)
+      : taxRows.find((t: any) => String(t?.name || t?.taxName || "").trim().toLowerCase() === desiredName.toLowerCase());
+    if (!row) return;
+
+    const name = String(row?.name || row?.taxName || "").trim();
+    if (!name) return;
+
+    const groupTaxes = Array.isArray(row?.groupTaxes) ? row.groupTaxes.map((x: any) => String(x)) : [];
+    const isGroup =
+      row?.isGroup === true ||
+      String(row?.kind || "").toLowerCase() === "group" ||
+      String(row?.type || "").toLowerCase() === "group" ||
+      row?.description === TAX_GROUP_MARKER ||
+      groupTaxes.length > 0;
+    const rate = Number(row?.rate ?? row?.taxRate ?? 0);
+    const computedRate = isGroup
+      ? Number(groupTaxes.reduce((sum: number, childId: string) => sum + (rateById.get(childId) || 0), 0).toFixed(2))
+      : (Number.isFinite(rate) ? rate : 0);
+    const computedLabel = `${name} [${computedRate}%]`;
+
+    setForm((prev) => {
+      const current = String(prev.salesTax || "").trim();
+      if (!current || current === initialSalesTaxLabel) {
+        return { ...prev, salesTax: computedLabel };
+      }
+      return prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taxRows, initialData?.taxId]);
 
   useEffect(() => {
     let mounted = true;
@@ -378,19 +456,31 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
       try {
         const response: any = await taxesAPI.getAll({ limit: 1000 });
         let apiRows = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
-        if (apiRows.length === 0) {
+
+        let settingsRows: any[] = [];
+        try {
           const local = localStorage.getItem("taban_settings_taxes_v1");
-          if (local) {
-            try {
-              apiRows = JSON.parse(local);
-            } catch {
-              // ignore
-            }
-          }
+          const parsed = local ? JSON.parse(local) : [];
+          settingsRows = Array.isArray(parsed) ? parsed : [];
+        } catch {
+          settingsRows = [];
         }
 
+        // Merge API/local tax lists (tax groups often live under settings storage).
+        const merged: any[] = [];
+        const seen = new Set<string>();
+        [...apiRows, ...settingsRows].forEach((row: any) => {
+          if (!row) return;
+          const id = String(row?._id || row?.id || "").trim();
+          const name = String(row?.name || row?.taxName || "").trim().toLowerCase();
+          const key = id ? `id:${id}` : name ? `name:${name}` : "";
+          if (!key || seen.has(key)) return;
+          seen.add(key);
+          merged.push(row);
+        });
+
         if (mounted) {
-          setTaxOptions(getGroupedTaxes(apiRows));
+          setTaxRows(merged);
         }
       } catch (error) {
         console.error("Failed to load taxes", error);
@@ -481,6 +571,82 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
 
     setIsSaving(true);
     try {
+      const selectedTaxLabel = String(form.salesTax || "").trim();
+      const selectedTaxName = String(selectedTaxLabel.split("[")[0] || "").trim().toLowerCase();
+      const selectedTaxRecord = selectedTaxLabel
+        ? taxRows.find((tax: any) => {
+          if (!tax) return false;
+          if (tax.isActive === false) return false;
+
+          const id = String(tax._id || tax.id || "");
+          const name = String(tax.name || tax.taxName || "").trim();
+          if (!id || !name) return false;
+
+          const rateById = new Map<string, number>();
+          taxRows.forEach((row: any) => {
+            const rowId = String(row?._id || row?.id || "");
+            if (!rowId) return;
+            const rowRate = Number(row?.rate ?? row?.taxRate ?? 0);
+            rateById.set(rowId, Number.isFinite(rowRate) ? rowRate : 0);
+          });
+
+          const groupTaxes = Array.isArray(tax.groupTaxes) ? tax.groupTaxes.map((x: any) => String(x)) : [];
+          const isGroup =
+            tax.isGroup === true ||
+            String(tax.kind || "").toLowerCase() === "group" ||
+            String(tax.type || "").toLowerCase() === "group" ||
+            tax.description === TAX_GROUP_MARKER ||
+            groupTaxes.length > 0;
+
+          const computedRate = isGroup
+            ? Number(groupTaxes.reduce((sum: number, taxId: string) => sum + (rateById.get(taxId) || 0), 0).toFixed(2))
+            : Number(tax.rate ?? tax.taxRate ?? 0);
+
+          const label = `${name} [${Number.isFinite(computedRate) ? computedRate : 0}%]`;
+          return label === selectedTaxLabel;
+        }) || taxRows.find((tax: any) => {
+          if (!tax) return false;
+          if (tax.isActive === false) return false;
+          const name = String(tax.name || tax.taxName || "").trim().toLowerCase();
+          return Boolean(selectedTaxName) && name === selectedTaxName;
+        })
+        : null;
+
+      const selectedTaxInfo = selectedTaxRecord
+        ? (() => {
+          const id = String(selectedTaxRecord._id || selectedTaxRecord.id || "");
+          const name = String(selectedTaxRecord.name || selectedTaxRecord.taxName || "").trim();
+
+          const rateById = new Map<string, number>();
+          taxRows.forEach((row: any) => {
+            const rowId = String(row?._id || row?.id || "");
+            if (!rowId) return;
+            const rowRate = Number(row?.rate ?? row?.taxRate ?? 0);
+            rateById.set(rowId, Number.isFinite(rowRate) ? rowRate : 0);
+          });
+
+          const groupTaxes = Array.isArray(selectedTaxRecord.groupTaxes) ? selectedTaxRecord.groupTaxes.map((x: any) => String(x)) : [];
+          const isGroup =
+            selectedTaxRecord.isGroup === true ||
+            String(selectedTaxRecord.kind || "").toLowerCase() === "group" ||
+            String(selectedTaxRecord.type || "").toLowerCase() === "group" ||
+            selectedTaxRecord.description === TAX_GROUP_MARKER ||
+            groupTaxes.length > 0;
+
+          const computedRate = isGroup
+            ? Number(groupTaxes.reduce((sum: number, taxId: string) => sum + (rateById.get(taxId) || 0), 0).toFixed(2))
+            : Number(selectedTaxRecord.rate ?? selectedTaxRecord.taxRate ?? 0);
+
+          return {
+            taxId: id,
+            taxName: name,
+            taxRate: Number.isFinite(computedRate) ? computedRate : 0,
+            kind: isGroup ? "group" : "tax",
+            isCompound: !!selectedTaxRecord.isCompound,
+          };
+        })()
+        : null;
+
       await onCreate(
         {
           type: form.type,
@@ -489,7 +655,9 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
           sku: form.sku.trim(),
           sellingPrice: Number(form.sellingPrice),
           salesAccount: form.salesAccount || "Sales",
-          salesTax: form.salesTax || "",
+          salesTax: selectedTaxLabel || "",
+          taxId: selectedTaxInfo?.taxId,
+          taxInfo: selectedTaxInfo || undefined,
           salesDescription: form.salesDescription || "",
           description: form.salesDescription || "",
           rate: Number(form.sellingPrice),

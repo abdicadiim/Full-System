@@ -189,7 +189,17 @@ export default function ItemDetails({
         if (activeTab === "history") {
             fetchHistory();
         }
-    }, [activeTab, item.id, item._id]);
+    }, [
+        activeTab,
+        item.id,
+        item._id,
+        item.updatedAt,
+        item.createdAt,
+        item.status,
+        (item as any).active,
+        (item as any).isActive,
+        Array.isArray((item as any).history) ? (item as any).history.length : 0,
+    ]);
 
     const transactionNumberHeading: Record<(typeof transactionTypeOptions)[number], string> = {
         Quotes: "QUOTE NUMBER",
@@ -364,74 +374,52 @@ export default function ItemDetails({
     const fetchHistory = async () => {
         setIsLoadingHistory(true);
         try {
-            const itemId = item.id || item._id;
-            const history: any[] = [];
-            history.push({
-                type: 'milestone',
-                title: 'Item Created',
-                description: 'Item was added to the inventory system.',
-                timestamp: item.createdAt || new Date().toISOString(),
-                color: 'bg-blue-600'
-            });
+            const rows = Array.isArray((item as any).history) ? (item as any).history : [];
+            const fallback = rows.length > 0 ? rows : [
+                {
+                    action: "created",
+                    by: (item as any).createdBy || (item as any).updatedBy || { name: "Unknown" },
+                    at: item.createdAt || new Date().toISOString(),
+                    details: "created",
+                },
+            ];
 
-            if (item.inventoryTracking) {
-                history.push({
-                    type: 'milestone',
-                    title: 'Inventory Tracking Enabled',
-                    description: `Tracking started with opening stock: ${item.openingStock || 0}${item.unit ? ' ' + item.unit : ''}`,
-                    timestamp: item.createdAt || new Date().toISOString(),
-                    color: 'bg-emerald-500'
-                });
-            }
+            const normalized = fallback.map((row: any) => ({
+                action: String(row?.action || row?.details || "updated"),
+                byName: String(row?.by?.name || row?.byName || row?.userName || "Unknown"),
+                at: String(row?.at || row?.timestamp || item.updatedAt || item.createdAt || new Date().toISOString()),
+                details: String(row?.details || ""),
+            }));
 
-            const [quotes, invoices, creditNotes, receipts] = await Promise.all([
-                apiRequest('/quotes?limit=1000').catch(() => ({ success: true, data: [] })),
-                apiRequest('/sales-invoices?limit=1000').catch(() => ({ success: true, data: [] })),
-                apiRequest('/credit-notes?limit=1000').catch(() => ({ success: true, data: [] })),
-                apiRequest('/sales-receipts?limit=1000').catch(() => ({ success: true, data: [] }))
-            ]);
-
-            const processTransactions = (resp: any, type: string, numberField: string, entityField: string) => {
-                if (resp?.success && Array.isArray(resp.data)) {
-                    resp.data.forEach((tx: any) => {
-                        const lineItem = tx.items?.find((li: any) =>
-                            (li?.item === itemId || (li?.item && typeof li.item === 'object' && (li.item._id === itemId || li.item.id === itemId)))
-                        );
-                        if (lineItem) {
-                            history.push({
-                                type: 'transaction',
-                                title: `${type} Created`,
-                                description: `${type} ${tx[numberField] || 'N/A'} for ${tx[entityField]?.displayName || tx[entityField + "Name"] || 'N/A'}`,
-                                quantity: lineItem.quantity || lineItem.quantityAdjusted || 0,
-                                timestamp: tx.date || tx.createdAt,
-                                status: tx.status,
-                                color: 'bg-slate-400'
-                            });
-                        }
-                    });
-                }
-            };
-
-            processTransactions(quotes, 'Quote', 'quoteNumber', 'customer');
-            processTransactions(invoices, 'Invoice', 'invoiceNumber', 'customer');
-            processTransactions(creditNotes, 'Credit Note', 'creditNoteNumber', 'customer');
-            processTransactions(receipts, 'Sales Receipt', 'receiptNumber', 'customer');
-
-            if (item.updatedAt && item.updatedAt !== item.createdAt) {
-                history.push({
-                    type: 'milestone',
-                    title: 'Last System Update',
-                    description: 'Detailed property modifications.',
-                    timestamp: item.updatedAt,
-                    color: 'bg-amber-400'
-                });
-            }
-            setHistoryEvents(history.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+            setHistoryEvents(normalized.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()));
         } catch (error) {
             console.error(error);
         } finally {
             setIsLoadingHistory(false);
         }
+    };
+
+    const formatHistoryDate = (value: string) => {
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return value;
+        return d.toLocaleString("en-US", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true,
+        }).replace(",", "");
+    };
+
+    const formatHistoryDetails = (row: any) => {
+        const action = String(row?.action || "").toLowerCase();
+        const details = String(row?.details || "").toLowerCase();
+        if (action.includes("created") || details.includes("created")) return "created by";
+        if (action.includes("marked_active") || details.includes("marked as active")) return "marked as active";
+        if (action.includes("marked_inactive") || details.includes("marked as inactive")) return "marked as inactive";
+        if (details) return details;
+        return action ? action.replace(/_/g, " ") : "updated";
     };
 
     const getStatusesForType = () => statusOptionsByType[txTypeFilter];
@@ -760,21 +748,34 @@ export default function ItemDetails({
                 )}
 
                 {activeTab === "history" && (
-                    <div className="bg-white rounded-lg border p-8">
-                        {isLoadingHistory ? <div className="flex items-center justify-center py-20"><RefreshCw className="animate-spin text-blue-500" /></div> : historyEvents.length > 0 ? (
-                            <div className="relative border-l-2 border-gray-100 pl-8 ml-4 space-y-12">
-                                {historyEvents.map((e, i) => (
-                                    <div key={i} className="relative">
-                                        <div className={`absolute -left-[41px] top-1 w-4 h-4 rounded-full border-4 border-white shadow-sm ${e.color}`}></div>
-                                        <div className="flex flex-col">
-                                            <span className="text-sm font-bold text-gray-900">{e.title}</span>
-                                            <span className="text-xs text-gray-500 mb-2">{e.description}</span>
-                                            <span className="text-[11px] text-gray-400">{new Date(e.timestamp).toLocaleString()}</span>
-                                        </div>
-                                    </div>
-                                ))}
+                    <div className="bg-white rounded-lg border border-gray-100 shadow-sm overflow-hidden">
+                        {isLoadingHistory ? (
+                            <div className="flex items-center justify-center py-20">
+                                <RefreshCw className="animate-spin text-blue-500" size={32} />
                             </div>
-                        ) : <div className="text-center py-20 text-gray-400">No history found</div>}
+                        ) : historyEvents.length > 0 ? (
+                            <div className="w-full">
+                                <div className="grid grid-cols-[280px_1fr] border-b border-gray-200 bg-white px-6 py-3 text-[12px] tracking-widest text-gray-400 uppercase">
+                                    <div>DATE</div>
+                                    <div>DETAILS</div>
+                                </div>
+                                <div>
+                                    {historyEvents.map((row: any, idx: number) => (
+                                        <div key={idx} className="grid grid-cols-[280px_1fr] border-b border-gray-100 px-6 py-3 text-[13px]">
+                                            <div className="text-gray-500">{formatHistoryDate(row.at)}</div>
+                                            <div className="text-gray-900">
+                                                {formatHistoryDetails(row)}{" "}
+                                                <span className="text-[#2563eb] italic">- {row.byName}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center py-20 text-center text-gray-400">
+                                No history found
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

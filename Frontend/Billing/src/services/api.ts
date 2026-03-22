@@ -633,73 +633,14 @@ export const customersAPI = {
   },
 };
 
+const itemsBase = resource("/items");
 export const itemsAPI = {
-  getAll: async (params?: Record<string, any>) => {
-    const query = String(params?.search || params?.q || "").trim().toLowerCase();
-    let items = readLocalCollection(ITEMS_STORAGE_KEY);
-    if (query) {
-      items = items.filter((item: any) =>
-        Object.values(item || {}).some((value) =>
-          String(value ?? "")
-            .toLowerCase()
-            .includes(query)
-        )
-      );
-    }
-    return { success: true, data: items };
-  },
+  getAll: async (params?: Record<string, any>) => itemsBase.getAll(params),
   list: async (params?: Record<string, any>) => itemsAPI.getAll(params),
-  getById: async (id: string) => {
-    const itemId = normalizeId(id, "item");
-    const item = readLocalCollection(ITEMS_STORAGE_KEY).find(
-      (row: any) => String(row?.id || row?._id) === itemId
-    );
-    if (!item) return { success: false, message: "Item not found", data: null };
-    return { success: true, data: item };
-  },
-  create: async (data: any) => {
-    const items = readLocalCollection(ITEMS_STORAGE_KEY);
-    const id = normalizeId(data?.id || data?._id, "item");
-    const created = {
-      ...data,
-      id,
-      _id: id,
-      active: data?.active !== undefined ? data.active : true,
-      status: data?.status || "Active",
-      createdAt: data?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    items.unshift(created);
-    writeLocalCollection(ITEMS_STORAGE_KEY, items);
-    recordEvent("item_created", { item: created });
-    return { success: true, data: created };
-  },
-  update: async (id: string, data: any) => {
-    const itemId = normalizeId(id, "item");
-    const items = readLocalCollection(ITEMS_STORAGE_KEY);
-    const idx = items.findIndex((row: any) => String(row?.id || row?._id) === itemId);
-    if (idx < 0) return { success: false, message: "Item not found", data: null };
-
-    const updated = {
-      ...items[idx],
-      ...data,
-      id: itemId,
-      _id: itemId,
-      updatedAt: new Date().toISOString(),
-    };
-    items[idx] = updated;
-    writeLocalCollection(ITEMS_STORAGE_KEY, items);
-    recordEvent("item_updated", { item: updated });
-    return { success: true, data: updated };
-  },
-  delete: async (id: string) => {
-    const itemId = normalizeId(id, "item");
-    const items = readLocalCollection(ITEMS_STORAGE_KEY);
-    const filtered = items.filter((row: any) => String(row?.id || row?._id) !== itemId);
-    writeLocalCollection(ITEMS_STORAGE_KEY, filtered);
-    recordEvent("item_deleted", { item_id: itemId });
-    return { success: true, data: { id: itemId } };
-  },
+  getById: async (id: string) => itemsBase.getById(String(id)),
+  create: async (data: any) => itemsBase.create(data),
+  update: async (id: string, data: any) => itemsBase.update(String(id), data),
+  delete: async (id: string) => itemsBase.delete(String(id)),
 };
 
 export const plansAPI = {

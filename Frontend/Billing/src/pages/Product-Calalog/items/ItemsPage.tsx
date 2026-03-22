@@ -78,7 +78,11 @@ function ItemsPageContent() {
     [items, selectedId]
   );
 
-  const handleCreateItem = async (data: any, tagIds: string[] = []) => {
+  const handleCreateItem = async (
+    data: any,
+    tagIds: string[] = [],
+    options?: { stayOnCurrent?: boolean }
+  ) => {
     if (!canCreateItems) {
       toast.error("You do not have permission to create items.");
       return;
@@ -129,10 +133,12 @@ function ItemsPageContent() {
         }
       }
 
-      if (view === "detail") {
-        setSelectedId(String(newItem._id || newItem.id));
-      } else {
-        setView("list");
+      if (!options?.stayOnCurrent) {
+        if (view === "detail") {
+          setSelectedId(String(newItem._id || newItem.id));
+        } else {
+          setView("list");
+        }
       }
       setClonedItem(null);
       toast.success("Item created successfully");
@@ -299,7 +305,7 @@ function ItemsPageContent() {
     delete clonedPayload.createdAt;
     delete clonedPayload.updatedAt;
 
-    await handleCreateItem(clonedPayload, []);
+    await handleCreateItem(clonedPayload, [], { stayOnCurrent: true });
   };
 
   if (permissionsLoading) {
@@ -358,7 +364,7 @@ function ItemsPageContent() {
           </div>
         </div>
       ) : (
-        <div className="w-full h-full overflow-hidden">
+        <div className={`w-full h-full ${view === "list" ? "overflow-hidden" : "overflow-visible"}`}>
           {view === "list" && (
             <ItemsList
               items={items}

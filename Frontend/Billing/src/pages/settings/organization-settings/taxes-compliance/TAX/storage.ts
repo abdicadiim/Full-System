@@ -262,7 +262,7 @@ const apiUpsertTax = async (tax: LocalTaxRecord) => {
     _id: tax._id,
     kind: isGroup ? "group" : "tax",
     name: tax.name,
-    rate: isGroup ? 0 : Number(tax.rate || 0),
+    rate: Number(tax.rate || 0),
     type: tax.type || "both",
     description: isGroup ? "" : String(tax.description || ""),
     groupTaxes: isGroup ? (tax.groupTaxes || []).map(String) : [],

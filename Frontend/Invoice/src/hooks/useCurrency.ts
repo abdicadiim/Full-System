@@ -34,7 +34,7 @@ export const useCurrency = () => {
   useEffect(() => {
     let isMounted = true;
 
-    const loadBaseCurrency = () => {
+    const loadBaseCurrency = async () => {
       try {
         const stored = localStorage.getItem("taban_currencies");
         if (stored) {
@@ -45,13 +45,23 @@ export const useCurrency = () => {
             return;
           }
         }
-        if (isMounted) {
-          setBaseCurrency(DEFAULT_CURRENCY);
+      } catch {
+        // ignore and fall back to API
+      }
+
+      try {
+        const res = await currenciesAPI.getBaseCurrency();
+        const base = (res as any)?.data;
+        if (base && isMounted) {
+          setBaseCurrency(normalizeCurrency(base));
+          return;
         }
-      } catch (error) {
-        if (isMounted) {
-          setBaseCurrency(DEFAULT_CURRENCY);
-        }
+      } catch {
+        // ignore
+      }
+
+      if (isMounted) {
+        setBaseCurrency(DEFAULT_CURRENCY);
       }
     };
 

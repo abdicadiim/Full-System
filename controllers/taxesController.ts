@@ -83,7 +83,6 @@ export const createTax = async (req: express.Request, res: express.Response) => 
 
   if (kind === "group") {
     payload.groupTaxes = pickStringArray(req.body?.groupTaxes);
-    payload.rate = 0;
     payload.isDefault = false;
   } else {
     payload.groupTaxes = [];
@@ -165,12 +164,8 @@ export const updateTax = async (req: express.Request, res: express.Response) => 
     if (updated.kind === "group") {
       // never allow default on groups
       if (updated.isDefault) {
-        await Tax.updateOne({ _id: updated._id }, { $set: { isDefault: false, rate: 0 } });
+        await Tax.updateOne({ _id: updated._id }, { $set: { isDefault: false } });
         updated.isDefault = false;
-      }
-      if (typeof updated.rate !== "number" || updated.rate !== 0) {
-        await Tax.updateOne({ _id: updated._id }, { $set: { rate: 0 } });
-        updated.rate = 0;
       }
     }
 

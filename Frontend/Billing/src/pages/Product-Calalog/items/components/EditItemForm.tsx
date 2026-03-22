@@ -94,9 +94,197 @@ const Textarea = ({ className = "", error, ...props }: TextareaProps) => (
     />
 );
 
+type DropdownOption = {
+    value: string;
+    label: string;
+};
+
+type SearchableDropdownProps = {
+    value: string;
+    options?: Array<string | DropdownOption>;
+    groupedOptions?: Array<{ label: string; options: Array<string | DropdownOption> }>;
+    onChange: (value: string) => void;
+    placeholder: string;
+    accentColor: string;
+    groupLabel?: string;
+    addNewLabel?: string;
+    onAddNew?: () => void;
+    className?: string;
+};
+
+const SearchableDropdown = ({
+    value,
+    options = [],
+    groupedOptions,
+    onChange,
+    placeholder,
+    accentColor,
+    groupLabel,
+    addNewLabel,
+    onAddNew,
+    className = "",
+}: SearchableDropdownProps) => {
+    const [open, setOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState("");
+    const wrapperRef = useRef<HTMLDivElement>(null);
+
+    const normalizeOptions = (opts: Array<string | DropdownOption>): DropdownOption[] =>
+        opts.map((opt) => (typeof opt === "string" ? { value: opt, label: opt } : opt));
+
+    const normalizedOptions = normalizeOptions(options);
+    const selected = (groupedOptions ? groupedOptions.flatMap((g) => normalizeOptions(g.options)) : normalizedOptions).find(
+        (opt) => opt.value === value
+    );
+
+    const filterOptions = (opts: DropdownOption[]) =>
+        opts.filter((opt) => opt.label.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    const displayedGroups =
+        groupedOptions
+            ?.map((group) => ({
+                label: group.label,
+                options: filterOptions(normalizeOptions(group.options)),
+            }))
+            .filter((group) => group.options.length > 0) || [];
+
+    const displayedOptions = filterOptions(normalizedOptions);
+
+    useEffect(() => {
+        const handleOutside = (event: MouseEvent) => {
+            if (!wrapperRef.current?.contains(event.target as Node)) {
+                setOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleOutside);
+        return () => document.removeEventListener("mousedown", handleOutside);
+    }, []);
+
+    const renderOptionItem = (opt: DropdownOption, isIndented = false) => {
+        const isSelected = value === opt.value;
+        return (
+            <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                    onChange(opt.value);
+                    setOpen(false);
+                    setSearchTerm("");
+                }}
+                className={`flex w-full items-center justify-between rounded-lg py-2 text-[13px] transition-colors hover:bg-slate-50 ${isIndented ? "pl-8 pr-4" : "px-4"} ${isSelected ? "font-medium text-slate-900" : "text-slate-700"}`}
+            >
+                <span>{opt.label}</span>
+                {isSelected ? <Check size={14} style={{ color: accentColor }} /> : null}
+            </button>
+        );
+    };
+
+    return (
+        <div ref={wrapperRef} className={`relative w-full ${className}`}>
+            <button
+                type="button"
+                onClick={() => setOpen((prev) => !prev)}
+                className="h-9 w-full max-w-[400px] rounded-md border border-slate-200 bg-white px-3 text-left text-[13px] transition-colors hover:border-slate-300"
+                style={open ? { borderColor: accentColor } : {}}
+            >
+                <div className="flex items-center justify-between gap-2">
+                    <span className={selected ? "text-slate-900" : "text-slate-400"}>{selected?.label || placeholder}</span>
+                    <ChevronDown size={14} className={`transition-transform ${open ? "rotate-180" : ""}`} style={{ color: accentColor }} />
+                </div>
+            </button>
+
+            {open && (
+                <div className="absolute left-0 top-full z-[140] mt-1 w-full max-w-[400px] rounded-xl border border-[#d6dbe8] bg-white p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+                    <div className="p-2">
+                        <div className="flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-all focus-within:bg-white" style={{ borderColor: accentColor }}>
+                            <Search size={14} className="text-slate-400" />
+                            <input
+                                autoFocus
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                placeholder="Search..."
+                                className="w-full border-none bg-transparent text-[13px] text-slate-700 outline-none placeholder:text-slate-400"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="max-h-64 overflow-y-auto custom-scrollbar py-1">
+                        {groupedOptions ? (
+                            displayedGroups.length === 0 ? (
+                                <div className="px-4 py-3 text-center text-[13px] text-slate-400">No results found</div>
+                            ) : (
+                                displayedGroups.map((group) => (
+                                    <div key={group.label} className="mb-1 last:mb-0">
+                                        <div className="px-4 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{group.label}</div>
+                                        {group.options.map((opt) => renderOptionItem(opt, true))}
+                                    </div>
+                                ))
+                            )
+                        ) : displayedOptions.length === 0 ? (
+                            <div className="px-4 py-3 text-center text-[13px] text-slate-400">No results found</div>
+                        ) : (
+                            <>
+                                {groupLabel && (
+                                    <div className="px-4 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{groupLabel}</div>
+                                )}
+                                {displayedOptions.map((opt) => renderOptionItem(opt))}
+                            </>
+                        )}
+                    </div>
+
+                    {onAddNew && addNewLabel && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setOpen(false);
+                                setSearchTerm("");
+                                onAddNew();
+                            }}
+                            className="w-full flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium border-t border-slate-100 hover:bg-slate-50 transition-colors"
+                            style={{ color: accentColor }}
+                        >
+                            <Plus size={14} />
+                            {addNewLabel}
+                        </button>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+const getGroupedTaxes = (rows: any[]) => {
+    const taxes: string[] = [];
+    const compoundTaxes: string[] = [];
+    const taxGroups: string[] = [];
+
+    rows.forEach((tax) => {
+        if (!tax) return;
+        if (tax.isActive === false) return;
+
+        const name = String(tax.name || tax.taxName || "").trim();
+        const rate = Number(tax.rate ?? tax.taxRate ?? 0);
+        if (!name) return;
+        const label = `${name} [${rate}%]`;
+
+        const isGroup = tax.kind === "group" || tax.isGroup === true || String(tax.type || "").toLowerCase() === "group";
+        const isCompound = tax.isCompound === true || String(tax.type || "").toLowerCase() === "compound";
+
+        if (isGroup) taxGroups.push(label);
+        else if (isCompound) compoundTaxes.push(label);
+        else taxes.push(label);
+    });
+
+    return [
+        { label: "Tax", options: Array.from(new Set(taxes)) },
+        { label: "Compound tax", options: Array.from(new Set(compoundTaxes)) },
+        { label: "Tax Group", options: Array.from(new Set(taxGroups)) },
+    ].filter((g) => g.options.length > 0);
+};
+
 export default function EditItemForm({ item, onCancel, onUpdate, baseCurrency }: EditItemFormProps) {
     const navigate = useNavigate();
     const currencyCode = baseCurrency?.symbol || baseCurrency?.code || "USD";
+    const accentColor = "#1b5e6a";
     const [form, setForm] = useState({
         type: item.type || "Goods",
         name: item.name || "",
@@ -140,6 +328,8 @@ export default function EditItemForm({ item, onCancel, onUpdate, baseCurrency }:
     const [isManageUnitsModalOpen, setIsManageUnitsModalOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [errors, setErrors] = useState<Record<string, boolean>>({});
+
+    const mergedTaxOptions = useMemo(() => getGroupedTaxes(dbTaxes || []), [dbTaxes]);
 
     const fetchData = async () => {
         try {
@@ -380,17 +570,17 @@ export default function EditItemForm({ item, onCancel, onUpdate, baseCurrency }:
                         </div>
                         <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4">
                             <Label tooltip={<>Add the sales tax that's applicable<br />for this item. Create a group tax from<br />Settings if you want to apply more than<br />one tax. This tax will be auto-populated<br />when you create transactions with this item.</>}>Tax</Label>
-                            <ZohoSelect
+                            <SearchableDropdown
                                 value={form.salesTax}
+                                groupedOptions={mergedTaxOptions}
                                 onChange={(val) => setForm(f => ({ ...f, salesTax: val }))}
-                                options={dbTaxes.map(t => `${t.name} [${t.rate}%]`)}
+                                placeholder="Select a Tax"
+                                accentColor={accentColor}
+                                addNewLabel="New Tax"
                                 onAddNew={() => {
                                     setPendingTaxField("salesTax");
                                     setIsTaxModalOpen(true);
                                 }}
-                                addNewLabel="New Tax"
-                                placeholder="Select a Tax"
-                                className="w-full max-w-[400px]"
                             />
                         </div>
                     </div>
@@ -443,17 +633,17 @@ export default function EditItemForm({ item, onCancel, onUpdate, baseCurrency }:
                         </div>
                         <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4">
                             <Label tooltip={<>Add the purchase tax that's applicable<br />for this item.</>}>Tax</Label>
-                            <ZohoSelect
+                            <SearchableDropdown
                                 value={form.purchaseTax}
+                                groupedOptions={mergedTaxOptions}
                                 onChange={(val) => setForm(f => ({ ...f, purchaseTax: val }))}
-                                options={dbTaxes.map(t => `${t.name} [${t.rate}%]`)}
+                                placeholder="Select a Tax"
+                                accentColor={accentColor}
+                                addNewLabel="New Tax"
                                 onAddNew={() => {
                                     setPendingTaxField("purchaseTax");
                                     setIsTaxModalOpen(true);
                                 }}
-                                addNewLabel="New Tax"
-                                placeholder="Select a Tax"
-                                className="w-full max-w-[400px]"
                             />
                         </div>
                         <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4">
