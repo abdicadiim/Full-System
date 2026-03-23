@@ -283,6 +283,7 @@ export default function SendQuoteEmail() {
         let resolvedRecipient =
           prefilledRecipientFromState ||
           quoteData.customer?.email ||
+          quoteData.customer?.primaryEmail ||
           quoteData.customerEmail ||
           "";
 

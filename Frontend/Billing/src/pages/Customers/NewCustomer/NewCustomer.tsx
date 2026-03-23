@@ -852,7 +852,7 @@ export default function NewCustomer() {
               accountsReceivable: customer.accountsReceivable || "",
               openingBalance: customer.receivables?.toString() || customer.openingBalance || "",
               paymentTerms: customer.paymentTerms || "due-on-receipt",
-              priceListId: customer.priceListId || "",
+              priceListId: customer.priceListId || customer.priceListID || customer.price_list_id || "",
               enablePortal: customer.enablePortal || false,
               customerOwner: customer.customerOwner || customer.salesperson || "",
               websiteUrl: customer.websiteUrl || customer.website || "",
@@ -975,6 +975,8 @@ export default function NewCustomer() {
         }
       }
 
+      const selectedPriceListRecord = priceLists.find((priceList: any) => String(priceList?.id || "").trim() === String(formData.priceListId || "").trim());
+
       // Prepare customer data for saving (matching API structure)
       const customerData = {
         displayName: formData.displayName || formData.companyName || `${formData.firstName} ${formData.lastName}`.trim(),
@@ -999,6 +1001,9 @@ export default function NewCustomer() {
         locationCode: formData.locationCode || '',
         currency: formData.currency || 'KES',
         paymentTerms: formData.paymentTerms || 'due-on-receipt',
+        priceListId: String(formData.priceListId || '').trim(),
+        priceListName: String(selectedPriceListRecord?.name || '').trim(),
+        priceList: String(selectedPriceListRecord?.name || '').trim(),
         department: formData.department || '',
         designation: formData.designation || '',
         accountsReceivable: formData.accountsReceivable || '',

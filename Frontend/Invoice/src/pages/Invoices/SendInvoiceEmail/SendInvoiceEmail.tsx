@@ -20,7 +20,7 @@ import {
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import { getInvoiceById, getInvoices } from "../../salesModel";
-import { invoicesAPI } from "../../../services/api";
+import { invoicesAPI, customersAPI } from "../../../services/api";
 import { applyEmailTemplate } from "../../settings/emailTemplateUtils";
 
 export default function SendInvoiceEmail() {
@@ -162,6 +162,23 @@ export default function SendInvoiceEmail() {
     }
     return "";
   };
+  const resolveCustomerEmail = async (invoiceData: any) => {
+    const direct = getCustomerEmail(invoiceData);
+    if (direct) return direct;
+    const customerId = String(invoiceData?.customerId || invoiceData?.customer?._id || invoiceData?.customer?.id || invoiceData?.customer || "").trim();
+    if (!customerId) return "";
+    try {
+      const response: any = await customersAPI.getById(customerId);
+      const customer = response?.success ? response?.data : response;
+      if (!customer) return "";
+      const email =
+        String(customer?.email || customer?.primaryEmail || "").trim() ||
+        String(customer?.contactPersons?.find?.((cp: any) => cp?.email)?.email || "").trim();
+      return email || "";
+    } catch {
+      return "";
+    }
+  };
 
   useEffect(() => {
     const fetchInvoice = async () => {
@@ -171,7 +188,7 @@ export default function SendInvoiceEmail() {
           if (invoiceData) {
             setInvoice(invoiceData);
             const customerDisplayName = getCustomerDisplayName(invoiceData);
-            const customerEmail = getCustomerEmail(invoiceData);
+            const customerEmail = await resolveCustomerEmail(invoiceData);
 
             // Fetch primary sender
             let sName = import.meta.env.VITE_EMAIL_SENDER_NAME || "JIRDE HUSSEIN KHALIF";

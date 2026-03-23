@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from "react";
+﻿import React, { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import {
@@ -2281,8 +2281,8 @@ return (
                   </button>
 
                   {isCustomerDropdownOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded shadow-lg z-50 max-h-80 overflow-hidden">
-                      <div className="flex items-center gap-2 p-2 border-b border-gray-100 sticky top-0 bg-white">
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl z-50 max-h-80 overflow-hidden">
+                      <div className="flex items-center gap-2 p-2.5 border-b border-gray-100 sticky top-0 bg-white">
                         <Search size={14} className="text-gray-400" />
                         <input
                           type="text"
@@ -2294,21 +2294,44 @@ return (
                         />
                       </div>
                       <div className="max-h-60 overflow-y-auto">
-                        {filteredCustomers.map((customer, idx) => (
-                          <div
-                            key={customer.id || customer._id || `cust-${idx}`}
-                            className="p-2.5 hover:bg-blue-50 cursor-pointer flex items-center gap-3 transition-colors"
-                            onClick={() => handleCustomerSelect(customer)}
-                          >
-                            <div className="text-sm text-gray-700">{customer.name || customer.displayName}</div>
-                          </div>
-                        ))}
+                        {filteredCustomers.map((customer, idx) => {
+                          const displayName = customer.name || customer.displayName || customer.companyName || "";
+                          const initial = displayName.charAt(0).toUpperCase() || "C";
+                          const customerNo = customer.customerNumber || "";
+                          const email = customer.email || "";
+                          const phone = customer.workPhone || customer.mobile || customer.phone || "";
+                          const isSelected = (selectedCustomer?.id || selectedCustomer?._id) === (customer.id || customer._id);
+                          return (
+                            <div
+                              key={customer.id || customer._id || `cust-${idx}`}
+                              className={`px-3 py-2.5 cursor-pointer flex items-center gap-3 transition-colors border-b border-gray-50 last:border-0 ${isSelected ? "bg-blue-600 text-white" : "hover:bg-blue-50"}`}
+                              onClick={() => handleCustomerSelect(customer)}
+                            >
+                              <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${isSelected ? "bg-white text-blue-600" : "bg-blue-100 text-blue-700"}`}>
+                                {initial}
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <div className={`text-sm font-medium truncate ${isSelected ? "text-white" : "text-gray-800"}`}>
+                                  {displayName}
+                                  {customerNo && <span className={`ml-2 text-xs font-normal ${isSelected ? "text-blue-100" : "text-gray-400"}`}>| {customerNo}</span>}
+                                </div>
+                                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                  {email && <span className={`text-xs ${isSelected ? "text-blue-100" : "text-gray-400"}`}>✉ {email}</span>}
+                                  {phone && <span className={`text-xs ${isSelected ? "text-blue-100" : "text-gray-400"}`}>📋 {phone}</span>}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {filteredCustomers.length === 0 && (
+                          <div className="px-4 py-6 text-sm text-gray-400 text-center">No customers found</div>
+                        )}
                       </div>
                       <button
-                        className="w-full p-2 border-t border-gray-100 text-xs text-[#156372] hover:bg-blue-50 flex items-center justify-center gap-1 transition-colors"
+                        className="w-full p-2.5 border-t border-gray-100 text-sm text-blue-600 hover:bg-blue-50 flex items-center justify-center gap-1.5 transition-colors font-medium"
                         onClick={openCustomerQuickAction}
                       >
-                        <Plus size={14} />
+                        <Plus size={15} className="text-blue-600" />
                         New Customer
                       </button>
                     </div>

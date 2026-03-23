@@ -6,13 +6,13 @@ import {
   MessageSquare, Briefcase, User, Calendar, Plus, Paperclip, Minus, Check,
   Trash2, MoreVertical, Edit2, Edit3, Settings, Info, Tag, HelpCircle, HardDrive,
   Layers, Box, Folder, Cloud, CheckCircle, Calculator, Image as ImageIcon, GripVertical,
-  FileText, CreditCard, Square, Upload, Loader2, LayoutGrid, PlusCircle, Mail, Building2,
+  FileText, CreditCard, Square, Upload, Loader2, LayoutGrid, PlusCircle, Mail, Building2, AlertTriangle,
   Package, Layout
 } from "lucide-react";
 import { getCustomers, saveQuote, getQuotes, getQuoteById, updateQuote, getProjects, getSalespersonsFromAPI, updateSalesperson, getItemsFromAPI, getTaxes, Customer, Tax, Salesperson, Quote, ContactPerson, Project } from "../../salesModel";
 
 import { getAllDocuments } from "../../../../utils/documentStorage";
-import { customersAPI, projectsAPI, salespersonsAPI, quotesAPI, itemsAPI, currenciesAPI, contactPersonsAPI, vendorsAPI, settingsAPI, chartOfAccountsAPI, documentsAPI, reportingTagsAPI, priceListsAPI, plansAPI } from "../../../../services/api";
+import { customersAPI, projectsAPI, salespersonsAPI, quotesAPI, itemsAPI, currenciesAPI, contactPersonsAPI, vendorsAPI, settingsAPI, chartOfAccountsAPI, documentsAPI, reportingTagsAPI, priceListsAPI, plansAPI, transactionNumberSeriesAPI } from "../../../../services/api";
 import { useAccountSelect } from "../../../../hooks/useAccountSelect";
 import { useCurrency } from "../../../../hooks/useCurrency";
 import { API_BASE_URL, getToken } from "../../../../services/auth";
@@ -46,6 +46,14 @@ type CatalogPriceListOption = {
   currency: string;
   status: string;
   displayLabel: string;
+};
+
+type PriceListSwitchDialogState = {
+  customerName: string;
+  currentPriceListName: string;
+  nextPriceListName: string;
+  customerCurrency: string;
+  nextPriceListCurrency: string;
 };
 
 const NewQuote = () => {
@@ -462,12 +470,15 @@ const NewQuote = () => {
   const [quoteNumberMode, setQuoteNumberMode] = useState("auto"); // "auto" or "manual"
   const [quotePrefix, setQuotePrefix] = useState("QT-");
   const [quoteNextNumber, setQuoteNextNumber] = useState("000002");
+  const [quoteSeriesRow, setQuoteSeriesRow] = useState<any | null>(null);
+  const [quoteSeriesRows, setQuoteSeriesRows] = useState<any[]>([]);
   const [isTaxPreferenceDropdownOpen, setIsTaxPreferenceDropdownOpen] = useState(false);
   const [taxPreferenceSearch, setTaxPreferenceSearch] = useState("");
   const [isPriceListDropdownOpen, setIsPriceListDropdownOpen] = useState(false);
   const [priceListSearch, setPriceListSearch] = useState("");
   const [catalogPriceListsRaw, setCatalogPriceListsRaw] = useState<any[]>([]);
   const [catalogPriceLists, setCatalogPriceLists] = useState<CatalogPriceListOption[]>([]);
+  const [priceListSwitchDialog, setPriceListSwitchDialog] = useState<PriceListSwitchDialogState | null>(null);
   const [isLocationFeatureEnabled, setIsLocationFeatureEnabled] = useState(false);
   const [locationOptions, setLocationOptions] = useState<string[]>(["Head Office"]);
   const taxPreferenceDropdownRef = useRef<HTMLDivElement | null>(null);
@@ -538,6 +549,26 @@ const NewQuote = () => {
     const rawDigits = extractQuoteDigits(numberValue);
     const safeDigits = rawDigits ? rawDigits.padStart(6, "0") : "000001";
     return `${safePrefix}${safeDigits}`;
+  };
+  const isQuoteSeriesRow = (row: any) => {
+    const moduleValue = String(row?.module || row?.name || row?.moduleKey || "").toLowerCase();
+    return moduleValue === "quote" || moduleValue === "quotes" || moduleValue.includes("quote");
+  };
+  const resolveQuoteSeriesRow = (rows: any[]) => {
+    const quoteRows = (rows || []).filter(isQuoteSeriesRow);
+    if (!quoteRows.length) return null;
+    return (
+      quoteRows.find((row: any) => Boolean(row?.isDefault)) ||
+      quoteRows.find((row: any) => String(row?.seriesName || "").toLowerCase() === "default transaction series") ||
+      quoteRows[0]
+    );
+  };
+  const resolveSeriesNextDigits = (row: any) => {
+    const starting = String(row?.startingNumber ?? row?.nextNumber ?? "1").trim() || "1";
+    const width = /^\d+$/.test(starting) ? starting.length : 6;
+    const parsed = parseInt(starting, 10);
+    const nextValue = Number(row?.nextNumber) > 0 ? Number(row?.nextNumber) : Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+    return String(nextValue).padStart(width, "0");
   };
 
   const formatPriceListDisplayLabel = (row: any) => {
@@ -647,6 +678,11 @@ const NewQuote = () => {
   const selectedPriceListOption = catalogPriceLists.find(
     (option) => option.name === formData.selectedPriceList
   );
+  const normalizeSelectedPriceListName = (value: any) => {
+    const normalized = String(value || "").trim();
+    if (!normalized || normalized.toLowerCase() === "select price list") return "";
+    return normalized;
+  };
   const selectedPriceListDisplay =
     selectedPriceListOption?.displayLabel ||
     formData.selectedPriceList ||
@@ -664,14 +700,42 @@ const NewQuote = () => {
   });
 
   const selectedPriceList = useMemo(() => {
-    const selected = String(formData.selectedPriceList || "").trim();
-    if (!selected || selected.toLowerCase() === "select price list") return null;
+    const selected = normalizeSelectedPriceListName(formData.selectedPriceList);
+    if (!selected) return null;
     return (
       catalogPriceListsRaw.find((row: any) => String(row?.name || "").trim() === selected) ||
       catalogPriceListsRaw.find((row: any) => String(row?.id || row?._id || "").trim() === selected) ||
       null
     );
   }, [catalogPriceListsRaw, formData.selectedPriceList]);
+
+  const resolveCustomerPriceListDefault = (customer: any) => {
+    const customerPriceListId = String(customer?.priceListId || customer?.priceListID || customer?.price_list_id || "").trim();
+    const customerPriceListNameRaw = String(customer?.priceListName || customer?.priceList || customer?.price_list || "").trim();
+    const resolvedPriceList =
+      (customerPriceListId
+        ? catalogPriceListsRaw.find((row: any) => String(row?.id || row?._id || "").trim() === customerPriceListId)
+        : null) ||
+      (customerPriceListNameRaw
+        ? catalogPriceListsRaw.find((row: any) => String(row?.name || "").trim() === customerPriceListNameRaw)
+        : null) ||
+      null;
+
+    return {
+      id: resolvedPriceList ? String(resolvedPriceList?.id || resolvedPriceList?._id || customerPriceListId || "").trim() : customerPriceListId,
+      name: resolvedPriceList ? String(resolvedPriceList?.name || "").trim() : customerPriceListNameRaw,
+      currency: resolvedPriceList ? String(resolvedPriceList?.currency || "").trim() : "",
+    };
+  };
+
+  const applyResolvedPriceListChoice = (nextPriceListName: string, nextCurrency = "") => {
+    setFormData((prev) => ({
+      ...prev,
+      selectedPriceList: nextPriceListName || "Select Price List",
+      currency: nextCurrency || prev.currency,
+    }));
+    setPriceListSwitchDialog(null);
+  };
 
   const parsePercentage = (value: any) => {
     const raw = String(value || "").replace(/[^0-9.-]/g, "");
@@ -877,6 +941,7 @@ const NewQuote = () => {
             itemsResult,
             plansResult,
             quoteNumberResult,
+            txSeriesResult,
             currenciesResult,
             baseCurrencyResult,
             settingsResult,
@@ -889,6 +954,7 @@ const NewQuote = () => {
             getItemsFromAPI(),
             plansAPI.getAll({ limit: 5000 }),
             quotesAPI.getNextNumber('QT-'),
+            transactionNumberSeriesAPI.getAll({ limit: 10000 }),
             currenciesAPI.getAll(),
             isEditMode ? Promise.resolve(null) : currenciesAPI.getBaseCurrency(),
             isEditMode ? Promise.resolve(null) : settingsAPI.getQuotesSettings(),
@@ -1031,21 +1097,47 @@ const NewQuote = () => {
           setTaxes([]);
         }
 
-        if (quoteNumberResult.status === "fulfilled") {
-          const quoteNumberResponse: any = quoteNumberResult.value;
-          if (quoteNumberResponse && quoteNumberResponse.success && quoteNumberResponse.data) {
-            const quoteNumberData: any = quoteNumberResponse.data || {};
-            const serverQuoteNumber = String(quoteNumberData.quoteNumber || quoteNumberData.nextNumber || "").trim();
-            const nextFromServer = quoteNumberData.nextNumber;
-            const resolvedPrefix = deriveQuotePrefixFromNumber(serverQuoteNumber, quotePrefix);
-            const resolvedNextDigits = extractQuoteDigits(nextFromServer || serverQuoteNumber) || "000001";
-
+        let resolvedSeriesRow: any = null;
+        if (txSeriesResult.status === "fulfilled") {
+          const txSeriesResponse: any = txSeriesResult.value;
+          const rows = Array.isArray(txSeriesResponse?.data)
+            ? txSeriesResponse.data
+            : Array.isArray(txSeriesResponse?.data?.data)
+              ? txSeriesResponse.data.data
+              : Array.isArray(txSeriesResponse)
+                ? txSeriesResponse
+                : [];
+          setQuoteSeriesRows(rows);
+          resolvedSeriesRow = resolveQuoteSeriesRow(rows);
+          if (resolvedSeriesRow) {
+            setQuoteSeriesRow(resolvedSeriesRow);
+            const resolvedPrefix = sanitizeQuotePrefix(resolvedSeriesRow?.prefix || quotePrefix);
+            const resolvedNextDigits = resolveSeriesNextDigits(resolvedSeriesRow);
             setQuotePrefix(resolvedPrefix);
-            setQuoteNextNumber(String(resolvedNextDigits).padStart(6, "0"));
+            setQuoteNextNumber(resolvedNextDigits);
             setFormData(prev => ({ ...prev, quoteNumber: buildQuoteNumber(resolvedPrefix, resolvedNextDigits) }));
           }
         } else {
-          console.error("Error loading next quote number:", quoteNumberResult.reason);
+          console.error("Error loading transaction number series:", txSeriesResult.reason);
+        }
+
+        if (!resolvedSeriesRow) {
+          if (quoteNumberResult.status === "fulfilled") {
+            const quoteNumberResponse: any = quoteNumberResult.value;
+            if (quoteNumberResponse && quoteNumberResponse.success && quoteNumberResponse.data) {
+              const quoteNumberData: any = quoteNumberResponse.data || {};
+              const serverQuoteNumber = String(quoteNumberData.quoteNumber || quoteNumberData.nextNumber || "").trim();
+              const nextFromServer = quoteNumberData.nextNumber;
+              const resolvedPrefix = deriveQuotePrefixFromNumber(serverQuoteNumber, quotePrefix);
+              const resolvedNextDigits = extractQuoteDigits(nextFromServer || serverQuoteNumber) || "000001";
+
+              setQuotePrefix(resolvedPrefix);
+              setQuoteNextNumber(String(resolvedNextDigits).padStart(6, "0"));
+              setFormData(prev => ({ ...prev, quoteNumber: buildQuoteNumber(resolvedPrefix, resolvedNextDigits) }));
+            }
+          } else {
+            console.error("Error loading next quote number:", quoteNumberResult.reason);
+          }
         }
 
         if (currenciesResult.status === "fulfilled") {
@@ -1261,7 +1353,7 @@ const NewQuote = () => {
             });
 
             const subTotalValue = resolveSubtotalFromQuoteLike(quote, mappedItems);
-            const totalTaxValue = toNumberSafe(quote.taxAmount ?? quote.tax);
+            const totalTaxValue = toNumberSafe(quote.totalTax ?? quote.taxAmount ?? quote.tax);
             const normalizedDiscount = normalizeDiscountForForm(quote, subTotalValue, totalTaxValue);
 
             // Get customer name - check both customer and customerName fields
@@ -1769,24 +1861,26 @@ const NewQuote = () => {
   const handleCustomerSelect = (customer) => {
     const customerId = customer.id || customer._id;
     const customerName = customer.name || customer.displayName || customer.companyName;
+    const currentPriceListName = normalizeSelectedPriceListName(formData.selectedPriceList);
+    const customerPriceListDefault = resolveCustomerPriceListDefault(customer);
+    const nextCustomerPriceListName = normalizeSelectedPriceListName(customerPriceListDefault.name);
+    const hadExistingCustomerOrPriceList = Boolean(selectedCustomer) || Boolean(currentPriceListName);
+    const shouldPromptForPriceListChange =
+      hadExistingCustomerOrPriceList &&
+      Boolean(currentPriceListName || nextCustomerPriceListName) &&
+      currentPriceListName !== nextCustomerPriceListName;
+
     setSelectedCustomer(customer);
     const customerTaxMeta = getCustomerTaxMeta(customer);
 
     setFormData(prev => {
       const customerCurrency = (customer.currency || prev.currency || "USD").split(' - ')[0];
-
-      const customerPriceListId = String(customer?.priceListId || customer?.priceListID || customer?.price_list_id || "").trim();
-      const customerPriceListNameRaw = String(customer?.priceListName || customer?.priceList || customer?.price_list || "").trim();
-      const resolvedPriceList =
-        (customerPriceListId
-          ? catalogPriceListsRaw.find((row: any) => String(row?.id || row?._id || "").trim() === customerPriceListId)
-          : null) ||
-        (customerPriceListNameRaw
-          ? catalogPriceListsRaw.find((row: any) => String(row?.name || "").trim() === customerPriceListNameRaw)
-          : null) ||
-        null;
-      const nextPriceListName = resolvedPriceList ? String(resolvedPriceList.name || "").trim() : (customerPriceListNameRaw || prev.selectedPriceList);
-      const nextCurrency = resolvedPriceList?.currency ? String(resolvedPriceList.currency).trim() : customerCurrency;
+      const nextPriceListName = shouldPromptForPriceListChange
+        ? normalizeSelectedPriceListName(prev.selectedPriceList)
+        : (nextCustomerPriceListName || normalizeSelectedPriceListName(prev.selectedPriceList));
+      const nextCurrency = shouldPromptForPriceListChange
+        ? prev.currency
+        : (customerPriceListDefault.currency || customerCurrency);
 
       // Tax auto-select rules:
       // - If customer has a tax configured -> override item tax with customer's tax.
@@ -1813,13 +1907,25 @@ const NewQuote = () => {
       const nextState = {
         ...prev,
         customerName: customerName,
-        selectedPriceList: nextPriceListName || prev.selectedPriceList,
+        selectedPriceList: nextPriceListName || "Select Price List",
         currency: nextCurrency,
         items: updatedItems,
       };
       const totals = calculateAllTotals(updatedItems, nextState);
       return { ...nextState, ...totals };
     });
+
+    if (shouldPromptForPriceListChange) {
+      setPriceListSwitchDialog({
+        customerName,
+        currentPriceListName,
+        nextPriceListName: nextCustomerPriceListName,
+        customerCurrency: String(customer?.currency || formData.currency || "USD").split(" - ")[0],
+        nextPriceListCurrency: customerPriceListDefault.currency || "",
+      });
+    } else {
+      setPriceListSwitchDialog(null);
+    }
 
     setIsCustomerDropdownOpen(false);
     setCustomerSearch("");
@@ -1909,14 +2015,13 @@ const NewQuote = () => {
 
   const customerDefaultsAppliedRef = useRef<{
     customerId: string;
-    priceListApplied: boolean;
     taxApplied: boolean;
     priceListFetchTriggered: boolean;
-  }>({ customerId: "", priceListApplied: false, taxApplied: false, priceListFetchTriggered: false });
+  }>({ customerId: "", taxApplied: false, priceListFetchTriggered: false });
 
   useEffect(() => {
     if (!selectedCustomer) {
-      customerDefaultsAppliedRef.current = { customerId: "", priceListApplied: false, taxApplied: false, priceListFetchTriggered: false };
+      customerDefaultsAppliedRef.current = { customerId: "", taxApplied: false, priceListFetchTriggered: false };
       return;
     }
 
@@ -1924,7 +2029,7 @@ const NewQuote = () => {
     if (!selectedCustomerId) return;
 
     if (customerDefaultsAppliedRef.current.customerId !== selectedCustomerId) {
-      customerDefaultsAppliedRef.current = { customerId: selectedCustomerId, priceListApplied: false, taxApplied: false, priceListFetchTriggered: false };
+      customerDefaultsAppliedRef.current = { customerId: selectedCustomerId, taxApplied: false, priceListFetchTriggered: false };
     }
 
     const customerPriceListId = String((selectedCustomer as any)?.priceListId || (selectedCustomer as any)?.priceListID || (selectedCustomer as any)?.price_list_id || "").trim();
@@ -1936,27 +2041,6 @@ const NewQuote = () => {
         loadCatalogPriceLists();
       } catch {
         // ignore
-      }
-    }
-
-    if (!customerDefaultsAppliedRef.current.priceListApplied && (customerPriceListId || customerPriceListNameRaw) && catalogPriceListsRaw.length > 0) {
-      const resolvedPriceList =
-        (customerPriceListId
-          ? catalogPriceListsRaw.find((row: any) => String(row?.id || row?._id || "").trim() === customerPriceListId)
-          : null) ||
-        (customerPriceListNameRaw
-          ? catalogPriceListsRaw.find((row: any) => String(row?.name || "").trim() === customerPriceListNameRaw)
-          : null) ||
-        null;
-
-      const nextPriceListName = resolvedPriceList ? String(resolvedPriceList.name || "").trim() : customerPriceListNameRaw;
-      if (nextPriceListName) {
-        setFormData((prev) => {
-          const current = String(prev.selectedPriceList || "").trim();
-          if (current === nextPriceListName) return prev;
-          return { ...prev, selectedPriceList: nextPriceListName };
-        });
-        customerDefaultsAppliedRef.current.priceListApplied = true;
       }
     }
 
@@ -2906,6 +2990,16 @@ const NewQuote = () => {
     };
   };
 
+  const recalculateLineAmount = (row: any, nextRate: number, nextQuantity?: number) => {
+    if (row?.itemType === "header") return row;
+    const quantity = nextQuantity ?? (parseFloat(String(row?.quantity)) || 0);
+    return {
+      ...row,
+      rate: nextRate,
+      amount: quantity * nextRate,
+    };
+  };
+
   useEffect(() => {
     // Re-apply selected price list to all selected lines (keeps rates consistent)
     const list = selectedPriceList;
@@ -2920,14 +3014,19 @@ const NewQuote = () => {
 
         const baseRate = Number(selectedEntity?.rate ?? row.catalogRate ?? row.rate ?? 0) || 0;
         const nextRate = list ? applyPriceListToBaseRate(baseRate, list, selectedEntity) : baseRate;
-        if (Number(row.rate ?? 0) === nextRate && row.itemEntityType === (selectedEntity.entityType || row.itemEntityType) && prev.currency === nextCurrency) {
+        const nextAmount = (parseFloat(String(row?.quantity)) || 0) * nextRate;
+        if (
+          Number(row.rate ?? 0) === nextRate &&
+          Number(row.amount ?? 0) === nextAmount &&
+          row.itemEntityType === (selectedEntity.entityType || row.itemEntityType) &&
+          prev.currency === nextCurrency
+        ) {
           return row;
         }
         return {
-          ...row,
+          ...recalculateLineAmount(row, nextRate),
           itemEntityType: selectedEntity.entityType || row.itemEntityType || "item",
           catalogRate: baseRate,
-          rate: nextRate,
         };
       });
 
@@ -3710,10 +3809,136 @@ const NewQuote = () => {
       totalTax,
       discountAmount,
       shipping,
+      shippingTaxAmount,
       adjustment,
       roundOff,
       finalTotal
     };
+  };
+
+  const persistQuoteSeriesPreferences = async () => {
+    const rawDigits = extractQuoteDigits(quoteNextNumber) || "1";
+    const width = rawDigits.length >= 2 ? rawDigits.length : 6;
+    const normalizedNextDigits = rawDigits.padStart(width, "0");
+    const normalizedPrefix = sanitizeQuotePrefix(quotePrefix);
+    const normalizedNextNumberValue = parseInt(normalizedNextDigits, 10) || 1;
+
+    if (!quoteSeriesRow) {
+      try {
+        const createdResponse: any = await transactionNumberSeriesAPI.createMultiple({
+          seriesName: "Default Transaction Series",
+          locationIds: [],
+          modules: [
+            {
+              module: "Quote",
+              prefix: normalizedPrefix,
+              startingNumber: normalizedNextDigits,
+              restartNumbering: "none",
+              isDefault: true,
+              status: "Active"
+            }
+          ]
+        });
+        const createdRows = Array.isArray(createdResponse?.data) ? createdResponse.data : [];
+        if (createdRows.length) {
+          setQuoteSeriesRows(createdRows);
+          const resolved = resolveQuoteSeriesRow(createdRows);
+          if (resolved) setQuoteSeriesRow(resolved);
+        }
+      } catch (error) {
+        console.error("Failed to create transaction number series:", error);
+        throw error;
+      }
+      return;
+    }
+
+    const seriesName = String(quoteSeriesRow?.seriesName || "Default Transaction Series").trim() || "Default Transaction Series";
+    const matchingRows = (quoteSeriesRows || []).filter(
+      (row) => String(row?.seriesName || "").toLowerCase() === seriesName.toLowerCase()
+    );
+    const rowsToUpdate = matchingRows.length ? matchingRows : [quoteSeriesRow];
+    const locationIds = Array.isArray(quoteSeriesRow?.locationIds) ? quoteSeriesRow.locationIds : [];
+
+    const modules = rowsToUpdate.map((row) => {
+      const isQuoteRow = isQuoteSeriesRow(row);
+      return {
+        module: String(row?.module || row?.name || "Quote"),
+        prefix: isQuoteRow ? normalizedPrefix : String(row?.prefix || ""),
+        startingNumber: isQuoteRow ? normalizedNextDigits : String(row?.startingNumber ?? row?.nextNumber ?? "1"),
+        restartNumbering: String(row?.restartNumbering || "none").toLowerCase() || "none",
+        isDefault: Boolean(row?.isDefault),
+        status: String(row?.status || "Active")
+      };
+    });
+
+    await transactionNumberSeriesAPI.updateMultiple({
+      seriesName,
+      originalName: seriesName,
+      locationIds,
+      modules
+    });
+
+    setQuoteSeriesRows((prev) =>
+      (prev || []).map((row) => {
+        if (
+          String(row?.seriesName || "").toLowerCase() === seriesName.toLowerCase() &&
+          isQuoteSeriesRow(row)
+        ) {
+          return {
+            ...row,
+            prefix: normalizedPrefix,
+            startingNumber: normalizedNextDigits,
+            nextNumber: normalizedNextNumberValue
+          };
+        }
+        return row;
+      })
+    );
+    setQuoteSeriesRow((prev) =>
+      prev
+        ? {
+          ...prev,
+          prefix: normalizedPrefix,
+          startingNumber: normalizedNextDigits,
+          nextNumber: normalizedNextNumberValue
+        }
+        : prev
+    );
+  };
+
+  const getNextQuoteNumberForSave = async () => {
+    let quoteNumber = formData.quoteNumber;
+    if (quoteNumberMode !== "auto") return quoteNumber;
+
+    const seriesId = String(quoteSeriesRow?.id || quoteSeriesRow?._id || "").trim();
+    if (seriesId) {
+      try {
+        const seriesResponse: any = await transactionNumberSeriesAPI.getNextNumber(seriesId);
+        if (seriesResponse && seriesResponse.success && seriesResponse.data) {
+          const serverQuoteNumber = String(seriesResponse.data.nextNumber || seriesResponse.data.next_number || "").trim();
+          if (serverQuoteNumber) return serverQuoteNumber;
+        }
+      } catch (error) {
+        console.error("Error getting next quote number from series:", error);
+      }
+    }
+
+    try {
+      const quoteNumberResponse = await quotesAPI.getNextNumber(quotePrefix);
+      if (quoteNumberResponse && quoteNumberResponse.success && quoteNumberResponse.data) {
+        const quoteNumberData: any = quoteNumberResponse.data || {};
+        const serverQuoteNumber = String(quoteNumberData.quoteNumber || quoteNumberData.nextNumber || "").trim();
+        const resolvedPrefix = deriveQuotePrefixFromNumber(serverQuoteNumber, quotePrefix);
+        const resolvedNextDigits = extractQuoteDigits(quoteNumberData.nextNumber || serverQuoteNumber) || quoteNextNumber;
+        quoteNumber = buildQuoteNumber(resolvedPrefix, resolvedNextDigits);
+      }
+    } catch (error) {
+      console.error("Error getting next quote number:", error);
+      const existingQuotes = await getQuotes();
+      quoteNumber = buildQuoteNumber(quotePrefix, String(existingQuotes.length + 1));
+    }
+
+    return quoteNumber;
   };
 
   const extractSavedQuoteId = (savedQuote: any) => {
@@ -3753,6 +3978,7 @@ const NewQuote = () => {
         totalTax,
         discountAmount,
         shipping,
+        shippingTaxAmount,
         adjustment,
         roundOff,
         finalTotal
@@ -3761,21 +3987,7 @@ const NewQuote = () => {
       // Get quote number from backend (only for new quotes)
       let quoteNumber = formData.quoteNumber;
       if (!isEditMode) {
-        try {
-          const quoteNumberResponse = await quotesAPI.getNextNumber(quotePrefix);
-          if (quoteNumberResponse && quoteNumberResponse.success && quoteNumberResponse.data) {
-            const quoteNumberData: any = quoteNumberResponse.data || {};
-            const serverQuoteNumber = String(quoteNumberData.quoteNumber || quoteNumberData.nextNumber || "").trim();
-            const resolvedPrefix = deriveQuotePrefixFromNumber(serverQuoteNumber, quotePrefix);
-            const resolvedNextDigits = extractQuoteDigits(quoteNumberData.nextNumber || serverQuoteNumber) || quoteNextNumber;
-            quoteNumber = buildQuoteNumber(resolvedPrefix, resolvedNextDigits);
-          }
-        } catch (error) {
-          console.error('Error getting next quote number:', error);
-          // Fallback to local generation - await getQuotes()
-          const existingQuotes = await getQuotes();
-          quoteNumber = buildQuoteNumber(quotePrefix, String(existingQuotes.length + 1));
-        }
+        quoteNumber = await getNextQuoteNumberForSave();
       }
 
       // Prepare quote data
@@ -3812,6 +4024,7 @@ const NewQuote = () => {
         discountAccount: formData.discountAccount,
         shippingCharges: shipping,
         shippingChargeTax: String(formData.shippingChargeTax || ""),
+        shippingTaxAmount: shippingTaxAmount,
         adjustment: adjustment,
         roundOff: roundOff,
         total: finalTotal,
@@ -3884,6 +4097,7 @@ const NewQuote = () => {
         totalTax,
         discountAmount,
         shipping,
+        shippingTaxAmount,
         adjustment,
         roundOff,
         finalTotal
@@ -3891,20 +4105,7 @@ const NewQuote = () => {
 
       let quoteNumber = formData.quoteNumber;
       if (!isEditMode) {
-        try {
-          const quoteNumberResponse = await quotesAPI.getNextNumber(quotePrefix);
-          if (quoteNumberResponse && quoteNumberResponse.success && quoteNumberResponse.data) {
-            const quoteNumberData: any = quoteNumberResponse.data || {};
-            const serverQuoteNumber = String(quoteNumberData.quoteNumber || quoteNumberData.nextNumber || "").trim();
-            const resolvedPrefix = deriveQuotePrefixFromNumber(serverQuoteNumber, quotePrefix);
-            const resolvedNextDigits = extractQuoteDigits(quoteNumberData.nextNumber || serverQuoteNumber) || quoteNextNumber;
-            quoteNumber = buildQuoteNumber(resolvedPrefix, resolvedNextDigits);
-          }
-        } catch (error) {
-          console.error('Error getting next quote number:', error);
-          const existingQuotes = await getQuotes();
-          quoteNumber = buildQuoteNumber(quotePrefix, String(existingQuotes.length + 1));
-        }
+        quoteNumber = await getNextQuoteNumberForSave();
       }
 
       const quoteData = {
@@ -3936,6 +4137,7 @@ const NewQuote = () => {
         discountAccount: formData.discountAccount,
         shippingCharges: shipping,
         shippingChargeTax: String(formData.shippingChargeTax || ""),
+        shippingTaxAmount: shippingTaxAmount,
         adjustment: adjustment,
         roundOff: roundOff,
         total: finalTotal,
@@ -3974,9 +4176,9 @@ const NewQuote = () => {
       } else {
         throw new Error("Failed to save quote before sending.");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error in handleSaveAndSend:", error);
-      alert("Failed to save quote. Please try again.");
+      alert(error?.message || "Failed to save quote. Please try again.");
     } finally {
       setSaveLoading(null);
     }
@@ -5297,6 +5499,60 @@ const NewQuote = () => {
           </div>
         </div>
       </div>
+      {priceListSwitchDialog && typeof document !== "undefined" && document.body && createPortal(
+        <div className="fixed inset-0 z-[12100] bg-slate-900/35">
+          <div className="flex min-h-full items-start justify-center px-4 pt-6">
+            <div className="w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+              <div className="flex items-start gap-4 border-b border-slate-200 px-5 py-6">
+                <div className="mt-0.5 rounded-full bg-amber-100 p-2 text-amber-600">
+                  <AlertTriangle size={20} />
+                </div>
+                <div className="flex-1 pr-6">
+                  <p className="text-base font-semibold text-slate-900">
+                    {priceListSwitchDialog.nextPriceListName
+                      ? "You have selected a customer with a different price list."
+                      : "You have selected a customer without a price list."}
+                  </p>
+                  <p className="mt-2 text-sm leading-7 text-slate-700">
+                    {priceListSwitchDialog.nextPriceListName
+                      ? `${priceListSwitchDialog.customerName} uses "${priceListSwitchDialog.nextPriceListName}". You can apply this new price list to update item rates and discounts on the quote, or keep the existing price list "${priceListSwitchDialog.currentPriceListName}".`
+                      : `${priceListSwitchDialog.customerName} does not have a saved price list. You can clear the current quote price list "${priceListSwitchDialog.currentPriceListName}" and use the standard item rates, or keep the existing price list.`}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  onClick={() => setPriceListSwitchDialog(null)}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 px-5 py-5">
+                <button
+                  type="button"
+                  className="rounded-md bg-[#156372] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#0f4f5b]"
+                  onClick={() => applyResolvedPriceListChoice(
+                    priceListSwitchDialog.nextPriceListName,
+                    priceListSwitchDialog.nextPriceListName
+                      ? (priceListSwitchDialog.nextPriceListCurrency || priceListSwitchDialog.customerCurrency)
+                      : priceListSwitchDialog.customerCurrency
+                  )}
+                >
+                  {priceListSwitchDialog.nextPriceListName ? "Apply New Price List" : "Clear Price List"}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  onClick={() => setPriceListSwitchDialog(null)}
+                >
+                  Keep Existing Price List
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Address Modal */}
       {isAddressModalOpen && (
@@ -6289,12 +6545,25 @@ const NewQuote = () => {
 
               <div className="flex items-center gap-2 px-4 py-4 border-t border-gray-200">
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     if (quoteNumberMode === "auto") {
+                      const nextDigits = extractQuoteDigits(quoteNextNumber) || "1";
+                      const width = nextDigits.length >= 2 ? nextDigits.length : 6;
+                      const normalizedDigits = nextDigits.padStart(width, "0");
+                      const normalizedPrefix = sanitizeQuotePrefix(quotePrefix);
+                      setQuoteNextNumber(normalizedDigits);
+                      setQuotePrefix(normalizedPrefix);
                       setFormData(prev => ({
                         ...prev,
-                        quoteNumber: buildQuoteNumber(quotePrefix, quoteNextNumber)
+                        quoteNumber: buildQuoteNumber(normalizedPrefix, normalizedDigits)
                       }));
+                      try {
+                        await persistQuoteSeriesPreferences();
+                        toast.success("Quote number series updated.");
+                      } catch (error) {
+                        console.error("Error saving quote number series:", error);
+                        toast.error("Failed to save quote number series.");
+                      }
                     }
                     setIsQuoteNumberModalOpen(false);
                   }}

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Calculator, CalendarDays, ChevronDown, ChevronRight, ChevronUp, Image as ImageIcon, Info, MoreVertical, PlusCircle, Search, Settings, ShoppingBag, Tag, Upload, X } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Customer, Salesperson, getCustomers, getPlansFromAPI, getQuotes, getSalespersonsFromAPI, getTaxesFromAPI, saveQuote, saveSalesperson, saveTax } from "../../salesModel";
-import { customersAPI, quotesAPI, reportingTagsAPI, priceListsAPI } from "../../../../services/api";
+import { customersAPI, quotesAPI, reportingTagsAPI, priceListsAPI, productsAPI } from "../../../../services/api";
 import { createTaxLocal, readTaxesLocal } from "../../../settings/organization-settings/taxes-compliance/TAX/storage";
 import { Country, State } from "country-state-city";
 
@@ -50,6 +50,9 @@ type PlanAddonOption = {
   productId?: string;
   productName: string;
   rate: number;
+  taxSelection?: string;
+  taxName?: string;
+  taxRate?: number;
   status?: string;
   active?: boolean;
 };
@@ -64,6 +67,12 @@ type CouponOption = {
   active?: boolean;
   product?: string;
   productId?: string;
+};
+
+type PriceListSwitchDialogState = {
+  customerName: string;
+  currentPriceListName: string;
+  nextPriceListName: string;
 };
 
 const inputClass =
@@ -141,6 +150,7 @@ export default function SubscriptionQuote() {
   const [isPriceListDropdownOpen, setIsPriceListDropdownOpen] = useState(false);
   const priceListDropdownRef = useRef<HTMLDivElement | null>(null);
   const [catalogPriceLists, setCatalogPriceLists] = useState<any[]>([]);
+  const [priceListSwitchDialog, setPriceListSwitchDialog] = useState<PriceListSwitchDialogState | null>(null);
   const [isCouponDropdownOpen, setIsCouponDropdownOpen] = useState(false);
   const couponDropdownRef = useRef<HTMLTableCellElement | null>(null);
   const [couponSearch, setCouponSearch] = useState("");
@@ -207,6 +217,30 @@ export default function SubscriptionQuote() {
     );
   }, [catalogPriceLists, formData.priceList]);
 
+  const normalizeSelectedPriceListName = (value: any) => {
+    const normalized = String(value || "").trim();
+    if (!normalized || normalizeText(normalized) === "select price list") return "";
+    return normalized;
+  };
+
+  const resolveCustomerPriceListDefault = (customer: any) => {
+    const customerPriceListId = String(customer?.priceListId || customer?.priceListID || customer?.price_list_id || "").trim();
+    const customerPriceListNameRaw = String(customer?.priceListName || customer?.priceList || customer?.price_list || "").trim();
+    const resolvedPriceList =
+      (customerPriceListId
+        ? catalogPriceLists.find((row: any) => String(row?.id || row?._id || "").trim() === customerPriceListId)
+        : null) ||
+      (customerPriceListNameRaw
+        ? catalogPriceLists.find((row: any) => String(row?.name || "").trim() === customerPriceListNameRaw)
+        : null) ||
+      null;
+
+    return {
+      id: String(resolvedPriceList?.id || resolvedPriceList?._id || customerPriceListId || "").trim(),
+      name: String(resolvedPriceList?.name || customerPriceListNameRaw || "").trim(),
+    };
+  };
+
   const parsePercentage = (value: any) => {
     const raw = String(value || "").replace(/[^0-9.-]/g, "");
     const num = Number(raw);
@@ -260,6 +294,75 @@ export default function SubscriptionQuote() {
     const type = String(priceList.markupType || "").toLowerCase();
     const next = type === "markdown" ? baseRate * (1 - pct / 100) : baseRate * (1 + pct / 100);
     return applyRounding(next, priceList.roundOffTo || "Never mind");
+  };
+
+  const parseTaxRate = (value: any) => {
+    const raw = String(value ?? "").trim();
+    if (!raw) return 0;
+    const percentMatch = raw.match(/-?\d+(\.\d+)?/);
+    const parsed = Number(percentMatch ? percentMatch[0] : raw);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const getTaxBySelection = (taxValue: any): any => {
+    const valueStr = String(taxValue || "").trim();
+    if (!valueStr) return null;
+
+    const direct = taxes.find((tax: any) => {
+      const id = String(tax?.id || tax?._id || "").trim();
+      const name = String(tax?.name || tax?.taxName || "").trim().toLowerCase();
+      return id === valueStr || name === valueStr.toLowerCase();
+    });
+    if (direct) return direct;
+
+    const numericRate = parseTaxRate(valueStr);
+    if (numericRate > 0) {
+      const byRate = taxes.find((tax: any) => Number(tax?.rate || 0) === numericRate);
+      if (byRate) return byRate;
+    }
+
+    return null;
+  };
+
+  const formatTaxLabel = (tax: any) => {
+    if (!tax) return "";
+    const name = String(tax?.name || tax?.taxName || "").trim();
+    const rate = Number(tax?.rate ?? tax?.taxRate ?? 0) || 0;
+    if (!name) return "";
+    return `${name} [${rate}%]`;
+  };
+
+  const getCustomerTaxLabel = (customer: any) => {
+    const raw = String(customer?.taxRate || customer?.taxId || customer?.tax || "").trim();
+    if (!raw) return "";
+    const matched = getTaxBySelection(raw);
+    if (matched) return formatTaxLabel(matched);
+    const parsedRate = parseTaxRate(raw);
+    if (parsedRate > 0) return raw.includes("[") ? raw : `Tax [${parsedRate}%]`;
+    return "";
+  };
+
+  const getPlanAddonTaxLabel = (row: PlanAddonOption | null) => {
+    if (!row) return "";
+    const rawSelection = String(row.taxSelection || "").trim();
+    if (rawSelection) {
+      const matched = getTaxBySelection(rawSelection);
+      if (matched) return formatTaxLabel(matched);
+    }
+    const explicitName = String(row.taxName || "").trim();
+    const explicitRate = Number(row.taxRate ?? 0) || 0;
+    if (explicitName && explicitRate > 0) return `${explicitName} [${explicitRate}%]`;
+    if (explicitName) return explicitName;
+    if (explicitRate > 0) return `Tax [${explicitRate}%]`;
+    return "";
+  };
+
+  const applyResolvedPriceListChoice = (nextPriceListName: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      priceList: nextPriceListName || "Select Price List",
+    }));
+    setPriceListSwitchDialog(null);
   };
 
   const sanitizeQuotePrefix = (value: any) => String(value || "QT-").trim() || "QT-";
@@ -364,6 +467,37 @@ export default function SubscriptionQuote() {
       productName: String(row?.productName || sourceName || "").trim(),
     };
   };
+  const mapProductsRows = (rows: any[]): ProductOption[] =>
+    rows
+      .map((row: any, idx: number) => {
+        const statusValue =
+          row?.status ??
+          row?.Status ??
+          row?.productStatus ??
+          row?.state ??
+          row?.statusLabel ??
+          row?.statusText;
+        const rawActive =
+          row?.active ??
+          row?.isActive ??
+          row?.is_active ??
+          row?.enabled;
+        const rawInactive =
+          row?.inactive ??
+          row?.isInactive ??
+          row?.is_inactive ??
+          row?.disabled;
+        const activeValue =
+          typeof rawInactive !== "undefined" ? !rawInactive : rawActive;
+        return {
+          id: String(row?.id || row?._id || `prod-${idx}`),
+          name: String(row?.name || row?.productName || row?.product || "").trim(),
+          code: String(row?.code || row?.sku || row?.productCode || "").trim(),
+          status: String(statusValue || ""),
+          active: typeof activeValue === "boolean" ? activeValue : undefined,
+        };
+      })
+      .filter((row: ProductOption) => row.name);
 
   const formatDateForDisplay = (raw: string) => {
     if (!raw) return "";
@@ -469,19 +603,34 @@ export default function SubscriptionQuote() {
   }, [customers, location.key]);
 
   useEffect(() => {
-    const readProducts = () => {
+    const readProducts = async () => {
       try {
-        const rows = readRows("inv_products_v1");
-        const mapped = rows
-          .map((row: any, idx: number) => ({
-            id: String(row?.id || row?._id || `prod-${idx}`),
-            name: String(row?.name || row?.productName || row?.product || "").trim(),
-            code: String(row?.code || row?.productCode || row?.sku || "").trim(),
-            status: String(row?.status || ""),
-            active: typeof row?.active === "boolean" ? row.active : undefined,
-          }))
-          .filter((row: ProductOption) => row.name);
-        setProducts(mapped);
+        const localRows = mapProductsRows(readRows("inv_products_v1"));
+        if (localRows.length) setProducts(localRows);
+
+        try {
+          const response: any = await productsAPI.list({ limit: 5000 });
+          const rows =
+            response?.success && Array.isArray(response?.data)
+              ? response.data
+              : Array.isArray(response?.data)
+                ? response.data
+                : Array.isArray(response)
+                  ? response
+                  : [];
+          const apiRows = mapProductsRows(rows);
+
+          if (apiRows.length) {
+            const merged = new Map<string, ProductOption>();
+            apiRows.forEach((row) => merged.set(String(row.id), row));
+            localRows.forEach((row) => {
+              if (!merged.has(String(row.id))) merged.set(String(row.id), row);
+            });
+            setProducts(Array.from(merged.values()));
+          }
+        } catch (error) {
+          console.error("Error loading products from API:", error);
+        }
       } catch {
         setProducts([]);
       }
@@ -516,6 +665,9 @@ export default function SubscriptionQuote() {
             type: "plan" as const,
             ...extractProductLink(row),
             rate: Number(row?.price ?? row?.rate ?? 0) || 0,
+            taxSelection: String(row?.taxInfo?.taxId || row?.taxId || row?.salesTaxId || row?.tax || row?.salesTax || "").trim(),
+            taxName: String(row?.taxName || row?.taxInfo?.taxName || "").trim(),
+            taxRate: Number(row?.taxRate ?? row?.taxInfo?.taxRate ?? row?.salesTaxRate ?? 0) || 0,
             status: String(row?.status || "active"),
             active: row?.status ? String(row.status).toLowerCase() === "active" : undefined,
           }))
@@ -530,6 +682,9 @@ export default function SubscriptionQuote() {
             type: "addon" as const,
             ...extractProductLink(row),
             rate: Number(row?.price ?? row?.rate ?? row?.recurringPrice ?? 0) || 0,
+            taxSelection: String(row?.taxInfo?.taxId || row?.taxId || row?.salesTaxId || row?.tax || row?.salesTax || "").trim(),
+            taxName: String(row?.taxName || row?.taxInfo?.taxName || "").trim(),
+            taxRate: Number(row?.taxRate ?? row?.taxInfo?.taxRate ?? row?.salesTaxRate ?? 0) || 0,
             status: String(row?.status || ""),
             active: typeof row?.active === "boolean" ? row.active : undefined,
           }))
@@ -546,6 +701,9 @@ export default function SubscriptionQuote() {
             type: "plan" as const,
             ...extractProductLink(row),
             rate: Number(row?.price ?? row?.rate ?? 0) || 0,
+            taxSelection: String(row?.taxInfo?.taxId || row?.taxId || row?.salesTaxId || row?.tax || row?.salesTax || "").trim(),
+            taxName: String(row?.taxName || row?.taxInfo?.taxName || "").trim(),
+            taxRate: Number(row?.taxRate ?? row?.taxInfo?.taxRate ?? row?.salesTaxRate ?? 0) || 0,
             status: String(row?.status || "active"),
             active: row?.status ? String(row.status).toLowerCase() === "active" : undefined,
           }))
@@ -560,6 +718,9 @@ export default function SubscriptionQuote() {
             type: "addon" as const,
             ...extractProductLink(row),
             rate: Number(row?.price ?? row?.rate ?? row?.recurringPrice ?? 0) || 0,
+            taxSelection: String(row?.taxInfo?.taxId || row?.taxId || row?.salesTaxId || row?.tax || row?.salesTax || "").trim(),
+            taxName: String(row?.taxName || row?.taxInfo?.taxName || "").trim(),
+            taxRate: Number(row?.taxRate ?? row?.taxInfo?.taxRate ?? row?.salesTaxRate ?? 0) || 0,
             status: String(row?.status || ""),
             active: typeof row?.active === "boolean" ? row.active : undefined,
           }))
@@ -836,8 +997,6 @@ export default function SubscriptionQuote() {
         rate: taxRate,
         type: "tax",
         isCompound: newTaxForm.isCompound,
-        isActive: true,
-        status: "Active",
       });
       const selectedName = String(savedTax?.name || taxName).trim();
       const selectedRate = Number(savedTax?.rate ?? taxRate) || 0;
@@ -1211,24 +1370,35 @@ export default function SubscriptionQuote() {
 
   const handleCustomerSelect = (customer: any) => {
     const name = displayCustomerName(customer);
-    updateField("customerName", name);
+    const currentPriceListName = normalizeSelectedPriceListName(formData.priceList);
+    const customerPriceListDefault = resolveCustomerPriceListDefault(customer);
+    const nextCustomerPriceListName = normalizeSelectedPriceListName(customerPriceListDefault.name);
+    const hadExistingCustomerOrPriceList = Boolean(selectedCustomer) || Boolean(currentPriceListName);
+    const shouldPromptForPriceListChange =
+      hadExistingCustomerOrPriceList &&
+      Boolean(currentPriceListName || nextCustomerPriceListName) &&
+      currentPriceListName !== nextCustomerPriceListName;
+    const customerTaxLabel = getCustomerTaxLabel(customer);
+    const selectedPlanTaxLabel = getPlanAddonTaxLabel(selectedPlanAddon);
 
-    const customerPriceListId = String(customer?.priceListId || customer?.priceListID || customer?.price_list_id || "").trim();
-    const customerPriceListNameRaw = String(customer?.priceListName || customer?.priceList || customer?.price_list || "").trim();
-    const resolvedPriceList =
-      (customerPriceListId
-        ? catalogPriceLists.find((row: any) => String(row?.id || row?._id || "").trim() === customerPriceListId)
-        : null) ||
-      (customerPriceListNameRaw
-        ? catalogPriceLists.find((row: any) => String(row?.name || "").trim() === customerPriceListNameRaw)
-        : null) ||
-      null;
-    if (resolvedPriceList?.name) {
-      updateField("priceList", String(resolvedPriceList.name));
-    } else if (customerPriceListNameRaw) {
-      updateField("priceList", customerPriceListNameRaw as any);
+    setFormData((prev) => ({
+      ...prev,
+      customerName: name,
+      priceList: shouldPromptForPriceListChange
+        ? (normalizeSelectedPriceListName(prev.priceList) || "Select Price List")
+        : (nextCustomerPriceListName || normalizeSelectedPriceListName(prev.priceList) || "Select Price List"),
+      tax: customerTaxLabel || selectedPlanTaxLabel || prev.tax,
+    }));
+
+    if (shouldPromptForPriceListChange) {
+      setPriceListSwitchDialog({
+        customerName: name,
+        currentPriceListName,
+        nextPriceListName: nextCustomerPriceListName,
+      });
+    } else {
+      setPriceListSwitchDialog(null);
     }
-
     setSelectedCustomer(customer);
     setCustomerSearch("");
     setIsCustomerDropdownOpen(false);
@@ -1259,10 +1429,16 @@ export default function SubscriptionQuote() {
 
   const handlePlanAddonSelect = (row: PlanAddonOption) => {
     setSelectedPlanAddon(row);
-    updateField("plan", row.name);
     const baseRate = Number(row.rate || 0);
     const nextRate = selectedPriceList ? applyPriceListToBaseRate(baseRate, selectedPriceList, row) : baseRate;
-    updateField("rate", nextRate.toFixed(2));
+    const customerTaxLabel = selectedCustomer ? getCustomerTaxLabel(selectedCustomer) : "";
+    const planTaxLabel = getPlanAddonTaxLabel(row);
+    setFormData((prev) => ({
+      ...prev,
+      plan: row.name,
+      rate: nextRate.toFixed(2),
+      tax: customerTaxLabel || planTaxLabel || prev.tax,
+    }));
     setPlanAddonSearch("");
     setIsPlanAddonDropdownOpen(false);
   };
@@ -1272,11 +1448,14 @@ export default function SubscriptionQuote() {
     const baseRate = Number(selectedPlanAddon.rate || 0);
     const nextRate = selectedPriceList ? applyPriceListToBaseRate(baseRate, selectedPriceList, selectedPlanAddon) : baseRate;
     const nextRateText = nextRate.toFixed(2);
+    const customerTaxLabel = selectedCustomer ? getCustomerTaxLabel(selectedCustomer) : "";
+    const planTaxLabel = getPlanAddonTaxLabel(selectedPlanAddon);
     setFormData((prev) => {
-      if (String(prev.rate || "").trim() === nextRateText) return prev;
-      return { ...prev, rate: nextRateText };
+      const nextTax = customerTaxLabel || planTaxLabel || prev.tax;
+      if (String(prev.rate || "").trim() === nextRateText && String(prev.tax || "").trim() === String(nextTax || "").trim()) return prev;
+      return { ...prev, rate: nextRateText, tax: nextTax };
     });
-  }, [selectedPriceList, selectedPlanAddon]);
+  }, [selectedPriceList, selectedPlanAddon, selectedCustomer, taxes]);
 
   const formatCouponValue = (coupon: CouponOption) => {
     const isPercent = normalizeText(coupon.discountType).includes("percent");
@@ -3118,6 +3297,53 @@ export default function SubscriptionQuote() {
                 className="rounded border border-slate-300 bg-white px-4 py-1.5 text-[12px] text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {priceListSwitchDialog && (
+        <div className="fixed inset-0 z-[12100] flex items-start justify-center bg-black/35 px-4 pt-16" onClick={() => setPriceListSwitchDialog(null)}>
+          <div className="w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-4 border-b border-slate-200 px-5 py-6">
+              <div className="mt-0.5 rounded-full bg-amber-100 p-2 text-amber-600">
+                <AlertTriangle size={20} />
+              </div>
+              <div className="flex-1 pr-6">
+                <p className="text-base font-semibold text-slate-900">
+                  {priceListSwitchDialog.nextPriceListName
+                    ? "You have selected a customer with a different price list."
+                    : "You have selected a customer without a price list."}
+                </p>
+                <p className="mt-2 text-sm leading-7 text-slate-700">
+                  {priceListSwitchDialog.nextPriceListName
+                    ? `${priceListSwitchDialog.customerName} uses "${priceListSwitchDialog.nextPriceListName}". You can apply this new price list to update the selected plan or add-on rate, or keep the existing price list "${priceListSwitchDialog.currentPriceListName}".`
+                    : `${priceListSwitchDialog.customerName} does not have a saved price list. You can clear the current subscription quote price list "${priceListSwitchDialog.currentPriceListName}" and use the standard plan or add-on rate, or keep the existing price list.`}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                onClick={() => setPriceListSwitchDialog(null)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 px-5 py-5">
+              <button
+                type="button"
+                className="rounded-md bg-[#156372] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#0f4f5b]"
+                onClick={() => applyResolvedPriceListChoice(priceListSwitchDialog.nextPriceListName)}
+              >
+                {priceListSwitchDialog.nextPriceListName ? "Apply New Price List" : "Clear Price List"}
+              </button>
+              <button
+                type="button"
+                className="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                onClick={() => setPriceListSwitchDialog(null)}
+              >
+                Keep Existing Price List
               </button>
             </div>
           </div>

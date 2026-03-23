@@ -1217,6 +1217,7 @@ const mapQuoteFromApi = (quote: any): Quote => {
     quoteNumber: quote?.quoteNumber,
     customerId: quote?.customer?._id || quote?.customer,
     customerName: customerName || quote?.customerName || '',
+    customerEmail: String(quote?.customerEmail || quote?.email || quote?.customer?.email || quote?.customer?.primaryEmail || '').trim(),
     priceListId: String(quote?.priceListId || quote?.priceList?._id || quote?.priceList?.id || ""),
     priceListName: String(quote?.priceListName || quote?.priceList?.name || ""),
     customer: quote?.customer,
@@ -1350,11 +1351,12 @@ export const saveQuote = async (quoteData: Partial<Quote>): Promise<Quote> => {
     if (apiData.quoteDate && apiData.date) delete apiData.quoteDate;
 
     console.log('Sending quote data to API:', apiData);
-    const response = await quotesAPI.create(apiData);
+    const response: any = await quotesAPI.create(apiData);
     if (response && response.success && response.data) {
       return mapQuoteFromApi(response.data);
     }
-    throw new Error('Failed to save quote: Invalid response from API');
+    const apiMessage = response?.message || response?.data?.message || response?.error || "Invalid response from API";
+    throw new Error(`Failed to save quote: ${apiMessage}`);
   } catch (error) {
     console.error("Error saving quote to API:", error);
     throw error;
@@ -1470,11 +1472,12 @@ export const updateQuote = async (quoteId: string, quoteData: Partial<Quote>): P
       apiData.adjustment = parseFloat(String(quoteData.adjustment || 0)) || 0;
     }
 
-    const response = await quotesAPI.update(quoteId, apiData);
+    const response: any = await quotesAPI.update(quoteId, apiData);
     if (response && response.success && response.data) {
       return mapQuoteFromApi(response.data);
     }
-    throw new Error('Failed to update quote: Invalid response from API');
+    const apiMessage = response?.message || response?.data?.message || response?.error || "Invalid response from API";
+    throw new Error(`Failed to update quote: ${apiMessage}`);
   } catch (error) {
     console.error("Error updating quote via API:", error);
     throw error;
@@ -1502,7 +1505,8 @@ export const deleteQuotes = async (quoteIds: string[]): Promise<Quote[]> => {
       // Return updated list
       return await getQuotes();
     }
-    throw new Error('Failed to delete quotes');
+    const apiMessage = (response as any)?.message || (response as any)?.data?.message || "Failed to delete quotes";
+    throw new Error(apiMessage);
   } catch (error) {
     console.error("Error deleting quotes via API:", error);
     throw error;

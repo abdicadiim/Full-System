@@ -49,21 +49,27 @@ const QuoteSchema = new mongoose.Schema(
     }],
 
     subTotal: { type: Number, default: 0 },
+    subtotal: { type: Number, default: 0 },
     totalTax: { type: Number, default: 0 },
+    taxAmount: { type: Number, default: 0 },
     total: { type: Number, default: 0 },
     
     discount: { type: Number, default: 0 },
     discountType: { type: String, default: "percent" },
+    discountAmount: { type: Number, default: 0 },
     discountAccount: { type: String, default: "" },
     
     shippingCharges: { type: Number, default: 0 },
     shippingChargeTax: { type: String, default: "" },
+    shippingTaxAmount: { type: Number, default: 0 },
     
     adjustment: { type: Number, default: 0 },
     roundOff: { type: Number, default: 0 },
     
     customerNotes: { type: String, default: "" },
     termsAndConditions: { type: String, default: "" },
+    attachedFiles: { type: Array, default: [] },
+    customerEmail: { type: String, default: "" },
 
     // Tracking for Billing vs Invoice system if needed
     source: { type: String, default: "Billing", index: true }

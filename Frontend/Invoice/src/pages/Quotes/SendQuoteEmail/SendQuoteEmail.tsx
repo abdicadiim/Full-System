@@ -24,7 +24,7 @@ import {
   Check
 } from "lucide-react";
 import { getQuoteById, updateQuote, Quote, ContactPerson, AttachedFile } from "../../salesModel";
-import { emailTemplatesAPI, quotesAPI, contactPersonsAPI, senderEmailsAPI } from "../../../services/api";
+import { emailTemplatesAPI, quotesAPI, contactPersonsAPI, senderEmailsAPI, customersAPI } from "../../../services/api";
 import { API_BASE_URL, getToken } from "../../../services/auth";
 import { applyEmailTemplate } from "../../settings/emailTemplateUtils";
 
@@ -75,6 +75,9 @@ export default function SendQuoteEmail() {
   });
   const contactDropdownRef = useRef<HTMLDivElement>(null);
   const preloadedQuoteFromState = (location.state as { preloadedQuote?: Quote } | null)?.preloadedQuote;
+  const prefilledRecipientFromState = String(
+    (location.state as any)?.customerEmail || (location.state as any)?.sendTo || ""
+  ).trim();
 
   const safeParseJson = (value: string | null) => {
     if (!value) return null;
@@ -277,9 +280,26 @@ export default function SendQuoteEmail() {
           console.error("Error loading quote email template:", templateResult.reason);
         }
 
+        let resolvedRecipient =
+          prefilledRecipientFromState ||
+          quoteData.customer?.email ||
+          quoteData.customer?.primaryEmail ||
+          quoteData.customerEmail ||
+          "";
+
+        if (!resolvedRecipient && customerId) {
+          try {
+            const customerRes: any = await customersAPI.getById(String(customerId));
+            const customerRow: any = customerRes?.data?.customer || customerRes?.data || customerRes;
+            resolvedRecipient = String(customerRow?.email || customerRow?.primaryEmail || "").trim();
+          } catch (customerError) {
+            console.error("Error loading customer for quote email:", customerError);
+          }
+        }
+
         setEmailData({
           from: resolvedSenderEmail ? `"${resolvedSenderName}" <${resolvedSenderEmail}>` : resolvedSenderName,
-          sendTo: quoteData.customer?.email || quoteData.customerEmail || "",
+          sendTo: resolvedRecipient,
           cc: "",
           bcc: "",
           subject: templateSubject,

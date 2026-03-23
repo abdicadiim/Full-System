@@ -1,8 +1,12 @@
 import type express from "express";
 import mongoose from "mongoose";
 import { Quote } from "../models/Quote.js";
+import { SenderEmail } from "../models/SenderEmail.js";
+import { Organization } from "../models/Organization.js";
+import { sendSmtpMail } from "../services/smtpMailer.js";
 
 const asString = (v: unknown) => (typeof v === "string" ? v : "");
+const normalizeEmail = (value: unknown) => String(typeof value === "string" ? value : "").trim().toLowerCase();
 const asNumber = (v: unknown) => (typeof v === "number" ? v : 0);
 const asDate = (v: unknown) => (v ? new Date(String(v)) : null);
 
@@ -18,6 +22,29 @@ const requireOrgId = (req: express.Request, res: express.Response) => {
 const normalizeRow = (row: any) => {
   if (!row) return row;
   return { ...row, id: String(row._id) };
+};
+
+const pickSmtpSender = async (organizationId: any) => {
+  const primary: any = await SenderEmail.findOne({
+    organizationId,
+    isPrimary: true,
+    smtpHost: { $ne: "" },
+    smtpUser: { $ne: "" },
+    smtpPassword: { $ne: "" },
+    smtpPort: { $gt: 0 },
+  }).lean();
+  if (primary) return primary;
+
+  const fallback: any = await SenderEmail.findOne({
+    organizationId,
+    smtpHost: { $ne: "" },
+    smtpUser: { $ne: "" },
+    smtpPassword: { $ne: "" },
+    smtpPort: { $gt: 0 },
+  })
+    .sort({ isPrimary: -1, createdAt: -1 })
+    .lean();
+  return fallback || null;
 };
 
 export const listQuotes: express.RequestHandler = async (req, res) => {
@@ -157,6 +184,21 @@ export const deleteQuote: express.RequestHandler = async (req, res) => {
   return res.json({ success: true, data: { id } });
 };
 
+export const bulkDeleteQuotes: express.RequestHandler = async (req, res) => {
+  const orgId = requireOrgId(req, res);
+  if (!orgId) return;
+
+  const ids = Array.isArray(req.body?.ids) ? (req.body.ids as unknown[]) : [];
+  const objectIds = ids
+    .filter((id) => mongoose.isValidObjectId(id))
+    .map((id) => new mongoose.Types.ObjectId(String(id)));
+
+  if (!objectIds.length) return res.json({ success: true, data: { ids: [] } });
+
+  await Quote.deleteMany({ organizationId: orgId, _id: { $in: objectIds } });
+  return res.json({ success: true, data: { ids: objectIds.map((id) => String(id)) } });
+};
+
 export const getNextQuoteNumber: express.RequestHandler = async (req, res) => {
   const orgId = requireOrgId(req, res);
   if (!orgId) return;
@@ -176,4 +218,89 @@ export const getNextQuoteNumber: express.RequestHandler = async (req, res) => {
 
   const nextNumber = `${prefix}${String(nextNo).padStart(6, "0")}`;
   return res.json({ success: true, data: { nextNumber } });
+};
+
+export const sendQuoteEmail: express.RequestHandler = async (req, res) => {
+  const orgId = requireOrgId(req, res);
+  if (!orgId) return;
+
+  const id = String(req.params.id || "").trim();
+  if (!id) return res.status(400).json({ success: false, message: "Invalid quote id", data: null });
+
+  const quote: any = await Quote.findOne({ _id: id, organizationId: orgId }).lean();
+  if (!quote) return res.status(404).json({ success: false, message: "Quote not found", data: null });
+
+  const to = normalizeEmail(req.body?.to);
+  if (!to || !to.includes("@")) {
+    return res.status(400).json({ success: false, message: "Recipient email is required", data: null });
+  }
+
+  const sender = await pickSmtpSender(orgId);
+  if (!sender) {
+    return res.status(400).json({
+      success: false,
+      message: "SMTP sender is not configured. Go to Settings > Emails > New Sender and add SMTP Host/User/Password.",
+      data: null,
+    });
+  }
+
+  const org: any = await Organization.findById(orgId).lean();
+  const orgName = String(org?.name || "Organization");
+  const senderEmail = String(sender.email || sender.smtpUser || "").trim();
+  const fromHeaderRaw = String(req.body?.from || "").trim();
+  const fromHeader =
+    fromHeaderRaw && fromHeaderRaw.includes("@")
+      ? fromHeaderRaw
+      : senderEmail
+        ? `${orgName} <${senderEmail}>`
+        : fromHeaderRaw;
+
+  const subject = String(req.body?.subject || `Quote ${quote.quoteNumber || ""}`).trim();
+  const htmlBody = String(req.body?.body || "").trim();
+  const textBody = htmlBody ? htmlBody.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim() : subject;
+
+  const rawAttachments = Array.isArray(req.body?.attachments) ? req.body.attachments : [];
+  const attachments = rawAttachments
+    .map((att: any, index: number) => {
+      const filename = String(att?.filename || att?.name || `attachment-${index + 1}`).trim() || `attachment-${index + 1}`;
+      const contentType = String(att?.contentType || att?.type || "application/octet-stream").trim();
+      const raw = String(att?.content || att?.contentBase64 || "").trim();
+      if (!raw) return null;
+      const cleaned = raw.includes(",") ? raw.split(",").pop() || raw : raw;
+      const cid = `quote_${Date.now()}_${index}`;
+      return {
+        cid,
+        filename,
+        contentType,
+        contentBase64: cleaned,
+        disposition: "attachment" as const
+      };
+    })
+    .filter(Boolean);
+
+  const result = await sendSmtpMail(
+    {
+      host: String(sender.smtpHost || ""),
+      port: Number(sender.smtpPort || 0),
+      secure: Boolean(sender.smtpSecure),
+      user: String(sender.smtpUser || ""),
+      pass: String(sender.smtpPassword || ""),
+    },
+    {
+      from: fromHeader || senderEmail,
+      to,
+      subject,
+      text: textBody,
+      html: htmlBody,
+      attachments
+    }
+  );
+
+  if (!result.ok) {
+    return res.status(400).json({ success: false, message: result.error || "Failed to send email", data: result.debug || null });
+  }
+
+  await Quote.updateOne({ _id: id, organizationId: orgId }, { $set: { status: "Sent" } });
+
+  return res.json({ success: true, data: { id, status: "Sent" } });
 };

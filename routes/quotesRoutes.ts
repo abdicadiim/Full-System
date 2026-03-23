@@ -5,7 +5,9 @@ import {
   createQuote,
   updateQuote,
   deleteQuote,
-  getNextQuoteNumber
+  getNextQuoteNumber,
+  sendQuoteEmail,
+  bulkDeleteQuotes
 } from "../controllers/quotesController.js";
 import { requireAuth } from "../midelwares/requireAuth.js";
 
@@ -17,6 +19,8 @@ router.get("/next-number", getNextQuoteNumber);
 router.get("/", listQuotes);
 router.get("/:id", getQuoteById);
 router.post("/", createQuote);
+router.post("/bulk-delete", bulkDeleteQuotes);
+router.post("/:id/send-email", sendQuoteEmail);
 router.put("/:id", updateQuote);
 router.delete("/:id", deleteQuote);
 

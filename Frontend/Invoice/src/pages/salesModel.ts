@@ -1342,6 +1342,7 @@ const mapQuoteFromApi = (quote: any): Quote => {
     quoteNumber: quote?.quoteNumber,
     customerId: customerId ? String(customerId) : "",
     customerName: customerName,
+    customerEmail: String(quote?.customerEmail || quote?.email || quote?.customer?.email || quote?.customer?.primaryEmail || "").trim(),
     priceListId: String(quote?.priceListId || quote?.priceList?._id || quote?.priceList?.id || ""),
     priceListName: String(quote?.priceListName || quote?.priceList?.name || ""),
     customer: quote?.customer,

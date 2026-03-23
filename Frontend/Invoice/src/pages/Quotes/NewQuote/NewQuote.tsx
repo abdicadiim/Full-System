@@ -6,7 +6,7 @@ import {
   MessageSquare, User, Calendar, Plus, Paperclip, Minus, Check,
   Trash2, MoreVertical, Edit2, Edit3, Settings, Info, Tag, HelpCircle, HardDrive,
   Layers, Box, Folder, Cloud, Calculator, Image as ImageIcon, GripVertical,
-  FileText, CreditCard, Square, Upload, Loader2, LayoutGrid, PlusCircle, Mail, Building2
+  FileText, CreditCard, Square, Upload, Loader2, LayoutGrid, PlusCircle, Mail, Building2, AlertTriangle
 } from "lucide-react";
 import { getCustomers, saveQuote, getQuotes, getQuoteById, updateQuote, getProjects, getSalespersonsFromAPI, updateSalesperson, getItemsFromAPI, getTaxes, Customer, Tax, Salesperson, Quote, ContactPerson, Project } from "../../salesModel";
 
@@ -64,6 +64,14 @@ type CatalogPriceListOption = {
   currency: string;
   status: string;
   displayLabel: string;
+};
+
+type PriceListSwitchDialogState = {
+  customerName: string;
+  currentPriceListName: string;
+  nextPriceListName: string;
+  customerCurrency: string;
+  nextPriceListCurrency: string;
 };
 
 const NewQuote = () => {
@@ -535,6 +543,7 @@ const NewQuote = () => {
   const [priceListSearch, setPriceListSearch] = useState("");
   const [catalogPriceListsRaw, setCatalogPriceListsRaw] = useState<any[]>([]);
   const [catalogPriceLists, setCatalogPriceLists] = useState<CatalogPriceListOption[]>([]);
+  const [priceListSwitchDialog, setPriceListSwitchDialog] = useState<PriceListSwitchDialogState | null>(null);
   const [isLocationFeatureEnabled, setIsLocationFeatureEnabled] = useState(false);
   const [locationOptions, setLocationOptions] = useState<string[]>(["Head Office"]);
   const priceListDropdownRef = useRef<HTMLDivElement | null>(null);
@@ -718,6 +727,11 @@ const NewQuote = () => {
   const selectedPriceListOption = catalogPriceLists.find(
     (option) => option.name === formData.selectedPriceList
   );
+  const normalizeSelectedPriceListName = (value: any) => {
+    const normalized = String(value || "").trim();
+    if (!normalized || normalized.toLowerCase() === "select price list") return "";
+    return normalized;
+  };
   const selectedPriceListDisplay =
     selectedPriceListOption?.displayLabel ||
     formData.selectedPriceList ||
@@ -735,14 +749,42 @@ const NewQuote = () => {
   });
 
   const selectedPriceList = useMemo(() => {
-    const selected = String(formData.selectedPriceList || "").trim();
-    if (!selected || selected.toLowerCase() === "select price list") return null;
+    const selected = normalizeSelectedPriceListName(formData.selectedPriceList);
+    if (!selected) return null;
     return (
       catalogPriceListsRaw.find((row: any) => String(row?.name || "").trim() === selected) ||
       catalogPriceListsRaw.find((row: any) => String(row?.id || row?._id || "").trim() === selected) ||
       null
     );
   }, [catalogPriceListsRaw, formData.selectedPriceList]);
+
+  const resolveCustomerPriceListDefault = (customer: any) => {
+    const customerPriceListId = String(customer?.priceListId || customer?.priceListID || customer?.price_list_id || "").trim();
+    const customerPriceListNameRaw = String(customer?.priceListName || customer?.priceList || customer?.price_list || "").trim();
+    const resolvedPriceList =
+      (customerPriceListId
+        ? catalogPriceListsRaw.find((row: any) => String(row?.id || row?._id || "").trim() === customerPriceListId)
+        : null) ||
+      (customerPriceListNameRaw
+        ? catalogPriceListsRaw.find((row: any) => String(row?.name || "").trim() === customerPriceListNameRaw)
+        : null) ||
+      null;
+
+    return {
+      id: String(resolvedPriceList?.id || resolvedPriceList?._id || customerPriceListId || "").trim(),
+      name: String(resolvedPriceList?.name || customerPriceListNameRaw || "").trim(),
+      currency: String(resolvedPriceList?.currency || "").trim(),
+    };
+  };
+
+  const applyResolvedPriceListChoice = (nextPriceListName: string, nextCurrency = "") => {
+    setFormData((prev) => ({
+      ...prev,
+      selectedPriceList: nextPriceListName || "Select Price List",
+      currency: nextCurrency || prev.currency,
+    }));
+    setPriceListSwitchDialog(null);
+  };
 
   const parsePercentage = (value: any) => {
     const raw = String(value || "").replace(/[^0-9.-]/g, "");
@@ -1680,6 +1722,7 @@ const NewQuote = () => {
     const customerId = customer.id || customer._id;
     const customerName = customer.name || customer.displayName || customer.companyName;
     const previousDefaultTaxId = customerDefaultTaxId;
+    const currentPriceListName = normalizeSelectedPriceListName(formData.selectedPriceList);
 
     const customerPriceListId = String(customer?.priceListId || customer?.priceListID || customer?.price_list_id || "").trim();
     const customerPriceListNameRaw = String(customer?.priceListName || customer?.priceList || customer?.price_list || "").trim();
@@ -1692,6 +1735,12 @@ const NewQuote = () => {
         : null) ||
       null;
     const nextPriceListName = resolvedPriceList ? String(resolvedPriceList.name || "").trim() : customerPriceListNameRaw;
+    const nextCustomerPriceListName = normalizeSelectedPriceListName(nextPriceListName);
+    const hadExistingCustomerOrPriceList = Boolean(selectedCustomer) || Boolean(currentPriceListName);
+    const shouldPromptForPriceListChange =
+      hadExistingCustomerOrPriceList &&
+      Boolean(currentPriceListName || nextCustomerPriceListName) &&
+      currentPriceListName !== nextCustomerPriceListName;
 
     const rawCustomerTax =
       (customer as any)?.taxRate ??
@@ -1710,7 +1759,9 @@ const NewQuote = () => {
 
     setFormData(prev => {
       const customerCurrency = (customer.currency || prev.currency || "USD").split(' - ')[0];
-      const nextCurrency = resolvedPriceList?.currency ? String(resolvedPriceList.currency).trim() : customerCurrency;
+      const nextCurrency = shouldPromptForPriceListChange
+        ? prev.currency
+        : (resolvedPriceList?.currency ? String(resolvedPriceList.currency).trim() : customerCurrency);
 
       const updatedItems = prev.items.map((item: any) => {
         if (item.itemType === "header") return item;
@@ -1769,7 +1820,9 @@ const NewQuote = () => {
       const nextForm = {
         ...prev,
         customerName: customerName,
-        selectedPriceList: nextPriceListName || prev.selectedPriceList,
+        selectedPriceList: shouldPromptForPriceListChange
+          ? (normalizeSelectedPriceListName(prev.selectedPriceList) || "Select Price List")
+          : (nextCustomerPriceListName || normalizeSelectedPriceListName(prev.selectedPriceList) || "Select Price List"),
         currency: nextCurrency,
         items: updatedItems
       };
@@ -1779,6 +1832,18 @@ const NewQuote = () => {
         ...totals
       };
     });
+
+    if (shouldPromptForPriceListChange) {
+      setPriceListSwitchDialog({
+        customerName,
+        currentPriceListName,
+        nextPriceListName: nextCustomerPriceListName,
+        customerCurrency: String(customer?.currency || formData.currency || "USD").split(" - ")[0],
+        nextPriceListCurrency: String(resolvedPriceList?.currency || "").trim(),
+      });
+    } else {
+      setPriceListSwitchDialog(null);
+    }
 
     setIsCustomerDropdownOpen(false);
     setCustomerSearch("");
@@ -3815,7 +3880,12 @@ const NewQuote = () => {
       if (savedQuote) {
         const id = savedQuote._id || savedQuote.id || quoteId;
         console.log("Quote saved as draft, navigating to email:", id);
-        navigate(`/sales/quotes/${id}/email`, { state: { preloadedQuote: savedQuote } });
+        navigate(`/sales/quotes/${id}/email`, {
+          state: {
+            preloadedQuote: savedQuote,
+            customerEmail: String((selectedCustomer as any)?.email || (selectedCustomer as any)?.primaryEmail || "").trim(),
+          },
+        });
       } else {
         throw new Error("Failed to save quote before sending.");
       }
@@ -5107,6 +5177,61 @@ const NewQuote = () => {
           </div>
         </div>
       </div>
+
+      {priceListSwitchDialog && typeof document !== "undefined" && document.body && createPortal(
+        <div className="fixed inset-0 z-[12100] bg-slate-900/35">
+          <div className="flex min-h-full items-start justify-center px-4 pt-6">
+            <div className="w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+              <div className="flex items-start gap-4 border-b border-slate-200 px-5 py-6">
+                <div className="mt-0.5 rounded-full bg-amber-100 p-2 text-amber-600">
+                  <AlertTriangle size={20} />
+                </div>
+                <div className="flex-1 pr-6">
+                  <p className="text-base font-semibold text-slate-900">
+                    {priceListSwitchDialog.nextPriceListName
+                      ? "You have selected a customer with a different price list."
+                      : "You have selected a customer without a price list."}
+                  </p>
+                  <p className="mt-2 text-sm leading-7 text-slate-700">
+                    {priceListSwitchDialog.nextPriceListName
+                      ? `${priceListSwitchDialog.customerName} uses "${priceListSwitchDialog.nextPriceListName}". You can apply this new price list to update item rates and discounts on the quote, or keep the existing price list "${priceListSwitchDialog.currentPriceListName}".`
+                      : `${priceListSwitchDialog.customerName} does not have a saved price list. You can clear the current quote price list "${priceListSwitchDialog.currentPriceListName}" and use the standard item rates, or keep the existing price list.`}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  onClick={() => setPriceListSwitchDialog(null)}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 px-5 py-5">
+                <button
+                  type="button"
+                  className="rounded-md bg-[#156372] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#0f4f5b]"
+                  onClick={() => applyResolvedPriceListChoice(
+                    priceListSwitchDialog.nextPriceListName,
+                    priceListSwitchDialog.nextPriceListName
+                      ? (priceListSwitchDialog.nextPriceListCurrency || priceListSwitchDialog.customerCurrency)
+                      : priceListSwitchDialog.customerCurrency
+                  )}
+                >
+                  {priceListSwitchDialog.nextPriceListName ? "Apply New Price List" : "Clear Price List"}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  onClick={() => setPriceListSwitchDialog(null)}
+                >
+                  Keep Existing Price List
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Address Modal */}
       {isAddressModalOpen && (
