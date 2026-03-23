@@ -260,7 +260,14 @@ const Label = ({ children, required = false, tooltip, dotted = false }: any) => 
       {children}
       {required ? "*" : ""}
     </span>
-    {tooltip && <HelpCircle size={14} className="cursor-help text-gray-400" />}
+    {tooltip && (
+      <span className="relative inline-flex items-center group">
+        <HelpCircle size={14} className="cursor-help text-gray-400" />
+        <span className="pointer-events-none absolute left-full top-1/2 z-[9999] ml-2 -translate-y-1/2 whitespace-pre-line rounded bg-slate-900 px-2 py-1 text-[11px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
+          {tooltip}
+        </span>
+      </span>
+    )}
   </div>
 );
 
@@ -691,7 +698,7 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
               </div>
 
               <div className="grid grid-cols-[180px_1fr] items-center gap-4">
-                <Label tooltip="Select Type">Type</Label>
+                <Label tooltip="Select if this item is a physical good or a service. Remember that you cannot change the type if this item is included in a transaction.">Type</Label>
                 <div className="flex gap-6 text-[13px]">
                   {["Goods", "Service"].map((t) => (
                     <label key={t} className="flex items-center gap-2 cursor-pointer group">
@@ -703,7 +710,7 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
               </div>
 
               <div className="grid grid-cols-[180px_1fr] items-center gap-4">
-                <Label tooltip="Select Unit">Unit</Label>
+                <Label tooltip="The item will be measured in terms of this unit (e.g.: kg, dozen)">Unit</Label>
                 <SearchableDropdown
                   value={form.unit}
                   options={mergedUnitOptions}
@@ -716,7 +723,7 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
               </div>
 
               <div className="grid grid-cols-[180px_1fr] items-center gap-4">
-                <Label required dotted tooltip="SKU Number">SKU</Label>
+                <Label required dotted tooltip="The Stock Keeping Unit of the item">SKU</Label>
                 <input name="sku" value={form.sku} onChange={handleChange} className={inputBaseClass} />
               </div>
 
@@ -797,7 +804,7 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
                 />
               </div>
               <div className="grid grid-cols-[180px_1fr] items-center gap-4">
-                <Label tooltip="Select Tax">Tax</Label>
+                <Label tooltip="Add the sales tax that's applicable for this item. Create a group tax from Settings if you want to apply more than one tax. This tax will be auto-populated when you create transactions with this item.">Tax</Label>
                 <SearchableDropdown
                   value={form.salesTax}
                   groupedOptions={mergedTaxOptions}

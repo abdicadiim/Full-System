@@ -5,7 +5,6 @@ import { useNavigate } from "react-router-dom";
 import { useOrganizationBranding } from "../../../../hooks/useOrganizationBranding";
 import { reportingTagsAPI, taxesAPI, unitsAPI } from "../../../../services/api";
 import CreateAccountModal from "../../../settings/organization-settings/setup-configurations/opening-balances/CreateAccountModal";
-import ManageUnitsModal from "./modals/ManageUnitsModal";
 
 interface NewItemFormProps {
   onCancel: () => void;
@@ -229,7 +228,7 @@ const SearchableDropdown = ({
               ) : (
                 displayedGroups.map((group) => (
                   <div key={group.label} className="mb-1 last:mb-0">
-                    <div className="px-4 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{group.label}</div>
+                    <div className="px-4 py-1.5 text-[10px] font-extrabold text-slate-700 uppercase tracking-widest">{group.label}</div>
                     {group.options.map((opt) => renderOptionItem(opt, true))}
                   </div>
                 ))
@@ -238,7 +237,7 @@ const SearchableDropdown = ({
               <div className="px-4 py-3 text-center text-[13px] text-slate-400">No results found</div>
             ) : (
               <>
-                {groupLabel && <div className="px-4 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{groupLabel}</div>}
+                {groupLabel && <div className="px-4 py-1.5 text-[10px] font-extrabold text-slate-700 uppercase tracking-widest">{groupLabel}</div>}
                 {displayedOptions.map((opt) => renderOptionItem(opt))}
               </>
             )}
@@ -271,7 +270,14 @@ const Label = ({ children, required = false, tooltip, dotted = false }: any) => 
       {children}
       {required ? "*" : ""}
     </span>
-    {tooltip && <HelpCircle size={14} className="cursor-help text-gray-400" />}
+    {tooltip && (
+      <span className="relative inline-flex items-center group">
+        <HelpCircle size={14} className="cursor-help text-gray-400" />
+        <span className="pointer-events-none absolute left-full top-1/2 z-[9999] ml-2 -translate-y-1/2 whitespace-pre-line rounded bg-slate-900 px-2 py-1 text-[11px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
+          {tooltip}
+        </span>
+      </span>
+    )}
   </div>
 );
 
@@ -295,7 +301,6 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
   const [isSaving, setIsSaving] = useState(false);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [extraSalesAccounts, setExtraSalesAccounts] = useState<string[]>([]);
-  const [isUnitModalOpen, setIsUnitModalOpen] = useState(false);
   const [unitOptions, setUnitOptions] = useState<string[]>([]);
 
   const [form, setForm] = useState({
@@ -509,15 +514,6 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
     };
   }, []);
 
-  const refreshUnits = async () => {
-    try {
-      const response: any = await unitsAPI.getAll();
-      const apiUnits = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
-      setUnitOptions(apiUnits.map((u: any) => u.name).filter(Boolean));
-    } catch (err) {
-      console.warn("Failed to fetch units", err);
-    }
-  };
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -703,7 +699,7 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
               </div>
 
               <div className="grid grid-cols-[180px_1fr] items-center gap-4">
-                <Label tooltip="Select Type">Type</Label>
+                <Label tooltip="Select if this item is a physical good or a service. Remember that you cannot change the type if this item is included in a transaction.">Type</Label>
                 <div className="flex gap-6 text-[13px]">
                   {["Goods", "Service"].map((t) => (
                     <label key={t} className="flex items-center gap-2 cursor-pointer group">
@@ -715,20 +711,18 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
               </div>
 
               <div className="grid grid-cols-[180px_1fr] items-center gap-4">
-                <Label tooltip="Select Unit">Unit</Label>
+                <Label tooltip="The item will be measured in terms of this unit (e.g.: kg, dozen)">Unit</Label>
                 <SearchableDropdown
                   value={form.unit}
                   options={mergedUnitOptions}
                   onChange={(value) => setForm((prev) => ({ ...prev, unit: value }))}
                   placeholder="Select or type to add"
                   accentColor={accentColor}
-                  addNewLabel="Manage Units"
-                  onAddNew={() => setIsUnitModalOpen(true)}
                 />
               </div>
 
               <div className="grid grid-cols-[180px_1fr] items-center gap-4">
-                <Label required dotted tooltip="SKU Number">SKU</Label>
+                <Label required dotted tooltip="The Stock Keeping Unit of the item">SKU</Label>
                 <input name="sku" value={form.sku} onChange={handleChange} className={inputBaseClass} />
               </div>
 
@@ -795,7 +789,14 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
                 <Label required dotted>Selling Price</Label>
                 <div className="flex">
                   <span className="h-[34px] flex items-center px-3 bg-gray-50 border border-r-0 border-gray-300 text-[12px] text-gray-500 rounded-l">{currencyPrefix}</span>
-                  <input name="sellingPrice" type="number" value={form.sellingPrice} onChange={handleChange} className={`${inputBaseClass} rounded-l-none`} />
+                  <input
+                    name="sellingPrice"
+                    type="number"
+                    value={form.sellingPrice}
+                    onChange={handleChange}
+                    placeholder="0.00"
+                    className={`${inputBaseClass} rounded-l-none`}
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-[180px_1fr] items-center gap-4">
@@ -818,11 +819,11 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
                   value={form.salesDescription}
                   onChange={handleChange}
                   rows={3}
-                  className="w-full border border-gray-300 rounded p-2 text-[13px] outline-none focus:border-blue-400 resize-none transition-all"
+                  className="min-h-[72px] w-full rounded-md border border-gray-300 px-3 py-2 text-[13px] outline-none focus:border-blue-400 resize-y transition-all"
                 />
               </div>
               <div className="grid grid-cols-[180px_1fr] items-center gap-4">
-                <Label tooltip="Select Tax">Tax</Label>
+                <Label tooltip="Add the sales tax that's applicable for this item. Create a group tax from Settings if you want to apply more than one tax. This tax will be auto-populated when you create transactions with this item.">Tax</Label>
                 <SearchableDropdown
                   value={form.salesTax}
                   groupedOptions={mergedTaxOptions}
@@ -922,11 +923,6 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
         />
       )}
 
-      <ManageUnitsModal
-        isOpen={isUnitModalOpen}
-        onClose={() => setIsUnitModalOpen(false)}
-        onUnitsChanged={refreshUnits}
-      />
     </div>
   );
 }

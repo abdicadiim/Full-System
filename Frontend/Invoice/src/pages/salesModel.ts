@@ -43,9 +43,9 @@ export interface ContactPerson {
   id?: string;
   _id?: string;
   salutation?: string;
-  firstName: string;
-  lastName: string;
-  email: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
   workPhone?: string;
   mobile?: string;
   designation?: string;
@@ -68,7 +68,7 @@ export interface Customer {
   mobile?: string;
   receivables: number;
   currency: string;
-  openingBalance?: string;
+  openingBalance?: string | number;
   customerOwner?: string;
   documents?: any[];
   contactPersons?: ContactPerson[];
@@ -575,6 +575,10 @@ export interface RecurringInvoice extends Invoice {
   // Allow flexible additional properties from API
   [key: string]: any;
 }
+
+export type Expense = any;
+export type RecurringExpense = any;
+export type Bill = any;
 
 // Recurring Invoices - LocalStorage (no backend)
 const RECURRING_INVOICES_STORAGE_KEY = "taban_books_recurring_invoices_v1";
@@ -1087,11 +1091,13 @@ export interface SalesReceipt {
   id: string;
   _id?: string;
   receiptNumber: string;
+  salesReceiptNumber?: string;
   customer?: any;
   customerName?: string;
   customerId?: string;
   referenceNumber?: string;
   receiptDate?: string;
+  salesReceiptDate?: string;
   date: string;
   items: any[];
   subtotal: number;
@@ -1105,6 +1111,7 @@ export interface SalesReceipt {
   amount?: number;
   status: string;
   paymentMethod?: string;
+  currency?: string;
   attachments?: Array<{
     id: string;
     name: string;
@@ -1612,6 +1619,11 @@ export interface Project {
   customerName?: string;
   status?: string;
   budget?: number;
+  billingMethod?: string;
+  totalHours?: string | number;
+  billedAmount?: number;
+  unbilledAmount?: number;
+  currency?: string;
   createdAt?: string;
   updatedAt?: string;
 }

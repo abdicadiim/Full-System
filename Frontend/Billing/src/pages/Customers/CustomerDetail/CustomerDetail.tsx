@@ -408,6 +408,293 @@ export default function CustomerDetail() {
     const contactPersonProfileInputRef = useRef<HTMLInputElement>(null);
     const [contactPersonWorkPhoneCode, setContactPersonWorkPhoneCode] = useState("+355");
     const [contactPersonMobilePhoneCode, setContactPersonMobilePhoneCode] = useState("+355");
+    const [isSavingContactPerson, setIsSavingContactPerson] = useState(false);
+    const [isWorkPhoneCodeDropdownOpen, setIsWorkPhoneCodeDropdownOpen] = useState(false);
+    const [isMobilePhoneCodeDropdownOpen, setIsMobilePhoneCodeDropdownOpen] = useState(false);
+    const [workPhoneCodeSearch, setWorkPhoneCodeSearch] = useState("");
+    const [mobilePhoneCodeSearch, setMobilePhoneCodeSearch] = useState("");
+    const workPhoneCodeDropdownRef = useRef<HTMLDivElement>(null);
+    const mobilePhoneCodeDropdownRef = useRef<HTMLDivElement>(null);
+    const phoneCodeOptions = [
+        { code: "+93", name: "Afghanistan" },
+        { code: "+358", name: "Aland Islands" },
+        { code: "+355", name: "Albania" },
+        { code: "+213", name: "Algeria" },
+        { code: "+1", name: "American Samoa" },
+        { code: "+376", name: "Andorra" },
+        { code: "+244", name: "Angola" },
+        { code: "+1", name: "Anguilla" },
+        { code: "+672", name: "Antarctica" },
+        { code: "+1", name: "Antigua and Barbuda" },
+        { code: "+54", name: "Argentina" },
+        { code: "+374", name: "Armenia" },
+        { code: "+297", name: "Aruba" },
+        { code: "+61", name: "Ashmore and Cartier Islands" },
+        { code: "+61", name: "Australia" },
+        { code: "+43", name: "Austria" },
+        { code: "+994", name: "Azerbaijan" },
+        { code: "+1", name: "Bahamas" },
+        { code: "+973", name: "Bahrain" },
+        { code: "+880", name: "Bangladesh" },
+        { code: "+1", name: "Barbados" },
+        { code: "+375", name: "Belarus" },
+        { code: "+32", name: "Belgium" },
+        { code: "+501", name: "Belize" },
+        { code: "+229", name: "Benin" },
+        { code: "+1", name: "Bermuda" },
+        { code: "+975", name: "Bhutan" },
+        { code: "+591", name: "Bolivia" },
+        { code: "+599", name: "Bonaire, Sint Eustatius and Saba" },
+        { code: "+387", name: "Bosnia" },
+        { code: "+387", name: "Bosnia and Herzegovina" },
+        { code: "+267", name: "Botswana" },
+        { code: "+47", name: "Bouvet Island" },
+        { code: "+55", name: "Brazil" },
+        { code: "+246", name: "British Indian Ocean Territory" },
+        { code: "+1", name: "British Virgin Islands" },
+        { code: "+673", name: "Brunei" },
+        { code: "+359", name: "Bulgaria" },
+        { code: "+226", name: "Burkina Faso" },
+        { code: "+257", name: "Burundi" },
+        { code: "+855", name: "Cambodia" },
+        { code: "+237", name: "Cameroon" },
+        { code: "+1", name: "Canada" },
+        { code: "+238", name: "Cape Verde" },
+        { code: "+1", name: "Cayman Islands" },
+        { code: "+236", name: "Central African Republic" },
+        { code: "+235", name: "Chad" },
+        { code: "+56", name: "Chile" },
+        { code: "+86", name: "China" },
+        { code: "+61", name: "Christmas Island" },
+        { code: "+33", name: "Clipperton Island" },
+        { code: "+61", name: "Cocos Islands" },
+        { code: "+57", name: "Colombia" },
+        { code: "+269", name: "Comoros" },
+        { code: "+242", name: "Congo" },
+        { code: "+682", name: "Cook Islands" },
+        { code: "+61", name: "Coral Sea Islands" },
+        { code: "+506", name: "Costa Rica" },
+        { code: "+385", name: "Croatia" },
+        { code: "+53", name: "Cuba" },
+        { code: "+599", name: "Curacao" },
+        { code: "+357", name: "Cyprus" },
+        { code: "+420", name: "Czech Republic" },
+        { code: "+243", name: "DR Congo" },
+        { code: "+45", name: "Denmark" },
+        { code: "+253", name: "Djibouti" },
+        { code: "+1", name: "Dominica" },
+        { code: "+1", name: "Dominican Republic" },
+        { code: "+593", name: "Ecuador" },
+        { code: "+20", name: "Egypt" },
+        { code: "+503", name: "El Salvador" },
+        { code: "+240", name: "Equatorial Guinea" },
+        { code: "+291", name: "Eritrea" },
+        { code: "+372", name: "Estonia" },
+        { code: "+268", name: "Eswatini" },
+        { code: "+251", name: "Ethiopia" },
+        { code: "+500", name: "Falkland Islands" },
+        { code: "+298", name: "Faroe Islands" },
+        { code: "+679", name: "Fiji" },
+        { code: "+358", name: "Finland" },
+        { code: "+33", name: "France" },
+        { code: "+594", name: "French Guiana" },
+        { code: "+689", name: "French Polynesia" },
+        { code: "+262", name: "French Southern Territories" },
+        { code: "+241", name: "Gabon" },
+        { code: "+220", name: "Gambia" },
+        { code: "+995", name: "Georgia" },
+        { code: "+49", name: "Germany" },
+        { code: "+233", name: "Ghana" },
+        { code: "+350", name: "Gibraltar" },
+        { code: "+30", name: "Greece" },
+        { code: "+299", name: "Greenland" },
+        { code: "+1", name: "Grenada" },
+        { code: "+590", name: "Guadeloupe" },
+        { code: "+1", name: "Guam" },
+        { code: "+502", name: "Guatemala" },
+        { code: "+44", name: "Guernsey" },
+        { code: "+224", name: "Guinea" },
+        { code: "+245", name: "Guinea-Bissau" },
+        { code: "+592", name: "Guyana" },
+        { code: "+509", name: "Haiti" },
+        { code: "+672", name: "Heard Island and McDonald Islands" },
+        { code: "+503", name: "High Seas" },
+        { code: "+504", name: "Honduras" },
+        { code: "+852", name: "Hong Kong" },
+        { code: "+36", name: "Hungary" },
+        { code: "+354", name: "Iceland" },
+        { code: "+91", name: "India" },
+        { code: "+62", name: "Indonesia" },
+        { code: "+98", name: "Iran" },
+        { code: "+964", name: "Iraq" },
+        { code: "+353", name: "Ireland" },
+        { code: "+44", name: "Isle of Man" },
+        { code: "+972", name: "Israel" },
+        { code: "+39", name: "Italy" },
+        { code: "+225", name: "Cote d'Ivoire" },
+        { code: "+1", name: "Jamaica" },
+        { code: "+81", name: "Japan" },
+        { code: "+44", name: "Jersey" },
+        { code: "+962", name: "Jordan" },
+        { code: "+7", name: "Kazakhstan" },
+        { code: "+254", name: "Kenya" },
+        { code: "+686", name: "Kiribati" },
+        { code: "+383", name: "Kosova Republic" },
+        { code: "+383", name: "Kosovo" },
+        { code: "+965", name: "Kuwait" },
+        { code: "+996", name: "Kyrgyzstan" },
+        { code: "+856", name: "Laos" },
+        { code: "+371", name: "Latvia" },
+        { code: "+961", name: "Lebanon" },
+        { code: "+266", name: "Lesotho" },
+        { code: "+231", name: "Liberia" },
+        { code: "+218", name: "Libya" },
+        { code: "+423", name: "Liechtenstein" },
+        { code: "+370", name: "Lithuania" },
+        { code: "+352", name: "Luxembourg" },
+        { code: "+853", name: "Macau" },
+        { code: "+261", name: "Madagascar" },
+        { code: "+265", name: "Malawi" },
+        { code: "+60", name: "Malaysia" },
+        { code: "+960", name: "Maldives" },
+        { code: "+223", name: "Mali" },
+        { code: "+356", name: "Malta" },
+        { code: "+692", name: "Marshall Islands" },
+        { code: "+596", name: "Martinique" },
+        { code: "+222", name: "Mauritania" },
+        { code: "+230", name: "Mauritius" },
+        { code: "+262", name: "Mayotte" },
+        { code: "+52", name: "Mexico" },
+        { code: "+691", name: "Micronesia" },
+        { code: "+373", name: "Moldova" },
+        { code: "+377", name: "Monaco" },
+        { code: "+976", name: "Mongolia" },
+        { code: "+382", name: "Montenegro" },
+        { code: "+1", name: "Montserrat" },
+        { code: "+212", name: "Morocco" },
+        { code: "+258", name: "Mozambique" },
+        { code: "+95", name: "Myanmar" },
+        { code: "+264", name: "Namibia" },
+        { code: "+674", name: "Nauru" },
+        { code: "+977", name: "Nepal" },
+        { code: "+31", name: "Netherlands" },
+        { code: "+599", name: "Netherlands Antilles" },
+        { code: "+687", name: "New Caledonia" },
+        { code: "+64", name: "New Zealand" },
+        { code: "+505", name: "Nicaragua" },
+        { code: "+227", name: "Niger" },
+        { code: "+234", name: "Nigeria" },
+        { code: "+683", name: "Niue" },
+        { code: "+672", name: "Norfolk Island" },
+        { code: "+850", name: "North Korea" },
+        { code: "+389", name: "North Macedonia" },
+        { code: "+1", name: "Northern Mariana Islands" },
+        { code: "+47", name: "Norway" },
+        { code: "+968", name: "Oman" },
+        { code: "+92", name: "Pakistan" },
+        { code: "+680", name: "Palau" },
+        { code: "+970", name: "Palestine" },
+        { code: "+507", name: "Panama" },
+        { code: "+675", name: "Papua New Guinea" },
+        { code: "+595", name: "Paraguay" },
+        { code: "+51", name: "Peru" },
+        { code: "+63", name: "Philippines" },
+        { code: "+64", name: "Pitcairn" },
+        { code: "+48", name: "Poland" },
+        { code: "+351", name: "Portugal" },
+        { code: "+1", name: "Puerto Rico" },
+        { code: "+974", name: "Qatar" },
+        { code: "+262", name: "Reunion" },
+        { code: "+40", name: "Romania" },
+        { code: "+7", name: "Russia" },
+        { code: "+250", name: "Rwanda" },
+        { code: "+590", name: "Saint Barthelemy" },
+        { code: "+290", name: "Saint Helena" },
+        { code: "+1", name: "Saint Kitts and Nevis" },
+        { code: "+1", name: "Saint Lucia" },
+        { code: "+590", name: "Saint Martin" },
+        { code: "+508", name: "Saint Pierre and Miquelon" },
+        { code: "+1", name: "Saint Vincent and the Grenadines" },
+        { code: "+685", name: "Samoa" },
+        { code: "+378", name: "San Marino" },
+        { code: "+239", name: "Sao Tome and Principe" },
+        { code: "+966", name: "Saudi Arabia" },
+        { code: "+221", name: "Senegal" },
+        { code: "+381", name: "Serbia" },
+        { code: "+381", name: "Serbia and Montenegro" },
+        { code: "+248", name: "Seychelles" },
+        { code: "+232", name: "Sierra Leone" },
+        { code: "+65", name: "Singapore" },
+        { code: "+1", name: "Sint Maarten" },
+        { code: "+421", name: "Slovakia" },
+        { code: "+386", name: "Slovenia" },
+        { code: "+677", name: "Solomon Islands" },
+        { code: "+252", name: "Somalia" },
+        { code: "+252", name: "Somaliland" },
+        { code: "+27", name: "South Africa" },
+        { code: "+500", name: "South Georgia and the South Sandwich Islands" },
+        { code: "+82", name: "South Korea" },
+        { code: "+211", name: "South Sudan" },
+        { code: "+34", name: "Spain" },
+        { code: "+94", name: "Sri Lanka" },
+        { code: "+249", name: "Sudan" },
+        { code: "+597", name: "Suriname" },
+        { code: "+47", name: "Svalbard and Jan Mayen" },
+        { code: "+268", name: "Swaziland" },
+        { code: "+46", name: "Sweden" },
+        { code: "+41", name: "Switzerland" },
+        { code: "+963", name: "Syria" },
+        { code: "+886", name: "Taiwan" },
+        { code: "+992", name: "Tajikistan" },
+        { code: "+255", name: "Tanzania" },
+        { code: "+66", name: "Thailand" },
+        { code: "+670", name: "Timor Leste" },
+        { code: "+228", name: "Togo" },
+        { code: "+690", name: "Tokelau" },
+        { code: "+676", name: "Tonga" },
+        { code: "+1", name: "Trinidad and Tobago" },
+        { code: "+216", name: "Tunisia" },
+        { code: "+90", name: "Turkey" },
+        { code: "+993", name: "Turkmenistan" },
+        { code: "+1", name: "Turks and Caicos Islands" },
+        { code: "+688", name: "Tuvalu" },
+        { code: "+971", name: "U.A.E" },
+        { code: "+1", name: "U.S.A" },
+        { code: "+256", name: "Uganda" },
+        { code: "+380", name: "Ukraine" },
+        { code: "+971", name: "United Arab Emirates" },
+        { code: "+44", name: "United Kingdom" },
+        { code: "+1", name: "United States Minor Outlying Islands" },
+        { code: "+598", name: "Uruguay" },
+        { code: "+998", name: "Uzbekistan" },
+        { code: "+678", name: "Vanuatu" },
+        { code: "+379", name: "Vatican City" },
+        { code: "+58", name: "Venezuela" },
+        { code: "+84", name: "Vietnam" },
+        { code: "+1", name: "Virgin Islands, British" },
+        { code: "+1", name: "Virgin Islands, U.S." },
+        { code: "+681", name: "Wallis and Futuna" },
+        { code: "+212", name: "Western Sahara" },
+        { code: "+967", name: "Yemen" },
+        { code: "+260", name: "Zambia" },
+        { code: "+263", name: "Zimbabwe" }
+    ];
+    const filteredWorkPhoneCodeOptions = useMemo(() => {
+        const term = workPhoneCodeSearch.trim().toLowerCase();
+        if (!term) return phoneCodeOptions;
+        return phoneCodeOptions.filter(option => (
+            option.name.toLowerCase().includes(term) ||
+            option.code.toLowerCase().includes(term)
+        ));
+    }, [workPhoneCodeSearch, phoneCodeOptions]);
+    const filteredMobilePhoneCodeOptions = useMemo(() => {
+        const term = mobilePhoneCodeSearch.trim().toLowerCase();
+        if (!term) return phoneCodeOptions;
+        return phoneCodeOptions.filter(option => (
+            option.name.toLowerCase().includes(term) ||
+            option.code.toLowerCase().includes(term)
+        ));
+    }, [mobilePhoneCodeSearch, phoneCodeOptions]);
 
     // Associate Tags modal state
     const [isAssociateTagsModalOpen, setIsAssociateTagsModalOpen] = useState(false);
@@ -467,6 +754,12 @@ export default function CustomerDetail() {
             if (accountingBasisRef.current && !accountingBasisRef.current.contains(event.target as Node)) {
                 setIsAccountingBasisDropdownOpen(false);
             }
+            if (workPhoneCodeDropdownRef.current && !workPhoneCodeDropdownRef.current.contains(event.target as Node)) {
+                setIsWorkPhoneCodeDropdownOpen(false);
+            }
+            if (mobilePhoneCodeDropdownRef.current && !mobilePhoneCodeDropdownRef.current.contains(event.target as Node)) {
+                setIsMobilePhoneCodeDropdownOpen(false);
+            }
         };
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -485,6 +778,8 @@ export default function CustomerDetail() {
 
     // Delete modal state
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [isDeleteContactPersonModalOpen, setIsDeleteContactPersonModalOpen] = useState(false);
+    const [pendingDeleteContactPersonIndex, setPendingDeleteContactPersonIndex] = useState<number | null>(null);
 
     // Refresh state
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -1634,6 +1929,7 @@ export default function CustomerDetail() {
             contactPersons: updatedContactPersons,
         };
 
+        setIsSavingContactPerson(true);
         try {
             await customersAPI.update(id, updatedCustomer);
             setCustomer(updatedCustomer);
@@ -1642,6 +1938,8 @@ export default function CustomerDetail() {
         } catch (error: any) {
             toast.error(error?.message || "Failed to update contact person.");
             return;
+        } finally {
+            setIsSavingContactPerson(false);
         }
 
         setIsAddContactPersonModalOpen(false);
@@ -1688,6 +1986,11 @@ export default function CustomerDetail() {
         } catch (error: any) {
             toast.error(error?.message || "Failed to delete contact person.");
         }
+    };
+
+    const openDeleteContactPersonModal = (index: number) => {
+        setPendingDeleteContactPersonIndex(index);
+        setIsDeleteContactPersonModalOpen(true);
     };
 
     useEffect(() => {
@@ -4008,27 +4311,27 @@ export default function CustomerDetail() {
                 {/* Tabs */}
                 <div className="flex gap-6 mb-0 border-b border-gray-200 bg-white px-1">
                     <button
-                        className={`-mb-px px-2.5 py-2 text-[13px] font-medium cursor-pointer transition-colors border-b-2 ${activeTab === "overview"
-                            ? "text-gray-900 border-blue-600"
-                            : "text-gray-600 hover:text-gray-900 border-transparent"
+                        className={`-mb-px px-2.5 py-3 text-[13px] font-bold cursor-pointer transition-colors border-b-2 ${activeTab === "overview"
+                            ? "text-gray-900 border-[#156372]"
+                            : "text-gray-500 hover:text-gray-900 border-transparent"
                             }`}
                         onClick={() => setActiveTab("overview")}
                     >
                         Overview
                     </button>
                     <button
-                        className={`-mb-px px-2.5 py-2 text-[13px] font-medium cursor-pointer transition-colors border-b-2 ${activeTab === "comments"
-                            ? "text-gray-900 border-blue-600"
-                            : "text-gray-600 hover:text-gray-900 border-transparent"
+                        className={`-mb-px px-2.5 py-3 text-[13px] font-bold cursor-pointer transition-colors border-b-2 ${activeTab === "comments"
+                            ? "text-gray-900 border-[#156372]"
+                            : "text-gray-500 hover:text-gray-900 border-transparent"
                             }`}
                         onClick={() => setActiveTab("comments")}
                     >
                         Comments
                     </button>
                     <button
-                        className={`-mb-px px-2.5 py-2 text-[13px] font-medium cursor-pointer transition-colors border-b-2 ${activeTab === "transactions"
-                            ? "text-gray-900 border-blue-600"
-                            : "text-gray-600 hover:text-gray-900 border-transparent"
+                        className={`-mb-px px-2.5 py-3 text-[13px] font-bold cursor-pointer transition-colors border-b-2 ${activeTab === "transactions"
+                            ? "text-gray-900 border-[#156372]"
+                            : "text-gray-500 hover:text-gray-900 border-transparent"
                             }`}
                         onClick={() => {
                             setActiveTab("transactions");
@@ -4041,9 +4344,9 @@ export default function CustomerDetail() {
                     </button>
                     {customer?.linkedVendorId && (
                         <button
-                            className={`-mb-px px-2.5 py-2 text-[13px] font-medium cursor-pointer transition-colors border-b-2 ${activeTab === "purchases"
-                                ? "text-gray-900 border-blue-600"
-                                : "text-gray-600 hover:text-gray-900 border-transparent"
+                            className={`-mb-px px-2.5 py-3 text-[13px] font-bold cursor-pointer transition-colors border-b-2 ${activeTab === "purchases"
+                                ? "text-gray-900 border-[#156372]"
+                                : "text-gray-500 hover:text-gray-900 border-transparent"
                                 }`}
                             onClick={() => setActiveTab("purchases")}
                         >
@@ -4051,18 +4354,18 @@ export default function CustomerDetail() {
                         </button>
                     )}
                     <button
-                        className={`-mb-px px-2.5 py-2 text-[13px] font-medium cursor-pointer transition-colors border-b-2 ${activeTab === "mails"
-                            ? "text-gray-900 border-blue-600"
-                            : "text-gray-600 hover:text-gray-900 border-transparent"
+                        className={`-mb-px px-2.5 py-3 text-[13px] font-bold cursor-pointer transition-colors border-b-2 ${activeTab === "mails"
+                            ? "text-gray-900 border-[#156372]"
+                            : "text-gray-500 hover:text-gray-900 border-transparent"
                             }`}
                         onClick={() => setActiveTab("mails")}
                     >
                         Mails
                     </button>
                     <button
-                        className={`-mb-px px-2.5 py-2 text-[13px] font-medium cursor-pointer transition-colors border-b-2 ${activeTab === "statement"
-                            ? "text-gray-900 border-blue-600"
-                            : "text-gray-600 hover:text-gray-900 border-transparent"
+                        className={`-mb-px px-2.5 py-3 text-[13px] font-bold cursor-pointer transition-colors border-b-2 ${activeTab === "statement"
+                            ? "text-gray-900 border-[#156372]"
+                            : "text-gray-500 hover:text-gray-900 border-transparent"
                             }`}
                         onClick={() => setActiveTab("statement")}
                     >
@@ -4090,30 +4393,30 @@ export default function CustomerDetail() {
                                                         String((primaryContact as any)?.profileImage || (primaryContact as any)?.image || profileImage || "").trim() || null;
 
                                                     return (
-                                                <div
-                                                    className="w-12 h-12 rounded-lg bg-gray-200 flex items-center justify-center flex-shrink-0 relative cursor-pointer overflow-hidden group"
-                                                    onMouseEnter={() => setIsAvatarHovered(true)}
-                                                    onMouseLeave={() => setIsAvatarHovered(false)}
-                                                    onClick={() => profileImageInputRef.current?.click()}
-                                                >
-                                                    {topProfileImage ? (
-                                                        <img src={topProfileImage} alt="Profile" className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        <User size={24} className="text-gray-400" />
-                                                    )}
-                                                    {isAvatarHovered && (
-                                                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                                                            <Upload size={16} className="text-white" />
+                                                        <div
+                                                            className="w-12 h-12 rounded-lg bg-gray-200 flex items-center justify-center flex-shrink-0 relative cursor-pointer overflow-hidden group"
+                                                            onMouseEnter={() => setIsAvatarHovered(true)}
+                                                            onMouseLeave={() => setIsAvatarHovered(false)}
+                                                            onClick={() => profileImageInputRef.current?.click()}
+                                                        >
+                                                            {topProfileImage ? (
+                                                                <img src={topProfileImage} alt="Profile" className="w-full h-full object-cover" />
+                                                            ) : (
+                                                                <User size={24} className="text-gray-400" />
+                                                            )}
+                                                            {isAvatarHovered && (
+                                                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                                                                    <Upload size={16} className="text-white" />
+                                                                </div>
+                                                            )}
+                                                            <input
+                                                                type="file"
+                                                                ref={profileImageInputRef}
+                                                                onChange={handleProfileImageUpload}
+                                                                accept="image/*"
+                                                                style={{ display: "none" }}
+                                                            />
                                                         </div>
-                                                    )}
-                                                    <input
-                                                        type="file"
-                                                        ref={profileImageInputRef}
-                                                        onChange={handleProfileImageUpload}
-                                                        accept="image/*"
-                                                        style={{ display: "none" }}
-                                                    />
-                                                </div>
                                                     );
                                                 })()}
                                                 <div className="flex-1">
@@ -4160,7 +4463,7 @@ export default function CustomerDetail() {
                                                                             e.stopPropagation();
                                                                             setIsSettingsDropdownOpen(false);
                                                                             if (primaryContact && resolvedPrimaryContactIndex >= 0) {
-                                                                                await deleteContactPerson(resolvedPrimaryContactIndex);
+                                                                                openDeleteContactPersonModal(resolvedPrimaryContactIndex);
                                                                             } else {
                                                                                 setIsDeleteModalOpen(true);
                                                                             }
@@ -4172,17 +4475,14 @@ export default function CustomerDetail() {
                                                             )}
                                                         </div>
                                                     </div>
-                                                    <div className="text-sm text-gray-600 mb-1">
+                                                    <div className="text-[12px] text-gray-600 mb-1">
                                                         {primaryContact?.email || customer.email || ""}
-                                                    </div>
-                                                    <div className="text-sm text-gray-600 mb-2">
-                                                        Portal not enabled
                                                     </div>
                                                     <button
                                                         onClick={() => setIsInviteModalOpen(true)}
-                                                        className="text-sm text-blue-600 hover:underline bg-transparent border-none p-0 cursor-pointer"
+                                                        className="text-[12px] text-blue-600 hover:underline bg-transparent border-none p-0 cursor-pointer"
                                                     >
-                                                        Invite
+                                                        Invite to Portal
                                                     </button>
                                                 </div>
                                             </div>
@@ -4554,7 +4854,7 @@ export default function CustomerDetail() {
                                                                             <div className="absolute top-full right-0 mt-2 w-44 bg-white border border-gray-200 rounded-lg shadow-xl z-[120] py-1">
                                                                                 <button
                                                                                     type="button"
-                                                                                    className="w-[calc(100%-8px)] mx-1 my-1 text-left px-3 py-2 text-sm text-white rounded-md cursor-pointer bg-blue-600 hover:bg-blue-700 transition-colors"
+                                                                                    className="w-[calc(100%-8px)] mx-1 my-1 text-left px-3 py-2 text-sm text-gray-800 rounded-md cursor-pointer hover:bg-gray-50 transition-colors"
                                                                                     onClick={(e) => {
                                                                                         e.stopPropagation();
                                                                                         setOpenContactPersonSettingsIndex(null);
@@ -4580,7 +4880,7 @@ export default function CustomerDetail() {
                                                                                     onClick={async (e) => {
                                                                                         e.stopPropagation();
                                                                                         setOpenContactPersonSettingsIndex(null);
-                                                                                        await deleteContactPerson(index);
+                                                                                        openDeleteContactPersonModal(index);
                                                                                     }}
                                                                                 >
                                                                                     Delete
@@ -5606,77 +5906,86 @@ export default function CustomerDetail() {
                         </div>
                     </div>
                 )}
-
                 {activeTab === "comments" && (
-                    <div className="flex-1 min-h-0 p-6">
+                    <div className="flex-1 min-h-0 bg-white p-8 overflow-y-auto">
                         {/* Comment Editor */}
-                        <div className="mb-8 bg-white rounded-lg border border-gray-200 p-6">
-                            <div className="flex gap-2 mb-4 pb-4 border-b border-gray-200">
+                        <div className="mb-10 bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm max-w-5xl mx-auto">
+                            <div className="flex gap-4 p-3 bg-gray-50/80 border-b border-gray-200">
                                 <button
-                                    className="p-2 text-gray-600 hover:bg-gray-100 rounded-md cursor-pointer"
+                                    className="p-1.5 text-gray-500 hover:bg-gray-200 rounded cursor-pointer transition-colors flex items-center justify-center border-none bg-transparent"
                                     onClick={() => applyFormatting("bold")}
                                     title="Bold"
                                 >
-                                    <Bold size={16} />
+                                    <Bold size={15} />
                                 </button>
                                 <button
-                                    className="p-2 text-gray-600 hover:bg-gray-100 rounded-md cursor-pointer"
+                                    className="p-1.5 text-gray-500 hover:bg-gray-200 rounded cursor-pointer transition-colors flex items-center justify-center border-none bg-transparent"
                                     onClick={() => applyFormatting("italic")}
                                     title="Italic"
                                 >
-                                    <Italic size={16} />
+                                    <Italic size={15} />
                                 </button>
                                 <button
-                                    className="p-2 text-gray-600 hover:bg-gray-100 rounded-md cursor-pointer"
+                                    className="p-1.5 text-gray-500 hover:bg-gray-200 rounded cursor-pointer transition-colors flex items-center justify-center border-none bg-transparent"
                                     onClick={() => applyFormatting("underline")}
                                     title="Underline"
                                 >
-                                    <Underline size={16} />
+                                    <Underline size={15} />
                                 </button>
                             </div>
-                            <textarea
-                                id="comment-textarea"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y mb-4"
-                                placeholder="Add a comment..."
-                                value={commentText}
-                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCommentText(e.target.value)}
-                                rows={6}
-                            />
-                            <button
-                                className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium cursor-pointer hover:bg-blue-700"
-                                onClick={handleAddComment}
-                            >
-                                Add Comment
-                            </button>
+                            <div className="p-0">
+                                <textarea
+                                    id="comment-textarea"
+                                    className="w-full h-40 px-5 py-4 text-sm text-gray-700 outline-none resize-none placeholder:text-gray-400 leading-relaxed border-none"
+                                    placeholder="Add a comment..."
+                                    value={commentText}
+                                    onChange={(e) => setCommentText(e.target.value)}
+                                />
+                            </div>
+                            <div className="px-5 pb-5">
+                                <button
+                                    className="px-5 py-2 bg-[#156372] text-white rounded text-[13px] font-bold cursor-pointer hover:opacity-90 active:scale-95 transition-all shadow-sm border-none"
+                                    onClick={handleAddComment}
+                                >
+                                    Add Comment
+                                </button>
+                            </div>
                         </div>
 
                         {/* Comments List */}
-                        <div>
-                            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">ALL COMMENTS</h3>
+                        <div className="max-w-5xl mx-auto">
+                            <div className="flex items-center gap-4 mb-8">
+                                <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-[0.2em] whitespace-nowrap">ALL COMMENTS</h3>
+                                <div className="h-px w-full bg-gray-100"></div>
+                            </div>
+                            
                             {comments.length === 0 ? (
-                                <div className="text-center py-12 text-gray-500">
-                                    <p>No comments yet.</p>
+                                <div className="text-center py-20 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
+                                    <p className="text-sm text-gray-400 font-medium italic">No comments yet.</p>
                                 </div>
                             ) : (
-                                <div className="space-y-4">
+                                <div className="space-y-6 pb-20">
                                     {comments.map((comment) => (
-                                        <div key={comment.id} className="bg-white rounded-lg border border-gray-200 p-4">
-                                            <div className="text-sm text-gray-900 mb-3 whitespace-pre-wrap">
-                                                {comment.text}
+                                        <div key={comment.id} className="group flex flex-col bg-white rounded-lg border border-gray-100 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
+                                            <div className="p-6">
+                                                <div className="text-[15px] leading-relaxed text-[#156372] whitespace-pre-wrap font-semibold">
+                                                    {comment.text}
+                                                </div>
                                             </div>
-                                            <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-sm font-medium text-gray-900">{comment.author}</span>
-                                                    <span className="text-xs text-gray-500">
+                                            <div className="px-6 py-4 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between mt-auto">
+                                                <div className="flex items-center gap-4">
+                                                    <span className="text-sm font-bold text-gray-700">{comment.author === 'You' ? 'You' : comment.author}</span>
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-gray-200"></div>
+                                                    <span className="text-[11px] text-gray-400 font-bold uppercase tracking-wider">
                                                         {new Date(String(comment.timestamp)).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
                                                     </span>
                                                 </div>
                                                 <button
-                                                    className="p-1 text-gray-500 hover:text-red-600 cursor-pointer"
+                                                    className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all cursor-pointer border-none bg-transparent opacity-0 group-hover:opacity-100"
                                                     onClick={() => handleDeleteComment(comment.id)}
                                                     title="Delete comment"
                                                 >
-                                                    <Trash2 size={14} />
+                                                    <Trash2 size={16} />
                                                 </button>
                                             </div>
                                         </div>
@@ -5685,8 +5994,7 @@ export default function CustomerDetail() {
                             )}
                         </div>
                     </div>
-                )
-                }
+                )}
 
                 {
                     activeTab === "transactions" && (
@@ -6788,11 +7096,7 @@ export default function CustomerDetail() {
                                 </div>
                             )}
                         </div>
-                    )
-                }
-
-                {
-                    activeTab === "purchases" && (
+                    )}\n\n                {activeTab === "purchases" && (
                         <div className="flex-1 min-h-0 p-6" style={{ paddingRight: 0 }}>
                             <button className="flex items-center gap-2 px-4 py-2 mb-4 bg-gray-50 border border-gray-200 rounded-md text-sm text-gray-700 cursor-pointer hover:bg-gray-100">
                                 Go to transactions
@@ -6856,11 +7160,7 @@ export default function CustomerDetail() {
                                 </div>
                             )}
                         </div>
-                    )
-                }
-
-                {
-                    activeTab === "mails" && (
+                    )}\n\n                {activeTab === "mails" && (
                         <div className="flex-1 min-h-0 p-6" style={{ paddingRight: 0 }}>
                             <div className="bg-white rounded-lg border border-gray-200">
                                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
@@ -6937,11 +7237,7 @@ export default function CustomerDetail() {
                                 </div>
                             </div>
                         </div>
-                    )
-                }
-
-                {
-                    activeTab === "statement" && (
+                    )}\n\n                {activeTab === "statement" && (
                         <div className="flex-1 min-h-0 p-6" style={{ paddingRight: 0 }}>
                             {/* Statement Header */}
                             <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
@@ -7971,19 +8267,51 @@ export default function CustomerDetail() {
                                     <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
                                     <div className="space-y-3">
                                         <div className="flex gap-2">
-                                            <select
-                                                value={contactPersonWorkPhoneCode}
-                                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setContactPersonWorkPhoneCode(e.target.value)}
-                                                className="w-[92px] px-2 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                            >
-                                                <option value="+1">+1</option>
-                                                <option value="+44">+44</option>
-                                                <option value="+255">+255</option>
-                                                <option value="+254">+254</option>
-                                                <option value="+252">+252</option>
-                                                <option value="+355">+355</option>
-                                                <option value="+971">+971</option>
-                                            </select>
+                                            <div className="relative w-[92px]" ref={workPhoneCodeDropdownRef}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsWorkPhoneCodeDropdownOpen(prev => !prev)}
+                                                    className="w-full px-2 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 flex items-center justify-between bg-white"
+                                                >
+                                                    <span className="truncate">{contactPersonWorkPhoneCode}</span>
+                                                    <ChevronDown size={14} className={`ml-1 text-gray-500 transition-transform ${isWorkPhoneCodeDropdownOpen ? "rotate-180" : ""}`} />
+                                                </button>
+                                                {isWorkPhoneCodeDropdownOpen && (
+                                                    <div className="absolute z-50 mt-1 w-60 rounded-md border border-gray-200 bg-white shadow-lg">
+                                                        <div className="p-2 border-b border-gray-100">
+                                                            <div className="relative">
+                                                                <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+                                                                <input
+                                                                    value={workPhoneCodeSearch}
+                                                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWorkPhoneCodeSearch(e.target.value)}
+                                                                    placeholder="Search"
+                                                                    className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        <div className="max-h-[200px] overflow-y-auto">
+                                                            {filteredWorkPhoneCodeOptions.length === 0 && (
+                                                                <div className="px-3 py-2 text-xs text-gray-500">No results</div>
+                                                            )}
+                                                            {filteredWorkPhoneCodeOptions.map(option => (
+                                                                <button
+                                                                    key={`${option.code}-${option.name}-work`}
+                                                                    type="button"
+                                                                    className={`w-full flex items-center gap-2 px-3 py-2 text-left text-xs hover:bg-blue-50 ${contactPersonWorkPhoneCode === option.code ? "bg-blue-50 text-blue-700" : "text-gray-700"}`}
+                                                                    onClick={() => {
+                                                                        setContactPersonWorkPhoneCode(option.code);
+                                                                        setIsWorkPhoneCodeDropdownOpen(false);
+                                                                        setWorkPhoneCodeSearch("");
+                                                                    }}
+                                                                >
+                                                                    <span className="inline-block w-12">{option.code}</span>
+                                                                    <span className="truncate">{option.name}</span>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
                                             <input
                                                 type="tel"
                                                 placeholder="Work Phone"
@@ -7993,19 +8321,51 @@ export default function CustomerDetail() {
                                             />
                                         </div>
                                         <div className="flex gap-2">
-                                            <select
-                                                value={contactPersonMobilePhoneCode}
-                                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setContactPersonMobilePhoneCode(e.target.value)}
-                                                className="w-[92px] px-2 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                            >
-                                                <option value="+1">+1</option>
-                                                <option value="+44">+44</option>
-                                                <option value="+255">+255</option>
-                                                <option value="+254">+254</option>
-                                                <option value="+252">+252</option>
-                                                <option value="+355">+355</option>
-                                                <option value="+971">+971</option>
-                                            </select>
+                                            <div className="relative w-[92px]" ref={mobilePhoneCodeDropdownRef}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsMobilePhoneCodeDropdownOpen(prev => !prev)}
+                                                    className="w-full px-2 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 flex items-center justify-between bg-white"
+                                                >
+                                                    <span className="truncate">{contactPersonMobilePhoneCode}</span>
+                                                    <ChevronDown size={14} className={`ml-1 text-gray-500 transition-transform ${isMobilePhoneCodeDropdownOpen ? "rotate-180" : ""}`} />
+                                                </button>
+                                                {isMobilePhoneCodeDropdownOpen && (
+                                                    <div className="absolute z-50 mt-1 w-60 rounded-md border border-gray-200 bg-white shadow-lg">
+                                                        <div className="p-2 border-b border-gray-100">
+                                                            <div className="relative">
+                                                                <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+                                                                <input
+                                                                    value={mobilePhoneCodeSearch}
+                                                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMobilePhoneCodeSearch(e.target.value)}
+                                                                    placeholder="Search"
+                                                                    className="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        <div className="max-h-[200px] overflow-y-auto">
+                                                            {filteredMobilePhoneCodeOptions.length === 0 && (
+                                                                <div className="px-3 py-2 text-xs text-gray-500">No results</div>
+                                                            )}
+                                                            {filteredMobilePhoneCodeOptions.map(option => (
+                                                                <button
+                                                                    key={`${option.code}-${option.name}-mobile`}
+                                                                    type="button"
+                                                                    className={`w-full flex items-center gap-2 px-3 py-2 text-left text-xs hover:bg-blue-50 ${contactPersonMobilePhoneCode === option.code ? "bg-blue-50 text-blue-700" : "text-gray-700"}`}
+                                                                    onClick={() => {
+                                                                        setContactPersonMobilePhoneCode(option.code);
+                                                                        setIsMobilePhoneCodeDropdownOpen(false);
+                                                                        setMobilePhoneCodeSearch("");
+                                                                    }}
+                                                                >
+                                                                    <span className="inline-block w-12">{option.code}</span>
+                                                                    <span className="truncate">{option.name}</span>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
                                             <input
                                                 type="tel"
                                                 placeholder="Mobile"
@@ -8155,10 +8515,18 @@ export default function CustomerDetail() {
                             {/* Footer */}
                             <div className="sticky bottom-0 bg-white z-10 flex items-center justify-start gap-3 p-6 border-t border-gray-200">
                                 <button
-                                    className="px-6 py-2 bg-blue-600 text-white rounded-md text-sm font-medium cursor-pointer hover:bg-blue-700 transition-colors"
+                                    className={`px-6 py-2 bg-blue-600 text-white rounded-md text-sm font-medium cursor-pointer hover:bg-blue-700 transition-colors ${isSavingContactPerson ? "opacity-70 cursor-not-allowed" : ""}`}
                                     onClick={saveContactPerson}
+                                    disabled={isSavingContactPerson}
                                 >
-                                    Save
+                                    {isSavingContactPerson ? (
+                                        <span className="inline-flex items-center gap-2">
+                                            <Loader2 size={14} className="animate-spin" />
+                                            Saving...
+                                        </span>
+                                    ) : (
+                                        "Save"
+                                    )}
                                 </button>
                                 <button
                                     className="px-6 py-2 bg-white border border-gray-300 text-gray-700 rounded-md text-sm font-medium cursor-pointer hover:bg-gray-50 transition-colors"
@@ -9013,6 +9381,55 @@ export default function CustomerDetail() {
                                     type="button"
                                     className="px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50"
                                     onClick={() => setIsDeleteModalOpen(false)}
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+            {/* Delete Contact Person Confirmation Modal */}
+            {
+                isDeleteContactPersonModalOpen && (
+                    <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16">
+                        <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200">
+                            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+                                <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
+                                    !
+                                </div>
+                                <h3 className="text-[15px] font-semibold text-slate-800 flex-1">
+                                    Do you want to delete the contact person?
+                                </h3>
+                                <button
+                                    type="button"
+                                    className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                                    onClick={() => setIsDeleteContactPersonModalOpen(false)}
+                                    aria-label="Close"
+                                >
+                                    <X size={14} />
+                                </button>
+                            </div>
+                            <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+                                <button
+                                    type="button"
+                                    className="px-4 py-1.5 rounded-md bg-blue-600 text-white text-[12px] hover:bg-blue-700"
+                                    onClick={async () => {
+                                        if (pendingDeleteContactPersonIndex === null) return;
+                                        await deleteContactPerson(pendingDeleteContactPersonIndex);
+                                        setIsDeleteContactPersonModalOpen(false);
+                                        setPendingDeleteContactPersonIndex(null);
+                                    }}
+                                >
+                                    Delete
+                                </button>
+                                <button
+                                    type="button"
+                                    className="px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50"
+                                    onClick={() => {
+                                        setIsDeleteContactPersonModalOpen(false);
+                                        setPendingDeleteContactPersonIndex(null);
+                                    }}
                                 >
                                     Cancel
                                 </button>

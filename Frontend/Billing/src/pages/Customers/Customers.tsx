@@ -2814,7 +2814,7 @@ export default function Customers() {
                         {col.key === 'name' ? (
                           <div className="flex items-center gap-2">
                             <div className="flex flex-col min-w-0">
-                              <span className={`${isInactiveCustomer ? "text-slate-400" : "text-[#1b5e6a]"} font-medium truncate`}>
+                              <span className="text-[#1b5e6a] font-medium truncate">
                                 {customer.name || customer.displayName || 'Customer'}
                               </span>
                               <span className="text-[11px] text-gray-400 truncate md:hidden">{customer.email || 'No email provided'}</span>
