@@ -12,6 +12,7 @@ export default function Layout({ children }) {
   const isEmbeddedPage = searchParams.get("embed") === "1" || searchParams.get("quickAction") === "1";
   const hideAppChrome =
     isEmbeddedPage ||
+    location.pathname.startsWith("/documents") ||
     location.pathname.startsWith("/products/checkout-button") ||
     location.pathname.startsWith("/products/pricing-widgets/new");
   const isFullWidthPage =

@@ -1,5 +1,8 @@
 export const usePermissions = () => {
   const alwaysAllowed = () => true;
+  // Some pages still use the older `hasPermission(module, submodule, action)` helper.
+  // Keep a permissive alias here so those pages can compile and function.
+  const hasPermission = (..._args: any[]) => true;
 
   return {
     loading: false,
@@ -7,6 +10,7 @@ export const usePermissions = () => {
     canCreate: alwaysAllowed,
     canEdit: alwaysAllowed,
     canDelete: alwaysAllowed,
+    hasPermission,
   };
 };
 

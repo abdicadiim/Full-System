@@ -23,6 +23,7 @@ import ExpensesRoutes from '../pages/Expense/ExpensesRoutes'
 import SettingsRoutes from '../pages/settings/SettingsRoutes'
 import TimeTrackingPage from '../pages/timeTracking/TimeTrackingPage'
 import EventsPage from '../pages/events/EventsPage'
+import DocumentsPage from '../pages/documents/DocumentsPage'
 
 
 function ModulePlaceholder({ title }: { title: string }) {
@@ -125,7 +126,7 @@ export default function AppRoutes() {
       <Route path="/time-tracking/*" element={<TimeTrackingPage />} />
       <Route path="/events/*" element={<EventsPage />} />
 
-      <Route path="/documents/*" element={<ModulePlaceholder title="Documents" />} />
+      <Route path="/documents/*" element={<DocumentsPage />} />
       <Route path="/settings/*" element={<SettingsRoutes />} />
       <Route path="/reports/*" element={<ReportsRoutes />} />
 
