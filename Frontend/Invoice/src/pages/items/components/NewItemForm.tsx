@@ -260,14 +260,7 @@ const Label = ({ children, required = false, tooltip, dotted = false }: any) => 
       {children}
       {required ? "*" : ""}
     </span>
-    {tooltip && (
-      <span className="relative inline-flex items-center group">
-        <HelpCircle size={14} className="cursor-help text-gray-400" />
-        <span className="pointer-events-none absolute left-full top-1/2 z-[9999] ml-2 -translate-y-1/2 whitespace-pre-line rounded bg-slate-900 px-2 py-1 text-[11px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
-          {tooltip}
-        </span>
-      </span>
-    )}
+    {tooltip && <HelpCircle size={14} className="cursor-help text-gray-400" />}
   </div>
 );
 

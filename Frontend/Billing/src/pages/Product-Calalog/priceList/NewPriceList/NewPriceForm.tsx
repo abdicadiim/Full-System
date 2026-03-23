@@ -38,6 +38,13 @@ const roundingExamples = [
 export default function NewPriceForm({ onClose, editData }: NewPriceFormProps) {
     const { baseCurrency } = useCurrency();
     const { accentColor } = useOrganizationBranding();
+    const isActiveRow = (row: any) => {
+        const explicit = row?.isActive ?? row?.active;
+        if (explicit === false || String(explicit).toLowerCase() === 'false') return false;
+        const status = String(row?.status || '').trim().toLowerCase();
+        if (status) return status === 'active';
+        return true;
+    };
 
     const [priceType, setPriceType] = useState<'all' | 'individual'>('all');
     const [activeTab, setActiveTab] = useState<'products' | 'items'>('items');
@@ -102,11 +109,12 @@ export default function NewPriceForm({ onClose, editData }: NewPriceFormProps) {
                 // Load Items
                 const itemsRes: any = await itemsAPI.list({ limit: 1000, status: 'Active' });
                 const loadedItems = Array.isArray(itemsRes?.data) ? itemsRes.data : [];
+                const activeItems = loadedItems.filter(isActiveRow);
                 
-                if (loadedItems.length === 0) {
+                if (activeItems.length === 0) {
                     setItems([{ id: 'item-sample', name: 'mohamed', sku: 'sdv', salesRate: 11.00, status: 'Active', customRate: '', discount: '' }]);
                 } else {
-                    const normalized = loadedItems
+                    const normalized = activeItems
                         .map((row: any, idx: number) => {
                             const id = String(row?.id || row?._id || `item-${idx}`);
                             const name = String(row?.name || row?.itemName || '').trim();
@@ -126,9 +134,9 @@ export default function NewPriceForm({ onClose, editData }: NewPriceFormProps) {
                     currenciesAPI.list()
                 ]);
 
-                const productRows = Array.isArray(productsRes?.data) ? productsRes.data : [];
-                const planRows = Array.isArray(plansRes?.data) ? plansRes.data : Array.isArray(plansRes) ? plansRes : [];
-                const addonRows = Array.isArray(addonsRes?.data) ? addonsRes.data : Array.isArray(addonsRes) ? addonsRes : [];
+                const productRows = (Array.isArray(productsRes?.data) ? productsRes.data : []).filter(isActiveRow);
+                const planRows = (Array.isArray(plansRes?.data) ? plansRes.data : Array.isArray(plansRes) ? plansRes : []).filter(isActiveRow);
+                const addonRows = (Array.isArray(addonsRes?.data) ? addonsRes.data : Array.isArray(addonsRes) ? addonsRes : []).filter(isActiveRow);
                 const parsedCurrencies = Array.isArray(currenciesRes?.data) ? currenciesRes.data : [];
 
                 const normalize = (value: any) => String(value || '').trim().toLowerCase();
@@ -629,8 +637,8 @@ export default function NewPriceForm({ onClose, editData }: NewPriceFormProps) {
                                 <button onClick={() => setActiveTab('items')} className={`pb-2 text-[13px] px-1 font-medium transition-colors ${activeTab === 'items' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>Items</button>
                             </div>
 
-                            <div className="bg-white border-x border-b border-gray-100 p-8 space-y-8 animate-in fade-in duration-500">
-                                {activeTab === 'items' && (
+                            {activeTab === 'items' && (
+                                <div className="bg-white border-x border-b border-gray-100 p-8 space-y-8 animate-in fade-in duration-500">
                                     <div className="grid grid-cols-[160px_1fr] items-center gap-4">
                                         <label className="text-[13px] text-gray-600 font-medium">Pricing Scheme</label>
                                         <div className="flex items-center gap-6">
@@ -663,9 +671,7 @@ export default function NewPriceForm({ onClose, editData }: NewPriceFormProps) {
                                             <HelpCircle size={14} className="text-gray-400 cursor-help hover:text-blue-500 transition-colors" />
                                         </div>
                                     </div>
-                                )}
 
-                                {activeTab === 'items' && (
                                     <div className="grid grid-cols-[160px_1fr] items-center gap-4">
                                         <label className="text-[13px] text-gray-600 font-medium">Discount</label>
                                         <div className="flex items-center gap-6">
@@ -686,8 +692,8 @@ export default function NewPriceForm({ onClose, editData }: NewPriceFormProps) {
                                             )}
                                         </div>
                                     </div>
-                                )}
-                            </div>
+                                </div>
+                            )}
 
                             <div className="pt-2">
                                 {activeTab === 'products' ? (
@@ -700,79 +706,92 @@ export default function NewPriceForm({ onClose, editData }: NewPriceFormProps) {
                                         ) : (
                                             products.map(product => {
                                                 const isExpanded = expandedProducts.includes(product.id);
+                                                const activePlans = (product.plans || []).filter(isActiveRow);
+                                                const activeAddons = (product.addons || []).filter(isActiveRow);
                                                 return (
-                                                    <div key={product.id} className="border border-gray-100 rounded-lg overflow-hidden bg-white shadow-sm transition-all">
-                                                        <div className="flex items-center justify-between px-5 py-3.5 hover:bg-gray-50/50 cursor-pointer group" onClick={() => toggleProductExpansion(product.id)}>
-                                                            <h4 className="text-[14px] font-bold text-gray-800">{product.name}</h4>
-                                                            <div className="flex items-center gap-3">
-                                                                <button className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400 hover:text-blue-500 transition-all">
+                                                    <div key={product.id} className="border border-gray-100 rounded-lg overflow-hidden bg-white shadow-sm">
+                                                        <div
+                                                            className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 hover:bg-gray-50/60 cursor-pointer group"
+                                                            onClick={() => toggleProductExpansion(product.id)}
+                                                        >
+                                                            <h4 className="text-[13px] font-semibold text-gray-800">{product.name}</h4>
+                                                            <div className="flex items-center gap-2">
+                                                                <button className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-100 text-gray-400 hover:text-blue-500 hover:border-blue-100 bg-gray-50/50 transition-all">
                                                                     {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                                                                 </button>
                                                                 <button
                                                                     onClick={(e) => { e.stopPropagation(); removeProduct(product.id); }}
-                                                                    className="p-1.5 rounded-md hover:bg-red-50 text-gray-400 hover:text-red-500 transition-all"
+                                                                    className="w-7 h-7 flex items-center justify-center rounded-md border border-red-100 text-red-400 hover:text-red-600 hover:bg-red-50 transition-all"
                                                                 >
-                                                                    <X size={16} />
+                                                                    <X size={14} />
                                                                 </button>
                                                             </div>
                                                         </div>
 
                                                         {isExpanded && (
-                                                            <div className="p-6 pt-0 space-y-8 animate-in slide-in-from-top-2 duration-300">
-                                                                <div className="space-y-3">
-                                                                    <div className="flex items-center gap-2 text-[12px] font-bold text-gray-600 pl-1">
-                                                                        <Layout size={14} className="text-gray-400" />
+                                                            <div className="px-4 pb-4 pt-3 space-y-6 animate-in slide-in-from-top-2 duration-300">
+                                                                <div className="space-y-2">
+                                                                    <div className="flex items-center gap-2 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                                                                        <Layout size={13} className="text-gray-400" />
                                                                         Plans
                                                                     </div>
-                                                                    <div className="border border-blue-50/50 rounded-lg overflow-hidden">
-                                                                        <div className="grid grid-cols-[1fr_220px_220px] bg-blue-50/30 border-b border-blue-50 px-5 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                                                                            <div>PER UNIT</div>
-                                                                            <div className="text-right pr-4 uppercase">SETUP FEE ({currency || baseCurrency.code})</div>
-                                                                            <div className="text-right pr-4 uppercase">PRICE ({currency || baseCurrency.code})</div>
+                                                                    <div className="border border-gray-100 rounded-lg overflow-hidden">
+                                                                        <div className="grid grid-cols-[1fr_220px_220px] bg-gray-50 border-b border-gray-100 px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                                                            <div>Per Unit</div>
+                                                                            <div className="text-right pr-4">Setup Fee ({currency || baseCurrency.code})</div>
+                                                                            <div className="text-right pr-4">Price ({currency || baseCurrency.code})</div>
                                                                         </div>
                                                                         <div className="divide-y divide-gray-50">
-                                                                            {product.plans.map((plan: any, i: number) => (
-                                                                                <div key={i} className="grid grid-cols-[1fr_220px_220px] px-5 py-3 text-[13px] text-gray-700 items-center hover:bg-gray-50/30 transition-colors">
-                                                                                    <div className="font-medium">{plan.name}</div>
-                                                                                    <div className="text-right pr-8 text-gray-400">-</div>
-                                                                                    <div className="text-right pr-4">
-                                                                                        <input
-                                                                                            className="h-8 w-28 rounded-md border border-gray-200 px-2 text-right text-[12px] text-gray-700 focus:border-blue-500 focus:outline-none"
-                                                                                            placeholder="0"
-                                                                                            value={plan.priceListRate ?? ""}
-                                                                                            onChange={(e) => updatePlanRate(product.id, plan.id, e.target.value)}
-                                                                                        />
+                                                                            {activePlans.length === 0 ? (
+                                                                                <div className="px-4 py-3 text-[12px] text-gray-400">No active plans</div>
+                                                                            ) : (
+                                                                                activePlans.map((plan: any, i: number) => (
+                                                                                    <div key={i} className="grid grid-cols-[1fr_220px_220px] px-4 py-2.5 text-[13px] text-gray-700 items-center hover:bg-gray-50/40 transition-colors">
+                                                                                        <div className="font-medium">{plan.name}</div>
+                                                                                        <div className="text-right pr-8 text-gray-400">-</div>
+                                                                                        <div className="text-right pr-4">
+                                                                                            <input
+                                                                                                className="h-8 w-28 rounded-md border border-gray-200 px-2 text-right text-[12px] text-gray-700 focus:border-blue-500 focus:outline-none"
+                                                                                                placeholder="0"
+                                                                                                value={plan.priceListRate ?? ""}
+                                                                                                onChange={(e) => updatePlanRate(product.id, plan.id, e.target.value)}
+                                                                                            />
+                                                                                        </div>
                                                                                     </div>
-                                                                                </div>
-                                                                            ))}
+                                                                                ))
+                                                                            )}
                                                                         </div>
                                                                     </div>
                                                                 </div>
 
-                                                                <div className="space-y-3">
-                                                                    <div className="flex items-center gap-2 text-[12px] font-bold text-gray-600 pl-1">
-                                                                        <Box size={14} className="text-gray-400" />
+                                                                <div className="space-y-2">
+                                                                    <div className="flex items-center gap-2 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                                                                        <Box size={13} className="text-gray-400" />
                                                                         Addons
                                                                     </div>
-                                                                    <div className="border border-blue-50/50 rounded-lg overflow-hidden">
-                                                                        <div className="grid grid-cols-[1fr_220px] bg-blue-50/30 border-b border-blue-50 px-5 py-2.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                                                                            <div>PER UNIT</div>
-                                                                            <div className="text-right pr-4 uppercase">PRICE ({currency || baseCurrency.code})</div>
+                                                                    <div className="border border-gray-100 rounded-lg overflow-hidden">
+                                                                        <div className="grid grid-cols-[1fr_220px] bg-gray-50 border-b border-gray-100 px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                                                            <div>Per Unit</div>
+                                                                            <div className="text-right pr-4">Price ({currency || baseCurrency.code})</div>
                                                                         </div>
                                                                         <div className="divide-y divide-gray-50">
-                                                                            {product.addons.map((addon: any, i: number) => (
-                                                                                <div key={i} className="grid grid-cols-[1fr_220px] px-5 py-3 text-[13px] text-gray-700 items-center hover:bg-gray-50/30 transition-colors">
-                                                                                    <div className="font-medium">{addon.name}</div>
-                                                                                    <div className="text-right pr-4">
-                                                                                        <input
-                                                                                            className="h-8 w-28 rounded-md border border-gray-200 px-2 text-right text-[12px] text-gray-700 focus:border-blue-500 focus:outline-none"
-                                                                                            placeholder="0"
-                                                                                            value={addon.priceListRate ?? ""}
-                                                                                            onChange={(e) => updateAddonRate(product.id, addon.id, e.target.value)}
-                                                                                        />
+                                                                            {activeAddons.length === 0 ? (
+                                                                                <div className="px-4 py-3 text-[12px] text-gray-400">No active addons</div>
+                                                                            ) : (
+                                                                                activeAddons.map((addon: any, i: number) => (
+                                                                                    <div key={i} className="grid grid-cols-[1fr_220px] px-4 py-2.5 text-[13px] text-gray-700 items-center hover:bg-gray-50/40 transition-colors">
+                                                                                        <div className="font-medium">{addon.name}</div>
+                                                                                        <div className="text-right pr-4">
+                                                                                            <input
+                                                                                                className="h-8 w-28 rounded-md border border-gray-200 px-2 text-right text-[12px] text-gray-700 focus:border-blue-500 focus:outline-none"
+                                                                                                placeholder="0"
+                                                                                                value={addon.priceListRate ?? ""}
+                                                                                                onChange={(e) => updateAddonRate(product.id, addon.id, e.target.value)}
+                                                                                            />
+                                                                                        </div>
                                                                                     </div>
-                                                                                </div>
-                                                                            ))}
+                                                                                ))
+                                                                            )}
                                                                         </div>
                                                                     </div>
                                                                 </div>

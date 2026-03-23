@@ -245,12 +245,32 @@ export default function PlanDetailPage() {
   }, [addons, selectedPlanName, selectedPlanProduct]);
 
   const planPriceLists = useMemo(() => {
+    const planIdValue = String(selectedPlan?.id || selectedPlan?._id || "").trim();
+    const planNameValue = planNameOf(selectedPlan).trim().toLowerCase();
     return priceLists.filter((priceList) => {
-      const relatedProduct = String(priceList?.product || priceList?.productName || "").trim().toLowerCase();
-      if (!relatedProduct || !selectedPlanProduct) return true;
-      return relatedProduct === selectedPlanProduct;
+      const productMatch = (() => {
+        const relatedProduct = String(priceList?.product || priceList?.productName || "").trim().toLowerCase();
+        if (!relatedProduct || !selectedPlanProduct) return true;
+        return relatedProduct === selectedPlanProduct;
+      })();
+
+      if (!productMatch) return false;
+
+      const productRates = Array.isArray(priceList?.productRates) ? priceList.productRates : [];
+      if (productRates.length === 0) return false;
+
+      const planMatch = productRates.some((pr: any) => {
+        const plans = Array.isArray(pr?.plans) ? pr.plans : [];
+        return plans.some((p: any) => {
+          const idMatch = planIdValue && String(p?.planId || p?.id || "").trim() === planIdValue;
+          const nameMatch = planNameValue && String(p?.name || "").trim().toLowerCase() === planNameValue;
+          return idMatch || nameMatch;
+        });
+      });
+
+      return planMatch;
     });
-  }, [priceLists, selectedPlanProduct]);
+  }, [priceLists, selectedPlan, selectedPlanProduct]);
 
   useEffect(() => {
     setShowAddonCount(false);
