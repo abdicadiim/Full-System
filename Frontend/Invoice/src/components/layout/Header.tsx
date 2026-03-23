@@ -105,8 +105,8 @@ function Header({ onToggleSidebar }) {
         title: "SALES",
         items: [
           { label: "Customer", to: "/customers/new" },
-          { label: "Quotes", to: "/sales/quotes" },
-          { label: "Invoices", to: "/sales/invoices" },
+          { label: "Quotes", to: "/sales/quotes/new" },
+          { label: "Invoices", to: "/sales/invoices/new" },
           { label: "Sales Receipts", to: "/sales/receipts" },
           { label: "Retainer Invoices", to: "/sales/retainer-invoices" },
           { label: "Payment Links", to: "/payments/payment-links" },

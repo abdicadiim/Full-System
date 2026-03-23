@@ -1230,6 +1230,8 @@ export interface Quote {
   customer?: any;
   customerId?: string;
   customerName?: string;
+  priceListId?: string;
+  priceListName?: string;
   customerEmail?: string;
   salesperson?: any;
   salespersonId?: string;
@@ -1244,6 +1246,7 @@ export interface Quote {
   subtotal: number;
   tax?: number;
   taxAmount?: number;
+  totalTax?: number;
   taxName?: string;
   discount: number;
   discountType?: string;
@@ -1329,7 +1332,7 @@ const mapQuoteFromApi = (quote: any): Quote => {
       : "");
 
   const subtotalValue = Number(quote?.subtotal ?? quote?.subTotal ?? 0) || 0;
-  const taxValue = Number(quote?.tax ?? quote?.taxAmount ?? 0) || 0;
+  const taxValue = Number(quote?.tax ?? quote?.taxAmount ?? quote?.totalTax ?? 0) || 0;
   const taxExclusive = quote?.taxExclusive || 'Tax Exclusive';
   const taxLabel = quote?.taxName || (taxValue > 0 ? (taxExclusive === 'Tax Inclusive' ? 'Tax (Included)' : 'Tax') : '');
 
@@ -1339,6 +1342,8 @@ const mapQuoteFromApi = (quote: any): Quote => {
     quoteNumber: quote?.quoteNumber,
     customerId: customerId ? String(customerId) : "",
     customerName: customerName,
+    priceListId: String(quote?.priceListId || quote?.priceList?._id || quote?.priceList?.id || ""),
+    priceListName: String(quote?.priceListName || quote?.priceList?.name || ""),
     customer: quote?.customer,
     salesperson: quote?.salesperson?.name || quote?.salesperson,
     salespersonId: quote?.salesperson?._id || quote?.salesperson,
@@ -1353,6 +1358,7 @@ const mapQuoteFromApi = (quote: any): Quote => {
     subtotal: subtotalValue,
     tax: taxValue,
     taxAmount: taxValue,
+    totalTax: Number(quote?.totalTax ?? taxValue) || taxValue,
     taxName: taxLabel,
     discount: Number(quote?.discount || 0) || 0,
     discountType: quote?.discountType || 'percent',
@@ -1440,12 +1446,20 @@ export const saveQuote = async (quoteData: Partial<Quote>): Promise<Quote> => {
       quoteNumber: String(quoteData.quoteNumber || ''),
       customer: quoteData.customerId || quoteData.customer, // Use ID as priority
       customerId: quoteData.customerId || quoteData.customer,
+      customerName:
+        quoteData.customerName ||
+        (typeof (quoteData as any).customer === "object" && (quoteData as any).customer
+          ? ((quoteData as any).customer.displayName || (quoteData as any).customer.name || (quoteData as any).customer.companyName || "")
+          : ""),
+      priceListId: String((quoteData as any).priceListId || ""),
+      priceListName: String((quoteData as any).priceListName || ""),
       date: toISO(quoteData.quoteDate || quoteData.date) || new Date().toISOString(),
       quoteDate: toISO(quoteData.quoteDate || quoteData.date) || new Date().toISOString(),
       expiryDate: toISO(quoteData.expiryDate),
       subtotal: parseFloat(String(quoteData.subTotal || quoteData.subtotal || 0)) || 0,
       subTotal: parseFloat(String(quoteData.subTotal || quoteData.subtotal || 0)) || 0,
-      tax: parseFloat(String(quoteData.tax ?? quoteData.taxAmount ?? 0)) || 0,
+      tax: parseFloat(String(quoteData.tax ?? quoteData.taxAmount ?? quoteData.totalTax ?? 0)) || 0,
+      totalTax: parseFloat(String(quoteData.totalTax ?? quoteData.taxAmount ?? quoteData.tax ?? 0)) || 0,
       discount: parseFloat(String(quoteData.discount || 0)) || 0,
       discountType: quoteData.discountType || 'percent',
       discountAccount: quoteData.discountAccount || 'General Income',
@@ -1546,8 +1560,20 @@ export const updateQuote = async (quoteId: string, quoteData: Partial<Quote>): P
       apiData.subTotal = subtotalValue;
       apiData.subtotal = subtotalValue;
     }
-    if (quoteData.tax !== undefined || quoteData.taxAmount !== undefined) {
-      apiData.tax = parseFloat(String(quoteData.tax ?? quoteData.taxAmount ?? 0)) || 0;
+    if (quoteData.tax !== undefined || quoteData.taxAmount !== undefined || quoteData.totalTax !== undefined) {
+      apiData.tax = parseFloat(String(quoteData.tax ?? quoteData.taxAmount ?? quoteData.totalTax ?? 0)) || 0;
+      apiData.totalTax = parseFloat(String(quoteData.totalTax ?? quoteData.taxAmount ?? quoteData.tax ?? 0)) || 0;
+    }
+
+    if (quoteData.customerName !== undefined) {
+      apiData.customerName = String(quoteData.customerName || "");
+    }
+
+    if ((quoteData as any).priceListId !== undefined) {
+      apiData.priceListId = String((quoteData as any).priceListId || "");
+    }
+    if ((quoteData as any).priceListName !== undefined) {
+      apiData.priceListName = String((quoteData as any).priceListName || "");
     }
 
     if (quoteData.discountType !== undefined) {

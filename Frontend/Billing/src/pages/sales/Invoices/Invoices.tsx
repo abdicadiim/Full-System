@@ -2007,87 +2007,91 @@ export default function Invoices() {
       <div className="border-b border-gray-100 bg-white sticky top-0 z-[100]">
         {selectedInvoices.size > 0 ? (
           /* Bulk Action Header */
-          <div className="flex items-center justify-between px-4 h-[60px]">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleBulkUpdate}
-                className="h-9 px-4 rounded-md text-white text-sm font-medium inline-flex items-center gap-1.5 shadow-sm transition-all bg-gradient-to-r from-[#176a79] to-[#1b5e6a] hover:from-[#1b5e6a] hover:to-[#176a79]"
-              >
-                Bulk Update
-              </button>
-
-              <div className="relative" ref={downloadDropdownRef}>
+          <div className="flex-none flex items-center justify-between px-6 py-6 bg-white relative overflow-visible z-[100]">
+            <div className="flex min-w-0 flex-1 items-center gap-3 pl-4 pr-2 overflow-visible">
+              <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
                 <button
                   type="button"
-                  onClick={() => {
-                    if (!isGeneratingPdf) setIsDownloadDropdownOpen(!isDownloadDropdownOpen);
-                  }}
-                  className={`px-4 py-2 border border-gray-200 bg-white text-sm font-medium text-gray-700 rounded-md hover:bg-gray-50 transition-all shadow-sm flex items-center gap-2 ${isGeneratingPdf ? "opacity-60 cursor-not-allowed" : ""}`}
-                  title="Export Options"
-                  disabled={isGeneratingPdf}
+                  onClick={handleBulkUpdate}
+                  className="h-9 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
+                  title="Bulk Update"
                 >
-                  {isGeneratingPdf ? <RefreshCw size={16} className="animate-spin" /> : <FileDown size={16} className="text-gray-500" />}
-                  <span>Export PDF</span>
-                  <ChevronDown size={14} className="text-gray-400" />
+                  Bulk Update
                 </button>
-                {isDownloadDropdownOpen && (
-                  <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 min-w-[180px] py-1">
-                    <button
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                      onClick={() => {
-                        handleDownloadPDF();
-                        setIsDownloadDropdownOpen(false);
-                      }}
-                    >
-                      Download as PDF
-                    </button>
-                  </div>
-                )}
-              </div>
 
-              <button
-                type="button"
-                onClick={handleMarkAsPaidAction}
-                className="px-4 py-2 border border-gray-200 bg-white text-sm font-medium text-gray-700 rounded-md hover:bg-gray-50 transition-all shadow-sm flex items-center gap-2"
-              >
-                Mark As Paid
-              </button>
+                <div className="relative" ref={downloadDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isGeneratingPdf) setIsDownloadDropdownOpen(!isDownloadDropdownOpen);
+                    }}
+                    className={`px-4 py-2 border border-gray-200 bg-white text-sm font-medium text-gray-700 rounded-md hover:bg-gray-50 transition-all shadow-sm flex items-center gap-2 ${isGeneratingPdf ? "opacity-60 cursor-not-allowed" : ""}`}
+                    title="Export Options"
+                    disabled={isGeneratingPdf}
+                  >
+                    {isGeneratingPdf ? <RefreshCw size={16} className="animate-spin" /> : <FileDown size={16} className="text-gray-500" />}
+                    <span>Export PDF</span>
+                    <ChevronDown size={14} className="text-gray-400" />
+                  </button>
+                  {isDownloadDropdownOpen && (
+                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 min-w-[180px] py-1">
+                      <button
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        onClick={() => {
+                          handleDownloadPDF();
+                          setIsDownloadDropdownOpen(false);
+                        }}
+                      >
+                        Download as PDF
+                      </button>
+                    </div>
+                  )}
+                </div>
 
-              <button
-                type="button"
-                onClick={handleDelete}
-                className="px-4 py-2 border border-gray-200 bg-white text-sm font-medium text-red-600 rounded-md hover:bg-red-50 transition-all shadow-sm flex items-center gap-2"
-              >
-                <Trash2 size={16} className="text-red-500" />
-                <span>Delete</span>
-              </button>
-
-              <div className="mx-2 h-5 w-px bg-gray-200" />
-
-              <div className="inline-flex items-center gap-2 text-sm text-slate-500">
-                <span
-                  className="flex h-6 min-w-[24px] items-center justify-center rounded px-2 text-[13px] font-semibold text-white"
-                  style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
+                <button
+                  type="button"
+                  onClick={handleMarkAsPaidAction}
+                  className="px-4 py-2 border border-gray-200 bg-white text-sm font-medium text-gray-700 rounded-md hover:bg-gray-50 transition-all shadow-sm flex items-center gap-2"
                 >
-                  {selectedInvoices.size}
-                </span>
-                <span className="text-sm text-gray-700">Selected</span>
+                  Mark As Paid
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  className="px-4 py-2 border border-gray-200 bg-white text-sm font-medium text-red-600 rounded-md hover:bg-red-50 transition-all shadow-sm flex items-center gap-2"
+                >
+                  <Trash2 size={16} className="text-red-500" />
+                  <span>Delete</span>
+                </button>
+
+                <div className="mx-2 h-5 w-px bg-gray-200" />
+
+                <div className="inline-flex items-center gap-2 text-sm text-slate-500">
+                  <span
+                    className="flex h-6 min-w-[24px] items-center justify-center rounded px-2 text-[13px] font-semibold text-white"
+                    style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
+                  >
+                    {selectedInvoices.size}
+                  </span>
+                  <span className="text-sm text-gray-700">Selected</span>
+                </div>
               </div>
             </div>
 
             <button
               type="button"
               onClick={() => setSelectedInvoices(new Set())}
-              className="inline-flex items-center gap-1 text-sm text-red-500 hover:text-red-700"
+              className="flex items-center gap-1 px-3 py-2 text-sm text-gray-700 hover:text-gray-900"
+              aria-label="Clear Selection"
             >
-              <span>Esc</span>
-              <X size={18} />
+              <span className="text-gray-500">Esc</span>
+              <X size={16} className="text-red-500" />
             </button>
           </div>
         ) : (
           /* Normal Header */
-          <div className="flex items-center justify-between px-4 h-[60px]">
+          <div className="flex-none flex items-center justify-between px-6 py-6 bg-white relative overflow-visible">
             <div className="flex items-center gap-8 pl-4">
               <div className="relative" ref={invoiceDropdownRef}>
                 <button
@@ -2138,21 +2142,22 @@ export default function Invoices() {
             <div className="flex flex-wrap items-center gap-3 sm:gap-2 mr-4">
               <button
                 onClick={handleCreateNewInvoice}
-                className="h-9 px-4 rounded-md text-white text-sm font-medium inline-flex items-center gap-1.5 shadow-sm transition-all bg-gradient-to-r from-[#176a79] to-[#1b5e6a] hover:from-[#1b5e6a] hover:to-[#176a79]"
+                className="h-[38px] cursor-pointer transition-all text-white px-5 rounded-lg border-[#0D4A52] border-b-[4px] hover:brightness-110 hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:translate-y-[1px] text-sm font-semibold shadow-sm flex items-center justify-center gap-2"
+                style={{ background: "linear-gradient(180deg, #156372 0%, #0D4A52 100%)" }}
                 type="button"
               >
-                <Plus size={18} className="stroke-[3px]" />
+                <Plus size={16} strokeWidth={3} />
                 <span>New</span>
               </button>
 
               <div className="relative" ref={moreMenuRef}>
                 <button
-                  onClick={() => setIsMoreMenuOpen((prev) => !prev)}
-                  className="h-9 w-9 rounded-md border border-gray-200 bg-white text-slate-600 inline-flex items-center justify-center shadow-sm hover:bg-slate-50"
                   type="button"
-                  aria-label="More options"
+                  onClick={() => setIsMoreMenuOpen((prev) => !prev)}
+                  className="p-1.5 border border-gray-200 rounded hover:bg-gray-50 transition-colors bg-white shadow-sm"
+                  title="More Actions"
                 >
-                  <MoreHorizontal size={16} />
+                  <MoreHorizontal size={18} className="text-gray-500" />
                 </button>
                 {isMoreMenuOpen && (
                   <div className="absolute top-full right-0 mt-1 w-64 bg-white border border-gray-100 rounded-lg shadow-xl py-2 z-[110]">
@@ -2360,35 +2365,32 @@ export default function Invoices() {
         ) : (
           <div className="bg-white">
             <table className="w-full text-left border-collapse">
-              <thead className="bg-[#f6f7fb] sticky top-0 z-[110]">
-                <tr>
-                  <th className="px-4 py-3 text-left w-10">
+              <thead className="bg-[#f6f7fb] sticky top-0 z-[110] border-b border-[#e6e9f2]">
+                <tr className="text-[10px] font-semibold text-[#7b8494] uppercase tracking-wider">
+                  <th className="px-4 py-3 w-16 min-w-[64px] bg-[#f6f7fb]">
                     <div className="flex items-center gap-2">
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           setTempVisibleColumns([...visibleColumns]);
                           setTempColumnOrder([...columnOrder]);
                           setIsCustomizeColumnsModalOpen(true);
                         }}
-                        className="p-1 text-gray-500 hover:text-gray-700 cursor-pointer"
+                        className="h-6 w-6 flex items-center justify-center rounded border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
                         title="Customize Columns"
                       >
-                        <SlidersHorizontal size={14} />
+                        <SlidersHorizontal size={13} style={{ color: "#1b5e6a" }} />
                       </button>
+                      <div className="h-5 w-px bg-gray-200" />
+                      <input
+                        type="checkbox"
+                        checked={selectedInvoices.size === sortedInvoices.length && sortedInvoices.length > 0}
+                        onChange={handleSelectAllInvoices}
+                        style={{ accentColor: "#1b5e6a" }}
+                        className="cursor-pointer h-4 w-4 rounded border-gray-300 transition-all focus:ring-0"
+                      />
                     </div>
-                  </th>
-                  <th className="px-4 py-3 text-left w-10">
-                    <button
-                      className="cursor-pointer flex items-center"
-                      onClick={handleSelectAllInvoices}
-                    >
-                      {selectedInvoices.size === sortedInvoices.length && sortedInvoices.length > 0 ? (
-                        <CheckSquare size={16} fill="#156372" color="#156372" />
-                      ) : (
-                        <Square size={16} className="text-gray-400" />
-                      )}
-                    </button>
                   </th>
                   {visibleColumns.map((colKey) => {
                     const col = invoiceColumnOptions.find(c => c.key === colKey);
@@ -2398,79 +2400,84 @@ export default function Invoices() {
                     return (
                       <th
                         key={colKey}
-                        className="px-4 py-3 text-left text-[11px] font-semibold text-[#7b8494] uppercase tracking-wider select-none"
+                        className="px-4 py-3 text-left relative group/header cursor-pointer select-none"
+                        onClick={() => isSortable ? handleSort(col.label) : undefined}
                       >
-                        {isSortable ? (
-                          <button
-                            className="flex items-center gap-1 hover:text-gray-900 transition-colors uppercase"
-                            onClick={() => handleSort(col.label)}
-                          >
-                            {col.label}
-                            <ArrowUpDown size={12} className="text-gray-400" />
-                          </button>
-                        ) : (
-                          col.label
-                        )}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1">
+                            <span className={`truncate font-semibold ${/tax/i.test(colKey) ? 'text-black' : 'text-[#7b8494]'}`}>{col.label}</span>
+                            {isSortable && activeSortField === col.label && (
+                              <ArrowUpDown
+                                size={10}
+                                className="flex-shrink-0 transition-colors text-[#156372]"
+                              />
+                            )}
+                          </div>
+                        </div>
                       </th>
                     );
                   })}
-                  <th className="w-10 px-4 py-3 text-right sticky right-0 z-20 bg-[#f6f7fb]">
-                    <button
-                      onClick={() => setIsSearchModalOpen(true)}
-                      className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer"
-                    >
-                      <Search size={14} />
-                    </button>
+                  <th className="px-4 py-3 w-12 sticky right-0 bg-[#f6f7fb] z-20">
+                    <div className="flex items-center justify-center">
+                      <Search
+                        size={14}
+                        className="text-gray-300 cursor-pointer transition-colors hover:opacity-80"
+                        onClick={(e) => { e.stopPropagation(); setIsSearchModalOpen(true); }}
+                      />
+                    </div>
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {isRefreshing ? (
                   Array(5).fill(0).map((_, index) => (
-                    <tr key={`skeleton-${index}`}>
-                      <td className="px-4 py-3"></td>
-                      <td className="px-4 py-3">
-                        <div className="w-4 h-4 bg-gray-200 rounded animate-pulse"></div>
+                    <tr key={`skeleton-${index}`} className="animate-pulse border-b border-[#eef1f6] h-[50px]">
+                      <td className="px-4 py-3 w-16">
+                        <div className="h-4 w-4 bg-gray-100 rounded mx-auto" />
                       </td>
                       {visibleColumns.map((colKey) => (
                         <td key={`${index}-${colKey}`} className="px-4 py-3">
-                          <div className="h-4 bg-gray-200 rounded animate-pulse w-24"></div>
+                          <div className="h-4 bg-gray-100 rounded w-24" />
                         </td>
                       ))}
-                      <td className="px-4 py-3"></td>
-                      <td className="px-4 py-3"></td>
+                      <td className="px-4 py-3 w-12 sticky right-0 bg-white/95 backdrop-blur-sm" />
                     </tr>
                   ))
                 ) : (
-                  sortedInvoices.map((invoice) => (
-                    <tr
-                      key={invoice.id}
-                      onClick={(e) => {
-                        // Don't navigate if clicking checkbox or edit button
-                        if (!(e.target as Element).closest('.invoice-checkbox') && !(e.target as Element).closest('.invoice-edit-button')) {
+                  sortedInvoices.map((invoice) => {
+                    const isSelected = selectedInvoices.has(invoice.id);
+                    return (
+                      <tr
+                        key={invoice.id}
+                        className="text-[13px] h-[50px] group transition-all border-b border-[#eef1f6] cursor-pointer hover:bg-[#f8fafc]"
+                        style={isSelected ? { backgroundColor: "#1b5e6a1A" } : {}}
+                        onClick={(e) => {
+                          const target = e.target as HTMLElement;
+                          if (target.closest('.invoice-checkbox') || target.closest('.invoice-action-button') || target.closest('.invoice-edit-button')) {
+                            return;
+                          }
                           navigate(`/sales/invoices/${invoice.id}`);
-                        }
-                      }}
-                      className="group transition-all cursor-pointer hover:bg-slate-50/50"
-                    >
-                      {/* Empty first col under the sliders icon */}
-                      <td className="px-4 py-3 w-10"></td>
-                      {/* Checkbox column */}
-                      <td className="px-4 py-3">
-                        <button
-                          className="invoice-checkbox cursor-pointer"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleSelectInvoice(invoice.id);
-                          }}
-                        >
-                          {selectedInvoices.has(invoice.id) ? (
-                            <CheckSquare size={16} fill="#156372" color="#156372" />
-                          ) : (
-                            <Square size={16} />
-                          )}
-                        </button>
-                      </td>
+                        }}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className="h-6 w-6 shrink-0" aria-hidden />
+                            <span className="h-5 w-px shrink-0 bg-transparent" aria-hidden />
+                            <button
+                              className="invoice-checkbox cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectInvoice(invoice.id);
+                              }}
+                            >
+                              {selectedInvoices.has(invoice.id) ? (
+                                <CheckSquare size={16} fill="#156372" color="#156372" />
+                              ) : (
+                                <Square size={16} className="text-gray-400" />
+                              )}
+                            </button>
+                          </div>
+                        </td>
                       {visibleColumns.map((colKey) => (
                         <td key={`${invoice.id}-${colKey}`} className="px-4 py-3">
                           {renderInvoiceCell(invoice, colKey)}
@@ -2563,8 +2570,9 @@ export default function Invoices() {
                         </div>
                       </td>
                     </tr>
-                  ))
-                )}
+                  );
+                })
+            )}
               </tbody>
             </table>
           </div>

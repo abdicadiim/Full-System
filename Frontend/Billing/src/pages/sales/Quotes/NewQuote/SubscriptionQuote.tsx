@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Calculator, CalendarDays, ChevronDown, ChevronRight, ChevronUp, Image as ImageIcon, Info, MoreVertical, PlusCircle, Search, Settings, ShoppingBag, Tag, Upload, X } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Customer, Salesperson, getCustomers, getPlansFromAPI, getQuotes, getSalespersonsFromAPI, getTaxesFromAPI, saveQuote, saveSalesperson, saveTax } from "../../salesModel";
-import { customersAPI, quotesAPI, reportingTagsAPI } from "../../../../services/api";
+import { customersAPI, quotesAPI, reportingTagsAPI, priceListsAPI } from "../../../../services/api";
 import { createTaxLocal, readTaxesLocal } from "../../../settings/organization-settings/taxes-compliance/TAX/storage";
 import { Country, State } from "country-state-city";
 
@@ -124,6 +124,7 @@ export default function SubscriptionQuote() {
   const [salespersons, setSalespersons] = useState<Salesperson[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
   const [planAddons, setPlanAddons] = useState<PlanAddonOption[]>([]);
+  const [selectedPlanAddon, setSelectedPlanAddon] = useState<PlanAddonOption | null>(null);
   const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [isPlanAddonDropdownOpen, setIsPlanAddonDropdownOpen] = useState(false);
@@ -195,6 +196,72 @@ export default function SubscriptionQuote() {
   };
   const isProductSelected = formData.product.trim().length > 0;
   const normalizeText = (value: any) => String(value || "").trim().toLowerCase();
+
+  const selectedPriceList = useMemo(() => {
+    const selected = String(formData.priceList || "").trim();
+    if (!selected || normalizeText(selected) === "select price list") return null;
+    return (
+      catalogPriceLists.find((row: any) => String(row?.name || "").trim() === selected) ||
+      catalogPriceLists.find((row: any) => String(row?.id || row?._id || "").trim() === selected) ||
+      null
+    );
+  }, [catalogPriceLists, formData.priceList]);
+
+  const parsePercentage = (value: any) => {
+    const raw = String(value || "").replace(/[^0-9.-]/g, "");
+    const num = Number(raw);
+    return Number.isFinite(num) ? num : 0;
+  };
+
+  const applyRounding = (value: number, roundOffTo: string) => {
+    const label = String(roundOffTo || "").toLowerCase();
+    if (label.includes("decimal places")) {
+      const digits = Number(label.split(" ")[0]);
+      if (Number.isFinite(digits)) return Number(value.toFixed(digits));
+    }
+    if (label.includes("nearest whole")) return Math.round(value);
+    if (label.includes("0.99")) return Math.floor(value) + 0.99;
+    if (label.includes("0.50")) return Math.floor(value) + 0.5;
+    if (label.includes("0.49")) return Math.floor(value) + 0.49;
+    return value;
+  };
+
+  const getIndividualPriceListRate = (priceList: any, planAddon: PlanAddonOption | null) => {
+    if (!priceList || !planAddon) return null;
+    if (String(priceList.priceListType || "").toLowerCase() !== "individual") return null;
+
+    const productRates = Array.isArray(priceList.productRates) ? priceList.productRates : [];
+    const productRow = productRates.find((row: any) => {
+      const rowId = String(row?.productId || "").trim();
+      const rowName = String(row?.productName || "").trim();
+      return (planAddon.productId && rowId && rowId === String(planAddon.productId).trim()) || (rowName && rowName === planAddon.productName);
+    });
+    if (!productRow) return null;
+
+    const listRows = planAddon.type === "plan" ? (productRow.plans || []) : (productRow.addons || []);
+    const match = (Array.isArray(listRows) ? listRows : []).find((row: any) => {
+      const idKey = planAddon.type === "plan" ? "planId" : "addonId";
+      const rowId = String(row?.[idKey] || "").trim();
+      const rowName = String(row?.name || "").trim();
+      return (rowId && rowId === String(planAddon.id)) || (rowName && rowName === planAddon.name);
+    });
+    if (!match) return null;
+    const rate = Number(match.rate ?? match.price);
+    return Number.isFinite(rate) ? rate : null;
+  };
+
+  const applyPriceListToBaseRate = (baseRate: number, priceList: any, planAddon: PlanAddonOption | null) => {
+    if (!priceList) return baseRate;
+    const override = getIndividualPriceListRate(priceList, planAddon);
+    if (override !== null) return override;
+    if (String(priceList.priceListType || "").toLowerCase() === "individual") return baseRate;
+    const pct = parsePercentage(priceList.markup);
+    if (!pct) return baseRate;
+    const type = String(priceList.markupType || "").toLowerCase();
+    const next = type === "markdown" ? baseRate * (1 - pct / 100) : baseRate * (1 + pct / 100);
+    return applyRounding(next, priceList.roundOffTo || "Never mind");
+  };
+
   const sanitizeQuotePrefix = (value: any) => String(value || "QT-").trim() || "QT-";
   const extractQuoteDigits = (value: any) => {
     const raw = String(value || "").trim();
@@ -665,13 +732,26 @@ export default function SubscriptionQuote() {
   }, []);
 
   useEffect(() => {
-    const loadPriceLists = () => {
+    const loadPriceLists = async () => {
+      // Local fallback
       try {
         const raw = localStorage.getItem("inv_price_lists_v1");
         const parsed = raw ? JSON.parse(raw) : [];
         setCatalogPriceLists(Array.isArray(parsed) ? parsed : []);
       } catch {
         setCatalogPriceLists([]);
+      }
+
+      // Refresh from backend
+      try {
+        const response: any = await priceListsAPI.list({ limit: 5000 });
+        const rows = response?.success ? response?.data : null;
+        if (Array.isArray(rows)) {
+          localStorage.setItem("inv_price_lists_v1", JSON.stringify(rows));
+          setCatalogPriceLists(rows);
+        }
+      } catch (error) {
+        console.error("Failed to refresh price lists:", error);
       }
     };
     loadPriceLists();
@@ -1132,6 +1212,23 @@ export default function SubscriptionQuote() {
   const handleCustomerSelect = (customer: any) => {
     const name = displayCustomerName(customer);
     updateField("customerName", name);
+
+    const customerPriceListId = String(customer?.priceListId || customer?.priceListID || customer?.price_list_id || "").trim();
+    const customerPriceListNameRaw = String(customer?.priceListName || customer?.priceList || customer?.price_list || "").trim();
+    const resolvedPriceList =
+      (customerPriceListId
+        ? catalogPriceLists.find((row: any) => String(row?.id || row?._id || "").trim() === customerPriceListId)
+        : null) ||
+      (customerPriceListNameRaw
+        ? catalogPriceLists.find((row: any) => String(row?.name || "").trim() === customerPriceListNameRaw)
+        : null) ||
+      null;
+    if (resolvedPriceList?.name) {
+      updateField("priceList", String(resolvedPriceList.name));
+    } else if (customerPriceListNameRaw) {
+      updateField("priceList", customerPriceListNameRaw as any);
+    }
+
     setSelectedCustomer(customer);
     setCustomerSearch("");
     setIsCustomerDropdownOpen(false);
@@ -1151,6 +1248,7 @@ export default function SubscriptionQuote() {
     updateField("coupon", "");
     updateField("couponCode", "");
     updateField("couponValue", "0.00");
+    setSelectedPlanAddon(null);
     setProductSearch("");
     setPlanAddonSearch("");
     setCouponSearch("");
@@ -1160,11 +1258,25 @@ export default function SubscriptionQuote() {
   };
 
   const handlePlanAddonSelect = (row: PlanAddonOption) => {
+    setSelectedPlanAddon(row);
     updateField("plan", row.name);
-    updateField("rate", (Number(row.rate || 0)).toFixed(2));
+    const baseRate = Number(row.rate || 0);
+    const nextRate = selectedPriceList ? applyPriceListToBaseRate(baseRate, selectedPriceList, row) : baseRate;
+    updateField("rate", nextRate.toFixed(2));
     setPlanAddonSearch("");
     setIsPlanAddonDropdownOpen(false);
   };
+
+  useEffect(() => {
+    if (!selectedPlanAddon) return;
+    const baseRate = Number(selectedPlanAddon.rate || 0);
+    const nextRate = selectedPriceList ? applyPriceListToBaseRate(baseRate, selectedPriceList, selectedPlanAddon) : baseRate;
+    const nextRateText = nextRate.toFixed(2);
+    setFormData((prev) => {
+      if (String(prev.rate || "").trim() === nextRateText) return prev;
+      return { ...prev, rate: nextRateText };
+    });
+  }, [selectedPriceList, selectedPlanAddon]);
 
   const formatCouponValue = (coupon: CouponOption) => {
     const isPercent = normalizeText(coupon.discountType).includes("percent");
@@ -1255,14 +1367,21 @@ export default function SubscriptionQuote() {
     const totalBeforeDiscount = isTaxInclusive ? subtotal : subtotal + quoteTaxAmount;
     const total = Math.max(totalBeforeDiscount - discount, 0);
 
+    const taxName = String(formData.tax || "").split("[")[0].trim() || (normalizeText(formData.tax) === "non-taxable" ? "Non-Taxable" : "");
+
     const quoteItems = formData.plan
       ? [
         {
           id: 1,
-          itemType: "plan",
-          itemDetails: formData.plan,
+          itemId: String(selectedPlanAddon?.id || ""),
+          itemType: String(selectedPlanAddon?.type || "plan"),
+          name: formData.plan,
+          description: "",
           quantity,
           rate,
+          taxId: "",
+          taxName: taxName || "Non-Taxable",
+          taxRate: quoteTaxRate,
           tax: formData.tax || "Non-Taxable",
           amount: quoteLineAmount,
           reportingTags: Object.entries(reportingTagSelections).map(([tagId, value]) => ({ tagId, value })),
@@ -1280,20 +1399,22 @@ export default function SubscriptionQuote() {
       expiryDate: formData.expiryDate || undefined,
       salesperson: formData.salesperson,
       subject: formData.subject,
-      selectedPriceList: formData.priceList,
-      priceList: formData.priceList,
+      priceListId: String((selectedPriceList as any)?.id || (selectedPriceList as any)?._id || ""),
+      priceListName: String((selectedPriceList as any)?.name || ""),
+      taxPreference: formData.taxPreference,
       taxExclusive: formData.taxPreference,
       items: quoteItems,
       subtotal,
       subTotal: subtotal,
-      tax: quoteTaxRate,
+      tax: quoteTaxAmount,
       taxAmount: quoteTaxAmount,
+      totalTax: quoteTaxAmount,
       discount,
       discountAmount: discount,
       shippingCharges: 0,
       adjustment: 0,
       total,
-      currency: "AMD",
+      currency: String((selectedPriceList as any)?.currency || "USD"),
       customerNotes: formData.customerNotes,
       termsAndConditions: formData.termsAndConditions,
       reportingTags: Object.entries(reportingTagSelections).map(([tagId, value]) => ({ tagId, value })),
@@ -1306,7 +1427,7 @@ export default function SubscriptionQuote() {
       quoteType: "subscription",
       isSubscriptionQuote: true,
       meteredBilling: Boolean(formData.meteredBilling),
-      status: "draft" as const,
+      status: "Draft" as const,
       date: formData.quoteDate,
     };
   };
@@ -1385,7 +1506,7 @@ export default function SubscriptionQuote() {
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+      <div className="sticky top-0 z-40 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
         <div className="flex items-end gap-8">
           <button
             type="button"
@@ -1411,7 +1532,7 @@ export default function SubscriptionQuote() {
         </button>
       </div>
 
-      <div className="max-h-[calc(100vh-220px)] overflow-y-auto relative">
+      <div className="relative">
         {selectedCustomer && (
           <div className="absolute right-6 top-8 z-20 w-[240px] rounded-lg !bg-[#1e222d] p-3.5 text-white shadow-xl cursor-pointer hover:!bg-[#2a2f3b] transition-all border border-slate-700">
             <div className="flex items-center justify-between">

@@ -1398,237 +1398,241 @@ export default function SalesReceipts() {
     <div className="w-full min-h-screen bg-gray-50">
       {/* Header - Show Bulk Actions Bar when items are selected, otherwise show normal header */}
       {selectedReceipts.length > 0 ? (
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-white">
-          <div className="flex items-center gap-2">
-            <button
-              className="px-4 py-2 text-white rounded-md text-sm font-medium cursor-pointer"
-              style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-              onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = "0.9"}
-              onMouseLeave={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = "1"}
-              onClick={handleBulkUpdate}
-            >
-              Bulk Update
-            </button>
-            <button
-              className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-[#156372] rounded-lg cursor-pointer hover:bg-gray-50 hover:border-[#156372] transition-all font-semibold text-sm shadow-sm"
-              onClick={handleBulkPDFDownload}
-              title="PDF Download"
-            >
-              <Download size={16} />
-              PDF Download
-            </button>
-            <button
-              className="px-4 py-2 text-white border-none rounded-md text-sm font-medium cursor-pointer transition-all flex items-center gap-2"
-              style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-              onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = "0.9"}
-              onMouseLeave={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = "1"}
-              onClick={handleBulkDelete}
-            >
-              <Trash2 size={16} />
-              Delete
-            </button>
+        /* Bulk Actions Header */
+        <div className="flex-none flex items-center justify-between px-6 py-6 bg-white border-b border-gray-100 relative overflow-visible z-[100]">
+          <div className="flex min-w-0 flex-1 items-center gap-3 pl-4 pr-2 overflow-visible">
+            <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+              <button
+                className="px-4 py-2 text-white rounded-md text-sm font-medium cursor-pointer"
+                style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
+                onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = "0.9"}
+                onMouseLeave={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = "1"}
+                onClick={handleBulkUpdate}
+              >
+                Bulk Update
+              </button>
+              <button
+                className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-[#156372] rounded-lg cursor-pointer hover:bg-gray-50 hover:border-[#156372] transition-all font-semibold text-sm shadow-sm"
+                onClick={handleBulkPDFDownload}
+                title="PDF Download"
+              >
+                <Download size={16} />
+                PDF Download
+              </button>
+              <button
+                className="px-4 py-2 text-white border-none rounded-md text-sm font-medium cursor-pointer transition-all flex items-center gap-2"
+                style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
+                onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = "0.9"}
+                onMouseLeave={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = "1"}
+                onClick={handleBulkDelete}
+              >
+                <Trash2 size={16} />
+                Delete
+              </button>
+              <div className="mx-2 h-5 w-px bg-gray-200" />
+              <div className="inline-flex items-center gap-2 text-sm text-slate-500">
+                <span className="flex items-center justify-center min-w-[24px] h-6 px-2 rounded text-[13px] font-semibold text-white" style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}>
+                  {selectedReceipts.length}
+                </span>
+                <span className="text-sm text-gray-700">Selected</span>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="flex items-center justify-center min-w-[24px] h-6 px-2 rounded text-[13px] font-semibold text-white" style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}>
-              {selectedReceipts.length}
-            </span>
-            <span className="text-sm text-gray-700">Selected</span>
-            <button
-              className="flex items-center gap-1 py-1.5 px-3 bg-transparent border-none text-sm text-red-500 cursor-pointer transition-colors hover:text-red-600"
-              onClick={handleClearSelection}
-            >
-              Esc <X size={14} className="text-red-500" />
-            </button>
-          </div>
+          <button
+            className="flex items-center gap-1 py-1.5 px-3 bg-transparent border-none text-sm text-red-500 cursor-pointer transition-colors hover:text-red-600"
+            onClick={handleClearSelection}
+          >
+            Esc <X size={14} className="text-red-500" />
+          </button>
         </div>
       ) : (
         /* Normal Page Header */
-        <div className="bg-white border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="relative" ref={viewDropdownRef}>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setIsViewDropdownOpen(!isViewDropdownOpen)}
-                    className="flex items-center gap-3 px-4 py-1.5 bg-[#F0F5FF] hover:bg-[#E1EBFF] rounded-lg transition-colors group"
-                  >
-                    <h1 className="text-xl font-bold text-[#111827]">{selectedView}</h1>
-                    <ChevronDown
-                      size={18}
-                      className={`text-[#2563EB] transition-transform duration-200 ${isViewDropdownOpen ? "rotate-180" : ""}`}
-                    />
-                  </button>
-                </div>
-
-                {isViewDropdownOpen && (
-                  <div className="absolute top-full left-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-xl z-50 min-w-[220px] overflow-hidden">
-                    <div className="py-2">
-                      {salesReceiptViews.map((option) => (
-                        <div
-                          key={option}
-                          className={`flex items-center justify-between px-4 py-2 text-sm cursor-pointer ${isViewSelected(option)
-                            ? "text-[#2563eb] border border-[#2563eb] mx-2 rounded-md"
-                            : "text-[#374151] hover:bg-gray-50"
-                            }`}
-                          onClick={() => handleStatusFilter(option)}
-                        >
-                          <span>{option}</span>
-                          <Star size={16} className="text-gray-300" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                className="cursor-pointer transition-all bg-gradient-to-r from-[#156372] to-[#0D4A52] text-white px-6 py-2 rounded-lg border-[#0D4A52] border-b-[4px] hover:brightness-110 hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:brightness-90 active:translate-y-[2px] flex items-center gap-2 text-sm font-bold shadow-md"
-                onClick={handleCreateNewReceipt}
-              >
-                <Plus size={16} strokeWidth={3} />
-                New
-              </button>
-              <div className="relative" ref={moreMenuRef}>
+        <div className="flex-none flex items-center justify-between px-6 py-6 bg-white border-b border-gray-100 relative overflow-visible">
+          <div className="flex items-center gap-8 pl-4">
+            <div className="relative" ref={viewDropdownRef}>
+              <div className="flex items-center gap-2">
                 <button
-                  className="p-2 hover:bg-gray-100 rounded-lg text-gray-600 transition-colors"
-                  onClick={() => {
-                    setIsMoreMenuOpen((prev) => {
-                      const next = !prev;
-                      if (!next) setIsSortMenuOpen(false);
-                      return next;
-                    });
-                  }}
+                  onClick={() => setIsViewDropdownOpen(!isViewDropdownOpen)}
+                  className="flex items-center gap-1.5 py-4 cursor-pointer group border-b-2 border-slate-900 -mb-[1px] bg-transparent outline-none"
                 >
-                  <MoreVertical size={18} />
+                  <h1 className="text-[15px] font-bold text-slate-900 transition-colors">{selectedView}</h1>
+                  <ChevronDown
+                    size={14}
+                    className={`transition-transform duration-200 text-[#156372] ${isViewDropdownOpen ? "rotate-180" : ""}`}
+                  />
                 </button>
-
-                {isMoreMenuOpen && (
-                  <div className="absolute top-full right-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg min-w-[220px] z-[1000] overflow-visible py-1">
-                    {/* Sort by */}
-                    <div className="relative">
-                      <button
-                        className={`w-full flex items-center gap-3 py-2.5 px-4 cursor-pointer transition-all text-sm rounded-md ${isSortMenuOpen ? "bg-[#3b82f6] text-white" : "text-gray-700 hover:bg-gray-50"
-                          }`}
-                        onClick={() => setIsSortMenuOpen((prev) => !prev)}
-                      >
-                        <ArrowUpDown size={16} className={`flex-shrink-0 ${isSortMenuOpen ? "text-white" : "text-[#156372]"}`} />
-                        <span className="flex-1 font-medium text-[13px] text-left">Sort by</span>
-                        <ChevronRight size={16} className={`flex-shrink-0 ${isSortMenuOpen ? "text-white" : "text-gray-400"}`} />
-                      </button>
-
-                      {isSortMenuOpen && (
-                        <div className="absolute top-0 right-full mr-1.5 w-[220px] bg-white border border-gray-200 rounded-lg shadow-lg py-2 z-[99999]">
-                          {sortMenuOptions.map((option) => {
-                            const isActive = activeSort === option.value;
-                            return (
-                              <div
-                                key={option.label}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleSort(option.value);
-                                  setIsMoreMenuOpen(false);
-                                  setIsSortMenuOpen(false);
-                                }}
-                                className={`flex items-center justify-between py-2.5 px-3.5 mx-2 text-sm transition-all rounded-md ${isActive ? "bg-[#3b82f6] text-white" : "text-gray-700 hover:bg-gray-100"
-                                  }`}
-                              >
-                                <span>{option.label}</span>
-                                {isActive && <Check size={14} className="text-white" />}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Import Sales Receipts */}
-                    <div
-                      className="flex items-center gap-3 py-2.5 px-4 cursor-pointer transition-all text-sm text-gray-700 hover:bg-gray-50"
-                      onClick={() => {
-                        handleImportReceipts();
-                        setIsMoreMenuOpen(false);
-                        setIsSortMenuOpen(false);
-                      }}
-                    >
-                      <Download size={16} className="text-[#156372] flex-shrink-0" />
-                      <span className="flex-1 font-medium text-[13px]">Import Sales Receipts</span>
-                    </div>
-
-                    {/* Export Sales Receipt */}
-                    <div
-                      className="flex items-center gap-3 py-2.5 px-4 cursor-pointer transition-all text-sm text-gray-700 hover:bg-gray-50"
-                      onClick={() => {
-                        handleExport("Export to PDF");
-                        setIsMoreMenuOpen(false);
-                        setIsSortMenuOpen(false);
-                      }}
-                    >
-                      <FileUp size={16} className="text-[#156372] flex-shrink-0" />
-                      <span className="flex-1 font-medium text-[13px]">Export Sales Receipt</span>
-                    </div>
-
-                    <div className="h-px bg-gray-100 my-1"></div>
-
-                    {/* Preferences */}
-                    <div
-                      className="flex items-center gap-3 py-2.5 px-4 cursor-pointer transition-all text-sm text-gray-700 hover:bg-gray-50"
-                      onClick={() => {
-                        navigate("/settings/sales-receipts");
-                        setIsMoreMenuOpen(false);
-                        setIsSortMenuOpen(false);
-                      }}
-                    >
-                      <Settings size={16} className="text-[#156372] flex-shrink-0" />
-                      <span className="flex-1 font-medium text-[13px]">Preferences</span>
-                    </div>
-
-                    {/* Manage Custom Fields */}
-                    <div
-                      className="flex items-center gap-3 py-2.5 px-4 cursor-pointer transition-all text-sm text-gray-700 hover:bg-gray-50"
-                      onClick={() => {
-                        setIsFieldCustomizationOpen(true);
-                        setIsMoreMenuOpen(false);
-                        setIsSortMenuOpen(false);
-                      }}
-                    >
-                      <Grid3x3 size={16} className="text-[#156372] flex-shrink-0" />
-                      <span className="flex-1 font-medium text-[13px]">Manage Custom Fields</span>
-                    </div>
-
-                    <div className="h-px bg-gray-100 my-1"></div>
-
-                    {/* Refresh List */}
-                    <div
-                      className={`flex items-center gap-3 py-2.5 px-4 cursor-pointer transition-colors text-sm text-gray-700 hover:bg-gray-50 ${isRefreshing ? "opacity-50 cursor-not-allowed" : ""}`}
-                      onClick={() => {
-                        if (!isRefreshing) {
-                          refreshData();
-                          setIsMoreMenuOpen(false);
-                          setIsSortMenuOpen(false);
-                        }
-                      }}
-                    >
-                      <RefreshCw size={16} className={`text-[#156372] flex-shrink-0 ${isRefreshing ? "animate-spin" : ""}`} />
-                      <span className="flex-1 font-medium text-[13px]">Refresh List</span>
-                    </div>
-
-                    {/* Reset Column Width */}
-                    <div
-                      className="flex items-center gap-3 py-2.5 px-4 cursor-pointer transition-colors text-sm text-gray-700 hover:bg-gray-50"
-                      onClick={() => {
-                        handleResetColumnWidth();
-                        setIsMoreMenuOpen(false);
-                        setIsSortMenuOpen(false);
-                      }}
-                    >
-                      <RotateCcw size={16} className="text-[#156372] flex-shrink-0" />
-                      <span className="flex-1 font-medium text-[13px]">Reset Column Width</span>
-                    </div>
-                  </div>
-                )}
               </div>
+
+              {isViewDropdownOpen && (
+                <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-2xl z-50 py-2 overflow-hidden">
+                  <div className="max-h-80 overflow-y-auto py-1">
+                    {salesReceiptViews.map((option) => (
+                      <div
+                        key={option}
+                        className={`flex items-center justify-between px-4 py-2 text-sm cursor-pointer ${isViewSelected(option)
+                          ? "text-[#156372] font-semibold bg-blue-50"
+                          : "text-[#374151] hover:bg-gray-50"
+                          }`}
+                        onClick={() => handleStatusFilter(option)}
+                      >
+                        <span>{option}</span>
+                        {isViewSelected(option) && <CheckCircle size={14} className="text-[#156372]" />}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleCreateNewReceipt}
+              className="h-[38px] cursor-pointer transition-all text-white px-5 rounded-lg border-[#0D4A52] border-b-[4px] hover:brightness-110 hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:translate-y-[1px] text-sm font-semibold shadow-sm flex items-center justify-center gap-2"
+              style={{ background: "linear-gradient(180deg, #156372 0%, #0D4A52 100%)" }}
+              type="button"
+            >
+              <Plus size={16} strokeWidth={3} />
+              <span>New</span>
+            </button>
+            <div className="relative" ref={moreMenuRef}>
+              <button
+                className="p-2 hover:bg-gray-100 rounded-lg text-gray-600 transition-colors"
+                onClick={() => {
+                  setIsMoreMenuOpen((prev) => {
+                    const next = !prev;
+                    if (!next) setIsSortMenuOpen(false);
+                    return next;
+                  });
+                }}
+              >
+                <MoreVertical size={18} />
+              </button>
+
+              {isMoreMenuOpen && (
+                <div className="absolute top-full right-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg min-w-[220px] z-[1000] overflow-visible py-1">
+                  {/* Sort by */}
+                  <div className="relative">
+                    <button
+                      className={`w-full flex items-center gap-3 py-2.5 px-4 cursor-pointer transition-all text-sm rounded-md ${isSortMenuOpen ? "bg-[#3b82f6] text-white" : "text-gray-700 hover:bg-gray-50"
+                        }`}
+                      onClick={() => setIsSortMenuOpen((prev) => !prev)}
+                    >
+                      <ArrowUpDown size={16} className={`flex-shrink-0 ${isSortMenuOpen ? "text-white" : "text-[#156372]"}`} />
+                      <span className="flex-1 font-medium text-[13px] text-left">Sort by</span>
+                      <ChevronRight size={16} className={`flex-shrink-0 ${isSortMenuOpen ? "text-white" : "text-gray-400"}`} />
+                    </button>
+
+                    {isSortMenuOpen && (
+                      <div className="absolute top-0 right-full mr-1.5 w-[220px] bg-white border border-gray-200 rounded-lg shadow-lg py-2 z-[99999]">
+                        {sortMenuOptions.map((option) => {
+                          const isActive = activeSort === option.value;
+                          return (
+                            <div
+                              key={option.label}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSort(option.value);
+                                setIsMoreMenuOpen(false);
+                                setIsSortMenuOpen(false);
+                              }}
+                              className={`flex items-center justify-between py-2.5 px-3.5 mx-2 text-sm transition-all rounded-md ${isActive ? "bg-[#3b82f6] text-white" : "text-gray-700 hover:bg-gray-100"
+                                }`}
+                            >
+                              <span>{option.label}</span>
+                              {isActive && <Check size={14} className="text-white" />}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Import Sales Receipts */}
+                  <div
+                    className="flex items-center gap-3 py-2.5 px-4 cursor-pointer transition-all text-sm text-gray-700 hover:bg-gray-50"
+                    onClick={() => {
+                      handleImportReceipts();
+                      setIsMoreMenuOpen(false);
+                      setIsSortMenuOpen(false);
+                    }}
+                  >
+                    <Download size={16} className="text-[#156372] flex-shrink-0" />
+                    <span className="flex-1 font-medium text-[13px]">Import Sales Receipts</span>
+                  </div>
+
+                  {/* Export Sales Receipt */}
+                  <div
+                    className="flex items-center gap-3 py-2.5 px-4 cursor-pointer transition-all text-sm text-gray-700 hover:bg-gray-50"
+                    onClick={() => {
+                      handleExport("Export to PDF");
+                      setIsMoreMenuOpen(false);
+                      setIsSortMenuOpen(false);
+                    }}
+                  >
+                    <FileUp size={16} className="text-[#156372] flex-shrink-0" />
+                    <span className="flex-1 font-medium text-[13px]">Export Sales Receipt</span>
+                  </div>
+
+                  <div className="h-px bg-gray-100 my-1"></div>
+
+                  {/* Preferences */}
+                  <div
+                    className="flex items-center gap-3 py-2.5 px-4 cursor-pointer transition-all text-sm text-gray-700 hover:bg-gray-50"
+                    onClick={() => {
+                      navigate("/settings/sales-receipts");
+                      setIsMoreMenuOpen(false);
+                      setIsSortMenuOpen(false);
+                    }}
+                  >
+                    <Settings size={16} className="text-[#156372] flex-shrink-0" />
+                    <span className="flex-1 font-medium text-[13px]">Preferences</span>
+                  </div>
+
+                  {/* Manage Custom Fields */}
+                  <div
+                    className="flex items-center gap-3 py-2.5 px-4 cursor-pointer transition-all text-sm text-gray-700 hover:bg-gray-50"
+                    onClick={() => {
+                      setIsFieldCustomizationOpen(true);
+                      setIsMoreMenuOpen(false);
+                      setIsSortMenuOpen(false);
+                    }}
+                  >
+                    <Grid3x3 size={16} className="text-[#156372] flex-shrink-0" />
+                    <span className="flex-1 font-medium text-[13px]">Manage Custom Fields</span>
+                  </div>
+
+                  <div className="h-px bg-gray-100 my-1"></div>
+
+                  {/* Refresh List */}
+                  <div
+                    className={`flex items-center gap-3 py-2.5 px-4 cursor-pointer transition-colors text-sm text-gray-700 hover:bg-gray-50 ${isRefreshing ? "opacity-50 cursor-not-allowed" : ""}`}
+                    onClick={() => {
+                      if (!isRefreshing) {
+                        refreshData();
+                        setIsMoreMenuOpen(false);
+                        setIsSortMenuOpen(false);
+                      }
+                    }}
+                  >
+                    <RefreshCw size={16} className={`text-[#156372] flex-shrink-0 ${isRefreshing ? "animate-spin" : ""}`} />
+                    <span className="flex-1 font-medium text-[13px]">Refresh List</span>
+                  </div>
+
+                  {/* Reset Column Width */}
+                  <div
+                    className="flex items-center gap-3 py-2.5 px-4 cursor-pointer transition-colors text-sm text-gray-700 hover:bg-gray-50"
+                    onClick={() => {
+                      handleResetColumnWidth();
+                      setIsMoreMenuOpen(false);
+                      setIsSortMenuOpen(false);
+                    }}
+                  >
+                    <RotateCcw size={16} className="text-[#156372] flex-shrink-0" />
+                    <span className="flex-1 font-medium text-[13px]">Reset Column Width</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1709,20 +1713,20 @@ export default function SalesReceipts() {
       )}
 
       {/* Filter Bar */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3">
-        <div className="flex items-center gap-4">
+      <div className="bg-white border-b border-gray-200">
+        <div className="flex items-center gap-4 px-6 py-3">
           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">VIEW BY:</span>
           <div className="relative flex items-center gap-2" ref={periodDropdownRef}>
             <span className="text-sm font-medium text-gray-700">Period:</span>
             <button
-              className="flex items-center gap-2 px-3 py-1.5 border-2 border-gray-200 rounded-lg text-sm text-gray-700 hover:border-[#156372] transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 hover:border-[#156372] transition-colors shadow-sm"
               onClick={() => setIsPeriodDropdownOpen(!isPeriodDropdownOpen)}
             >
               <span>{selectedPeriod}</span>
               <ChevronDown size={14} />
             </button>
             {isPeriodDropdownOpen && (
-              <div className="absolute top-full left-0 mt-2 bg-white border-2 border-gray-200 rounded-xl shadow-xl z-50 min-w-[150px] overflow-hidden">
+              <div className="absolute top-full left-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-xl z-50 min-w-[150px] overflow-hidden">
                 {periodOptions.map((option) => (
                   <div
                     key={option}
@@ -1742,7 +1746,7 @@ export default function SalesReceipts() {
         </div>
       </div>
 
-      <div className="p-6 relative">
+      <div className="relative">
 
         {hasLoadedOnce && !isRefreshing && filteredSalesReceipts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -1767,34 +1771,35 @@ export default function SalesReceipts() {
             </div>
           </div>
         ) : (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="bg-white">
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
-
-                    <th className="p-4 text-left">
-                      <input
-                        type="checkbox"
-                        checked={selectedReceipts.length === filteredSalesReceipts.length && filteredSalesReceipts.length > 0}
-                        onChange={handleSelectAll}
-                        className="w-4 h-4 text-[#156372] border-gray-300 rounded focus:ring-blue-500"
-                      />
+              <table className="w-full text-left border-collapse table-fixed bg-white">
+                <thead className="bg-[#f6f7fb] sticky top-0 z-20 border-b border-[#e6e9f2]">
+                  <tr className="text-[10px] font-semibold text-[#7b8494] uppercase tracking-wider">
+                    <th className="px-6 py-3 w-16">
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedReceipts.length === filteredSalesReceipts.length && filteredSalesReceipts.length > 0}
+                          onChange={handleSelectAll}
+                          className="w-4 h-4 text-[#156372] border-gray-300 rounded focus:ring-blue-500"
+                        />
+                      </div>
                     </th>
-                    <th className="p-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    <th className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         RECEIPT DATE
                         <ArrowUpDown size={14} className="text-gray-400" />
                       </div>
                     </th>
-                    <th className="p-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">SALES RECEIPT#</th>
-                    <th className="p-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">REFERENCE</th>
-                    <th className="p-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">CUSTOMER NAME</th>
-                    <th className="p-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">PAYMENT MODE</th>
-                    <th className="p-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">STATUS</th>
-                    <th className="p-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">AMOUNT</th>
-                    <th className="p-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">CREATED BY</th>
-                    <th className="p-4 text-left">
+                    <th className="px-4 py-3">SALES RECEIPT#</th>
+                    <th className="px-4 py-3">REFERENCE</th>
+                    <th className="px-4 py-3">CUSTOMER NAME</th>
+                    <th className="px-4 py-3">PAYMENT MODE</th>
+                    <th className="px-4 py-3">STATUS</th>
+                    <th className="px-4 py-3">AMOUNT</th>
+                    <th className="px-4 py-3">CREATED BY</th>
+                    <th className="px-6 py-3 w-10">
                       <button
                         onClick={handleOpenAdvancedSearch}
                         className="p-1 hover:bg-gray-200 rounded transition-colors"
@@ -1807,27 +1812,26 @@ export default function SalesReceipts() {
                 <tbody>
                   {isRefreshing || !hasLoadedOnce ? (
                     Array(5).fill(0).map((_, index) => (
-                      <tr key={`skeleton-${index}`} className="border-b border-gray-100">
-
-                        <td className="p-4">
-                          <div className="w-4 h-4 bg-gray-200 rounded animate-pulse"></div>
+                      <tr key={`skeleton-${index}`} className="border-b border-[#eef1f6] h-[50px] animate-pulse">
+                        <td className="px-4 py-3">
+                          <div className="w-4 h-4 bg-gray-100 rounded mx-auto" />
                         </td>
-                        <td className="p-4"><div className="h-4 bg-gray-200 rounded animate-pulse w-24"></div></td>
-                        <td className="p-4"><div className="h-4 bg-gray-200 rounded animate-pulse w-32"></div></td>
-                        <td className="p-4"><div className="h-4 bg-gray-200 rounded animate-pulse w-20"></div></td>
-                        <td className="p-4"><div className="h-4 bg-gray-200 rounded animate-pulse w-32"></div></td>
-                        <td className="p-4"><div className="h-4 bg-gray-200 rounded animate-pulse w-24"></div></td>
-                        <td className="p-4"><div className="h-4 bg-gray-200 rounded animate-pulse w-20"></div></td>
-                        <td className="p-4"><div className="h-4 bg-gray-200 rounded animate-pulse w-24"></div></td>
-                        <td className="p-4"><div className="h-4 bg-gray-200 rounded animate-pulse w-24"></div></td>
-                        <td className="p-4"></td>
+                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>
+                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-32"></div></td>
+                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-20"></div></td>
+                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-32"></div></td>
+                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>
+                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-20"></div></td>
+                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>
+                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>
+                        <td className="px-4 py-3"></td>
                       </tr>
                     ))
                   ) : (
                     (Array.isArray(filteredSalesReceipts) ? filteredSalesReceipts : []).map((receipt) => (
                       <tr
                         key={receipt.id}
-                        className="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer"
+                        className="text-[13px] h-[50px] group transition-all border-b border-[#eef1f6] cursor-pointer hover:bg-[#f8fafc]"
                         onClick={(e) => {
                           // Don't navigate if clicking checkbox or filter icon
                           const target = e.target as HTMLElement;
@@ -1839,7 +1843,7 @@ export default function SalesReceipts() {
                       >
 
                         <td
-                          className="p-4"
+                          className="px-4 py-3"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleSelectReceipt(receipt.id, e);
@@ -1886,45 +1890,6 @@ export default function SalesReceipts() {
                   )}
                 </tbody>
               </table>
-            </div>
-
-            {/* Pagination Controls */}
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-end">
-              <div className="flex items-center gap-2">
-                <button
-                  className={`p-2 rounded-lg border border-gray-200 hover:bg-white transition-colors ${pagination.page === 1 ? "opacity-50 cursor-not-allowed" : ""}`}
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={pagination.page === 1}
-                >
-                  <ChevronLeft size={16} />
-                </button>
-                {Array.from({ length: Math.min(5, pagination.pages) }, (_, i) => {
-                  let pageNum;
-                  if (pagination.pages <= 5) pageNum = i + 1;
-                  else if (pagination.page <= 3) pageNum = i + 1;
-                  else if (pagination.page >= pagination.pages - 2) pageNum = pagination.pages - 4 + i;
-                  else pageNum = pagination.page - 2 + i;
-
-                  return (
-                    <button
-                      key={pageNum}
-                      className={`w-8 h-8 rounded-lg border text-sm font-medium transition-colors ${
-                        pagination.page === pageNum ? "bg-[#156372] text-white border-[#156372]" : "border-gray-200 hover:bg-white text-gray-600"
-                      }`}
-                      onClick={() => setCurrentPage(pageNum)}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
-                <button
-                  className={`p-2 rounded-lg border border-gray-200 hover:bg-white transition-colors ${pagination.page === pagination.pages || pagination.pages === 0 ? "opacity-50 cursor-not-allowed" : ""}`}
-                  onClick={() => setCurrentPage((p) => Math.min(pagination.pages, p + 1))}
-                  disabled={pagination.page === pagination.pages || pagination.pages === 0}
-                >
-                  <ChevronRight size={16} />
-                </button>
-              </div>
             </div>
           </div>
         )}

@@ -785,13 +785,25 @@ export default function Invoices() {
   };
 
   const getInvoiceStatusTextDisplay = (invoice: Invoice) => {
-    const rawStatus = String(invoice?.status || "").trim().toLowerCase();
+    let rawStatus = String(invoice?.status || "").trim().toLowerCase();
     const dueDateValue = invoice?.dueDate ? new Date(invoice.dueDate) : null;
     const hasValidDueDate = dueDateValue instanceof Date && !Number.isNaN(dueDateValue.getTime());
     const diffDays = hasValidDueDate
       ? Math.ceil((dueDateValue!.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
       : null;
+    
+    // Dynamically adjust status based on payments/balance if not draft/void
     const balanceDue = Number(invoice.balance !== undefined ? invoice.balance : (invoice.balanceDue || 0));
+    const totalAmount = Number(invoice.total !== undefined ? invoice.total : (getInvoiceDisplayTotal ? getInvoiceDisplayTotal(invoice) : 0));
+    
+    if (rawStatus !== "draft" && rawStatus !== "void") {
+      if (balanceDue <= 0 && totalAmount > 0) {
+        rawStatus = "paid";
+      } else if (balanceDue < totalAmount && balanceDue > 0 && totalAmount > 0) {
+        rawStatus = "partially_paid";
+      }
+    }
+
     const isOverdueByDate = Boolean(
       hasValidDueDate &&
       dueDateValue!.getTime() < Date.now() &&
@@ -804,13 +816,16 @@ export default function Invoices() {
     if (rawStatus === "paid") {
       return { text: "PAID", className: "text-green-600" };
     }
+    if (rawStatus === "partially_paid" || rawStatus === "partially paid") {
+      return { text: "PARTIALLY PAID", className: "text-blue-600" };
+    }
     if (rawStatus === "draft") {
       return { text: "DRAFT", className: "text-slate-400" };
     }
     if (rawStatus === "pending" || rawStatus === "pending approval") {
       return { text: "PENDING", className: "text-amber-500" };
     }
-    if (rawStatus === "sent") {
+    if (rawStatus === "sent" || rawStatus === "unpaid" || rawStatus === "viewed") {
       if (hasValidDueDate && diffDays !== null) {
         if (diffDays < 0) {
           return {
@@ -2139,12 +2154,12 @@ export default function Invoices() {
             <div className="flex flex-wrap items-center gap-3 sm:gap-2 mr-4">
               <button
                 onClick={handleCreateNewInvoice}
-                className="h-[38px] cursor-pointer transition-all text-white px-5 rounded-lg border-[#0D4A52] border-b-[4px] hover:brightness-110 hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:translate-y-[1px] text-sm font-semibold shadow-sm flex items-center justify-center gap-2"
-                style={{ background: "linear-gradient(180deg, #156372 0%, #0D4A52 100%)" }}
+                className="cursor-pointer transition-all text-white px-3 sm:px-4 py-1.5 rounded-lg border-[#0D4A52] border-b-[4px] hover:brightness-110 hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:brightness-90 active:translate-y-[2px] flex items-center gap-1 text-sm font-semibold"
+                style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
                 type="button"
               >
                 <Plus size={16} strokeWidth={3} />
-                <span>New</span>
+                <span className="hidden sm:inline">New</span>
               </button>
 
               <div className="relative" ref={moreMenuRef}>
@@ -2361,9 +2376,9 @@ export default function Invoices() {
         ) : (
           <div className="bg-white">
             <table className="w-full text-left border-collapse">
-              <thead className="bg-[#f6f7fb] sticky top-0 z-[110]">
+              <thead className="bg-[#f6f7fb] sticky top-0 z-[110] border-b border-[#e6e9f2]">
             <tr className="text-[10px] font-semibold text-[#7b8494] uppercase tracking-wider">
-              <th className="px-4 py-3 w-16 min-w-[64px]">
+              <th className="px-4 py-3 w-16 min-w-[64px] bg-[#f6f7fb]">
                 <div className="flex items-center gap-2 relative">
                   <button
                     type="button"
@@ -2374,9 +2389,10 @@ export default function Invoices() {
                       setIsCustomizeColumnsModalOpen(true);
                     }}
                     className="h-6 w-6 flex items-center justify-center rounded border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
-                    title="Customize Columns"
+                    title="Manage columns"
+                    aria-label="Manage columns"
                   >
-                    <SlidersHorizontal size={13} style={{ color: "#1b5e6a" }} />
+                    <SlidersHorizontal size={13} style={{ color: "#156372" }} />
                   </button>
                   <div className="h-5 w-px bg-gray-200" />
                   <input
@@ -2384,7 +2400,7 @@ export default function Invoices() {
                     checked={selectedInvoices.size === sortedInvoices.length && sortedInvoices.length > 0}
                     onChange={handleSelectAllInvoices}
                     style={{ accentColor: "#1b5e6a" }}
-                    className="w-4 h-4 rounded border-gray-300 cursor-pointer focus:ring-0"
+                    className="w-4 h-4 rounded border-gray-300 cursor-pointer transition-all focus:ring-0"
                   />
                 </div>
               </th>
@@ -2401,22 +2417,19 @@ export default function Invoices() {
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1">
-                        <span className="truncate">{col.label}</span>
-                        {isSortable && (
-                          activeSortField === col.label ? (
-                            sortConfig.direction === "asc" ?
-                              <ChevronUp size={12} className="text-[#156372]" /> :
-                              <ChevronDown size={12} className="text-[#156372]" />
-                          ) : (
-                            <ArrowUpDown size={10} className="text-gray-400 opacity-0 group-hover/header:opacity-100 transition-opacity" />
-                          )
+                        <span className={`truncate font-semibold ${/tax/i.test(colKey) ? 'text-black' : 'text-[#7b8494]'}`}>{col.label}</span>
+                        {isSortable && activeSortField === col.label && (
+                          <ArrowUpDown
+                            size={10}
+                            className="flex-shrink-0 transition-colors text-[#156372]"
+                          />
                         )}
                       </div>
                     </div>
                   </th>
                 );
               })}
-              <th className="px-4 py-3 w-12 sticky right-0 bg-[#f6f7fb]">
+              <th className="px-4 py-3 w-12 sticky right-0 bg-[#f6f7fb] z-20">
                 <div className="flex items-center justify-center">
                   <Search
                     size={14}
@@ -2433,7 +2446,7 @@ export default function Invoices() {
               <tbody className="divide-y divide-gray-100">
                 {isRefreshing ? (
                   Array(5).fill(0).map((_, index) => (
-                    <tr key={`skeleton-${index}`} className="animate-pulse border-b border-gray-50 h-[50px]">
+                    <tr key={`skeleton-${index}`} className="animate-pulse border-b border-[#eef1f6] h-[50px]">
                       <td className="px-4 py-3 w-16">
                         <div className="h-4 w-4 bg-gray-100 rounded mx-auto" />
                       </td>
@@ -2442,7 +2455,7 @@ export default function Invoices() {
                           <div className="h-4 bg-gray-100 rounded w-24" />
                         </td>
                       ))}
-                      <td className="px-4 py-3 w-12 sticky right-0 bg-white" />
+                      <td className="px-4 py-3 w-12 sticky right-0 bg-white/95 backdrop-blur-sm" />
                     </tr>
                   ))
                 ) : (

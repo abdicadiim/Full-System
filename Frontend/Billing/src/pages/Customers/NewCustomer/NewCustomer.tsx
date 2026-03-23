@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { Info, Phone, Smartphone, Upload, X, Search, ChevronDown, Check, Globe, File, Edit, CheckCircle, Plus, MoreVertical, Folder, Cloud, Box, Layers, HardDrive, Settings, Paperclip, FileText, CreditCard, ChevronUp, Square, Grid3x3, RefreshCw, LayoutGrid, Loader2 } from "lucide-react";
-import { customersAPI, currenciesAPI, documentsAPI, taxesAPI, reportingTagsAPI } from "../../../services/api";
+import { customersAPI, currenciesAPI, documentsAPI, taxesAPI, reportingTagsAPI, priceListsAPI } from "../../../services/api";
 
 import { getAllDocuments } from "../../../../utils/documentStorage";
 // import { getToken, API_BASE_URL } from "../../../../services/auth";
@@ -31,6 +31,8 @@ const splitPhoneNumber = (phone: string, defaultPrefix: string) => {
 const accounts = [
   { id: "ar1", name: "Accounts Receivable" }
 ];
+
+const PRICE_LISTS_STORAGE_KEY = "inv_price_lists_v1";
 
 
 
@@ -203,22 +205,90 @@ export default function NewCustomer() {
   }, [loadTaxes]);
 
   const loadPriceLists = useCallback(() => {
-    try {
-      const raw = localStorage.getItem('inv_price_lists_v1');
-      const parsed = raw ? JSON.parse(raw) : [];
-      if (Array.isArray(parsed)) {
-        setPriceLists(parsed.map((p: any) => ({
-          id: String(p.id || p._id || ""),
-          name: String(p.name || ""),
-          currency: String(p.currency || ""),
-          pricingScheme: String(p.pricingScheme || "")
-        })));
+    const normalize = (rows: any[]) => {
+      const parsed = Array.isArray(rows) ? rows : [];
+      const normalized = parsed
+        .map((row: any) => {
+          const id = String(row?.id || row?._id || "").trim();
+          const name = String(row?.name || "").trim();
+          const pricingScheme = String(row?.pricingScheme || "").trim();
+          const currency = String(row?.currency || "").trim() || "-";
+          const status = String(
+            row?.status ?? (row?.isActive === false || row?.active === false ? "Inactive" : "Active")
+          ).trim();
+
+          return {
+            id,
+            name,
+            pricingScheme,
+            currency,
+            status,
+            isActive: row?.isActive,
+            active: row?.active,
+          };
+        })
+        .filter((row: any) => row.id && row.name)
+        .filter((row: any) => {
+          const status = String(row?.status || "").toLowerCase().trim();
+          if (status === "inactive") return false;
+          if (row?.isActive === false) return false;
+          if (row?.active === false) return false;
+          return true;
+        })
+        .map((row: any) => ({
+          id: row.id,
+          name: row.name,
+          currency: row.currency,
+          pricingScheme: row.pricingScheme,
+        }));
+
+      setPriceLists(normalized);
+    };
+
+    const load = async () => {
+      // 1) Instant local fallback (offline + faster UI)
+      try {
+        const raw = localStorage.getItem(PRICE_LISTS_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        normalize(parsed);
+      } catch (error) {
+        console.error("Error reading cached price lists for customer:", error);
+        normalize([]);
       }
-    } catch (error) {
-      console.error("Error loading price lists:", error);
-      setPriceLists([]);
-    }
+
+      // 2) Refresh from backend and keep localStorage in sync
+      try {
+        const response: any = await priceListsAPI.list({ limit: 5000 });
+        const rows = response?.success ? response?.data : null;
+        if (Array.isArray(rows)) {
+          localStorage.setItem(PRICE_LISTS_STORAGE_KEY, JSON.stringify(rows));
+          normalize(rows);
+        }
+      } catch (error) {
+        console.error("Error loading price lists from API for customer:", error);
+      }
+    };
+
+    load();
   }, []);
+
+  useEffect(() => {
+    loadPriceLists();
+
+    const onStorageChange = (event: StorageEvent) => {
+      if (!event.key || event.key === PRICE_LISTS_STORAGE_KEY) {
+        loadPriceLists();
+      }
+    };
+    const onWindowFocus = () => loadPriceLists();
+
+    window.addEventListener("storage", onStorageChange);
+    window.addEventListener("focus", onWindowFocus);
+    return () => {
+      window.removeEventListener("storage", onStorageChange);
+      window.removeEventListener("focus", onWindowFocus);
+    };
+  }, [loadPriceLists]);
 
   const [availableReportingTags, setAvailableReportingTags] = useState<any[]>([]);
 

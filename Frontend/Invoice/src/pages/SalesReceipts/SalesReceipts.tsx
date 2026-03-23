@@ -29,7 +29,8 @@ import {
   Download,
   RotateCcw,
   SlidersHorizontal,
-  Info
+  Info,
+  CheckCircle
 } from "lucide-react";
 
 // import FieldCustomization from "../shared/FieldCustomization";
@@ -1547,108 +1548,111 @@ export default function SalesReceipts() {
     <div className="flex flex-col h-[calc(100vh-72px)] w-full bg-white font-sans text-gray-800 antialiased relative overflow-hidden">
       {/* Header - Show Bulk Actions Bar when items are selected, otherwise show normal header */}
       {selectedReceipts.length > 0 ? (
-        <div className="flex-none flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-white z-30">
-          <div className="flex items-center gap-2">
-            <button
-              className="px-4 py-2 text-white rounded-md text-sm font-medium cursor-pointer"
-              style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-              onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = "0.9"}
-              onMouseLeave={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = "1"}
-              onClick={handleBulkUpdate}
-            >
-              Bulk Update
-            </button>
-            <button
-              className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-[#156372] rounded-lg cursor-pointer hover:bg-gray-50 hover:border-[#156372] transition-all font-semibold text-sm shadow-sm"
-              onClick={handleBulkPDFDownload}
-              title="PDF Download"
-            >
-              <Download size={16} />
-              PDF Download
-            </button>
-            <button
-              className="px-4 py-2 text-white border-none rounded-md text-sm font-medium cursor-pointer transition-all flex items-center gap-2"
-              style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-              onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = "0.9"}
-              onMouseLeave={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = "1"}
-              onClick={handleBulkDelete}
-            >
-              <Trash2 size={16} />
-              Delete
-            </button>
+        <div className="flex-none flex items-center justify-between px-6 py-6 bg-white border-b border-gray-100 relative overflow-visible z-[100]">
+          <div className="flex min-w-0 flex-1 items-center gap-3 pl-4 pr-2 overflow-visible">
+            <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+              <button
+                className="px-4 py-2 text-white rounded-md text-sm font-medium cursor-pointer"
+                style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
+                onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = "0.9"}
+                onMouseLeave={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = "1"}
+                onClick={handleBulkUpdate}
+              >
+                Bulk Update
+              </button>
+              <button
+                className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-[#156372] rounded-lg cursor-pointer hover:bg-gray-50 hover:border-[#156372] transition-all font-semibold text-sm shadow-sm"
+                onClick={handleBulkPDFDownload}
+                title="PDF Download"
+              >
+                <Download size={16} />
+                PDF Download
+              </button>
+              <button
+                className="px-4 py-2 text-white border-none rounded-md text-sm font-medium cursor-pointer transition-all flex items-center gap-2"
+                style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
+                onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = "0.9"}
+                onMouseLeave={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = "1"}
+                onClick={handleBulkDelete}
+              >
+                <Trash2 size={16} />
+                Delete
+              </button>
+              <div className="mx-2 h-5 w-px bg-gray-200" />
+              <div className="inline-flex items-center gap-2 text-sm text-slate-500">
+                <span className="flex items-center justify-center min-w-[24px] h-6 px-2 rounded text-[13px] font-semibold text-white" style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}>
+                  {selectedReceipts.length}
+                </span>
+                <span className="text-sm text-gray-700">Selected</span>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="flex items-center justify-center min-w-[24px] h-6 px-2 bg-[#156372] rounded text-[13px] font-semibold text-white">
-              {selectedReceipts.length}
-            </span>
-            <span className="text-sm text-gray-700">Selected</span>
-            <button
-              className="flex items-center gap-1 py-1.5 px-3 bg-transparent border-none text-sm text-red-500 cursor-pointer transition-colors hover:text-red-600"
-              onClick={handleClearSelection}
-            >
-              Esc <X size={14} className="text-red-500" />
-            </button>
-          </div>
+          <button
+            className="flex items-center gap-1 py-1.5 px-3 bg-transparent border-none text-sm text-red-500 cursor-pointer transition-colors hover:text-red-600"
+            onClick={handleClearSelection}
+          >
+            Esc <X size={14} className="text-red-500" />
+          </button>
         </div>
       ) : (
         /* Normal Page Header */
-        <div className="flex-none flex items-center justify-between px-6 py-6 border-b border-gray-100 bg-white z-30">
-          <div className="flex items-center gap-6 pl-4">
-              <div className="relative" ref={viewDropdownRef}>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setIsViewDropdownOpen(!isViewDropdownOpen)}
-                    className="flex items-center gap-1.5 py-4 cursor-pointer group border-b-2 border-slate-900 -mb-[px]"
-                  >
-                    <h1 className="text-[15px] font-bold text-slate-900 transition-colors">
-                      {selectedView}
-                    </h1>
-                    <ChevronDown
-                      size={14}
-                      className={`transition-transform duration-200 ${isViewDropdownOpen ? "rotate-180" : ""}`}
-                      style={{ color: "#1b5e6a" }}
-                    />
-                  </button>
-                </div>
-
-                {isViewDropdownOpen && (
-                  <div className="absolute top-full left-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-xl z-50 min-w-[220px] overflow-hidden">
-                    <div className="py-2">
-                      {salesReceiptViews.map((option) => (
-                        <div
-                          key={option}
-                          className={`flex items-center justify-between px-4 py-2 text-sm cursor-pointer ${isViewSelected(option)
-                            ? "text-[#1b5e6a] border border-[#1b5e6a] mx-2 rounded-md font-semibold"
-                            : "text-[#374151] hover:bg-gray-50"
-                            }`}
-                          onClick={() => handleStatusFilter(option)}
-                        >
-                          <span>{option}</span>
-                          <Star size={16} className="text-gray-300" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+        <div className="flex-none flex items-center justify-between px-6 py-6 border-b border-gray-100 bg-white z-30 relative overflow-visible">
+          <div className="flex items-center gap-8 pl-4">
+            <div className="relative" ref={viewDropdownRef}>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsViewDropdownOpen(!isViewDropdownOpen)}
+                  className="flex items-center gap-1.5 py-4 cursor-pointer group border-b-2 border-slate-900 -mb-[px] bg-transparent outline-none"
+                >
+                  <h1 className="text-[15px] font-bold text-slate-900 transition-colors">
+                    {selectedView}
+                  </h1>
+                  <ChevronDown
+                    size={14}
+                    className={`transition-transform duration-200 text-[#156372] ${isViewDropdownOpen ? "rotate-180" : ""}`}
+                  />
+                </button>
               </div>
+
+              {isViewDropdownOpen && (
+                <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-2xl z-50 py-2 overflow-hidden">
+                  <div className="max-h-80 overflow-y-auto py-1">
+                    {salesReceiptViews.map((option) => (
+                      <div
+                        key={option}
+                        className={`flex items-center justify-between px-4 py-2 text-sm cursor-pointer ${isViewSelected(option)
+                          ? "text-[#156372] font-semibold bg-blue-50"
+                          : "text-[#374151] hover:bg-gray-50"
+                          }`}
+                        onClick={() => handleStatusFilter(option)}
+                      >
+                        <span>{option}</span>
+                        {isViewSelected(option) && <CheckCircle size={14} className="text-[#156372]" />}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 sm:gap-2 mr-4">
+          <div className="flex items-center gap-3">
+            <button
+              className="h-[38px] cursor-pointer transition-all text-white px-5 rounded-lg border-[#0D4A52] border-b-[4px] hover:brightness-110 hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:translate-y-[1px] text-sm font-semibold shadow-sm flex items-center justify-center gap-2"
+              style={{ background: "linear-gradient(180deg, #156372 0%, #0D4A52 100%)" }}
+              onClick={handleCreateNewReceipt}
+              type="button"
+            >
+              <Plus size={16} strokeWidth={3} />
+              <span>New</span>
+            </button>
+            <div className="relative" ref={moreMenuRef}>
               <button
-                className="h-[38px] min-w-[100px] cursor-pointer transition-all text-white px-5 rounded-lg border-[#0D4A52] border-b-[4px] hover:brightness-110 hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:translate-y-[1px] text-sm font-semibold shadow-sm flex items-center justify-center gap-2"
-                style={{ background: "linear-gradient(180deg, #156372 0%, #0D4A52 100%)" }}
-                onClick={handleCreateNewReceipt}
+                className="p-2 hover:bg-gray-100 rounded-lg text-gray-600 transition-colors"
+                onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
               >
-                <Plus size={16} strokeWidth={3} />
-                New
+                <MoreVertical size={18} />
               </button>
-              <div className="relative" ref={moreMenuRef}>
-                <button
-                  className="h-[38px] flex items-center justify-center p-2 bg-white border border-gray-300 border-b-[4px] rounded-lg hover:bg-gray-50 transition-all hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:translate-y-[1px] shadow-sm"
-                  onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
-                >
-                  <MoreVertical size={18} className="text-gray-500" />
-                </button>
 
                 {isMoreMenuOpen && (
                   <div className="absolute top-full right-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg min-w-[220px] z-[1000] overflow-visible py-1">
@@ -1854,20 +1858,20 @@ export default function SalesReceipts() {
       )}
 
       {/* Filter Bar */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3">
-        <div className="flex items-center gap-4">
+      <div className="bg-white border-b border-gray-200">
+        <div className="flex items-center gap-4 px-6 py-3">
           <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">VIEW BY:</span>
           <div className="relative flex items-center gap-2" ref={periodDropdownRef}>
             <span className="text-sm font-medium text-gray-700">Period:</span>
             <button
-              className="flex items-center gap-2 px-3 py-1.5 border-2 border-gray-200 rounded-lg text-sm text-gray-700 hover:border-[#1b5e6a] transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 hover:border-[#156372] transition-colors shadow-sm"
               onClick={() => setIsPeriodDropdownOpen(!isPeriodDropdownOpen)}
             >
               <span>{selectedPeriod}</span>
               <ChevronDown size={14} />
             </button>
             {isPeriodDropdownOpen && (
-              <div className="absolute top-full left-0 mt-2 bg-white border-2 border-gray-200 rounded-xl shadow-xl z-50 min-w-[150px] overflow-hidden">
+              <div className="absolute top-full left-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-xl z-50 min-w-[150px] overflow-hidden">
                 {periodOptions.map((option) => (
                   <div
                     key={option}
@@ -1889,7 +1893,7 @@ export default function SalesReceipts() {
 
       {/* Resizing Save Banner */}
       {hasResized && (
-        <div className="mx-6 mb-4 flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-md animate-in slide-in-from-top-1 duration-300">
+        <div className="flex items-center justify-between p-3 bg-blue-50 border-b border-blue-200 animate-in slide-in-from-top-1 duration-300">
           <div className="flex items-center gap-3">
             <Info size={16} className="text-[#156372]" />
             <span className="text-sm text-[#156372]">You have resized the columns. Would you like to save the changes?</span>
@@ -1938,197 +1942,122 @@ export default function SalesReceipts() {
         ) : (
           <div className="bg-white">
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-[13px] table-fixed" style={{ minWidth: `${tableMinWidth}px` }}>
+              <table className="w-full text-left border-collapse table-fixed bg-white">
                 <thead className="bg-[#f6f7fb] sticky top-0 z-20 border-b border-[#e6e9f2]">
                   <tr className="text-[10px] font-semibold text-[#7b8494] uppercase tracking-wider">
-                    <th className="px-4 py-3 w-16 min-w-[64px]">
-                      <div className="flex items-center gap-2 relative">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setIsCustomizeModalOpen(true);
-                          }}
-                          className="h-6 w-6 flex items-center justify-center rounded border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
-                          title="Manage columns"
-                          aria-label="Manage columns"
-                        >
-                          <SlidersHorizontal size={13} style={{ color: "#1b5e6a" }} />
-                        </button>
-                        <div className="h-5 w-px bg-gray-200" />
+                    <th className="px-6 py-3 w-16">
+                      <div className="flex items-center gap-3">
                         <input
                           type="checkbox"
                           checked={selectedReceipts.length === filteredSalesReceipts.length && filteredSalesReceipts.length > 0}
                           onChange={handleSelectAll}
-                          style={{ accentColor: "#1b5e6a" }}
-                          className="w-4 h-4 rounded border-gray-300 cursor-pointer focus:ring-0"
+                          className="w-4 h-4 text-[#156372] border-gray-300 rounded focus:ring-blue-500"
                         />
                       </div>
                     </th>
-                    {visibleColumns.map((col) => (
-                      <th
-                        key={col.key}
-                        className="px-4 py-3 relative group/header cursor-pointer select-none text-left"
-                        style={{ width: col.width }}
-                        onClick={() => col.key === 'receipt_date' ? handleSort('receipt_date') : undefined}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1">
-                            <span className="truncate">{col.label}</span>
-                            {col.key === 'receipt_date' && (
-                              <ArrowUpDown size={10} className="text-gray-400 opacity-0 group-hover/header:opacity-100 transition-opacity" />
-                            )}
-                          </div>
-                        </div>
-                        {/* Column resize handle */}
-                        <div
-                          role="separator"
-                          aria-orientation="vertical"
-                          onMouseDown={(e) => startResizing(col.key, e)}
-                          onClick={(e) => e.stopPropagation()}
-                          className="absolute right-0 top-0 h-full w-px cursor-col-resize opacity-0 group-hover/header:opacity-100 transition-opacity bg-gray-300"
-                        />
-                      </th>
-                    ))}
-                    <th className="px-4 py-3 w-12 sticky right-0 bg-[#f6f7fb] z-30 shadow-[-4px_0_4px_-2px_rgba(0,0,0,0.05)]">
-                      <div className="flex items-center justify-center">
-                        <Search
-                          size={13}
-                          className="text-gray-400 cursor-pointer transition-colors hover:text-gray-600"
-                          onClick={handleOpenAdvancedSearch}
-                        />
+                    <th className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        RECEIPT DATE
+                        <ArrowUpDown size={14} className="text-gray-400" />
                       </div>
+                    </th>
+                    <th className="px-4 py-3">SALES RECEIPT#</th>
+                    <th className="px-4 py-3">REFERENCE</th>
+                    <th className="px-4 py-3">CUSTOMER NAME</th>
+                    <th className="px-4 py-3">PAYMENT MODE</th>
+                    <th className="px-4 py-3">STATUS</th>
+                    <th className="px-4 py-3">AMOUNT</th>
+                    <th className="px-4 py-3">CREATED BY</th>
+                    <th className="px-6 py-3 w-10">
+                      <button
+                        onClick={handleOpenAdvancedSearch}
+                        className="p-1 hover:bg-gray-200 rounded transition-colors"
+                      >
+                        <Search size={14} className="text-gray-500" />
+                      </button>
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {isRefreshing || !hasLoadedOnce ? (
                     Array(5).fill(0).map((_, index) => (
-                      <tr key={`skeleton-${index}`} className="border-b border-gray-100">
+                      <tr key={`skeleton-${index}`} className="border-b border-[#eef1f6] h-[50px] animate-pulse">
                         <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <span className="h-6 w-6 shrink-0 bg-gray-100 rounded animate-pulse" />
-                            <span className="h-5 w-px shrink-0 bg-transparent" />
-                            <div className="w-4 h-4 bg-gray-100 rounded animate-pulse"></div>
-                          </div>
+                          <div className="w-4 h-4 bg-gray-100 rounded mx-auto" />
                         </td>
-                        {visibleColumns.map((col) => (
-                          <td key={`skeleton-cell-${col.key}`} className="px-4 py-3">
-                            <div className="h-4 bg-gray-100 rounded animate-pulse" style={{ width: col.width * 0.7 }}></div>
-                          </td>
-                        ))}
-                        <td className="px-4 py-3 sticky right-0 bg-white shadow-[-4px_0_4px_-2px_rgba(0,0,0,0.05)]"></td>
+                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>
+                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-32"></div></td>
+                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-20"></div></td>
+                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-32"></div></td>
+                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>
+                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-20"></div></td>
+                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>
+                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>
+                        <td className="px-4 py-3"></td>
                       </tr>
                     ))
                   ) : (
-                    (Array.isArray(filteredSalesReceipts) ? filteredSalesReceipts : []).map((receipt) => (
+                    (Array.isArray(filteredSalesReceipts) ? filteredSalesReceipts : []).map((receipt) => {
+                      const customerName = receipt.customerName || receipt.customer?.displayName || receipt.customer?.companyName || (typeof receipt.customer === 'string' ? receipt.customer : "—");
+                      return (
                       <tr
                         key={receipt.id}
-                        className="group border-b border-gray-50 hover:bg-gray-50/80 transition-all cursor-pointer"
+                        className="text-[13px] h-[50px] group transition-all border-b border-[#eef1f6] cursor-pointer hover:bg-[#f8fafc]"
                         onClick={(e) => {
                           const target = e.target as HTMLElement;
-                          if (!target.closest('input[type="checkbox"]') && !target.closest('button')) {
+                          if (!target.closest('input[type="checkbox"]') && !target.closest('svg') && !target.closest('button')) {
                             navigate(`/sales/sales-receipts/${receipt.id}`);
                           }
                         }}
                       >
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <button
-                               type="button"
-                               className="h-6 w-6 flex items-center justify-center rounded text-gray-400 hover:text-[#1b5e6a] hover:bg-white transition-all opacity-0 group-hover:opacity-100"
-                               onClick={(e) => {
-                                 e.stopPropagation();
-                                 navigate(`/sales/sales-receipts/${receipt.id}`);
-                               }}
-                            >
-                               <Eye size={14} />
-                            </button>
-                            <div className="h-5 w-px bg-transparent" />
-                            <input
-                              type="checkbox"
-                              checked={selectedReceipts.includes(receipt.id)}
-                              onChange={(e) => handleSelectReceipt(receipt.id, e)}
-                              onClick={(e) => e.stopPropagation()}
-                              className="w-4 h-4 text-[#1b5e6a] border-gray-300 rounded focus:ring-0 cursor-pointer"
-                            />
-                          </div>
+
+                        <td
+                          className="px-4 py-3"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectReceipt(receipt.id, e);
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedReceipts.includes(receipt.id)}
+                            onChange={(e) => handleSelectReceipt(receipt.id, e)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-4 h-4 text-[#156372] border-gray-300 rounded focus:ring-blue-500"
+                          />
                         </td>
-                        {visibleColumns.map((col) => {
-                          const value = getSalesReceiptFieldValue(receipt, col.key);
-                          return (
-                            <td key={col.key} className="px-4 py-3 truncate text-[13px] text-slate-600">
-                              {col.key === 'receipt_number' ? (
-                                <span className="text-[#1b5e6a] font-semibold hover:underline decoration-[#1b5e6a]/30 underline-offset-4">
-                                  {value}
-                                </span>
-                              ) : col.key === 'status' ? (
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                                  String(value).toLowerCase() === 'paid' ? 'bg-emerald-50 text-emerald-700' :
-                                  String(value).toLowerCase() === 'void' ? 'bg-rose-50 text-rose-700' :
-                                  'bg-slate-100 text-slate-700'
-                                }`}>
-                                  {String(value || "PAID").toUpperCase()}
-                                </span>
-                              ) : col.key === 'amount' ? (
-                                <span className="font-semibold text-slate-900">{value}</span>
-                              ) : (
-                                <span>{value}</span>
-                              )}
-                            </td>
-                          );
-                        })}
-                        <td className="px-4 py-3 sticky right-0 bg-white/95 backdrop-blur-sm group-hover:bg-gray-50 shadow-[-4px_0_4px_-2px_rgba(0,0,0,0.05)] transition-colors">
-                            <div className="flex items-center justify-center">
-                               <button className="p-1.5 rounded-lg hover:bg-white text-gray-400 opacity-0 group-hover:opacity-100 transition-all">
-                                  <MoreVertical size={14} />
-                               </button>
-                            </div>
+                        <td className="p-4 text-gray-900">{typeof receipt.date === "string" ? new Date(receipt.date).toLocaleDateString() : (receipt.receiptDate ? new Date(receipt.receiptDate).toLocaleDateString() : "—")}</td>
+                        <td className="p-4">
+                          <span
+                            className="text-[#156372] hover:text-blue-700 hover:underline font-medium cursor-pointer"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/sales/sales-receipts/${receipt.id}`);
+                            }}
+                          >
+                            {receipt.receiptNumber || receipt.id || "—"}
+                          </span>
                         </td>
+                        <td className="p-4 text-gray-900">{receipt.paymentReference || receipt.referenceNumber || "—"}</td>
+                        <td className="p-4 text-gray-900 font-medium">{customerName}</td>
+                        <td className="p-4 text-gray-900">{receipt.paymentMode || "—"}</td>
+                        <td className="p-4">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                            String(receipt.status || "paid").toLowerCase() === 'paid' ? 'bg-emerald-50 text-emerald-700' :
+                            String(receipt.status || "void").toLowerCase() === 'void' ? 'bg-rose-50 text-rose-700' :
+                            'bg-slate-100 text-slate-700'
+                          }`}>
+                            {String(receipt.status || "PAID").toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="p-4 font-semibold text-slate-900">{receipt.amount || receipt.total || 0}</td>
+                        <td className="p-4 text-gray-900">{receipt.createdBy || "—"}</td>
+                        <td className="p-4"></td>
                       </tr>
-                    ))
+                    )})
                   )}
                 </tbody>
               </table>
-            </div>
-
-            {/* Pagination Controls */}
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-end">
-              <div className="flex items-center gap-2">
-                <button
-                  className={`p-2 rounded-lg border border-gray-200 hover:bg-white transition-colors ${pagination.page === 1 ? "opacity-50 cursor-not-allowed" : ""}`}
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={pagination.page === 1}
-                >
-                  <ChevronLeft size={16} />
-                </button>
-                {Array.from({ length: Math.min(5, pagination.pages) }, (_, i) => {
-                  let pageNum;
-                  if (pagination.pages <= 5) pageNum = i + 1;
-                  else if (pagination.page <= 3) pageNum = i + 1;
-                  else if (pagination.page >= pagination.pages - 2) pageNum = pagination.pages - 4 + i;
-                  else pageNum = pagination.page - 2 + i;
-
-                  return (
-                    <button
-                      key={pageNum}
-                      className={`w-8 h-8 rounded-lg border text-sm font-medium transition-colors ${
-                        pagination.page === pageNum ? "bg-[#156372] text-white border-[#156372]" : "border-gray-200 hover:bg-white text-gray-600"
-                      }`}
-                      onClick={() => setCurrentPage(pageNum)}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
-                <button
-                  className={`p-2 rounded-lg border border-gray-200 hover:bg-white transition-colors ${pagination.page === pagination.pages || pagination.pages === 0 ? "opacity-50 cursor-not-allowed" : ""}`}
-                  onClick={() => setCurrentPage((p) => Math.min(pagination.pages, p + 1))}
-                  disabled={pagination.page === pagination.pages || pagination.pages === 0}
-                >
-                  <ChevronRight size={16} />
-                </button>
-              </div>
             </div>
           </div>
         )}

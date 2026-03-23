@@ -863,7 +863,31 @@ export const currenciesAPI = {
 
 export const invoicesAPI = {
   ...invoicesLocal,
+  getAll: async (params?: Record<string, any>) => {
+    try {
+      const res = await resource("/invoices").getAll(params);
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+    return invoicesLocal.getAll(params);
+  },
+  list: (params?: Record<string, any>) => invoicesAPI.getAll(params),
+  getById: async (id: string) => {
+    try {
+      const res = await resource("/invoices").getById(id);
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+    return invoicesLocal.getById(id);
+  },
   getByCustomer: async (customerId: string, params?: Record<string, any>) => {
+    const res = await invoicesAPI.getAll({ ...(params || {}), customerId });
+    if (res?.success) return res as any;
+
     const all = await invoicesLocal.getAll({ limit: 10000 });
     const filtered = (all.data || []).filter((invoice: any) => {
       const ref =
@@ -878,21 +902,62 @@ export const invoicesAPI = {
     return { success: true, data, pagination };
   },
   getNextNumber: async (prefix?: string) => {
+    try {
+      const res: any = await request({ path: "/invoices/next-number", params: { prefix: prefix || "INV-" } });
+      if (res?.success) return res as any;
+      if (typeof res?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
     const all = await invoicesLocal.getAll({ limit: 100000 });
     const next = (all.pagination?.total || 0) + 1;
-    return { success: true, data: { nextNumber: `${prefix || "INV-"}${String(next).padStart(5, "0")}` } };
+    const nextNumber = `${prefix || "INV-"}${String(next).padStart(6, "0")}`;
+    return { success: true, data: { nextNumber } };
   },
   create: async (data: any) => {
+    try {
+      const res = await resource("/invoices").create(data);
+      if (res?.success) {
+        recordEvent("invoice_created", { invoice: (res as any).data });
+        return res as any;
+      }
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+
     const res = await invoicesLocal.create(data);
     if (res.success) recordEvent("invoice_created", { invoice: res.data });
     return res;
   },
   update: async (id: string, data: any) => {
+    try {
+      const res = await resource("/invoices").update(id, data);
+      if (res?.success) {
+        recordEvent("invoice_updated", { invoice: (res as any).data });
+        return res as any;
+      }
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+
     const res = await invoicesLocal.update(id, data);
     if (res.success) recordEvent("invoice_updated", { invoice: res.data });
     return res;
   },
   delete: async (id: string) => {
+    try {
+      const res = await resource("/invoices").delete(id);
+      if (res?.success) {
+        recordEvent("invoice_deleted", { invoice_id: id });
+        return res as any;
+      }
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+
     const res = await invoicesLocal.delete(id);
     if (res.success) recordEvent("invoice_deleted", { invoice_id: id });
     return res;

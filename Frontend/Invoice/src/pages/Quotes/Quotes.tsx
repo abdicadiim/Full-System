@@ -2393,8 +2393,80 @@ export default function Quotes() {
         )}
 
         {quotesLoading ? (
-          <div className="flex-1 flex items-center justify-center">
-            <LoadingSpinner />
+          <div className="flex-1 overflow-auto bg-white min-h-0">
+            <table className="w-full text-left border-collapse" style={{ minWidth: `${tableMinWidth}px` }}>
+              <thead className="bg-[#f6f7fb] sticky top-0 z-20 border-b border-[#e6e9f2]">
+                <tr className="text-[10px] font-semibold text-[#7b8494] uppercase tracking-wider">
+                  <th className="w-16 px-4 py-3 text-left bg-[#f6f7fb]">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="h-6 w-6 flex items-center justify-center rounded border border-gray-300 bg-white hover:bg-gray-50 transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCustomizeColumnsOpen();
+                        }}
+                        title="Customize columns"
+                      >
+                        <SlidersHorizontal size={13} className="text-[#156372]" />
+                      </button>
+                      <div className="h-5 w-px bg-gray-200" />
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 rounded border-gray-300 text-[#156372] focus:ring-0 cursor-pointer"
+                        checked={false}
+                        readOnly
+                      />
+                    </div>
+                  </th>
+                  {visibleColumns.map((colKey) => {
+                    const column = allColumnOptions.find(c => c.key === colKey);
+                    return (
+                      <th
+                        key={colKey}
+                        className="group/header relative px-4 py-3 text-left text-[11px] font-semibold text-[#7b8494] uppercase tracking-wider select-none bg-[#f6f7fb]"
+                        style={{
+                          width: `${columnWidths[colKey] || 120}px`,
+                          minWidth: `${columnWidths[colKey] || 120}px`,
+                          maxWidth: `${columnWidths[colKey] || 120}px`,
+                        }}
+                      >
+                        {column?.label}
+                        {renderColumnResizeHandle(colKey)}
+                      </th>
+                    );
+                  })}
+                  <th className="w-10 px-4 py-3 text-right bg-[#f6f7fb] border-l border-transparent"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#eef1f6] animate-pulse">
+                {Array.from({ length: 10 }).map((_, idx) => (
+                  <tr key={idx} className="text-[13px] h-[50px] border-b border-[#eef1f6]">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 shrink-0" />
+                        <div className="h-5 w-px bg-transparent shrink-0" />
+                        <div className="w-4 h-4 rounded bg-gray-100 border border-gray-200" />
+                      </div>
+                    </td>
+                    {visibleColumns.map((colKey) => (
+                      <td
+                        key={colKey}
+                        className="px-4 py-3"
+                        style={{
+                          width: `${columnWidths[colKey] || 120}px`,
+                          minWidth: `${columnWidths[colKey] || 120}px`,
+                          maxWidth: `${columnWidths[colKey] || 120}px`,
+                        }}
+                      >
+                        <div className="h-3 bg-gray-100 rounded w-2/3" />
+                      </td>
+                    ))}
+                    <td className="w-10 px-4 py-3 border-l border-[#eef1f6]"></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : sortedQuotes.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-gray-50/30">

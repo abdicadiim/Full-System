@@ -24,6 +24,7 @@ import { addonsRoutes } from "./routes/addonsRoutes.js";
 import { couponsRoutes } from "./routes/couponsRoutes.js";
 import priceListsRoutes from "./routes/priceListsRoutes.js";
 import quotesRoutes from "./routes/quotesRoutes.js";
+import invoicesRoutes from "./routes/invoicesRoutes.js";
 
 if (!MONGO_URI) {
   // eslint-disable-next-line no-console
@@ -85,47 +86,7 @@ app.use("/api/addons", addonsRoutes);
 app.use("/api/coupons", couponsRoutes);
 app.use("/api/price-lists", priceListsRoutes);
 app.use("/api/quotes", quotesRoutes);
-
-// Example Mongo model + routes (minimal)
-const InvoiceSchema = new mongoose.Schema(
-  {
-    number: { type: String, required: true, index: true },
-    customerName: { type: String, default: "" },
-    total: { type: Number, default: 0 },
-    currency: { type: String, default: "USD" },
-    status: { type: String, default: "draft" },
-  },
-  { timestamps: true }
-);
-const Invoice = mongoose.model("Invoice", InvoiceSchema);
-
-app.get("/api/invoices", async (_req, res) => {
-  const rows = await Invoice.find().sort({ createdAt: -1 }).limit(200).lean();
-  res.json({ success: true, data: rows });
-});
-
-app.post("/api/invoices", async (req, res) => {
-  const created = await Invoice.create(req.body || {});
-  res.status(201).json({ success: true, data: created });
-});
-
-app.get("/api/invoices/:id", async (req, res) => {
-  const row = await Invoice.findById(req.params.id).lean();
-  if (!row) return res.status(404).json({ success: false, message: "Not found", data: null });
-  res.json({ success: true, data: row });
-});
-
-app.put("/api/invoices/:id", async (req, res) => {
-  const updated = await Invoice.findByIdAndUpdate(req.params.id, req.body || {}, { new: true }).lean();
-  if (!updated) return res.status(404).json({ success: false, message: "Not found", data: null });
-  res.json({ success: true, data: updated });
-});
-
-app.delete("/api/invoices/:id", async (req, res) => {
-  const deleted = await Invoice.findByIdAndDelete(req.params.id).lean();
-  if (!deleted) return res.status(404).json({ success: false, message: "Not found", data: null });
-  res.json({ success: true, data: deleted });
-});
+app.use("/api/invoices", invoicesRoutes);
 
 app.use("/api", (_req, res) => {
   res.status(501).json({ success: false, message: "Not implemented", data: null });

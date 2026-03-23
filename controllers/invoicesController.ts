@@ -1,15 +1,18 @@
 import type express from "express";
 import mongoose from "mongoose";
-import { Quote } from "../models/Quote.js";
+import { Invoice } from "../models/Invoice.js";
 
 const asString = (v: unknown) => (typeof v === "string" ? v : "");
-const asNumber = (v: unknown) => (typeof v === "number" ? v : 0);
 const asDate = (v: unknown) => (v ? new Date(String(v)) : null);
 
 const requireOrgId = (req: express.Request, res: express.Response) => {
   const orgId = req.user?.organizationId;
   if (!orgId) {
     res.status(401).json({ success: false, message: "Unauthenticated", data: null });
+    return null;
+  }
+  if (!mongoose.isValidObjectId(orgId)) {
+    res.status(400).json({ success: false, message: "Invalid organization", data: null });
     return null;
   }
   return orgId;
@@ -20,7 +23,7 @@ const normalizeRow = (row: any) => {
   return { ...row, id: String(row._id) };
 };
 
-export const listQuotes: express.RequestHandler = async (req, res) => {
+export const listInvoices: express.RequestHandler = async (req, res) => {
   const orgId = requireOrgId(req, res);
   if (!orgId) return;
 
@@ -35,11 +38,11 @@ export const listQuotes: express.RequestHandler = async (req, res) => {
   if (customerId) filter.customerId = customerId;
   if (q) {
     const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-    filter.$or = [{ quoteNumber: re }, { customerName: re }, { subject: re }];
+    filter.$or = [{ invoiceNumber: re }, { customerName: re }];
   }
 
-  const total = await Quote.countDocuments(filter);
-  let query = Quote.find(filter).sort({ createdAt: -1 });
+  const total = await Invoice.countDocuments(filter);
+  let query = Invoice.find(filter).sort({ createdAt: -1 });
   if (limit > 0) query = query.skip((page - 1) * limit).limit(limit);
   const rows = await query.lean();
 
@@ -55,15 +58,15 @@ export const listQuotes: express.RequestHandler = async (req, res) => {
   });
 };
 
-export const getQuoteById: express.RequestHandler = async (req, res) => {
+export const getInvoiceById: express.RequestHandler = async (req, res) => {
   const orgId = requireOrgId(req, res);
   if (!orgId) return;
 
   const id = String(req.params.id || "").trim();
   if (!id) return res.status(400).json({ success: false, message: "Invalid id", data: null });
 
-  let row: any = await Quote.findOne({ _id: id, organizationId: orgId }).lean();
-  if (!row) return res.status(404).json({ success: false, message: "Quote not found", data: null });
+  let row: any = await Invoice.findOne({ _id: id, organizationId: orgId }).lean();
+  if (!row) return res.status(404).json({ success: false, message: "Invoice not found", data: null });
 
   if (row.customerId) {
     try {
@@ -81,9 +84,14 @@ export const getQuoteById: express.RequestHandler = async (req, res) => {
   return res.json({ success: true, data: normalizeRow(row) });
 };
 
-export const createQuote: express.RequestHandler = async (req, res) => {
+export const createInvoice: express.RequestHandler = async (req, res) => {
   const orgId = requireOrgId(req, res);
   if (!orgId) return;
+
+  const invoiceNumber = asString(req.body?.invoiceNumber).trim();
+  if (!invoiceNumber) {
+    return res.status(400).json({ success: false, message: "Invoice number is required", data: null });
+  }
 
   let customerName = asString(req.body?.customerName).trim();
   const customerId = asString(req.body?.customerId).trim();
@@ -102,23 +110,24 @@ export const createQuote: express.RequestHandler = async (req, res) => {
   const payload: any = {
     organizationId: orgId,
     ...req.body,
+    invoiceNumber,
     customerName,
-    quoteDate: asDate(req.body?.quoteDate) || new Date(),
-    expiryDate: asDate(req.body?.expiryDate)
+    date: asDate(req.body?.date) || asDate(req.body?.invoiceDate) || new Date(),
+    dueDate: asDate(req.body?.dueDate),
   };
 
   try {
-    const created = await Quote.create(payload);
+    const created = await Invoice.create(payload);
     return res.status(201).json({ success: true, data: normalizeRow(created.toObject()) });
   } catch (e: any) {
     if (e?.code === 11000) {
-      return res.status(409).json({ success: false, message: "Quote number already exists", data: null });
+      return res.status(409).json({ success: false, message: "Invoice number already exists", data: null });
     }
-    return res.status(500).json({ success: false, message: e.message || "Failed to create quote", data: null });
+    return res.status(500).json({ success: false, message: e.message || "Failed to create invoice", data: null });
   }
 };
 
-export const updateQuote: express.RequestHandler = async (req, res) => {
+export const updateInvoice: express.RequestHandler = async (req, res) => {
   const orgId = requireOrgId(req, res);
   if (!orgId) return;
 
@@ -126,8 +135,9 @@ export const updateQuote: express.RequestHandler = async (req, res) => {
   if (!id) return res.status(400).json({ success: false, message: "Invalid id", data: null });
 
   const patch: any = { ...req.body };
-  if (patch.quoteDate) patch.quoteDate = asDate(patch.quoteDate);
-  if (patch.expiryDate) patch.expiryDate = asDate(patch.expiryDate);
+  if (patch.date) patch.date = asDate(patch.date);
+  if (patch.invoiceDate) patch.invoiceDate = asDate(patch.invoiceDate);
+  if (patch.dueDate) patch.dueDate = asDate(patch.dueDate);
 
   if (patch.customerId && (!patch.customerName || patch.customerName === patch.customerId)) {
     try {
@@ -140,40 +150,39 @@ export const updateQuote: express.RequestHandler = async (req, res) => {
     }
   }
 
-  const updated: any = await Quote.findOneAndUpdate({ _id: id, organizationId: orgId }, { $set: patch }, { new: true })
+  const updated: any = await Invoice.findOneAndUpdate({ _id: id, organizationId: orgId }, { $set: patch }, { new: true })
     .lean();
-  if (!updated) return res.status(404).json({ success: false, message: "Quote not found", data: null });
+  if (!updated) return res.status(404).json({ success: false, message: "Invoice not found", data: null });
 
   return res.json({ success: true, data: normalizeRow(updated) });
 };
 
-export const deleteQuote: express.RequestHandler = async (req, res) => {
+export const deleteInvoice: express.RequestHandler = async (req, res) => {
   const orgId = requireOrgId(req, res);
   if (!orgId) return;
 
   const id = String(req.params.id || "").trim();
-  const deleted = await Quote.findOneAndDelete({ _id: id, organizationId: orgId }).lean();
-  if (!deleted) return res.status(404).json({ success: false, message: "Quote not found", data: null });
+  const deleted = await Invoice.findOneAndDelete({ _id: id, organizationId: orgId }).lean();
+  if (!deleted) return res.status(404).json({ success: false, message: "Invoice not found", data: null });
   return res.json({ success: true, data: { id } });
 };
 
-export const getNextQuoteNumber: express.RequestHandler = async (req, res) => {
+export const getNextInvoiceNumber: express.RequestHandler = async (req, res) => {
   const orgId = requireOrgId(req, res);
   if (!orgId) return;
 
-  const prefix = asString(req.query.prefix || "QT-");
-  const last = await Quote.findOne({ organizationId: orgId, quoteNumber: new RegExp(`^${prefix}`) })
-    .sort({ quoteNumber: -1 })
+  const prefix = asString(req.query.prefix || "INV-");
+  const last = await Invoice.findOne({ organizationId: orgId, invoiceNumber: new RegExp(`^${prefix}`) })
+    .sort({ invoiceNumber: -1 })
     .lean();
 
   let nextNo = 1;
   if (last) {
-    const digits = last.quoteNumber.match(/\d+$/);
-    if (digits) {
-      nextNo = parseInt(digits[0]) + 1;
-    }
+    const digits = String((last as any).invoiceNumber || "").match(/\d+$/);
+    if (digits) nextNo = parseInt(digits[0]) + 1;
   }
 
   const nextNumber = `${prefix}${String(nextNo).padStart(6, "0")}`;
   return res.json({ success: true, data: { nextNumber } });
 };
+

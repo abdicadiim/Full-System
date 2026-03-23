@@ -11,7 +11,7 @@ import {
 import { getCustomers, saveQuote, getQuotes, getQuoteById, updateQuote, getProjects, getSalespersonsFromAPI, updateSalesperson, getItemsFromAPI, getTaxes, Customer, Tax, Salesperson, Quote, ContactPerson, Project } from "../../salesModel";
 
 import { getAllDocuments } from "../../../utils/documentStorage";
-import { customersAPI, projectsAPI, salespersonsAPI, quotesAPI, itemsAPI, currenciesAPI, contactPersonsAPI, vendorsAPI, settingsAPI, chartOfAccountsAPI, documentsAPI, reportingTagsAPI } from "../../../services/api";
+import { customersAPI, projectsAPI, salespersonsAPI, quotesAPI, itemsAPI, currenciesAPI, contactPersonsAPI, vendorsAPI, settingsAPI, chartOfAccountsAPI, documentsAPI, reportingTagsAPI, priceListsAPI } from "../../../services/api";
 import { useAccountSelect } from "../../../hooks/useAccountSelect";
 import { useCurrency } from "../../../hooks/useCurrency";
 import { API_BASE_URL, getToken } from "../../../services/auth";
@@ -533,6 +533,7 @@ const NewQuote = () => {
   const [quoteNextNumber, setQuoteNextNumber] = useState("000002");
   const [isPriceListDropdownOpen, setIsPriceListDropdownOpen] = useState(false);
   const [priceListSearch, setPriceListSearch] = useState("");
+  const [catalogPriceListsRaw, setCatalogPriceListsRaw] = useState<any[]>([]);
   const [catalogPriceLists, setCatalogPriceLists] = useState<CatalogPriceListOption[]>([]);
   const [isLocationFeatureEnabled, setIsLocationFeatureEnabled] = useState(false);
   const [locationOptions, setLocationOptions] = useState<string[]>(["Head Office"]);
@@ -627,31 +628,46 @@ const NewQuote = () => {
     return detail ? `${name} [ ${detail} ]` : name;
   };
 
-  const loadCatalogPriceLists = () => {
+  const normalizeCatalogPriceLists = (rows: any[]) => {
+    const parsed = Array.isArray(rows) ? rows : [];
+    setCatalogPriceListsRaw(parsed);
+
+    const normalized: CatalogPriceListOption[] = parsed
+      .map((row: any) => ({
+        id: String(row?.id || row?._id || ""),
+        name: String(row?.name || "").trim(),
+        pricingScheme: String(row?.pricingScheme || "").trim(),
+        currency: String(row?.currency || "").trim(),
+        status: String(row?.status || "Active").trim(),
+        displayLabel: formatPriceListDisplayLabel(row),
+      }))
+      .filter((row: CatalogPriceListOption) => row.name)
+      .filter((row: CatalogPriceListOption) => row.status.toLowerCase() !== "inactive");
+
+    setCatalogPriceLists(normalized);
+  };
+
+  const loadCatalogPriceLists = async () => {
+    // 1) Local fallback for instant UI
     try {
       const raw = localStorage.getItem(PRICE_LISTS_STORAGE_KEY);
       const parsed = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(parsed)) {
-        setCatalogPriceLists([]);
-        return;
-      }
-
-      const normalized: CatalogPriceListOption[] = parsed
-        .map((row: any) => ({
-          id: String(row?.id || row?._id || ""),
-          name: String(row?.name || "").trim(),
-          pricingScheme: String(row?.pricingScheme || "").trim(),
-          currency: String(row?.currency || "").trim(),
-          status: String(row?.status || "Active").trim(),
-          displayLabel: formatPriceListDisplayLabel(row)
-        }))
-        .filter((row: CatalogPriceListOption) => row.name)
-        .filter((row: CatalogPriceListOption) => row.status.toLowerCase() !== "inactive");
-
-      setCatalogPriceLists(normalized);
+      normalizeCatalogPriceLists(Array.isArray(parsed) ? parsed : []);
     } catch (error) {
-      console.error("Error loading price lists for quote:", error);
-      setCatalogPriceLists([]);
+      console.error("Error reading cached price lists for quote:", error);
+      normalizeCatalogPriceLists([]);
+    }
+
+    // 2) Refresh from backend
+    try {
+      const response: any = await priceListsAPI.list({ limit: 5000 });
+      const rows = response?.success ? response?.data : null;
+      if (Array.isArray(rows)) {
+        localStorage.setItem(PRICE_LISTS_STORAGE_KEY, JSON.stringify(rows));
+        normalizeCatalogPriceLists(rows);
+      }
+    } catch (error) {
+      console.error("Error loading price lists from API for quote:", error);
     }
   };
 
@@ -717,6 +733,90 @@ const NewQuote = () => {
       option.currency.toLowerCase().includes(search)
     );
   });
+
+  const selectedPriceList = useMemo(() => {
+    const selected = String(formData.selectedPriceList || "").trim();
+    if (!selected || selected.toLowerCase() === "select price list") return null;
+    return (
+      catalogPriceListsRaw.find((row: any) => String(row?.name || "").trim() === selected) ||
+      catalogPriceListsRaw.find((row: any) => String(row?.id || row?._id || "").trim() === selected) ||
+      null
+    );
+  }, [catalogPriceListsRaw, formData.selectedPriceList]);
+
+  const parsePercentage = (value: any) => {
+    const raw = String(value || "").replace(/[^0-9.-]/g, "");
+    const num = Number(raw);
+    return Number.isFinite(num) ? num : 0;
+  };
+
+  const applyRounding = (value: number, roundOffTo: string) => {
+    const label = String(roundOffTo || "").toLowerCase();
+    if (label.includes("decimal places")) {
+      const digits = Number(label.split(" ")[0]);
+      if (Number.isFinite(digits)) return Number(value.toFixed(digits));
+    }
+    if (label.includes("nearest whole")) return Math.round(value);
+    if (label.includes("0.99")) return Math.floor(value) + 0.99;
+    if (label.includes("0.50")) return Math.floor(value) + 0.5;
+    if (label.includes("0.49")) return Math.floor(value) + 0.49;
+    return value;
+  };
+
+  const getIndividualPriceListRate = (priceList: any, entity: any) => {
+    if (!priceList) return null;
+    if (String(priceList.priceListType || "").toLowerCase() !== "individual") return null;
+
+    const entityType = String(entity?.entityType || entity?.itemEntityType || "item").toLowerCase();
+    const entityId = String(entity?.sourceId || entity?.itemId || entity?.id || "").trim();
+    const entityName = String(entity?.name || "").trim();
+
+    if (entityType === "item") {
+      const itemRates = Array.isArray(priceList.itemRates) ? priceList.itemRates : [];
+      const match = itemRates.find((row: any) => {
+        const rowId = String(row?.itemId || "").trim();
+        const rowName = String(row?.itemName || "").trim();
+        return (rowId && rowId === entityId) || (rowName && entityName && rowName === entityName);
+      });
+      const rate = match ? Number(match.rate ?? match.price) : null;
+      return Number.isFinite(rate as any) ? (rate as number) : null;
+    }
+
+    const productRates = Array.isArray(priceList.productRates) ? priceList.productRates : [];
+    for (const productRow of productRates) {
+      const plans = Array.isArray(productRow?.plans) ? productRow.plans : [];
+      const addons = Array.isArray(productRow?.addons) ? productRow.addons : [];
+
+      const planMatch = plans.find((row: any) => String(row?.planId || "").trim() === entityId || String(row?.name || "").trim() === entityName);
+      if (planMatch) {
+        const rate = Number(planMatch.rate ?? planMatch.price);
+        return Number.isFinite(rate) ? rate : null;
+      }
+
+      const addonMatch = addons.find((row: any) => String(row?.addonId || "").trim() === entityId || String(row?.name || "").trim() === entityName);
+      if (addonMatch) {
+        const rate = Number(addonMatch.rate ?? addonMatch.price);
+        return Number.isFinite(rate) ? rate : null;
+      }
+    }
+
+    return null;
+  };
+
+  const applyPriceListToBaseRate = (baseRate: number, priceList: any, entity: any) => {
+    if (!priceList) return baseRate;
+
+    const override = getIndividualPriceListRate(priceList, entity);
+    if (override !== null) return override;
+
+    if (String(priceList.priceListType || "").toLowerCase() === "individual") return baseRate;
+    const pct = parsePercentage(priceList.markup);
+    if (!pct) return baseRate;
+
+    const type = String(priceList.markupType || "").toLowerCase();
+    const next = type === "markdown" ? baseRate * (1 - pct / 100) : baseRate * (1 + pct / 100);
+    return applyRounding(next, priceList.roundOffTo || "Never mind");
+  };
 
   const normalizeReportingTagOptions = (tag: any): string[] => {
     const candidates = Array.isArray(tag?.options)
@@ -1581,6 +1681,18 @@ const NewQuote = () => {
     const customerName = customer.name || customer.displayName || customer.companyName;
     const previousDefaultTaxId = customerDefaultTaxId;
 
+    const customerPriceListId = String(customer?.priceListId || customer?.priceListID || customer?.price_list_id || "").trim();
+    const customerPriceListNameRaw = String(customer?.priceListName || customer?.priceList || customer?.price_list || "").trim();
+    const resolvedPriceList =
+      (customerPriceListId
+        ? catalogPriceListsRaw.find((row: any) => String(row?.id || row?._id || "").trim() === customerPriceListId)
+        : null) ||
+      (customerPriceListNameRaw
+        ? catalogPriceListsRaw.find((row: any) => String(row?.name || "").trim() === customerPriceListNameRaw)
+        : null) ||
+      null;
+    const nextPriceListName = resolvedPriceList ? String(resolvedPriceList.name || "").trim() : customerPriceListNameRaw;
+
     const rawCustomerTax =
       (customer as any)?.taxRate ??
       (customer as any)?.taxId ??
@@ -1597,7 +1709,8 @@ const NewQuote = () => {
     setCustomerDefaultTaxId(resolvedCustomerTaxId);
 
     setFormData(prev => {
-      const currency = (customer.currency || prev.currency || "USD").split(' - ')[0];
+      const customerCurrency = (customer.currency || prev.currency || "USD").split(' - ')[0];
+      const nextCurrency = resolvedPriceList?.currency ? String(resolvedPriceList.currency).trim() : customerCurrency;
 
       const updatedItems = prev.items.map((item: any) => {
         if (item.itemType === "header") return item;
@@ -1656,7 +1769,8 @@ const NewQuote = () => {
       const nextForm = {
         ...prev,
         customerName: customerName,
-        currency: currency,
+        selectedPriceList: nextPriceListName || prev.selectedPriceList,
+        currency: nextCurrency,
         items: updatedItems
       };
       const totals = calculateAllTotals(updatedItems, nextForm);
@@ -2545,10 +2659,14 @@ const NewQuote = () => {
 
   const handleItemSelect = (itemId, selectedItem) => {
     const selectedEntityId = selectedItem.sourceId || selectedItem.id;
+    const baseRate = Number(selectedItem?.rate ?? 0) || 0;
+    const nextRate = selectedPriceList ? applyPriceListToBaseRate(baseRate, selectedPriceList, selectedItem) : baseRate;
     setSelectedItemIds(prev => ({ ...prev, [itemId]: selectedItem.id }));
     handleItemChange(itemId, 'itemId', selectedEntityId); // Store the selected Item ID
+    handleItemChange(itemId, 'itemEntityType', selectedItem.entityType || selectedItem.itemEntityType || "item");
+    handleItemChange(itemId, 'catalogRate', baseRate);
     handleItemChange(itemId, 'itemDetails', selectedItem.name);
-    handleItemChange(itemId, 'rate', selectedItem.rate);
+    handleItemChange(itemId, 'rate', nextRate);
     handleItemChange(itemId, 'stockOnHand', selectedItem.stockOnHand);
     handleItemChange(itemId, 'unit', selectedItem.unit);
     handleItemChange(itemId, 'description', selectedItem.salesDescription || selectedItem.description || "");
@@ -2626,6 +2744,33 @@ const NewQuote = () => {
       total
     };
   };
+
+  useEffect(() => {
+    const list = selectedPriceList;
+    setFormData((prev) => {
+      const nextCurrency = list?.currency ? String(list.currency).trim() : prev.currency;
+      const updatedItems = prev.items.map((row: any) => {
+        if (row.itemType === "header") return row;
+        const selectedUiId = selectedItemIds?.[row.id];
+        if (!selectedUiId) return row;
+        const selectedEntity = availableItems.find((item: any) => String(item.id) === String(selectedUiId));
+        if (!selectedEntity) return row;
+
+        const baseRate = Number(selectedEntity?.rate ?? row.catalogRate ?? row.rate ?? 0) || 0;
+        const nextRate = list ? applyPriceListToBaseRate(baseRate, list, selectedEntity) : baseRate;
+        if (Number(row.rate ?? 0) === nextRate && prev.currency === nextCurrency) return row;
+        return {
+          ...row,
+          itemEntityType: selectedEntity.entityType || row.itemEntityType || "item",
+          catalogRate: baseRate,
+          rate: nextRate,
+        };
+      });
+
+      const totals = calculateAllTotals(updatedItems, { ...prev, currency: nextCurrency });
+      return { ...prev, currency: nextCurrency, items: updatedItems, ...totals };
+    });
+  }, [selectedPriceList, availableItems, selectedItemIds]);
 
   const handleItemChange = (id, field, value) => {
     setFormData(prev => {
@@ -3498,14 +3643,17 @@ const NewQuote = () => {
         salespersonId: formData.salespersonId,
         projectName: formData.projectName,
         subject: formData.subject,
-        selectedPriceList: formData.selectedPriceList,
-        priceList: formData.selectedPriceList,
+        priceListId: String(selectedPriceList?.id || selectedPriceList?._id || ""),
+        priceListName: String(selectedPriceList?.name || ""),
+        taxPreference: formData.taxExclusive,
         taxExclusive: formData.taxExclusive,
 
         // Items array - filter out empty rows and ensure valid data
         items: validItems,
 
         // Summary
+        subTotal: subTotal,
+        totalTax: totalTax,
         subtotal: subTotal,
         tax: totalTax,
         taxAmount: totalTax,
@@ -3533,7 +3681,7 @@ const NewQuote = () => {
         })) || [],
 
         // Status
-        status: "draft"
+        status: "Draft"
       };
 
       // Save or update quote
@@ -3622,10 +3770,13 @@ const NewQuote = () => {
         salespersonId: formData.salespersonId,
         projectName: formData.projectName,
         subject: formData.subject,
-        selectedPriceList: formData.selectedPriceList,
-        priceList: formData.selectedPriceList,
+        priceListId: String(selectedPriceList?.id || selectedPriceList?._id || ""),
+        priceListName: String(selectedPriceList?.name || ""),
+        taxPreference: formData.taxExclusive,
         taxExclusive: formData.taxExclusive,
         items: validItems,
+        subTotal: subTotal,
+        totalTax: totalTax,
         subtotal: subTotal,
         tax: totalTax,
         taxAmount: totalTax,
@@ -3649,7 +3800,7 @@ const NewQuote = () => {
           size: file.size,
           url: file.url
         })) || [],
-        status: "draft", // Save as draft first
+        status: "Draft", // Save as draft first
         date: formData.quoteDate
       };
 
@@ -3689,9 +3840,9 @@ const NewQuote = () => {
 
   return (
     <>
-      <div className="w-full h-full overflow-y-auto bg-gray-50">
+      <div className="w-full min-h-full bg-gray-50">
         {/* Header */}
-        <div className="border-b border-gray-200 bg-white">
+        <div className="sticky top-0 z-40 border-b border-gray-200 bg-white">
           <div className="w-full px-8 h-16 flex justify-between items-center">
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-9 h-9 rounded-md border border-gray-200 bg-gray-50 flex items-center justify-center text-gray-600 flex-shrink-0">

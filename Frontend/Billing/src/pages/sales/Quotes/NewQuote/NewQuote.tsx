@@ -12,7 +12,7 @@ import {
 import { getCustomers, saveQuote, getQuotes, getQuoteById, updateQuote, getProjects, getSalespersonsFromAPI, updateSalesperson, getItemsFromAPI, getTaxes, Customer, Tax, Salesperson, Quote, ContactPerson, Project } from "../../salesModel";
 
 import { getAllDocuments } from "../../../../utils/documentStorage";
-import { customersAPI, projectsAPI, salespersonsAPI, quotesAPI, itemsAPI, currenciesAPI, contactPersonsAPI, vendorsAPI, settingsAPI, chartOfAccountsAPI, documentsAPI, reportingTagsAPI } from "../../../../services/api";
+import { customersAPI, projectsAPI, salespersonsAPI, quotesAPI, itemsAPI, currenciesAPI, contactPersonsAPI, vendorsAPI, settingsAPI, chartOfAccountsAPI, documentsAPI, reportingTagsAPI, priceListsAPI, plansAPI } from "../../../../services/api";
 import { useAccountSelect } from "../../../../hooks/useAccountSelect";
 import { useCurrency } from "../../../../hooks/useCurrency";
 import { API_BASE_URL, getToken } from "../../../../services/auth";
@@ -34,9 +34,10 @@ const defaultSampleItems = [
 ];
 
 const PRICE_LISTS_STORAGE_KEY = "inv_price_lists_v1";
-const PLANS_STORAGE_KEY = "inv_plans_v1";
-const LS_LOCATIONS_ENABLED_KEY = "taban_locations_enabled";
-const LS_LOCATIONS_CACHE_KEY = "taban_locations_cache";
+  const PLANS_STORAGE_KEY = "inv_plans_v1";
+  const PLANS_STORAGE_KEYS = [PLANS_STORAGE_KEY, "taban_plans"];
+  const LS_LOCATIONS_ENABLED_KEY = "taban_locations_enabled";
+  const LS_LOCATIONS_CACHE_KEY = "taban_locations_cache";
 
 type CatalogPriceListOption = {
   id: string;
@@ -465,6 +466,7 @@ const NewQuote = () => {
   const [taxPreferenceSearch, setTaxPreferenceSearch] = useState("");
   const [isPriceListDropdownOpen, setIsPriceListDropdownOpen] = useState(false);
   const [priceListSearch, setPriceListSearch] = useState("");
+  const [catalogPriceListsRaw, setCatalogPriceListsRaw] = useState<any[]>([]);
   const [catalogPriceLists, setCatalogPriceLists] = useState<CatalogPriceListOption[]>([]);
   const [isLocationFeatureEnabled, setIsLocationFeatureEnabled] = useState(false);
   const [locationOptions, setLocationOptions] = useState<string[]>(["Head Office"]);
@@ -555,31 +557,46 @@ const NewQuote = () => {
     return detail ? `${name} [ ${detail} ]` : name;
   };
 
-  const loadCatalogPriceLists = () => {
+  const normalizeCatalogPriceLists = (rows: any[]) => {
+    const parsed = Array.isArray(rows) ? rows : [];
+    setCatalogPriceListsRaw(parsed);
+
+    const normalized: CatalogPriceListOption[] = parsed
+      .map((row: any) => ({
+        id: String(row?.id || row?._id || ""),
+        name: String(row?.name || "").trim(),
+        pricingScheme: String(row?.pricingScheme || "").trim(),
+        currency: String(row?.currency || "").trim(),
+        status: String(row?.status || "Active").trim(),
+        displayLabel: formatPriceListDisplayLabel(row),
+      }))
+      .filter((row: CatalogPriceListOption) => row.name)
+      .filter((row: CatalogPriceListOption) => row.status.toLowerCase() !== "inactive");
+
+    setCatalogPriceLists(normalized);
+  };
+
+  const loadCatalogPriceLists = async () => {
+    // 1) Instant local fallback (for offline + faster UI)
     try {
       const raw = localStorage.getItem(PRICE_LISTS_STORAGE_KEY);
       const parsed = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(parsed)) {
-        setCatalogPriceLists([]);
-        return;
-      }
-
-      const normalized: CatalogPriceListOption[] = parsed
-        .map((row: any) => ({
-          id: String(row?.id || row?._id || ""),
-          name: String(row?.name || "").trim(),
-          pricingScheme: String(row?.pricingScheme || "").trim(),
-          currency: String(row?.currency || "").trim(),
-          status: String(row?.status || "Active").trim(),
-          displayLabel: formatPriceListDisplayLabel(row)
-        }))
-        .filter((row: CatalogPriceListOption) => row.name)
-        .filter((row: CatalogPriceListOption) => row.status.toLowerCase() !== "inactive");
-
-      setCatalogPriceLists(normalized);
+      normalizeCatalogPriceLists(Array.isArray(parsed) ? parsed : []);
     } catch (error) {
-      console.error("Error loading price lists for quote:", error);
-      setCatalogPriceLists([]);
+      console.error("Error reading cached price lists for quote:", error);
+      normalizeCatalogPriceLists([]);
+    }
+
+    // 2) Refresh from backend and keep localStorage in sync
+    try {
+      const response: any = await priceListsAPI.list({ limit: 5000 });
+      const rows = response?.success ? response?.data : null;
+      if (Array.isArray(rows)) {
+        localStorage.setItem(PRICE_LISTS_STORAGE_KEY, JSON.stringify(rows));
+        normalizeCatalogPriceLists(rows);
+      }
+    } catch (error) {
+      console.error("Error loading price lists from API for quote:", error);
     }
   };
 
@@ -645,6 +662,92 @@ const NewQuote = () => {
       option.currency.toLowerCase().includes(search)
     );
   });
+
+  const selectedPriceList = useMemo(() => {
+    const selected = String(formData.selectedPriceList || "").trim();
+    if (!selected || selected.toLowerCase() === "select price list") return null;
+    return (
+      catalogPriceListsRaw.find((row: any) => String(row?.name || "").trim() === selected) ||
+      catalogPriceListsRaw.find((row: any) => String(row?.id || row?._id || "").trim() === selected) ||
+      null
+    );
+  }, [catalogPriceListsRaw, formData.selectedPriceList]);
+
+  const parsePercentage = (value: any) => {
+    const raw = String(value || "").replace(/[^0-9.-]/g, "");
+    const num = Number(raw);
+    return Number.isFinite(num) ? num : 0;
+  };
+
+  const applyRounding = (value: number, roundOffTo: string) => {
+    const label = String(roundOffTo || "").toLowerCase();
+    if (label.includes("decimal places")) {
+      const digits = Number(label.split(" ")[0]);
+      if (Number.isFinite(digits)) return Number(value.toFixed(digits));
+    }
+    if (label.includes("nearest whole")) return Math.round(value);
+    if (label.includes("0.99")) return Math.floor(value) + 0.99;
+    if (label.includes("0.50")) return Math.floor(value) + 0.5;
+    if (label.includes("0.49")) return Math.floor(value) + 0.49;
+    return value;
+  };
+
+  const getIndividualPriceListRate = (priceList: any, entity: any) => {
+    if (!priceList) return null;
+    if (String(priceList.priceListType || "").toLowerCase() !== "individual") return null;
+
+    const entityType = String(entity?.entityType || entity?.itemEntityType || "item").toLowerCase();
+    const entityId = String(entity?.sourceId || entity?.itemId || entity?.id || "").trim();
+    const entityName = String(entity?.name || "").trim();
+
+    if (entityType === "item") {
+      const itemRates = Array.isArray(priceList.itemRates) ? priceList.itemRates : [];
+      const match = itemRates.find((row: any) => {
+        const rowId = String(row?.itemId || "").trim();
+        const rowName = String(row?.itemName || "").trim();
+        return (rowId && rowId === entityId) || (rowName && entityName && rowName === entityName);
+      });
+      const rate = match ? Number(match.rate ?? match.price) : null;
+      return Number.isFinite(rate as any) ? (rate as number) : null;
+    }
+
+    // plan/addon from Product Catalog
+    const productRates = Array.isArray(priceList.productRates) ? priceList.productRates : [];
+    for (const productRow of productRates) {
+      const plans = Array.isArray(productRow?.plans) ? productRow.plans : [];
+      const addons = Array.isArray(productRow?.addons) ? productRow.addons : [];
+
+      const planMatch = plans.find((row: any) => String(row?.planId || "").trim() === entityId || String(row?.name || "").trim() === entityName);
+      if (planMatch) {
+        const rate = Number(planMatch.rate ?? planMatch.price);
+        return Number.isFinite(rate) ? rate : null;
+      }
+
+      const addonMatch = addons.find((row: any) => String(row?.addonId || "").trim() === entityId || String(row?.name || "").trim() === entityName);
+      if (addonMatch) {
+        const rate = Number(addonMatch.rate ?? addonMatch.price);
+        return Number.isFinite(rate) ? rate : null;
+      }
+    }
+
+    return null;
+  };
+
+  const applyPriceListToBaseRate = (baseRate: number, priceList: any, entity: any) => {
+    if (!priceList) return baseRate;
+
+    const override = getIndividualPriceListRate(priceList, entity);
+    if (override !== null) return override;
+
+    // Sales list -> markup/markdown against base rate
+    if (String(priceList.priceListType || "").toLowerCase() === "individual") return baseRate;
+    const pct = parsePercentage(priceList.markup);
+    if (!pct) return baseRate;
+
+    const type = String(priceList.markupType || "").toLowerCase();
+    const next = type === "markdown" ? baseRate * (1 - pct / 100) : baseRate * (1 + pct / 100);
+    return applyRounding(next, priceList.roundOffTo || "Never mind");
+  };
 
   const normalizeReportingTagOptions = (tag: any): string[] => {
     const candidates = Array.isArray(tag?.options)
@@ -767,29 +870,31 @@ const NewQuote = () => {
       setIsLoading(true);
       try {
         // Load heavy dropdown data in parallel.
-        const [
-          customersResult,
-          projectsResult,
-          salespersonsResult,
-          itemsResult,
-          quoteNumberResult,
-          currenciesResult,
-          baseCurrencyResult,
-          settingsResult,
-          taxesResult,
-          generalSettingsResult
-        ] = await Promise.allSettled([
-          getCustomers(),
-          getProjects(),
-          getSalespersonsFromAPI(),
-          getItemsFromAPI(),
-          quotesAPI.getNextNumber('QT-'),
-          currenciesAPI.getAll(),
-          isEditMode ? Promise.resolve(null) : currenciesAPI.getBaseCurrency(),
-          isEditMode ? Promise.resolve(null) : settingsAPI.getQuotesSettings(),
-          getTaxes(),
-          settingsAPI.getGeneralSettings()
-        ]);
+          const [
+            customersResult,
+            projectsResult,
+            salespersonsResult,
+            itemsResult,
+            plansResult,
+            quoteNumberResult,
+            currenciesResult,
+            baseCurrencyResult,
+            settingsResult,
+            taxesResult,
+            generalSettingsResult
+          ] = await Promise.allSettled([
+            getCustomers(),
+            getProjects(),
+            getSalespersonsFromAPI(),
+            getItemsFromAPI(),
+            plansAPI.getAll({ limit: 5000 }),
+            quotesAPI.getNextNumber('QT-'),
+            currenciesAPI.getAll(),
+            isEditMode ? Promise.resolve(null) : currenciesAPI.getBaseCurrency(),
+            isEditMode ? Promise.resolve(null) : settingsAPI.getQuotesSettings(),
+            getTaxes(),
+            settingsAPI.getGeneralSettings()
+          ]);
 
         if (customersResult.status === "fulfilled") {
           const normalizedCustomers = (customersResult.value || []).map((c: any) => ({
@@ -841,34 +946,69 @@ const NewQuote = () => {
           console.error("Error loading items:", itemsResult.reason);
         }
 
+        const normalizePlanRow = (plan: any, index: number) => {
+          const sourceId = String(plan?.id || plan?._id || plan?.planId || `plan-${index}`);
+          return {
+            ...plan,
+            entityType: "plan",
+            id: `plan:${sourceId}`,
+            sourceId,
+            name: String(plan?.planName || plan?.name || plan?.plan || "").trim(),
+            sku: String(plan?.planCode || plan?.code || plan?.sku || "").trim(),
+            code: String(plan?.planCode || plan?.code || plan?.sku || "").trim(),
+            rate: Number(plan?.price ?? plan?.rate ?? plan?.amount ?? 0) || 0,
+            stockOnHand: 0,
+            unit: String(plan?.billingFrequencyUnit || plan?.billingFrequency || plan?.unit || "plan"),
+            description: String(plan?.planDescription || plan?.description || ""),
+          };
+        };
+
         let transformedPlans: any[] = [];
         try {
-          const rawPlans = localStorage.getItem(PLANS_STORAGE_KEY);
-          const parsedPlans = rawPlans ? JSON.parse(rawPlans) : [];
-          if (Array.isArray(parsedPlans)) {
-            transformedPlans = parsedPlans
-              .map((plan: any, index: number) => {
-                const sourceId = String(plan?.id || plan?._id || `plan-${index}`);
-                return {
-                  ...plan,
-                  entityType: "plan",
-                  id: `plan:${sourceId}`,
-                  sourceId,
-                  name: String(plan?.planName || plan?.name || plan?.plan || "").trim(),
-                  sku: String(plan?.planCode || plan?.code || "").trim(),
-                  code: String(plan?.planCode || plan?.code || "").trim(),
-                  rate: Number(plan?.price ?? plan?.rate ?? 0) || 0,
-                  stockOnHand: 0,
-                  unit: String(plan?.billingFrequencyUnit || plan?.billingFrequency || "plan"),
-                  description: String(plan?.planDescription || plan?.description || "")
-                };
-              })
-              .filter((plan: any) => plan.name)
-              .filter((plan: any) => String(plan.status || "active").toLowerCase() !== "inactive");
+          if (plansResult.status === "fulfilled") {
+            const response: any = plansResult.value;
+            const rows =
+              response?.success && Array.isArray(response?.data)
+                ? response.data
+                : Array.isArray((response as any)?.data)
+                  ? (response as any).data
+                  : Array.isArray(response)
+                    ? response
+                    : [];
+            transformedPlans.push(
+              ...(Array.isArray(rows) ? rows.map(normalizePlanRow).filter((plan: any) => plan.name) : [])
+            );
+          } else {
+            console.error("Error loading plans from API:", plansResult.reason);
           }
         } catch (error) {
-          console.error("Error loading plans from Product Catalog storage:", error);
+          console.error("Error parsing plans from API response:", error);
         }
+
+        // Also load plans from localStorage caches (supports legacy keys)
+        try {
+          const mergedLocal: any[] = [];
+          PLANS_STORAGE_KEYS.forEach((key) => {
+            try {
+              const raw = localStorage.getItem(key);
+              const parsed = raw ? JSON.parse(raw) : [];
+              if (Array.isArray(parsed)) mergedLocal.push(...parsed);
+            } catch {
+              // ignore invalid key and continue
+            }
+          });
+          if (mergedLocal.length) {
+            transformedPlans.push(
+              ...mergedLocal.map(normalizePlanRow).filter((plan: any) => plan.name)
+            );
+          }
+        } catch (error) {
+          console.error("Error loading plans from localStorage:", error);
+        }
+
+        transformedPlans = transformedPlans
+          .filter((plan: any) => String(plan?.status || "active").toLowerCase() !== "inactive")
+          .filter((plan: any) => String(plan?.name || "").trim().length > 0);
 
         const combinedItemsAndPlans = [...transformedItems, ...transformedPlans];
         const uniqueByEntityAndId = new Map<string, any>();
@@ -1630,14 +1770,55 @@ const NewQuote = () => {
     const customerId = customer.id || customer._id;
     const customerName = customer.name || customer.displayName || customer.companyName;
     setSelectedCustomer(customer);
+    const customerTaxMeta = getCustomerTaxMeta(customer);
 
     setFormData(prev => {
-      const currency = (customer.currency || prev.currency || "USD").split(' - ')[0];
-      return {
+      const customerCurrency = (customer.currency || prev.currency || "USD").split(' - ')[0];
+
+      const customerPriceListId = String(customer?.priceListId || customer?.priceListID || customer?.price_list_id || "").trim();
+      const customerPriceListNameRaw = String(customer?.priceListName || customer?.priceList || customer?.price_list || "").trim();
+      const resolvedPriceList =
+        (customerPriceListId
+          ? catalogPriceListsRaw.find((row: any) => String(row?.id || row?._id || "").trim() === customerPriceListId)
+          : null) ||
+        (customerPriceListNameRaw
+          ? catalogPriceListsRaw.find((row: any) => String(row?.name || "").trim() === customerPriceListNameRaw)
+          : null) ||
+        null;
+      const nextPriceListName = resolvedPriceList ? String(resolvedPriceList.name || "").trim() : (customerPriceListNameRaw || prev.selectedPriceList);
+      const nextCurrency = resolvedPriceList?.currency ? String(resolvedPriceList.currency).trim() : customerCurrency;
+
+      // Tax auto-select rules:
+      // - If customer has a tax configured -> override item tax with customer's tax.
+      // - Else -> keep whatever the user already selected.
+      // - If nothing selected -> apply a default tax (first active from Taxes list).
+      const fallbackDefaultTax = defaultTaxId ? getTaxMetaById(defaultTaxId) : { taxId: "", taxRate: 0 };
+      const updatedItems = (prev.items || []).map((row: any) => {
+        if (row?.itemType === "header") return row;
+
+        if (customerTaxMeta.taxId) {
+          return { ...row, tax: customerTaxMeta.taxId, taxRate: customerTaxMeta.taxRate };
+        }
+
+        const hasUserTax = Boolean(String(row?.tax || "").trim()) || parseTaxRate(row?.taxRate) > 0;
+        if (hasUserTax) return row;
+
+        if (fallbackDefaultTax.taxId) {
+          return { ...row, tax: fallbackDefaultTax.taxId, taxRate: fallbackDefaultTax.taxRate };
+        }
+
+        return row;
+      });
+
+      const nextState = {
         ...prev,
         customerName: customerName,
-        currency: currency
+        selectedPriceList: nextPriceListName || prev.selectedPriceList,
+        currency: nextCurrency,
+        items: updatedItems,
       };
+      const totals = calculateAllTotals(updatedItems, nextState);
+      return { ...nextState, ...totals };
     });
 
     setIsCustomerDropdownOpen(false);
@@ -1725,6 +1906,79 @@ const NewQuote = () => {
       }
     }
   };
+
+  const customerDefaultsAppliedRef = useRef<{
+    customerId: string;
+    priceListApplied: boolean;
+    taxApplied: boolean;
+    priceListFetchTriggered: boolean;
+  }>({ customerId: "", priceListApplied: false, taxApplied: false, priceListFetchTriggered: false });
+
+  useEffect(() => {
+    if (!selectedCustomer) {
+      customerDefaultsAppliedRef.current = { customerId: "", priceListApplied: false, taxApplied: false, priceListFetchTriggered: false };
+      return;
+    }
+
+    const selectedCustomerId = String((selectedCustomer as any)?.id || (selectedCustomer as any)?._id || "").trim();
+    if (!selectedCustomerId) return;
+
+    if (customerDefaultsAppliedRef.current.customerId !== selectedCustomerId) {
+      customerDefaultsAppliedRef.current = { customerId: selectedCustomerId, priceListApplied: false, taxApplied: false, priceListFetchTriggered: false };
+    }
+
+    const customerPriceListId = String((selectedCustomer as any)?.priceListId || (selectedCustomer as any)?.priceListID || (selectedCustomer as any)?.price_list_id || "").trim();
+    const customerPriceListNameRaw = String((selectedCustomer as any)?.priceListName || (selectedCustomer as any)?.priceList || (selectedCustomer as any)?.price_list || "").trim();
+
+    if ((customerPriceListId || customerPriceListNameRaw) && catalogPriceListsRaw.length === 0 && !customerDefaultsAppliedRef.current.priceListFetchTriggered) {
+      customerDefaultsAppliedRef.current.priceListFetchTriggered = true;
+      try {
+        loadCatalogPriceLists();
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!customerDefaultsAppliedRef.current.priceListApplied && (customerPriceListId || customerPriceListNameRaw) && catalogPriceListsRaw.length > 0) {
+      const resolvedPriceList =
+        (customerPriceListId
+          ? catalogPriceListsRaw.find((row: any) => String(row?.id || row?._id || "").trim() === customerPriceListId)
+          : null) ||
+        (customerPriceListNameRaw
+          ? catalogPriceListsRaw.find((row: any) => String(row?.name || "").trim() === customerPriceListNameRaw)
+          : null) ||
+        null;
+
+      const nextPriceListName = resolvedPriceList ? String(resolvedPriceList.name || "").trim() : customerPriceListNameRaw;
+      if (nextPriceListName) {
+        setFormData((prev) => {
+          const current = String(prev.selectedPriceList || "").trim();
+          if (current === nextPriceListName) return prev;
+          return { ...prev, selectedPriceList: nextPriceListName };
+        });
+        customerDefaultsAppliedRef.current.priceListApplied = true;
+      }
+    }
+
+    if (!customerDefaultsAppliedRef.current.taxApplied) {
+      const customerTaxMeta = getCustomerTaxMeta(selectedCustomer);
+      if (customerTaxMeta.taxId) {
+        setFormData((prev) => {
+          const updatedItems = (prev.items || []).map((row: any) => {
+            if (row?.itemType === "header") return row;
+            const currentTaxId = String(row?.tax || "").trim();
+            const currentTaxRate = parseTaxRate(row?.taxRate);
+            if (currentTaxId === customerTaxMeta.taxId && currentTaxRate === customerTaxMeta.taxRate) return row;
+            return { ...row, tax: customerTaxMeta.taxId, taxRate: customerTaxMeta.taxRate };
+          });
+
+          const totals = calculateAllTotals(updatedItems, prev);
+          return { ...prev, items: updatedItems, ...totals };
+        });
+        customerDefaultsAppliedRef.current.taxApplied = true;
+      }
+    }
+  }, [selectedCustomer, catalogPriceListsRaw, taxes]);
 
   const openAddressModal = (type: "billing" | "shipping") => {
     const source = type === "billing" ? billingAddress : shippingAddress;
@@ -2444,6 +2698,47 @@ const NewQuote = () => {
     return null;
   };
 
+  const getNormalizedTaxId = (taxObj: any): string => {
+    if (!taxObj) return "";
+    return String(taxObj?.id || taxObj?._id || taxObj?.taxId || "").trim();
+  };
+
+  const defaultTaxId = useMemo(() => {
+    const activeRows = (taxes || []).filter((tax: any) => {
+      if (!tax) return false;
+      const status = String(tax?.status || "").toLowerCase();
+      const active = tax?.active;
+      const isActive = tax?.isActive;
+      if (status === "inactive") return false;
+      if (active === false) return false;
+      if (isActive === false) return false;
+      const name = String(tax?.name || tax?.taxName || "").trim();
+      return Boolean(name);
+    });
+
+    const preferred =
+      activeRows.find((tax: any) => Boolean(tax?.isDefault || tax?.default)) ||
+      activeRows[0] ||
+      taxes?.[0] ||
+      null;
+
+    return preferred ? getNormalizedTaxId(preferred) : "";
+  }, [taxes]);
+
+  const getCustomerTaxMeta = (customer: any) => {
+    const raw = String(customer?.taxRate || customer?.taxId || customer?.tax || "").trim();
+    if (!raw) return { taxId: "", taxRate: 0 };
+    const taxObj = getTaxBySelection(raw);
+    if (!taxObj) return { taxId: "", taxRate: 0 };
+    return { taxId: getNormalizedTaxId(taxObj), taxRate: parseTaxRate(taxObj.rate) };
+  };
+
+  const getTaxMetaById = (taxId: string) => {
+    const taxObj = getTaxBySelection(taxId);
+    if (!taxObj) return { taxId: "", taxRate: 0 };
+    return { taxId: getNormalizedTaxId(taxObj), taxRate: parseTaxRate(taxObj.rate) };
+  };
+
   const getTaxMetaFromItem = (item: any) => {
     const taxObj = getTaxBySelection(item?.tax);
     if (taxObj) {
@@ -2516,27 +2811,44 @@ const NewQuote = () => {
 
   const handleItemSelect = (itemId, selectedItem) => {
     const selectedEntityId = selectedItem.sourceId || selectedItem.id;
+    const baseRate = Number(selectedItem?.rate ?? 0) || 0;
+    const nextRate = selectedPriceList ? applyPriceListToBaseRate(baseRate, selectedPriceList, selectedItem) : baseRate;
+
+    const row = (formData.items || []).find((r: any) => String(r?.id) === String(itemId));
+    const existingRowTaxId = String(row?.tax || "").trim();
+    const customerTaxMeta = selectedCustomer ? getCustomerTaxMeta(selectedCustomer) : { taxId: "", taxRate: 0 };
+    const itemTaxId = resolveItemTaxId(selectedItem);
+    const fallbackDefaultTax = defaultTaxId ? getTaxMetaById(defaultTaxId) : { taxId: "", taxRate: 0 };
+    const resolvedTaxId =
+      customerTaxMeta.taxId ||
+      existingRowTaxId ||
+      itemTaxId ||
+      fallbackDefaultTax.taxId ||
+      "";
+    const resolvedTaxRate =
+      (customerTaxMeta.taxId ? customerTaxMeta.taxRate : 0) ||
+      (resolvedTaxId ? getTaxMetaById(resolvedTaxId).taxRate : 0) ||
+      parseTaxRate(selectedItem?.taxInfo?.taxRate ?? selectedItem?.taxRate ?? selectedItem?.salesTaxRate) ||
+      0;
+
     setSelectedItemIds(prev => ({ ...prev, [itemId]: selectedItem.id }));
     handleItemChange(itemId, 'itemId', selectedEntityId); // Store the actual Product/Plan ID
+    handleItemChange(itemId, 'itemEntityType', selectedItem.entityType || selectedItem.itemEntityType || "item");
+    handleItemChange(itemId, 'catalogRate', baseRate);
     handleItemChange(itemId, 'itemDetails', selectedItem.name);
-    handleItemChange(itemId, 'rate', selectedItem.rate);
+    handleItemChange(itemId, 'rate', nextRate);
     handleItemChange(itemId, 'stockOnHand', selectedItem.stockOnHand);
     handleItemChange(itemId, 'unit', selectedItem.unit);
     handleItemChange(itemId, 'description', selectedItem.salesDescription || selectedItem.description || "");
 
-    // Automatically apply the item's tax if it exists (supports id/name/rate formats)
-    const resolvedTaxId = resolveItemTaxId(selectedItem);
     if (resolvedTaxId) {
       handleItemChange(itemId, 'tax', resolvedTaxId);
-      const selectedTax = taxes.find((tax: any) => String(tax.id || tax._id) === String(resolvedTaxId));
-      if (selectedTax) {
-        handleItemChange(itemId, 'taxRate', parseTaxRate(selectedTax.rate));
+      if (resolvedTaxRate > 0) {
+        handleItemChange(itemId, 'taxRate', resolvedTaxRate);
       }
-    } else {
-      const fallbackRate = parseTaxRate(selectedItem?.taxInfo?.taxRate ?? selectedItem?.taxRate ?? selectedItem?.salesTaxRate);
-      if (fallbackRate > 0) {
-        handleItemChange(itemId, 'taxRate', fallbackRate);
-      }
+    } else if (resolvedTaxRate > 0) {
+      // Support rate-only taxes (no id match) as a last resort
+      handleItemChange(itemId, 'taxRate', resolvedTaxRate);
     }
 
     setOpenItemDropdowns(prev => ({ ...prev, [itemId]: false }));
@@ -2593,6 +2905,36 @@ const NewQuote = () => {
       total
     };
   };
+
+  useEffect(() => {
+    // Re-apply selected price list to all selected lines (keeps rates consistent)
+    const list = selectedPriceList;
+    setFormData((prev) => {
+      const nextCurrency = list?.currency ? String(list.currency).trim() : prev.currency;
+      const updatedItems = prev.items.map((row: any) => {
+        if (row.itemType === "header") return row;
+        const selectedUiId = selectedItemIds?.[row.id];
+        if (!selectedUiId) return row;
+        const selectedEntity = availableItems.find((item: any) => String(item.id) === String(selectedUiId));
+        if (!selectedEntity) return row;
+
+        const baseRate = Number(selectedEntity?.rate ?? row.catalogRate ?? row.rate ?? 0) || 0;
+        const nextRate = list ? applyPriceListToBaseRate(baseRate, list, selectedEntity) : baseRate;
+        if (Number(row.rate ?? 0) === nextRate && row.itemEntityType === (selectedEntity.entityType || row.itemEntityType) && prev.currency === nextCurrency) {
+          return row;
+        }
+        return {
+          ...row,
+          itemEntityType: selectedEntity.entityType || row.itemEntityType || "item",
+          catalogRate: baseRate,
+          rate: nextRate,
+        };
+      });
+
+      const totals = calculateAllTotals(updatedItems, { ...prev, currency: nextCurrency });
+      return { ...prev, currency: nextCurrency, items: updatedItems, ...totals };
+    });
+  }, [selectedPriceList, availableItems, selectedItemIds]);
 
   const handleItemChange = (id, field, value) => {
     setFormData(prev => {
@@ -3440,22 +3782,27 @@ const NewQuote = () => {
       const quoteData = {
         quoteNumber: quoteNumber,
         referenceNumber: formData.referenceNumber,
+        customerName: formData.customerName,
         customer: selectedCustomer?.id || selectedCustomer?._id || formData.customerName,
         customerId: selectedCustomer?.id || selectedCustomer?._id || null,
+        customerEmail: String((selectedCustomer as any)?.email || (selectedCustomer as any)?.primaryEmail || "").trim(),
         quoteDate: convertToISODate(formData.quoteDate),
         expiryDate: convertToISODate(formData.expiryDate),
         salesperson: formData.salesperson,
         salespersonId: formData.salespersonId,
         projectName: formData.projectName,
         subject: formData.subject,
-        selectedPriceList: formData.selectedPriceList,
-        priceList: formData.selectedPriceList,
+        priceListId: String(selectedPriceList?.id || selectedPriceList?._id || ""),
+        priceListName: String(selectedPriceList?.name || ""),
+        taxPreference: formData.taxExclusive,
         taxExclusive: formData.taxExclusive,
 
         // Items array - filter out empty rows and ensure valid data
         items: validItems,
 
         // Summary
+        subTotal: subTotal,
+        totalTax: totalTax,
         subtotal: subTotal,
         tax: totalTax,
         taxAmount: totalTax,
@@ -3483,7 +3830,7 @@ const NewQuote = () => {
         })) || [],
 
         // Status
-        status: "draft"
+        status: "Draft"
       };
 
       // Save or update quote
@@ -3566,16 +3913,20 @@ const NewQuote = () => {
         customerName: formData.customerName,
         customer: selectedCustomer?.id || selectedCustomer?._id || formData.customerName,
         customerId: selectedCustomer?.id || selectedCustomer?._id || null,
+        customerEmail: String((selectedCustomer as any)?.email || (selectedCustomer as any)?.primaryEmail || "").trim(),
         quoteDate: convertToISODate(formData.quoteDate),
         expiryDate: convertToISODate(formData.expiryDate),
         salesperson: formData.salesperson,
         salespersonId: formData.salespersonId,
         projectName: formData.projectName,
         subject: formData.subject,
-        selectedPriceList: formData.selectedPriceList,
-        priceList: formData.selectedPriceList,
+        priceListId: String(selectedPriceList?.id || selectedPriceList?._id || ""),
+        priceListName: String(selectedPriceList?.name || ""),
+        taxPreference: formData.taxExclusive,
         taxExclusive: formData.taxExclusive,
         items: validItems,
+        subTotal: subTotal,
+        totalTax: totalTax,
         subtotal: subTotal,
         tax: totalTax,
         taxAmount: totalTax,
@@ -3599,7 +3950,7 @@ const NewQuote = () => {
           size: file.size,
           url: file.url
         })) || [],
-        status: "draft", // Save as draft first
+        status: "Draft", // Save as draft first
         date: formData.quoteDate
       };
 
@@ -3614,7 +3965,12 @@ const NewQuote = () => {
       if (savedQuote) {
         const id = savedQuote._id || savedQuote.id || quoteId;
         console.log("Quote saved as draft, navigating to email:", id);
-        navigate(`/sales/quotes/${id}/email`, { state: { preloadedQuote: savedQuote } });
+        navigate(`/sales/quotes/${id}/email`, {
+          state: {
+            preloadedQuote: savedQuote,
+            customerEmail: String((selectedCustomer as any)?.email || (selectedCustomer as any)?.primaryEmail || "").trim(),
+          },
+        });
       } else {
         throw new Error("Failed to save quote before sending.");
       }
@@ -3637,87 +3993,12 @@ const NewQuote = () => {
     // For example: open a modal with more options, or perform a specific action
   };
 
-  if (isLoading) {
+  if (isLoading && isEditMode) {
     return (
-      <div className="w-screen h-screen bg-slate-50 flex flex-col overflow-hidden">
-        {/* Upper Toolbar Skeleton */}
-        <div className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 animate-pulse shrink-0">
-          <div className="flex gap-8 h-full">
-            <div className="w-20 h-full border-b-[3px] border-[#156372]/30 flex items-center justify-center">
-              <div className="w-12 h-3 bg-slate-100 rounded"></div>
-            </div>
-            <div className="w-32 h-full flex items-center justify-center">
-              <div className="w-20 h-3 bg-slate-50 rounded"></div>
-            </div>
-          </div>
-          <div className="w-8 h-8 rounded-lg bg-slate-100"></div>
-        </div>
-
-        {/* Scrollable Form Body Skeleton */}
-        <div className="flex-1 overflow-auto p-8 space-y-8 animate-pulse">
-          <div className="max-w-7xl mx-auto space-y-8">
-            {/* Header Identity Section */}
-            <div className="bg-white border rounded-2xl p-8 shadow-sm space-y-8 border-slate-200">
-              <div className="flex items-center gap-6">
-                <div className="w-48 h-4 bg-slate-100 rounded"></div>
-                <div className="w-96 h-11 bg-slate-50 rounded-xl border border-slate-100"></div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-x-16 gap-y-7 max-w-5xl">
-                {[1, 2, 3, 4, 5, 6].map((i) => (
-                  <div key={i} className="flex gap-6 items-center">
-                    <div className="w-36 h-3 bg-slate-100/60 rounded shrink-0"></div>
-                    <div className="flex-1 h-10 bg-slate-50/50 rounded-lg border border-slate-100"></div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Line Items Matrix Skeleton */}
-            <div className="bg-white border rounded-2xl shadow-sm border-slate-200 overflow-hidden">
-              <div className="bg-slate-50 border-b h-12 flex px-6 items-center gap-4 border-slate-200">
-                <div className="w-8 h-8 rounded bg-slate-200/50 shrink-0"></div>
-                <div className="flex-1 h-3 bg-slate-200/40 rounded max-w-[40%]"></div>
-                <div className="w-24 h-3 bg-slate-200/40 rounded ml-auto"></div>
-                <div className="w-24 h-3 bg-slate-200/40 rounded"></div>
-              </div>
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-24 border-b border-slate-50 flex items-center px-6 gap-6">
-                  <div className="w-7 h-7 rounded bg-slate-100 shrink-0"></div>
-                  <div className="flex-1 space-y-3">
-                    <div className="w-1/2 h-3.5 bg-slate-100 rounded"></div>
-                    <div className="w-1/3 h-2.5 bg-slate-50/80 rounded"></div>
-                  </div>
-                  <div className="w-24 h-9 bg-slate-50 rounded-lg border border-slate-100"></div>
-                  <div className="w-24 h-9 bg-slate-50 rounded-lg border border-slate-100"></div>
-                  <div className="w-24 h-9 bg-slate-50 rounded-lg border border-slate-100"></div>
-                </div>
-              ))}
-            </div>
-
-            {/* Summary Panel Skeleton */}
-            <div className="flex justify-end gap-12">
-              <div className="w-80 space-y-3">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="flex justify-between items-center py-2 h-8">
-                    <div className="w-20 h-3 bg-slate-100 rounded"></div>
-                    <div className="w-16 h-4 bg-slate-50 rounded"></div>
-                  </div>
-                ))}
-                <div className="pt-4 border-t border-slate-200 flex justify-between h-10">
-                  <div className="w-24 h-5 bg-slate-200 rounded"></div>
-                  <div className="w-20 h-6 bg-slate-200 rounded"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer Actions Flyout Skeleton */}
-        <div className="h-20 bg-white border-t border-slate-200 shadow-[0_-1px_10px_rgba(0,0,0,0.02)] shrink-0 flex items-center px-10 gap-4">
-          <div className="w-32 h-11 bg-slate-100 rounded-xl"></div>
-          <div className="w-10 h-11 bg-slate-50 rounded-lg border border-slate-100 ml-auto"></div>
-          <div className="w-32 h-11 bg-[#156372]/10 rounded-xl border border-[#156372]/20"></div>
+      <div className="w-full h-full min-h-0 bg-[#f6f7fb] flex items-center justify-center">
+        <div className="flex items-center gap-2 text-sm text-slate-600">
+          <Loader2 size={18} className="animate-spin" />
+          Loading quote...
         </div>
       </div>
     );
@@ -3725,9 +4006,9 @@ const NewQuote = () => {
 
   return (
     <>
-      <div className="w-full min-h-screen bg-[#f6f7fb]">
+      <div className="w-full min-h-full bg-[#f6f7fb] flex flex-col">
         {/* Header */}
-        <div className="border-b border-gray-200 bg-white">
+        <div className="sticky top-0 z-40 border-b border-gray-200 bg-white">
           <div className="w-full px-8 h-16 flex justify-between items-center">
             <div className="h-full flex items-end gap-8">
               <button
@@ -3745,12 +4026,15 @@ const NewQuote = () => {
                 Subscription Quote
               </button>
             </div>
-            <button
-              onClick={() => navigate("/sales/quotes")}
-              className="text-gray-500 hover:text-gray-700 transition-colors"
-            >
-              <X size={20} />
-            </button>
+            <div className="flex items-center gap-3">
+              {isLoading ? <Loader2 size={18} className="animate-spin text-slate-500" /> : null}
+              <button
+                onClick={() => navigate("/sales/quotes")}
+                className="text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
           </div>
         </div>
 

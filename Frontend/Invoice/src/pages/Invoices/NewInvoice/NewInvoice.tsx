@@ -41,7 +41,7 @@ import {
 } from "lucide-react";
 import { saveInvoice, getInvoiceById, updateInvoice, getTaxes, saveTax, deleteTax, Customer, Tax, Salesperson, Invoice, ContactPerson } from "../../salesModel";
 import { getAllDocuments } from "../../../utils/documentStorage";
-import { customersAPI, salespersonsAPI, projectsAPI, invoicesAPI, itemsAPI, bankAccountsAPI, currenciesAPI, transactionNumberSeriesAPI, chartOfAccountsAPI, accountantAPI, reportingTagsAPI } from "../../../services/api";
+import { customersAPI, salespersonsAPI, projectsAPI, invoicesAPI, itemsAPI, bankAccountsAPI, currenciesAPI, transactionNumberSeriesAPI, chartOfAccountsAPI, accountantAPI, reportingTagsAPI, priceListsAPI } from "../../../services/api";
 import { useCurrency } from "../../../hooks/useCurrency";
 import { usePaymentTermsDropdown, defaultPaymentTerms, PaymentTerm } from "../../../hooks/usePaymentTermsDropdown";
 import { API_BASE_URL, getToken } from "../../../services/auth";
@@ -230,6 +230,7 @@ const [availableReportingTags, setAvailableReportingTags] = useState<any[]>([]);
 const [locationOptions, setLocationOptions] = useState<string[]>(["Head Office"]);
 const [isPriceListDropdownOpen, setIsPriceListDropdownOpen] = useState(false);
 const [priceListSearch, setPriceListSearch] = useState("");
+const [catalogPriceListsRaw, setCatalogPriceListsRaw] = useState<any[]>([]);
 const [catalogPriceLists, setCatalogPriceLists] = useState<CatalogPriceListOption[]>([]);
 const readStoredLocationOptions = (): string[] => {
   try {
@@ -370,31 +371,46 @@ const formatPriceListDisplayLabel = (row: any) => {
 
   return detail ? `${name} [ ${detail} ]` : name;
 };
-const loadCatalogPriceLists = () => {
+const normalizeCatalogPriceLists = (rows: any[]) => {
+  const parsed = Array.isArray(rows) ? rows : [];
+  setCatalogPriceListsRaw(parsed);
+
+  const normalized: CatalogPriceListOption[] = parsed
+    .map((row: any) => ({
+      id: String(row?.id || row?._id || row?.name || ""),
+      name: String(row?.name || "").trim(),
+      pricingScheme: String(row?.pricingScheme || "").trim(),
+      currency: String(row?.currency || "").trim(),
+      status: String(row?.status || "Active").trim(),
+      displayLabel: formatPriceListDisplayLabel(row),
+    }))
+    .filter((row: CatalogPriceListOption) => row.name)
+    .filter((row: CatalogPriceListOption) => row.status.toLowerCase() !== "inactive");
+
+  setCatalogPriceLists(normalized);
+};
+
+const loadCatalogPriceLists = async () => {
+  // Fast local fallback
   try {
     const raw = localStorage.getItem(PRICE_LISTS_STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(parsed)) {
-      setCatalogPriceLists([]);
-      return;
-    }
-
-    const normalized: CatalogPriceListOption[] = parsed
-      .map((row: any) => ({
-        id: String(row?.id || row?._id || row?.name || ""),
-        name: String(row?.name || "").trim(),
-        pricingScheme: String(row?.pricingScheme || "").trim(),
-        currency: String(row?.currency || "").trim(),
-        status: String(row?.status || "Active").trim(),
-        displayLabel: formatPriceListDisplayLabel(row),
-      }))
-      .filter((row: CatalogPriceListOption) => row.name)
-      .filter((row: CatalogPriceListOption) => row.status.toLowerCase() !== "inactive");
-
-    setCatalogPriceLists(normalized);
+    normalizeCatalogPriceLists(Array.isArray(parsed) ? parsed : []);
   } catch (error) {
-    console.error("Error loading price lists for invoice:", error);
-    setCatalogPriceLists([]);
+    console.error("Error reading cached price lists for invoice:", error);
+    normalizeCatalogPriceLists([]);
+  }
+
+  // Refresh from backend
+  try {
+    const response: any = await priceListsAPI.list({ limit: 5000 });
+    const rows = response?.success ? response?.data : null;
+    if (Array.isArray(rows)) {
+      localStorage.setItem(PRICE_LISTS_STORAGE_KEY, JSON.stringify(rows));
+      normalizeCatalogPriceLists(rows);
+    }
+  } catch (error) {
+    console.error("Error loading price lists from API for invoice:", error);
   }
 };
 const bulkSelectedItems: any[] = [];
@@ -499,6 +515,89 @@ const filteredPriceListOptions = catalogPriceLists.filter((option) => {
     option.currency.toLowerCase().includes(search)
   );
 });
+
+const selectedPriceList = useMemo(() => {
+  const selected = String((formData as any).selectedPriceList || "").trim();
+  if (!selected || selected.toLowerCase() === "select price list") return null;
+  return (
+    catalogPriceListsRaw.find((row: any) => String(row?.name || "").trim() === selected) ||
+    catalogPriceListsRaw.find((row: any) => String(row?.id || row?._id || "").trim() === selected) ||
+    null
+  );
+}, [catalogPriceListsRaw, (formData as any).selectedPriceList]);
+
+const parsePercentage = (value: any) => {
+  const raw = String(value || "").replace(/[^0-9.-]/g, "");
+  const num = Number(raw);
+  return Number.isFinite(num) ? num : 0;
+};
+
+const applyRounding = (value: number, roundOffTo: string) => {
+  const label = String(roundOffTo || "").toLowerCase();
+  if (label.includes("decimal places")) {
+    const digits = Number(label.split(" ")[0]);
+    if (Number.isFinite(digits)) return Number(value.toFixed(digits));
+  }
+  if (label.includes("nearest whole")) return Math.round(value);
+  if (label.includes("0.99")) return Math.floor(value) + 0.99;
+  if (label.includes("0.50")) return Math.floor(value) + 0.5;
+  if (label.includes("0.49")) return Math.floor(value) + 0.49;
+  return value;
+};
+
+const getIndividualPriceListRate = (priceList: any, entity: any) => {
+  if (!priceList) return null;
+  if (String(priceList.priceListType || "").toLowerCase() !== "individual") return null;
+
+  const entityType = String(entity?.entityType || entity?.itemEntityType || "item").toLowerCase();
+  const entityId = String(entity?.sourceId || entity?.itemId || entity?.id || "").trim();
+  const entityName = String(entity?.name || "").trim();
+
+  if (entityType === "item") {
+    const itemRates = Array.isArray(priceList.itemRates) ? priceList.itemRates : [];
+    const match = itemRates.find((row: any) => {
+      const rowId = String(row?.itemId || "").trim();
+      const rowName = String(row?.itemName || "").trim();
+      return (rowId && rowId === entityId) || (rowName && entityName && rowName === entityName);
+    });
+    const rate = match ? Number(match.rate ?? match.price) : null;
+    return Number.isFinite(rate as any) ? (rate as number) : null;
+  }
+
+  const productRates = Array.isArray(priceList.productRates) ? priceList.productRates : [];
+  for (const productRow of productRates) {
+    const plans = Array.isArray(productRow?.plans) ? productRow.plans : [];
+    const addons = Array.isArray(productRow?.addons) ? productRow.addons : [];
+
+    const planMatch = plans.find((row: any) => String(row?.planId || "").trim() === entityId || String(row?.name || "").trim() === entityName);
+    if (planMatch) {
+      const rate = Number(planMatch.rate ?? planMatch.price);
+      return Number.isFinite(rate) ? rate : null;
+    }
+
+    const addonMatch = addons.find((row: any) => String(row?.addonId || "").trim() === entityId || String(row?.name || "").trim() === entityName);
+    if (addonMatch) {
+      const rate = Number(addonMatch.rate ?? addonMatch.price);
+      return Number.isFinite(rate) ? rate : null;
+    }
+  }
+
+  return null;
+};
+
+const applyPriceListToBaseRate = (baseRate: number, priceList: any, entity: any) => {
+  if (!priceList) return baseRate;
+  const override = getIndividualPriceListRate(priceList, entity);
+  if (override !== null) return override;
+
+  if (String(priceList.priceListType || "").toLowerCase() === "individual") return baseRate;
+  const pct = parsePercentage(priceList.markup);
+  if (!pct) return baseRate;
+
+  const type = String(priceList.markupType || "").toLowerCase();
+  const next = type === "markdown" ? baseRate * (1 - pct / 100) : baseRate * (1 + pct / 100);
+  return applyRounding(next, priceList.roundOffTo || "Never mind");
+};
 const customerDropdownRef = useRef<HTMLDivElement | null>(null);
 const depositToDropdownRef = useRef<HTMLDivElement | null>(null);
 const dueDatePickerRef = useRef<HTMLDivElement | null>(null);
@@ -806,10 +905,31 @@ const handleContactPersonImageUpload = noop;
 const handleCustomerSearch = noop;
 const handleCustomerSelect = (customer: any) => {
   setSelectedCustomer(customer);
-  setFormData((prev) => ({
-    ...prev,
-    customerName: customer?.displayName || customer?.name || customer?.companyName || "",
-  }));
+  setFormData((prev) => {
+    const customerName = customer?.displayName || customer?.name || customer?.companyName || "";
+    const customerCurrency = String(customer?.currency || prev.currency || "USD").split(" - ")[0];
+
+    const customerPriceListId = String(customer?.priceListId || customer?.priceListID || customer?.price_list_id || "").trim();
+    const customerPriceListNameRaw = String(customer?.priceListName || customer?.priceList || customer?.price_list || "").trim();
+    const resolvedPriceList =
+      (customerPriceListId
+        ? catalogPriceListsRaw.find((row: any) => String(row?.id || row?._id || "").trim() === customerPriceListId)
+        : null) ||
+      (customerPriceListNameRaw
+        ? catalogPriceListsRaw.find((row: any) => String(row?.name || "").trim() === customerPriceListNameRaw)
+        : null) ||
+      null;
+
+    const nextPriceListName = resolvedPriceList ? String(resolvedPriceList.name || "").trim() : (customerPriceListNameRaw || (prev as any).selectedPriceList);
+    const nextCurrency = resolvedPriceList?.currency ? String(resolvedPriceList.currency).trim() : customerCurrency;
+
+    return {
+      ...prev,
+      customerName,
+      selectedPriceList: nextPriceListName || (prev as any).selectedPriceList,
+      currency: nextCurrency,
+    } as any;
+  });
   setIsCustomerDropdownOpen(false);
   setCustomerSearch("");
 };
@@ -1054,6 +1174,37 @@ const calculateInvoiceTotalsFromData = (data: InvoiceFormState) => {
     total,
   };
 };
+
+useEffect(() => {
+  const list = selectedPriceList;
+  setFormData((prev) => {
+    const nextCurrency = list?.currency ? String(list.currency).trim() : prev.currency;
+    const updatedItems = (prev.items || []).map((row: any) => {
+      if (row?.itemType === "header") return row;
+      if (!row?.itemId && !row?.name && !row?.itemDetails) return row;
+
+      const entity = {
+        entityType: row?.itemEntityType || "item",
+        itemId: row?.itemId,
+        id: row?.itemId,
+        name: row?.name || row?.itemDetails,
+      };
+      const baseRate = Number(row?.catalogRate ?? row?.rate ?? 0) || 0;
+      const nextRate = list ? applyPriceListToBaseRate(baseRate, list, entity) : baseRate;
+      if (Number(row?.rate ?? 0) === nextRate && prev.currency === nextCurrency) return row;
+      return { ...row, catalogRate: baseRate, rate: nextRate };
+    });
+
+    const nextState = { ...prev, currency: nextCurrency, items: updatedItems } as InvoiceFormState;
+    const totals = calculateInvoiceTotalsFromData(nextState);
+    return {
+      ...nextState,
+      subTotal: totals.subTotal,
+      roundOff: totals.roundOff,
+      total: totals.total,
+    };
+  });
+}, [selectedPriceList]);
 const taxSummary = useMemo(() => {
   const summary: Record<string, number> = {};
   const rows = (formData.items || []).filter((item: any) => item?.itemType !== "header");
@@ -1427,10 +1578,13 @@ const handleItemSelect = (itemId: number | string, selectedItem: any) => {
     const updatedItems = prev.items.map((item) => {
       if (String(item.id) !== String(itemId)) return item;
       const quantity = Number(item.quantity || 1);
-      const rate = Number(selectedItem.rate || 0);
+      const baseRate = Number(selectedItem.rate || 0);
+      const rate = selectedPriceList ? applyPriceListToBaseRate(baseRate, selectedPriceList, selectedItem) : baseRate;
       const updatedItem: any = {
         ...item,
-        itemId: String(selectedItem.id || ""),
+        itemId: String(selectedItem.sourceId || selectedItem.id || ""),
+        itemEntityType: selectedItem.entityType || selectedItem.itemEntityType || "item",
+        catalogRate: baseRate,
         itemDetails: selectedItem.name || item.itemDetails || "",
         name: selectedItem.name || item.name || "",
         sku: selectedItem.sku || item.sku || "",
@@ -1649,6 +1803,12 @@ const buildInvoicePayload = (statusValue: string) => {
     : "";
 
   const customer = customerDetails;
+  const customerDisplayName =
+    customer?.displayName ||
+    customer?.companyName ||
+    customer?.name ||
+    (formData as any).customerName ||
+    "";
   const itemRows = (formData.items as any[]).filter((item) => item.itemType !== "header");
 
   const payload = {
@@ -1658,6 +1818,9 @@ const buildInvoicePayload = (statusValue: string) => {
     sourceQuoteNumber: sourceQuoteNumber || undefined,
     customer: customer?.id || customer?._id || undefined,
     customerId: customer?.id || customer?._id || undefined,
+    customerName: customerDisplayName,
+    priceListId: String(selectedPriceList?.id || selectedPriceList?._id || ""),
+    priceListName: String(selectedPriceList?.name || ""),
     date: formData.invoiceDate || new Date().toISOString(),
     dueDate: formData.dueDate,
     orderNumber: formData.orderNumber,
@@ -1760,8 +1923,9 @@ const isDuplicateInvoiceNumberError = (error: any) => {
 
 const fetchLatestInvoiceNumber = async () => {
   const response = await invoicesAPI.getNextNumber(invoicePrefix || "INV-");
-  if (response && response.success && response.data?.invoiceNumber) {
-    const latestNumber = String(response.data.invoiceNumber);
+  const nextNumber = response?.data?.invoiceNumber || response?.data?.nextNumber;
+  if (response && response.success && nextNumber) {
+    const latestNumber = String(nextNumber);
     setFormData(prev => ({ ...prev, invoiceNumber: latestNumber }));
     if (response.data.nextNumber !== undefined && response.data.nextNumber !== null) {
       setInvoiceNextNumber(String(response.data.nextNumber).padStart(6, "0"));
