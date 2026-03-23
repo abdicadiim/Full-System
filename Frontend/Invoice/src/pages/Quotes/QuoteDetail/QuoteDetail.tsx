@@ -1149,10 +1149,22 @@ const QuoteDetail = () => {
   };
 
   const getQuoteTotalsMeta = (quoteData) => {
-    const subTotal = toNumber(quoteData?.subTotal ?? quoteData?.subtotal ?? quoteData?.total ?? 0);
-    const taxAmount = toNumber(quoteData?.taxAmount ?? quoteData?.tax ?? 0);
-    const discount = toNumber(quoteData?.discount ?? 0);
+    const items = Array.isArray(quoteData?.items) ? quoteData.items : [];
+    const computedSubTotal = items.reduce((sum, item) => {
+      const quantity = toNumber(item?.quantity ?? 0);
+      const rate = toNumber(item?.unitPrice ?? item?.rate ?? item?.price ?? 0);
+      const amount = toNumber(item?.amount ?? item?.total);
+      const lineTotal = amount || (quantity * rate);
+      return sum + lineTotal;
+    }, 0);
+    const subTotal = toNumber(quoteData?.subTotal ?? quoteData?.subtotal ?? computedSubTotal);
+
     const shippingCharges = toNumber(quoteData?.shippingCharges ?? 0);
+    const shippingTaxAmount = toNumber(quoteData?.shippingTaxAmount ?? quoteData?.shippingTax ?? 0);
+    const taxAmountFromQuote = toNumber(quoteData?.totalTax ?? quoteData?.taxAmount ?? quoteData?.tax ?? 0);
+    const itemsTaxAmount = items.reduce((sum, item) => sum + toNumber(item?.taxAmount ?? 0), 0);
+    const taxAmount = taxAmountFromQuote || (itemsTaxAmount + shippingTaxAmount);
+    const discount = toNumber(quoteData?.discount ?? 0);
     const adjustment = toNumber(quoteData?.adjustment ?? 0);
     const roundOff = toNumber(quoteData?.roundOff ?? 0);
     const taxExclusive = quoteData?.taxExclusive || "Tax Exclusive";
@@ -1179,17 +1191,40 @@ const QuoteDetail = () => {
       }
     }
 
+    const shippingTaxSource =
+      quoteData?.shippingChargeTax ??
+      quoteData?.shippingTaxId ??
+      quoteData?.shippingTax;
+    const shippingTaxName =
+      shippingTaxSource && typeof shippingTaxSource === "object"
+        ? String((shippingTaxSource as any).name || (shippingTaxSource as any).taxName || "")
+        : String(quoteData?.shippingTaxName || "");
+    const shippingTaxRate =
+      shippingTaxSource && typeof shippingTaxSource === "object"
+        ? parseFloat((shippingTaxSource as any).rate || 0) || 0
+        : parseFloat(quoteData?.shippingTaxRate || 0) || 0;
+    const shippingTaxLabel =
+      shippingTaxName ||
+      (shippingTaxRate > 0 ? `Shipping Tax (${Number.isInteger(shippingTaxRate) ? shippingTaxRate.toFixed(0) : shippingTaxRate.toFixed(2)}%)` : "Shipping Tax");
+
+    const computedTotal = isTaxInclusive
+      ? (subTotal - discount + shippingCharges + adjustment + roundOff)
+      : (subTotal + taxAmount - discount + shippingCharges + adjustment + roundOff);
+
     return {
       subTotal,
       taxAmount,
       discount,
       shippingCharges,
+      shippingTaxAmount,
+      shippingTaxLabel,
       adjustment,
       roundOff,
       taxExclusive,
       discountBase,
       discountLabel,
-      taxLabel
+      taxLabel,
+      total: toNumber(quoteData?.total ?? computedTotal)
     };
   };
 
@@ -1198,13 +1233,13 @@ const QuoteDetail = () => {
       draft: { label: "Draft", className: "text-yellow-800" },
       approved: { label: "Approved", className: "text-emerald-700" },
       sent: { label: "Sent", className: "text-blue-800" },
-      open: { label: "Open", className: "text-green-800" },
-      accepted: { label: "Accepted", className: "text-green-800" },
+      open: { label: "Open", className: "text-[#0D4A52]" },
+      accepted: { label: "Accepted", className: "text-[#0D4A52]" },
       declined: { label: "Declined", className: "text-red-800" },
       rejected: { label: "Declined", className: "text-red-800" },
       expired: { label: "Expired", className: "text-gray-800" },
-      converted: { label: "Invoiced", className: "text-green-800" },
-      invoiced: { label: "Invoiced", className: "text-green-800" }
+      converted: { label: "Invoiced", className: "text-[#0D4A52]" },
+      invoiced: { label: "Invoiced", className: "text-[#0D4A52]" }
     };
     const statusInfo = statusMap[status?.toLowerCase()] || statusMap.draft;
     return <span className={`text-xs font-medium ${statusInfo.className}`}>{statusInfo.label}</span>;
@@ -1353,6 +1388,7 @@ const QuoteDetail = () => {
       const quoteData = {
         customerName: quote.customerName || '',
         customerId: quote.customerId || null,
+        customerEmail: quote.customerEmail || (quote as any).email || '',
         orderNumber: quote.referenceNumber || '',
         invoiceDate: invoiceDate,
         dueDate: dueDate,
@@ -1360,19 +1396,23 @@ const QuoteDetail = () => {
         salespersonId: quote.salespersonId || '',
         subject: quote.subject || `Invoice from Quote ${quote.quoteNumber || quote.id}`,
         items: invoiceItems,
+        selectedPriceList: (quote as any).priceListName || (quote as any).selectedPriceList || "",
         subTotal: toNumber(totalsMeta.subTotal),
         tax: taxAmount,
         taxAmount: taxAmount,
+        totalTax: taxAmount,
         discount: normalizedDiscount,
         discountType: sourceDiscountType,
+        discountAccount: quote.discountAccount || "General Income",
         shippingCharges: shippingCharges,
         shippingChargeTax: String(shippingTaxValue || ""),
         shippingTaxId: shippingTaxId,
         shippingTaxName: shippingTaxName,
         shippingTaxRate: shippingTaxRate,
+        shippingTaxAmount: toNumber(totalsMeta.shippingTaxAmount),
         adjustment: adjustment,
         roundOff: roundOff,
-        total: quote.total || 0,
+        total: toNumber(totalsMeta.total),
         currency: quote.currency || 'KES',
         customerNotes: quote.customerNotes || '',
         termsAndConditions: quote.termsAndConditions || '',
@@ -1653,6 +1693,12 @@ const QuoteDetail = () => {
               <span>${formatCurrency(totalsMeta.shippingCharges, quote.currency)}</span>
             </div>
             ` : ''}
+            ${totalsMeta.shippingTaxAmount > 0 ? `
+            <div class="totals-row">
+              <span>${totalsMeta.shippingTaxLabel}</span>
+              <span>${formatCurrency(totalsMeta.shippingTaxAmount, quote.currency)}</span>
+            </div>
+            ` : ''}
             ${totalsMeta.adjustment !== 0 ? `
             <div class="totals-row">
               <span>Adjustment</span>
@@ -1667,7 +1713,7 @@ const QuoteDetail = () => {
             ` : ''}
             <div class="totals-row total">
               <span>Total</span>
-              <span>${formatCurrency(quote.total, quote.currency)}</span>
+              <span>${formatCurrency(totalsMeta.total, quote.currency)}</span>
             </div>
           </div>
         </div>
@@ -1809,7 +1855,6 @@ const QuoteDetail = () => {
 
     const quoteDate = quoteData.quoteDate || quoteData.date || new Date().toISOString();
     const customerName = quoteData.customerName || (typeof quoteData.customer === 'object' ? (quoteData.customer?.displayName || quoteData.customer?.name) : quoteData.customer) || 'N/A';
-    const total = formatCurrency(quoteData.total || quoteData.amount || 0, quoteData.currency || 'KES');
     const notes = quoteData.customerNotes || 'Looking forward for your business.';
     const totalsMeta = getQuoteTotalsMeta(quoteData);
 
@@ -1929,6 +1974,12 @@ const QuoteDetail = () => {
             <span class="total-value">${formatCurrency(totalsMeta.shippingCharges, quoteData.currency)}</span>
           </div>
           ` : ''}
+          ${totalsMeta.shippingTaxAmount > 0 ? `
+          <div class="total-row">
+            <span class="total-label">${totalsMeta.shippingTaxLabel}</span>
+            <span class="total-value">${formatCurrency(totalsMeta.shippingTaxAmount, quoteData.currency)}</span>
+          </div>
+          ` : ''}
           ${totalsMeta.adjustment !== 0 ? `
           <div class="total-row">
             <span class="total-label">Adjustment</span>
@@ -1943,7 +1994,7 @@ const QuoteDetail = () => {
           ` : ''}
           <div class="total-row final">
             <span>Total</span>
-            <span>${total}</span>
+            <span>${formatCurrency(totalsMeta.total, quoteData.currency)}</span>
           </div>
         </div>
 
@@ -2671,6 +2722,7 @@ const QuoteDetail = () => {
     <>
       <style>{`
         @media print {
+          @page { size: A4; margin: 20mm; }
           /* Hide all UI elements except the document */
           body > *:not(.print-content),
           .print-content ~ *,
@@ -2699,6 +2751,8 @@ const QuoteDetail = () => {
             padding: 20mm !important;
             box-shadow: none !important;
             max-width: 100% !important;
+            width: 210mm !important;
+            min-height: 297mm !important;
             page-break-inside: avoid;
           }
           
@@ -2880,8 +2934,8 @@ const QuoteDetail = () => {
                   <div>
                     <span className={`text-xs font-medium ${(q.status || 'draft').toLowerCase() === 'draft' ? 'text-slate-600' :
                       (q.status || 'draft').toLowerCase() === 'sent' ? 'text-blue-800' :
-                        (q.status || 'draft').toLowerCase() === 'open' ? 'text-green-800' :
-                          (q.status || 'draft').toLowerCase() === 'accepted' ? 'text-green-800' :
+                        (q.status || 'draft').toLowerCase() === 'open' ? 'text-[#0D4A52]' :
+                          (q.status || 'draft').toLowerCase() === 'accepted' ? 'text-[#0D4A52]' :
                             ['declined', 'rejected'].includes((q.status || 'draft').toLowerCase()) ? 'text-red-800' :
                               (q.status || 'draft').toLowerCase() === 'expired' ? 'text-gray-800' :
                                 'text-slate-600'
@@ -2980,8 +3034,8 @@ const QuoteDetail = () => {
                         <div>
                           <span className={`text-xs font-medium ${(q.status || 'draft').toLowerCase() === 'draft' ? 'text-slate-600' :
                             (q.status || 'draft').toLowerCase() === 'sent' ? 'text-blue-800' :
-                              (q.status || 'draft').toLowerCase() === 'open' ? 'text-green-800' :
-                                (q.status || 'draft').toLowerCase() === 'accepted' ? 'text-green-800' :
+                              (q.status || 'draft').toLowerCase() === 'open' ? 'text-[#0D4A52]' :
+                                (q.status || 'draft').toLowerCase() === 'accepted' ? 'text-[#0D4A52]' :
                                   ['declined', 'rejected'].includes((q.status || 'draft').toLowerCase()) ? 'text-red-800' :
                                     (q.status || 'draft').toLowerCase() === 'expired' ? 'text-gray-800' :
                                       'text-slate-600'
@@ -3284,7 +3338,7 @@ const QuoteDetail = () => {
             <div className="px-4 md:px-6 pt-4 bg-gray-50 border-b border-gray-200">
               <div className="mb-3 text-sm text-gray-700 flex items-center flex-wrap gap-2">
                 <span>Approved by:</span>
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gradient-to-r from-green-500 to-purple-500 text-white text-xs font-semibold">A</span>
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gradient-to-r from-[#156372] to-[#0D4A52] text-white text-xs font-semibold">A</span>
                 <span className="font-medium text-gray-900">{String((quote as any)?.approvedByName || (quote as any)?.approvedBy || "Admin")}</span>
                 <span className="text-gray-400">•</span>
                 <button type="button" className="text-[#2563eb] hover:underline">View Approval Details</button>
@@ -3426,7 +3480,7 @@ const QuoteDetail = () => {
                   <div
                   className="w-full max-w-[920px] mx-auto bg-white border border-[#d1d5db] shadow-sm overflow-hidden print-content"
                   data-print-content
-                  style={{ minHeight: "470px", padding: "46px 40px 24px 40px", position: "relative" }}
+                  style={{ width: "210mm", maxWidth: "210mm", minHeight: "297mm", padding: "46px 40px 24px 40px", position: "relative" }}
                   onMouseEnter={() => setIsQuoteDocumentHovered(true)}
                   onMouseLeave={() => {
                     setIsQuoteDocumentHovered(false);
@@ -3506,7 +3560,7 @@ const QuoteDetail = () => {
                         left: "-60px",
                         width: "200px",
                         height: "30px",
-                        backgroundColor: "#22c55e",
+                        backgroundColor: "#0D4A52",
                         color: "white",
                         display: "flex",
                         alignItems: "center",
@@ -3566,7 +3620,7 @@ const QuoteDetail = () => {
                         left: "-60px",
                         width: "200px",
                         height: "30px",
-                        backgroundColor: "#22c55e",
+                        backgroundColor: "#0D4A52",
                         color: "white",
                         display: "flex",
                         alignItems: "center",
@@ -4034,6 +4088,12 @@ const QuoteDetail = () => {
                           <span className="text-sm font-medium text-gray-900">{formatCurrency(quoteTotalsMeta.shippingCharges, quote.currency)}</span>
                         </div>
                       )}
+                      {quoteTotalsMeta.shippingTaxAmount > 0 && (
+                        <div className="flex items-center justify-between w-64 py-2">
+                          <span className="text-sm text-gray-600">{quoteTotalsMeta.shippingTaxLabel}</span>
+                          <span className="text-sm font-medium text-gray-900">{formatCurrency(quoteTotalsMeta.shippingTaxAmount, quote.currency)}</span>
+                        </div>
+                      )}
                       {quoteTotalsMeta.adjustment !== 0 && (
                         <div className="flex items-center justify-between w-64 py-2">
                           <span className="text-sm text-gray-600">Adjustment</span>
@@ -4048,7 +4108,7 @@ const QuoteDetail = () => {
                       )}
                       <div className="flex items-center justify-between w-64 py-2 px-3 bg-gray-100 total-row">
                         <span className="text-sm text-gray-600">Total</span>
-                        <span className="text-sm font-medium text-gray-900 text-lg font-bold">{formatCurrency(quote.total, quote.currency)}</span>
+                        <span className="text-sm font-medium text-gray-900 text-lg font-bold">{formatCurrency(quoteTotalsMeta.total, quote.currency)}</span>
                       </div>
                     </div>
                   </div>
@@ -5268,7 +5328,7 @@ const QuoteDetail = () => {
                           <td className="px-4 py-3 text-gray-700">{field.mandatory ? "Yes" : "No"}</td>
                           <td className="px-4 py-3 text-gray-700">{field.showInPDF ? "Yes" : "No"}</td>
                           <td className="px-4 py-3">
-                            <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
+                            <span className="px-2 py-1 bg-[#e6f3f1] text-[#0D4A52] rounded text-xs font-medium">
                               {field.status}
                             </span>
                           </td>

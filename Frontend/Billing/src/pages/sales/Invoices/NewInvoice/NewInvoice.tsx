@@ -156,6 +156,8 @@ const navigate = useNavigate();
 const { id } = useParams();
 const location = useLocation();
 const isEditMode = Boolean(id);
+const quoteDataFromState: any = (location as any)?.state?.quoteData || null;
+const hasAppliedQuotePrefillRef = useRef(false);
 const settingsDropdownRef = useRef<HTMLDivElement>(null);
 const [isSettingsDropdownOpen, setIsSettingsDropdownOpen] = useState(false);
 const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
@@ -321,7 +323,34 @@ const filteredCustomers = customers.filter((customer) => {
 const getCustomerOptionId = (customer: any) => String(customer?.id || customer?._id || customer?.customerId || "");
 const getCustomerPrimaryName = (customer: any) => String(customer?.displayName || customer?.name || customer?.companyName || "Unnamed Customer");
 const getCustomerCode = (customer: any) => String(customer?.customerNumber || customer?.customerCode || customer?.contactNumber || customer?.code || "");
-const getCustomerEmail = (customer: any) => String(customer?.email || customer?.primaryEmail || "");
+const getCustomerEmail = (customer: any) => {
+  if (!customer) return "";
+  const direct =
+    customer?.email ||
+    customer?.primaryEmail ||
+    customer?.billingEmail ||
+    customer?.workEmail ||
+    customer?.contactEmail;
+  if (direct) return String(direct);
+
+  const contactPersons =
+    customer?.contactPersons ||
+    customer?.contacts ||
+    customer?.contactPersonsList ||
+    customer?.contactPerson;
+  if (Array.isArray(contactPersons)) {
+    const primary = contactPersons.find((c: any) => c?.isPrimary || c?.primary || c?.isDefault);
+    const primaryEmail = primary?.email || primary?.mail || "";
+    if (primaryEmail) return String(primaryEmail);
+    const firstWithEmail = contactPersons.find((c: any) => c?.email || c?.mail);
+    if (firstWithEmail?.email || firstWithEmail?.mail) return String(firstWithEmail?.email || firstWithEmail?.mail);
+  } else if (contactPersons && typeof contactPersons === "object") {
+    const email = (contactPersons as any)?.email || (contactPersons as any)?.mail;
+    if (email) return String(email);
+  }
+
+  return "";
+};
 const getCustomerCompany = (customer: any) => String(customer?.companyName || customer?.displayName || customer?.name || "");
 const getCustomerInitial = (customer: any) => getCustomerPrimaryName(customer).trim().charAt(0).toUpperCase() || "C";
 const filteredSalespersons = salespersons.filter((salesperson) =>
@@ -1064,9 +1093,17 @@ const isTaxInclusiveMode = (value: any) => String(value || "").toLowerCase().inc
 const getTaxBySelection = (selection: any) => {
   const normalizedSelection = String(selection || "").toLowerCase().trim();
   if (!normalizedSelection) return undefined;
-  return findTaxOptionById(selection)
+  const direct =
+    findTaxOptionById(selection)
     || taxOptions.find((tax: any) => String(tax.name || "").toLowerCase().trim() === normalizedSelection)
     || taxOptions.find((tax: any) => getTaxDisplayLabel(tax).toLowerCase().trim() === normalizedSelection);
+  if (direct) return direct;
+
+  const rate = parseTaxRate(normalizedSelection);
+  if (rate > 0) {
+    return taxOptions.find((tax: any) => parseTaxRate((tax as any)?.rate) === rate);
+  }
+  return undefined;
 };
 const getItemBaseAmount = (item: any) => Number(item?.quantity || 0) * Number(item?.rate || 0);
 const getTaxAmountFromBase = (base: number, rate: number, _isInclusive: boolean) => (base * rate) / 100;
@@ -1335,6 +1372,77 @@ useEffect(() => {
 
   prefillAppliedRef.current = true;
 }, [location.state, customers, isEditMode]);
+
+useEffect(() => {
+  if (isEditMode) return;
+  if (!quoteDataFromState) return;
+  if (hasAppliedQuotePrefillRef.current) return;
+  hasAppliedQuotePrefillRef.current = true;
+
+  setFormData((prev) => {
+    const quoteItems = Array.isArray(quoteDataFromState?.items) ? quoteDataFromState.items : [];
+    const mappedItems =
+      quoteItems.length > 0
+        ? quoteItems.map((item: any, index: number) => {
+          const quantity = Number(item?.quantity ?? 1) || 1;
+          const rate = Number(item?.rate ?? item?.unitPrice ?? item?.price ?? 0) || 0;
+          const amount = Number(item?.amount ?? item?.total ?? (quantity * rate) ?? 0) || 0;
+          return {
+            id: index + 1,
+            itemId: item?.itemId || item?.item?._id || item?.item?.id || item?.item || null,
+            itemDetails: item?.itemDetails || item?.name || item?.item?.name || "",
+            description: item?.description || item?.itemDetails || "",
+            quantity,
+            rate,
+            tax: item?.taxId || item?.tax || "",
+            taxRate: Number(item?.taxRate || 0) || 0,
+            amount,
+            itemEntityType: item?.itemEntityType || item?.entityType || item?.item?.entityType || "item",
+            itemType: item?.itemType || "line",
+            catalogRate: Number(item?.catalogRate ?? item?.unitPrice ?? item?.rate ?? item?.price ?? rate) || rate,
+          };
+        })
+        : prev.items;
+
+    return {
+      ...prev,
+      customerName: quoteDataFromState?.customerName || prev.customerName,
+      orderNumber: quoteDataFromState?.orderNumber || quoteDataFromState?.referenceNumber || prev.orderNumber,
+      invoiceDate: quoteDataFromState?.invoiceDate ? formatDate(quoteDataFromState.invoiceDate) : prev.invoiceDate,
+      dueDate: quoteDataFromState?.dueDate ? formatDate(quoteDataFromState.dueDate) : prev.dueDate,
+      salesperson: quoteDataFromState?.salesperson || prev.salesperson,
+      salespersonId: quoteDataFromState?.salespersonId || prev.salespersonId,
+      subject: quoteDataFromState?.subject || prev.subject,
+      taxExclusive: quoteDataFromState?.taxExclusive || prev.taxExclusive,
+      selectedPriceList: quoteDataFromState?.selectedPriceList || (prev as any).selectedPriceList,
+      items: mappedItems as any,
+      subTotal: Number(quoteDataFromState?.subTotal ?? quoteDataFromState?.subtotal ?? prev.subTotal) || prev.subTotal,
+      discount: Number(quoteDataFromState?.discount ?? prev.discount) || prev.discount,
+      discountType: String(quoteDataFromState?.discountType || prev.discountType || "percent"),
+      discountAccount: quoteDataFromState?.discountAccount || prev.discountAccount,
+      shippingCharges: Number(quoteDataFromState?.shippingCharges ?? prev.shippingCharges) || prev.shippingCharges,
+      shippingChargeTax: String(quoteDataFromState?.shippingChargeTax || prev.shippingChargeTax || ""),
+      roundOff: Number(quoteDataFromState?.roundOff ?? prev.roundOff) || prev.roundOff,
+      adjustment: Number(quoteDataFromState?.adjustment ?? prev.adjustment) || prev.adjustment,
+      total: Number(quoteDataFromState?.total ?? prev.total) || prev.total,
+      currency: String(quoteDataFromState?.currency || prev.currency || "USD"),
+      customerNotes: String(quoteDataFromState?.customerNotes || prev.customerNotes || ""),
+      termsAndConditions: String(quoteDataFromState?.termsAndConditions || prev.termsAndConditions || ""),
+    } as InvoiceFormState;
+  });
+
+  const customerId = quoteDataFromState?.customerId || quoteDataFromState?.customer?._id || quoteDataFromState?.customer?.id || "";
+  if (customerId) {
+    setSelectedCustomer({
+      ...(quoteDataFromState?.customer || {}),
+      id: customerId,
+      _id: customerId,
+      displayName: quoteDataFromState?.customerName || quoteDataFromState?.customer?.displayName || "",
+      name: quoteDataFromState?.customerName || quoteDataFromState?.customer?.displayName || "",
+      email: quoteDataFromState?.customerEmail || (quoteDataFromState?.customer as any)?.email || (quoteDataFromState?.customer as any)?.primaryEmail || "",
+    });
+  }
+}, [isEditMode, quoteDataFromState]);
 
 useEffect(() => {
   const normalizeLocalTaxRow = (tax: any) => ({
@@ -1827,6 +1935,7 @@ const buildInvoicePayload = (statusValue: string) => {
     customer?.name ||
     formData.customerName ||
     "";
+  const customerEmail = getCustomerEmail(customer);
   const itemRows = (formData.items as any[]).filter((item) => item.itemType !== "header");
 
   const payload = {
@@ -1834,6 +1943,7 @@ const buildInvoicePayload = (statusValue: string) => {
     customer: customer?.id || customer?._id || undefined,
     customerId: customer?.id || customer?._id || undefined,
     customerName: customerDisplayName,
+    customerEmail: customerEmail || undefined,
     priceListId: String(selectedPriceList?.id || selectedPriceList?._id || ""),
     priceListName: String(selectedPriceList?.name || ""),
     date: formData.invoiceDate || new Date().toISOString(),
@@ -2062,9 +2172,17 @@ const handleSaveAndSend = async (overridingStatus?: string) => {
       toast.success(requestedStatus === "sent" ? "Invoice created and ready to send." : "Invoice created successfully.");
     }
 
-    // If user requested send, open email modal after successful save.
+    // If user requested send, open email page and auto-send.
     if (requestedStatus === "sent") {
-      navigate(`/sales/invoices/${savedInvoice.id}`, { state: { openEmailModal: true } });
+      const customerEmail = String(getCustomerEmail(customer) || (customer as any)?.primaryEmail || (invoiceData as any)?.customerEmail || "").trim();
+      if (!customerEmail) {
+        toast.error("Customer email not found. Please add an email and try again.");
+        navigate(`/sales/invoices/${savedInvoice.id}/email`, { state: { customerEmail: "" } });
+      } else {
+        navigate(`/sales/invoices/${savedInvoice.id}/email`, {
+          state: { autoSend: true, sendTo: customerEmail, customerEmail },
+        });
+      }
     } else {
       navigate("/sales/invoices");
     }

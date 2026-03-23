@@ -536,7 +536,7 @@ export default function SalesReceipts() {
       const response = await getSalesReceiptsPaginated({
         page,
         limit: 50,
-        status: selectedStatus === "All" ? "All" : selectedStatus,
+        status: selectedStatus === "All" ? undefined : selectedStatus,
         sortBy: mapSortOptionToField(activeSort),
         sortOrder: isDesc ? "desc" : "asc"
       });

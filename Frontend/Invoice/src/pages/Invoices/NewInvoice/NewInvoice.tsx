@@ -1129,9 +1129,17 @@ const isTaxInclusiveMode = (value: any) => String(value || "").toLowerCase().inc
 const getTaxBySelection = (selection: any) => {
   const normalizedSelection = String(selection || "").toLowerCase().trim();
   if (!normalizedSelection) return undefined;
-  return findTaxOptionById(selection)
+  const direct =
+    findTaxOptionById(selection)
     || taxOptions.find((tax: any) => String(tax.name || "").toLowerCase().trim() === normalizedSelection)
     || taxOptions.find((tax: any) => getTaxDisplayLabel(tax).toLowerCase().trim() === normalizedSelection);
+  if (direct) return direct;
+
+  const rate = parseTaxRate(normalizedSelection);
+  if (rate > 0) {
+    return taxOptions.find((tax: any) => parseTaxRate((tax as any)?.rate) === rate);
+  }
+  return undefined;
 };
 const getItemBaseAmount = (item: any) => Number(item?.quantity || 0) * Number(item?.rate || 0);
 const getTaxAmountFromBase = (base: number, rate: number, _isInclusive: boolean) => (base * rate) / 100;
@@ -2047,9 +2055,17 @@ const handleSaveAndSend = async (overridingStatus?: string) => {
       toast.success(requestedStatus === "sent" ? "Invoice created and ready to send." : "Invoice created successfully.");
     }
 
-    // If user requested send, open email modal after successful save.
+    // If user requested send, open email page and auto-send.
     if (requestedStatus === "sent") {
-      navigate(`/sales/invoices/${savedInvoice.id}`, { state: { openEmailModal: true } });
+      const customerEmail = String(getCustomerEmail(customer) || (customer as any)?.primaryEmail || (invoiceData as any)?.customerEmail || "").trim();
+      if (!customerEmail) {
+        toast.error("Customer email not found. Please add an email and try again.");
+        navigate(`/sales/invoices/${savedInvoice.id}/email`, { state: { customerEmail: "" } });
+      } else {
+        navigate(`/sales/invoices/${savedInvoice.id}/email`, {
+          state: { autoSend: true, sendTo: customerEmail, customerEmail },
+        });
+      }
     } else {
       navigate("/sales/invoices");
     }

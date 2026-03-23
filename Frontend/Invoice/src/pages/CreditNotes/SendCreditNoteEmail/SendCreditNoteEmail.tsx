@@ -17,6 +17,7 @@ import {
   HelpCircle
 } from "lucide-react";
 import { getCreditNoteById } from "../../salesModel";
+import { creditNotesAPI } from "../../../services/api";
 
 export default function SendCreditNoteEmail() {
   const { id } = useParams();
@@ -34,6 +35,7 @@ export default function SendCreditNoteEmail() {
   const [showBcc, setShowBcc] = useState(false);
   const [attachments, setAttachments] = useState([]);
   const [attachCreditNotePDF, setAttachCreditNotePDF] = useState(true);
+  const [isSending, setIsSending] = useState(false);
   const [fontSize, setFontSize] = useState("16");
   const [isBold, setIsBold] = useState(false);
   const [isItalic, setIsItalic] = useState(false);
@@ -79,15 +81,31 @@ export default function SendCreditNoteEmail() {
     })}`;
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!emailData.sendTo) {
       alert("Please enter a recipient email address");
       return;
     }
-    // Here you would typically send the email
-    console.log("Sending email:", emailData, attachments);
-    alert("Email sent successfully!");
-    navigate(`/sales/credit-notes/${id}`);
+    try {
+      setIsSending(true);
+      await creditNotesAPI.sendEmail(String(id), {
+        to: emailData.sendTo,
+        cc: emailData.cc,
+        bcc: emailData.bcc,
+        from: emailData.from,
+        subject: emailData.subject,
+        body: emailData.body,
+        attachSystemPDF: attachCreditNotePDF,
+        attachments: [],
+      });
+      alert("Email sent successfully!");
+      navigate(`/sales/credit-notes/${id}`);
+    } catch (error: any) {
+      console.error("Error sending credit note email:", error);
+      alert(error?.message || "Failed to send email. Please try again.");
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleCancel = () => {

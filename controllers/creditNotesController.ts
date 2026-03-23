@@ -1,11 +1,16 @@
-import type express from "express";
+import express from "express";
 import mongoose from "mongoose";
-import { Invoice } from "../models/Invoice.js";
+import { CreditNote } from "../models/CreditNote.js";
 import { SenderEmail } from "../models/SenderEmail.js";
 import { Organization } from "../models/Organization.js";
 import { sendSmtpMail } from "../services/smtpMailer.js";
 
 const asString = (v: unknown) => (typeof v === "string" ? v : "");
+const asNumber = (v: unknown) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+const asDate = (v: unknown) => (v ? new Date(String(v)) : null);
 const normalizeEmail = (value: unknown) => {
   const raw = String(typeof value === "string" ? value : "").trim();
   if (!raw) return "";
@@ -15,7 +20,6 @@ const normalizeEmail = (value: unknown) => {
   const match = first.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
   return String(match?.[0] || first).trim().toLowerCase();
 };
-const asDate = (v: unknown) => (v ? new Date(String(v)) : null);
 
 const requireOrgId = (req: express.Request, res: express.Response) => {
   const orgId = req.user?.organizationId;
@@ -30,10 +34,7 @@ const requireOrgId = (req: express.Request, res: express.Response) => {
   return orgId;
 };
 
-const normalizeRow = (row: any) => {
-  if (!row) return row;
-  return { ...row, id: String(row._id) };
-};
+const normalizeRow = (row: any) => (row ? { ...row, id: String(row._id) } : row);
 
 const pickSmtpSender = async (organizationId: any) => {
   const primary: any = await SenderEmail.findOne({
@@ -76,26 +77,28 @@ const pickSmtpSender = async (organizationId: any) => {
   return null;
 };
 
-export const listInvoices: express.RequestHandler = async (req, res) => {
+export const listCreditNotes: express.RequestHandler = async (req, res) => {
   const orgId = requireOrgId(req, res);
   if (!orgId) return;
 
   const q = asString(req.query.search ?? req.query.q).trim();
   const status = asString(req.query.status).trim();
   const customerId = asString(req.query.customerId).trim();
+  const invoiceId = asString(req.query.invoiceId).trim();
   const limit = Math.max(0, Number(req.query.limit || 0));
   const page = Math.max(1, Number(req.query.page || 1));
 
   const filter: any = { organizationId: orgId };
   if (status) filter.status = new RegExp(`^${status}$`, "i");
   if (customerId) filter.customerId = customerId;
+  if (invoiceId) filter.invoiceId = invoiceId;
   if (q) {
     const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-    filter.$or = [{ invoiceNumber: re }, { customerName: re }];
+    filter.$or = [{ creditNoteNumber: re }, { customerName: re }, { invoiceNumber: re }];
   }
 
-  const total = await Invoice.countDocuments(filter);
-  let query = Invoice.find(filter).sort({ createdAt: -1 });
+  const total = await CreditNote.countDocuments(filter);
+  let query = CreditNote.find(filter).sort({ date: -1, createdAt: -1 });
   if (limit > 0) query = query.skip((page - 1) * limit).limit(limit);
   const rows = await query.lean();
 
@@ -111,144 +114,103 @@ export const listInvoices: express.RequestHandler = async (req, res) => {
   });
 };
 
-export const getInvoiceById: express.RequestHandler = async (req, res) => {
+export const getCreditNoteById: express.RequestHandler = async (req, res) => {
   const orgId = requireOrgId(req, res);
   if (!orgId) return;
 
   const id = String(req.params.id || "").trim();
-  if (!id) return res.status(400).json({ success: false, message: "Invalid id", data: null });
-
-  let row: any = await Invoice.findOne({ _id: id, organizationId: orgId }).lean();
-  if (!row) return res.status(404).json({ success: false, message: "Invoice not found", data: null });
-
-  if (row.customerId) {
-    try {
-      const cust = await mongoose.model("Customer").findOne({ _id: row.customerId, organizationId: orgId }).lean();
-      if (cust) {
-        row.customer = cust;
-        if (!row.customerName) row.customerName = (cust as any).displayName || (cust as any).name || (cust as any).companyName;
-        if (!row.customerEmail && !row.email) row.customerEmail = (cust as any).email;
-      }
-    } catch (e) {
-      // ignore
-    }
-  }
-
+  const row = await CreditNote.findOne({ _id: id, organizationId: orgId }).lean();
+  if (!row) return res.status(404).json({ success: false, message: "Credit note not found", data: null });
   return res.json({ success: true, data: normalizeRow(row) });
 };
 
-export const createInvoice: express.RequestHandler = async (req, res) => {
+export const createCreditNote: express.RequestHandler = async (req, res) => {
   const orgId = requireOrgId(req, res);
   if (!orgId) return;
 
-  const invoiceNumber = asString(req.body?.invoiceNumber).trim();
-  if (!invoiceNumber) {
-    return res.status(400).json({ success: false, message: "Invoice number is required", data: null });
-  }
-
-  let customerName = asString(req.body?.customerName).trim();
-  const customerId = asString(req.body?.customerId).trim();
-  
-  if (customerId && (!customerName || customerName === customerId)) {
-    try {
-      const cust = await mongoose.model("Customer").findOne({ _id: customerId, organizationId: orgId }).lean();
-      if (cust) {
-        customerName = (cust as any).displayName || (cust as any).name || (cust as any).companyName || customerName;
-      }
-    } catch (e) {
-      // ignore
-    }
-  }
-
-  const payload: any = {
-    organizationId: orgId,
-    ...req.body,
-    invoiceNumber,
-    customerName,
-    date: asDate(req.body?.date) || asDate(req.body?.invoiceDate) || new Date(),
-    dueDate: asDate(req.body?.dueDate),
-  };
-
   try {
-    const created = await Invoice.create(payload);
+    const payload = {
+      ...req.body,
+      organizationId: orgId,
+      creditNoteNumber: String(req.body?.creditNoteNumber || "").trim(),
+      customerId: String(req.body?.customerId || req.body?.customer || "").trim(),
+      customerName: String(req.body?.customerName || "").trim(),
+      invoiceId: String(req.body?.invoiceId || req.body?.invoice || "").trim(),
+      invoiceNumber: String(req.body?.invoiceNumber || "").trim(),
+      date: asDate(req.body?.creditNoteDate || req.body?.date) || new Date(),
+      total: asNumber(req.body?.total),
+      balance: asNumber(req.body?.balance ?? req.body?.total),
+      status: String(req.body?.status || "open"),
+    };
+
+    const created = await CreditNote.create(payload);
     return res.status(201).json({ success: true, data: normalizeRow(created.toObject()) });
-  } catch (e: any) {
-    if (e?.code === 11000) {
-      return res.status(409).json({ success: false, message: "Invoice number already exists", data: null });
+  } catch (error: any) {
+    const msg = String(error?.message || "");
+    if (msg.toLowerCase().includes("duplicate") || msg.toLowerCase().includes("exists")) {
+      return res.status(409).json({ success: false, message: "Credit note number already exists", data: null });
     }
-    return res.status(500).json({ success: false, message: e.message || "Failed to create invoice", data: null });
+    return res.status(500).json({ success: false, message: msg || "Failed to create credit note", data: null });
   }
 };
 
-export const updateInvoice: express.RequestHandler = async (req, res) => {
+export const updateCreditNote: express.RequestHandler = async (req, res) => {
   const orgId = requireOrgId(req, res);
   if (!orgId) return;
 
   const id = String(req.params.id || "").trim();
-  if (!id) return res.status(400).json({ success: false, message: "Invalid id", data: null });
-
-  const patch: any = { ...req.body };
-  if (patch.date) patch.date = asDate(patch.date);
-  if (patch.invoiceDate) patch.invoiceDate = asDate(patch.invoiceDate);
-  if (patch.dueDate) patch.dueDate = asDate(patch.dueDate);
-
-  if (patch.customerId && (!patch.customerName || patch.customerName === patch.customerId)) {
-    try {
-      const cust = await mongoose.model("Customer").findOne({ _id: patch.customerId, organizationId: orgId }).lean();
-      if (cust) {
-        patch.customerName = (cust as any).displayName || (cust as any).name || (cust as any).companyName || patch.customerName;
-      }
-    } catch (e) {
-      // ignore
-    }
+  const update: any = { ...req.body };
+  if (req.body?.creditNoteDate || req.body?.date) {
+    update.date = asDate(req.body?.creditNoteDate || req.body?.date) || update.date;
   }
 
-  const updated: any = await Invoice.findOneAndUpdate({ _id: id, organizationId: orgId }, { $set: patch }, { new: true })
-    .lean();
-  if (!updated) return res.status(404).json({ success: false, message: "Invoice not found", data: null });
-
+  const updated = await CreditNote.findOneAndUpdate(
+    { _id: id, organizationId: orgId },
+    { $set: update },
+    { new: true }
+  ).lean();
+  if (!updated) return res.status(404).json({ success: false, message: "Credit note not found", data: null });
   return res.json({ success: true, data: normalizeRow(updated) });
 };
 
-export const deleteInvoice: express.RequestHandler = async (req, res) => {
+export const deleteCreditNote: express.RequestHandler = async (req, res) => {
   const orgId = requireOrgId(req, res);
   if (!orgId) return;
 
   const id = String(req.params.id || "").trim();
-  const deleted = await Invoice.findOneAndDelete({ _id: id, organizationId: orgId }).lean();
-  if (!deleted) return res.status(404).json({ success: false, message: "Invoice not found", data: null });
+  await CreditNote.findOneAndDelete({ _id: id, organizationId: orgId }).lean();
   return res.json({ success: true, data: { id } });
 };
 
-export const getNextInvoiceNumber: express.RequestHandler = async (req, res) => {
+export const getNextCreditNoteNumber: express.RequestHandler = async (req, res) => {
   const orgId = requireOrgId(req, res);
   if (!orgId) return;
 
-  const prefix = asString(req.query.prefix || "INV-");
-  const last = await Invoice.findOne({ organizationId: orgId, invoiceNumber: new RegExp(`^${prefix}`) })
-    .sort({ invoiceNumber: -1 })
+  const prefix = asString(req.query.prefix || "CN-");
+  const last = await CreditNote.findOne({ organizationId: orgId, creditNoteNumber: new RegExp(`^${prefix}`) })
+    .sort({ creditNoteNumber: -1 })
     .lean();
 
   let nextNo = 1;
   if (last) {
-    const digits = String((last as any).invoiceNumber || "").match(/\d+$/);
-    if (digits) nextNo = parseInt(digits[0]) + 1;
+    const digits = String((last as any).creditNoteNumber || "").match(/\d+$/);
+    if (digits) nextNo = parseInt(digits[0], 10) + 1;
   }
 
   const nextNumber = `${prefix}${String(nextNo).padStart(6, "0")}`;
-  return res.json({ success: true, data: { nextNumber } });
+  return res.json({ success: true, data: { nextNumber, creditNoteNumber: nextNumber } });
 };
 
-export const sendInvoiceEmail: express.RequestHandler = async (req, res) => {
+export const sendCreditNoteEmail: express.RequestHandler = async (req, res) => {
   try {
     const orgId = requireOrgId(req, res);
     if (!orgId) return;
 
     const id = String(req.params.id || "").trim();
-    if (!id) return res.status(400).json({ success: false, message: "Invalid invoice id", data: null });
+    if (!id) return res.status(400).json({ success: false, message: "Invalid credit note id", data: null });
 
-    const invoice: any = await Invoice.findOne({ _id: id, organizationId: orgId }).lean();
-    if (!invoice) return res.status(404).json({ success: false, message: "Invoice not found", data: null });
+    const note: any = await CreditNote.findOne({ _id: id, organizationId: orgId }).lean();
+    if (!note) return res.status(404).json({ success: false, message: "Credit note not found", data: null });
 
     const to = normalizeEmail(req.body?.to);
     if (!to || !to.includes("@")) {
@@ -276,7 +238,7 @@ export const sendInvoiceEmail: express.RequestHandler = async (req, res) => {
           ? `${orgName} <${senderEmail}>`
           : fromHeaderRaw;
 
-    const subject = String(req.body?.subject || `Invoice ${invoice.invoiceNumber || ""}`).trim();
+    const subject = String(req.body?.subject || `Credit Note ${note.creditNoteNumber || ""}`).trim();
     const htmlBody = String(req.body?.body || "").trim();
     const textBody = htmlBody ? htmlBody.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim() : subject;
 
@@ -288,7 +250,7 @@ export const sendInvoiceEmail: express.RequestHandler = async (req, res) => {
         const raw = String(att?.content || att?.contentBase64 || "").trim();
         if (!raw) return null;
         const cleaned = raw.includes(",") ? raw.split(",").pop() || raw : raw;
-        const cid = `invoice_${Date.now()}_${index}`;
+        const cid = `credit_note_${Date.now()}_${index}`;
         return {
           cid,
           filename,
@@ -313,7 +275,7 @@ export const sendInvoiceEmail: express.RequestHandler = async (req, res) => {
         subject,
         text: textBody,
         html: htmlBody,
-        attachments
+        attachments,
       }
     );
 
@@ -321,14 +283,12 @@ export const sendInvoiceEmail: express.RequestHandler = async (req, res) => {
       return res.status(400).json({ success: false, message: result.error || "Failed to send email", data: result.debug || null });
     }
 
-    await Invoice.updateOne({ _id: id, organizationId: orgId }, { $set: { status: "Sent" } });
-
+    await CreditNote.updateOne({ _id: id, organizationId: orgId }, { $set: { status: "Sent" } });
     return res.json({ success: true, data: { id, status: "Sent" } });
   } catch (error: any) {
-    const message = String(error?.message || "SMTP send failed");
     return res.status(400).json({
       success: false,
-      message,
+      message: String(error?.message || "SMTP send failed"),
       data: null,
     });
   }

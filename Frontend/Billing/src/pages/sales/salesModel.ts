@@ -919,7 +919,53 @@ export const getCreditNoteById = async (creditNoteId: string): Promise<CreditNot
 
 export const saveCreditNote = async (creditNoteData: Partial<CreditNote>): Promise<CreditNote> => {
   try {
-    const response = await creditNotesAPI.create(creditNoteData);
+    const toISO = (dateVal: any) => {
+      if (!dateVal) return undefined;
+      try {
+        const d = new Date(dateVal);
+        if (!isNaN(d.getTime())) return d.toISOString();
+        if (typeof dateVal === "string" && dateVal.includes("/")) {
+          const parts = dateVal.split("/");
+          if (parts.length === 3) {
+            const day = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10) - 1;
+            const year = parseInt(parts[2], 10);
+            const dd = new Date(year, month, day);
+            if (!isNaN(dd.getTime())) return dd.toISOString();
+          }
+        }
+      } catch {}
+      return undefined;
+    };
+
+    const apiData: any = {
+      ...creditNoteData,
+      creditNoteNumber: String((creditNoteData as any).creditNoteNumber || (creditNoteData as any).number || ""),
+      customer: creditNoteData.customerId || (creditNoteData as any).customer,
+      customerId: creditNoteData.customerId || (creditNoteData as any).customer,
+      customerName:
+        creditNoteData.customerName ||
+        (typeof (creditNoteData as any).customer === "object" && (creditNoteData as any).customer
+          ? ((creditNoteData as any).customer.displayName || (creditNoteData as any).customer.name || (creditNoteData as any).customer.companyName || "")
+          : ""),
+      invoiceId: String((creditNoteData as any).invoiceId || (creditNoteData as any).invoice || ""),
+      invoiceNumber: String((creditNoteData as any).invoiceNumber || ""),
+      date: toISO((creditNoteData as any).creditNoteDate || (creditNoteData as any).date) || new Date().toISOString(),
+      subtotal: Number((creditNoteData as any).subtotal ?? (creditNoteData as any).subTotal ?? 0) || 0,
+      subTotal: Number((creditNoteData as any).subtotal ?? (creditNoteData as any).subTotal ?? 0) || 0,
+      tax: Number((creditNoteData as any).tax ?? (creditNoteData as any).taxAmount ?? 0) || 0,
+      discount: Number((creditNoteData as any).discount ?? 0) || 0,
+      discountType: (creditNoteData as any).discountType || "percent",
+      shippingCharges: Number((creditNoteData as any).shippingCharges ?? 0) || 0,
+      shippingChargeTax: String((creditNoteData as any).shippingChargeTax || ""),
+      adjustment: Number((creditNoteData as any).adjustment ?? 0) || 0,
+      roundOff: Number((creditNoteData as any).roundOff ?? 0) || 0,
+      total: Number((creditNoteData as any).total ?? 0) || 0,
+      balance: Number((creditNoteData as any).balance ?? (creditNoteData as any).total ?? 0) || 0,
+      status: (creditNoteData as any).status || "open",
+    };
+
+    const response = await creditNotesAPI.create(apiData);
     if (response && response.success && response.data) {
       return response.data;
     }
@@ -932,7 +978,53 @@ export const saveCreditNote = async (creditNoteData: Partial<CreditNote>): Promi
 
 export const updateCreditNote = async (creditNoteId: string, creditNoteData: Partial<CreditNote>): Promise<CreditNote> => {
   try {
-    const response = await creditNotesAPI.update(creditNoteId, creditNoteData);
+    const toISO = (dateVal: any) => {
+      if (!dateVal) return undefined;
+      try {
+        const d = new Date(dateVal);
+        if (!isNaN(d.getTime())) return d.toISOString();
+        if (typeof dateVal === "string" && dateVal.includes("/")) {
+          const parts = dateVal.split("/");
+          if (parts.length === 3) {
+            const day = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10) - 1;
+            const year = parseInt(parts[2], 10);
+            const dd = new Date(year, month, day);
+            if (!isNaN(dd.getTime())) return dd.toISOString();
+          }
+        }
+      } catch {}
+      return undefined;
+    };
+
+    const apiData: any = {
+      ...creditNoteData,
+      creditNoteNumber: String((creditNoteData as any).creditNoteNumber || (creditNoteData as any).number || ""),
+      customer: creditNoteData.customerId || (creditNoteData as any).customer,
+      customerId: creditNoteData.customerId || (creditNoteData as any).customer,
+      customerName:
+        creditNoteData.customerName ||
+        (typeof (creditNoteData as any).customer === "object" && (creditNoteData as any).customer
+          ? ((creditNoteData as any).customer.displayName || (creditNoteData as any).customer.name || (creditNoteData as any).customer.companyName || "")
+          : ""),
+      invoiceId: String((creditNoteData as any).invoiceId || (creditNoteData as any).invoice || ""),
+      invoiceNumber: String((creditNoteData as any).invoiceNumber || ""),
+      date: toISO((creditNoteData as any).creditNoteDate || (creditNoteData as any).date),
+      subtotal: Number((creditNoteData as any).subtotal ?? (creditNoteData as any).subTotal ?? 0) || 0,
+      subTotal: Number((creditNoteData as any).subtotal ?? (creditNoteData as any).subTotal ?? 0) || 0,
+      tax: Number((creditNoteData as any).tax ?? (creditNoteData as any).taxAmount ?? 0) || 0,
+      discount: Number((creditNoteData as any).discount ?? 0) || 0,
+      discountType: (creditNoteData as any).discountType || "percent",
+      shippingCharges: Number((creditNoteData as any).shippingCharges ?? 0) || 0,
+      shippingChargeTax: String((creditNoteData as any).shippingChargeTax || ""),
+      adjustment: Number((creditNoteData as any).adjustment ?? 0) || 0,
+      roundOff: Number((creditNoteData as any).roundOff ?? 0) || 0,
+      total: Number((creditNoteData as any).total ?? 0) || 0,
+      balance: Number((creditNoteData as any).balance ?? (creditNoteData as any).total ?? 0) || 0,
+      status: (creditNoteData as any).status || "open",
+    };
+
+    const response = await creditNotesAPI.update(creditNoteId, apiData);
     if (response && response.success && response.data) {
       return response.data;
     }
@@ -1022,7 +1114,11 @@ export const getSalesReceipts = async (params: any = {}): Promise<SalesReceipt[]
 
 export const getSalesReceiptsPaginated = async (params: any = {}): Promise<any> => {
   try {
-    const response = await salesReceiptsAPI.getAll(params);
+    const finalParams = { ...params };
+    if (String(finalParams.status || "").toLowerCase() === "all") {
+      delete finalParams.status;
+    }
+    const response = await salesReceiptsAPI.getAll(finalParams);
     if (response && response.success && response.data) {
       const data = response.data.map((item: any) => ({
         ...item,
@@ -1065,7 +1161,53 @@ export const getSalesReceiptById = async (receiptId: string): Promise<SalesRecei
 
 export const saveSalesReceipt = async (receiptData: Partial<SalesReceipt>): Promise<SalesReceipt> => {
   try {
-    const response = await salesReceiptsAPI.create(receiptData);
+    const toISO = (dateVal: any) => {
+      if (!dateVal) return undefined;
+      try {
+        const d = new Date(dateVal);
+        if (!isNaN(d.getTime())) return d.toISOString();
+        if (typeof dateVal === "string" && dateVal.includes("/")) {
+          const parts = dateVal.split("/");
+          if (parts.length === 3) {
+            const day = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10) - 1;
+            const year = parseInt(parts[2], 10);
+            const dd = new Date(year, month, day);
+            if (!isNaN(dd.getTime())) return dd.toISOString();
+          }
+        }
+      } catch {}
+      return undefined;
+    };
+
+    const apiData: any = {
+      ...receiptData,
+      receiptNumber: String(receiptData.receiptNumber || ""),
+      customer: receiptData.customerId || (receiptData as any).customer,
+      customerId: receiptData.customerId || (receiptData as any).customer,
+      customerName:
+        receiptData.customerName ||
+        (typeof (receiptData as any).customer === "object" && (receiptData as any).customer
+          ? ((receiptData as any).customer.displayName || (receiptData as any).customer.name || (receiptData as any).customer.companyName || "")
+          : ""),
+      date: toISO((receiptData as any).receiptDate || (receiptData as any).date) || new Date().toISOString(),
+      receiptDate: toISO((receiptData as any).receiptDate || (receiptData as any).date) || new Date().toISOString(),
+      subtotal: Number(receiptData.subtotal ?? receiptData.subTotal ?? 0) || 0,
+      subTotal: Number(receiptData.subtotal ?? receiptData.subTotal ?? 0) || 0,
+      tax: Number((receiptData as any).tax ?? (receiptData as any).taxAmount ?? 0) || 0,
+      discount: Number(receiptData.discount ?? 0) || 0,
+      discountType: receiptData.discountType || "percent",
+      shippingCharges: Number(receiptData.shippingCharges ?? 0) || 0,
+      shippingChargeTax: String(receiptData.shippingChargeTax || ""),
+      adjustment: Number(receiptData.adjustment ?? 0) || 0,
+      roundOff: Number(receiptData.roundOff ?? 0) || 0,
+      total: Number(receiptData.total ?? 0) || 0,
+      status: receiptData.status || "paid",
+    };
+
+    if (apiData.receiptDate && apiData.date) delete apiData.receiptDate;
+
+    const response = await salesReceiptsAPI.create(apiData);
     if (response && response.success && response.data) {
       return response.data;
     }
@@ -1078,7 +1220,50 @@ export const saveSalesReceipt = async (receiptData: Partial<SalesReceipt>): Prom
 
 export const updateSalesReceipt = async (receiptId: string, receiptData: Partial<SalesReceipt>): Promise<SalesReceipt> => {
   try {
-    const response = await salesReceiptsAPI.update(receiptId, receiptData);
+    const toISO = (dateVal: any) => {
+      if (!dateVal) return undefined;
+      try {
+        const d = new Date(dateVal);
+        if (!isNaN(d.getTime())) return d.toISOString();
+        if (typeof dateVal === "string" && dateVal.includes("/")) {
+          const parts = dateVal.split("/");
+          if (parts.length === 3) {
+            const day = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10) - 1;
+            const year = parseInt(parts[2], 10);
+            const dd = new Date(year, month, day);
+            if (!isNaN(dd.getTime())) return dd.toISOString();
+          }
+        }
+      } catch {}
+      return undefined;
+    };
+
+    const apiData: any = {
+      ...receiptData,
+      receiptNumber: String(receiptData.receiptNumber || ""),
+      customer: receiptData.customerId || (receiptData as any).customer,
+      customerId: receiptData.customerId || (receiptData as any).customer,
+      customerName:
+        receiptData.customerName ||
+        (typeof (receiptData as any).customer === "object" && (receiptData as any).customer
+          ? ((receiptData as any).customer.displayName || (receiptData as any).customer.name || (receiptData as any).customer.companyName || "")
+          : ""),
+      date: toISO((receiptData as any).receiptDate || (receiptData as any).date),
+      subtotal: Number(receiptData.subtotal ?? receiptData.subTotal ?? 0) || 0,
+      subTotal: Number(receiptData.subtotal ?? receiptData.subTotal ?? 0) || 0,
+      tax: Number((receiptData as any).tax ?? (receiptData as any).taxAmount ?? 0) || 0,
+      discount: Number(receiptData.discount ?? 0) || 0,
+      discountType: receiptData.discountType || "percent",
+      shippingCharges: Number(receiptData.shippingCharges ?? 0) || 0,
+      shippingChargeTax: String(receiptData.shippingChargeTax || ""),
+      adjustment: Number(receiptData.adjustment ?? 0) || 0,
+      roundOff: Number(receiptData.roundOff ?? 0) || 0,
+      total: Number(receiptData.total ?? 0) || 0,
+      status: receiptData.status || "paid",
+    };
+
+    const response = await salesReceiptsAPI.update(receiptId, apiData);
     if (response && response.success && response.data) {
       return response.data;
     }
@@ -1287,7 +1472,7 @@ export const getQuoteById = async (quoteId: string): Promise<Quote | null> => {
   }
 };
 
-export const saveQuote = async (quoteData: Partial<Quote>): Promise<Quote> => {
+export const saveQuote = async (quoteData: Partial<Quote>, retryCount = 0): Promise<Quote> => {
   try {
     // Helper to normalize dates to ISO format
     const toISO = (dateVal: any) => {
@@ -1358,6 +1543,49 @@ export const saveQuote = async (quoteData: Partial<Quote>): Promise<Quote> => {
     const apiMessage = response?.message || response?.data?.message || response?.error || "Invalid response from API";
     throw new Error(`Failed to save quote: ${apiMessage}`);
   } catch (error) {
+    const msg = String((error as any)?.message || "");
+    if (
+      retryCount < 2 &&
+      (msg.toLowerCase().includes("already exists") || msg.toLowerCase().includes("duplicate"))
+    ) {
+      try {
+        const rawNumber = String(quoteData.quoteNumber || "QT-").trim();
+        const prefixMatch = rawNumber.match(/^(.*?)(\d+)\s*$/);
+        const prefix = prefixMatch && String(prefixMatch[1] || "").trim() ? prefixMatch[1] : "QT-";
+        let nextNumber = "";
+        try {
+          const next = await quotesAPI.getNextNumber(prefix);
+          nextNumber =
+            next?.data?.nextNumber ||
+            next?.data?.quoteNumber ||
+            next?.nextNumber ||
+            next?.quoteNumber ||
+            "";
+        } catch (nextErr) {
+          console.warn("Quote next-number endpoint failed, falling back to local scan.", nextErr);
+        }
+
+        if (!nextNumber) {
+          const existing = await getQuotes();
+          const maxSuffix = existing
+            .map((q) => String((q as any)?.quoteNumber || ""))
+            .filter((num) => num.startsWith(prefix))
+            .map((num) => {
+              const digits = num.match(/\d+$/);
+              return digits ? parseInt(digits[0], 10) : 0;
+            })
+            .reduce((max, cur) => (cur > max ? cur : max), 0);
+          nextNumber = `${prefix}${String(maxSuffix + 1).padStart(6, "0")}`;
+        }
+
+        if (nextNumber) {
+          const retryData = { ...quoteData, quoteNumber: String(nextNumber).trim() };
+          return await saveQuote(retryData, retryCount + 1);
+        }
+      } catch (retryError) {
+        console.error("Error retrying quote number:", retryError);
+      }
+    }
     console.error("Error saving quote to API:", error);
     throw error;
   }

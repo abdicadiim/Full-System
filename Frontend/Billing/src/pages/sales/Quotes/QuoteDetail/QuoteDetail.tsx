@@ -959,10 +959,22 @@ const QuoteDetail = () => {
   };
 
   const getQuoteTotalsMeta = (quoteData) => {
-    const subTotal = toNumber(quoteData?.subTotal ?? quoteData?.subtotal ?? quoteData?.total ?? 0);
-    const taxAmount = toNumber(quoteData?.taxAmount ?? quoteData?.tax ?? 0);
-    const discount = toNumber(quoteData?.discount ?? 0);
+    const items = Array.isArray(quoteData?.items) ? quoteData.items : [];
+    const computedSubTotal = items.reduce((sum, item) => {
+      const quantity = toNumber(item?.quantity ?? 0);
+      const rate = toNumber(item?.unitPrice ?? item?.rate ?? item?.price ?? 0);
+      const amount = toNumber(item?.amount ?? item?.total);
+      const lineTotal = amount || (quantity * rate);
+      return sum + lineTotal;
+    }, 0);
+    const subTotal = toNumber(quoteData?.subTotal ?? quoteData?.subtotal ?? computedSubTotal);
+
     const shippingCharges = toNumber(quoteData?.shippingCharges ?? 0);
+    const shippingTaxAmount = toNumber(quoteData?.shippingTaxAmount ?? quoteData?.shippingTax ?? 0);
+    const taxAmountFromQuote = toNumber(quoteData?.totalTax ?? quoteData?.taxAmount ?? quoteData?.tax ?? 0);
+    const itemsTaxAmount = items.reduce((sum, item) => sum + toNumber(item?.taxAmount ?? 0), 0);
+    const taxAmount = taxAmountFromQuote || (itemsTaxAmount + shippingTaxAmount);
+    const discount = toNumber(quoteData?.discount ?? 0);
     const adjustment = toNumber(quoteData?.adjustment ?? 0);
     const roundOff = toNumber(quoteData?.roundOff ?? 0);
     const taxExclusive = quoteData?.taxExclusive || "Tax Exclusive";
@@ -989,17 +1001,40 @@ const QuoteDetail = () => {
       }
     }
 
+    const shippingTaxSource =
+      quoteData?.shippingChargeTax ??
+      quoteData?.shippingTaxId ??
+      quoteData?.shippingTax;
+    const shippingTaxName =
+      shippingTaxSource && typeof shippingTaxSource === "object"
+        ? String((shippingTaxSource as any).name || (shippingTaxSource as any).taxName || "")
+        : String(quoteData?.shippingTaxName || "");
+    const shippingTaxRate =
+      shippingTaxSource && typeof shippingTaxSource === "object"
+        ? parseFloat((shippingTaxSource as any).rate || 0) || 0
+        : parseFloat(quoteData?.shippingTaxRate || 0) || 0;
+    const shippingTaxLabel =
+      shippingTaxName ||
+      (shippingTaxRate > 0 ? `Shipping Tax (${Number.isInteger(shippingTaxRate) ? shippingTaxRate.toFixed(0) : shippingTaxRate.toFixed(2)}%)` : "Shipping Tax");
+
+    const computedTotal = isTaxInclusive
+      ? (subTotal - discount + shippingCharges + adjustment + roundOff)
+      : (subTotal + taxAmount - discount + shippingCharges + adjustment + roundOff);
+
     return {
       subTotal,
       taxAmount,
       discount,
       shippingCharges,
+      shippingTaxAmount,
+      shippingTaxLabel,
       adjustment,
       roundOff,
       taxExclusive,
       discountBase,
       discountLabel,
-      taxLabel
+      taxLabel,
+      total: toNumber(quoteData?.total ?? computedTotal)
     };
   };
 
@@ -1008,13 +1043,13 @@ const QuoteDetail = () => {
       draft: { label: "Draft", className: "text-yellow-800" },
       approved: { label: "Approved", className: "text-emerald-700" },
       sent: { label: "Sent", className: "text-blue-800" },
-      open: { label: "Open", className: "text-green-800" },
-      accepted: { label: "Accepted", className: "text-green-800" },
+      open: { label: "Open", className: "text-[#0D4A52]" },
+      accepted: { label: "Accepted", className: "text-[#0D4A52]" },
       declined: { label: "Declined", className: "text-red-800" },
       rejected: { label: "Declined", className: "text-red-800" },
       expired: { label: "Expired", className: "text-gray-800" },
-      converted: { label: "Invoiced", className: "text-green-800" },
-      invoiced: { label: "Invoiced", className: "text-green-800" }
+      converted: { label: "Invoiced", className: "text-[#0D4A52]" },
+      invoiced: { label: "Invoiced", className: "text-[#0D4A52]" }
     };
     const statusInfo = statusMap[status?.toLowerCase()] || statusMap.draft;
     return <span className={`text-xs font-medium ${statusInfo.className}`}>{statusInfo.label}</span>;
@@ -1061,8 +1096,14 @@ const QuoteDetail = () => {
       // Map quote items to invoice items format
       const invoiceItems = (quote.items || []).map((item, index) => {
         const quantity = parseFloat(item.quantity) || 1;
-        const rate = parseFloat(item.unitPrice || item.rate || item.price) || 0;
-        const lineAmount = parseFloat(item.total || item.amount || (quantity * rate)) || 0;
+        const baseRate = parseFloat(item.catalogRate || item.unitPrice || item.rate || item.price) || 0;
+        const rawLineAmount = parseFloat(item.total || item.amount) || 0;
+        const effectiveRate =
+          rawLineAmount > 0 && quantity > 0
+            ? rawLineAmount / quantity
+            : baseRate;
+        const rate = Number.isFinite(effectiveRate) ? effectiveRate : baseRate;
+        const lineAmount = rawLineAmount > 0 ? rawLineAmount : (quantity * rate);
         const rawTaxSource = item.tax;
         const rawTaxValue =
           item.taxId ??
@@ -1102,11 +1143,14 @@ const QuoteDetail = () => {
         return {
           id: index + 1,
           itemId: item.item?._id || item.itemId || item.item || null, // Include the product ID for stock tracking
+          itemEntityType: item.itemEntityType || item.entityType || item.item?.entityType || "item",
+          itemType: item.itemType || "line",
           itemDetails: item.name || item.item?.name || '',
           name: item.name || item.item?.name || '',
           quantity,
           rate,
           price: rate,
+          catalogRate: parseFloat(item.catalogRate || item.unitPrice || item.rate || item.price) || rate,
           tax: taxIdValue || normalizedRawTaxValue || (derivedTaxRate > 0 ? derivedTaxRate : ''),
           taxId: taxIdValue,
           taxRate: derivedTaxRate,
@@ -1120,7 +1164,7 @@ const QuoteDetail = () => {
       const rawDiscount = toNumber(quote.discount);
       const discountBase = Math.max(0, toNumber(totalsMeta.discountBase ?? totalsMeta.subTotal));
       const taxAmount = toNumber(totalsMeta.taxAmount);
-      const shippingCharges = toNumber(quote.shippingCharges);
+      const shippingCharges = toNumber(quote.shippingCharges ?? totalsMeta.shippingCharges);
       const adjustment = toNumber(quote.adjustment);
       const roundOff = toNumber(quote.roundOff);
       const quoteTotal = toNumber(quote.total ?? quote.amount);
@@ -1163,6 +1207,7 @@ const QuoteDetail = () => {
       const quoteData = {
         customerName: quote.customerName || '',
         customerId: quote.customerId || null,
+        customerEmail: quote.customerEmail || (quote as any).email || '',
         orderNumber: quote.referenceNumber || '',
         invoiceDate: invoiceDate,
         dueDate: dueDate,
@@ -1170,19 +1215,23 @@ const QuoteDetail = () => {
         salespersonId: quote.salespersonId || '',
         subject: quote.subject || `Invoice from Quote ${quote.quoteNumber || quote.id}`,
         items: invoiceItems,
+        selectedPriceList: (quote as any).priceListName || (quote as any).selectedPriceList || "",
         subTotal: toNumber(totalsMeta.subTotal),
         tax: taxAmount,
         taxAmount: taxAmount,
+        totalTax: taxAmount,
         discount: normalizedDiscount,
         discountType: sourceDiscountType,
+        discountAccount: quote.discountAccount || "General Income",
         shippingCharges: shippingCharges,
         shippingChargeTax: String(shippingTaxValue || ""),
         shippingTaxId: shippingTaxId,
         shippingTaxName: shippingTaxName,
         shippingTaxRate: shippingTaxRate,
+        shippingTaxAmount: toNumber(totalsMeta.shippingTaxAmount),
         adjustment: adjustment,
         roundOff: roundOff,
-        total: quote.total || 0,
+        total: toNumber(totalsMeta.total),
         currency: quote.currency || 'KES',
         customerNotes: quote.customerNotes || '',
         termsAndConditions: quote.termsAndConditions || '',
@@ -1463,6 +1512,12 @@ const QuoteDetail = () => {
               <span>${formatCurrency(totalsMeta.shippingCharges, quote.currency)}</span>
             </div>
             ` : ''}
+            ${totalsMeta.shippingTaxAmount > 0 ? `
+            <div class="totals-row">
+              <span>${totalsMeta.shippingTaxLabel}</span>
+              <span>${formatCurrency(totalsMeta.shippingTaxAmount, quote.currency)}</span>
+            </div>
+            ` : ''}
             ${totalsMeta.adjustment !== 0 ? `
             <div class="totals-row">
               <span>Adjustment</span>
@@ -1477,7 +1532,7 @@ const QuoteDetail = () => {
             ` : ''}
             <div class="totals-row total">
               <span>Total</span>
-              <span>${formatCurrency(quote.total, quote.currency)}</span>
+              <span>${formatCurrency(totalsMeta.total, quote.currency)}</span>
             </div>
           </div>
         </div>
@@ -1619,7 +1674,6 @@ const QuoteDetail = () => {
 
     const quoteDate = quoteData.quoteDate || quoteData.date || new Date().toISOString();
     const customerName = quoteData.customerName || (typeof quoteData.customer === 'object' ? (quoteData.customer?.displayName || quoteData.customer?.name) : quoteData.customer) || 'N/A';
-    const total = formatCurrency(quoteData.total || quoteData.amount || 0, quoteData.currency || 'KES');
     const notes = quoteData.customerNotes || 'Looking forward for your business.';
     const totalsMeta = getQuoteTotalsMeta(quoteData);
 
@@ -1739,6 +1793,12 @@ const QuoteDetail = () => {
             <span class="total-value">${formatCurrency(totalsMeta.shippingCharges, quoteData.currency)}</span>
           </div>
           ` : ''}
+          ${totalsMeta.shippingTaxAmount > 0 ? `
+          <div class="total-row">
+            <span class="total-label">${totalsMeta.shippingTaxLabel}</span>
+            <span class="total-value">${formatCurrency(totalsMeta.shippingTaxAmount, quoteData.currency)}</span>
+          </div>
+          ` : ''}
           ${totalsMeta.adjustment !== 0 ? `
           <div class="total-row">
             <span class="total-label">Adjustment</span>
@@ -1753,7 +1813,7 @@ const QuoteDetail = () => {
           ` : ''}
           <div class="total-row final">
             <span>Total</span>
-            <span>${total}</span>
+            <span>${formatCurrency(totalsMeta.total, quoteData.currency)}</span>
           </div>
         </div>
 
@@ -2045,9 +2105,8 @@ const QuoteDetail = () => {
     if (!quote) return;
 
     try {
-      // Match requested post-accept UI flow by moving quote to invoiced state.
-      await updateQuote(quoteId, { status: 'invoiced' });
-      await appendActivityLog("Status Updated", "Quote status changed to invoiced.", "success");
+      await updateQuote(quoteId, { status: 'accepted' });
+      await appendActivityLog("Status Updated", "Quote status changed to accepted.", "success");
       const updatedQuote = await getQuoteById(quoteId);
       if (updatedQuote) {
         setQuote(updatedQuote);
@@ -2056,14 +2115,14 @@ const QuoteDetail = () => {
       try {
         const quotes = await getQuotes();
         setAllQuotes(quotes);
-        toast.success("Quote marked as invoiced.");
-        setStatusSuccessMessage("Quote status has been changed to invoiced.");
+        toast.success("Quote marked as accepted.");
+        setStatusSuccessMessage("Quote status has been changed to accepted.");
       } catch (error) {
         console.error("Error reloading quotes:", error);
       }
     } catch (error) {
-      console.error("Error marking quote as invoiced:", error);
-      toast.error("Failed to mark quote as invoiced. Please try again.");
+      console.error("Error marking quote as accepted:", error);
+      toast.error("Failed to mark quote as accepted. Please try again.");
     }
   };
 
@@ -2478,12 +2537,20 @@ const QuoteDetail = () => {
   const isApprovedStatus = quoteStatus === "approved";
   const isExpiredStatus = quoteStatus === "expired";
   const isDraftStatus = quoteStatus === "draft";
+  const isSentStatus = quoteStatus === "sent";
+  const isAcceptedStatus = quoteStatus === "accepted";
   const isSimplifiedActionStatus = quoteStatus === "accepted" || isInvoicedStatus;
+  const hasPlanItems = (quote?.items || []).some((item: any) => {
+    const entityType = String(item?.itemEntityType || item?.entityType || item?.item?.entityType || "").toLowerCase();
+    const itemId = String(item?.itemId || item?.item?.id || item?.item?._id || item?.item || "").toLowerCase();
+    return entityType === "plan" || itemId.startsWith("plan:");
+  });
 
   return (
     <>
       <style>{`
         @media print {
+          @page { size: A4; margin: 20mm; }
           /* Hide all UI elements except the document */
           body > *:not(.print-content),
           .print-content ~ *,
@@ -2512,6 +2579,8 @@ const QuoteDetail = () => {
             padding: 20mm !important;
             box-shadow: none !important;
             max-width: 100% !important;
+            width: 210mm !important;
+            min-height: 297mm !important;
             page-break-inside: avoid;
           }
           
@@ -2609,7 +2678,7 @@ const QuoteDetail = () => {
                     {filterOptions.map(option => (
                       <div
                         key={option}
-                        className={`px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 ${selectedFilter === option ? 'bg-[#156372]/10 text-[#156372]' : 'text-gray-700'}`}
+                        className={`px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 ${selectedFilter === option ? 'bg-[#e6f3f1] text-[#0D4A52]' : 'text-gray-700'}`}
                         onClick={() => {
                           setSelectedFilter(option);
                           setIsFilterDropdownOpen(false);
@@ -2622,11 +2691,11 @@ const QuoteDetail = () => {
                 )}
               </div>
               <div className="flex items-center gap-2 ml-2">
-                <div className="inline-flex items-center overflow-hidden rounded-md border border-[#15803d] shadow-sm">
-                  <button className="px-3 py-2 text-white bg-[#16a34a] hover:bg-[#15803d] cursor-pointer" onClick={handleCreateNewQuote}>
+                <div className="inline-flex items-center overflow-hidden rounded-md border border-[#156372] shadow-sm">
+                  <button className="px-3 py-2 text-white bg-[#0D4A52] hover:bg-[#156372] cursor-pointer" onClick={handleCreateNewQuote}>
                     <Plus size={16} />
                   </button>
-                  <button className="px-2.5 py-2 text-white bg-[#16a34a] border-l border-[#15803d] hover:bg-[#15803d] cursor-pointer" onClick={handleCreateNewQuote}>
+                  <button className="px-2.5 py-2 text-white bg-[#0D4A52] border-l border-[#156372] hover:bg-[#156372] cursor-pointer" onClick={handleCreateNewQuote}>
                     <ChevronDown size={14} />
                   </button>
                 </div>
@@ -2694,8 +2763,8 @@ const QuoteDetail = () => {
                   <div>
                     <span className={`text-xs font-medium ${(q.status || 'draft').toLowerCase() === 'draft' ? 'text-slate-600' :
                       (q.status || 'draft').toLowerCase() === 'sent' ? 'text-blue-800' :
-                        (q.status || 'draft').toLowerCase() === 'open' ? 'text-green-800' :
-                          (q.status || 'draft').toLowerCase() === 'accepted' ? 'text-green-800' :
+                        (q.status || 'draft').toLowerCase() === 'open' ? 'text-[#0D4A52]' :
+                          (q.status || 'draft').toLowerCase() === 'accepted' ? 'text-[#0D4A52]' :
                             ['declined', 'rejected'].includes((q.status || 'draft').toLowerCase()) ? 'text-red-800' :
                               (q.status || 'draft').toLowerCase() === 'expired' ? 'text-gray-800' :
                                 'text-slate-600'
@@ -2748,7 +2817,7 @@ const QuoteDetail = () => {
                         {filterOptions.map(option => (
                           <div
                             key={option}
-                            className={`px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 ${selectedFilter === option ? 'bg-[#156372]/10 text-[#156372]' : 'text-gray-700'}`}
+                            className={`px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 ${selectedFilter === option ? 'bg-[#e6f3f1] text-[#0D4A52]' : 'text-gray-700'}`}
                             onClick={() => {
                               setSelectedFilter(option);
                               setIsFilterDropdownOpen(false);
@@ -2794,8 +2863,8 @@ const QuoteDetail = () => {
                         <div>
                           <span className={`text-xs font-medium ${(q.status || 'draft').toLowerCase() === 'draft' ? 'text-slate-600' :
                             (q.status || 'draft').toLowerCase() === 'sent' ? 'text-blue-800' :
-                              (q.status || 'draft').toLowerCase() === 'open' ? 'text-green-800' :
-                                (q.status || 'draft').toLowerCase() === 'accepted' ? 'text-green-800' :
+                              (q.status || 'draft').toLowerCase() === 'open' ? 'text-[#0D4A52]' :
+                                (q.status || 'draft').toLowerCase() === 'accepted' ? 'text-[#0D4A52]' :
                                   ['declined', 'rejected'].includes((q.status || 'draft').toLowerCase()) ? 'text-red-800' :
                                     (q.status || 'draft').toLowerCase() === 'expired' ? 'text-gray-800' :
                                       'text-slate-600'
@@ -2820,14 +2889,6 @@ const QuoteDetail = () => {
 
         {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {statusSuccessMessage && (
-            <div className="px-4 md:px-6 pt-2">
-              <div className="inline-flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                <CheckCircle size={15} />
-                <span>{statusSuccessMessage}</span>
-              </div>
-            </div>
-          )}
           {/* Header */}
           <div className={`flex items-center justify-between px-4 h-[74px] border-b border-gray-200 bg-white ${selectedQuotes.length > 0 ? 'opacity-50 pointer-events-none' : ''}`}>
             <div className="flex items-center gap-2 md:gap-4">
@@ -2945,17 +3006,19 @@ const QuoteDetail = () => {
                   <RefreshCw size={16} />
                   <span>Submit for Approval</span>
                 </button>
-                <button
-                  className="flex items-center gap-1.5 px-2 py-1.5 bg-transparent text-gray-700 rounded-md text-sm font-medium cursor-pointer hover:text-[#156372]"
-                  onClick={handleConvertToInvoice}
-                >
-                  <FileText size={16} />
-                  <span>Convert to Invoice</span>
-                </button>
+                {!hasPlanItems && (
+                  <button
+                    className="flex items-center gap-1.5 px-2 py-1.5 bg-transparent text-gray-700 rounded-md text-sm font-medium cursor-pointer hover:text-[#156372]"
+                    onClick={handleConvertToInvoice}
+                  >
+                    <FileText size={16} />
+                    <span>Convert to Invoice</span>
+                  </button>
+                )}
               </>
             )}
 
-            {!isSimplifiedActionStatus && (
+            {!isSimplifiedActionStatus && hasPlanItems && (
               <button
                 className="flex items-center gap-1.5 px-2 py-1.5 bg-transparent text-gray-700 rounded-md text-sm font-medium cursor-pointer hover:text-[#156372]"
                 onClick={handleCreateSubscription}
@@ -2966,40 +3029,51 @@ const QuoteDetail = () => {
 
             {isApprovedStatus && (
               <div className="relative quote-detail-dropdown-wrapper">
-                <button
-                  className="flex items-center gap-1.5 px-2 py-1.5 bg-transparent text-gray-700 rounded-md text-sm font-medium cursor-pointer hover:text-[#156372]"
-                  onClick={() => {
-                    setShowConvertDropdown(!showConvertDropdown);
-                    setShowMailDropdown(false);
-                    setShowPdfDropdown(false);
-                    setShowMoreDropdown(false);
-                  }}
-                >
-                  <span>Convert</span>
-                  <ChevronDown size={14} />
-                </button>
-                {showConvertDropdown && (
-                  <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 min-w-[210px] p-1.5">
+                {hasPlanItems ? (
+                  <button
+                    className="flex items-center gap-1.5 px-2 py-1.5 bg-transparent text-gray-700 rounded-md text-sm font-medium cursor-pointer hover:text-[#156372]"
+                    onClick={handleCreateSubscription}
+                  >
+                    <span>Create a Subscription</span>
+                  </button>
+                ) : (
+                  <>
                     <button
-                      type="button"
+                      className="flex items-center gap-1.5 px-2 py-1.5 bg-transparent text-gray-700 rounded-md text-sm font-medium cursor-pointer hover:text-[#156372]"
                       onClick={() => {
-                        setShowConvertDropdown(false);
-                        handleConvertToInvoice();
+                        setShowConvertDropdown(!showConvertDropdown);
+                        setShowMailDropdown(false);
+                        setShowPdfDropdown(false);
+                        setShowMoreDropdown(false);
                       }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-md text-white bg-[#2F80FF] shadow-sm"
                     >
-                      <FileText size={14} />
-                      Convert to Invoice
+                      <span>Convert</span>
+                      <ChevronDown size={14} />
                     </button>
-                    <button
-                      type="button"
-                      onClick={handleConvertToDraft}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-md text-gray-700 hover:bg-gray-50 mt-1"
-                    >
-                      <FileText size={14} />
-                      Convert to Draft
-                    </button>
-                  </div>
+                    {showConvertDropdown && (
+                      <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 min-w-[210px] p-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowConvertDropdown(false);
+                            handleConvertToInvoice();
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-md text-white bg-[#2F80FF] shadow-sm"
+                        >
+                          <FileText size={14} />
+                          Convert to Invoice
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleConvertToDraft}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-md text-gray-700 hover:bg-gray-50 mt-1"
+                        >
+                          <FileText size={14} />
+                          Convert to Draft
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -3091,7 +3165,7 @@ const QuoteDetail = () => {
             <div className="px-4 md:px-6 pt-4 bg-gray-50 border-b border-gray-200">
               <div className="mb-3 text-sm text-gray-700 flex items-center flex-wrap gap-2">
                 <span>Approved by:</span>
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gradient-to-r from-green-500 to-purple-500 text-white text-xs font-semibold">A</span>
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gradient-to-r from-[#156372] to-[#0D4A52] text-white text-xs font-semibold">A</span>
                 <span className="font-medium text-gray-900">{String((quote as any)?.approvedByName || (quote as any)?.approvedBy || "Admin")}</span>
                 <span className="text-gray-400">•</span>
                 <button type="button" className="text-[#2563eb] hover:underline">View Approval Details</button>
@@ -3117,17 +3191,113 @@ const QuoteDetail = () => {
             </div>
           )}
 
+          {isAcceptedStatus && (
+            <div className="px-4 md:px-6 pt-4 bg-gray-50 border-b border-gray-200">
+              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3">
+                <span className="text-sm font-semibold text-gray-900">WHAT'S NEXT?</span>
+                <span className="text-sm text-gray-600">Create an invoice for this quote to confirm the sale and bill your customer.</span>
+                {hasPlanItems ? (
+                  <button
+                    type="button"
+                    className="px-4 py-1.5 bg-[#2F80FF] hover:bg-[#276AE6] text-white rounded-md text-sm font-semibold"
+                    onClick={handleCreateSubscription}
+                  >
+                    Create Subscription
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="px-4 py-1.5 bg-[#2F80FF] hover:bg-[#276AE6] text-white rounded-md text-sm font-semibold"
+                    onClick={handleConvertToInvoice}
+                  >
+                    Convert to Invoice
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="px-4 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-md text-sm font-medium"
+                  onClick={handleCreateProject}
+                >
+                  Create Project
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isSentStatus && (
+            <div className="px-4 md:px-6 pt-4 bg-gray-50 border-b border-gray-200">
+              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3">
+                <span className="text-sm font-semibold text-gray-900">WHAT'S NEXT?</span>
+                <span className="text-sm text-gray-600">Create an invoice for this quote to confirm the sale and bill your customer.</span>
+                {hasPlanItems ? (
+                  <button
+                    type="button"
+                    className="px-4 py-1.5 bg-[#2F80FF] hover:bg-[#276AE6] text-white rounded-md text-sm font-semibold"
+                    onClick={handleCreateSubscription}
+                  >
+                    Create Subscription
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="px-4 py-1.5 bg-[#2F80FF] hover:bg-[#276AE6] text-white rounded-md text-sm font-semibold"
+                    onClick={handleConvertToInvoice}
+                  >
+                    Convert to Invoice
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="px-4 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-md text-sm font-medium"
+                  onClick={handleCreateProject}
+                >
+                  Create Project
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isInvoicedStatus && (
+            <div className="px-4 md:px-6 pt-4 bg-gray-50 border-b border-gray-200">
+              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3">
+                <span className="text-sm font-semibold text-gray-900">WHAT'S NEXT?</span>
+                <span className="text-sm text-gray-600">This quote has been invoiced. You can review the invoice details or create a project.</span>
+                <button
+                  type="button"
+                  className="px-4 py-1.5 bg-[#0D4A52] hover:bg-[#0B3B41] text-white rounded-md text-sm font-semibold"
+                  onClick={() => setActiveTab("invoices")}
+                >
+                  View Invoices
+                </button>
+                <button
+                  type="button"
+                  className="px-4 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-md text-sm font-medium"
+                  onClick={handleCreateProject}
+                >
+                  Create Project
+                </button>
+              </div>
+            </div>
+          )}
+
           {String(quote?.status || "draft").toLowerCase() === "draft" && (
             <div className="px-4 md:px-6 pt-4 bg-gray-50 border-b border-gray-200">
               <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3">
                 <span className="text-sm font-semibold text-gray-900">WHAT'S NEXT?</span>
-                <span className="text-sm text-gray-600">Submit this quote for approval to get the details verified.</span>
+                <span className="text-sm text-gray-600">Go ahead and email this quote to your customer or simply mark it as sent.</span>
                 <button
                   type="button"
-                  className="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-md text-sm font-semibold"
-                  onClick={handleSubmitForApproval}
+                  className="px-4 py-1.5 bg-[#2F80FF] hover:bg-[#276AE6] text-white rounded-md text-sm font-semibold"
+                  onClick={handleSendEmail}
                 >
-                  Submit for Approval
+                  Send Quote
+                </button>
+                <button
+                  type="button"
+                  className="px-4 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-md text-sm font-medium"
+                  onClick={handleMarkCurrentAsSent}
+                >
+                  Mark As Sent
                 </button>
               </div>
             </div>
@@ -3192,7 +3362,7 @@ const QuoteDetail = () => {
                 <div
                   className="w-full max-w-[920px] mx-auto bg-white border border-[#d1d5db] shadow-sm overflow-hidden print-content"
                   data-print-content
-                  style={{ minHeight: "470px", padding: "46px 40px 24px 40px", position: "relative" }}
+                  style={{ width: "210mm", maxWidth: "210mm", minHeight: "297mm", padding: "46px 40px 24px 40px", position: "relative" }}
                   onMouseEnter={() => setIsQuoteDocumentHovered(true)}
                   onMouseLeave={() => {
                     setIsQuoteDocumentHovered(false);
@@ -3256,6 +3426,96 @@ const QuoteDetail = () => {
                       </div>
                     </div>
                   )}
+                  {String(quote.status || "").toLowerCase() === "accepted" && (
+                    <div style={{
+                      position: "absolute",
+                      top: "0",
+                      left: "0",
+                      width: "200px",
+                      height: "200px",
+                      overflow: "hidden",
+                      zIndex: 10
+                    }}>
+                      <div style={{
+                        position: "absolute",
+                        top: "40px",
+                        left: "-60px",
+                        width: "200px",
+                        height: "30px",
+                        backgroundColor: "#10B981",
+                        color: "white",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "14px",
+                        fontWeight: "600",
+                        transform: "rotate(-45deg)",
+                        boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
+                      }}>
+                        ACCEPTED
+                      </div>
+                    </div>
+                  )}
+                  {String(quote.status || "").toLowerCase() === "draft" && (
+                    <div style={{
+                      position: "absolute",
+                      top: "0",
+                      left: "0",
+                      width: "200px",
+                      height: "200px",
+                      overflow: "hidden",
+                      zIndex: 10
+                    }}>
+                      <div style={{
+                        position: "absolute",
+                        top: "40px",
+                        left: "-60px",
+                        width: "200px",
+                        height: "30px",
+                        backgroundColor: "#6B7280",
+                        color: "white",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "14px",
+                        fontWeight: "600",
+                        transform: "rotate(-45deg)",
+                        boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
+                      }}>
+                        DRAFT
+                      </div>
+                    </div>
+                  )}
+                  {['declined', 'rejected'].includes(String(quote.status || "").toLowerCase()) && (
+                    <div style={{
+                      position: "absolute",
+                      top: "0",
+                      left: "0",
+                      width: "200px",
+                      height: "200px",
+                      overflow: "hidden",
+                      zIndex: 10
+                    }}>
+                      <div style={{
+                        position: "absolute",
+                        top: "40px",
+                        left: "-60px",
+                        width: "200px",
+                        height: "30px",
+                        backgroundColor: "#F59E0B",
+                        color: "white",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "14px",
+                        fontWeight: "600",
+                        transform: "rotate(-45deg)",
+                        boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
+                      }}>
+                        DECLINED
+                      </div>
+                    </div>
+                  )}
                   {(String(quote.status || "").toLowerCase() === 'invoiced' || String(quote.status || "").toLowerCase() === 'converted') && (
                     <div style={{
                       position: "absolute",
@@ -3272,7 +3532,7 @@ const QuoteDetail = () => {
                         left: "-60px",
                         width: "200px",
                         height: "30px",
-                        backgroundColor: "#22c55e",
+                        backgroundColor: "#0D4A52",
                         color: "white",
                         display: "flex",
                         alignItems: "center",
@@ -3470,6 +3730,14 @@ const QuoteDetail = () => {
                           </span>
                         </div>
                       )}
+                      {quoteTotalsMeta.shippingTaxAmount > 0 && (
+                        <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "11px", color: "#4b5563" }}>
+                          <span>{quoteTotalsMeta.shippingTaxLabel}</span>
+                          <span style={{ color: "#111827", fontWeight: "500" }}>
+                            {formatCurrency(quoteTotalsMeta.shippingTaxAmount, quote.currency)}
+                          </span>
+                        </div>
+                      )}
                       {quoteTotalsMeta.adjustment !== 0 && (
                         <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "11px", color: "#4b5563" }}>
                           <span>Adjustment</span>
@@ -3498,7 +3766,7 @@ const QuoteDetail = () => {
                         color: "#111827"
                       }}>
                         <span>Total</span>
-                        <span>{formatCurrency(quote.total || 0, quote.currency)}</span>
+                        <span>{formatCurrency(quoteTotalsMeta.total || 0, quote.currency)}</span>
                       </div>
                     </div>
                   </div>
@@ -3711,6 +3979,12 @@ const QuoteDetail = () => {
                           <span className="text-sm font-medium text-gray-900">{formatCurrency(quoteTotalsMeta.shippingCharges, quote.currency)}</span>
                         </div>
                       )}
+                      {quoteTotalsMeta.shippingTaxAmount > 0 && (
+                        <div className="flex items-center justify-between w-64 py-2">
+                          <span className="text-sm text-gray-600">{quoteTotalsMeta.shippingTaxLabel}</span>
+                          <span className="text-sm font-medium text-gray-900">{formatCurrency(quoteTotalsMeta.shippingTaxAmount, quote.currency)}</span>
+                        </div>
+                      )}
                       {quoteTotalsMeta.adjustment !== 0 && (
                         <div className="flex items-center justify-between w-64 py-2">
                           <span className="text-sm text-gray-600">Adjustment</span>
@@ -3725,7 +3999,7 @@ const QuoteDetail = () => {
                       )}
                       <div className="flex items-center justify-between w-64 py-2 px-3 bg-gray-100 total-row">
                         <span className="text-sm text-gray-600">Total</span>
-                        <span className="text-sm font-medium text-gray-900 text-lg font-bold">{formatCurrency(quote.total, quote.currency)}</span>
+                        <span className="text-sm font-medium text-gray-900 text-lg font-bold">{formatCurrency(quoteTotalsMeta.total, quote.currency)}</span>
                       </div>
                     </div>
                   </div>
@@ -4946,7 +5220,7 @@ const QuoteDetail = () => {
                           <td className="px-4 py-3 text-gray-700">{field.mandatory ? "Yes" : "No"}</td>
                           <td className="px-4 py-3 text-gray-700">{field.showInPDF ? "Yes" : "No"}</td>
                           <td className="px-4 py-3">
-                            <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
+                            <span className="px-2 py-1 bg-[#e6f3f1] text-[#0D4A52] rounded text-xs font-medium">
                               {field.status}
                             </span>
                           </td>

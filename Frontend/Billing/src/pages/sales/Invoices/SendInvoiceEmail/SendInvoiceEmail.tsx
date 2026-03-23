@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import toast from "react-hot-toast";
 import {
   X,
@@ -94,6 +94,7 @@ const normalizeInvoiceItems = (sourceInvoice: any) => {
 export default function SendInvoiceEmail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [invoice, setInvoice] = useState(null);
   const [loading, setLoading] = useState(false);
   const [sendingStage, setSendingStage] = useState("");
@@ -106,6 +107,11 @@ export default function SendInvoiceEmail() {
     subject: "",
     body: "",
   });
+  const prefilledRecipientFromState = String(
+    (location.state as any)?.sendTo || (location.state as any)?.customerEmail || ""
+  ).trim();
+  const autoSendRequested = Boolean((location.state as any)?.autoSend);
+  const hasAutoSentRef = useRef(false);
   const [showCc, setShowCc] = useState(false);
   const [showBcc, setShowBcc] = useState(false);
   const [attachments, setAttachments] = useState([]);
@@ -291,7 +297,7 @@ export default function SendInvoiceEmail() {
 
             setEmailData({
               from: `"${sName}" <${sEmail}>`,
-              sendTo: customerEmail,
+              sendTo: prefilledRecipientFromState || customerEmail,
               cc: "",
               bcc: "",
               subject: templateSubject,
@@ -318,6 +324,15 @@ export default function SendInvoiceEmail() {
       bodyEditorRef.current.innerHTML = emailData.body;
     }
   }, [emailData.body, isBodyDirty]);
+
+  useEffect(() => {
+    if (!autoSendRequested || hasAutoSentRef.current) return;
+    if (!invoice || !emailData.sendTo) return;
+    hasAutoSentRef.current = true;
+    setTimeout(() => {
+      handleSend();
+    }, 0);
+  }, [autoSendRequested, emailData.sendTo, invoice]);
 
   const formatDate = (dateString) => {
     if (!dateString) return "-";

@@ -49,7 +49,7 @@ if (AUTH_BYPASS) {
 
 const app = express();
 app.disable("x-powered-by");
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "20mb" }));
 app.use(cookieParser());
 
 app.use(

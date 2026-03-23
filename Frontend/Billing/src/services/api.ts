@@ -962,11 +962,13 @@ export const invoicesAPI = {
     if (res.success) recordEvent("invoice_deleted", { invoice_id: id });
     return res;
   },
-  sendEmail: async (id: string, data: any) => ({
-    success: true,
-    data: { id, queued: true, type: "invoice", ...data },
-    message: "Email queued locally",
-  }),
+  sendEmail: async (id: string, data: any) => {
+    const res: any = await request({ method: "POST", path: `/invoices/${encodeURIComponent(id)}/send-email`, data });
+    if (!res?.success) {
+      throw new Error(res?.message || "Failed to send email");
+    }
+    return res;
+  },
   sendReminder: async (id: string, data: any) => ({
     success: true,
     data: { id, queued: true, type: "reminder", ...data },
@@ -1118,6 +1120,13 @@ export const creditNotesAPI = {
       if (res?.success) return res as any;
     } catch {}
     return creditNotesLocal.delete(id);
+  },
+  sendEmail: async (id: string, data: any) => {
+    const res: any = await request({ method: "POST", path: `/credit-notes/${encodeURIComponent(id)}/send-email`, data });
+    if (!res?.success) {
+      throw new Error(res?.message || "Failed to send email");
+    }
+    return res;
   },
   applyToInvoices: async (creditNoteId: string, allocations: any) =>
     creditNotesAPI.update(creditNoteId, {
@@ -1593,11 +1602,13 @@ export const salesReceiptsAPI = {
     const next = (all.pagination?.total || 0) + 1;
     return { success: true, data: { nextNumber: `SR-${String(next).padStart(5, "0")}` } };
   },
-  sendEmail: async (id: string, data: any) => ({
-    success: true,
-    data: { id, queued: true, type: "sales-receipt", ...data },
-    message: "Email queued locally",
-  }),
+  sendEmail: async (id: string, data: any) => {
+    const res: any = await request({ method: "POST", path: `/sales-receipts/${encodeURIComponent(id)}/send-email`, data });
+    if (!res?.success) {
+      throw new Error(res?.message || "Failed to send email");
+    }
+    return res;
+  },
 };
 
 export const salespersonsAPI = {

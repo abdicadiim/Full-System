@@ -6,7 +6,15 @@ import { Organization } from "../models/Organization.js";
 import { sendSmtpMail } from "../services/smtpMailer.js";
 
 const asString = (v: unknown) => (typeof v === "string" ? v : "");
-const normalizeEmail = (value: unknown) => String(typeof value === "string" ? value : "").trim().toLowerCase();
+const normalizeEmail = (value: unknown) => {
+  const raw = String(typeof value === "string" ? value : "").trim();
+  if (!raw) return "";
+  const angle = raw.match(/<([^>]+)>/);
+  const candidate = angle?.[1] ? angle[1] : raw;
+  const first = candidate.split(/[;,]/)[0]?.trim() || "";
+  const match = first.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  return String(match?.[0] || first).trim().toLowerCase();
+};
 const asNumber = (v: unknown) => (typeof v === "number" ? v : 0);
 const asDate = (v: unknown) => (v ? new Date(String(v)) : null);
 
@@ -44,7 +52,25 @@ const pickSmtpSender = async (organizationId: any) => {
   })
     .sort({ isPrimary: -1, createdAt: -1 })
     .lean();
-  return fallback || null;
+  if (fallback) return fallback;
+
+  const host = String(process.env.SMTP_HOST || "").trim();
+  const port = Number(process.env.SMTP_PORT || 0);
+  const user = String(process.env.SMTP_USER || "").trim();
+  const pass = String(process.env.SMTP_PASS || process.env.SMTP_PASSWORD || "").trim();
+  if (host && port > 0 && user && pass) {
+    return {
+      smtpHost: host,
+      smtpPort: port,
+      smtpUser: user,
+      smtpPassword: pass,
+      smtpSecure: port === 465,
+      email: String(process.env.SMTP_FROM || user || "").trim(),
+      isEnvFallback: true,
+    };
+  }
+
+  return null;
 };
 
 export const listQuotes: express.RequestHandler = async (req, res) => {

@@ -6,6 +6,7 @@ import {
   updateInvoice,
   deleteInvoice,
   getNextInvoiceNumber,
+  sendInvoiceEmail,
 } from "../controllers/invoicesController.js";
 import { requireAuth } from "../midelwares/requireAuth.js";
 
@@ -17,8 +18,8 @@ router.get("/next-number", getNextInvoiceNumber);
 router.get("/", listInvoices);
 router.get("/:id", getInvoiceById);
 router.post("/", createInvoice);
+router.post("/:id/send-email", sendInvoiceEmail);
 router.put("/:id", updateInvoice);
 router.delete("/:id", deleteInvoice);
 
 export default router;
-
