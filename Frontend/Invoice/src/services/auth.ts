@@ -6,6 +6,12 @@ export const API_BASE_URL =
 
 const TOKEN_KEYS = ["token", "auth_token", "accessToken"];
 const USER_KEYS = ["user", "current_user", "auth_user"];
+export const AUTH_USER_UPDATED_EVENT = "auth:user-updated";
+
+const broadcastUserUpdate = () => {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(AUTH_USER_UPDATED_EVENT));
+};
 
 export const getToken = () => {
   if (typeof localStorage === "undefined") return "";
@@ -44,12 +50,15 @@ export const getCurrentUser = () => {
 
 export const setCurrentUser = (user: any) => {
   if (typeof localStorage === "undefined") return;
-  localStorage.setItem("user", JSON.stringify(user || null));
+  const serialized = JSON.stringify(user || null);
+  USER_KEYS.forEach((key) => localStorage.setItem(key, serialized));
+  broadcastUserUpdate();
 };
 
 export const clearCurrentUser = () => {
   if (typeof localStorage === "undefined") return;
   USER_KEYS.forEach((key) => localStorage.removeItem(key));
+  broadcastUserUpdate();
 };
 
 export const logout = () => {

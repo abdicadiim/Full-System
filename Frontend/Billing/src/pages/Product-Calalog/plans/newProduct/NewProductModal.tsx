@@ -111,7 +111,7 @@ export default function NewProductModal({
 
     const labelClass = "block text-[13px] text-gray-700 font-normal mb-1.5";
     const inputClass = "w-full h-[36px] rounded border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-gray-400 transition-all placeholder:text-gray-400";
-    const textareaClass = "w-full rounded border border-gray-200 bg-white p-2.5 text-[13px] outline-none focus:border-gray-400 min-h-[100px] resize-none transition-all placeholder:text-gray-400";
+    const textareaClass = "w-full h-[68px] rounded border border-gray-300 bg-white px-3 py-2 text-[13px] outline-none focus:border-gray-400 resize-y transition-all placeholder:text-gray-400";
 
     return (
         <Modal open={isOpen} title={isEditMode ? "Edit Product" : "New Product"} onClose={onClose}>
@@ -138,6 +138,7 @@ export default function NewProductModal({
                         <label className={labelClass}>Description</label>
                         <textarea
                             className={textareaClass}
+                            rows={3}
                             value={form.description}
                             onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
                         />

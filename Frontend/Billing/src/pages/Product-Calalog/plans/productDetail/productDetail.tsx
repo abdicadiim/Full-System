@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, CirclePlus, Download, MoreVertical, Pencil, Upload, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CirclePlus, Download, MoreVertical, Pencil, Trash2, Upload, X } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import NewProductModal from "../newProduct/NewProductModal";
@@ -445,81 +445,105 @@ export default function ProductDetailPage() {
             <Pencil size={13} />
             Edit
           </button>
-          <button
-            type="button"
-            onClick={() => navigate(`/products/plans/new?product=${encodeURIComponent(selectedProductName)}`)}
-            className="inline-flex items-center gap-1 text-[12px] text-[#334155] hover:text-[#111827]"
-          >
-            <CirclePlus size={13} />
-            Add Plan
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate(`/products/addons/new?product=${encodeURIComponent(selectedProductName)}`)}
-            className="inline-flex items-center gap-1 text-[12px] text-[#334155] hover:text-[#111827]"
-          >
-            <CirclePlus size={13} />
-            Add Addon
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate(`/products/coupons/new?product=${encodeURIComponent(selectedProductName)}`)}
-            className="inline-flex items-center gap-1 text-[12px] text-[#334155] hover:text-[#111827]"
-          >
-            <CirclePlus size={13} />
-            Add Coupon
-          </button>
-          <div className="h-4 w-px bg-[#d1d5db]" />
+          {isActive(selectedProduct) ? (
+            <>
+              <button
+                type="button"
+                onClick={() => navigate(`/products/plans/new?product=${encodeURIComponent(selectedProductName)}`)}
+                className="inline-flex items-center gap-1 text-[12px] text-[#334155] hover:text-[#111827]"
+              >
+                <CirclePlus size={13} />
+                Add Plan
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate(`/products/addons/new?product=${encodeURIComponent(selectedProductName)}`)}
+                className="inline-flex items-center gap-1 text-[12px] text-[#334155] hover:text-[#111827]"
+              >
+                <CirclePlus size={13} />
+                Add Addon
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate(`/products/coupons/new?product=${encodeURIComponent(selectedProductName)}`)}
+                className="inline-flex items-center gap-1 text-[12px] text-[#334155] hover:text-[#111827]"
+              >
+                <CirclePlus size={13} />
+                Add Coupon
+              </button>
+              <div className="h-4 w-px bg-[#d1d5db]" />
 
-          <div className="relative" ref={actionsRef}>
-            <button
-              type="button"
-              onClick={() => setActionsOpen((prev) => !prev)}
-              className="inline-flex h-7 w-7 items-center justify-center rounded border border-[#d1d5db] text-[#64748b] hover:bg-[#f8fafc]"
-            >
-              <MoreVertical size={14} />
-            </button>
-            {actionsOpen ? (
-              <div className="absolute left-0 top-full z-[130] mt-1 w-56 rounded-lg border border-[#d7dce8] bg-white py-1 shadow-xl">
+              <div className="relative" ref={actionsRef}>
                 <button
                   type="button"
-                  onClick={() => {
-                    setActionsOpen(false);
-                    setEmailTemplatesOpen(true);
-                  }}
-                  className="mx-1 mb-1 w-[calc(100%-8px)] rounded-md px-3 py-2 text-left text-sm text-[#475569] hover:bg-[#3b82f6] hover:text-white"
+                  onClick={() => setActionsOpen((prev) => !prev)}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded border border-[#d1d5db] text-[#64748b] hover:bg-[#f8fafc]"
                 >
-                  Associate Email Templates
+                  <MoreVertical size={14} />
                 </button>
-                <button type="button" onClick={handleToggleStatus} className="w-full px-3 py-2 text-left text-sm text-[#475569] hover:bg-[#3b82f6] hover:text-white">
-                  {isActive(selectedProduct) ? "Mark as Inactive" : "Mark as Active"}
-                </button>
-                <button type="button" onClick={handleDeleteProduct} className="w-full px-3 py-2 text-left text-sm text-[#475569] hover:bg-[#3b82f6] hover:text-white">
-                  Delete
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActionsOpen(false);
-                    navigate("/products/pricing-widgets");
-                  }}
-                  className="w-full px-3 py-2 text-left text-sm text-[#475569] hover:bg-[#3b82f6] hover:text-white"
-                >
-                  Configure Pricing Widget
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActionsOpen(false);
-                    navigate(`/products/checkout-button?productId=${encodeURIComponent(getId(selectedProduct))}`);
-                  }}
-                  className="w-full px-3 py-2 text-left text-sm text-[#475569] hover:bg-[#3b82f6] hover:text-white"
-                >
-                  Configure Checkout Button
-                </button>
+                {actionsOpen ? (
+                  <div className="absolute left-0 top-full z-[130] mt-1 w-56 rounded-lg border border-[#d7dce8] bg-white py-1 shadow-xl">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActionsOpen(false);
+                        setEmailTemplatesOpen(true);
+                      }}
+                      className="mx-1 mb-1 w-[calc(100%-8px)] rounded-md px-3 py-2 text-left text-sm text-[#475569] hover:bg-[#3b82f6] hover:text-white"
+                    >
+                      Associate Email Templates
+                    </button>
+                    <button type="button" onClick={handleToggleStatus} className="w-full px-3 py-2 text-left text-sm text-[#475569] hover:bg-[#3b82f6] hover:text-white">
+                      {isActive(selectedProduct) ? "Mark as Inactive" : "Mark as Active"}
+                    </button>
+                    <button type="button" onClick={handleDeleteProduct} className="w-full px-3 py-2 text-left text-sm text-[#475569] hover:bg-[#3b82f6] hover:text-white">
+                      Delete
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActionsOpen(false);
+                        navigate("/products/pricing-widgets");
+                      }}
+                      className="w-full px-3 py-2 text-left text-sm text-[#475569] hover:bg-[#3b82f6] hover:text-white"
+                    >
+                      Configure Pricing Widget
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActionsOpen(false);
+                        navigate(`/products/checkout-button?productId=${encodeURIComponent(getId(selectedProduct))}`);
+                      }}
+                      className="w-full px-3 py-2 text-left text-sm text-[#475569] hover:bg-[#3b82f6] hover:text-white"
+                    >
+                      Configure Checkout Button
+                    </button>
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-          </div>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={handleToggleStatus}
+                className="inline-flex items-center gap-1 text-[12px] text-[#334155] hover:text-[#111827]"
+              >
+                <CheckCircle2 size={13} />
+                Mark as Active
+              </button>
+              <div className="h-4 w-px bg-[#d1d5db]" />
+              <button
+                type="button"
+                onClick={handleDeleteProduct}
+                className="inline-flex items-center gap-1 text-[12px] text-[#334155] hover:text-[#111827]"
+              >
+                <Trash2 size={13} />
+                Delete
+              </button>
+            </>
+          )}
         </div>
 
         <div className="flex-1 p-6">

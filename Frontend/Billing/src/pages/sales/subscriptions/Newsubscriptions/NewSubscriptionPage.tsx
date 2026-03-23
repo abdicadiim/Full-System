@@ -1614,6 +1614,26 @@ const NewSubscriptionPage = () => {
         return found?.name || formData.productName || "";
     }, [activeProducts, formData.productId, formData.productName]);
 
+    const selectedSubscriptionSeries = useMemo(() => {
+        const found = activeProducts.find((p) => p.id === formData.productId);
+        if (!found?.autoGenerateSubscriptionNumbers) return null;
+        const prefix = String(found.prefix || "SUB-").trim();
+        const rawNext = String(found.nextNumber || "00001").trim();
+        const digits = rawNext.replace(/[^\d]/g, "");
+        const width = Math.max((rawNext.match(/^\d+$/)?.[0].length || digits.length || 5), 5);
+        const current = Number(digits) > 0 ? Number(digits) : 1;
+        return `${prefix}${String(current).padStart(width, "0")}`;
+    }, [activeProducts, formData.productId]);
+
+    useEffect(() => {
+        if (!selectedSubscriptionSeries) return;
+        setFormData((prev) =>
+            prev.subscriptionNumber === selectedSubscriptionSeries
+                ? prev
+                : { ...prev, subscriptionNumber: selectedSubscriptionSeries }
+        );
+    }, [selectedSubscriptionSeries]);
+
     useEffect(() => {
         if (formData.productId || !formData.productName || !activeProducts.length) return;
         const normalized = normalizeText(formData.productName);
@@ -3530,6 +3550,7 @@ const NewSubscriptionPage = () => {
                                             className="w-full px-3 py-1.5 border border-[#3b82f6] rounded text-[13px] outline-none"
                                             value={formData.subscriptionNumber}
                                             onChange={(e) => handleChange("subscriptionNumber", e.target.value)}
+                                            readOnly={Boolean(selectedSubscriptionSeries)}
                                         />
                                     </div>
                                     <div className="flex items-center">
@@ -4122,6 +4143,7 @@ const NewSubscriptionPage = () => {
                             state: {
                                 currency: formData.currency,
                                 customerId: formData.customerId,
+                                productId: formData.productId,
                                 productName: formData.productName,
                                 planName: formData.planName,
                                 quantity: formData.quantity,

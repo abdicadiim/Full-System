@@ -20,8 +20,32 @@ const requireOrgId = (req: express.Request, res: express.Response) => {
 
 const normalizeRow = (row: any) => {
   if (!row) return row;
-  return { ...row, id: String(row._id) };
+  return {
+    ...row,
+    id: String(row._id),
+    comments: normalizePlanComments(row.comments),
+  };
 };
+
+const normalizePlanComment = (comment: any, index = 0) => {
+  if (!comment || typeof comment !== "object") {
+    return null;
+  }
+  const id = String(comment.id || comment._id || `comment-${index}-${Date.now()}`).trim();
+  if (!id) return null;
+  const content = asString(comment.content ?? comment.text).trim();
+  return {
+    id,
+    content,
+    text: asString(comment.text ?? comment.content).trim(),
+    createdAt: asString(comment.createdAt).trim() || new Date().toISOString(),
+    authorName: asString(comment.authorName).trim(),
+    authorInitial: asString(comment.authorInitial).trim(),
+  };
+};
+
+const normalizePlanComments = (comments: any) =>
+  Array.isArray(comments) ? comments.map((comment, index) => normalizePlanComment(comment, index)).filter(Boolean) : [];
 
 const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -142,6 +166,7 @@ export const createPlan: express.RequestHandler = async (req, res) => {
     planAccount: asString(req.body?.planAccount).trim().slice(0, 120) || "Sales",
     setupFeeAccount: asString(req.body?.setupFeeAccount).trim().slice(0, 120) || "Sales",
     image: asString(req.body?.image).trim().slice(0, 2_000_000),
+    comments: normalizePlanComments(req.body?.comments),
     reportingTagValues: req.body?.reportingTagValues && typeof req.body.reportingTagValues === "object" ? req.body.reportingTagValues : {},
   };
 
@@ -195,6 +220,7 @@ export const updatePlan: express.RequestHandler = async (req, res) => {
   if (typeof req.body?.planChange === "boolean") patch.planChange = req.body.planChange;
   if (typeof req.body?.image === "string") patch.image = asString(req.body.image).trim().slice(0, 2_000_000);
   if (Array.isArray(req.body?.planFeatures)) patch.planFeatures = req.body.planFeatures;
+  if (Array.isArray(req.body?.comments)) patch.comments = normalizePlanComments(req.body.comments);
   if (req.body?.reportingTagValues && typeof req.body.reportingTagValues === "object") patch.reportingTagValues = req.body.reportingTagValues;
 
   if (typeof req.body?.productId !== "undefined" || typeof req.body?.product !== "undefined") {
@@ -320,6 +346,7 @@ export const bulkCreatePlans: express.RequestHandler = async (req, res) => {
       planAccount: asString(row?.planAccount).trim().slice(0, 120) || "Sales",
       setupFeeAccount: asString(row?.setupFeeAccount).trim().slice(0, 120) || "Sales",
       image: asString(row?.image).trim().slice(0, 2_000_000),
+      comments: normalizePlanComments(row?.comments),
       reportingTagValues: row?.reportingTagValues && typeof row.reportingTagValues === "object" ? row.reportingTagValues : {},
     });
   });

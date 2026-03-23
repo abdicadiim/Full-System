@@ -2,11 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { Check, ChevronDown, Search } from "lucide-react";
-import { creditNotesAPI, invoicesAPI, paymentsReceivedAPI } from "../../../../services/api";
+import { creditNotesAPI, invoicesAPI, paymentsReceivedAPI, productsAPI } from "../../../../services/api";
 
 type PreviewState = {
   currency?: string;
   customerId?: string;
+  productId?: string;
   productName?: string;
   planName?: string;
   quantity?: number;
@@ -27,6 +28,28 @@ type PreviewState = {
     tax?: string;
     taxRate?: number;
   }>;
+};
+
+const normalizeSeriesDigits = (value: any, fallbackWidth = 5) => {
+  const raw = String(value ?? "").trim();
+  const digits = raw.replace(/[^\d]/g, "");
+  const numeric = Number(digits);
+  if (!digits || !Number.isFinite(numeric) || numeric < 0) {
+    return { current: 1, width: fallbackWidth };
+  }
+  return {
+    current: numeric,
+    width: Math.max(raw.match(/^\d+$/)?.[0].length || digits.length || fallbackWidth, fallbackWidth),
+  };
+};
+
+const buildProductSubscriptionNumber = (product: any) => {
+  const prefix = String(product?.prefix || "").trim();
+  const { current, width } = normalizeSeriesDigits(product?.nextNumber || "00001");
+  return {
+    subscriptionNumber: `${prefix}${String(current).padStart(width, "0")}`,
+    nextNumber: String(current + 1).padStart(width, "0"),
+  };
 };
 
 const formatMoney = (value: number, currency: string) => {
@@ -639,7 +662,24 @@ const SubscriptionPreviewPage = () => {
 
             const nextIndex = existing.length + 1;
             const fallbackNumber = `SUB-${String(nextIndex).padStart(5, "0")}`;
-            const subscriptionNumber = String(draft?.subscriptionNumber || fallbackNumber);
+            const selectedProductId = String(draft?.productId || state.productId || "").trim();
+            let selectedProduct: any = null;
+            if (selectedProductId) {
+              try {
+                const productResponse: any = await productsAPI.getById(selectedProductId);
+                selectedProduct = productResponse?.data || productResponse?.data?.data || productResponse || null;
+              } catch {
+                selectedProduct = null;
+              }
+            }
+            const productSeries = selectedProduct?.autoGenerateSubscriptionNumbers
+              ? buildProductSubscriptionNumber(selectedProduct)
+              : null;
+            const subscriptionNumber = String(
+              productSeries?.subscriptionNumber ||
+              draft?.subscriptionNumber ||
+              fallbackNumber
+            );
             const isEditMode = Boolean(draft?.id);
             const existingIndex = isEditMode
               ? existing.findIndex((row: any) => String(row?.id || "") === String(draft?.id || ""))
@@ -736,6 +776,14 @@ const SubscriptionPreviewPage = () => {
               localStorage.setItem(listKey, JSON.stringify(updated));
             } catch {
               // ignore storage errors
+            }
+
+            if (!isEditMode && selectedProductId && productSeries) {
+              try {
+                await productsAPI.update(selectedProductId, { nextNumber: productSeries.nextNumber });
+              } catch (error) {
+                console.error("Failed to increment product subscription number series:", error);
+              }
             }
 
             // Auto-generate invoice for new subscriptions when enabled

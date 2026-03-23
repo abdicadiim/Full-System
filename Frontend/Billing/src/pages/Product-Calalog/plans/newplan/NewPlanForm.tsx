@@ -142,6 +142,161 @@ interface StyledDropdownProps {
   accentColor?: string;
 }
 
+type TaxSearchableDropdownProps = {
+  value: string;
+  options?: Array<string | DropdownOption>;
+  groupedOptions?: Array<{ label: string; options: Array<string | DropdownOption> }>;
+  onChange: (value: string) => void;
+  placeholder: string;
+  accentColor: string;
+  addNewLabel?: string;
+  onAddNew?: () => void;
+  disabled?: boolean;
+};
+
+function TaxSearchableDropdown({
+  value,
+  options = [],
+  groupedOptions,
+  onChange,
+  placeholder,
+  accentColor,
+  addNewLabel,
+  onAddNew,
+  disabled = false,
+}: TaxSearchableDropdownProps) {
+  const [open, setOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  const normalizeOptions = (opts: Array<string | DropdownOption>): DropdownOption[] =>
+    opts.map((opt) => (typeof opt === "string" ? { value: opt, label: opt } : opt));
+
+  const normalizedOptions = normalizeOptions(options);
+  const selected = (groupedOptions
+    ? groupedOptions.flatMap((g) => normalizeOptions(g.options))
+    : normalizedOptions
+  ).find((opt) => opt.value === value);
+
+  const filterOptions = (opts: DropdownOption[]) =>
+    opts.filter((opt) => opt.label.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  const displayedGroups =
+    groupedOptions?.map((group) => ({
+      label: group.label,
+      options: filterOptions(normalizeOptions(group.options)),
+    })).filter((group) => group.options.length > 0) || [];
+
+  const displayedOptions = filterOptions(normalizedOptions);
+
+  useEffect(() => {
+    const handleOutside = (event: MouseEvent) => {
+      if (!wrapperRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, []);
+
+  const renderOptionItem = (opt: DropdownOption, isIndented = false) => {
+    const isSelected = value === opt.value;
+    return (
+      <button
+        key={opt.value}
+        type="button"
+        onClick={() => {
+          onChange(opt.value);
+          setOpen(false);
+          setSearchTerm("");
+        }}
+        className={`flex w-full items-center justify-between rounded-lg py-2 text-[13px] transition-colors ${isIndented ? "pl-8 pr-4" : "px-4"} ${isSelected ? "font-medium text-white" : "text-slate-700 hover:bg-slate-50"}`}
+        style={isSelected ? { backgroundColor: accentColor } : undefined}
+      >
+        <span>{opt.label}</span>
+        {isSelected ? <Check size={14} className="text-white" /> : null}
+      </button>
+    );
+  };
+
+  return (
+    <div ref={wrapperRef} className={`relative ${open ? "z-[9999]" : ""}`}>
+      <button
+        type="button"
+        onClick={() => {
+          if (disabled) return;
+          setOpen((prev) => !prev);
+        }}
+        disabled={disabled}
+        className={`h-[34px] w-full rounded border px-3 text-left text-[13px] transition-colors ${
+          disabled ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400" : "border-gray-300 hover:border-gray-400"
+        }`}
+        style={open && !disabled ? { borderColor: accentColor } : {}}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className={selected ? "text-[#1f2937]" : "text-[#6b7280]"}>{selected?.label || placeholder}</span>
+          <ChevronDown size={14} className={`transition-transform ${open ? "rotate-180" : ""}`} style={{ color: accentColor }} />
+        </div>
+      </button>
+
+      {open && !disabled && (
+        <div className="absolute left-0 bottom-full z-[9999] mb-1 w-full rounded-xl border border-[#d6dbe8] bg-white p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+          <div className="p-2">
+            <div className="flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-all focus-within:bg-white" style={{ borderColor: accentColor }}>
+              <Search size={14} className="text-slate-400" />
+              <input
+                autoFocus
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search..."
+                className="w-full border-none bg-transparent text-[13px] text-slate-700 outline-none placeholder:text-slate-400"
+              />
+            </div>
+          </div>
+
+          <div className="max-h-56 overflow-y-auto py-1">
+            {groupedOptions ? (
+              displayedGroups.length === 0 ? (
+                <div className="px-4 py-2 text-[13px] text-slate-400">No results found</div>
+              ) : (
+                displayedGroups.map((group) => (
+                  <div key={group.label} className="pb-1">
+                    <div className="px-4 pt-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                      {group.label}
+                    </div>
+                    <div className="mt-1 space-y-1">
+                      {group.options.map((opt) => renderOptionItem(opt, true))}
+                    </div>
+                  </div>
+                ))
+              )
+            ) : displayedOptions.length === 0 ? (
+              <div className="px-4 py-2 text-[13px] text-slate-400">No results found</div>
+            ) : (
+              <div className="space-y-1">{displayedOptions.map((opt) => renderOptionItem(opt))}</div>
+            )}
+          </div>
+
+          {onAddNew && addNewLabel ? (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setSearchTerm("");
+                onAddNew();
+              }}
+              className="flex w-full items-center gap-2 border-t border-slate-100 px-4 py-2 text-[13px] text-slate-600 hover:text-[#1d4ed8]"
+            >
+              <PlusCircle size={14} />
+              {addNewLabel}
+            </button>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StyledDropdown({
   value,
   options = [],
@@ -961,16 +1116,15 @@ export default function NewPlanForm() {
               <div className={`grid grid-cols-1 items-start gap-2 md:grid-cols-[180px_340px] ${isFlatPricing ? "xl:col-start-2 xl:row-start-3" : ""}`}>
                 <label className="text-[13px] text-[#111827]">Sales Tax</label>
                 <div>
-                  <StyledDropdown
+                  <TaxSearchableDropdown
                     value={form.salesTax}
                     groupedOptions={groupedTaxOptions}
                     onChange={(newValue) => setForm((prev) => ({ ...prev, salesTax: newValue }))}
                     placeholder="Select a Tax"
-                    disabled={lockDependentFields}
-                    footerActionLabel="New Tax"
-                    onFooterActionClick={() => navigate("/settings/taxes/new")}
-                    selectedStyle="blue"
                     accentColor={accentColor}
+                    addNewLabel="New Tax"
+                    onAddNew={() => navigate("/settings/taxes/new")}
+                    disabled={lockDependentFields}
                   />
                   <p className="mt-2 text-[12px] text-[#64748b]">
                     Add tax to your Plan or Addon. Use tax group for more than one tax.

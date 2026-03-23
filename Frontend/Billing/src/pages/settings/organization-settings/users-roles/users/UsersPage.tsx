@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Play, MoreVertical, ChevronDown, X, Eye, EyeOff, Plus, Check, Search, Minus, ArrowLeft, Info, User as UserIcon, Pencil, Star } from "lucide-react";
 import { usersAPI, rolesAPI, locationsAPI } from "../../../../../services/api";
-import { getCurrentUser } from "../../../../../services/auth";
+import { getCurrentUser, setCurrentUser } from "../../../../../services/auth";
 import Skeleton from "../../../../../components/ui/Skeleton";
 
 const STANDARD_ROLE_OPTIONS = [
@@ -280,16 +280,25 @@ export default function UsersPage() {
         setEditModalOpen(false);
         setError(null);
 
+        const updatedUser = {
+          ...selectedUser,
+          ...response.data,
+          name: editData.name,
+          email: editData.email,
+          role: roleValue,
+        };
+
         // Update selected user immediately with new data
         if (userId) {
-          // Use existing userDetails or update with response data
-          const updatedUser = {
-            ...selectedUser,
-            name: editData.name,
-            email: editData.email,
-            role: roleValue,
-          };
           setSelectedUser(updatedUser);
+          setUserDetails((prev) => (prev ? { ...prev, ...response.data, ...updatedUser } : prev));
+
+          const activeUser = getCurrentUser();
+          const activeUserId = String(activeUser?.id || activeUser?._id || "");
+          const editedUserId = String(updatedUser.id || updatedUser._id || "");
+          if (activeUserId && activeUserId === editedUserId) {
+            setCurrentUser(updatedUser);
+          }
 
           // Load existing location access from userDetails (immediate, no API call)
           const userData = userDetails || {};

@@ -9,6 +9,18 @@ const PlanFeatureSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const PlanCommentSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true },
+    content: { type: String, default: "" },
+    text: { type: String, default: "" },
+    createdAt: { type: String, default: () => new Date().toISOString() },
+    authorName: { type: String, default: "" },
+    authorInitial: { type: String, default: "" },
+  },
+  { _id: false }
+);
+
 const PlanSchema = new mongoose.Schema(
   {
     organizationId: { type: mongoose.Schema.Types.ObjectId, ref: "Organization", required: true, index: true },
@@ -45,6 +57,7 @@ const PlanSchema = new mongoose.Schema(
 
     image: { type: String, default: "" },
 
+    comments: { type: [PlanCommentSchema], default: [] },
     reportingTagValues: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
   { timestamps: true }

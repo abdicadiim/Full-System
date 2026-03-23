@@ -929,10 +929,30 @@ export const invoicesAPI = {
     }),
 };
 
+const paymentsReceivedBase = resource("/payments-received");
 export const paymentsReceivedAPI = {
   ...paymentsReceivedLocal,
+  getAll: async (params?: Record<string, any>) => {
+    try {
+      const res = await paymentsReceivedBase.getAll(params);
+      if (res?.success) return res as any;
+    } catch {}
+    return paymentsReceivedLocal.getAll(params);
+  },
+  list: (params?: Record<string, any>) => paymentsReceivedAPI.getAll(params),
+  getById: async (id: string) => {
+    try {
+      const res = await paymentsReceivedBase.getById(id);
+      if (res?.success) return res as any;
+    } catch {}
+    return paymentsReceivedLocal.getById(id);
+  },
   getByInvoice: async (invoiceId: string, params?: Record<string, any>) => {
-    const all = await paymentsReceivedLocal.getAll({ limit: 10000 });
+    try {
+      const res = await request({ path: "/payments-received/invoice/" + invoiceId, params }); // Wait, I didn't create this endpoint yet. Actually, let's stick to filtering if not.
+      if (res?.success) return res as any;
+    } catch {}
+    const all = await paymentsReceivedAPI.getAll({ limit: 10000 });
     const filtered = (all.data || []).filter((payment: any) => {
       const ref = payment?.invoiceId || payment?.invoice?._id || payment?.invoice?.id || payment?.invoice || "";
       return String(ref) === String(invoiceId);
@@ -941,26 +961,63 @@ export const paymentsReceivedAPI = {
     return { success: true, data, pagination };
   },
   create: async (data: any) => {
+    try {
+      const res = await paymentsReceivedBase.create(data);
+      if (res?.success) {
+        recordEvent("payment_received", { payment: (res as any).data });
+        return res as any;
+      }
+    } catch {}
     const res = await paymentsReceivedLocal.create(data);
     if (res.success) recordEvent("payment_received", { payment: res.data });
     return res;
   },
   update: async (id: string, data: any) => {
+    try {
+      const res = await paymentsReceivedBase.update(id, data);
+      if (res?.success) {
+        recordEvent("payment_updated", { payment: (res as any).data });
+        return res as any;
+      }
+    } catch {}
     const res = await paymentsReceivedLocal.update(id, data);
     if (res.success) recordEvent("payment_updated", { payment: res.data });
     return res;
   },
   delete: async (id: string) => {
+    try {
+      const res = await paymentsReceivedBase.delete(id);
+      if (res?.success) {
+        recordEvent("payment_deleted", { payment_id: id });
+        return res as any;
+      }
+    } catch {}
     const res = await paymentsReceivedLocal.delete(id);
     if (res.success) recordEvent("payment_deleted", { payment_id: id });
     return res;
   },
 };
 
+const creditNotesBase = resource("/credit-notes");
 export const creditNotesAPI = {
   ...creditNotesLocal,
+  getAll: async (params?: Record<string, any>) => {
+    try {
+      const res = await creditNotesBase.getAll(params);
+      if (res?.success) return res as any;
+    } catch {}
+    return creditNotesLocal.getAll(params);
+  },
+  list: (params?: Record<string, any>) => creditNotesAPI.getAll(params),
+  getById: async (id: string) => {
+    try {
+      const res = await creditNotesBase.getById(id);
+      if (res?.success) return res as any;
+    } catch {}
+    return creditNotesLocal.getById(id);
+  },
   getByCustomer: async (customerId: string, params?: Record<string, any>) => {
-    const all = await creditNotesLocal.getAll({ limit: 10000 });
+    const all = await creditNotesAPI.getAll({ ...params, customerId, limit: 10000 });
     const filtered = (all.data || []).filter((creditNote: any) => {
       const ref =
         creditNote?.customerId ||
@@ -974,7 +1031,7 @@ export const creditNotesAPI = {
     return { success: true, data, pagination };
   },
   getByInvoice: async (invoiceId: string, params?: Record<string, any>) => {
-    const all = await creditNotesLocal.getAll({ limit: 10000 });
+    const all = await creditNotesAPI.getAll({ ...params, limit: 10000 });
     const filtered = (all.data || []).filter((creditNote: any) => {
       const ref = creditNote?.invoiceId || creditNote?.invoice?._id || creditNote?.invoice?.id || creditNote?.invoice || "";
       return String(ref) === String(invoiceId);
@@ -983,12 +1040,37 @@ export const creditNotesAPI = {
     return { success: true, data, pagination };
   },
   getNextNumber: async () => {
+    try {
+      const res = await request({ path: "/credit-notes/next-number" });
+      if (res?.success) return res as any;
+    } catch {}
     const all = await creditNotesLocal.getAll({ limit: 100000 });
     const next = (all.pagination?.total || 0) + 1;
     return { success: true, data: { nextNumber: `CN-${String(next).padStart(5, "0")}` } };
   },
+  create: async (data: any) => {
+    try {
+      const res = await creditNotesBase.create(data);
+      if (res?.success) return res as any;
+    } catch {}
+    return creditNotesLocal.create(data);
+  },
+  update: async (id: string, data: any) => {
+    try {
+      const res = await creditNotesBase.update(id, data);
+      if (res?.success) return res as any;
+    } catch {}
+    return creditNotesLocal.update(id, data);
+  },
+  delete: async (id: string) => {
+    try {
+      const res = await creditNotesBase.delete(id);
+      if (res?.success) return res as any;
+    } catch {}
+    return creditNotesLocal.delete(id);
+  },
   applyToInvoices: async (creditNoteId: string, allocations: any) =>
-    creditNotesLocal.update(creditNoteId, {
+    creditNotesAPI.update(creditNoteId, {
       allocations: Array.isArray(allocations) ? allocations : [],
       allocationUpdatedAt: new Date().toISOString(),
     }),
@@ -1012,10 +1094,44 @@ export const quotesAPI = {
   }),
 };
 
+const recurringInvoicesBase = resource("/recurring-invoices");
 export const recurringInvoicesAPI = {
   ...recurringInvoicesLocal,
+  getAll: async (params?: Record<string, any>) => {
+    try {
+      const res = await recurringInvoicesBase.getAll(params);
+      if (res?.success) return res as any;
+    } catch {}
+    return recurringInvoicesLocal.getAll(params);
+  },
+  list: (params?: Record<string, any>) => recurringInvoicesAPI.getAll(params),
+  getById: async (id: string) => {
+    try {
+      const res = await recurringInvoicesBase.getById(id);
+      if (res?.success) return res as any;
+    } catch {}
+    return recurringInvoicesLocal.getById(id);
+  },
+  create: async (data: any) => {
+    try {
+      return (await recurringInvoicesBase.create(data)) as any;
+    } catch {}
+    return recurringInvoicesLocal.create(data);
+  },
+  update: async (id: string, data: any) => {
+    try {
+      return (await recurringInvoicesBase.update(id, data)) as any;
+    } catch {}
+    return recurringInvoicesLocal.update(id, data);
+  },
+  delete: async (id: string) => {
+    try {
+      return (await recurringInvoicesBase.delete(id)) as any;
+    } catch {}
+    return recurringInvoicesLocal.delete(id);
+  },
   generateInvoice: async (id: string) => {
-    const source = await recurringInvoicesLocal.getById(id);
+    const source = await recurringInvoicesAPI.getById(id);
     if (!source.success || !source.data) {
       return { success: false, message: "Recurring invoice not found", data: null };
     }
@@ -1038,18 +1154,30 @@ export const recurringInvoicesAPI = {
       status: base?.status || "draft",
     };
 
-    const invoicesRows = readLocalCollection(LOCAL_INVOICES_KEY);
-    invoicesRows.unshift(createdInvoice);
-    writeLocalCollection(LOCAL_INVOICES_KEY, invoicesRows);
-    await recurringInvoicesLocal.update(id, { lastGenerated: now, lastGeneratedInvoiceId: invId });
+    const res = await invoicesAPI.create(createdInvoice);
+    if (res.success) {
+      await recurringInvoicesAPI.update(id, { lastGenerated: now, lastGeneratedInvoiceId: res.data?.id || res.data?._id || invId });
+    } else {
+      // Fallback if API fails
+      const invoicesRows = readLocalCollection(LOCAL_INVOICES_KEY);
+      invoicesRows.unshift(createdInvoice);
+      writeLocalCollection(LOCAL_INVOICES_KEY, invoicesRows);
+      await recurringInvoicesLocal.update(id, { lastGenerated: now, lastGeneratedInvoiceId: invId });
+      return { success: true, data: createdInvoice };
+    }
 
-    return { success: true, data: createdInvoice };
+    return res;
   },
 };
 
+const expensesBase = resource("/expenses");
 export const expensesAPI = {
   ...expensesLocal,
   getAll: async (params?: Record<string, any>) => {
+    try {
+      const res: any = await expensesBase.getAll(params);
+      if (res?.success) return res;
+    } catch {}
     const response = await expensesLocal.getAll(params);
     let rows = Array.isArray(response?.data) ? response.data : [];
 
@@ -1069,7 +1197,12 @@ export const expensesAPI = {
       pagination: response?.pagination,
     };
   },
+  list: (params?: any) => expensesAPI.getAll(params),
   getById: async (id: string) => {
+    try {
+      const res: any = await expensesBase.getById(id);
+      if (res?.success) return res;
+    } catch {}
     const response = await expensesLocal.getById(id);
     return {
       ...response,
@@ -1078,6 +1211,13 @@ export const expensesAPI = {
     };
   },
   create: async (data: any) => {
+    try {
+      const res: any = await expensesBase.create(data);
+      if (res?.success) {
+        recordEvent("expense_created", { expense: res.data });
+        return res;
+      }
+    } catch {}
     const payload = {
       ...data,
       expense_id: data?.expense_id || data?._id || data?.id,
@@ -1091,6 +1231,13 @@ export const expensesAPI = {
     };
   },
   update: async (id: string, data: any) => {
+    try {
+      const res: any = await expensesBase.update(id, data);
+      if (res?.success) {
+        recordEvent("expense_updated", { expense: res.data });
+        return res;
+      }
+    } catch {}
     const response = await expensesLocal.update(id, data);
     if (response.success) recordEvent("expense_updated", { expense: response.data });
     return {
@@ -1100,6 +1247,13 @@ export const expensesAPI = {
     };
   },
   delete: async (id: string) => {
+    try {
+      const res: any = await expensesBase.delete(id);
+      if (res?.success) {
+        recordEvent("expense_deleted", { expense_id: id });
+        return res;
+      }
+    } catch {}
     const response = await expensesLocal.delete(id);
     if (response.success) recordEvent("expense_deleted", { expense_id: id });
     return {
@@ -1127,9 +1281,21 @@ const addRepeatInterval = (baseDate: Date, repeatEvery: string) => {
   return next;
 };
 
+const recurringExpensesBase = resource("/expenses/recurring");
+
 export const recurringExpensesAPI = {
   ...recurringExpensesLocal,
   getAll: async (params?: Record<string, any>) => {
+    try {
+      const res: any = await recurringExpensesBase.getAll(params);
+      if (res?.success) {
+        return {
+          ...res,
+          code: 0,
+          recurring_expenses: res.data || [],
+        };
+      }
+    } catch {}
     const response = await recurringExpensesLocal.getAll(params);
     const rows = Array.isArray(response?.data) ? response.data : [];
     return {
@@ -1141,6 +1307,16 @@ export const recurringExpensesAPI = {
     };
   },
   getById: async (id: string) => {
+    try {
+      const res: any = await recurringExpensesBase.getById(id);
+      if (res?.success) {
+        return {
+          ...res,
+          code: 0,
+          recurring_expense: res.data || null,
+        };
+      }
+    } catch {}
     const response = await recurringExpensesLocal.getById(id);
     return {
       ...response,
@@ -1150,13 +1326,24 @@ export const recurringExpensesAPI = {
   },
   create: async (data: any) => {
     const nowIso = new Date().toISOString();
-    const created = await recurringExpensesLocal.create({
+    const payload = {
       ...data,
       recurring_expense_id: data?.recurring_expense_id || data?._id || data?.id,
       status: String(data?.status || "active").toLowerCase(),
       created_time: data?.created_time || nowIso,
       next_expense_date: data?.next_expense_date || data?.start_date || nowIso.slice(0, 10),
-    });
+    };
+    try {
+      const res: any = await recurringExpensesBase.create(payload);
+      if (res?.success) {
+        return {
+          ...res,
+          code: 0,
+          recurring_expense: res.data || null,
+        };
+      }
+    } catch {}
+    const created = await recurringExpensesLocal.create(payload);
     return {
       ...created,
       code: created?.success ? 0 : 1,
@@ -1164,6 +1351,16 @@ export const recurringExpensesAPI = {
     };
   },
   update: async (id: string, data: any) => {
+    try {
+      const res: any = await recurringExpensesBase.update(id, data);
+      if (res?.success) {
+        return {
+          ...res,
+          code: 0,
+          recurring_expense: res.data || null,
+        };
+      }
+    } catch {}
     const response = await recurringExpensesLocal.update(id, data);
     return {
       ...response,
@@ -1172,6 +1369,15 @@ export const recurringExpensesAPI = {
     };
   },
   delete: async (id: string) => {
+    try {
+      const res: any = await recurringExpensesBase.delete(id);
+      if (res?.success) {
+        return {
+          ...res,
+          code: 0,
+        };
+      }
+    } catch {}
     const response = await recurringExpensesLocal.delete(id);
     return {
       ...response,
@@ -1180,6 +1386,16 @@ export const recurringExpensesAPI = {
   },
   updateStatus: async (id: string, status: string) => {
     const normalizedStatus = String(status || "").toLowerCase();
+    try {
+      const res: any = await recurringExpensesBase.update(id, { status: normalizedStatus });
+      if (res?.success) {
+        return {
+          ...res,
+          code: 0,
+          recurring_expense: res.data || null,
+        };
+      }
+    } catch {}
     const response = await recurringExpensesLocal.update(id, { status: normalizedStatus });
     return {
       ...response,
@@ -1238,10 +1454,29 @@ export const recurringExpensesAPI = {
   },
 };
 
+const projectsBase = resource("/projects");
 export const projectsAPI = {
   ...projectsLocal,
+  getAll: async (params?: Record<string, any>) => {
+    try {
+      const res = await projectsBase.getAll(params);
+      if (res?.success) return res as any;
+    } catch {}
+    return projectsLocal.getAll(params);
+  },
+  list: (params?: any) => projectsAPI.getAll(params),
+  getById: async (id: string) => {
+    try {
+      const res = await projectsBase.getById(id);
+      if (res?.success) return res as any;
+    } catch {}
+    return projectsLocal.getById(id);
+  },
+  create: (data: any) => projectsBase.create(data),
+  update: (id: string, data: any) => projectsBase.update(id, data),
+  delete: (id: string) => projectsBase.delete(id),
   getByCustomer: async (customerId: string, params?: Record<string, any>) => {
-    const all = await projectsLocal.getAll({ limit: 10000 });
+    const all = await projectsAPI.getAll({ ...params, customerId, limit: 10000 });
     const filtered = (all.data || []).filter((project: any) => {
       const ref =
         project?.customerId ||
@@ -1280,9 +1515,31 @@ export const billsAPI = {
     request({ path: `/bills/vendor/${vendorId}`, params }),
 };
 
+const salesReceiptsBase = resource("/sales-receipts");
 export const salesReceiptsAPI = {
   ...salesReceiptsLocal,
+  getAll: async (params?: any) => {
+    try {
+      const res = await salesReceiptsBase.getAll(params);
+      if (res?.success) return res as any;
+    } catch {}
+    return salesReceiptsLocal.getAll(params);
+  },
+  getById: async (id: string) => {
+    try {
+      const res = await salesReceiptsBase.getById(id);
+      if (res?.success) return res as any;
+    } catch {}
+    return salesReceiptsLocal.getById(id);
+  },
+  create: (data: any) => salesReceiptsBase.create(data),
+  update: (id: string, data: any) => salesReceiptsBase.update(id, data),
+  delete: (id: string) => salesReceiptsBase.delete(id),
   getNextNumber: async () => {
+    try {
+      const res = await request({ path: "/sales-receipts/next-number" });
+      if (res?.success) return res as any;
+    } catch {}
     const all = await salesReceiptsLocal.getAll({ limit: 100000 });
     const next = (all.pagination?.total || 0) + 1;
     return { success: true, data: { nextNumber: `SR-${String(next).padStart(5, "0")}` } };

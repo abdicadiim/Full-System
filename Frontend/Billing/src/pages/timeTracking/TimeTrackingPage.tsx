@@ -139,6 +139,7 @@ const getLongMonthLabel = (date) => {
 
 // Time Entries Page Component
 function TimeEntriesPage() {
+  const currentUser = getCurrentUser();
   const [timeEntries, setTimeEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
@@ -151,7 +152,6 @@ function TimeEntriesPage() {
         const data = Array.isArray(response)
           ? response
           : (response?.data || []);
-        const currentUser = getCurrentUser();
 
         const transformedEntries = data.map(entry => {
           const userName = getEntryUserLabel(entry, new Map(), currentUser);
@@ -232,7 +232,7 @@ function TimeEntriesPage() {
                     <td className="px-4 py-3 text-sm text-gray-900">{entry.projectName || '--'}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">{entry.taskName || '--'}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">{entry.timeSpent || '--'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{getEntryUserLabel(entry, new Map(), getCurrentUser())}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{getEntryUserLabel(entry, new Map(), currentUser)}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">{entry.billable ? 'Yes' : 'No'}</td>
                     <td className="px-4 py-3 text-sm text-gray-900 max-w-[200px] truncate">{entry.notes || '--'}</td>
                   </tr>
@@ -247,6 +247,7 @@ function TimeEntriesPage() {
 }
 
 function TimesheetTable() {
+  const currentUser = useMemo(() => getCurrentUser(), []);
   const navigate = useNavigate();
   const [showDropdown, setShowDropdown] = useState(false);
   const [billingStatusExpanded, setBillingStatusExpanded] = useState(true);
@@ -423,7 +424,6 @@ function TimesheetTable() {
   // Load time entries from database (declare before useMemo that uses it)
   const [timeEntries, setTimeEntries] = useState([]);
   const [loadingEntries, setLoadingEntries] = useState(false);
-  const currentUser = useMemo(() => getCurrentUser(), []);
 
   const timerTaskOptions = useMemo(() => {
     const selectedProject = projects.find((project) => project.projectName === selectedProjectForTimer);
@@ -912,9 +912,9 @@ function TimesheetTable() {
         const data = Array.isArray(response)
           ? response
           : (response?.data || []);
+        // Transform database entries to match frontend format
         const currentUser = getCurrentUser();
 
-        // Transform database entries to match frontend format
         const transformedEntries = data.map(entry => {
           const isUserObject = typeof entry.user === 'object' && entry.user !== null;
           const userName = isUserObject
@@ -1355,8 +1355,6 @@ function TimesheetTable() {
           return;
         }
 
-        // Get current user
-        const { getCurrentUser } = await import("../../services/auth");
         const currentUser = getCurrentUser();
         if (!currentUser) {
           toast.error('User not found. Please log in again.');

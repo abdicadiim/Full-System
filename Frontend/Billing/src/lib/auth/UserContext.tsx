@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { AUTH_USER_UPDATED_EVENT } from "../../services/auth";
 
 type User =
   | {
@@ -25,6 +26,20 @@ type UserContextValue = {
 };
 
 const UserContext = createContext<UserContextValue | null>(null);
+
+const readStoredUser = () => {
+  if (typeof localStorage === "undefined") return null;
+  for (const key of ["user", "current_user", "auth_user"]) {
+    const raw = localStorage.getItem(key);
+    if (!raw) continue;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      continue;
+    }
+  }
+  return null;
+};
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User>(null);
@@ -74,6 +89,20 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    const syncFromStorage = () => {
+      setUser(readStoredUser());
+    };
+
+    window.addEventListener("storage", syncFromStorage);
+    window.addEventListener(AUTH_USER_UPDATED_EVENT, syncFromStorage as EventListener);
+
+    return () => {
+      window.removeEventListener("storage", syncFromStorage);
+      window.removeEventListener(AUTH_USER_UPDATED_EVENT, syncFromStorage as EventListener);
+    };
+  }, []);
 
   const logout = useCallback(async () => {
     try {

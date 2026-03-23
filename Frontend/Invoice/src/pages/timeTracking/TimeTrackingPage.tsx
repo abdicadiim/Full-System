@@ -139,6 +139,7 @@ const getLongMonthLabel = (date) => {
 
 // Time Entries Page Component
 function TimeEntriesPage() {
+  const currentUser = getCurrentUser();
   const [timeEntries, setTimeEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
@@ -232,7 +233,7 @@ function TimeEntriesPage() {
                     <td className="px-4 py-3 text-sm text-gray-900">{entry.projectName || '--'}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">{entry.taskName || '--'}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">{entry.timeSpent || '--'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{getEntryUserLabel(entry, new Map(), getCurrentUser())}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{getEntryUserLabel(entry, new Map(), currentUser)}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">{entry.billable ? 'Yes' : 'No'}</td>
                     <td className="px-4 py-3 text-sm text-gray-900 max-w-[200px] truncate">{entry.notes || '--'}</td>
                   </tr>
@@ -912,7 +913,6 @@ function TimesheetTable() {
         const data = Array.isArray(response)
           ? response
           : (response?.data || []);
-        const currentUser = getCurrentUser();
 
         // Transform database entries to match frontend format
         const transformedEntries = data.map(entry => {
@@ -1355,9 +1355,6 @@ function TimesheetTable() {
           return;
         }
 
-        // Get current user
-        const { getCurrentUser } = await import("../../services/auth");
-        const currentUser = getCurrentUser();
         if (!currentUser) {
           toast.error('User not found. Please log in again.');
           return;

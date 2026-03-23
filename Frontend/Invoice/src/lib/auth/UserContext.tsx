@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { AUTH_USER_UPDATED_EVENT } from "../../services/auth";
 
 type User =
   | {
@@ -74,6 +75,30 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    const syncFromStorage = () => {
+      const raw = localStorage.getItem("user") || localStorage.getItem("current_user") || localStorage.getItem("auth_user");
+      if (!raw) {
+        setUser(null);
+        return;
+      }
+
+      try {
+        setUser(JSON.parse(raw));
+      } catch {
+        setUser(null);
+      }
+    };
+
+    window.addEventListener("storage", syncFromStorage);
+    window.addEventListener(AUTH_USER_UPDATED_EVENT, syncFromStorage as EventListener);
+
+    return () => {
+      window.removeEventListener("storage", syncFromStorage);
+      window.removeEventListener(AUTH_USER_UPDATED_EVENT, syncFromStorage as EventListener);
+    };
+  }, []);
 
   const logout = useCallback(async () => {
     try {

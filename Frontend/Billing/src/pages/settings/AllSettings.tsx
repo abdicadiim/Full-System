@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, X, Building2, Users, Receipt, Settings as SettingsIcon, Palette, Zap, Package, CreditCard, ShoppingCart, ShoppingBag, Puzzle, Plug, Code } from "lucide-react";
-
-import { getCurrentUser } from "../../services/auth";
+import { useUser } from "../../lib/auth/UserContext";
 
 export default function AllSettings() {
   const navigate = useNavigate();
@@ -10,7 +9,7 @@ export default function AllSettings() {
   const [selectedSetting, setSelectedSetting] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
 
-  const user = getCurrentUser();
+  const { user } = useUser();
   const permissions = user?.permissions;
 
   // Helper to check permissions

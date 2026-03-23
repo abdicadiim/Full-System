@@ -139,7 +139,11 @@ export default function PlanDetailPage() {
       loadPriceLists();
     };
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    window.addEventListener("taban:plans-updated", onStorage);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("taban:plans-updated", onStorage);
+    };
   }, []);
 
   useEffect(() => {
@@ -1157,6 +1161,8 @@ export default function PlanDetailPage() {
         isOpen={commentsOpen}
         onClose={() => setCommentsOpen(false)}
         storageKey={`taban_plan_comments_${String(selectedPlan.id || "default")}`}
+        planId={getPlanId(selectedPlan)}
+        initialComments={Array.isArray(selectedPlan?.comments) ? selectedPlan.comments : []}
       />
 
       <PlansBulkUpdateModal
