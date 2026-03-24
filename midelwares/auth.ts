@@ -10,6 +10,7 @@ export type AuthedUser = {
   organizationId: string;
   role: "admin" | "member";
   photoUrl?: string | null;
+  activeTimer?: any | null;
 };
 type SessionClaims = { sub: string };
 
@@ -36,7 +37,7 @@ export const clearSessionCookie = (res: express.Response) => {
 
 export const getAuthedUser = async (req: express.Request): Promise<AuthedUser | null> => {
   if (AUTH_BYPASS) {
-    return { id: "000000000000000000000001", name: "Dev User", email: "dev@example.com", organizationId: "00000000000000000000000a", role: "admin", photoUrl: "" };
+    return { id: "000000000000000000000001", name: "Dev User", email: "dev@example.com", organizationId: "00000000000000000000000a", role: "admin", photoUrl: "", activeTimer: null };
   }
 
   const header = req.headers.authorization;
@@ -56,6 +57,7 @@ export const getAuthedUser = async (req: express.Request): Promise<AuthedUser | 
       organizationId: String(user.organizationId),
       role: (user.role === "admin" ? "admin" : "member") as "admin" | "member",
       photoUrl: (user as any).photoUrl || (user as any).avatar || (user as any).image || (user as any).photo || "",
+      activeTimer: (user as any).activeTimer || null,
     };
   } catch {
     return null;

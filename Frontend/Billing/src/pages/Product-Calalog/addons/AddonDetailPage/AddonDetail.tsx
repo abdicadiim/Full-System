@@ -52,6 +52,7 @@ export default function AddonDetailPage() {
   const [isSidebarMenuOpen, setIsSidebarMenuOpen] = useState(false);
   const [isBulkActionsOpen, setIsBulkActionsOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [showPlanCount, setShowPlanCount] = useState(false);
   const [showPriceListCount, setShowPriceListCount] = useState(false);
@@ -255,6 +256,7 @@ export default function AddonDetailPage() {
         const res: any = await addonsAPI.create(payload);
         await loadAddons();
         setActionsOpen(false);
+        toast.success("Addon cloned successfully");
         const id = String(res?.data?.id || res?.data?._id || "");
         navigate(id ? `/products/addons/${id}` : "/products/addons");
       } catch (e: any) {
@@ -265,17 +267,8 @@ export default function AddonDetailPage() {
   };
 
   const handleDelete = () => {
-    void (async () => {
-      try {
-        await addonsAPI.delete(String(addon.id));
-        await loadAddons();
-        setActionsOpen(false);
-        navigate("/products/addons");
-      } catch (e: any) {
-        console.error("Failed to delete addon", e);
-        toast.error(e?.message || "Failed to delete addon");
-      }
-    })();
+    setActionsOpen(false);
+    setIsDeleteModalOpen(true);
   };
 
   const handleEdit = () => {
@@ -288,6 +281,7 @@ export default function AddonDetailPage() {
       try {
         await addonsAPI.update(String(addon.id), { status: nextStatus });
         await loadAddons();
+        toast.success(`Addon marked as ${nextStatus.toLowerCase()}`);
       } catch (e: any) {
         console.error("Failed to update addon status", e);
         toast.error(e?.message || "Failed to update addon status");
@@ -669,16 +663,16 @@ export default function AddonDetailPage() {
                 <div className="absolute left-0 top-full z-[60] mt-2 w-32 rounded-lg border border-gray-200 bg-white p-1.5 shadow-xl">
                   <button
                     onClick={handleClone}
-                    className="mb-1 flex w-full items-center gap-2 rounded-lg border border-[#93c5fd] bg-[#3b82f6] px-3 py-2 text-sm font-medium text-white"
+                    className="mb-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
                   >
                     <Copy size={14} />
                     Clone
                   </button>
                   <button
                     onClick={handleDelete}
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-600 hover:bg-red-50"
                   >
-                    <Trash2 size={14} className="text-[#3b82f6]" />
+                    <Trash2 size={14} className="text-red-600" />
                     Delete
                   </button>
                 </div>
@@ -993,6 +987,56 @@ export default function AddonDetailPage() {
           </div>
         </section>
       </div>
+
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16">
+          <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 text-[12px] font-bold text-amber-600">
+                !
+              </div>
+              <h3 className="flex-1 text-[15px] font-semibold text-slate-800">Delete addon?</h3>
+              <button
+                type="button"
+                className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                onClick={() => setIsDeleteModalOpen(false)}
+                aria-label="Close"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="px-5 py-3 text-[13px] text-slate-600">
+              You cannot retrieve this addon once they have been deleted.
+            </div>
+            <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+              <button
+                type="button"
+                className="rounded-md bg-blue-600 px-4 py-1.5 text-[12px] text-white hover:bg-blue-700"
+                onClick={async () => {
+                  try {
+                    await addonsAPI.delete(String(addon.id));
+                    await loadAddons();
+                    setIsDeleteModalOpen(false);
+                    navigate("/products/addons");
+                    toast.success("Addon deleted successfully");
+                  } catch (error: any) {
+                    toast.error(`Failed to delete addon: ${error?.message || "Unknown error"}`);
+                  }
+                }}
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                className="rounded-md border border-slate-300 px-4 py-1.5 text-[12px] text-slate-700 hover:bg-slate-50"
+                onClick={() => setIsDeleteModalOpen(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <CommentsDrawer
         isOpen={commentsOpen}

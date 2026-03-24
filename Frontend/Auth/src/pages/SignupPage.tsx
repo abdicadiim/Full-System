@@ -4,6 +4,24 @@ import AuthShell from "../components/AuthShell";
 import { getAppDisplayName } from "../lib/appBranding";
 import { authApi } from "../services/authApi";
 
+const persistSession = (result: any) => {
+  if (typeof window === "undefined") return;
+  const token = typeof result?.token === "string" ? result.token : "";
+  const user = result?.data ?? null;
+
+  if (token) {
+    localStorage.setItem("auth_token", token);
+    localStorage.setItem("token", token);
+    localStorage.setItem("accessToken", token);
+  }
+  if (user) {
+    const serialized = JSON.stringify(user);
+    localStorage.setItem("user", serialized);
+    localStorage.setItem("current_user", serialized);
+    localStorage.setItem("auth_user", serialized);
+  }
+};
+
 export default function SignupPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -25,10 +43,12 @@ export default function SignupPage() {
     const result = await authApi.signup(name, email, password).catch(() => null);
     if (!result || !result.success) {
       setLoading(false);
-      setError(result?.message || "Signup failed");
+      const message = result && !result.success ? result.message || "Signup failed" : "Signup failed";
+      setError(message);
       return;
     }
 
+    persistSession(result);
     navigate(`/org-setup${window.location.search}`, { state: { orgName: name } });
   };
 

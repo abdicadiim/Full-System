@@ -475,13 +475,11 @@ export default function ItemDetails({
     };
 
     const formatHistoryDetails = (row: any) => {
-        const action = String(row?.action || "").toLowerCase();
-        const details = String(row?.details || "").toLowerCase();
-        if (action.includes("created") || details.includes("created")) return "created by";
-        if (action.includes("marked_active") || details.includes("marked as active")) return "marked as active";
-        if (action.includes("marked_inactive") || details.includes("marked as inactive")) return "marked as inactive";
-        if (details) return details;
-        return action ? action.replace(/_/g, " ") : "updated";
+        const action = String(row?.action || row?.details || "").toLowerCase();
+        if (action.includes("created")) return "created by";
+        if (action.includes("marked_active") || action.includes("marked as active")) return "marked as active";
+        if (action.includes("marked_inactive") || action.includes("marked as inactive")) return "marked as inactive";
+        return "updated by";
     };
 
     const getStatusesForType = () => statusOptionsByType[txTypeFilter];
@@ -1081,7 +1079,7 @@ export default function ItemDetails({
                                             <div className="text-gray-500">{formatHistoryDate(row.at)}</div>
                                             <div className="text-gray-900">
                                                 {formatHistoryDetails(row)}{" "}
-                                                <span className="text-[#2563eb] italic">- {row.byName}</span>
+                                                <span className="ml-1 text-blue-500 italic font-medium">- {row.byName}</span>
                                             </div>
                                         </div>
                                     ))}

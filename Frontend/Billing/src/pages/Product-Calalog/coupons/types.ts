@@ -6,6 +6,7 @@ export interface CouponRecord {
   id: string;
   productId?: string;
   product: string;
+  productName?: string;
   couponName: string;
   couponCode: string;
   discountType: CouponDiscountType;

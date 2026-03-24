@@ -22,6 +22,46 @@ const normalizeRow = (row: any) => (row ? { ...row, id: String(row._id) } : row)
 
 const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+type ProductLookup = {
+  byId: Map<string, { id: string; name: string }>;
+  byName: Map<string, { id: string; name: string }>;
+};
+
+const buildProductLookup = async (orgId: string): Promise<ProductLookup> => {
+  const products = await Product.find({ organizationId: orgId }).select({ _id: 1, name: 1 }).lean();
+  const byId = new Map<string, { id: string; name: string }>();
+  const byName = new Map<string, { id: string; name: string }>();
+
+  products.forEach((p: any) => {
+    const id = String(p?._id || "").trim();
+    const name = String(p?.name || "").trim();
+    if (!id || !name) return;
+    const entry = { id, name };
+    byId.set(id.toLowerCase(), entry);
+    byName.set(name.toLowerCase(), entry);
+  });
+
+  return { byId, byName };
+};
+
+const resolveCouponProduct = (row: any, productLookup?: ProductLookup) => {
+  const rawProduct = asString(row?.product).trim();
+  const rawProductId = asString(row?.productId).trim();
+  const byId = rawProductId ? productLookup?.byId.get(rawProductId.toLowerCase()) : undefined;
+  const byRawProductId = rawProduct ? productLookup?.byId.get(rawProduct.toLowerCase()) : undefined;
+  const byName = rawProduct ? productLookup?.byName.get(rawProduct.toLowerCase()) : undefined;
+  const productId = byId?.id || byRawProductId?.id || String(row?.productId || "").trim();
+  const product = byId?.name || byRawProductId?.name || byName?.name || rawProduct || rawProductId;
+
+  return {
+    ...row,
+    id: String(row?._id || row?.id || "").trim(),
+    ...(productId ? { productId } : {}),
+    product,
+    productName: product,
+  };
+};
+
 const toPayload = (orgId: string, body: any, productLookup?: { byId: Map<string, { id: string; name: string }>; byName: Map<string, { id: string; name: string }> }) => {
   const rawProductId = String(body?.productId || "").trim();
   const rawProductName = asString(body?.product).trim();
@@ -110,10 +150,11 @@ export const listCoupons: express.RequestHandler = async (req, res) => {
   let query = Coupon.find(filter).sort({ createdAt: -1 });
   if (limit > 0) query = query.skip((page - 1) * limit).limit(limit);
   const rows = await query.lean();
+  const productLookup = await buildProductLookup(orgId);
 
   return res.json({
     success: true,
-    data: rows.map(normalizeRow),
+    data: rows.map((row) => resolveCouponProduct(normalizeRow(row), productLookup)),
     pagination: {
       total,
       page,
@@ -132,31 +173,22 @@ export const getCouponById: express.RequestHandler = async (req, res) => {
 
   const row = await Coupon.findOne({ _id: id, organizationId: orgId }).lean();
   if (!row) return res.status(404).json({ success: false, message: "Coupon not found", data: null });
-  return res.json({ success: true, data: normalizeRow(row) });
+  const productLookup = await buildProductLookup(orgId);
+  return res.json({ success: true, data: resolveCouponProduct(normalizeRow(row), productLookup) });
 };
 
 export const createCoupon: express.RequestHandler = async (req, res) => {
   const orgId = requireOrgId(req, res);
   if (!orgId) return;
 
-  const products = await Product.find({ organizationId: orgId }).select({ _id: 1, name: 1 }).lean();
-  const byId = new Map<string, { id: string; name: string }>();
-  const byName = new Map<string, { id: string; name: string }>();
-  products.forEach((p: any) => {
-    const id = String(p?._id || "").trim();
-    const name = String(p?.name || "").trim();
-    if (!id || !name) return;
-    byId.set(id.toLowerCase(), { id, name });
-    byName.set(name.toLowerCase(), { id, name });
-  });
-
-  const parsed = toPayload(orgId, req.body, { byId, byName });
+  const productLookup = await buildProductLookup(orgId);
+  const parsed = toPayload(orgId, req.body, productLookup);
   if (!parsed.ok) return res.status(400).json({ success: false, message: parsed.message, data: null });
   if (!parsed.payload?.productId) return res.status(400).json({ success: false, message: "Invalid product", data: null });
 
   try {
     const created = await Coupon.create(parsed.payload);
-    return res.status(201).json({ success: true, data: normalizeRow(created.toObject()) });
+    return res.status(201).json({ success: true, data: resolveCouponProduct(normalizeRow(created.toObject()), productLookup) });
   } catch (e: any) {
     if (e?.code === 11000) return res.status(409).json({ success: false, message: "Coupon code already exists", data: null });
     return res.status(500).json({ success: false, message: "Failed to create coupon", data: null });
@@ -172,23 +204,14 @@ export const bulkCreateCoupons: express.RequestHandler = async (req, res) => {
     return res.status(400).json({ success: false, message: "Expected an array of coupons (or { rows: [...] })", data: null });
   }
 
-  const products = await Product.find({ organizationId: orgId }).select({ _id: 1, name: 1 }).lean();
-  const byId = new Map<string, { id: string; name: string }>();
-  const byName = new Map<string, { id: string; name: string }>();
-  products.forEach((p: any) => {
-    const id = String(p?._id || "").trim();
-    const name = String(p?.name || "").trim();
-    if (!id || !name) return;
-    byId.set(id.toLowerCase(), { id, name });
-    byName.set(name.toLowerCase(), { id, name });
-  });
+  const productLookup = await buildProductLookup(orgId);
 
   const invalid: { index: number; message: string }[] = [];
   const prepared: any[] = [];
   const seenCodes = new Set<string>();
 
   input.forEach((row, index) => {
-    const parsed = toPayload(orgId, row, { byId, byName });
+    const parsed = toPayload(orgId, row, productLookup);
     if (!parsed.ok) {
       invalid.push({ index, message: parsed.message });
       return;
@@ -238,7 +261,7 @@ export const bulkCreateCoupons: express.RequestHandler = async (req, res) => {
         insertedCount: insertedDocs.length,
         skippedExisting,
         invalid,
-        inserted: insertedDocs.map((d: any) => normalizeRow(d.toObject ? d.toObject() : d)),
+        inserted: insertedDocs.map((d: any) => resolveCouponProduct(normalizeRow(d.toObject ? d.toObject() : d), productLookup)),
       },
     });
   } catch (e: any) {
@@ -254,7 +277,7 @@ export const bulkCreateCoupons: express.RequestHandler = async (req, res) => {
         skippedExisting,
         skippedDuplicates,
         invalid,
-        inserted: insertedDocs.map((d: any) => normalizeRow(d.toObject ? d.toObject() : d)),
+        inserted: insertedDocs.map((d: any) => resolveCouponProduct(normalizeRow(d.toObject ? d.toObject() : d), productLookup)),
       },
     });
   }
@@ -267,28 +290,20 @@ export const updateCoupon: express.RequestHandler = async (req, res) => {
   const id = String(req.params.id || "").trim();
   if (!id) return res.status(400).json({ success: false, message: "Invalid coupon id", data: null });
 
-  const patch: any = {};
-  const setString = (key: string, max: number) => {
-    if (typeof req.body?.[key] === "string") patch[key] = asString(req.body[key]).trim().slice(0, max);
-  };
+  const existing = await Coupon.findOne({ _id: id, organizationId: orgId }).lean();
+  if (!existing) return res.status(404).json({ success: false, message: "Coupon not found", data: null });
 
-  setString("product", 220);
-  setString("couponName", 220);
-  setString("couponCode", 100);
-  setString("discountType", 40);
-  setString("redemptionType", 40);
-  setString("associatedPlans", 2000);
-  setString("associatedAddons", 2000);
-  setString("expirationDate", 40);
-  setString("status", 40);
+  const productLookup = await buildProductLookup(orgId);
+  const parsed = toPayload(orgId, { ...existing, ...req.body }, productLookup);
+  if (!parsed.ok) return res.status(400).json({ success: false, message: parsed.message, data: null });
 
-  if (typeof req.body?.discountValue !== "undefined") patch.discountValue = Number(req.body.discountValue) || 0;
-  if (typeof req.body?.limitedCycles !== "undefined") patch.limitedCycles = Number(req.body.limitedCycles) || 0;
-  if (typeof req.body?.maxRedemption !== "undefined") patch.maxRedemption = Number(req.body.maxRedemption) || 0;
-
-  const updated: any = await Coupon.findOneAndUpdate({ _id: id, organizationId: orgId }, { $set: patch }, { new: true }).lean();
+  const updated: any = await Coupon.findOneAndUpdate(
+    { _id: id, organizationId: orgId },
+    { $set: { ...parsed.payload, updatedAt: new Date().toISOString() } },
+    { new: true }
+  ).lean();
   if (!updated) return res.status(404).json({ success: false, message: "Coupon not found", data: null });
-  return res.json({ success: true, data: normalizeRow(updated) });
+  return res.json({ success: true, data: resolveCouponProduct(normalizeRow(updated), productLookup) });
 };
 
 export const deleteCoupon: express.RequestHandler = async (req, res) => {

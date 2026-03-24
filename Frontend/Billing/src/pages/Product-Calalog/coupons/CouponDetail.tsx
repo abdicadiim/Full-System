@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ChevronDown,
   Plus,
@@ -17,6 +17,7 @@ export type CouponDetailRecord = {
   status: 'Active' | 'Inactive' | 'Expired';
   value: string;
   product?: string;
+  productName?: string;
   redemptionType?: string;
   discountType?: string;
   associatePlans?: string;
@@ -25,6 +26,63 @@ export type CouponDetailRecord = {
 };
 
 type DetailTab = 'details' | 'transactions' | 'activity';
+
+type ActivityLogEntry = {
+  id: string;
+  message: string;
+  timestamp: string;
+};
+
+const activityStorageKey = (couponId: string) => `coupon_activity_logs_${couponId}`;
+
+const formatActivityTimestamp = (iso: string) => {
+  if (!iso) return '-';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+};
+
+const loadActivityLogs = (couponId: string, fallbackMessage: string, createdOn?: string): ActivityLogEntry[] => {
+  if (typeof window === 'undefined' || !couponId) return [];
+  const seedTimestamp =
+    createdOn && !Number.isNaN(new Date(createdOn).getTime())
+      ? createdOn
+      : new Date().toISOString();
+  try {
+    const raw = window.localStorage.getItem(activityStorageKey(couponId));
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const normalized = parsed
+          .filter(Boolean)
+          .map((entry, index) => ({
+            id: String(entry?.id || `coupon-log-${couponId}-${index}`),
+            message: String(entry?.message || '').trim(),
+            timestamp: String(entry?.timestamp || ''),
+          }))
+          .filter((entry) => entry.message);
+        if (normalized.length > 0) return normalized;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return [
+    {
+      id: `coupon-log-${couponId}-seed`,
+      message: fallbackMessage,
+      timestamp: seedTimestamp,
+    },
+  ];
+};
 
 type CouponDetailProps = {
   coupons: CouponDetailRecord[];
@@ -63,11 +121,43 @@ export default function CouponDetail({
 }: CouponDetailProps) {
   const [activeTab, setActiveTab] = useState<DetailTab>('details');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [activityLogs, setActivityLogs] = useState<ActivityLogEntry[]>([]);
 
   const selectedCoupon = useMemo(
     () => coupons.find((row) => row.id === selectedCouponId) || coupons[0],
     [coupons, selectedCouponId]
   );
+
+  useEffect(() => {
+    if (!selectedCoupon) {
+      setActivityLogs([]);
+      return;
+    }
+
+    const reload = () => {
+      setActivityLogs(
+        loadActivityLogs(
+          selectedCoupon.id,
+          `Coupon ${selectedCoupon.name} Added.`,
+          selectedCoupon.createdOn
+        )
+      );
+    };
+
+    reload();
+
+    const onActivityUpdate = (event: Event) => {
+      const customEvent = event as CustomEvent<{ couponId?: string }>;
+      if (!customEvent.detail?.couponId || customEvent.detail.couponId === selectedCoupon.id) {
+        reload();
+      }
+    };
+
+    window.addEventListener('coupon:activity-updated', onActivityUpdate as EventListener);
+    return () => {
+      window.removeEventListener('coupon:activity-updated', onActivityUpdate as EventListener);
+    };
+  }, [selectedCoupon?.id, selectedCoupon?.name, selectedCoupon?.createdOn]);
 
   if (!selectedCoupon) return null;
 
@@ -282,7 +372,7 @@ export default function CouponDetail({
                   </div>
                   <div className="flex justify-between gap-6">
                     <span className="text-[13px] text-[#64748b]">Product Name</span>
-                    <span className="text-[13px] text-[#2563eb]">{selectedCoupon.product || '-'}</span>
+                    <span className="text-[13px] text-[#2563eb]">{(selectedCoupon as any).productName || selectedCoupon.product || '-'}</span>
                   </div>
                 </div>
 
@@ -340,17 +430,39 @@ export default function CouponDetail({
             )}
 
             {activeTab === 'activity' && (
-              <div className="pt-8 space-y-3">
-                <div className="flex items-center gap-4 border-b border-gray-100 pb-3">
-                  <span className="text-[13px] text-slate-500">{selectedCoupon.createdOn || '-'}</span>
-                  <span className="text-[13px] text-slate-700">Coupon {selectedCoupon.code} added.</span>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-[13px] text-slate-500">-</span>
-                  <span className="text-[13px] text-slate-700">
-                    Status: {selectedCoupon.status}
-                  </span>
-                </div>
+              <div className="pt-6">
+                {activityLogs.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center text-slate-500">
+                    <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-50 text-slate-300">
+                      <svg width="32" height="32" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path
+                          d="M8 10C8 8.34315 9.34315 7 11 7H18.5C19.3284 7 20 7.67157 20 8.5V10H37C39.2091 10 41 11.7909 41 14V36C41 38.2091 39.2091 40 37 40H11C8.79086 40 7 38.2091 7 36V11C7 10.4477 7.44772 10 8 10Z"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        />
+                        <path d="M14 10V7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                        <path d="M34 10V7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      </svg>
+                    </div>
+                    <p className="text-[14px] font-medium">No activity logs yet</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {activityLogs.map((log) => (
+                      <div key={log.id} className="grid grid-cols-[220px_1fr] gap-6 px-2 py-4">
+                        <div className="text-[13px] text-slate-500 whitespace-nowrap">
+                          {formatActivityTimestamp(log.timestamp)}
+                        </div>
+                        <div className="flex items-start gap-3">
+                          <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-orange-100 text-[11px] font-bold text-orange-500">
+                            i
+                          </div>
+                          <div className="text-[13px] leading-6 text-slate-800">{log.message}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

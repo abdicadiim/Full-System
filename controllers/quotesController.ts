@@ -4,6 +4,7 @@ import { Quote } from "../models/Quote.js";
 import { SenderEmail } from "../models/SenderEmail.js";
 import { Organization } from "../models/Organization.js";
 import { sendSmtpMail } from "../services/smtpMailer.js";
+import { recordEvent } from "../services/eventService.js";
 
 const asString = (v: unknown) => (typeof v === "string" ? v : "");
 const normalizeEmail = (value: unknown) => {
@@ -162,6 +163,7 @@ export const createQuote: express.RequestHandler = async (req, res) => {
 
   try {
     const created = await Quote.create(payload);
+    await recordEvent('quote_created', { quote: created || null }, 'user');
     return res.status(201).json({ success: true, data: normalizeRow(created.toObject()) });
   } catch (e: any) {
     if (e?.code === 11000) {
@@ -206,6 +208,8 @@ export const deleteQuote: express.RequestHandler = async (req, res) => {
 
   const id = String(req.params.id || "").trim();
   const deleted = await Quote.findOneAndDelete({ _id: id, organizationId: orgId }).lean();
+    if (deleted) await recordEvent('quote_deleted', { quote: deleted }, 'user');
+    if (updated) await recordEvent('quote_updated', { quote: updated }, 'user');
   if (!deleted) return res.status(404).json({ success: false, message: "Quote not found", data: null });
   return res.json({ success: true, data: { id } });
 };

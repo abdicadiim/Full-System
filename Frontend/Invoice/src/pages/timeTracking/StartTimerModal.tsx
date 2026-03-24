@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { X, ChevronDown, Clock, Plus, Search } from "lucide-react";
 import { toast } from "react-toastify";
 import { projectsAPI } from "../../services/api";
+import { syncRemoteTimer } from "../../lib/timeTracking/timerSync";
 
 type TimerState = {
   isTimerRunning?: boolean;
@@ -141,6 +142,7 @@ export default function StartTimerModal({
     };
 
     localStorage.setItem("timerState", JSON.stringify(timerState));
+    syncRemoteTimer(timerState);
     window.dispatchEvent(new CustomEvent("timerStateUpdated"));
     toast.success("The timer has been started.");
     onClose();

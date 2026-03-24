@@ -22,6 +22,33 @@ const normalizeRow = (row: any) => (row ? { ...row, id: String(row._id) } : row)
 
 const escapeRegex = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+const normalizePricingModel = (value: unknown) => {
+  const text = asString(value).trim().toLowerCase();
+  if (text.includes("volume")) return "Volume";
+  if (text.includes("tier")) return "Tier";
+  if (text.includes("package")) return "Package";
+  if (text.includes("flat")) return "Flat";
+  if (text.includes("per unit") || text === "unit" || text === "perunit") return "Per Unit";
+  return "Per Unit";
+};
+
+const normalizeBracketRows = (rows: unknown) => {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((row: any) => ({
+      startingQty: String(row?.startingQty ?? row?.startingQuantity ?? "").trim(),
+      endingQty: String(row?.endingQty ?? row?.endingQuantity ?? "").trim(),
+      price: String(row?.price ?? "").trim(),
+    }))
+    .filter((row) => row.startingQty || row.endingQty || row.price);
+};
+
+const readBracketRows = (body: any) => {
+  const rows = normalizeBracketRows(body?.pricingBrackets);
+  if (rows.length > 0) return rows;
+  return normalizeBracketRows(body?.volumeBrackets);
+};
+
 const resolveProductForOrg = async (orgId: string, body: any) => {
   const rawProductId = String(body?.productId || "").trim();
   const rawProductName = asString(body?.product).trim();
@@ -108,6 +135,20 @@ export const createAddon: express.RequestHandler = async (req, res) => {
   if (!addonName) return res.status(400).json({ success: false, message: "Addon Name is required", data: null });
   if (!addonCode) return res.status(400).json({ success: false, message: "Addon Code is required", data: null });
 
+  const pricingModel = normalizePricingModel(req.body?.pricingModel ?? req.body?.pricingScheme);
+  const bracketRows = readBracketRows(req.body);
+  const legacyRow =
+    bracketRows.length === 0 && (req.body?.startingQuantity !== undefined || req.body?.endingQuantity !== undefined || req.body?.price !== undefined)
+      ? [
+          {
+            startingQty: pricingModel === "Package" ? "" : String(req.body?.startingQuantity ?? "1").trim(),
+            endingQty: String(req.body?.endingQuantity ?? (pricingModel === "Package" ? "" : "2")).trim(),
+            price: String(req.body?.price ?? "").trim(),
+          },
+        ]
+      : [];
+  const pricingRows = bracketRows.length > 0 ? bracketRows : legacyRow;
+
   const payload: any = {
     organizationId: orgId,
     productId: productResolved.productId,
@@ -117,12 +158,12 @@ export const createAddon: express.RequestHandler = async (req, res) => {
     description: asString(req.body?.description).trim().slice(0, 5000),
     status: asString(req.body?.status).trim().slice(0, 40) || "Active",
     addonType: asString(req.body?.addonType ?? req.body?.type).trim().slice(0, 40) || "Recurring",
-    pricingModel: asString(req.body?.pricingModel ?? req.body?.pricingScheme).trim().slice(0, 40) || "Unit",
+    pricingModel,
     unit: asString(req.body?.unit ?? req.body?.unitName).trim().slice(0, 60),
     billingFrequency: asString(req.body?.billingFrequency).trim().slice(0, 120),
-    startingQuantity: Number(req.body?.startingQuantity ?? 0) || 0,
-    endingQuantity: Number(req.body?.endingQuantity ?? 0) || 0,
-    price: Number(req.body?.price ?? 0) || 0,
+    startingQuantity: Number(pricingRows[0]?.startingQty ?? req.body?.startingQuantity ?? 0) || 0,
+    endingQuantity: Number(pricingRows[0]?.endingQty ?? req.body?.endingQuantity ?? 0) || 0,
+    price: Number(pricingRows[0]?.price ?? req.body?.price ?? 0) || 0,
     imageUrl: asString(req.body?.imageUrl).trim().slice(0, 2_000_000),
     account: asString(req.body?.account).trim().slice(0, 120) || "Sales",
     taxName: asString(req.body?.taxName ?? req.body?.salesTax).trim().slice(0, 120),
@@ -130,8 +171,8 @@ export const createAddon: express.RequestHandler = async (req, res) => {
     selectedPlans: Array.isArray(req.body?.selectedPlans) ? req.body.selectedPlans.map((v: any) => String(v || "").trim()).filter(Boolean) : [],
     includeInWidget: Boolean(req.body?.includeInWidget ?? req.body?.showInWidget ?? false),
     showInPortal: Boolean(req.body?.showInPortal ?? false),
-    volumeBrackets: Array.isArray(req.body?.volumeBrackets) ? req.body.volumeBrackets : Array.isArray(req.body?.pricingBrackets) ? req.body.pricingBrackets : [],
-    pricingBrackets: Array.isArray(req.body?.pricingBrackets) ? req.body.pricingBrackets : Array.isArray(req.body?.volumeBrackets) ? req.body.volumeBrackets : [],
+    volumeBrackets: pricingRows,
+    pricingBrackets: pricingRows,
   };
 
   try {
@@ -168,6 +209,10 @@ export const updateAddon: express.RequestHandler = async (req, res) => {
   setString("taxName", 120);
   setString("associatedPlans", 2000);
 
+  if (typeof req.body?.pricingModel !== "undefined" || typeof req.body?.pricingScheme !== "undefined") {
+    patch.pricingModel = normalizePricingModel(req.body?.pricingModel ?? req.body?.pricingScheme);
+  }
+
   if (typeof req.body?.startingQuantity !== "undefined") patch.startingQuantity = Number(req.body.startingQuantity) || 0;
   if (typeof req.body?.endingQuantity !== "undefined") patch.endingQuantity = Number(req.body.endingQuantity) || 0;
   if (typeof req.body?.price !== "undefined") patch.price = Number(req.body.price) || 0;
@@ -176,8 +221,19 @@ export const updateAddon: express.RequestHandler = async (req, res) => {
   if (Array.isArray(req.body?.selectedPlans)) {
     patch.selectedPlans = req.body.selectedPlans.map((v: any) => String(v || "").trim()).filter(Boolean);
   }
-  if (Array.isArray(req.body?.volumeBrackets)) patch.volumeBrackets = req.body.volumeBrackets;
-  if (Array.isArray(req.body?.pricingBrackets)) patch.pricingBrackets = req.body.pricingBrackets;
+  const bracketRows = readBracketRows(req.body);
+  if (bracketRows.length > 0) {
+    patch.volumeBrackets = bracketRows;
+    patch.pricingBrackets = bracketRows;
+    patch.startingQuantity = Number(bracketRows[0]?.startingQty ?? req.body.startingQuantity ?? 0) || 0;
+    patch.endingQuantity = Number(bracketRows[0]?.endingQty ?? req.body.endingQuantity ?? 0) || 0;
+    if (typeof req.body?.price === "undefined" && typeof bracketRows[0]?.price !== "undefined") {
+      patch.price = Number(bracketRows[0]?.price ?? 0) || 0;
+    }
+  } else {
+    if (Array.isArray(req.body?.volumeBrackets)) patch.volumeBrackets = req.body.volumeBrackets;
+    if (Array.isArray(req.body?.pricingBrackets)) patch.pricingBrackets = req.body.pricingBrackets;
+  }
 
   if (typeof req.body?.productId !== "undefined" || typeof req.body?.product !== "undefined") {
     const productResolved = await resolveProductForOrg(orgId, req.body);
@@ -280,7 +336,7 @@ export const bulkCreateAddons: express.RequestHandler = async (req, res) => {
       description: asString(row?.description).trim().slice(0, 5000),
       status: asString(row?.status).trim().slice(0, 40) || "Active",
       addonType: asString(row?.addonType ?? row?.type).trim().slice(0, 40) || "Recurring",
-      pricingModel: asString(row?.pricingModel ?? row?.pricingScheme).trim().slice(0, 40) || "Unit",
+      pricingModel: normalizePricingModel(row?.pricingModel ?? row?.pricingScheme),
       unit: asString(row?.unit ?? row?.unitName).trim().slice(0, 60),
       billingFrequency: asString(row?.billingFrequency).trim().slice(0, 120),
       startingQuantity: Number(row?.startingQuantity ?? 0) || 0,
@@ -293,8 +349,8 @@ export const bulkCreateAddons: express.RequestHandler = async (req, res) => {
       selectedPlans: Array.isArray(row?.selectedPlans) ? row.selectedPlans.map((v: any) => String(v || "").trim()).filter(Boolean) : [],
       includeInWidget: Boolean(row?.includeInWidget ?? row?.showInWidget ?? false),
       showInPortal: Boolean(row?.showInPortal ?? false),
-      volumeBrackets: Array.isArray(row?.volumeBrackets) ? row.volumeBrackets : Array.isArray(row?.pricingBrackets) ? row.pricingBrackets : [],
-      pricingBrackets: Array.isArray(row?.pricingBrackets) ? row.pricingBrackets : Array.isArray(row?.volumeBrackets) ? row.volumeBrackets : [],
+      volumeBrackets: readBracketRows(row),
+      pricingBrackets: readBracketRows(row),
     });
   });
 

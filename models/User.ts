@@ -19,6 +19,9 @@ const UserSchema = new mongoose.Schema(
 
     // Optional avatar (can be a URL or a data: URI)
     photoUrl: { type: String, default: "" },
+
+    // Store active timer state to sync across applications
+    activeTimer: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   { timestamps: true }
 );

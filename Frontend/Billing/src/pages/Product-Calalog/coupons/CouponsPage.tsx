@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Plus,
   MoreHorizontal,
@@ -53,7 +54,14 @@ type Column = {
   locked?: boolean;
 };
 
+type CouponActivityLog = {
+  id: string;
+  message: string;
+  timestamp: string;
+};
+
 const COLUMNS_STORAGE_KEY = 'taban_coupons_columns_v1';
+const couponActivityKey = (couponId: string) => `coupon_activity_logs_${couponId}`;
 
 const DEFAULT_COLUMNS: Column[] = [
   { key: 'name', label: 'NAME', visible: true, width: 220, locked: true },
@@ -84,6 +92,19 @@ const formatDate = (iso: string) => {
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
+const formatActivityTimestamp = (iso: string) => {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '-';
+  return d.toLocaleString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
 const asCurrency = (currencyCode: string, amount: number) => {
   const safe = Number.isFinite(amount) ? amount : 0;
   return `${currencyCode}${safe.toLocaleString(undefined, {
@@ -101,7 +122,7 @@ const toCouponRow = (record: CouponRecord, currencyCode: string): CouponRow => (
     record.discountType === 'Percentage'
       ? `${record.discountValue}%`
       : asCurrency(currencyCode, record.discountValue),
-  product: record.product || '-',
+  product: (record as any).productName || record.product || '-',
   redemptionType: record.redemptionType || '-',
   discountType: record.discountType || '-',
   associatePlans: record.associatedPlans || '-',
@@ -132,6 +153,62 @@ const downloadCsv = (name: string, headers: string[], rows: string[][]) => {
   window.URL.revokeObjectURL(url);
 };
 
+const readCouponActivityLogs = (couponId: string): CouponActivityLog[] => {
+  if (typeof window === 'undefined' || !couponId) return [];
+  try {
+    const raw = window.localStorage.getItem(couponActivityKey(couponId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed
+          .filter(Boolean)
+          .map((item, index) => ({
+            id: String(item?.id || `coupon-log-${couponId}-${index}`),
+            message: String(item?.message || ''),
+            timestamp: String(item?.timestamp || ''),
+          }))
+          .filter((item) => item.message)
+      : [];
+  } catch {
+    return [];
+  }
+};
+
+const writeCouponActivityLogs = (couponId: string, logs: CouponActivityLog[]) => {
+  if (typeof window === 'undefined' || !couponId) return;
+  window.localStorage.setItem(couponActivityKey(couponId), JSON.stringify(logs.slice(0, 200)));
+  window.dispatchEvent(new CustomEvent('coupon:activity-updated', { detail: { couponId } }));
+};
+
+const appendCouponActivityLog = (couponId: string, message: string) => {
+  if (typeof window === 'undefined' || !couponId || !message) return;
+  const next = [
+    {
+      id: `coupon-log-${couponId}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      message,
+      timestamp: new Date().toISOString(),
+    },
+    ...readCouponActivityLogs(couponId),
+  ];
+  writeCouponActivityLogs(couponId, next);
+};
+
+const seedCouponActivityLog = (coupon: CouponRecord) => {
+  const couponId = String((coupon as any)?.id || (coupon as any)?._id || '').trim();
+  if (!couponId) return;
+  const existing = readCouponActivityLogs(couponId);
+  if (existing.length > 0) return;
+  const createdAt = String((coupon as any)?.createdAt || (coupon as any)?.createdOn || new Date().toISOString());
+  const seed = [
+    {
+      id: `coupon-log-${couponId}-seed`,
+      message: `Coupon ${(coupon as any)?.couponName || (coupon as any)?.name || (coupon as any)?.couponCode || couponId} Added.`,
+      timestamp: createdAt,
+    },
+  ];
+  writeCouponActivityLogs(couponId, seed);
+};
+
 const CouponsPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -150,6 +227,9 @@ const CouponsPage: React.FC = () => {
   const [activeFilter, setActiveFilter] = useState<CouponStatusFilter>('All');
   const [sortKey, setSortKey] = useState<CouponSortKey>('createdAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteMode, setDeleteMode] = useState<'single' | 'bulk'>('single');
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const [columns, setColumns] = useState<Column[]>(() => {
     const saved = localStorage.getItem(COLUMNS_STORAGE_KEY);
@@ -211,6 +291,10 @@ const CouponsPage: React.FC = () => {
     () => records.map((record) => toCouponRow(record, baseCurrencyCode || baseCurrency.code || "USD")),
     [records, baseCurrencyCode, baseCurrency.code]
   );
+
+  useEffect(() => {
+    records.forEach((record) => seedCouponActivityLog(record));
+  }, [records]);
 
   const resizingRef = useRef<{ col: string; startX: number; startWidth: number } | null>(null);
   const moreRef = useRef<HTMLDivElement>(null);
@@ -315,6 +399,10 @@ const CouponsPage: React.FC = () => {
         await couponsAPI.update(id, { status: nextStatus });
         const rows = await loadCouponsFromDb();
         setRecords(rows);
+        appendCouponActivityLog(
+          id,
+          `Status of Coupon with code ${current.couponCode} has been changed from ${current.status} to ${nextStatus}.`
+        );
         toast.success(`Coupon status updated to ${nextStatus}`);
       } catch (e: any) {
         console.error('Failed to update coupon status', e);
@@ -348,8 +436,11 @@ const CouponsPage: React.FC = () => {
         const res: any = await couponsAPI.create(clonedPayload);
         const rows = await loadCouponsFromDb();
         setRecords(rows);
-        toast.success('Coupon cloned successfully');
         const newId = String(res?.data?.id || res?.data?._id || '');
+        if (newId) {
+          appendCouponActivityLog(newId, `Coupon cloned from ${target.couponName}.`);
+        }
+        toast.success('Coupon cloned successfully');
         setSelectedCouponId(newId || null);
       } catch (e: any) {
         console.error('Failed to clone coupon', e);
@@ -359,21 +450,9 @@ const CouponsPage: React.FC = () => {
   };
 
   const handleDeleteCoupon = (id: string) => {
-    if (!window.confirm('Delete this coupon?')) return;
-    void (async () => {
-      try {
-        await couponsAPI.delete(id);
-        const rows = await loadCouponsFromDb();
-        setRecords(rows);
-        toast.success('Coupon deleted successfully');
-        if (selectedCouponId === id) {
-          setSelectedCouponId(rows.length ? String(rows[0]?.id || rows[0]?._id || '') : null);
-        }
-      } catch (e: any) {
-        console.error('Failed to delete coupon', e);
-        toast.error(e?.message || 'Failed to delete coupon');
-      }
-    })();
+    setDeleteMode('single');
+    setPendingDeleteId(id);
+    setIsDeleteModalOpen(true);
   };
 
   const clearBulkSelection = () => {
@@ -399,23 +478,9 @@ const CouponsPage: React.FC = () => {
 
   const handleBulkDelete = () => {
     if (selectedIds.length === 0) return;
-    if (!window.confirm(`Delete ${selectedIds.length} selected coupon(s)?`)) return;
-    const selectedSet = new Set(selectedIds);
-    void (async () => {
-      try {
-        await Promise.all(selectedIds.map((couponId) => couponsAPI.delete(couponId)));
-        const rows = await loadCouponsFromDb();
-        setRecords(rows);
-        toast.success(`${selectedIds.length} coupons deleted successfully`);
-        if (selectedCouponId && selectedSet.has(selectedCouponId)) {
-          setSelectedCouponId(rows.length ? String(rows[0]?.id || rows[0]?._id || '') : null);
-        }
-        clearBulkSelection();
-      } catch (e: any) {
-        console.error('Failed bulk delete', e);
-        toast.error(e?.message || 'Failed to delete coupons');
-      }
-    })();
+    setDeleteMode('bulk');
+    setPendingDeleteId(null);
+    setIsDeleteModalOpen(true);
   };
 
   const handleExportCoupons = () => {
@@ -441,7 +506,7 @@ const CouponsPage: React.FC = () => {
     ];
 
     const body = rows.map((record) => [
-      record.product || '',
+      (record as any).productName || record.product || '',
       record.couponName || '',
       record.couponCode || '',
       record.discountType || '',
@@ -479,6 +544,7 @@ const CouponsPage: React.FC = () => {
     const now = new Date().toISOString();
 
     if (editingCouponId) {
+      const original = records.find((record) => record.id === editingCouponId);
       void (async () => {
         try {
           const patch: any = {
@@ -500,6 +566,19 @@ const CouponsPage: React.FC = () => {
           await couponsAPI.update(editingCouponId, patch);
           const rows = await loadCouponsFromDb();
           setRecords(rows);
+          const messages: string[] = [];
+          if (original) {
+            if ((original.couponName || '').trim() !== (payload.name || '').trim()) {
+              messages.push(`Name updated for Coupon ${payload.name}.`);
+            }
+            if ((original.couponCode || '').trim().toUpperCase() !== (payload.code || '').trim().toUpperCase()) {
+              messages.push(`Code updated for Coupon ${payload.code}.`);
+            }
+          }
+          if (messages.length === 0) {
+            messages.push(`Coupon ${payload.name || 'details'} updated.`);
+          }
+          messages.forEach((message) => appendCouponActivityLog(editingCouponId, message));
           toast.success('Coupon updated successfully');
           setSelectedCouponId(editingCouponId);
           setEditingCouponId(null);
@@ -537,8 +616,11 @@ const CouponsPage: React.FC = () => {
         const res: any = await couponsAPI.create(payloadToCreate);
         const rows = await loadCouponsFromDb();
         setRecords(rows);
-        toast.success('Coupon created successfully');
         const id = String(res?.data?.id || res?.data?._id || '');
+        if (id) {
+          appendCouponActivityLog(id, `Coupon ${payload.name || 'New Coupon'} Added.`);
+        }
+        toast.success('Coupon created successfully');
         setSelectedCouponId(id || null);
         setEditingCouponId(null);
         setView('list');
@@ -953,6 +1035,85 @@ const CouponsPage: React.FC = () => {
           initialCoupon={editingCouponId ? records.find((record) => record.id === editingCouponId) || null : null}
         />
       )}
+      {typeof document !== 'undefined' &&
+        createPortal(
+          isDeleteModalOpen ? (
+            <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16">
+              <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white shadow-2xl">
+                <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 text-[12px] font-bold text-amber-600">
+                    !
+                  </div>
+                  <h3 className="flex-1 text-[15px] font-semibold text-slate-800">
+                    {deleteMode === 'single' ? 'Delete coupon?' : 'Delete selected coupons?'}
+                  </h3>
+                  <button
+                    type="button"
+                    className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                    onClick={() => setIsDeleteModalOpen(false)}
+                    aria-label="Close"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+                <div className="px-5 py-3 text-[13px] text-slate-600">
+                  {deleteMode === 'single'
+                    ? 'You cannot retrieve this coupon once it has been deleted.'
+                    : 'You cannot retrieve these coupons once they have been deleted.'}
+                </div>
+                <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+                  <button
+                    type="button"
+                    className="rounded-md bg-blue-600 px-4 py-1.5 text-[12px] text-white hover:bg-blue-700"
+                    onClick={async () => {
+                      try {
+                        if (deleteMode === 'single') {
+                          const id = pendingDeleteId;
+                          if (!id) return;
+                          await couponsAPI.delete(id);
+                          const rows = await loadCouponsFromDb();
+                          setRecords(rows);
+                          toast.success('Coupon deleted successfully');
+                          if (selectedCouponId === id) {
+                            setSelectedCouponId(rows.length ? String(rows[0]?.id || rows[0]?._id || '') : null);
+                          }
+                        } else {
+                          const selectedSet = new Set(selectedIds);
+                          await Promise.all(selectedIds.map((couponId) => couponsAPI.delete(couponId)));
+                          const rows = await loadCouponsFromDb();
+                          setRecords(rows);
+                          toast.success(`${selectedIds.length} coupons deleted successfully`);
+                          if (selectedCouponId && selectedSet.has(selectedCouponId)) {
+                            setSelectedCouponId(rows.length ? String(rows[0]?.id || rows[0]?._id || '') : null);
+                          }
+                          clearBulkSelection();
+                        }
+                        setIsDeleteModalOpen(false);
+                        setPendingDeleteId(null);
+                      } catch (e: any) {
+                        console.error('Failed to delete coupon(s)', e);
+                        toast.error(e?.message || 'Failed to delete coupons');
+                      }
+                    }}
+                  >
+                    Delete
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md border border-slate-300 px-4 py-1.5 text-[12px] text-slate-700 hover:bg-slate-50"
+                    onClick={() => {
+                      setIsDeleteModalOpen(false);
+                      setPendingDeleteId(null);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null,
+          document.body
+        )}
     </div >
   );
 };

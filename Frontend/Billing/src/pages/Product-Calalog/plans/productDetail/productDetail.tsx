@@ -87,6 +87,7 @@ export default function ProductDetailPage() {
   const [sidebarMoreOpen, setSidebarMoreOpen] = useState(false);
   const [emailTemplatesOpen, setEmailTemplatesOpen] = useState(false);
   const [editProductOpen, setEditProductOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [showTabCount, setShowTabCount] = useState<Record<"plans" | "addons" | "coupons", boolean>>({
     plans: false,
     addons: false,
@@ -257,7 +258,7 @@ export default function ProductDetailPage() {
     }
   };
 
-  const handleDeleteProduct = async () => {
+  const handleDeleteProduct = () => {
     if (!selectedProduct) return;
     const hasTransactions = productPlans.length > 0 || productAddons.length > 0 || productCoupons.length > 0;
     if (hasTransactions) {
@@ -265,14 +266,18 @@ export default function ProductDetailPage() {
       setActionsOpen(false);
       return;
     }
-    if (!window.confirm("Delete this product?")) return;
-    const targetId = getId(selectedProduct);
+    setActionsOpen(false);
+    setIsDeleteModalOpen(true);
+  };
 
+  const confirmDeleteProduct = async () => {
+    if (!selectedProduct) return;
+    const targetId = getId(selectedProduct);
     try {
       const res: any = await productsAPI.delete(targetId);
       if (res?.success === false) throw new Error(res?.message || "Failed to delete product");
       await refreshProducts(true);
-      setActionsOpen(false);
+      setIsDeleteModalOpen(false);
       toast.success("Product deleted");
 
       const remaining = products.filter((row) => getId(row) !== targetId);
@@ -842,6 +847,46 @@ export default function ProductDetailPage() {
           </div>
         </div>
       </main>
+
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16">
+          <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 text-[12px] font-bold text-amber-600">
+                !
+              </div>
+              <h3 className="flex-1 text-[15px] font-semibold text-slate-800">Delete product?</h3>
+              <button
+                type="button"
+                className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                onClick={() => setIsDeleteModalOpen(false)}
+                aria-label="Close"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="px-5 py-3 text-[13px] text-slate-600">
+              You cannot retrieve this product once it has been deleted.
+            </div>
+            <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+              <button
+                type="button"
+                className="rounded-md bg-blue-600 px-4 py-1.5 text-[12px] text-white hover:bg-blue-700"
+                onClick={confirmDeleteProduct}
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                className="rounded-md border border-slate-300 px-4 py-1.5 text-[12px] text-slate-700 hover:bg-slate-50"
+                onClick={() => setIsDeleteModalOpen(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <NewProductModal
         isOpen={editProductOpen}

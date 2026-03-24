@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown, Image as ImageIcon, Info, MinusCircle, PlusCircle, Search, Trash2, X } from "lucide-react";
 import { toast } from "react-toastify";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -24,6 +25,7 @@ type FormState = {
   selectedPlans: string[];
   includeInWidget: boolean;
   showInPortal: boolean;
+  isDigitalService: boolean;
 };
 
 type DropdownProps = {
@@ -37,6 +39,10 @@ type DropdownProps = {
   onFooterClick?: () => void;
   groupLabel?: string;
   selectedStyle?: "default" | "blue";
+  openUpward?: boolean;
+  inlineMenu?: boolean;
+  menuClassName?: string;
+  portalMenu?: boolean;
 };
 
 type VolumeBracket = {
@@ -101,6 +107,7 @@ const DEFAULT_FORM: FormState = {
   selectedPlans: [],
   includeInWidget: false,
   showInPortal: false,
+  isDigitalService: false,
 };
 
 const dedupe = (rows: string[]) => Array.from(new Set(rows.map((v) => String(v || "").trim()).filter(Boolean)));
@@ -148,6 +155,7 @@ const toForm = (row: AddonRecord): FormState => ({
   account: String((row as any).account || "Sales"),
   includeInWidget: Boolean((row as any).includeInWidget),
   showInPortal: Boolean((row as any).showInPortal),
+  isDigitalService: Boolean((row as any).isDigitalService),
 });
 
 function StyledDropdown({
@@ -161,11 +169,17 @@ function StyledDropdown({
   onFooterClick,
   groupLabel,
   selectedStyle = "blue",
+  openUpward = false,
+  inlineMenu = false,
+  menuClassName = "mt-1",
+  portalMenu = false,
 }: DropdownProps) {
   const accentColor = "#1b5e6a";
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [portalStyle, setPortalStyle] = useState<React.CSSProperties | null>(null);
   const normalizedGroups = useMemo(
     () => (groupedOptions || []).map((group) => ({ label: group.label, options: group.options || [] })),
     [groupedOptions]
@@ -187,13 +201,36 @@ function StyledDropdown({
   );
 
   useEffect(() => {
-    const close = (event: MouseEvent) => !ref.current?.contains(event.target as Node) && setOpen(false);
+    const close = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (ref.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
+    };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, []);
 
+  useLayoutEffect(() => {
+    if (!open || (!openUpward && !portalMenu) || disabled) {
+      setPortalStyle(null);
+      return;
+    }
+    const button = ref.current?.querySelector("button");
+    if (!button) return;
+    const rect = button.getBoundingClientRect();
+    setPortalStyle({
+      position: "fixed",
+      left: rect.left,
+      width: rect.width,
+      top: openUpward ? undefined : rect.bottom + 6,
+      bottom: openUpward ? window.innerHeight - rect.top + 6 : undefined,
+      zIndex: 120,
+    });
+  }, [open, openUpward, portalMenu, disabled, query]);
+
   return (
-    <div ref={ref} className="relative w-full">
+    <div ref={ref} className={`relative w-full ${open && !disabled ? "z-[200]" : ""}`}>
       <button
         type="button"
         disabled={disabled}
@@ -205,60 +242,179 @@ function StyledDropdown({
         <ChevronDown size={14} className={`transition-transform ${open ? "rotate-180" : ""}`} style={{ color: accentColor }} />
       </button>
       {open && !disabled ? (
-        <div className="absolute left-0 top-full z-[120] mt-1 w-full rounded-xl border border-[#d6dbe8] bg-white p-2 shadow-xl">
-          <div className="mb-2 flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-all focus-within:bg-white" style={{ borderColor: accentColor }}>
-            <Search size={14} className="text-slate-400" />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" className="w-full border-none bg-transparent text-[13px] text-slate-700 outline-none placeholder:text-slate-400" />
-          </div>
-          {groupLabel ? <div className="px-2 pb-1 text-[13px] font-semibold text-[#475569]">{groupLabel}</div> : null}
-          <div className="max-h-52 overflow-auto rounded-lg bg-white">
-            {normalizedGroups.length > 0 ? (
-              filteredGroups.length === 0 ? (
+        inlineMenu ? (
+          <div className="mt-1 w-full rounded-xl border border-[#d6dbe8] bg-white p-2 shadow-xl">
+            <div className="mb-2 flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-all focus-within:bg-white" style={{ borderColor: accentColor }}>
+              <Search size={14} className="text-slate-400" />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" className="w-full border-none bg-transparent text-[13px] text-slate-700 outline-none placeholder:text-slate-400" />
+            </div>
+            {groupLabel ? <div className="px-2 pb-1 text-[13px] font-semibold text-[#475569]">{groupLabel}</div> : null}
+            <div className="max-h-52 overflow-auto rounded-lg bg-white">
+              {normalizedGroups.length > 0 ? (
+                filteredGroups.length === 0 ? (
+                  <div className="px-3 py-2 text-[13px] text-[#94a3b8]">No options found</div>
+                ) : (
+                  filteredGroups.map((group) => (
+                    <div key={group.label} className="mb-1 last:mb-0">
+                      <div className="px-2 pb-1 text-[13px] font-semibold text-[#475569]">{group.label}</div>
+                      {group.options.map((opt) => (
+                        <button
+                          key={`${group.label}-${opt}`}
+                          type="button"
+                          onClick={() => {
+                            onChange(opt);
+                            setOpen(false);
+                            setQuery("");
+                          }}
+                          className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-[13px] transition-colors last:mb-0 hover:bg-slate-50 ${value === opt ? "font-medium text-slate-900" : "text-slate-700"}`}
+                        >
+                          <span>{opt}</span>
+                          {value === opt ? <Check size={14} style={{ color: accentColor }} /> : null}
+                        </button>
+                      ))}
+                    </div>
+                  ))
+                )
+              ) : filtered.length === 0 ? (
                 <div className="px-3 py-2 text-[13px] text-[#94a3b8]">No options found</div>
               ) : (
-                filteredGroups.map((group) => (
-                  <div key={group.label} className="mb-1 last:mb-0">
-                    <div className="px-2 pb-1 text-[13px] font-semibold text-[#475569]">{group.label}</div>
-                    {group.options.map((opt) => (
-                      <button
-                        key={`${group.label}-${opt}`}
-                        type="button"
-                        onClick={() => {
-                          onChange(opt);
-                          setOpen(false);
-                          setQuery("");
-                        }}
-                        className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-[13px] transition-colors last:mb-0 hover:bg-slate-50 ${value === opt ? "font-medium text-slate-900" : "text-slate-700"}`}
-                      >
-                        <span>{opt}</span>
-                        {value === opt ? <Check size={14} style={{ color: accentColor }} /> : null}
-                      </button>
-                    ))}
-                  </div>
+                filtered.map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => {
+                      onChange(opt);
+                      setOpen(false);
+                      setQuery("");
+                    }}
+                    className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-[13px] transition-colors last:mb-0 hover:bg-slate-50 ${value === opt ? "font-medium text-slate-900" : "text-slate-700"}`}
+                  >
+                    <span>{opt}</span>
+                    {value === opt ? <Check size={14} style={{ color: accentColor }} /> : null}
+                  </button>
                 ))
-              )
-            ) : filtered.length === 0 ? (
-              <div className="px-3 py-2 text-[13px] text-[#94a3b8]">No options found</div>
-            ) : (
-              filtered.map((opt) => (
-                <button
-                  key={opt}
-                  type="button"
-                  onClick={() => {
-                    onChange(opt);
-                    setOpen(false);
-                    setQuery("");
-                  }}
-                  className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-[13px] transition-colors last:mb-0 hover:bg-slate-50 ${value === opt ? "font-medium text-slate-900" : "text-slate-700"}`}
-                >
-                  <span>{opt}</span>
-                  {value === opt ? <Check size={14} style={{ color: accentColor }} /> : null}
-                </button>
-              ))
-            )}
+              )}
+            </div>
+            {footerLabel && onFooterClick ? <button type="button" onClick={() => { setOpen(false); setQuery(""); onFooterClick(); }} className="mt-2 flex w-full items-center gap-2 border-t border-slate-100 px-2 pt-2 text-[13px] font-medium transition-colors hover:opacity-90" style={{ color: accentColor }}><PlusCircle size={14} />{footerLabel}</button> : null}
           </div>
-          {footerLabel && onFooterClick ? <button type="button" onClick={() => { setOpen(false); setQuery(""); onFooterClick(); }} className="mt-2 flex w-full items-center gap-2 border-t border-slate-100 px-2 pt-2 text-[13px] font-medium transition-colors hover:opacity-90" style={{ color: accentColor }}><PlusCircle size={14} />{footerLabel}</button> : null}
-        </div>
+        ) : openUpward || portalMenu ? (
+          createPortal(
+            <div
+              ref={menuRef}
+              className="rounded-xl border border-[#d6dbe8] bg-white p-2 shadow-xl"
+              style={portalStyle || undefined}
+            >
+              <div className="mb-2 flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-all focus-within:bg-white" style={{ borderColor: accentColor }}>
+                <Search size={14} className="text-slate-400" />
+                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" className="w-full border-none bg-transparent text-[13px] text-slate-700 outline-none placeholder:text-slate-400" />
+              </div>
+              {groupLabel ? <div className="px-2 pb-1 text-[13px] font-semibold text-[#475569]">{groupLabel}</div> : null}
+              <div className="max-h-52 overflow-auto rounded-lg bg-white">
+                {normalizedGroups.length > 0 ? (
+                  filteredGroups.length === 0 ? (
+                    <div className="px-3 py-2 text-[13px] text-[#94a3b8]">No options found</div>
+                  ) : (
+                    filteredGroups.map((group) => (
+                      <div key={group.label} className="mb-1 last:mb-0">
+                        <div className="px-2 pb-1 text-[13px] font-semibold text-[#475569]">{group.label}</div>
+                        {group.options.map((opt) => (
+                          <button
+                            key={`${group.label}-${opt}`}
+                            type="button"
+                            onClick={() => {
+                              onChange(opt);
+                              setOpen(false);
+                              setQuery("");
+                            }}
+                            className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-[13px] transition-colors last:mb-0 hover:bg-slate-50 ${value === opt ? "font-medium text-slate-900" : "text-slate-700"}`}
+                          >
+                            <span>{opt}</span>
+                            {value === opt ? <Check size={14} style={{ color: accentColor }} /> : null}
+                          </button>
+                        ))}
+                      </div>
+                    ))
+                  )
+                ) : filtered.length === 0 ? (
+                  <div className="px-3 py-2 text-[13px] text-[#94a3b8]">No options found</div>
+                ) : (
+                  filtered.map((opt) => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => {
+                        onChange(opt);
+                        setOpen(false);
+                        setQuery("");
+                      }}
+                      className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-[13px] transition-colors last:mb-0 hover:bg-slate-50 ${value === opt ? "font-medium text-slate-900" : "text-slate-700"}`}
+                    >
+                      <span>{opt}</span>
+                      {value === opt ? <Check size={14} style={{ color: accentColor }} /> : null}
+                    </button>
+                  ))
+                )}
+              </div>
+              {footerLabel && onFooterClick ? <button type="button" onClick={() => { setOpen(false); setQuery(""); onFooterClick(); }} className="mt-2 flex w-full items-center gap-2 border-t border-slate-100 px-2 pt-2 text-[13px] font-medium transition-colors hover:opacity-90" style={{ color: accentColor }}><PlusCircle size={14} />{footerLabel}</button> : null}
+            </div>,
+            document.body
+          )
+        ) : (
+          <div className={`absolute left-0 top-full z-[120] ${menuClassName} w-full rounded-xl border border-[#d6dbe8] bg-white p-2 shadow-xl`}>
+            <div className="mb-2 flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-all focus-within:bg-white" style={{ borderColor: accentColor }}>
+              <Search size={14} className="text-slate-400" />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" className="w-full border-none bg-transparent text-[13px] text-slate-700 outline-none placeholder:text-slate-400" />
+            </div>
+            {groupLabel ? <div className="px-2 pb-1 text-[13px] font-semibold text-[#475569]">{groupLabel}</div> : null}
+            <div className="max-h-52 overflow-auto rounded-lg bg-white">
+              {normalizedGroups.length > 0 ? (
+                filteredGroups.length === 0 ? (
+                  <div className="px-3 py-2 text-[13px] text-[#94a3b8]">No options found</div>
+                ) : (
+                  filteredGroups.map((group) => (
+                    <div key={group.label} className="mb-1 last:mb-0">
+                      <div className="px-2 pb-1 text-[13px] font-semibold text-[#475569]">{group.label}</div>
+                      {group.options.map((opt) => (
+                        <button
+                          key={`${group.label}-${opt}`}
+                          type="button"
+                          onClick={() => {
+                            onChange(opt);
+                            setOpen(false);
+                            setQuery("");
+                          }}
+                          className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-[13px] transition-colors last:mb-0 hover:bg-slate-50 ${value === opt ? "font-medium text-slate-900" : "text-slate-700"}`}
+                        >
+                          <span>{opt}</span>
+                          {value === opt ? <Check size={14} style={{ color: accentColor }} /> : null}
+                        </button>
+                      ))}
+                    </div>
+                  ))
+                )
+              ) : filtered.length === 0 ? (
+                <div className="px-3 py-2 text-[13px] text-[#94a3b8]">No options found</div>
+              ) : (
+                filtered.map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => {
+                      onChange(opt);
+                      setOpen(false);
+                      setQuery("");
+                    }}
+                    className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-[13px] transition-colors last:mb-0 hover:bg-slate-50 ${value === opt ? "font-medium text-slate-900" : "text-slate-700"}`}
+                  >
+                    <span>{opt}</span>
+                    {value === opt ? <Check size={14} style={{ color: accentColor }} /> : null}
+                  </button>
+                ))
+              )}
+            </div>
+            {footerLabel && onFooterClick ? <button type="button" onClick={() => { setOpen(false); setQuery(""); onFooterClick(); }} className="mt-2 flex w-full items-center gap-2 border-t border-slate-100 px-2 pt-2 text-[13px] font-medium transition-colors hover:opacity-90" style={{ color: accentColor }}><PlusCircle size={14} />{footerLabel}</button> : null}
+          </div>
+        )
       ) : null}
     </div>
   );
@@ -439,15 +595,20 @@ export default function NewAddonPage() {
     setVolumeBrackets((prev) => prev.map((row, rowIndex) => (rowIndex === index ? { ...row, [key]: value } : row)));
   };
 
+  const getNextBracketStart = (rows: VolumeBracket[]) => {
+    for (let index = rows.length - 1; index >= 0; index -= 1) {
+      const candidate = Number(rows[index]?.endingQty || rows[index]?.startingQty);
+      if (Number.isFinite(candidate) && candidate > 0) return String(candidate + 1);
+    }
+    return rows.length === 0 ? "1" : "";
+  };
+
   const addVolumeBracket = () => {
     setVolumeBrackets((prev) => {
       if (isPackagePricing) {
         return [...prev, { startingQty: "", endingQty: "", price: "" }];
       }
-      const last = prev[prev.length - 1];
-      const parsedNext = Number(last?.endingQty || last?.startingQty);
-      const nextStart = Number.isFinite(parsedNext) && parsedNext > 0 ? String(parsedNext + 1) : "";
-      return [...prev, { startingQty: nextStart, endingQty: "", price: "" }];
+      return [...prev, { startingQty: getNextBracketStart(prev), endingQty: "", price: "" }];
     });
   };
 
@@ -594,13 +755,23 @@ export default function NewAddonPage() {
           return;
         }
         if (["Volume", "Tier", "Package"].includes(normModel(found.pricingModel))) {
-          setVolumeBrackets([
-            {
-              startingQty: normModel(found.pricingModel) === "Package" ? "" : String((found as any).startingQuantity ?? "1"),
-              endingQty: String((found as any).endingQuantity ?? (normModel(found.pricingModel) === "Package" ? "" : "2")),
-              price: Number.isFinite(Number(found.price)) ? String(found.price) : "",
-            },
-          ]);
+          const firstRow: VolumeBracket = {
+            startingQty: normModel(found.pricingModel) === "Package" ? "" : String((found as any).startingQuantity ?? "1"),
+            endingQty: String((found as any).endingQuantity ?? (normModel(found.pricingModel) === "Package" ? "" : "2")),
+            price: Number.isFinite(Number(found.price)) ? String(found.price) : "",
+          };
+          setVolumeBrackets(
+            normModel(found.pricingModel) === "Package"
+              ? [firstRow]
+              : [
+                  firstRow,
+                  {
+                    startingQty: "",
+                    endingQty: "",
+                    price: "",
+                  },
+                ]
+          );
           return;
         }
         setVolumeBrackets(DEFAULT_VOLUME_BRACKETS);
@@ -656,6 +827,7 @@ export default function NewAddonPage() {
             plan: planSummary,
             includeInWidget: form.includeInWidget,
             showInPortal: form.showInPortal,
+            isDigitalService: form.isDigitalService,
             taxName: form.taxName.trim(),
             startingQuantity,
             endingQuantity,
@@ -695,6 +867,7 @@ export default function NewAddonPage() {
           plan: planSummary,
           includeInWidget: form.includeInWidget,
           showInPortal: form.showInPortal,
+          isDigitalService: form.isDigitalService,
           taxName: form.taxName.trim(),
           startingQuantity,
           endingQuantity,
@@ -741,175 +914,199 @@ export default function NewAddonPage() {
     })();
   };
 
-  const labelRequiredClass = "mb-1 block text-[13px] font-normal text-[#ef4444]";
-  const labelClass = "mb-1 block text-[13px] font-normal text-gray-700";
-  const inputBaseClass = "h-[34px] w-full rounded border border-gray-300 bg-white px-3 text-[13px] outline-none focus:border-blue-400 transition-all disabled:cursor-not-allowed disabled:bg-gray-100";
-  const textareaBaseClass = "w-full rounded border border-gray-300 bg-white p-2 text-[13px] outline-none focus:border-blue-400 transition-all disabled:cursor-not-allowed disabled:bg-gray-100 resize-none";
+  const labelRequiredClass = "mb-1 block text-[12px] font-normal text-[#ff4d4f]";
+  const labelClass = "mb-1 block text-[12px] font-normal text-[#1f2937]";
+  const inputBaseClass =
+    "h-[32px] w-full rounded border border-[#cfd6e6] bg-white px-3 text-[12px] text-[#111827] outline-none transition-all focus:border-[#4c8bf5] disabled:cursor-not-allowed disabled:bg-gray-100";
+  const textareaBaseClass =
+    "w-full rounded border border-[#cfd6e6] bg-white px-3 py-2 text-[12px] text-[#111827] outline-none transition-all focus:border-[#4c8bf5] disabled:cursor-not-allowed disabled:bg-gray-100 resize-none";
 
   return (
-    <div className="w-full min-h-full flex flex-col bg-gray-50">
-      <div className="flex-none flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
-        <h1 className="text-[18px] font-semibold text-slate-900">{isEditMode ? "Edit Addon" : "New Addon"}</h1>
-        <button onClick={handleCancel} className="text-gray-400 hover:text-gray-600 transition-colors" aria-label="Close">
+    <div className="flex min-h-full w-full flex-col bg-[#f8f9fc]">
+      <div className="flex-none flex items-center justify-between border-b border-[#dbe2ef] bg-white px-8 py-4">
+        <h1 className="text-[18px] font-semibold text-[#111827]">{isEditMode ? "Edit Addon" : "New Addon"}</h1>
+        <button onClick={handleCancel} className="text-[#9ca3af] hover:text-[#6b7280] transition-colors" aria-label="Close">
           <X size={20} />
         </button>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-gray-50 pb-6">
-	        <div className="w-full max-w-[1120px] px-6 py-8">
-	          <div className="overflow-visible rounded-lg bg-transparent">
-	            <div className="space-y-6 p-6">
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_280px]">
-          <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">
-            <div className="w-full max-w-[520px]">
-              <label className={labelRequiredClass}>Product*</label>
-              <StyledDropdown value={form.product} options={products} onChange={(v) => setField("product", v)} placeholder="Select Product" footerLabel="New Product" onFooterClick={() => setNewProductOpen(true)} />
-            </div>
-            <div className="md:col-span-1" />
-
-            <div className={`w-full max-w-[520px] ${inputsDisabled ? "opacity-60" : ""}`}>
-              <label className={labelRequiredClass}>Addon Name*</label>
-              <input type="text" value={form.addonName} disabled={inputsDisabled} onChange={(e) => setField("addonName", e.target.value)} className={inputBaseClass} />
-            </div>
-            <div className={`w-full max-w-[520px] ${inputsDisabled ? "opacity-60" : ""}`}>
-              <label className={labelRequiredClass}>Addon Code*</label>
-              <input type="text" value={form.addonCode} disabled={inputsDisabled} onChange={(e) => setField("addonCode", e.target.value)} className={inputBaseClass} />
-            </div>
-
-            <div className={`w-full max-w-[520px] ${inputsDisabled ? "opacity-60" : ""}`}>
-              <label className={labelClass}>Addon Description</label>
-              <textarea value={form.description} disabled={inputsDisabled} onChange={(e) => setField("description", e.target.value)} className={`h-20 ${textareaBaseClass}`} />
-            </div>
-            <div className={`w-full max-w-[520px] ${inputsDisabled ? "opacity-60" : ""}`}>
-              <label className={labelRequiredClass}>Addon Type*</label>
-              <div className="mt-2 flex gap-4">
-                <label className="flex cursor-pointer items-center text-[13px] text-gray-700"><input type="radio" name="addonType" checked={form.addonType === "One-time"} disabled={inputsDisabled} onChange={() => setField("addonType", "One-time")} style={{ accentColor: "#1b5e6a" }} className="mr-2 disabled:cursor-not-allowed" />One-time</label>
-                <label className="flex cursor-pointer items-center text-[13px] text-gray-700"><input type="radio" name="addonType" checked={form.addonType === "Recurring"} disabled={inputsDisabled} onChange={() => setField("addonType", "Recurring")} style={{ accentColor: "#1b5e6a" }} className="mr-2 disabled:cursor-not-allowed" />Recurring</label>
-              </div>
-            </div>
-
-            {form.addonType === "Recurring" ? (
-              <div className={`w-full max-w-[520px] ${inputsDisabled ? "opacity-60" : ""}`}>
-                <label className={labelRequiredClass}>Pricing Interval*</label>
-                <StyledDropdown value={form.billingFrequency} options={BILLING_INTERVALS} onChange={(v) => setField("billingFrequency", v)} placeholder="Select interval" disabled={inputsDisabled} />
-              </div>
-            ) : null}
-          </div>
-
-          <div className="flex items-start justify-center">
-            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onImageInputChange} />
-            {imageUrl ? (
-              <div className="mt-1 flex h-[230px] w-[260px] flex-col overflow-hidden rounded-lg border border-[#cfd5e3] bg-white">
-                <div className="flex-1 bg-white p-2">
-                  <img src={imageUrl} alt="Addon" className="h-full w-full object-contain" />
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-[#f8f9fc] pb-6">
+        <div className="w-full px-8 py-6">
+          <div className="space-y-0">
+            <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+              <div className="space-y-5">
+                <div className={`grid grid-cols-[140px_minmax(0,420px)] items-center gap-x-6 ${inputsDisabled ? "opacity-60" : ""}`}>
+                  <label className={labelRequiredClass}>Product*</label>
+                  <StyledDropdown
+                    value={form.product}
+                    options={products}
+                    onChange={(v) => setField("product", v)}
+                    placeholder="Select Product"
+                    footerLabel="New Product"
+                    onFooterClick={() => setNewProductOpen(true)}
+                    menuClassName="mt-0"
+                    portalMenu
+                  />
                 </div>
-                <div className="flex h-[44px] items-center justify-between border-t border-[#e5e7eb] px-3">
-                  <button type="button" disabled={inputsDisabled} onClick={() => fileInputRef.current?.click()} className="text-[14px] text-[#2563eb] disabled:cursor-not-allowed disabled:opacity-50">
-                    Change Image
-                  </button>
-                  <button type="button" disabled={inputsDisabled} onClick={() => setImageUrl("")} className="text-[#111827] hover:text-[#ef4444] disabled:cursor-not-allowed disabled:opacity-50">
-                    <Trash2 size={16} />
-                  </button>
+
+                <div className="grid grid-cols-2 gap-x-10">
+                  <div className={`grid grid-cols-[140px_minmax(0,1fr)] items-center gap-x-6 ${inputsDisabled ? "opacity-60" : ""}`}>
+                    <label className={labelRequiredClass}>Addon Name*</label>
+                    <input type="text" value={form.addonName} disabled={inputsDisabled} onChange={(e) => setField("addonName", e.target.value)} className={inputBaseClass} />
+                  </div>
+                  <div className={`grid grid-cols-[140px_minmax(0,1fr)] items-center gap-x-6 ${inputsDisabled ? "opacity-60" : ""}`}>
+                    <label className={labelRequiredClass}>Addon Code*</label>
+                    <input type="text" value={form.addonCode} disabled={inputsDisabled} onChange={(e) => setField("addonCode", e.target.value)} className={inputBaseClass} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-x-10">
+                  <div className={`grid grid-cols-[140px_minmax(0,1fr)] items-start gap-x-6 ${inputsDisabled ? "opacity-60" : ""}`}>
+                    <label className={labelClass}>Addon Description</label>
+                    <textarea value={form.description} disabled={inputsDisabled} onChange={(e) => setField("description", e.target.value)} className={`h-20 ${textareaBaseClass}`} />
+                  </div>
+                  <div className={`grid grid-cols-[140px_minmax(0,1fr)] items-start gap-x-6 ${inputsDisabled ? "opacity-60" : ""}`}>
+                    <label className={labelRequiredClass}>Addon Type*</label>
+                    <div className="mt-1 flex gap-5">
+                      <label className="flex cursor-pointer items-center text-[12px] text-[#111827]">
+                        <input type="radio" name="addonType" checked={form.addonType === "One-time"} disabled={inputsDisabled} onChange={() => setField("addonType", "One-time")} style={{ accentColor: "#1b5e6a" }} className="mr-2 disabled:cursor-not-allowed" />
+                        One-time
+                      </label>
+                      <label className="flex cursor-pointer items-center text-[12px] text-[#111827]">
+                        <input type="radio" name="addonType" checked={form.addonType === "Recurring"} disabled={inputsDisabled} onChange={() => setField("addonType", "Recurring")} style={{ accentColor: "#1b5e6a" }} className="mr-2 disabled:cursor-not-allowed" />
+                        Recurring
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={`grid grid-cols-[140px_minmax(0,420px)] items-center gap-x-6 ${inputsDisabled ? "opacity-60" : ""}`}>
+                  <label className={labelRequiredClass}>Pricing Interval*</label>
+                  <StyledDropdown value={form.billingFrequency} options={BILLING_INTERVALS} onChange={(v) => setField("billingFrequency", v)} placeholder="Select interval" disabled={inputsDisabled} />
                 </div>
               </div>
-            ) : (
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => !inputsDisabled && fileInputRef.current?.click()}
-                onKeyDown={(e) => {
-                  if (inputsDisabled) return;
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    fileInputRef.current?.click();
-                  }
-                }}
-                onDragOver={(e) => {
-                  if (inputsDisabled) return;
-                  e.preventDefault();
-                }}
-                onDrop={(e) => {
-                  if (inputsDisabled) return;
-                  e.preventDefault();
-                  applyImageFile(e.dataTransfer.files?.[0]);
-                }}
-                className={`mt-1 flex h-[230px] w-[260px] flex-col items-center justify-center rounded-lg border border-dashed border-[#d7dce8] bg-white text-center ${
-                  inputsDisabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"
-                }`}
-              >
-                <ImageIcon size={42} className="mb-3 text-[#8a8aa0]" />
-                <p className="text-[14px] text-[#4b5563]">Drag image(s) here or</p>
-                <span className="text-[14px] text-[#156372]">Browse images</span>
-              </div>
-            )}
-          </div>
-        </div>
 
-        <div className={`border-b border-[#d8deea] bg-[#f7f8fc] px-4 ${inputsDisabled ? "opacity-60" : ""}`}>
-          <nav className="flex flex-wrap items-end gap-2 border-b border-[#d8deea] pt-2">
-            {["Pricing", "Plans", "Hosted Payment Pages & Portal", "Other Details"].map((tab) => (
-              <button
-                key={tab}
-                disabled={inputsDisabled}
-                onClick={() => setActiveTab(tab)}
-                className={`px-5 py-3 text-[13px] transition-colors disabled:cursor-not-allowed ${
-                  activeTab === tab
-                    ? "border-x border-t-2 border-b-0 border-[#d8deea] border-t-[#22b573] bg-white font-medium text-[#111827]"
-                    : "text-[#111827] hover:text-[#0f172a]"
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </nav>
-        </div>
+              <div className="flex items-start justify-center lg:pt-4">
+                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onImageInputChange} />
+                {imageUrl ? (
+                  <div className="mt-1 flex h-[190px] w-[230px] flex-col overflow-hidden rounded-lg border border-[#cfd5e3] bg-white">
+                    <div className="flex-1 bg-white p-2">
+                      <img src={imageUrl} alt="Addon" className="h-full w-full object-contain" />
+                    </div>
+                    <div className="flex h-[44px] items-center justify-between border-t border-[#e5e7eb] px-3">
+                      <button type="button" disabled={inputsDisabled} onClick={() => fileInputRef.current?.click()} className="text-[14px] text-[#2563eb] disabled:cursor-not-allowed disabled:opacity-50">
+                        Change Image
+                      </button>
+                      <button type="button" disabled={inputsDisabled} onClick={() => setImageUrl("")} className="text-[#111827] hover:text-[#ef4444] disabled:cursor-not-allowed disabled:opacity-50">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => !inputsDisabled && fileInputRef.current?.click()}
+                    onKeyDown={(e) => {
+                      if (inputsDisabled) return;
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        fileInputRef.current?.click();
+                      }
+                    }}
+                    onDragOver={(e) => {
+                      if (inputsDisabled) return;
+                      e.preventDefault();
+                    }}
+                    onDrop={(e) => {
+                      if (inputsDisabled) return;
+                      e.preventDefault();
+                      applyImageFile(e.dataTransfer.files?.[0]);
+                    }}
+                    className={`mt-1 flex h-[190px] w-[230px] flex-col items-center justify-center rounded-lg border border-dashed border-[#d7dce8] bg-white text-center ${
+                      inputsDisabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+                    }`}
+                  >
+                    <ImageIcon size={42} className="mb-3 text-[#8a8aa0]" />
+                    <p className="text-[14px] text-[#4b5563]">Drag image(s) here or</p>
+                    <span className="text-[14px] text-[#156372]">Browse images</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className={`mt-6 border-b border-[#d8deea] bg-[#f7f8fc] px-4 ${inputsDisabled ? "opacity-60" : ""}`}>
+              <nav className="flex flex-wrap items-end gap-2 border-b border-[#d8deea] pt-2">
+                {["Pricing", "Plans", "Hosted Payment Pages & Portal", "Other Details"].map((tab) => (
+                  <button
+                    key={tab}
+                    disabled={inputsDisabled}
+                    onClick={() => setActiveTab(tab)}
+                    className={`px-5 py-3 text-[13px] transition-colors disabled:cursor-not-allowed ${
+                      activeTab === tab
+                        ? "border-x border-t-2 border-b-0 border-[#d8deea] border-t-[#22b573] bg-white font-medium text-[#111827] shadow-[0_-1px_0_0_#fff]"
+                        : "text-[#111827] hover:text-[#0f172a]"
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </nav>
+            </div>
 
         {activeTab === "Pricing" ? (
           <div className={`space-y-6 py-2 ${inputsDisabled ? "opacity-60" : ""}`}>
-            <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
-              <div className="w-full max-w-[520px]">
-                <label className={labelRequiredClass}>Pricing Model*</label>
-                <StyledDropdown
-                  value={form.pricingModel}
-                  options={PRICING_MODELS}
-                  onChange={(v) => {
-                    const nextModel = normModel(v);
-                    setForm((prev) => ({ ...prev, pricingModel: nextModel, unit: nextModel === "Flat" ? "" : prev.unit }));
-                    setVolumeBrackets((prev) => {
-                      if (nextModel === "Package") {
-                        return prev.length ? prev.map((row) => ({ ...row, startingQty: "" })) : [{ startingQty: "", endingQty: "", price: "" }];
-                      }
-                      if (nextModel === "Volume" || nextModel === "Tier") {
-                        return prev.length
-                          ? prev.map((row, index) => ({
-                              ...row,
-                              startingQty: row.startingQty || (index === 0 ? "1" : ""),
-                              endingQty: row.endingQty || (index === 0 ? "2" : row.endingQty),
-                            }))
-                          : [{ startingQty: "1", endingQty: "2", price: "" }];
-                      }
-                      return prev;
-                    });
-                  }}
-                  placeholder="Select Pricing Model"
-                  disabled={inputsDisabled}
-                />
-              </div>
-              {!isFlatPricing ? (
-                <div className="w-full max-w-[520px]">
-                  <label className={labelRequiredClass}>Unit Name*</label>
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1">
-                      <StyledDropdown value={form.unit} options={unitOptions} onChange={(v) => setField("unit", v)} placeholder="Select Unit" disabled={inputsDisabled} />
-                    </div>
-                    <Info size={16} className="text-gray-400" />
-                  </div>
-                </div>
-              ) : <div />}
-            </div>
-
             {isBracketPricing ? (
               <>
+                <div className="grid grid-cols-1 gap-x-14 gap-y-6 md:grid-cols-2">
+                  <div className={`grid grid-cols-[140px_minmax(0,1fr)] items-center gap-x-6 ${inputsDisabled ? "opacity-60" : ""}`}>
+                    <label className={labelRequiredClass}>Pricing Model*</label>
+                    <StyledDropdown
+                      value={form.pricingModel}
+                      options={PRICING_MODELS}
+                      onChange={(v) => {
+                        const nextModel = normModel(v);
+                        setForm((prev) => ({ ...prev, pricingModel: nextModel, unit: nextModel === "Flat" ? "" : prev.unit }));
+                        setVolumeBrackets((prev) => {
+                          if (nextModel === "Package") {
+                            return prev.length ? prev.map((row) => ({ ...row, startingQty: "" })) : [{ startingQty: "", endingQty: "", price: "" }];
+                          }
+                          if (nextModel === "Volume" || nextModel === "Tier") {
+                            const nextRows =
+                              prev.length > 0
+                                ? [...prev]
+                                : [
+                                    { startingQty: "1", endingQty: "2", price: "" },
+                                    { startingQty: "", endingQty: "", price: "" },
+                                  ];
+                            while (nextRows.length < 2) {
+                              nextRows.push({ startingQty: "", endingQty: "", price: "" });
+                            }
+                            return nextRows.map((row, index) => ({
+                              ...row,
+                              startingQty: row.startingQty || (index === 0 ? "1" : ""),
+                              endingQty: row.endingQty || (index === 0 ? "2" : ""),
+                            }));
+                          }
+                          return prev;
+                        });
+                      }}
+                      placeholder="Select Pricing Model"
+                      disabled={inputsDisabled}
+                    />
+                  </div>
+
+                  <div className={`grid grid-cols-[140px_minmax(0,1fr)] items-center gap-x-6 ${inputsDisabled ? "opacity-60" : ""}`}>
+                    <label className={labelRequiredClass}>Unit Name*</label>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <StyledDropdown value={form.unit} options={unitOptions} onChange={(v) => setField("unit", v)} placeholder="Select Unit" disabled={inputsDisabled} />
+                      </div>
+                      <Info size={16} className="text-gray-400" />
+                    </div>
+                  </div>
+                </div>
+
                 {isPackagePricing ? (
                   <p className="max-w-[780px] text-[15px] leading-7 text-[#64748b]">
                     Price is set for a fixed quantity of addons. Unit price is not applicable.
@@ -1036,37 +1233,162 @@ export default function NewAddonPage() {
                     <p className="mt-1 text-[11px] leading-tight text-gray-400">Add tax to your Plan or Addon. Use tax group for more than one tax.</p>
                   </div>
                 </div>
-              </>
-            ) : (
-              <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
-                <div className="w-full max-w-[520px] space-y-4">
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-red-600">Price*</label>
-                    {isFlatPricing ? (
-                      <div className="grid grid-cols-[54px_1fr] overflow-hidden rounded-md border border-gray-300">
-                        <span className="border-r bg-gray-50 px-3 py-2 text-sm text-gray-500">{currencyPrefix}</span>
-                        <input type="text" value={form.price} disabled={inputsDisabled} onChange={(e) => setField("price", e.target.value)} className="flex-1 p-2 text-sm outline-none disabled:cursor-not-allowed disabled:bg-gray-100" />
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-[54px_1fr_105px] overflow-hidden rounded-md border border-gray-300">
-                        <span className="border-r bg-gray-50 px-3 py-2 text-sm text-gray-500">{currencyPrefix}</span>
-                        <input type="text" value={form.price} disabled={inputsDisabled} onChange={(e) => setField("price", e.target.value)} className="flex-1 p-2 text-sm outline-none disabled:cursor-not-allowed disabled:bg-gray-100" />
-                        <span className="border-l bg-gray-50 px-3 py-2 text-sm text-gray-500">{`/unit${recurringSuffix}`}</span>
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-red-600">Type*</label>
-                    <div className="mt-2 flex gap-4">
-                      <label className="flex cursor-pointer items-center text-sm"><input type="radio" name="productType" checked={form.type === "Goods"} disabled={inputsDisabled} onChange={() => setField("type", "Goods")} className="mr-2 accent-blue-600 disabled:cursor-not-allowed" />Goods</label>
-                      <label className="flex cursor-pointer items-center text-sm"><input type="radio" name="productType" checked={form.type === "Service"} disabled={inputsDisabled} onChange={() => setField("type", "Service")} className="mr-2 accent-blue-600 disabled:cursor-not-allowed" />Service</label>
+
+                {form.type === "Service" ? (
+                  <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
+                    <div />
+                    <div className="flex items-center gap-2">
+                      <label className="flex cursor-pointer items-center gap-2 text-[12px] text-[#111827]">
+                        <input
+                          type="checkbox"
+                          checked={form.isDigitalService}
+                          onChange={(e) => setField("isDigitalService", e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300 disabled:cursor-not-allowed"
+                          disabled={inputsDisabled}
+                        />
+                        <span>It is a digital service</span>
+                      </label>
+                      <Info size={14} className="text-gray-400" />
                     </div>
                   </div>
+                ) : null}
+              </>
+            ) : (
+              <div className="w-full max-w-[700px] space-y-6">
+                <div className="grid grid-cols-1 gap-x-14 gap-y-6 md:grid-cols-2">
+                  <div className={`grid grid-cols-[140px_minmax(0,1fr)] items-center gap-x-6 ${inputsDisabled ? "opacity-60" : ""}`}>
+                    <label className={labelRequiredClass}>Pricing Model*</label>
+                    <StyledDropdown
+                      value={form.pricingModel}
+                      options={PRICING_MODELS}
+                      onChange={(v) => {
+                        const nextModel = normModel(v);
+                        setForm((prev) => ({ ...prev, pricingModel: nextModel, unit: nextModel === "Flat" ? "" : prev.unit }));
+                        setVolumeBrackets((prev) => {
+                          if (nextModel === "Package") {
+                            return prev.length ? prev.map((row) => ({ ...row, startingQty: "" })) : [{ startingQty: "", endingQty: "", price: "" }];
+                          }
+                          if (nextModel === "Volume" || nextModel === "Tier") {
+                            const nextRows =
+                              prev.length > 0
+                                ? [...prev]
+                                : [
+                                    { startingQty: "1", endingQty: "2", price: "" },
+                                    { startingQty: "", endingQty: "", price: "" },
+                                  ];
+                            while (nextRows.length < 2) {
+                              nextRows.push({ startingQty: "", endingQty: "", price: "" });
+                            }
+                            return nextRows.map((row, index) => ({
+                              ...row,
+                              startingQty: row.startingQty || (index === 0 ? "1" : ""),
+                              endingQty: row.endingQty || (index === 0 ? "2" : ""),
+                            }));
+                          }
+                          return prev;
+                        });
+                      }}
+                      placeholder="Select Pricing Model"
+                      disabled={inputsDisabled}
+                    />
+                  </div>
+
+                  {!isFlatPricing ? (
+                    <div className={`grid grid-cols-[140px_minmax(0,1fr)] items-center gap-x-6 ${inputsDisabled ? "opacity-60" : ""}`}>
+                      <label className={labelRequiredClass}>Unit Name*</label>
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1">
+                          <StyledDropdown value={form.unit} options={unitOptions} onChange={(v) => setField("unit", v)} placeholder="Select Unit" disabled={inputsDisabled} />
+                        </div>
+                        <Info size={16} className="text-gray-400" />
+                      </div>
+                    </div>
+                  ) : (
+                    <div />
+                  )}
                 </div>
-                <div className="w-full max-w-[520px]">
-                  <label className="mb-1 block text-sm font-medium text-slate-600">Sales Tax</label>
-                  <StyledDropdown value={form.taxName} options={taxOptions} onChange={(v) => setField("taxName", v)} placeholder="Select a Tax" disabled={inputsDisabled} groupLabel="Compound tax" footerLabel="New Tax" onFooterClick={() => navigate("/settings/taxes/new")} />
-                  <p className="mt-1 text-[11px] leading-tight text-gray-400">Add tax to your Plan or Addon. Use tax group for more than one tax.</p>
+
+                <div className="grid grid-cols-1 gap-x-14 gap-y-6 md:grid-cols-2">
+                  <div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-x-6">
+                    <label className={labelRequiredClass}>Price*</label>
+                    <div className="grid grid-cols-[54px_1fr_105px] overflow-hidden rounded-md border border-[#cfd6e6] bg-white">
+                      <span className="border-r border-[#cfd6e6] bg-[#f8fafc] px-3 py-2 text-[12px] text-[#64748b]">{currencyPrefix}</span>
+                      <input
+                        type="text"
+                        value={form.price}
+                        disabled={inputsDisabled}
+                        onChange={(e) => setField("price", e.target.value)}
+                        className="flex-1 px-3 py-2 text-[12px] outline-none disabled:cursor-not-allowed disabled:bg-gray-100"
+                      />
+                      <span className="border-l border-[#cfd6e6] bg-[#f8fafc] px-3 py-2 text-[12px] text-[#64748b]">{`/unit${recurringSuffix}`}</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-[140px_minmax(0,1fr)] items-start gap-x-6">
+                    <label className={labelClass}>Sales Tax</label>
+                    <div>
+                      <StyledDropdown
+                        value={form.taxName}
+                        options={taxOptions}
+                        onChange={(v) => setField("taxName", v)}
+                        placeholder="Select a Tax"
+                        disabled={inputsDisabled}
+                        groupLabel="Compound tax"
+                        footerLabel="New Tax"
+                        onFooterClick={() => navigate("/settings/taxes/new")}
+                      />
+                      <p className="mt-1 max-w-[260px] text-[11px] leading-tight text-gray-400">Add tax to your Plan or Addon. Use tax group for more than one tax.</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-x-6">
+                    <label className={labelRequiredClass}>Type*</label>
+                    <div className="flex items-center gap-5">
+                      <label className="flex cursor-pointer items-center text-[12px] text-[#111827]">
+                        <input
+                          type="radio"
+                          name="productType"
+                          checked={form.type === "Goods"}
+                          disabled={inputsDisabled}
+                          onChange={() => {
+                            setField("type", "Goods");
+                            setField("isDigitalService", false);
+                          }}
+                          className="mr-2 accent-[#1b5e6a] disabled:cursor-not-allowed"
+                        />
+                        Goods
+                      </label>
+                      <label className="flex cursor-pointer items-center text-[12px] text-[#111827]">
+                        <input
+                          type="radio"
+                          name="productType"
+                          checked={form.type === "Service"}
+                          disabled={inputsDisabled}
+                          onChange={() => setField("type", "Service")}
+                          className="mr-2 accent-[#1b5e6a] disabled:cursor-not-allowed"
+                        />
+                        Service
+                      </label>
+                    </div>
+                  </div>
+
+                  {form.type === "Service" ? (
+                    <div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-x-6">
+                      <span className="text-[12px] text-[#111827]">It is a digital service</span>
+                      <label className="flex cursor-pointer items-center gap-2 text-[12px] text-[#111827]">
+                        <input
+                          type="checkbox"
+                          checked={form.isDigitalService}
+                          onChange={(e) => setField("isDigitalService", e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300 disabled:cursor-not-allowed"
+                          disabled={inputsDisabled}
+                        />
+                        <Info size={14} className="text-gray-400" />
+                      </label>
+                    </div>
+                  ) : (
+                    <div />
+                  )}
                 </div>
               </div>
             )}
@@ -1159,25 +1481,25 @@ export default function NewAddonPage() {
           </div>
         ) : null}
       </div>
-    </div>
-  </div>
-</div>
-
-      <div className="sticky bottom-0 z-[200] flex-none flex gap-3 border-t border-gray-200 bg-white px-8 py-4 shadow-[0_-1px_3px_0_rgba(0,0,0,0.1)]">
-        <button
-          onClick={handleSave}
-          disabled={inputsDisabled}
-          className="cursor-pointer transition-all text-white px-8 py-1.5 rounded-lg border-[#0D4A52] border-b-[4px] hover:brightness-110 hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:brightness-90 active:translate-y-[2px] flex items-center gap-2 text-[13px] font-semibold disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none disabled:border-b-[4px]"
-          style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-        >
-          {isEditMode ? "Save Changes" : "Save"}
-        </button>
-        <button
-          onClick={handleCancel}
-          className="cursor-pointer transition-all bg-white text-slate-600 px-8 py-1.5 rounded-lg border-slate-200 border border-b-[4px] hover:bg-slate-50 active:border-b-[2px] active:translate-y-[2px] text-[13px] font-semibold"
-        >
-          Cancel
-        </button>
+      </div>
+      </div>
+      <div className="flex-none border-t border-gray-200 bg-white px-8 py-4 shadow-[0_-1px_3px_0_rgba(0,0,0,0.1)]">
+        <div className="flex gap-3">
+          <button
+            onClick={handleSave}
+            disabled={inputsDisabled}
+            className="cursor-pointer rounded-lg border-b-[4px] border-[#0D4A52] px-8 py-1.5 text-[13px] font-semibold text-white transition-all hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[2px] active:border-b-[2px] active:brightness-90 disabled:cursor-not-allowed disabled:transform-none disabled:opacity-60 disabled:border-b-[4px]"
+            style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
+          >
+            {isEditMode ? "Save Changes" : "Save"}
+          </button>
+          <button
+            onClick={handleCancel}
+            className="cursor-pointer rounded-lg border border-slate-200 border-b-[4px] bg-white px-8 py-1.5 text-[13px] font-semibold text-slate-600 transition-all hover:bg-slate-50 active:translate-y-[2px] active:border-b-[2px]"
+          >
+            Cancel
+          </button>
+        </div>
       </div>
 
       <NewProductModal isOpen={newProductOpen} onClose={() => setNewProductOpen(false)} onSaveSuccess={onNewProductSaved} />

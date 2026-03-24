@@ -113,13 +113,24 @@ export const updateItem: express.RequestHandler = async (req, res, next) => {
 
     const prevInactive = computeIsInactive(existing);
 
-    const body = (req.body || {}) as Record<string, unknown>;
-    const nextRow = { ...existing, ...body };
+    const body = { ...(req.body || {}) } as Record<string, unknown>;
+    delete body._id;
+    delete body.id;
+    delete body.organizationId;
+    delete body.createdBy;
+    delete body.updatedBy;
+    delete body.history;
+    delete body.createdAt;
+    delete body.updatedAt;
+    delete body.__v;
+    const safeBody = body;
+
+    const nextRow = { ...existing, ...safeBody };
     const nextInactive = computeIsInactive(nextRow);
 
     const activeChanged = prevInactive !== nextInactive;
 
-    const changedFields = Object.keys(body).filter((key) => {
+    const changedFields = Object.keys(safeBody).filter((key) => {
       if (key === "history" || key === "updatedBy" || key === "createdBy") return false;
       if (key === "__v" || key === "_id" || key === "id") return false;
       return true;
@@ -138,7 +149,7 @@ export const updateItem: express.RequestHandler = async (req, res, next) => {
 
     const updated = await Item.findOneAndUpdate(
       { _id: req.params.id, organizationId: orgId },
-      { $set: { ...body, updatedBy: actor }, $push: { history: historyEntry } },
+      { $set: { ...safeBody, updatedBy: actor }, $push: { history: historyEntry } },
       { new: true }
     ).lean();
     if (!updated) return res.status(404).json({ success: false, message: "Item not found", data: null });

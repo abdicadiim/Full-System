@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
     X,
@@ -23,16 +22,18 @@ import {
 } from "../../../../services/api";
 import { Item, Z } from "../itemsModel";
 import NewAccountModal from "../../../../components/modals/NewAccountModal";
-import NewTaxModal from "../../../../components/modals/NewTaxModal";
-import NewVendorModal from "../../../../components/modals/NewVendorModal";
+import NewTaxModal from "../../../../../components/modals/NewTaxModal";
+import NewVendorModal from "../../../Expense/bills/NewVendorModal";
 import ManageUnitsModal from "./modals/ManageUnitsModal";
 import ZohoSelect from "../../../../components/ZohoSelect";
 
 interface EditItemFormProps {
-    item: Item;
+    item?: Item;
+    initialData?: Item;
     onCancel: () => void;
     onUpdate: (data: any) => Promise<void>;
     baseCurrency?: any;
+    formTitle?: string;
 }
 
 const Label = ({ children, required = false, help = true, tooltip, htmlFor }: { children: React.ReactNode; required?: boolean; help?: boolean; tooltip?: React.ReactNode; htmlFor?: string }) => (
@@ -62,7 +63,7 @@ const Input = ({ className = "", error, ...props }: InputProps) => (
     <input
         {...props}
         className={`block w-full max-w-[400px] rounded-md border text-[13px] text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#1b5e6a] focus:border-[#1b5e6a] transition-all ${error ? "border-red-500 ring-red-500/20 ring-1" : "border-slate-200"} ${className}`}
-        style={error ? { borderColor: '#ef4444', ringColor: '#ef4444' } : {}}
+        style={error ? { borderColor: "#ef4444" } : {}}
     />
 );
 
@@ -281,36 +282,40 @@ const getGroupedTaxes = (rows: any[]) => {
     ].filter((g) => g.options.length > 0);
 };
 
-export default function EditItemForm({ item, onCancel, onUpdate, baseCurrency }: EditItemFormProps) {
-    const navigate = useNavigate();
+export default function EditItemForm({ item, initialData, onCancel, onUpdate, baseCurrency, formTitle = "Edit Item" }: EditItemFormProps) {
+    const sourceItem = item || initialData || ({} as Item);
     const currencyCode = String(baseCurrency?.code || "USD").trim() || "USD";
     // Use code (e.g. ARS) to clearly indicate the base currency (symbol like "$" can be ambiguous).
     const currencyPrefix = currencyCode;
     const accentColor = "#1b5e6a";
+    const asArray = (value: any) => {
+        const candidate = value?.data ?? value?.taxes ?? value?.results ?? value;
+        return Array.isArray(candidate) ? candidate : [];
+    };
     const [form, setForm] = useState({
-        type: item.type || "Goods",
-        name: item.name || "",
-        sku: item.sku || "",
-        unit: item.unit || "pcs",
-        sellable: item.sellingPrice !== undefined,
-        sellingPrice: item.sellingPrice?.toString() || "",
-        salesAccount: item.salesAccount || "Sales",
-        salesDescription: item.salesDescription || "",
-        salesTax: item.taxInfo ? `${item.taxInfo.taxName} [${item.taxInfo.taxRate}%]` : "Select a Tax",
-        purchasable: item.costPrice !== undefined,
-        costPrice: item.costPrice?.toString() || "",
-        purchaseAccount: item.purchaseAccount || "Cost of Goods Sold",
-        purchaseDescription: item.purchaseDescription || "",
-        purchaseTax: item.purchaseTaxInfo ? `${item.purchaseTaxInfo.taxName} [${item.purchaseTaxInfo.taxRate}%]` : "Select a Tax",
-        preferredVendor: item.preferredVendor || "",
-        trackInventory: item.trackInventory || false,
-        inventoryAccount: item.inventoryAccount || "Inventory Asset",
-        inventoryValuationMethod: item.inventoryValuationMethod || "FIFO (First In First Out)",
-        reorderPoint: item.reorderPoint?.toString() || "",
-        currency: item.currency || currencyCode,
+        type: sourceItem.type || "Goods",
+        name: sourceItem.name || "",
+        sku: sourceItem.sku || "",
+        unit: sourceItem.unit || "pcs",
+        sellable: sourceItem.sellingPrice !== undefined,
+        sellingPrice: sourceItem.sellingPrice?.toString() || "",
+        salesAccount: sourceItem.salesAccount || "Sales",
+        salesDescription: sourceItem.salesDescription || "",
+        salesTax: sourceItem.taxInfo ? `${sourceItem.taxInfo.taxName} [${sourceItem.taxInfo.taxRate}%]` : "Select a Tax",
+        purchasable: sourceItem.costPrice !== undefined,
+        costPrice: sourceItem.costPrice?.toString() || "",
+        purchaseAccount: sourceItem.purchaseAccount || "Cost of Goods Sold",
+        purchaseDescription: sourceItem.purchaseDescription || "",
+        purchaseTax: sourceItem.purchaseTaxInfo ? `${sourceItem.purchaseTaxInfo.taxName} [${sourceItem.purchaseTaxInfo.taxRate}%]` : "Select a Tax",
+        preferredVendor: sourceItem.preferredVendor || "",
+        trackInventory: sourceItem.trackInventory || false,
+        inventoryAccount: sourceItem.inventoryAccount || "Inventory Asset",
+        inventoryValuationMethod: sourceItem.inventoryValuationMethod || "FIFO (First In First Out)",
+        reorderPoint: sourceItem.reorderPoint?.toString() || "",
+        currency: sourceItem.currency || currencyCode,
     });
 
-    const [images, setImages] = useState<string[]>(item.images || []);
+    const [images, setImages] = useState<string[]>(sourceItem.images || []);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [dbUnits, setDbUnits] = useState<any[]>([]);
@@ -318,7 +323,7 @@ export default function EditItemForm({ item, onCancel, onUpdate, baseCurrency }:
     const [dbTaxes, setDbTaxes] = useState<any[]>([]);
     const [dbVendors, setDbVendors] = useState<any[]>([]);
     const [availableTags, setAvailableTags] = useState<any[]>([]);
-    const [selectedTagIds, setSelectedTagIds] = useState<string[]>(item.tagIds || []);
+    const [selectedTagIds, setSelectedTagIds] = useState<string[]>(sourceItem.tagIds || []);
 
     const [isTaxModalOpen, setIsTaxModalOpen] = useState(false);
     const [pendingTaxField, setPendingTaxField] = useState<"salesTax" | "purchaseTax">("salesTax");
@@ -342,11 +347,11 @@ export default function EditItemForm({ item, onCancel, onUpdate, baseCurrency }:
                 vendorsAPI.getAll(),
                 reportingTagsAPI.getAll()
             ]);
-            setDbUnits(u.data || u || []);
-            setDbAccounts(Array.isArray(a?.data || a) ? (a.data || a) : []);
-            setDbTaxes(t.data || t || []);
-            setDbVendors(v.data || v || []);
-            setAvailableTags(tags.data || tags || []);
+            setDbUnits(asArray(u));
+            setDbAccounts(asArray(a));
+            setDbTaxes(asArray(t));
+            setDbVendors(asArray(v));
+            setAvailableTags(asArray(tags));
         } catch (e) {
             console.error("Data fetch failed", e);
         }
@@ -355,6 +360,34 @@ export default function EditItemForm({ item, onCancel, onUpdate, baseCurrency }:
     useEffect(() => {
         fetchData();
     }, []);
+
+    useEffect(() => {
+        const nextItem = item || initialData || ({} as Item);
+        setForm({
+            type: nextItem.type || "Goods",
+            name: nextItem.name || "",
+            sku: nextItem.sku || "",
+            unit: nextItem.unit || "pcs",
+            sellable: nextItem.sellingPrice !== undefined,
+            sellingPrice: nextItem.sellingPrice?.toString() || "",
+            salesAccount: nextItem.salesAccount || "Sales",
+            salesDescription: nextItem.salesDescription || "",
+            salesTax: nextItem.taxInfo ? `${nextItem.taxInfo.taxName} [${nextItem.taxInfo.taxRate}%]` : "Select a Tax",
+            purchasable: nextItem.costPrice !== undefined,
+            costPrice: nextItem.costPrice?.toString() || "",
+            purchaseAccount: nextItem.purchaseAccount || "Cost of Goods Sold",
+            purchaseDescription: nextItem.purchaseDescription || "",
+            purchaseTax: nextItem.purchaseTaxInfo ? `${nextItem.purchaseTaxInfo.taxName} [${nextItem.purchaseTaxInfo.taxRate}%]` : "Select a Tax",
+            preferredVendor: nextItem.preferredVendor || "",
+            trackInventory: nextItem.trackInventory || false,
+            inventoryAccount: nextItem.inventoryAccount || "Inventory Asset",
+            inventoryValuationMethod: nextItem.inventoryValuationMethod || "FIFO (First In First Out)",
+            reorderPoint: nextItem.reorderPoint?.toString() || "",
+            currency: nextItem.currency || currencyCode,
+        });
+        setImages(nextItem.images || []);
+        setSelectedTagIds(nextItem.tagIds || []);
+    }, [item?.id, item?._id, initialData?.id, initialData?._id, currencyCode]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value, type } = e.target;
@@ -441,7 +474,7 @@ export default function EditItemForm({ item, onCancel, onUpdate, baseCurrency }:
         <div className="bg-[#fbfcff] min-h-screen font-sans flex flex-col">
             {/* Header */}
             <div className="flex-none flex items-center justify-between px-6 py-4 bg-white border-b border-slate-100">
-                <h2 className="text-[18px] font-bold text-slate-800">Edit Item</h2>
+                <h2 className="text-[18px] font-bold text-slate-800">{formTitle}</h2>
                 <button type="button" onClick={onCancel} className="p-1 rounded-full hover:bg-slate-50 transition-colors">
                     <X size={20} className="text-slate-400" />
                 </button>
@@ -769,8 +802,22 @@ export default function EditItemForm({ item, onCancel, onUpdate, baseCurrency }:
             </form>
 
             <NewAccountModal isOpen={isAccountModalOpen} onClose={() => setIsAccountModalOpen(false)} defaultType={accountModalDefaultType} onCreated={(acc) => { setDbAccounts(prev => [...prev, acc]); setForm(f => ({ ...f, [pendingAccountField]: acc.accountName || acc.name })); setIsAccountModalOpen(false); }} />
-            <NewTaxModal isOpen={isTaxModalOpen} onClose={() => setIsTaxModalOpen(false)} onCreated={(tax) => { setDbTaxes(prev => [...prev, tax]); setForm(f => ({ ...f, [pendingTaxField]: `${tax.name} [${tax.rate}%]` })); }} />
-            <NewVendorModal isOpen={isVendorModalOpen} onClose={() => setIsVendorModalOpen(false)} onCreated={(v) => { setDbVendors(prev => [...prev, v]); setForm(f => ({ ...f, preferredVendor: v.name })); }} />
+            <NewTaxModal
+                isOpen={isTaxModalOpen}
+                onClose={() => setIsTaxModalOpen(false)}
+                onCreated={({ tax }: any) => {
+                    setDbTaxes((prev) => [...prev, tax]);
+                    setForm((f) => ({ ...f, [pendingTaxField]: `${tax.name} [${tax.rate}%]` }));
+                }}
+            />
+            <NewVendorModal
+                isOpen={isVendorModalOpen}
+                onClose={() => setIsVendorModalOpen(false)}
+                onVendorCreated={(v) => {
+                    setDbVendors((prev) => [...prev, v]);
+                    setForm((f) => ({ ...f, preferredVendor: v.name }));
+                }}
+            />
             <ManageUnitsModal isOpen={isManageUnitsModalOpen} onClose={() => setIsManageUnitsModalOpen(false)} onUnitsChanged={fetchData} />
         </div>
     );

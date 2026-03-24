@@ -1,6 +1,7 @@
 // src/features/items/ItemsPage.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
+import { Loader2, X } from "lucide-react";
 import { itemsAPI, tagAssignmentsAPI } from "../../../services/api";
 import { Item, DeleteConfirmModal } from "./itemsModel";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -10,6 +11,7 @@ import ItemsList from "./ItemsList";
 import ItemSidebar from "./components/ItemSidebar";
 import ItemDetails from "./components/ItemDetails";
 import NewItemForm from "./components/NewItemForm";
+import EditItemForm from "./components/EditItemForm";
 import BulkUpdateModal from "./components/modals/BulkUpdateModal";
 import { useCurrency } from "../../../hooks/useCurrency";
 import { usePermissions } from "../../../hooks/usePermissions";
@@ -26,6 +28,7 @@ function ItemsPageContent() {
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<DeleteConfirmModal>({
     open: false, itemId: null, itemName: null, count: 1, itemIds: null
   });
+  const [isDeletingItems, setIsDeletingItems] = useState(false);
   const [bulkUpdateModal, setBulkUpdateModal] = useState<{ open: boolean, itemIds: string[] }>({
     open: false, itemIds: []
   });
@@ -156,10 +159,33 @@ function ItemsPageContent() {
       toast.error("You do not have permission to edit items.");
       return;
     }
-    if (!selectedId) return;
+    const targetId = String(selectedItem?.id || selectedItem?._id || selectedId || "").trim();
+    if (!targetId) {
+      toast.error("No item selected for editing.");
+      return;
+    }
     try {
-      await itemsAPI.update(selectedId, data);
+      const safeSelected = { ...(selectedItem || {}) } as any;
+      const safeData = { ...(data || {}) } as any;
+      delete safeSelected.id;
+      delete safeSelected._id;
+      delete safeSelected.createdAt;
+      delete safeSelected.updatedAt;
+      delete safeSelected.__v;
+      delete safeData.id;
+      delete safeData._id;
+      delete safeData.createdAt;
+      delete safeData.updatedAt;
+      delete safeData.__v;
+      const response = await itemsAPI.update(targetId, {
+        ...safeSelected,
+        ...safeData,
+      });
+      if (response && response.success === false) {
+        throw new Error(response.message || "Failed to update item");
+      }
       await fetchItems();
+      setSelectedId(targetId);
       setView("detail");
       toast.success("Item updated successfully");
     } catch (error: any) {
@@ -183,6 +209,7 @@ function ItemsPageContent() {
       return;
     }
     if (!deleteConfirmModal.itemId) return;
+    setIsDeletingItems(true);
     try {
       await itemsAPI.delete(deleteConfirmModal.itemId);
       await fetchItems();
@@ -193,7 +220,9 @@ function ItemsPageContent() {
       toast.success("Item deleted successfully");
       setDeleteConfirmModal({ open: false, itemId: null, itemName: null, count: 1, itemIds: null });
     } catch (error: any) {
-      toast.error("Failed to delete item");
+      toast.error("Failed to delete item: " + (error?.message || "Unknown error"));
+    } finally {
+      setIsDeletingItems(false);
     }
   };
 
@@ -203,13 +232,20 @@ function ItemsPageContent() {
       return;
     }
     if (!deleteConfirmModal.itemIds || deleteConfirmModal.itemIds.length === 0) return;
+    setIsDeletingItems(true);
     try {
       await Promise.all(deleteConfirmModal.itemIds.map(id => itemsAPI.delete(id)));
       await fetchItems();
+      if (deleteConfirmModal.itemIds.includes(selectedId || "")) {
+        setSelectedId(null);
+        setView("list");
+      }
       toast.success(`${deleteConfirmModal.itemIds.length} item(s) deleted successfully`);
       setDeleteConfirmModal({ open: false, itemId: null, itemName: null, count: 1, itemIds: null });
     } catch (error: any) {
-      toast.error("Bulk delete failed");
+      toast.error("Bulk delete failed: " + (error?.message || "Unknown error"));
+    } finally {
+      setIsDeletingItems(false);
     }
   };
 
@@ -394,18 +430,11 @@ function ItemsPageContent() {
           )}
 
           {view === "edit" && selectedItem && canEditItems && (
-            <NewItemForm
+            <EditItemForm
               onCancel={() => setView("detail")}
-              onCreate={async (data: any) => {
-                await handleUpdateItem({
-                  ...selectedItem,
-                  ...data,
-                  id: selectedItem.id || selectedItem._id,
-                  _id: selectedItem._id || selectedItem.id,
-                });
-              }}
+              onUpdate={handleUpdateItem}
               baseCurrency={baseCurrency}
-              initialData={selectedItem}
+              item={selectedItem as Item}
               formTitle="Edit Item"
             />
           )}
@@ -414,30 +443,62 @@ function ItemsPageContent() {
 
       {/* Delete Confirmation Modal */}
       {deleteConfirmModal.open && (
-        <div className="fixed inset-0 bg-black/60 z-[10000] flex items-start justify-center pt-4 px-6 pb-6 overflow-y-auto">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Delete Item{deleteConfirmModal.count > 1 ? 's' : ''}
-            </h2>
-            <p className="text-sm text-gray-600 mb-6">
-              Are you sure you want to delete {deleteConfirmModal.count > 1
-                ? `${deleteConfirmModal.count} item(s)?`
-                : `"${deleteConfirmModal.itemName}"?`}
-              <br />
-              <span className="text-red-600 font-medium">This action cannot be undone.</span>
-            </p>
-            <div className="flex justify-end gap-3">
+        <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16 px-4">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200">
+            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+              <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
+                !
+              </div>
+              <h3 className="text-[15px] font-semibold text-slate-800 flex-1">
+                {deleteConfirmModal.count > 1
+                  ? `Delete ${deleteConfirmModal.count} item${deleteConfirmModal.count === 1 ? "" : "s"}?`
+                  : "Delete item?"}
+              </h3>
               <button
-                onClick={() => setDeleteConfirmModal({ open: false, itemId: null, itemName: null, count: 1, itemIds: null })}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                type="button"
+                className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                onClick={() => {
+                  if (isDeletingItems) return;
+                  setDeleteConfirmModal({ open: false, itemId: null, itemName: null, count: 1, itemIds: null });
+                }}
+                aria-label="Close"
+                disabled={isDeletingItems}
               >
-                Cancel
+                <X size={14} />
+              </button>
+            </div>
+            <div className="px-5 py-3 text-[13px] text-slate-600">
+              {deleteConfirmModal.count > 1 ? (
+                <>You cannot retrieve these items once they have been deleted.</>
+              ) : (
+                <>
+                  You cannot retrieve this item once it has been deleted.
+                  <div className="mt-2 font-medium text-slate-700">
+                    {deleteConfirmModal.itemName ? `"${deleteConfirmModal.itemName}"` : "This item"} will be permanently removed.
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+              <button
+                type="button"
+                className={`px-4 py-1.5 rounded-md bg-blue-600 text-white text-[12px] hover:bg-blue-700 flex items-center gap-2 ${isDeletingItems ? "opacity-70 cursor-not-allowed" : ""}`}
+                onClick={() => deleteConfirmModal.itemIds ? confirmBulkDelete() : confirmDeleteItem()}
+                disabled={isDeletingItems}
+              >
+                {isDeletingItems && <Loader2 size={14} className="animate-spin" />}
+                {isDeletingItems ? "Deleting..." : "Delete"}
               </button>
               <button
-                onClick={() => deleteConfirmModal.itemIds ? confirmBulkDelete() : confirmDeleteItem()}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors"
+                type="button"
+                className={`px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50 ${isDeletingItems ? "opacity-70 cursor-not-allowed" : ""}`}
+                onClick={() => {
+                  if (isDeletingItems) return;
+                  setDeleteConfirmModal({ open: false, itemId: null, itemName: null, count: 1, itemIds: null });
+                }}
+                disabled={isDeletingItems}
               >
-                Delete
+                Cancel
               </button>
             </div>
           </div>

@@ -1,9 +1,13 @@
 import type express from "express";
 import mongoose from "mongoose";
 import { Invoice } from "../models/Invoice.js";
+<<<<<<< Updated upstream
 import { SenderEmail } from "../models/SenderEmail.js";
 import { Organization } from "../models/Organization.js";
 import { sendSmtpMail } from "../services/smtpMailer.js";
+=======
+import { recordEvent } from "../services/eventService.js";
+>>>>>>> Stashed changes
 
 const asString = (v: unknown) => (typeof v === "string" ? v : "");
 const normalizeEmail = (value: unknown) => {
@@ -171,6 +175,7 @@ export const createInvoice: express.RequestHandler = async (req, res) => {
 
   try {
     const created = await Invoice.create(payload);
+    await recordEvent('invoice_created', { invoice: created || null }, 'user');
     return res.status(201).json({ success: true, data: normalizeRow(created.toObject()) });
   } catch (e: any) {
     if (e?.code === 11000) {
@@ -216,6 +221,8 @@ export const deleteInvoice: express.RequestHandler = async (req, res) => {
 
   const id = String(req.params.id || "").trim();
   const deleted = await Invoice.findOneAndDelete({ _id: id, organizationId: orgId }).lean();
+    if (deleted) await recordEvent('invoice_deleted', { invoice: deleted }, 'user');
+    if (updated) await recordEvent('invoice_updated', { invoice: updated }, 'user');
   if (!deleted) return res.status(404).json({ success: false, message: "Invoice not found", data: null });
   return res.json({ success: true, data: { id } });
 };

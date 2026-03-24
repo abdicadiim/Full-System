@@ -22,7 +22,7 @@ const ExportItemsModal = ({ isOpen, onClose, data, accounts = [] }: ExportItemsM
 
     const handleExport = () => {
         if (module !== "Items") {
-            toast("Only Items export is currently supported.", { icon: "ℹ️" });
+            toast("Only Items export is currently supported.", { icon: <Info size={16} /> });
         }
 
         let exportData = [...(data || [])];

@@ -24,11 +24,16 @@ export default function ManageUnitsModal({ isOpen, onClose, onUnitsChanged }: Ma
         }
     }, [isOpen]);
 
+    const asArray = (value: any) => {
+        const candidate = value?.data ?? value?.units ?? value;
+        return Array.isArray(candidate) ? candidate : [];
+    };
+
     const fetchUnits = async () => {
         setIsLoading(true);
         try {
             const response = await unitsAPI.getAll();
-            setUnits(response.data || response || []);
+            setUnits(asArray(response));
         } catch (error: any) {
             toast.error("Failed to load units");
         } finally {

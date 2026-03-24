@@ -13,7 +13,7 @@ const AddonSchema = new mongoose.Schema(
     status: { type: String, default: "Active", index: true },
 
     addonType: { type: String, default: "Recurring" }, // Recurring | One-time
-    pricingModel: { type: String, default: "Unit" }, // Unit | Volume | Tier
+    pricingModel: { type: String, default: "Per Unit" }, // Per Unit | Volume | Tier | Package | Flat
 
     unit: { type: String, default: "" },
     billingFrequency: { type: String, default: "" },

@@ -1,9 +1,27 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import AuthShell from "../components/AuthShell";
 import { getAppDisplayName, getFallbackUrl } from "../lib/appBranding";
 import { goReturnTo } from "../lib/returnTo";
 import { authApi } from "../services/authApi";
+
+const persistSession = (result: any) => {
+  if (typeof window === "undefined") return;
+  const token = typeof result?.token === "string" ? result.token : "";
+  const user = result?.data ?? null;
+
+  if (token) {
+    localStorage.setItem("auth_token", token);
+    localStorage.setItem("token", token);
+    localStorage.setItem("accessToken", token);
+  }
+  if (user) {
+    const serialized = JSON.stringify(user);
+    localStorage.setItem("user", serialized);
+    localStorage.setItem("current_user", serialized);
+    localStorage.setItem("auth_user", serialized);
+  }
+};
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -12,19 +30,50 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const appName = getAppDisplayName();
 
+  useEffect(() => {
+    const checkLogin = async () => {
+      const token =
+        localStorage.getItem("auth_token") ||
+        localStorage.getItem("token") ||
+        localStorage.getItem("accessToken") ||
+        "";
+      try {
+        const res = await fetch("/api/auth/me", {
+          credentials: 'include',
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        if (res.ok) {
+          goReturnTo(getFallbackUrl());
+        }
+      } catch (e) {}
+    };
+    checkLogin();
+  }, []);
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    const result = await authApi.login(email, password).catch(() => null);
-    if (!result || !result.success) {
-      setLoading(false);
-      setError(result?.message || "Login failed");
+    const nextEmail = email.trim();
+    const nextPassword = password;
+    if (!nextEmail || !nextPassword) {
+      setError("Please enter both email and password.");
       return;
     }
-
-    goReturnTo(getFallbackUrl());
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await authApi.login(nextEmail, nextPassword);
+      if (!result || !result.success) {
+        const failure = result && !result.success ? (result as { success: false; message?: string }) : null;
+        setError(failure?.message || "Login failed");
+      } else {
+        persistSession(result);
+        goReturnTo(getFallbackUrl());
+      }
+    } catch (err: any) {
+      setError(err?.message || "An error occurred during login");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -77,4 +126,3 @@ export default function LoginPage() {
     </AuthShell>
   );
 }
-

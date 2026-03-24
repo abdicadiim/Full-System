@@ -29,6 +29,7 @@ const num = (value: unknown, fallback = 0) => {
 export const normalizeCoupon = (row: any): CouponRecord => ({
   id: String(row?.id || row?._id || `coupon-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`),
   product: String(row?.product || "").trim(),
+  productName: String(row?.productName || row?.product || "").trim(),
   couponName: String(row?.couponName || row?.name || "").trim(),
   couponCode: String(row?.couponCode || row?.code || "").trim(),
   discountType: toDiscountType(row?.discountType || row?.discount || "Percentage"),

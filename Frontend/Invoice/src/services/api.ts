@@ -1467,56 +1467,53 @@ export const recurringExpensesAPI = {
 
 const projectsBase = resource("/projects");
 export const projectsAPI = {
-  ...projectsLocal,
   getAll: async (params?: Record<string, any>) => {
-    try {
-      const res = await projectsBase.getAll(params);
-      if (res?.success) return res as any;
-    } catch {}
-    return projectsLocal.getAll(params);
+    return (await projectsBase.getAll(params)) as any;
   },
-  list: (params?: any) => projectsAPI.getAll(params),
+  list: async (params?: Record<string, any>) => projectsAPI.getAll(params),
   getById: async (id: string) => {
-    try {
-      const res = await projectsBase.getById(id);
-      if (res?.success) return res as any;
-    } catch {}
-    return projectsLocal.getById(id);
+    return (await projectsBase.getById(String(id))) as any;
   },
-  create: (data: any) => projectsBase.create(data),
-  update: (id: string, data: any) => projectsBase.update(id, data),
-  delete: (id: string) => projectsBase.delete(id),
+  create: async (data: any) => {
+    return (await projectsBase.create(data)) as any;
+  },
+  update: async (id: string, data: any) => {
+    return (await projectsBase.update(String(id), data)) as any;
+  },
+  delete: async (id: string) => {
+    return (await projectsBase.delete(String(id))) as any;
+  },
+  bulkUpdate: async (ids: string[], data: any) => {
+    return (await request({ method: "POST", path: "/projects/bulk-update", data: { ids, data } })) as any;
+  },
+  bulkDelete: async (ids: string[]) => {
+    return (await request({ method: "POST", path: "/projects/bulk-delete", data: { ids } })) as any;
+  },
   getByCustomer: async (customerId: string, params?: Record<string, any>) => {
-    const all = await projectsAPI.getAll({ ...params, customerId, limit: 10000 });
-    const filtered = (all.data || []).filter((project: any) => {
-      const ref =
-        project?.customerId ||
-        project?.customer?._id ||
-        project?.customer?.id ||
-        project?.customer ||
-        "";
-      return String(ref) === String(customerId);
-    });
-    const { data, pagination } = paginateRows(filterRowsByParams(filtered, params), params);
-    return { success: true, data, pagination };
+    return await projectsAPI.getAll({ ...params, customerId });
   },
 };
 
+const timeEntriesBase = resource("/projects/time-entries");
 export const timeEntriesAPI = {
-  ...timeEntriesLocal,
+  getAll: async (params?: Record<string, any>) => {
+    return (await timeEntriesBase.getAll(params)) as any;
+  },
+  list: async (params?: Record<string, any>) => timeEntriesAPI.getAll(params),
+  getById: async (id: string) => {
+    return (await timeEntriesBase.getById(String(id))) as any;
+  },
+  create: async (data: any) => {
+    return (await timeEntriesBase.create(data)) as any;
+  },
+  update: async (id: string, data: any) => {
+    return (await timeEntriesBase.update(String(id), data)) as any;
+  },
+  delete: async (id: string) => {
+    return (await timeEntriesBase.delete(String(id))) as any;
+  },
   getByProject: async (projectId: string, params?: Record<string, any>) => {
-    const all = await timeEntriesLocal.getAll({ limit: 10000 });
-    const filtered = (all.data || []).filter((entry: any) => {
-      const ref =
-        entry?.projectId ||
-        entry?.project?._id ||
-        entry?.project?.id ||
-        entry?.project ||
-        "";
-      return String(ref) === String(projectId);
-    });
-    const { data, pagination } = paginateRows(filterRowsByParams(filtered, params), params);
-    return { success: true, data, pagination };
+    return await timeEntriesAPI.getAll({ ...params, projectId });
   },
 };
 

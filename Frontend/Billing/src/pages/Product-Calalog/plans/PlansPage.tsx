@@ -11,6 +11,7 @@ import {
     Search,
     SlidersHorizontal,
     Upload,
+    X,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -227,6 +228,7 @@ export default function PlansPage() {
     const [customizeOpen, setCustomizeOpen] = useState(false);
     const [bulkUpdateOpen, setBulkUpdateOpen] = useState(false);
     const [newProductModalOpen, setNewProductModalOpen] = useState(false);
+    const [deleteModal, setDeleteModal] = useState<{ entityType: TabType; ids: string[] } | null>(null);
 
     const [plans, setPlans] = useState<PlanRow[]>([]);
     const [products, setProducts] = useState<ProductRow[]>([]);
@@ -608,35 +610,32 @@ export default function PlansPage() {
     };
 
     const handleBulkDelete = () => {
-        if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} selected ${tab}?`)) return;
-        if (tab === "products") {
-            void (async () => {
-                try {
-                    await Promise.all(selectedIds.map((id) => productsAPI.delete(id)));
-                    const res: any = await productsAPI.getAll({ limit: 1000 });
-                    const list = Array.isArray(res?.data) ? res.data : [];
-                    setProducts(list.map(normalizeProduct).filter((r: ProductRow) => r.name));
-                    setSelectedIds([]);
-                    toast.success("Selected products deleted");
-                } catch {
-                    toast.error("Failed to delete products");
-                }
-            })();
-            return;
-        }
+        if (!selectedIds.length) return;
+        setDeleteModal({ entityType: tab, ids: [...selectedIds] });
+    };
 
-        void (async () => {
-            try {
-                await Promise.all(selectedIds.map((id) => plansAPI.delete(id)));
+    const confirmBulkDelete = async () => {
+        if (!deleteModal) return;
+
+        try {
+            if (deleteModal.entityType === "products") {
+                await Promise.all(deleteModal.ids.map((id) => productsAPI.delete(id)));
+                const res: any = await productsAPI.getAll({ limit: 1000 });
+                const list = Array.isArray(res?.data) ? res.data : [];
+                setProducts(list.map(normalizeProduct).filter((r: ProductRow) => r.name));
+                toast.success("Selected products deleted");
+            } else {
+                await Promise.all(deleteModal.ids.map((id) => plansAPI.delete(id)));
                 const res: any = await plansAPI.getAll({ limit: 1000 });
                 const list = Array.isArray(res?.data) ? res.data : [];
                 setPlans(list.map(normalizePlan).filter((r: PlanRow) => r.plan));
-                setSelectedIds([]);
                 toast.success("Selected plans deleted");
-            } catch (e: any) {
-                toast.error(e?.message || "Failed to delete plans");
             }
-        })();
+            setSelectedIds([]);
+            setDeleteModal(null);
+        } catch (e: any) {
+            toast.error(e?.message || `Failed to delete ${deleteModal.entityType}`);
+        }
     };
 
     const handleBulkUpdate = (field: string, newValue: string) => {
@@ -1141,6 +1140,50 @@ export default function PlansPage() {
                     toast.success("Products list updated");
                 }}
             />
+
+            {deleteModal ? (
+                <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16">
+                    <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200">
+                        <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+                            <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
+                                !
+                            </div>
+                            <h3 className="text-[15px] font-semibold text-slate-800 flex-1">
+                                {deleteModal.entityType === "products"
+                                    ? `Delete ${deleteModal.ids.length} selected product${deleteModal.ids.length === 1 ? "" : "s"}?`
+                                    : `Delete ${deleteModal.ids.length} selected plan${deleteModal.ids.length === 1 ? "" : "s"}?`}
+                            </h3>
+                            <button
+                                type="button"
+                                className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                                onClick={() => setDeleteModal(null)}
+                                aria-label="Close"
+                            >
+                                <X size={14} />
+                            </button>
+                        </div>
+                        <div className="px-5 py-3 text-[13px] text-slate-600">
+                            You cannot retrieve these {deleteModal.entityType} once they have been deleted.
+                        </div>
+                        <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+                            <button
+                                type="button"
+                                className="px-4 py-1.5 rounded-md bg-blue-600 text-white text-[12px] hover:bg-blue-700"
+                                onClick={() => void confirmBulkDelete()}
+                            >
+                                Delete
+                            </button>
+                            <button
+                                type="button"
+                                className="px-4 py-1.5 rounded-md border border-slate-200 bg-white text-slate-700 text-[12px] hover:bg-slate-50"
+                                onClick={() => setDeleteModal(null)}
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
 
         </div>
     );

@@ -13,6 +13,7 @@ type User =
       unreadMessages?: number;
       unreadNotifications?: number;
       studentClass?: string | null;
+      activeTimer?: any | null;
     }
   | null;
 
@@ -27,31 +28,18 @@ type UserContextValue = {
 
 const UserContext = createContext<UserContextValue | null>(null);
 
-const readStoredUser = () => {
-  if (typeof localStorage === "undefined") return null;
-  for (const key of ["user", "current_user", "auth_user"]) {
-    const raw = localStorage.getItem(key);
-    if (!raw) continue;
-    try {
-      return JSON.parse(raw);
-    } catch {
-      continue;
-    }
-  }
-  return null;
-};
-
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User>(null);
   const [loading, setLoading] = useState(true);
   const [hasChecked, setHasChecked] = useState(false);
+  const [pollingEnabled, setPollingEnabled] = useState(false);
 
   const refresh = useCallback(async () => {
-    setLoading(true);
+    const token = localStorage.getItem("auth_token") || localStorage.getItem("token") || "";
+
     const ac = new AbortController();
     const timeout = setTimeout(() => ac.abort(), 8000);
     try {
-      const token = localStorage.getItem("auth_token") || localStorage.getItem("token") || "";
       const res = await fetch("/api/auth/me", {
         credentials: "include",
         signal: ac.signal,
@@ -67,18 +55,29 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         setUser(payload.data);
         try {
           localStorage.setItem("user", JSON.stringify(payload.data));
+          // GLOBAL TIMER SYNC
+          const serverTimer = payload.data.activeTimer;
+          const localTimerStr = localStorage.getItem("timerState");
+          const serverTimerStr = serverTimer ? JSON.stringify(serverTimer) : null;
+          if (localTimerStr !== serverTimerStr) {
+            if (serverTimerStr) localStorage.setItem("timerState", serverTimerStr);
+            else localStorage.removeItem("timerState");
+            window.dispatchEvent(new CustomEvent("timerStateUpdated"));
+          }
         } catch {}
         return;
       }
-      try {
-        localStorage.removeItem("auth_token");
-        localStorage.removeItem("token");
-        localStorage.removeItem("accessToken");
+      // If we got a 401/error, don't clear everything unless it's definitely unauthorized
+      if (res.status === 401) {
         localStorage.removeItem("user");
-      } catch {}
-      setUser(null);
-    } catch {
-      setUser(null);
+        setUser(null);
+      }
+      localStorage.setItem("auth_bootstrap_ready", "1");
+      setPollingEnabled(true);
+    } catch (err) {
+      if ((import.meta as any).env?.DEV) {
+        console.error("Refresh failed", err);
+      }
     } finally {
       clearTimeout(timeout);
       setLoading(false);
@@ -87,17 +86,32 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    refresh();
+    void refresh();
   }, [refresh]);
 
   useEffect(() => {
-    const syncFromStorage = () => {
-      setUser(readStoredUser());
-    };
+    if (!pollingEnabled) return;
+    const interval = window.setInterval(refresh, 30000);
+    return () => window.clearInterval(interval);
+  }, [refresh, pollingEnabled]);
 
+  useEffect(() => {
+    const syncFromStorage = () => {
+      if (typeof localStorage === "undefined") return;
+      for (const key of ["user", "current_user", "auth_user"]) {
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        try {
+          setUser(JSON.parse(raw));
+          return;
+        } catch {
+          continue;
+        }
+      }
+      setUser(null);
+    };
     window.addEventListener("storage", syncFromStorage);
     window.addEventListener(AUTH_USER_UPDATED_EVENT, syncFromStorage as EventListener);
-
     return () => {
       window.removeEventListener("storage", syncFromStorage);
       window.removeEventListener(AUTH_USER_UPDATED_EVENT, syncFromStorage as EventListener);
@@ -106,15 +120,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+      const bootstrapReady = localStorage.getItem("auth_bootstrap_ready") === "1";
+      if (bootstrapReady) {
+        await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+      }
     } finally {
       setUser(null);
-      try {
-        localStorage.removeItem("user");
-        localStorage.removeItem("auth_token");
-        localStorage.removeItem("token");
-        localStorage.removeItem("accessToken");
-      } catch {}
+      localStorage.removeItem("user");
+      localStorage.removeItem("timerState");
+      localStorage.removeItem("auth_token");
+      localStorage.removeItem("token");
     }
   }, []);
 

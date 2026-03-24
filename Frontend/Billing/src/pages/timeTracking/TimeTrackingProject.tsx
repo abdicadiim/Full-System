@@ -1,3 +1,16 @@
+
+const syncRemote = (s) => {
+  const bootstrapReady = typeof localStorage !== 'undefined' ? localStorage.getItem('auth_bootstrap_ready') === '1' : false;
+  const tm = typeof document !== 'undefined' ? document.cookie.match(/(^| )fs_session=([^;]+)/) : null;
+  const t = (tm ? tm[2] : null) || (typeof localStorage !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('auth_token') || localStorage.getItem('accessToken')) : null);
+  if(t && bootstrapReady) {
+    fetch('/api/auth/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` },
+      body: JSON.stringify({ activeTimer: s })
+    }).catch(()=>null);
+  }
+};
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { X, Search, ArrowUpDown, ChevronRight, ChevronDown, Download, Upload, Settings, Eye, EyeOff, Info, List, LayoutGrid, SlidersHorizontal, MoreVertical, MoreHorizontal, Plus, Pause, Play, Square, Trash2, AlertTriangle, Clock, Receipt } from "lucide-react";
@@ -9,6 +22,29 @@ import BulkUpdateModal, { BulkFieldOption } from "../Expense/shared/BulkUpdateMo
 import ProjectsCustomizeColumnsModal from "./components/ProjectsCustomizeColumnsModal";
 import StartTimerModal from "./StartTimerModal";
 import { useCurrency } from "../../hooks/useCurrency";
+
+
+// Helper formatting functions
+const formatTime = (seconds: number) => {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+};
+
+const formatTimeShort = (seconds: number) => {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+};
+
+const formatTimeVerbose = (seconds: number) => {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  return `${String(hours).padStart(2, "0")}h : ${String(minutes).padStart(2, "0")}m : ${String(secs).padStart(2, "0")}s`;
+};
 
 export default function TimeTrackingProject() {
   const navigate = useNavigate();
@@ -290,7 +326,7 @@ export default function TimeTrackingProject() {
           pausedElapsedTime: pausedElapsed,
           elapsedTime: pausedElapsed
         };
-        localStorage.setItem('timerState', JSON.stringify(updatedTimerState));
+        localStorage.setItem('timerState', JSON.stringify(updatedTimerState)); syncRemote(JSON.parse(localStorage.getItem('timerState') || 'null'));
       }
     }
     setIsTimerHydrated(true);
@@ -302,14 +338,16 @@ export default function TimeTrackingProject() {
 
     const savedTimerState = localStorage.getItem('timerState');
     let timerState;
-
     if (savedTimerState) {
-      timerState = JSON.parse(savedTimerState);
+      try {
+        timerState = JSON.parse(savedTimerState);
+      } catch(e) {
+        timerState = {};
+      }
     } else {
       timerState = {};
     }
 
-    // Update timer state preserving startTime when running
     const updatedState = {
       ...timerState,
       pausedElapsedTime: isTimerRunning ? (timerState.pausedElapsedTime || 0) : elapsedTime,
@@ -321,129 +359,87 @@ export default function TimeTrackingProject() {
       isBillable
     };
 
-    // If timer is running, ensure startTime is set
     if (isTimerRunning && !updatedState.startTime) {
       updatedState.startTime = Date.now();
       updatedState.pausedElapsedTime = elapsedTime;
     }
 
-    // If timer is paused, clear startTime
     if (!isTimerRunning && updatedState.startTime) {
       updatedState.pausedElapsedTime = elapsedTime;
       delete updatedState.startTime;
     }
 
     localStorage.setItem('timerState', JSON.stringify(updatedState));
-  }, [isTimerHydrated, elapsedTime, isTimerRunning, timerNotes, selectedProjectForTimer, selectedTaskForTimer, isBillable]);
+    // syncRemote helper
+    const sr = (st) => {
+       const bootstrapReady = localStorage.getItem('auth_bootstrap_ready') === '1';
+       const tm = document.cookie.match(/(^| )fs_session=([^;]+)/);
+       const b = localStorage.getItem('token') || localStorage.getItem('auth_token');
+       const t = (tm ? tm[2] : null) || b;
+       if(t && bootstrapReady) {
+         fetch('/api/auth/me', {
+           method: 'PATCH',
+           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` },
+           body: JSON.stringify({ activeTimer: st })
+         }).catch(()=>null);
+       }
+    };
+    sr(updatedState);
+  }, [isTimerHydrated, isTimerRunning, timerNotes, selectedProjectForTimer, selectedTaskForTimer, isBillable]);
 
-  // Listen for storage changes (when timer is updated from other page)
+  // Listen for storage changes
   useEffect(() => {
     const handleStorageChange = (e) => {
       if (e.key === 'timerState' && e.newValue) {
-        const timerState = JSON.parse(e.newValue);
-        const calculatedElapsedTime = calculateElapsedTime(timerState);
-        setElapsedTime(calculatedElapsedTime);
-        setIsTimerRunning(Boolean(timerState.isTimerRunning));
-        setTimerNotes(timerState.timerNotes || '');
-        setSelectedProjectForTimer(timerState.associatedProject || timerState.selectedProjectForTimer || '');
-        setSelectedTaskForTimer(timerState.selectedTaskForTimer || '');
-        setIsBillable(timerState.isBillable ?? true);
+        try {
+            const ts = JSON.parse(e.newValue);
+            setElapsedTime(calculateElapsedTime(ts));
+            setIsTimerRunning(Boolean(ts.isTimerRunning));
+            setTimerNotes(ts.timerNotes || '');
+            setSelectedProjectForTimer(ts.associatedProject || ts.selectedProjectForTimer || '');
+            setSelectedTaskForTimer(ts.selectedTaskForTimer || '');
+            setIsBillable(ts.isBillable ?? true);
+        } catch(err){}
       }
     };
 
-    // Also listen for custom events (for same-tab updates)
     const handleCustomStorage = () => {
-      const savedTimerState = localStorage.getItem('timerState');
-      if (savedTimerState) {
-        const timerState = JSON.parse(savedTimerState);
-        const calculatedElapsedTime = calculateElapsedTime(timerState);
-        setElapsedTime(calculatedElapsedTime);
-        setIsTimerRunning(Boolean(timerState.isTimerRunning));
-        setTimerNotes(timerState.timerNotes || '');
-        setSelectedProjectForTimer(timerState.associatedProject || timerState.selectedProjectForTimer || '');
-        setSelectedTaskForTimer(timerState.selectedTaskForTimer || '');
-        setIsBillable(timerState.isBillable ?? true);
+      const saved = localStorage.getItem('timerState');
+      if (saved) {
+        try {
+            const ts = JSON.parse(saved);
+            setElapsedTime(calculateElapsedTime(ts));
+            setIsTimerRunning(Boolean(ts.isTimerRunning));
+            setTimerNotes(ts.timerNotes || '');
+            setSelectedProjectForTimer(ts.associatedProject || ts.selectedProjectForTimer || '');
+            setSelectedTaskForTimer(ts.selectedTaskForTimer || '');
+            setIsBillable(ts.isBillable ?? true);
+        } catch(err){}
       }
     };
 
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('timerStateUpdated', handleCustomStorage);
 
-    // Poll for changes to update elapsed time (especially when timer is running)
-    const pollInterval = setInterval(() => {
-      const savedTimerState = localStorage.getItem('timerState');
-      if (savedTimerState) {
-        const timerState = JSON.parse(savedTimerState);
-        if (timerState.isTimerRunning) {
-          // Always recalculate elapsed time from startTime if timer is running
-          const calculatedElapsedTime = calculateElapsedTime(timerState);
-          setElapsedTime(calculatedElapsedTime);
-        } else {
-          setElapsedTime(timerState.pausedElapsedTime || timerState.elapsedTime || 0);
-        }
-      }
+    const poll = setInterval(() => {
+       const saved = localStorage.getItem('timerState');
+       if (saved) {
+         try {
+             const ts = JSON.parse(saved);
+             if (ts) { setElapsedTime(calculateElapsedTime(ts)); setIsTimerRunning(Boolean(ts.isTimerRunning)); }
+         } catch(e){}
+       }
     }, 1000);
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('timerStateUpdated', handleCustomStorage);
-      clearInterval(pollInterval);
+      clearInterval(poll);
     };
   }, []);
 
-  // Timer functionality - update display every second
-  useEffect(() => {
-    let interval = null;
-    if (isTimerRunning) {
-      interval = setInterval(() => {
-        // Calculate elapsed time from startTime stored in localStorage
-        const savedTimerState = localStorage.getItem('timerState');
-        if (savedTimerState) {
-          const timerState = JSON.parse(savedTimerState);
-          if (timerState.isTimerRunning && timerState.startTime) {
-            const calculatedElapsedTime = calculateElapsedTime(timerState);
-            setElapsedTime(calculatedElapsedTime);
-          }
-        }
-      }, 1000);
-      setTimerInterval(interval);
-    } else {
-      if (timerInterval) {
-        clearInterval(timerInterval);
-        setTimerInterval(null);
-      }
-    }
-
-    return () => {
-      if (interval) {
-        clearInterval(interval);
-      }
-    };
-  }, [isTimerRunning]);
-
   // Format time as HH:MM:SS
-  const formatTime = (seconds) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  };
-
-  // Format time as HH:MM for display in timer controls
-  const formatTimeShort = (seconds) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  };
-
-  const formatTimeVerbose = (seconds: number) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    return `${String(hours).padStart(2, "0")}h : ${String(minutes).padStart(2, "0")}m : ${String(secs).padStart(2, "0")}s`;
-  };
-
+  // Format time as HH:MM for display
   const handleStartTimer = () => {
     // Get current elapsed time (if resuming from pause)
     const savedTimerState = localStorage.getItem('timerState');
@@ -466,7 +462,7 @@ export default function TimeTrackingProject() {
       selectedTaskForTimer,
       isBillable
     };
-    localStorage.setItem('timerState', JSON.stringify(timerState));
+    localStorage.setItem('timerState', JSON.stringify(timerState)); syncRemote(JSON.parse(localStorage.getItem('timerState') || 'null'));
 
     setIsTimerRunning(true);
     setElapsedTime(pausedElapsed);
@@ -501,7 +497,7 @@ export default function TimeTrackingProject() {
       selectedTaskForTimer,
       isBillable
     };
-    localStorage.setItem('timerState', JSON.stringify(timerState));
+    localStorage.setItem('timerState', JSON.stringify(timerState)); syncRemote(JSON.parse(localStorage.getItem('timerState') || 'null'));
     window.dispatchEvent(new CustomEvent('timerStateUpdated'));
     toast.success('The timer has been paused.');
   };
@@ -559,7 +555,7 @@ export default function TimeTrackingProject() {
     setIsBillable(true);
     setShowProjectFields(false);
     // Clear from localStorage
-    localStorage.removeItem('timerState');
+    localStorage.removeItem('timerState'); syncRemote(null);
     window.dispatchEvent(new CustomEvent('timerStateUpdated'));
   };
 
@@ -575,7 +571,7 @@ export default function TimeTrackingProject() {
     setIsBillable(true);
     setShowProjectFields(false);
     // Clear from localStorage
-    localStorage.removeItem('timerState');
+    localStorage.removeItem('timerState'); syncRemote(null);
     window.dispatchEvent(new CustomEvent('timerStateUpdated'));
   };
 
@@ -1821,18 +1817,12 @@ export default function TimeTrackingProject() {
                 </button>
                 <button
                   onClick={handleStopTimer}
-                  className="flex h-9 w-8 items-center justify-center border-none border-r border-gray-200 bg-white text-red-500 hover:bg-gray-50"
+                  className="flex h-9 w-8 items-center justify-center border-none bg-white text-red-500 hover:bg-gray-50"
                   title="Stop timer"
                 >
                   <Square size={12} />
                 </button>
-                <button
-                  onClick={handleDeleteTimer}
-                  className="flex h-9 w-8 items-center justify-center border-none bg-white text-gray-500 hover:bg-gray-50"
-                  title="Delete timer"
-                >
-                  <Trash2 size={13} />
-                </button>
+                
               </div>
             )}
 
@@ -1884,7 +1874,8 @@ export default function TimeTrackingProject() {
                   </button>
                   <button
                     onClick={() => { navigate('/time-tracking/projects/import'); setShowMoreMenu(false); }}
-                    className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 border-none bg-transparent cursor-pointer"
+
+className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 border-none bg-transparent cursor-pointer"
                   >
                     <Upload size={14} />
                     Import Projects

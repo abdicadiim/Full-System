@@ -562,6 +562,10 @@ const NewCouponPage: React.FC<NewCouponPageProps> = ({ onCancel, onClose, onSave
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+    if (name === "discountValue" || name === "cycles" || name === "maxRedemptions") {
+      setForm((prev) => ({ ...prev, [name]: value.replace(/[^0-9]/g, "") }));
+      return;
+    }
     setForm(prev => ({ ...prev, [name]: value }));
   };
 
@@ -598,7 +602,15 @@ const NewCouponPage: React.FC<NewCouponPageProps> = ({ onCancel, onClose, onSave
 
             <FormRow label={form.discountType === 'Flat' ? `Discount (${baseCurrency.code || 'USD'}) *` : 'Discount *'} required>
               <div className="flex">
-                <input type="text" name="discountValue" value={form.discountValue} onChange={handleChange} className="h-[38px] flex-1 rounded-l-md border border-gray-300 border-r-0 px-3 text-[14px] outline-none focus:border-blue-400" />
+                <input
+                  type="text"
+                  name="discountValue"
+                  value={form.discountValue}
+                  onChange={handleChange}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  className="h-[38px] flex-1 rounded-l-md border border-gray-300 border-r-0 px-3 text-[14px] outline-none focus:border-blue-400"
+                />
                 <div className="relative w-[96px]">
                   <select name="discountType" value={form.discountType} onChange={handleChange} className="h-[38px] w-full cursor-pointer appearance-none rounded-r-md border border-gray-300 bg-gray-50 px-3 pr-7 text-[14px] outline-none">
                     <option value="%">%</option>
@@ -621,7 +633,16 @@ const NewCouponPage: React.FC<NewCouponPageProps> = ({ onCancel, onClose, onSave
 
             {form.redemptionType === 'Limited Cycles' && (
               <FormRow label="Number of Cycles*" required info>
-                <input type="text" name="cycles" value={form.cycles} onChange={handleChange} placeholder="Enter a number" className="w-full h-[38px] rounded-md border border-gray-300 bg-white px-3 text-[14px] outline-none focus:border-blue-400" />
+                <input
+                  type="text"
+                  name="cycles"
+                  value={form.cycles}
+                  onChange={handleChange}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="Enter a number"
+                  className="w-full h-[38px] rounded-md border border-gray-300 bg-white px-3 text-[14px] outline-none focus:border-blue-400"
+                />
               </FormRow>
             )}
           </div>
@@ -693,7 +714,16 @@ const NewCouponPage: React.FC<NewCouponPageProps> = ({ onCancel, onClose, onSave
                 <CustomDatePicker value={form.expirationDate} onChange={(v) => setForm(prev => ({ ...prev, expirationDate: v }))} placeholder="Click or Type to select" accentColor={accentColor} />
               </FormRow>
               <FormRow label="Maximum Redemptions" info>
-                <input type="text" name="maxRedemptions" value={form.maxRedemptions} onChange={handleChange} placeholder="Enter a number" className="w-full h-[38px] rounded-md border border-gray-300 px-3 text-[14px] italic outline-none focus:border-blue-400" />
+                <input
+                  type="text"
+                  name="maxRedemptions"
+                  value={form.maxRedemptions}
+                  onChange={handleChange}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="Enter a number"
+                  className="w-full h-[38px] rounded-md border border-gray-300 px-3 text-[14px] italic outline-none focus:border-blue-400"
+                />
               </FormRow>
             </div>
           </section>

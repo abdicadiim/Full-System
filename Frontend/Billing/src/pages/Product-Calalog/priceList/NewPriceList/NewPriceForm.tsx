@@ -606,7 +606,8 @@ export default function NewPriceForm({ onClose, editData }: NewPriceFormProps) {
                             placeholder="Enter the description"
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
-                            className="w-[450px] h-20 border border-gray-300 rounded p-3 text-[13px] outline-none resize-none focus:ring-1 focus:ring-blue-500/20"
+                            rows={2}
+                            className="w-[220px] max-w-full min-h-[46px] border border-gray-300 rounded px-2 py-1 text-[13px] leading-tight outline-none resize-y overflow-auto focus:ring-1 focus:ring-blue-500/20 focus:border-blue-500"
                         />
                     </div>
 

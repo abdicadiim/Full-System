@@ -1,5 +1,6 @@
 import type express from "express";
 import { Project } from "../models/Project.js";
+import { recordEvent } from "../services/eventService.js";
 
 const requireOrgId = (req: express.Request, res: express.Response) => {
   const orgId = req.user?.organizationId;
@@ -41,6 +42,7 @@ export const createProject: express.RequestHandler = async (req, res) => {
 
   try {
     const created = await Project.create({ ...req.body, organizationId: orgId });
+    await recordEvent('project_created', { project: created || null }, 'user');
     return res.status(201).json({ success: true, data: normalizeRow(created.toObject()) });
   } catch (e: any) {
     return res.status(500).json({ success: false, message: e.message, data: null });
@@ -52,6 +54,7 @@ export const updateProject: express.RequestHandler = async (req, res) => {
   if (!orgId) return;
 
   const updated = await Project.findOneAndUpdate({ _id: req.params.id, organizationId: orgId }, { $set: req.body }, { new: true }).lean();
+    if (updated) await recordEvent('project_updated', { project: updated }, 'user');
   if (!updated) return res.status(404).json({ success: false, message: "Project not found", data: null });
 
   return res.json({ success: true, data: normalizeRow(updated) });
@@ -62,6 +65,7 @@ export const deleteProject: express.RequestHandler = async (req, res) => {
   if (!orgId) return;
 
   const deleted = await Project.findOneAndDelete({ _id: req.params.id, organizationId: orgId }).lean();
+    if (deleted) await recordEvent('project_deleted', { project: deleted }, 'user');
   if (!deleted) return res.status(404).json({ success: false, message: "Project not found", data: null });
 
   return res.json({ success: true, data: { id: req.params.id } });

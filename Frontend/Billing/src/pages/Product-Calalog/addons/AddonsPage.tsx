@@ -101,6 +101,7 @@ export default function AddonsPage() {
   const [bulkAccountValue, setBulkAccountValue] = useState("");
   const [bulkAccountSearch, setBulkAccountSearch] = useState("");
   const [bulkAccountOpen, setBulkAccountOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
   const allAddonsRef = useRef<HTMLDivElement>(null);
   const moreRef = useRef<HTMLDivElement>(null);
@@ -294,19 +295,7 @@ export default function AddonsPage() {
 
   const handleBulkDelete = () => {
     if (selectedIds.length === 0) return;
-    void (async () => {
-      try {
-        await Promise.all(selectedIds.map((id) => addonsAPI.delete(id)));
-        const res: any = await addonsAPI.getAll({ limit: 1000 });
-        setAddons(Array.isArray(res?.data) ? res.data : []);
-        toast.success(`Deleted ${selectedIds.length} addons`);
-      } catch (e: any) {
-        console.error("Failed to delete addons", e);
-        toast.error(e?.message || "Failed to delete addons");
-      } finally {
-        setSelectedIds([]);
-      }
-    })();
+    setIsDeleteModalOpen(true);
   };
 
   const handleApplyBulkUpdate = () => {
@@ -674,6 +663,57 @@ export default function AddonsPage() {
           setCustomizeOpen(false);
         }}
       />
+
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16">
+          <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 text-[12px] font-bold text-amber-600">
+                !
+              </div>
+              <h3 className="flex-1 text-[15px] font-semibold text-slate-800">Delete addons?</h3>
+              <button
+                type="button"
+                className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                onClick={() => setIsDeleteModalOpen(false)}
+                aria-label="Close"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="px-5 py-3 text-[13px] text-slate-600">
+              You cannot retrieve these addons once they have been deleted.
+            </div>
+            <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+              <button
+                type="button"
+                className="rounded-md bg-blue-600 px-4 py-1.5 text-[12px] text-white hover:bg-blue-700"
+                onClick={async () => {
+                  try {
+                    await Promise.all(selectedIds.map((id) => addonsAPI.delete(id)));
+                    const res: any = await addonsAPI.getAll({ limit: 1000 });
+                    setAddons(Array.isArray(res?.data) ? res.data : []);
+                    setSelectedIds([]);
+                    setIsDeleteModalOpen(false);
+                    toast.success("Selected addons deleted successfully");
+                  } catch (error: any) {
+                    toast.error(`Failed to delete addons: ${error?.message || "Unknown error"}`);
+                  }
+                }}
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                className="rounded-md border border-slate-300 px-4 py-1.5 text-[12px] text-slate-700 hover:bg-slate-50"
+                onClick={() => setIsDeleteModalOpen(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {bulkUpdateOpen && (
         <div className="fixed inset-0 bg-black/60 z-[10000] flex items-start justify-center pt-4 px-6 pb-6 overflow-y-auto">

@@ -78,6 +78,7 @@ export default function PlanDetailPage() {
   const [activeTab, setActiveTab] = useState<"details" | "addons" | "price-lists" | "activity">("details");
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [isActionsOpen, setIsActionsOpen] = useState(false);
+  const [deleteModal, setDeleteModal] = useState<{ mode: "single" | "bulk"; ids: string[] } | null>(null);
   const [showAddonCount, setShowAddonCount] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [planStatusFilter, setPlanStatusFilter] = useState<"All Plans" | "Active Plans" | "Inactive Plans">("All Plans");
@@ -356,17 +357,22 @@ export default function PlanDetailPage() {
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!selectedPlan) return;
-    if (!window.confirm("Are you sure you want to delete this plan?")) return;
-    const targetId = getPlanId(selectedPlan);
+    setIsActionsOpen(false);
+    setDeleteModal({ mode: "single", ids: [getPlanId(selectedPlan)] });
+  };
+
+  const confirmDelete = async () => {
+    const ids = deleteModal?.ids || [];
+    if (ids.length === 0) return;
     try {
-      const res: any = await plansAPI.delete(targetId);
-      if (res?.success === false) throw new Error(res?.message || "Failed to delete plan");
+      await Promise.all(ids.map((id) => plansAPI.delete(id)));
       await refreshPlans();
-      toast.success("Plan deleted");
-      setIsActionsOpen(false);
-      const remaining = plans.filter((p) => getPlanId(p) !== targetId);
+      toast.success(ids.length > 1 ? "Selected plans deleted" : "Plan deleted");
+      setDeleteModal(null);
+      if (ids.length > 1) clearSelection();
+      const remaining = plans.filter((p) => !ids.includes(getPlanId(p)));
       if (remaining.length > 0) navigate(`/products/plans/${getPlanId(remaining[0])}`);
       else navigate("/products/plans");
     } catch (e: any) {
@@ -388,28 +394,8 @@ export default function PlanDetailPage() {
 
   const handleBulkDelete = async () => {
     if (selectedIds.length === 0) return;
-    if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} selected plans?`)) return;
-
-    const selectedSet = new Set(selectedIds);
-    const currentSelectedPlanId = getPlanId(selectedPlan);
-    const deletingCurrentPlan = selectedSet.has(currentSelectedPlanId);
-    try {
-      await Promise.all(selectedIds.map((id) => plansAPI.delete(id)));
-      await refreshPlans();
-      clearSelection();
-      toast.success("Selected plans deleted");
-
-      const remaining = plans.filter((p) => !selectedSet.has(getPlanId(p)));
-      if (remaining.length === 0) {
-        navigate("/products/plans");
-        return;
-      }
-      if (deletingCurrentPlan) {
-        navigate(`/products/plans/${getPlanId(remaining[0])}`);
-      }
-    } catch {
-      toast.error("Bulk delete failed");
-    }
+    setIsBulkActionsOpen(false);
+    setDeleteModal({ mode: "bulk", ids: [...selectedIds] });
   };
 
   const handleBulkUpdate = async (field: string, newValue: string) => {
@@ -1156,6 +1142,50 @@ export default function PlanDetailPage() {
           </div>
         </div>
       </main>
+
+      {deleteModal && (
+        <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16">
+          <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 text-[12px] font-bold text-amber-600">
+                !
+              </div>
+              <h3 className="flex-1 text-[15px] font-semibold text-slate-800">
+                {deleteModal.mode === "bulk" ? `Delete ${deleteModal.ids.length} plans?` : "Delete plan?"}
+              </h3>
+              <button
+                type="button"
+                className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                onClick={() => setDeleteModal(null)}
+                aria-label="Close"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="px-5 py-3 text-[13px] text-slate-600">
+              {deleteModal.mode === "bulk"
+                ? "You cannot retrieve these plans once they have been deleted."
+                : "You cannot retrieve this plan once it has been deleted."}
+            </div>
+            <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+              <button
+                type="button"
+                className="rounded-md bg-blue-600 px-4 py-1.5 text-[12px] text-white hover:bg-blue-700"
+                onClick={confirmDelete}
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                className="rounded-md border border-slate-300 px-4 py-1.5 text-[12px] text-slate-700 hover:bg-slate-50"
+                onClick={() => setDeleteModal(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <CommentsDrawer
         isOpen={commentsOpen}

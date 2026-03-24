@@ -69,8 +69,20 @@ export const logout = () => {
 export const getMe = async () => {
   try {
     const token = getToken();
+    if (!token) {
+      const cachedUser = getCurrentUser();
+      if (cachedUser) {
+        return { success: true, data: cachedUser };
+      }
+      return {
+        success: false,
+        status: 0,
+        message: "No auth token",
+        data: null,
+      };
+    }
     const headers: Record<string, string> = {};
-    if (token) headers.Authorization = `Bearer ${token}`;
+    headers.Authorization = `Bearer ${token}`;
 
     const response = await fetch(`${API_BASE_URL}/auth/me`, {
       headers,
@@ -86,6 +98,7 @@ export const getMe = async () => {
       };
     }
     const user = payload?.data ?? payload?.user ?? payload;
+    if (payload?.token) setToken(payload.token);
     if (user) setCurrentUser(user);
     return payload?.success !== undefined ? payload : { success: true, data: user };
   } catch (error: any) {
