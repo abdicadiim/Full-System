@@ -1,13 +1,10 @@
 import type express from "express";
 import mongoose from "mongoose";
 import { Invoice } from "../models/Invoice.js";
-<<<<<<< Updated upstream
 import { SenderEmail } from "../models/SenderEmail.js";
 import { Organization } from "../models/Organization.js";
 import { sendSmtpMail } from "../services/smtpMailer.js";
-=======
 import { recordEvent } from "../services/eventService.js";
->>>>>>> Stashed changes
 
 const asString = (v: unknown) => (typeof v === "string" ? v : "");
 const normalizeEmail = (value: unknown) => {
