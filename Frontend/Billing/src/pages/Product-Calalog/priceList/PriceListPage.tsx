@@ -9,6 +9,7 @@ import {
     ChevronUp,
     Settings,
     Trash2,
+    X,
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -87,6 +88,8 @@ export default function PriceListPage() {
 
     const [priceLists, setPriceLists] = useState<PriceListRecord[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [pendingDeletePriceList, setPendingDeletePriceList] = useState<PriceListRecord | null>(null);
 
     const visibleColumns = useMemo(() => columns.filter((c) => c.visible), [columns]);
     const sortedPriceLists = useMemo(() => {
@@ -297,10 +300,20 @@ export default function PriceListPage() {
         }
     };
 
-    const handleDelete = async (id: string) => {
-        if (!window.confirm('Are you sure you want to delete this price list?')) return;
+    const openDeleteModal = (row: PriceListRecord) => {
+        setPendingDeletePriceList(row);
+        setShowDeleteModal(true);
+    };
+
+    const closeDeleteModal = () => {
+        setShowDeleteModal(false);
+        setPendingDeletePriceList(null);
+    };
+
+    const confirmDeletePriceList = async () => {
+        if (!pendingDeletePriceList) return;
         try {
-            const res: any = await priceListsAPI.delete(id);
+            const res: any = await priceListsAPI.delete(pendingDeletePriceList.id);
             if (res.success) {
                 loadPriceLists();
                 toast.success('Price list deleted successfully');
@@ -309,6 +322,8 @@ export default function PriceListPage() {
             }
         } catch (error) {
             toast.error('Failed to delete price list');
+        } finally {
+            closeDeleteModal();
         }
     };
 
@@ -481,7 +496,7 @@ export default function PriceListPage() {
                                                             </button>
                                                             <span className="text-slate-300">|</span>
                                                             <button
-                                                                onClick={() => handleDelete(row.id)}
+                                                                onClick={() => openDeleteModal(row)}
                                                                 className="text-red-500 hover:text-red-700 font-medium flex items-center gap-1 transition-colors"
                                                             >
                                                                 <Trash2 size={14} />
@@ -533,6 +548,48 @@ export default function PriceListPage() {
                         }}
                         editData={editingPriceList}
                     />
+                )}
+
+                {showDeleteModal && pendingDeletePriceList && (
+                    <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16" onClick={closeDeleteModal}>
+                        <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+                                <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
+                                    !
+                                </div>
+                                <h3 className="text-[15px] font-semibold text-slate-800 flex-1">
+                                    Delete price list?
+                                </h3>
+                                <button
+                                    type="button"
+                                    className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                                    onClick={closeDeleteModal}
+                                    aria-label="Close"
+                                >
+                                    <X size={14} />
+                                </button>
+                            </div>
+                            <div className="px-5 py-3 text-[13px] text-slate-600">
+                                You cannot retrieve this price list once it has been deleted.
+                            </div>
+                            <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+                                <button
+                                    type="button"
+                                    className="px-4 py-1.5 rounded-md bg-blue-600 text-white text-[12px] hover:bg-blue-700"
+                                    onClick={confirmDeletePriceList}
+                                >
+                                    Delete
+                                </button>
+                                <button
+                                    type="button"
+                                    className="px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50"
+                                    onClick={closeDeleteModal}
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 )}
             </main>
         </div>

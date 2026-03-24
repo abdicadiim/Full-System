@@ -12,6 +12,7 @@ const BILLING_PERIODS = ["Day(s)", "Week(s)", "Month(s)", "Year(s)"];
 const BILLING_CYCLES = ["Auto-renews until canceled", "Fixed number of cycles"];
 const PRICING_MODELS = ["Per Unit", "Flat"];
 const UNIT_NAMES = ["box", "cm", "dz", "ft", "g", "in", "kg", "km", "lb", "mg", "ml", "m", "pcs", "SAV"];
+const PLAN_ACTIVITY_LOGS_PREFIX = "taban_plan_activity_logs_";
 const ACCOUNT_GROUPS: Array<{ label: string; options: string[] }> = [
   { label: "Other Current Asset", options: ["Advance Tax", "Employee Advance", "Goods In Transit", "Prepaid Expenses"] },
   { label: "Fixed Asset", options: ["Furniture and Equipment"] },
@@ -48,6 +49,73 @@ const ACCOUNT_GROUPS: Array<{ label: string; options: string[] }> = [
   { label: "Cost Of Goods Sold", options: ["Cost of Goods Sold"] },
 ];
 const TAX_GROUP_MARKER = "__taban_tax_group__";
+
+type PlanActivityLog = {
+  id: string;
+  action: string;
+  description: string;
+  actor: string;
+  timestamp: string;
+  tone?: "blue" | "green" | "amber";
+};
+
+const getCurrentUserDisplayName = () => {
+  try {
+    const raw = localStorage.getItem("user");
+    if (!raw) return "System";
+    const user = JSON.parse(raw);
+    return String(user?.name || user?.displayName || user?.email || "System").trim() || "System";
+  } catch {
+    return "System";
+  }
+};
+
+const getPlanActivityKey = (planId: string) => `${PLAN_ACTIVITY_LOGS_PREFIX}${String(planId || "").trim()}`;
+
+const normalizePlanActivityLog = (log: any): PlanActivityLog => ({
+  id: String(log?.id || log?._id || `${Date.now()}-${Math.random().toString(36).slice(2)}`),
+  action: String(log?.action || "Plan Updated"),
+  description: String(log?.description || ""),
+  actor: String(log?.actor || "System"),
+  timestamp: String(log?.timestamp || log?.createdAt || new Date().toISOString()),
+  tone: log?.tone === "green" || log?.tone === "amber" || log?.tone === "blue" ? log.tone : undefined,
+});
+
+const readPlanActivityLogs = (planId: string): PlanActivityLog[] => {
+  try {
+    const raw = localStorage.getItem(getPlanActivityKey(planId));
+    const parsed = raw ? JSON.parse(raw) : [];
+    const logs = Array.isArray(parsed) ? parsed.map(normalizePlanActivityLog) : [];
+    return logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  } catch {
+    return [];
+  }
+};
+
+const writePlanActivityLogs = (planId: string, logs: PlanActivityLog[]) => {
+  try {
+    localStorage.setItem(getPlanActivityKey(planId), JSON.stringify(logs.slice(0, 200)));
+  } catch {
+    // ignore storage failures
+  }
+};
+
+const appendPlanActivityLog = (planId: string, log: Omit<PlanActivityLog, "id" | "timestamp"> & { timestamp?: string }) => {
+  if (!planId) return;
+  const next: PlanActivityLog = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    timestamp: log.timestamp || new Date().toISOString(),
+    action: log.action,
+    description: log.description,
+    actor: log.actor,
+    tone: log.tone,
+  };
+  const current = readPlanActivityLogs(planId);
+  const nextLogs = [next, ...current]
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, 200);
+  writePlanActivityLogs(planId, nextLogs);
+};
 
 const normalizeReportingTagOptions = (tag: any): string[] => {
   const raw = Array.isArray(tag?.options) ? tag.options : [];
@@ -840,16 +908,32 @@ export default function NewPlanForm() {
       if (isEditMode && editPlanId) {
         const res: any = await plansAPI.update(editPlanId, payload);
         if (res?.success === false) throw new Error(res?.message || "Failed to update plan");
+        const savedId = String(res?.data?.id || res?.data?._id || editPlanId);
+        appendPlanActivityLog(savedId, {
+          action: "Plan Updated",
+          description: `Plan ${payload.planName} was updated.`,
+          actor: getCurrentUserDisplayName(),
+          tone: "blue",
+        });
         toast.success("Plan updated successfully");
-        const id = String(res?.data?.id || res?.data?._id || editPlanId);
+        const id = savedId;
         navigate(`/products/plans/${id}`);
         return;
       }
 
       const res: any = await plansAPI.create({ ...payload, status: "Active" });
       if (res?.success === false) throw new Error(res?.message || "Failed to save plan");
+      const createdId = String(res?.data?.id || res?.data?._id || "");
+      if (createdId) {
+        appendPlanActivityLog(createdId, {
+          action: "Plan Created",
+          description: `Plan ${payload.planName} was created with code ${payload.planCode}.`,
+          actor: getCurrentUserDisplayName(),
+          tone: "green",
+        });
+      }
       toast.success(clonePlanId ? "Plan cloned successfully" : "Plan saved successfully");
-      const id = String(res?.data?.id || res?.data?._id || "");
+      const id = createdId;
       if (id) navigate(`/products/plans/${id}`);
       else navigate("/products/plans");
     } catch (error) {

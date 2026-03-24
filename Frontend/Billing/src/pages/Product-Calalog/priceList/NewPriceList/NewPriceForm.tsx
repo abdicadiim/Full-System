@@ -36,7 +36,7 @@ const roundingExamples = [
 ];
 
 export default function NewPriceForm({ onClose, editData }: NewPriceFormProps) {
-    const { baseCurrency } = useCurrency();
+    const { baseCurrency, symbol: baseCurrencySymbol } = useCurrency();
     const { accentColor } = useOrganizationBranding();
     const isActiveRow = (row: any) => {
         const explicit = row?.isActive ?? row?.active;
@@ -83,6 +83,13 @@ export default function NewPriceForm({ onClose, editData }: NewPriceFormProps) {
     const [showBulkUnitDropdown, setShowBulkUnitDropdown] = useState(false);
     const [showAddProductDropdown, setShowAddProductDropdown] = useState(false);
     const [addProductSearch, setAddProductSearch] = useState('');
+    const bulkCurrencyLabel = baseCurrency.code || baseCurrencySymbol || baseCurrency.symbol || 'USD';
+
+    useEffect(() => {
+        if (priceType === 'individual') {
+            setActiveTab('products');
+        }
+    }, [priceType]);
 
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
@@ -353,7 +360,7 @@ export default function NewPriceForm({ onClose, editData }: NewPriceFormProps) {
         if (selectedItemIds.length === items.length) {
             setSelectedItemIds([]);
         } else {
-            setSelectedItemIds(items.map((_, idx) => String(idx)));
+            setSelectedItemIds(items.map((item: any, idx: number) => String(item?.id || item?._id || `item-${idx}`)));
         }
     };
 
@@ -361,6 +368,60 @@ export default function NewPriceForm({ onClose, editData }: NewPriceFormProps) {
         setSelectedItemIds(prev =>
             prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
         );
+    };
+
+    const applyBulkUpdate = () => {
+        if (!selectedItemIds.length) {
+            toast.error('Select at least one item');
+            return;
+        }
+
+        const baseValue = Number(bulkUpdateValue);
+        if (!Number.isFinite(baseValue)) {
+            toast.error('Enter a valid bulk update value');
+            return;
+        }
+
+        const discountValue =
+            bulkDiscountValue.trim() === ''
+                ? null
+                : Number(bulkDiscountValue);
+        if (discountValue !== null && !Number.isFinite(discountValue)) {
+            toast.error('Enter a valid discount value');
+            return;
+        }
+
+        setItems(prev =>
+            prev.map((item, idx) => {
+                const itemId = String(item?.id || item?._id || `item-${idx}`);
+                const isTarget = selectedItemIds.includes(itemId);
+                if (!isTarget) return item;
+
+                const salesRate = Number(item?.salesRate ?? 0) || 0;
+                const adjustment =
+                    bulkUpdateUnit === '%'
+                        ? (salesRate * baseValue) / 100
+                        : baseValue;
+
+                const nextRate =
+                    bulkUpdateRule === 'Markup'
+                        ? salesRate + adjustment
+                        : salesRate - adjustment;
+
+                return {
+                    ...item,
+                    id: itemId,
+                    customRate: Number.isFinite(nextRate) ? Math.max(0, nextRate).toFixed(2) : item.customRate,
+                    discount:
+                        discountValue === null
+                            ? item.discount
+                            : String(discountValue),
+                };
+            })
+        );
+
+        toast.success('Bulk rates updated');
+        setIsBulkModalOpen(false);
     };
 
     const handleSave = async () => {
@@ -445,25 +506,28 @@ export default function NewPriceForm({ onClose, editData }: NewPriceFormProps) {
         <div className="flex flex-col h-screen bg-white relative">
             {/* Modal Overlay */}
             {isBulkModalOpen && (
-                <div className="fixed inset-0 z-[200] flex items-start justify-center pt-20 bg-black/40 animate-in fade-in duration-200">
-                    <div className="bg-white w-[640px] rounded-lg shadow-2xl overflow-hidden border border-gray-200">
+                <div className="fixed inset-0 z-[200] flex items-start justify-center pt-14 bg-black/35 animate-in fade-in duration-200">
+                    <div className="bg-white w-[650px] max-w-[calc(100vw-2rem)] rounded-xl shadow-2xl overflow-hidden border border-gray-200">
                         {/* Modal Header */}
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                            <h3 className="text-[17px] font-bold text-gray-800">Update Rates in Bulk</h3>
-                            <button onClick={() => setIsBulkModalOpen(false)} className="text-red-500 hover:scale-110 transition-transform">
-                                <X size={20} strokeWidth={2.5} />
+                        <div className="flex items-center justify-between px-6 py-3.5 border-b border-gray-100">
+                            <h3 className="text-[18px] font-semibold text-gray-800">Update Rates in Bulk</h3>
+                            <button
+                                onClick={() => setIsBulkModalOpen(false)}
+                                className="h-8 w-8 grid place-items-center rounded-md text-red-500 hover:bg-red-50 hover:scale-105 transition-all"
+                            >
+                                <X size={18} strokeWidth={2.5} />
                             </button>
                         </div>
 
                         {/* Modal Body */}
-                        <div className="p-8 space-y-6">
-                            <div className="flex items-center gap-4">
-                                <label className="text-[13px] text-gray-800 w-140 shrink-0">Bulk Update Rule</label>
-                                <div className="flex items-center gap-3">
+                        <div className="px-6 py-6 space-y-5">
+                            <div className="grid grid-cols-[145px_1fr] items-center gap-3">
+                                <label className="text-[13px] text-gray-800 shrink-0">Bulk Update Rule</label>
+                                <div className="flex items-center gap-2.5 flex-nowrap whitespace-nowrap min-w-0">
                                     <div className="relative" ref={bulkRuleRef}>
                                         <button
                                             onClick={() => setShowBulkRuleDropdown(!showBulkRuleDropdown)}
-                                            className="w-[160px] h-9 flex items-center justify-between px-3 border border-gray-300 rounded text-[13px] bg-white hover:border-blue-400 transition-colors"
+                                            className="w-[132px] h-9 flex items-center justify-between px-3 border border-gray-300 rounded-md text-[13px] bg-white hover:border-blue-400 transition-colors"
                                         >
                                             {bulkUpdateRule} <ChevronDown size={14} className={`text-gray-400 transition-transform ${showBulkRuleDropdown ? 'rotate-180' : ''}`} />
                                         </button>
@@ -490,7 +554,7 @@ export default function NewPriceForm({ onClose, editData }: NewPriceFormProps) {
                                             </div>
                                         )}
                                     </div>
-                                    <div className="w-[160px] h-9 flex items-center px-3 border border-gray-300 rounded text-[13px] text-gray-600 bg-white">
+                                    <div className="w-[138px] h-9 flex items-center px-3 border border-gray-300 rounded-md text-[13px] text-gray-600 bg-white">
                                         Sales Rate
                                     </div>
                                     <span className="text-[13px] text-gray-500 lowercase">by</span>
@@ -499,19 +563,24 @@ export default function NewPriceForm({ onClose, editData }: NewPriceFormProps) {
                                             type="text"
                                             value={bulkUpdateValue}
                                             onChange={(e) => setBulkUpdateValue(e.target.value)}
-                                            className="w-[100px] h-9 border border-gray-300 border-r-0 rounded-l px-3 text-[13px] outline-none focus:border-blue-400"
+                                            className="w-[82px] h-9 border border-gray-300 border-r-0 rounded-l-md px-3 text-[13px] outline-none focus:border-blue-400"
                                         />
                                         <div className="relative h-9" ref={bulkUnitRef}>
                                             <button
                                                 onClick={() => setShowBulkUnitDropdown(!showBulkUnitDropdown)}
-                                                className="h-full flex items-center gap-1.5 px-3 border border-gray-300 rounded-r text-[13px] bg-[#f9fafb] hover:bg-gray-50 border-l-0"
+                                                className="h-full w-[72px] flex items-center justify-between gap-1 px-3 border border-gray-300 rounded-r-md text-[13px] bg-[#f9fafb] hover:bg-gray-50 border-l-0"
                                             >
-                                                {bulkUpdateUnit === '%' ? '%' : currency || baseCurrency.code} <ChevronDown size={12} className="text-gray-400" />
+                                                <span className="truncate">{bulkUpdateUnit === '%' ? '%' : bulkCurrencyLabel}</span>
+                                                <ChevronDown size={12} className="text-gray-400 shrink-0" />
                                             </button>
                                             {showBulkUnitDropdown && (
-                                                <div className="absolute top-full right-0 mt-1 w-[80px] bg-white border border-gray-200 rounded-lg shadow-xl z-[60] py-1 overflow-hidden">
-                                                    <button onClick={() => { setBulkUpdateUnit('%'); setShowBulkUnitDropdown(false); }} className={`w-full px-4 py-2 text-[13px] text-center transition-colors ${bulkUpdateUnit === '%' ? 'bg-blue-500 text-white' : 'text-gray-700 hover:bg-gray-50'}`}>%</button>
-                                                    <button onClick={() => { setBulkUpdateUnit('currency'); setShowBulkUnitDropdown(false); }} className={`w-full px-4 py-2 text-[13px] text-center transition-colors ${bulkUpdateUnit === 'currency' ? 'bg-blue-500 text-white' : 'text-gray-700 hover:bg-gray-50'}`}>{currency || baseCurrency.code}</button>
+                                                <div className="absolute top-full right-0 mt-1 w-[132px] bg-white border border-gray-200 rounded-lg shadow-xl z-[60] py-1 overflow-hidden">
+                                                    <button onClick={() => { setBulkUpdateUnit('%'); setShowBulkUnitDropdown(false); }} className={`w-full px-3 py-2 text-[13px] flex items-center justify-between transition-colors ${bulkUpdateUnit === '%' ? 'bg-blue-500 text-white' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                        <span>%</span>
+                                                    </button>
+                                                    <button onClick={() => { setBulkUpdateUnit('currency'); setShowBulkUnitDropdown(false); }} className={`w-full px-3 py-2 text-[13px] flex items-center justify-between transition-colors ${bulkUpdateUnit === 'currency' ? 'bg-blue-500 text-white' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                        <span>{bulkCurrencyLabel}</span>
+                                                    </button>
                                                 </div>
                                             )}
                                         </div>
@@ -519,31 +588,35 @@ export default function NewPriceForm({ onClose, editData }: NewPriceFormProps) {
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-4">
-                                <label className="text-[13px] text-gray-800 w-140 shrink-0">Discount (%)</label>
-                                <div className="flex items-center shadow-sm">
-                                    <input
-                                        type="text"
-                                        value={bulkDiscountValue}
-                                        onChange={(e) => setBulkDiscountValue(e.target.value)}
-                                        className="w-[120px] h-9 border border-gray-300 border-r-0 rounded-l px-3 text-[13px] outline-none focus:border-blue-400"
-                                    />
-                                    <div className="h-9 flex items-center px-4 border border-gray-300 rounded-r bg-white text-[13px] text-gray-400">
-                                        %
+                            {includeDiscount && (
+                                <div className="grid grid-cols-[150px_1fr] items-center gap-4">
+                                    <label className="text-[13px] text-gray-800 shrink-0">Discount (%)</label>
+                                    <div className="flex items-center shadow-sm">
+                                        <input
+                                            type="text"
+                                            value={bulkDiscountValue}
+                                            onChange={(e) => setBulkDiscountValue(e.target.value)}
+                                            className="w-[120px] h-9 border border-gray-300 border-r-0 rounded-l-md px-3 text-[13px] outline-none focus:border-blue-400"
+                                        />
+                                        <div className="h-9 flex items-center px-4 border border-gray-300 rounded-r-md bg-white text-[13px] text-gray-400">
+                                            %
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
 
                         {/* Modal Footer */}
-                        <div className="px-6 py-6 flex items-center gap-3">
+                        <div className="px-6 py-5 flex items-center gap-3 border-t border-gray-100">
                             <button
+                                type="button"
+                                onClick={applyBulkUpdate}
                                 className="cursor-pointer rounded-lg border-b-[4px] border-[#0D4A52] px-5 py-2 text-[13px] font-bold text-white transition-all hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[2px] active:border-b-[2px] active:brightness-90"
                                 style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
                             >
                                 Update
                             </button>
-                            <button onClick={() => setIsBulkModalOpen(false)} className="bg-white text-gray-700 px-5 py-2 rounded-md text-[13px] font-bold border border-gray-300 hover:bg-gray-50 active:scale-95 transition-all">
+                            <button type="button" onClick={() => setIsBulkModalOpen(false)} className="bg-white text-gray-700 px-5 py-2 rounded-md text-[13px] font-bold border border-gray-300 hover:bg-gray-50 active:scale-95 transition-all">
                                 Cancel
                             </button>
                         </div>
@@ -675,20 +748,20 @@ export default function NewPriceForm({ onClose, editData }: NewPriceFormProps) {
 
                                     <div className="grid grid-cols-[160px_1fr] items-center gap-4">
                                         <label className="text-[13px] text-gray-600 font-medium">Discount</label>
-                                        <div className="flex items-center gap-6">
-                                            <label className="flex items-center gap-2 text-[13px] cursor-pointer">
+                                        <div className="grid grid-cols-[16px_1fr] gap-x-2 gap-y-2 items-start">
+                                            <label className="col-span-2 flex items-center gap-2 text-[13px] cursor-pointer">
                                                 <input
                                                     type="checkbox"
-                                                    className="w-4 h-4 accent-blue-600 rounded"
+                                                    className="w-4 h-4 accent-blue-600 rounded shrink-0"
                                                     checked={includeDiscount}
                                                     onChange={(e) => setIncludeDiscount(e.target.checked)}
                                                 />
-                                                I want to include discount percentage for the items
+                                                <span className="leading-snug">I want to include discount percentage for the items</span>
                                             </label>
                                             {includeDiscount && (
-                                                <div className="flex items-center gap-1.5 text-[11px] text-blue-600 animate-in fade-in slide-in-from-left-2 duration-300">
-                                                    <Info size={14} className="text-blue-500 shrink-0" />
-                                                    <span>When a price list is applied, the discount percentage will be applied only if discount is enabled at the line-item level</span>
+                                                <div className="col-span-2 flex items-start gap-1.5 text-[11px] text-blue-600 animate-in fade-in slide-in-from-top-1 duration-300">
+                                                    <Info size={14} className="text-blue-500 shrink-0 mt-0.5" />
+                                                    <span className="leading-snug">When a price list is applied, the discount percentage will be applied only if discount is enabled at the line-item level.</span>
                                                 </div>
                                             )}
                                         </div>
@@ -985,7 +1058,8 @@ export default function NewPriceForm({ onClose, editData }: NewPriceFormProps) {
                                                     ) : (
                                                         <div className="divide-y divide-gray-50">
                                                             {items.map((item, idx) => {
-                                                                const isSelected = selectedItemIds.includes(String(idx));
+                                                                const itemId = String(item?.id || item?._id || `item-${idx}`);
+                                                                const isSelected = selectedItemIds.includes(itemId);
                                                                 return (
                                                                     <div key={idx} className={`grid ${pricingScheme === 'Volume'
                                                                         ? (includeDiscount
@@ -1000,7 +1074,7 @@ export default function NewPriceForm({ onClose, editData }: NewPriceFormProps) {
                                                                                 <input
                                                                                     type="checkbox"
                                                                                     checked={isSelected}
-                                                                                    onChange={() => toggleSelectItem(String(idx))}
+                                                                                    onChange={() => toggleSelectItem(itemId)}
                                                                                     className="w-4 h-4 accent-blue-600 rounded cursor-pointer"
                                                                                 />
                                                                             </div>
@@ -1183,7 +1257,7 @@ export default function NewPriceForm({ onClose, editData }: NewPriceFormProps) {
                                     </button>
 
                                     {showRoundingExamples && (
-                                        <div className="absolute top-[calc(100%+8px)] left-0 w-[420px] bg-white border-2 border-blue-500 rounded-lg shadow-2xl z-[160] overflow-visible animate-in fade-in slide-in-from-top-2 duration-200">
+                                        <div className="absolute top-[calc(100%+8px)] left-0 w-[340px] bg-white border-2 border-blue-500 rounded-lg shadow-2xl z-[160] overflow-visible animate-in fade-in slide-in-from-top-2 duration-200">
                                             <div className="absolute -top-2 left-10 w-4 h-4 bg-white border-t-2 border-l-2 border-blue-500 rotate-45" />
 
                                             <div className="relative bg-white rounded-lg overflow-hidden">

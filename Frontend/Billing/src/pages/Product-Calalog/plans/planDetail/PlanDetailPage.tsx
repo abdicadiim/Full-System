@@ -30,15 +30,113 @@ import { addonsAPI, productsAPI, plansAPI } from "../../../../services/api";
 const PLANS_STORAGE_KEY = "inv_plans_v1";
 const ADDONS_STORAGE_KEY = "inv_addons_v1";
 const PRICE_LISTS_STORAGE_KEY = "inv_price_lists_v1";
+const PLAN_ACTIVITY_LOGS_PREFIX = "taban_plan_activity_logs_";
 
 const getPlanId = (row: any) => String(row?.id || row?._id || "");
 const isPlanActive = (row: any) => String(row?.status || "Active").toLowerCase() === "active";
+
+type PlanActivityLog = {
+  id: string;
+  action: string;
+  description: string;
+  actor: string;
+  timestamp: string;
+  tone?: "blue" | "green" | "amber";
+};
 
 const formatDate = (value: string) => {
   if (!value) return "-";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "-";
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+};
+
+const formatActivityTimestamp = (value: string) => {
+  if (!value) return "-";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).replace(",", "");
+};
+
+const getPlanActivityKey = (planId: string) => `${PLAN_ACTIVITY_LOGS_PREFIX}${String(planId || "").trim()}`;
+
+const getCurrentUserDisplayName = () => {
+  try {
+    const raw = localStorage.getItem("user");
+    if (!raw) return "System";
+    const user = JSON.parse(raw);
+    return String(user?.name || user?.displayName || user?.email || "System").trim() || "System";
+  } catch {
+    return "System";
+  }
+};
+
+const normalizePlanActivityLog = (log: any): PlanActivityLog => ({
+  id: String(log?.id || log?._id || `${Date.now()}-${Math.random().toString(36).slice(2)}`),
+  action: String(log?.action || "Plan Updated"),
+  description: String(log?.description || ""),
+  actor: String(log?.actor || "System"),
+  timestamp: String(log?.timestamp || log?.createdAt || new Date().toISOString()),
+  tone: log?.tone === "green" || log?.tone === "amber" || log?.tone === "blue" ? log.tone : undefined,
+});
+
+const readPlanActivityLogs = (planId: string): PlanActivityLog[] => {
+  try {
+    const raw = localStorage.getItem(getPlanActivityKey(planId));
+    const parsed = raw ? JSON.parse(raw) : [];
+    const logs = Array.isArray(parsed) ? parsed.map(normalizePlanActivityLog) : [];
+    return logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  } catch {
+    return [];
+  }
+};
+
+const writePlanActivityLogs = (planId: string, logs: PlanActivityLog[]) => {
+  try {
+    localStorage.setItem(getPlanActivityKey(planId), JSON.stringify(logs.slice(0, 200)));
+  } catch {
+    // ignore storage failures
+  }
+};
+
+const seedPlanActivityLogs = (plan: any): PlanActivityLog[] => {
+  const name = planNameOf(plan);
+  const code = planCodeOf(plan);
+  const createdAt = String(plan?.createdAt || plan?.createdOn || "");
+  const updatedAt = String(plan?.updatedAt || createdAt || "");
+  const status = isPlanActive(plan) ? "Active" : "Inactive";
+  const logs: PlanActivityLog[] = [];
+
+  if (updatedAt) {
+    logs.push({
+      id: `updated-${updatedAt}`,
+      action: "Plan Updated",
+      description: `Status was changed to ${status}.`,
+      actor: getCurrentUserDisplayName(),
+      timestamp: updatedAt,
+      tone: status === "Active" ? "blue" : "amber",
+    });
+  }
+
+  if (createdAt) {
+    logs.push({
+      id: `created-${createdAt}`,
+      action: "Plan Created",
+      description: `Plan ${name} was created with code ${code}.`,
+      actor: getCurrentUserDisplayName(),
+      timestamp: createdAt,
+      tone: "green",
+    });
+  }
+
+  return logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 };
 
 const formatFrequency = (row: any) => {
@@ -89,6 +187,7 @@ export default function PlanDetailPage() {
   const [isSidebarMenuOpen, setIsSidebarMenuOpen] = useState(false);
   const [productIdByName, setProductIdByName] = useState<Record<string, string>>({});
   const [plansLoading, setPlansLoading] = useState(false);
+  const [activityLogs, setActivityLogs] = useState<PlanActivityLog[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadPlans = async () => {
@@ -224,6 +323,45 @@ export default function PlanDetailPage() {
     [selectedPlan]
   );
 
+  useEffect(() => {
+    if (!planId || !selectedPlan) {
+      setActivityLogs([]);
+      return;
+    }
+
+    const stored = readPlanActivityLogs(getPlanId(selectedPlan) || String(planId));
+    if (stored.length > 0) {
+      setActivityLogs(stored);
+      return;
+    }
+
+    const seeded = seedPlanActivityLogs(selectedPlan);
+    setActivityLogs(seeded);
+    if (seeded.length > 0) {
+      writePlanActivityLogs(getPlanId(selectedPlan) || String(planId), seeded);
+    }
+  }, [planId, selectedPlan]);
+
+  const appendPlanActivityLog = (planTargetId: string, log: Omit<PlanActivityLog, "id" | "timestamp"> & { timestamp?: string }) => {
+    if (!planTargetId) return;
+    const next: PlanActivityLog = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      timestamp: log.timestamp || new Date().toISOString(),
+      action: log.action,
+      description: log.description,
+      actor: log.actor,
+      tone: log.tone,
+    };
+    const current = readPlanActivityLogs(planTargetId);
+    const nextLogs = [next, ...current]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 200);
+    writePlanActivityLogs(planTargetId, nextLogs);
+    if (planTargetId === getPlanId(selectedPlan)) {
+      setActivityLogs(nextLogs);
+    }
+  };
+
   const planAddons = useMemo(() => {
     return addons.filter((addon) => {
       const addonProduct = String(addon?.product || "").trim().toLowerCase();
@@ -324,6 +462,12 @@ export default function PlanDetailPage() {
     try {
       const res: any = await plansAPI.update(targetId, { status: nextStatus });
       if (res?.success === false) throw new Error(res?.message || "Failed to update plan");
+      appendPlanActivityLog(targetId, {
+        action: "Plan Updated",
+        description: `Status was changed to ${nextStatus}.`,
+        actor: getCurrentUserDisplayName(),
+        tone: nextStatus === "Active" ? "blue" : "amber",
+      });
       await refreshPlans();
       toast.success(`Plan marked as ${nextStatus.toLowerCase()}`);
       setIsActionsOpen(false);
@@ -350,6 +494,14 @@ export default function PlanDetailPage() {
       toast.success("Plan cloned successfully");
       setIsActionsOpen(false);
       const createdId = String(res?.data?.id || res?.data?._id || "");
+      if (createdId) {
+        appendPlanActivityLog(createdId, {
+          action: "Plan Created",
+          description: `Plan ${planNameOf(clone)} was created with code ${planCodeOf(clone)}.`,
+          actor: getCurrentUserDisplayName(),
+          tone: "green",
+        });
+      }
       if (createdId) navigate(`/products/plans/${createdId}`);
       else navigate("/products/plans");
     } catch (e: any) {
@@ -491,7 +643,7 @@ export default function PlanDetailPage() {
                   type="checkbox"
                   checked={allVisibleSelected}
                   onChange={toggleSelectAllVisible}
-                  className="h-4 w-4 rounded border-gray-300 accent-[#3b82f6]"
+                    className="h-4 w-4 rounded border-gray-300 accent-[#1b5e6a]"
                 />
                 <div className="relative" ref={bulkActionsRef}>
                   <button
@@ -510,7 +662,7 @@ export default function PlanDetailPage() {
                           setIsBulkActionsOpen(false);
                           setBulkUpdateOpen(true);
                         }}
-                        className="mx-1 block w-[calc(100%-8px)] rounded-md px-3 py-2 text-left text-sm text-[#334155] hover:bg-[#3b82f6] hover:text-white"
+                        className="mx-1 block w-[calc(100%-8px)] rounded-md px-3 py-2 text-left text-sm text-[#334155] hover:bg-[#1b5e6a] hover:text-white"
                       >
                         Bulk Update
                       </button>
@@ -541,7 +693,7 @@ export default function PlanDetailPage() {
               </div>
               <div className="flex items-center gap-2">
                 <div className="h-5 w-px bg-gray-200" />
-                <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#eff6ff] px-2 text-[12px] font-semibold text-[#2563eb]">
+                <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#e6f5ef] px-2 text-[12px] font-semibold text-[#1b5e6a]">
                   {selectedIds.length}
                 </span>
                 <span className="text-sm text-[#334155]">Selected</span>
@@ -560,7 +712,7 @@ export default function PlanDetailPage() {
                 className="inline-flex items-center gap-1 text-sm font-semibold text-[#111827]"
               >
                 {planStatusFilter}
-                <ChevronDown size={14} className="text-[#2563eb]" />
+                <ChevronDown size={14} className="text-[#1b5e6a]" />
               </button>
               {isPlanFilterOpen ? (
                 <div className="absolute left-0 top-full z-[180] mt-1 w-48 rounded-md border border-gray-200 bg-white py-1 shadow-xl">
@@ -572,7 +724,7 @@ export default function PlanDetailPage() {
                         setPlanStatusFilter(option);
                         setIsPlanFilterOpen(false);
                       }}
-                      className={`w-full px-4 py-2 text-left text-sm ${planStatusFilter === option ? "bg-[#eff6ff] text-[#2563eb]" : "text-[#334155] hover:bg-gray-50"}`}
+                      className={`w-full px-4 py-2 text-left text-sm ${planStatusFilter === option ? "bg-[#e6f5ef] text-[#1b5e6a]" : "text-[#334155] hover:bg-gray-50"}`}
                     >
                       {option}
                     </button>
@@ -585,7 +737,7 @@ export default function PlanDetailPage() {
               <button
                 type="button"
                 onClick={() => navigate("/products/plans/new")}
-                className="inline-flex h-7 w-7 items-center justify-center rounded bg-[#22b573] text-white hover:opacity-90"
+                className="inline-flex h-7 w-7 items-center justify-center rounded bg-[#1b5e6a] text-white hover:opacity-90"
               >
                 <Plus size={14} />
               </button>
@@ -657,7 +809,7 @@ export default function PlanDetailPage() {
                     checked={checked}
                     onChange={() => toggleRowSelection(planRowId)}
                     onClick={(event) => event.stopPropagation()}
-                    className="mt-1 h-4 w-4 rounded border-gray-300 accent-[#3b82f6]"
+                    className="mt-1 h-4 w-4 rounded border-gray-300 accent-[#1b5e6a]"
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
@@ -670,7 +822,7 @@ export default function PlanDetailPage() {
                       <div className="text-right text-sm text-[#111827]">{String(plan?.unitName || "Unit")}</div>
                     </div>
                     <div className="mt-1 flex items-start justify-between gap-2">
-                      <div className={`text-[11px] font-medium uppercase ${isPlanActive(plan) ? "text-[#16a34a]" : "text-[#8b949e]"}`}>
+                      <div className={`text-[11px] font-medium uppercase ${isPlanActive(plan) ? "text-[#1b5e6a]" : "text-[#8b949e]"}`}>
                         {isPlanActive(plan) ? "ACTIVE" : "INACTIVE"}
                       </div>
                       <div className="text-right text-[11px] text-[#334155]">{formatFrequency(plan)}</div>
@@ -745,7 +897,7 @@ export default function PlanDetailPage() {
 
         <div className="flex-1 min-h-0 overflow-y-auto p-4">
           <div className="rounded-xl border border-[#d8deea] bg-white p-5 shadow-[0_8px_18px_rgba(15,23,42,0.05)]">
-            <span className={`inline-block rounded px-3 py-1 text-xs font-semibold text-white ${isPlanActive(selectedPlan) ? "bg-[#22b573]" : "bg-[#8b949e]"}`}>
+            <span className={`inline-block rounded px-3 py-1 text-xs font-semibold text-white ${isPlanActive(selectedPlan) ? "bg-[#1b5e6a]" : "bg-[#8b949e]"}`}>
               {isPlanActive(selectedPlan) ? "Active" : "Inactive"}
             </span>
 
@@ -757,7 +909,7 @@ export default function PlanDetailPage() {
                 </p>
               </div>
 
-              <div className="border-l-2 border-[#22b573] pl-3">
+              <div className="border-l-2 border-[#1b5e6a] pl-3">
                 <div className="text-[22px] font-medium text-[#111827]">AMD{Number(selectedPlan?.price || 0).toFixed(2)}</div>
                 <div className="text-[14px] text-[#64748b]">Bill Every {formatFrequency(selectedPlan)}</div>
               </div>
@@ -777,7 +929,7 @@ export default function PlanDetailPage() {
                   >
                     <Copy size={14} />
                   </button>
-                  <button type="button" className="inline-flex items-center gap-1 text-[13px] text-[#3b82f6] hover:underline">
+                  <button type="button" className="inline-flex items-center gap-1 text-[13px] text-[#1b5e6a] hover:underline">
                     <Settings size={13} />
                     Customize
                   </button>
@@ -786,7 +938,7 @@ export default function PlanDetailPage() {
             </div>
 
             <div className="mt-5 border-t border-dashed border-[#d8deea] pt-3 text-[14px] text-[#334155]">
-              <span className="inline-flex items-center gap-1 text-[#22b573]">
+              <span className="inline-flex items-center gap-1 text-[#1b5e6a]">
                 <BarChart3 size={15} />
               </span>{" "}
               MRR : <span className="font-medium">AMD0.00</span>
@@ -808,7 +960,7 @@ export default function PlanDetailPage() {
                     key={tab.key}
                     type="button"
                     onClick={() => setActiveTab(tab.key as typeof activeTab)}
-                    className={`border-b-2 pb-3 text-[13px] ${activeTab === tab.key ? "border-[#3b82f6] text-[#111827]" : "border-transparent text-[#334155]"}`}
+                    className={`border-b-2 pb-3 text-[13px] ${activeTab === tab.key ? "border-[#1b5e6a] text-[#111827]" : "border-transparent text-[#334155]"}`}
                   >
                     {tab.label}
                   </button>
@@ -839,13 +991,13 @@ export default function PlanDetailPage() {
                               toast.info("Open Products and select the product.");
                             }
                           }}
-                          className="text-left text-[#2563eb] hover:underline"
+                          className="text-left text-[#1b5e6a] hover:underline"
                           title="Open product details"
                         >
                           {String(selectedPlan?.product || "-")}
                         </button>
                       ) : (
-                        <span className="text-[#2563eb]">-</span>
+                        <span className="text-[#1b5e6a]">-</span>
                       )}
                       <span className="text-[#64748b]">Creation Date</span>
                       <span className="text-[#111827]">{formatDate(String(selectedPlan?.createdAt || selectedPlan?.createdOn || ""))}</span>
@@ -885,7 +1037,7 @@ export default function PlanDetailPage() {
                             <button
                               type="button"
                               onClick={() => fileInputRef.current?.click()}
-                              className="text-[12px] text-[#3b82f6] hover:underline"
+                              className="text-[12px] text-[#1b5e6a] hover:underline"
                             >
                               Change Image
                             </button>
@@ -907,7 +1059,7 @@ export default function PlanDetailPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                           </svg>
                           <p className="mt-2 text-[13px] text-[#64748b]">Drag image(s) here or</p>
-                          <p className="text-[13px] text-[#3b82f6]">Browse images</p>
+                          <p className="text-[13px] text-[#1b5e6a]">Browse images</p>
                         </div>
                       )}
                     </div>
@@ -952,7 +1104,7 @@ export default function PlanDetailPage() {
                     <button
                       type="button"
                       onClick={() => navigate(`/products/addons/new?product=${encodeURIComponent(String(selectedPlan?.product || ""))}`)}
-                      className="inline-flex items-center gap-1 text-sm text-[#2563eb] hover:text-[#1d4ed8]"
+                      className="inline-flex items-center gap-1 text-sm text-[#1b5e6a] hover:text-[#22b573]"
                     >
                       <CirclePlus size={13} />
                       New
@@ -988,7 +1140,7 @@ export default function PlanDetailPage() {
                                     <button
                                       type="button"
                                       onClick={() => navigate(`/products/addons/${addonId}`)}
-                                      className="text-[#111827] hover:text-[#2563eb]"
+                                      className="text-[#111827] hover:text-[#1b5e6a]"
                                     >
                                       {String(addon?.addonName || "-")}
                                     </button>
@@ -1016,7 +1168,7 @@ export default function PlanDetailPage() {
                         <button
                           type="button"
                           onClick={() => setShowAddonCount(true)}
-                          className="text-[#3b82f6] hover:underline"
+                          className="text-[#1b5e6a] hover:underline"
                         >
                           View
                         </button>
@@ -1040,7 +1192,7 @@ export default function PlanDetailPage() {
                     <button
                       type="button"
                       onClick={() => navigate("/products/price-lists?new=1")}
-                      className="inline-flex items-center gap-1 text-sm text-[#2563eb] hover:text-[#1d4ed8]"
+                      className="inline-flex items-center gap-1 text-sm text-[#1b5e6a] hover:text-[#22b573]"
                     >
                       <CirclePlus size={13} />
                       New
@@ -1090,7 +1242,7 @@ export default function PlanDetailPage() {
                         <button
                           type="button"
                           onClick={() => setShowPriceListCount(true)}
-                          className="text-[#3b82f6] hover:underline"
+                          className="text-[#1b5e6a] hover:underline"
                         >
                           View
                         </button>
@@ -1108,34 +1260,40 @@ export default function PlanDetailPage() {
               ) : null}
 
               {activeTab === "activity" ? (
-                <div className="space-y-6">
-                  <div className="relative pl-6 before:absolute before:left-0 before:top-2 before:h-full before:w-px before:bg-gray-100">
-                    <div className="relative mb-8">
-                      <div className="absolute -left-[27.5px] top-1.5 h-3 w-3 rounded-full border-2 border-white bg-blue-500 ring-4 ring-blue-50" />
-                      <div className="flex items-center gap-2 text-[14px] font-medium text-[#111827]">
-                        Plan Updated
-                        <span className="text-[12px] font-normal text-[#64748b]">
-                          at {formatDate(selectedPlan?.updatedAt || selectedPlan?.createdAt || "")}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-[13px] text-[#64748b]">
-                        Status was changed to {isPlanActive(selectedPlan) ? "Active" : "Inactive"}.
-                      </p>
+                <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+                  {activityLogs.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-14 text-center text-gray-500">
+                      <MessageSquare size={42} className="text-gray-300" />
+                      <p className="mt-3 text-[14px] font-medium">No activity logs yet</p>
                     </div>
-
-                    <div className="relative">
-                      <div className="absolute -left-[27.5px] top-1.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-500 ring-4 ring-emerald-50" />
-                      <div className="flex items-center gap-2 text-[14px] font-medium text-[#111827]">
-                        Plan Created
-                        <span className="text-[12px] font-normal text-[#64748b]">
-                          at {formatDate(selectedPlan?.createdAt || "")}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-[13px] text-[#64748b]">
-                        Plan {planNameOf(selectedPlan)} was created with code {planCodeOf(selectedPlan)}.
-                      </p>
+                  ) : (
+                    <div className="divide-y divide-gray-100">
+                      {activityLogs.map((log) => {
+                        const dotClass =
+                          log.tone === "green"
+                            ? "bg-emerald-500 ring-emerald-50"
+                            : log.tone === "amber"
+                              ? "bg-amber-500 ring-amber-50"
+                              : "bg-sky-500 ring-sky-50";
+                        return (
+                          <div key={log.id} className="grid grid-cols-[180px_28px_1fr] gap-4 px-4 py-5 items-start hover:bg-gray-50/40 transition-colors">
+                            <div className="text-[13px] text-[#64748b] whitespace-nowrap pt-0.5">
+                              {formatActivityTimestamp(log.timestamp)}
+                            </div>
+                            <div className="pt-0.5 flex justify-center">
+                              <div className={`h-3 w-3 rounded-full border-2 border-white ${dotClass} ring-4`} />
+                            </div>
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2 text-[14px] font-medium text-[#111827]">
+                                <span>{log.action}</span>
+                              </div>
+                              <p className="mt-1 text-[13px] text-[#64748b]">{log.description}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  </div>
+                  )}
                 </div>
               ) : null}
             </div>
@@ -1170,7 +1328,7 @@ export default function PlanDetailPage() {
             <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
               <button
                 type="button"
-                className="rounded-md bg-blue-600 px-4 py-1.5 text-[12px] text-white hover:bg-blue-700"
+                className="rounded-md bg-[#1b5e6a] px-4 py-1.5 text-[12px] text-white hover:bg-[#156372]"
                 onClick={confirmDelete}
               >
                 Delete
