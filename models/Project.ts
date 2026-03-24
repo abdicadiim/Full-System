@@ -15,6 +15,20 @@ const ProjectCommentSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const ProjectAttachmentSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true },
+    documentId: { type: String, default: "" },
+    name: { type: String, default: "" },
+    size: { type: Number, default: 0 },
+    type: { type: String, default: "" },
+    mimeType: { type: String, default: "" },
+    url: { type: String, default: "" },
+    uploadedAt: { type: String, default: () => new Date().toISOString() },
+  },
+  { _id: false }
+);
+
 const ProjectSchema = new mongoose.Schema(
   {
     organizationId: { type: mongoose.Schema.Types.ObjectId, ref: "Organization", required: true, index: true },
@@ -28,6 +42,7 @@ const ProjectSchema = new mongoose.Schema(
     startDate: { type: Date, default: null },
     endDate: { type: Date, default: null },
     comments: { type: [ProjectCommentSchema], default: [] },
+    attachments: { type: [ProjectAttachmentSchema], default: [] },
   },
   { timestamps: true, strict: false, minimize: false }
 );

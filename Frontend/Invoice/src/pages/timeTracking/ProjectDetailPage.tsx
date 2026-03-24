@@ -5,7 +5,7 @@ import { AUTH_USER_UPDATED_EVENT, getCurrentUser } from "../../services/auth";
 import { toast } from "react-toastify";
 import { useCurrency } from "../../hooks/useCurrency";
 import NewLogEntryForm from "./NewLogEntryForm";
-import { ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Search, ArrowUpDown, X, MessageSquare, Briefcase, User, Plus, Minus, Check, Trash2, MoreVertical, Edit3, Clock, Bold, Italic, Underline, Paperclip, Upload, FileText, Loader2, ExternalLink } from "lucide-react";
+import { ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Search, ArrowUpDown, X, MessageSquare, Briefcase, User, Plus, Minus, Check, Trash2, MoreVertical, Edit3, Clock, Bold, Italic, Underline, Paperclip, Upload, FileText, Loader2, ExternalLink, AlertTriangle } from "lucide-react";
 
 export default function ProjectDetailPage() {
   const { projectId } = useParams();
@@ -38,11 +38,12 @@ export default function ProjectDetailPage() {
   const itemDescriptionDropdownRef = useRef(null);
   const taxDropdownRef = useRef(null);
   const addUsersDropdownRef = useRef(null);
-  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [attachedFiles, setAttachedFiles] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [showAttachmentsPopover, setShowAttachmentsPopover] = useState(false);
   const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
   const [attachmentMenuIndex, setAttachmentMenuIndex] = useState<number | null>(null);
+  const [attachmentDeleteConfirmIndex, setAttachmentDeleteConfirmIndex] = useState<number | null>(null);
   const [showInvoicePreferences, setShowInvoicePreferences] = useState(false);
   const [showProjectInvoiceInfo, setShowProjectInvoiceInfo] = useState(false);
   const [invoiceInfoData, setInvoiceInfoData] = useState({
@@ -62,6 +63,23 @@ export default function ProjectDetailPage() {
       includeUnbilledExpenses: !!saved.includeUnbilledExpenses,
     };
   };
+  const normalizeAttachment = (attachment: any, index: number) => ({
+    id: String(attachment?.id || attachment?.documentId || attachment?._id || `attachment-${index}`),
+    documentId: String(attachment?.documentId || attachment?.id || attachment?._id || ""),
+    name: String(attachment?.name || attachment?.fileName || attachment?.filename || `Attachment ${index + 1}`),
+    size: Number(attachment?.size || attachment?.fileSize || 0),
+    type: String(attachment?.type || attachment?.mimeType || ""),
+    mimeType: String(attachment?.mimeType || attachment?.type || ""),
+    url: String(attachment?.url || ""),
+    uploadedAt: String(attachment?.uploadedAt || attachment?.createdAt || new Date().toISOString()),
+  });
+  const readFileAsDataUrl = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(reader.error || new Error("Failed to read attachment."));
+      reader.readAsDataURL(file);
+    });
   const [itemNameDropdownOpen, setItemNameDropdownOpen] = useState(false);
   const [itemDescriptionDropdownOpen, setItemDescriptionDropdownOpen] = useState(false);
   const [taxDropdownOpen, setTaxDropdownOpen] = useState(false);
@@ -421,6 +439,14 @@ export default function ProjectDetailPage() {
   const [accountSearchTerm, setAccountSearchTerm] = useState("");
   const [expandedAccountCategories, setExpandedAccountCategories] = useState({});
 
+  const persistProjectAttachments = async (attachments: any[]) => {
+    if (!projectId) return attachments;
+    const response = await projectsAPI.update(projectId, { attachments });
+    const persisted = response?.data?.attachments || response?.attachments || attachments;
+    setProject((prev: any) => (prev ? { ...prev, attachments: persisted } : prev));
+    return persisted;
+  };
+
   const handleAttachmentUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
@@ -438,8 +464,25 @@ export default function ProjectDetailPage() {
         toast.error("Each file must be 10MB or smaller.");
       }
 
-      if (validFiles.length) {
-        setAttachedFiles((prev) => [...prev, ...validFiles].slice(0, MAX_FILES));
+      const uploadedAttachments: any[] = [];
+      for (const file of validFiles) {
+        const dataUrl = await readFileAsDataUrl(file);
+        uploadedAttachments.push({
+          id: `attachment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          documentId: "",
+          name: file.name,
+          size: file.size,
+          type: file.type || "application/octet-stream",
+          mimeType: file.type || "application/octet-stream",
+          url: dataUrl,
+          uploadedAt: new Date().toISOString(),
+        });
+      }
+
+      if (uploadedAttachments.length) {
+        const nextAttachments = [...attachedFiles, ...uploadedAttachments].slice(0, MAX_FILES);
+        const persisted = await persistProjectAttachments(nextAttachments);
+        setAttachedFiles(Array.isArray(persisted) ? persisted : nextAttachments);
       }
       if (fileInputRef.current) fileInputRef.current.value = "";
     } finally {
@@ -452,27 +495,48 @@ export default function ProjectDetailPage() {
   };
 
   const handleRemoveAttachment = (index: number) => {
-    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
+    const next = attachedFiles.filter((_, i) => i !== index);
+    setAttachedFiles(next);
     setAttachmentMenuIndex((current) => (current === index ? null : current));
+    setAttachmentDeleteConfirmIndex((current) => (current === index ? null : current));
+    void persistProjectAttachments(next);
     toast.success("File removed successfully.");
   };
 
-  const handleDownloadAttachment = (file: File) => {
-    const url = URL.createObjectURL(file);
+  const handleRequestRemoveAttachment = (index: number) => {
+    setAttachmentMenuIndex(index);
+    setAttachmentDeleteConfirmIndex(index);
+  };
+
+  const handleCancelRemoveAttachment = () => {
+    setAttachmentDeleteConfirmIndex(null);
+  };
+
+  const handleDownloadAttachment = (file: any) => {
+    const url = file?.url || (file?.file ? URL.createObjectURL(file.file) : "");
+    if (!url) return;
     const link = document.createElement("a");
     link.href = url;
     link.download = file.name;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    if (!file?.url && file?.file) URL.revokeObjectURL(url);
   };
 
-  const formatFileSize = (bytes: number) => {
-    if (!bytes) return "0 B";
+  const handleOpenAttachmentInNewTab = (file: any) => {
+    const url = file?.url || (file?.file ? URL.createObjectURL(file.file) : "");
+    if (!url) return;
+    window.open(url, "_blank", "noopener,noreferrer");
+    if (!file?.url && file?.file) window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const formatFileSize = (bytes: number | string) => {
+    const size = Number(bytes) || 0;
+    if (!size) return "0 B";
     const units = ["B", "KB", "MB", "GB"];
-    const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-    const value = bytes / Math.pow(1024, index);
+    const index = Math.min(Math.floor(Math.log(size) / Math.log(1024)), units.length - 1);
+    const value = size / Math.pow(1024, index);
     return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
   };
 
@@ -1170,6 +1234,9 @@ export default function ProjectDetailPage() {
         const normalizedComments = Array.isArray(projectData.comments)
           ? projectData.comments.map((comment, index) => normalizeComment(comment, index)).filter(Boolean)
           : [];
+        const normalizedAttachments = Array.isArray(projectData.attachments)
+          ? projectData.attachments.map((attachment, index) => normalizeAttachment(attachment, index)).filter(Boolean)
+          : [];
         const transformedProject = {
           id: projectData._id || projectData.id,
           projectName: projectData.name || projectData.projectName,
@@ -1193,9 +1260,11 @@ export default function ProjectDetailPage() {
           isActive: projectData.status !== 'cancelled' && projectData.status !== 'completed',
           ...projectData, // Keep all other fields
           comments: normalizedComments,
+          attachments: normalizedAttachments,
         };
 
         setProject(transformedProject);
+        setAttachedFiles(normalizedAttachments);
 
         if (!normalizedComments.length && projectId) {
           try {
@@ -1653,7 +1722,7 @@ export default function ProjectDetailPage() {
   return (
     <div style={{ width: "100%", backgroundColor: "#f8fafc", minHeight: "100vh" }}>
       {/* Top Navigation Bar */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3">
+      <div className="sticky top-0 z-50 bg-[#f8fafc]/95 border-b border-gray-200 px-6 py-3">
         <div className="mb-4">
           <div className="flex justify-between items-center mb-2">
             <div className="flex items-center gap-3">
@@ -1858,11 +1927,12 @@ export default function ProjectDetailPage() {
               <div className="relative">
                 <button
                   onClick={() => setShowAttachmentsPopover((prev) => !prev)}
-                  className="w-8 h-8 border border-gray-200 rounded bg-white cursor-pointer flex items-center justify-center text-gray-600 hover:bg-gray-50"
+                  className="h-8 min-w-8 rounded border border-gray-200 bg-white px-2 cursor-pointer flex items-center justify-center gap-1 text-gray-600 hover:bg-gray-50"
                   aria-label="Attachments"
                   title="Attachments"
                 >
                   <Paperclip size={14} strokeWidth={2} />
+                  <span className="text-[12px] font-medium leading-none">{attachedFiles.length}</span>
                 </button>
                 {showAttachmentsPopover && (
                   <div className="absolute right-0 top-full mt-2 w-[286px] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg z-[220]">
@@ -1881,12 +1951,14 @@ export default function ProjectDetailPage() {
                       {attachedFiles.length === 0 ? (
                         <div className="py-3 text-center text-[14px] text-slate-700">No Files Attached</div>
                       ) : (
-                        <div className="max-h-40 space-y-2 overflow-auto">
+                        <div className="space-y-2">
                           {attachedFiles.map((file, index) => (
                             <div key={`${file.name}-${index}`}>
                               <div
-                                className={`group relative rounded-md px-3 py-2 pr-16 text-[13px] transition-colors ${
-                                  attachmentMenuIndex === index ? "bg-[#eef2ff]" : "bg-white"
+                                className={`group relative cursor-pointer rounded-md px-3 py-2 pr-16 text-[13px] transition-colors ${
+                                  attachmentMenuIndex === index
+                                    ? "w-full bg-[#eef2ff] hover:bg-[#e5e7eb]"
+                                    : "w-full bg-white hover:bg-slate-100"
                                 }`}
                               >
                                 <div className="flex items-start gap-2">
@@ -1900,23 +1972,17 @@ export default function ProjectDetailPage() {
                                 </div>
                                 <button
                                   type="button"
-                                  onClick={() => handleRemoveAttachment(index)}
-                                  className={`absolute right-8 top-1/2 -translate-y-1/2 rounded p-1 text-red-500 transition-opacity hover:bg-red-50 ${
-                                    attachmentMenuIndex === index ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                                  }`}
+                                  onClick={() => handleRequestRemoveAttachment(index)}
+                                  className="absolute right-8 top-1/2 -translate-y-1/2 rounded p-1 text-red-500 opacity-0 transition-opacity hover:bg-red-50 group-hover:opacity-100"
                                   aria-label="Remove attachment"
                                   title="Remove"
                                 >
                                   <Trash2 size={14} />
                                 </button>
-                              <button
-                                type="button"
-                                onClick={() => setAttachmentMenuIndex((current) => (current === index ? null : index))}
-                                className={`absolute right-2 top-1/2 -translate-y-1/2 rounded-md border p-1 transition-opacity ${
-                                  attachmentMenuIndex === index
-                                      ? "border-blue-500 text-blue-500 bg-white opacity-100 shadow-sm"
-                                      : "border-slate-200 text-slate-600 opacity-0 group-hover:opacity-100 hover:bg-slate-100"
-                                  }`}
+                                <button
+                                  type="button"
+                                  onClick={() => setAttachmentMenuIndex((current) => (current === index ? null : index))}
+                                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-600 opacity-0 transition-opacity group-hover:opacity-100"
                                   aria-label="Attachment actions"
                                   title="More"
                                 >
@@ -1936,14 +2002,14 @@ export default function ProjectDetailPage() {
                                     </button>
                                     <button
                                       type="button"
-                                      onClick={() => handleRemoveAttachment(index)}
+                                      onClick={() => handleRequestRemoveAttachment(index)}
                                       className="hover:text-blue-700"
                                     >
                                       Remove
                                     </button>
                                     <button
                                       type="button"
-                                      onClick={() => handleDownloadAttachment(file)}
+                                      onClick={() => handleOpenAttachmentInNewTab(file)}
                                       className="rounded p-1 text-blue-600 hover:bg-blue-50"
                                       aria-label="Open attachment"
                                       title="Open"
@@ -1958,23 +2024,72 @@ export default function ProjectDetailPage() {
                         </div>
                       )}
                       <div className="mt-4 text-center">
-                        <label className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#156372] px-4 py-3 text-[14px] font-semibold text-white shadow-sm hover:opacity-95">
-                          {isUploadingAttachments ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                          <span>{isUploadingAttachments ? "Uploading..." : "Upload your Files"}</span>
-                          <input
-                            ref={fileInputRef}
-                            type="file"
-                            multiple
-                            className="hidden"
-                            onChange={handleAttachmentUpload}
-                          />
-                        </label>
+                        {isUploadingAttachments ? (
+                          <div className="flex h-[58px] w-full items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 text-[14px] font-medium text-slate-400">
+                            <Loader2 size={16} className="animate-spin text-blue-400" />
+                            <span>Uploading...</span>
+                          </div>
+                        ) : (
+                          <label className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#156372] px-4 py-3 text-[14px] font-semibold text-white shadow-sm hover:opacity-95">
+                            <Upload size={16} />
+                            <span>Upload your Files</span>
+                            <input
+                              ref={fileInputRef}
+                              type="file"
+                              multiple
+                              className="hidden"
+                              onChange={handleAttachmentUpload}
+                            />
+                          </label>
+                        )}
                         <p className="mt-2 text-[11px] text-slate-500">You can upload a maximum of 10 files, 10MB each</p>
                       </div>
                     </div>
                   </div>
                 )}
               </div>
+              {attachmentDeleteConfirmIndex !== null && (
+                <div
+                  className="fixed inset-0 z-[10000] flex items-start justify-center bg-black/40 px-4 pt-4"
+                  onClick={handleCancelRemoveAttachment}
+                >
+                  <div
+                    className="w-full max-w-[520px] overflow-hidden rounded-lg bg-white shadow-2xl"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-start gap-3 px-5 py-4">
+                      <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+                        <AlertTriangle size={18} />
+                      </div>
+                      <p className="text-[14px] leading-6 text-slate-700">
+                        This action will permanently delete the attachment. Are you sure you want to proceed?
+                      </p>
+                    </div>
+                    <div className="border-t border-slate-200 px-5 py-4">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (attachmentDeleteConfirmIndex !== null) {
+                              handleRemoveAttachment(attachmentDeleteConfirmIndex);
+                            }
+                          }}
+                          className="rounded-md bg-blue-500 px-4 py-2 text-[14px] font-medium text-white hover:bg-blue-600"
+                        >
+                          Proceed
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCancelRemoveAttachment}
+                          className="rounded-md border border-slate-300 bg-white px-4 py-2 text-[14px] font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="relative" ref={moreDropdownRef}>
                 <button
                   onClick={() => setShowMoreDropdown(!showMoreDropdown)}
@@ -2346,7 +2461,7 @@ export default function ProjectDetailPage() {
                 borderRadius: "6px",
                 padding: "24px",
                 height: "100%",
-                border: "1px solid #e5e7eb",
+                border: "none",
                 boxShadow: "none",
                 display: "flex",
                 flexDirection: "column"
@@ -2437,7 +2552,7 @@ export default function ProjectDetailPage() {
               <div style={{ flex: "1 1 auto", minWidth: 0 }}>
                 {/* Project Hours & Summary */}
                 <div style={{
-                  backgroundColor: "#fff",
+                  backgroundColor: "transparent",
                   borderRadius: "6px",
                   padding: "24px",
                   marginBottom: "0",
@@ -2768,11 +2883,11 @@ export default function ProjectDetailPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: "24px", marginTop: "24px" }}>
               {/* Users Section */}
               <div style={{
-                backgroundColor: "#fff",
+                backgroundColor: "transparent",
                 borderRadius: "6px",
                 padding: "24px",
                 width: "100%",
-                border: "1px solid #e5e7eb",
+                border: "none",
                 boxShadow: "none"
               }}>
                 <div style={{
@@ -2807,17 +2922,17 @@ export default function ProjectDetailPage() {
 
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
-                    <tr style={{ backgroundColor: "transparent", borderBottom: "1px solid #e5e7eb" }}>
-                      <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: "600", color: "#6b7280", textTransform: "uppercase" }}>
+                    <tr style={{ backgroundColor: "#f8fafc", borderBottom: "1px solid #e5e7eb" }}>
+                      <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
                         NAME
                       </th>
-                      <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: "600", color: "#6b7280", textTransform: "uppercase" }}>
+                      <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
                         LOGGED HOURS
                       </th>
-                      <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: "600", color: "#6b7280", textTransform: "uppercase" }}>
+                      <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
                         COST PER HOUR
                       </th>
-                      <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: "600", color: "#6b7280", textTransform: "uppercase" }}>
+                      <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
                         ROLE
                       </th>
                     </tr>
@@ -2882,11 +2997,11 @@ export default function ProjectDetailPage() {
 
               {/* Project Tasks Section */}
               <div style={{
-                backgroundColor: "#fff",
+                backgroundColor: "transparent",
                 borderRadius: "6px",
                 padding: "24px",
                 width: "100%",
-                border: "1px solid #e5e7eb",
+                border: "none",
                 boxShadow: "none"
               }}>
                 <div style={{
