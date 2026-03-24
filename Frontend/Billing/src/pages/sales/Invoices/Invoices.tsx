@@ -7,6 +7,7 @@ import {
   ChevronRight,
   ChevronLeft,
   Plus,
+  ArrowDownLeft,
   ArrowUpDown,
   Search,
   Play,
@@ -192,6 +193,7 @@ export default function Invoices() {
   const bulkUpdateValueDropdownRef = useRef(null);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showInvoiceInsights, setShowInvoiceInsights] = useState(false);
   const [searchType, setSearchType] = useState("Invoices");
   const invoiceColumnOptions = [
     { key: "date", label: "Date", locked: true, defaultVisible: true },
@@ -1959,6 +1961,77 @@ export default function Invoices() {
     });
   }, [invoices, sortConfig]);
 
+  const paymentSummary = useMemo(() => {
+    const safeInvoices = Array.isArray(sortedInvoices) ? sortedInvoices : [];
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const endOfToday = new Date(startOfToday);
+    endOfToday.setDate(endOfToday.getDate() + 1);
+    const withinThirtyDays = new Date(startOfToday);
+    withinThirtyDays.setDate(withinThirtyDays.getDate() + 30);
+
+    let totalOutstandingReceivables = 0;
+    let dueToday = 0;
+    let dueWithin30Days = 0;
+    let overdueInvoice = 0;
+    let paidDiffDaysTotal = 0;
+    let paidDiffDaysCount = 0;
+
+    safeInvoices.forEach((invoice) => {
+      const totalAmount = Number(getInvoiceDisplayTotal(invoice)) || 0;
+      const paidAmount = Number((invoice as any)?.amountPaid || 0) || 0;
+      const balanceDueRaw = (invoice as any)?.balance !== undefined
+        ? Number((invoice as any)?.balance)
+        : (invoice as any)?.balanceDue !== undefined
+          ? Number((invoice as any)?.balanceDue)
+          : totalAmount - paidAmount;
+      const balanceDue = Number.isFinite(balanceDueRaw) ? Math.max(0, balanceDueRaw) : 0;
+      const dueDate = (invoice as any)?.dueDate ? new Date((invoice as any).dueDate) : null;
+      const hasValidDueDate = dueDate instanceof Date && !Number.isNaN(dueDate.getTime());
+
+      if (balanceDue > 0) {
+        totalOutstandingReceivables += balanceDue;
+        if (hasValidDueDate) {
+          if (dueDate! >= startOfToday && dueDate! < endOfToday) dueToday += balanceDue;
+          if (dueDate! > endOfToday && dueDate! <= withinThirtyDays) dueWithin30Days += balanceDue;
+          if (dueDate! < startOfToday) overdueInvoice += balanceDue;
+        }
+      }
+
+      const isPaid = String((invoice as any)?.status || "").toLowerCase() === "paid" || (totalAmount > 0 && balanceDue <= 0);
+      if (!isPaid) return;
+      const invoiceDateRaw = (invoice as any)?.invoiceDate || (invoice as any)?.date || (invoice as any)?.createdAt;
+      const paidDateRaw = (invoice as any)?.paymentDate || (invoice as any)?.paidDate || (invoice as any)?.lastPaymentDate || (invoice as any)?.updatedAt;
+      if (!invoiceDateRaw || !paidDateRaw) return;
+      const invoiceDate = new Date(invoiceDateRaw);
+      const paidDate = new Date(paidDateRaw);
+      if (Number.isNaN(invoiceDate.getTime()) || Number.isNaN(paidDate.getTime())) return;
+      const diffDays = Math.max(0, Math.round((paidDate.getTime() - invoiceDate.getTime()) / (1000 * 60 * 60 * 24)));
+      paidDiffDaysTotal += diffDays;
+      paidDiffDaysCount += 1;
+    });
+
+    return {
+      totalOutstandingReceivables,
+      dueToday,
+      dueWithin30Days,
+      overdueInvoice,
+      averageDaysForGettingPaid: paidDiffDaysCount > 0 ? paidDiffDaysTotal / paidDiffDaysCount : 0,
+    };
+  }, [sortedInvoices]);
+
+  const outstandingPercent = paymentSummary.totalOutstandingReceivables > 0
+    ? Math.round((paymentSummary.overdueInvoice / paymentSummary.totalOutstandingReceivables) * 100)
+    : 0;
+  const analyzedOnLabel = new Date().toLocaleString("en-GB", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+
   const handleSort = (field) => {
     setActiveSortField(field);
     setSortConfig(prev => ({
@@ -2375,6 +2448,71 @@ export default function Invoices() {
 
       {/* Content Area */}
       <div className="relative min-h-0 flex-1 overflow-auto bg-white">
+        <div className="px-6 pt-0 pb-4">
+          {!showInvoiceInsights ? (
+            <div className="rounded-md border border-[#e6e9f2] bg-[#f9fbff] px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[12px] font-semibold uppercase tracking-wide text-[#7b8494]">Payment Summary</p>
+                <button
+                  type="button"
+                  onClick={() => setShowInvoiceInsights(true)}
+                  className="text-[13px] font-medium text-[#156372] hover:text-[#0d4a52]"
+                >
+                  View Insights
+                </button>
+              </div>
+              <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#f5c77f] text-[#7b4d00]">
+                    <ArrowDownLeft size={14} />
+                  </span>
+                  <div>
+                    <p className="text-[12px] text-[#5f6b7b]">Total Outstanding Receivables</p>
+                    <p className="text-[46px] leading-[0.95] font-medium text-[#111827]">{formatMoney(paymentSummary.totalOutstandingReceivables)}</p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[12px] text-[#5f6b7b]">Due Today</p>
+                  <p className="text-[46px] leading-[0.95] font-medium text-[#111827]">{formatMoney(paymentSummary.dueToday)}</p>
+                </div>
+                <div>
+                  <p className="text-[12px] text-[#5f6b7b]">Due Within 30 Days</p>
+                  <p className="text-[46px] leading-[0.95] font-medium text-[#111827]">{formatMoney(paymentSummary.dueWithin30Days)}</p>
+                </div>
+                <div>
+                  <p className="text-[12px] text-[#5f6b7b]">Overdue Invoice</p>
+                  <p className="text-[46px] leading-[0.95] font-medium text-[#111827]">{formatMoney(paymentSummary.overdueInvoice)}</p>
+                </div>
+                <div>
+                  <p className="text-[12px] text-[#5f6b7b]">Average No. of Days for Getting Paid</p>
+                  <p className="text-[46px] leading-[0.95] font-medium text-[#111827]">{Math.round(paymentSummary.averageDaysForGettingPaid)} Days</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-md border border-[#e6e9f2] bg-white px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-[28px] font-semibold text-[#111827]">I've analyzed your invoices and here are a few actionable insights for you.</p>
+                <div className="flex items-center gap-3 text-[18px] text-[#111827]">
+                  <span>Last Analyzed On: {analyzedOnLabel}</span>
+                  <span className="h-4 w-px bg-[#d8dce6]" />
+                  <button
+                    type="button"
+                    onClick={() => setShowInvoiceInsights(false)}
+                    className="text-[#3467f6] hover:underline"
+                  >
+                    Hide Invoicing Insights
+                  </button>
+                </div>
+              </div>
+              <ul className="mt-3 space-y-2 text-[22px] text-[#111827]">
+                <li>- <span className="text-[#f97316] font-semibold">{formatMoney(paymentSummary.overdueInvoice)}</span> is overdue, which is <span className="font-semibold">{outstandingPercent}%</span> of your total unpaid invoices.</li>
+                <li>- <span className="text-[#f97316] font-semibold">{formatMoney(paymentSummary.totalOutstandingReceivables)}</span> worth of invoices remain unpaid from customers who've made <span className="font-semibold">{Math.max(0, 100 - outstandingPercent)}%</span> of their past invoice payments after the due date.</li>
+                <li>- <span className="text-[#f97316] font-semibold">{formatMoney(paymentSummary.overdueInvoice)}</span> worth of overdue invoices have exceeded your average late payment duration of <span className="font-semibold">{Math.round(paymentSummary.averageDaysForGettingPaid)} days</span>.</li>
+              </ul>
+            </div>
+          )}
+        </div>
 
         {sortedInvoices.length === 0 && !isRefreshing ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
