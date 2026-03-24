@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { customersAPI, projectsAPI } from "../../services/api";
 import { getCurrentUser } from "../../services/auth";
 import { toast } from "react-toastify";
@@ -48,8 +48,12 @@ type ProjectFormData = {
 export default function NewProjectForm() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { projectId } = useParams();
+  const isEditMode = Boolean(projectId);
   const { code: rawCurrencyCode } = useCurrency();
   const baseCurrencyCode = rawCurrencyCode ? rawCurrencyCode.split(' ')[0].substring(0, 3).toUpperCase() : "KES";
+  const [project, setProject] = useState<any>(null);
+  const [loadingProject, setLoadingProject] = useState(isEditMode);
   const [formData, setFormData] = useState<ProjectFormData>({
     projectName: "",
     projectCode: "",
@@ -156,6 +160,143 @@ export default function NewProjectForm() {
       window.removeEventListener('customerUpdated', handleCustomerUpdate);
     };
   }, []);
+
+  useEffect(() => {
+    if (!projectId) {
+      setProject(null);
+      setLoadingProject(false);
+      return;
+    }
+
+    const loadProject = async () => {
+      setLoadingProject(true);
+      try {
+        const response = await projectsAPI.getById(projectId);
+        const projectData = response?.data || response;
+
+        if (!projectData) {
+          toast.error("Project not found");
+          navigate("/time-tracking/projects");
+          return;
+        }
+
+        const transformedProject = {
+          id: projectData._id || projectData.id,
+          projectName: projectData.name || projectData.projectName || "",
+          projectNumber: projectData.projectNumber || projectData.id || "",
+          customerName: projectData.customer?.name || projectData.customerName || "",
+          customerId: projectData.customer?._id || projectData.customerId || "",
+          description: projectData.description || "",
+          billingMethod: projectData.billingMethod || "",
+          totalProjectCost: projectData.totalProjectCost?.toString?.() || "",
+          costBudget: projectData.billingRate?.toString?.() || "0",
+          revenueBudget: projectData.budget?.toString?.() || "0",
+          enableCustomerApproval: projectData.customerApprovalEnabled !== undefined ? Boolean(projectData.customerApprovalEnabled) : true,
+          enableTimeEntryApprovals: projectData.timeEntryApprovalEnabled !== undefined ? Boolean(projectData.timeEntryApprovalEnabled) : true,
+          hoursBudgetType: projectData.hoursBudgetType || "",
+          totalBudgetHours: projectData.totalBudgetHours?.toString?.() || "",
+          projectManagerApproverId: projectData.projectManagerApproverId || projectData.projectManagerApprover?.user || "",
+          addToWatchlist: projectData.addToWatchlist !== undefined ? projectData.addToWatchlist : true,
+          assignedTo: Array.isArray(projectData.assignedTo) ? projectData.assignedTo : [],
+          userCostRates: Array.isArray(projectData.userCostRates) ? projectData.userCostRates : [],
+          userBudgetHours: Array.isArray(projectData.userBudgetHours) ? projectData.userBudgetHours : [],
+          tasks: Array.isArray(projectData.tasks) ? projectData.tasks : [],
+          status: projectData.status || "planning",
+          billable: projectData.billable !== undefined ? projectData.billable : true
+        };
+
+        setProject(transformedProject);
+        setFormData({
+          projectName: transformedProject.projectName,
+          projectCode: transformedProject.projectNumber,
+          customerName: transformedProject.customerName,
+          customerId: transformedProject.customerId,
+          enableCustomerApproval: transformedProject.enableCustomerApproval,
+          billingMethod: transformedProject.billingMethod,
+          description: transformedProject.description,
+          totalProjectCost: transformedProject.totalProjectCost,
+          costBudget: transformedProject.costBudget,
+          revenueBudget: transformedProject.revenueBudget,
+          hoursBudgetType: transformedProject.hoursBudgetType,
+          totalBudgetHours: transformedProject.totalBudgetHours,
+          enableTimeEntryApprovals: transformedProject.enableTimeEntryApprovals,
+          projectManagerApproverId: transformedProject.projectManagerApproverId,
+          addToWatchlist: transformedProject.addToWatchlist
+        });
+        setShowHoursBudget(Boolean(transformedProject.hoursBudgetType));
+
+        const currentUser = getCurrentUser();
+        const projectUsers = Array.isArray(projectData.assignedTo) ? projectData.assignedTo : [];
+        const transformedUsers = projectUsers.map((user: any, index: number) => {
+          const userId = typeof user === "object" ? String(user?._id || user?.id || user?.userId || "").trim() : String(user || "").trim();
+          return {
+            id: index + 1,
+            name: typeof user === "object" ? (user?.name || "") : "",
+            email: typeof user === "object" ? (user?.email || "") : "",
+            userId,
+            costPerHour: String(
+              (transformedProject.userCostRates || []).find((rate: any) => String(rate?.user || rate?.userId || "") === userId)?.costPerHour ?? "0"
+            ),
+            ratePerHour: "",
+            isEditable: index > 0,
+            budgetHours: String(
+              (transformedProject.userBudgetHours || []).find((budget: any) => String(budget?.user || budget?.userId || "") === userId)?.budgetHours ?? ""
+            )
+          };
+        });
+
+        if (transformedUsers.length === 0 && currentUser) {
+          transformedUsers.push({
+            id: 1,
+            name: currentUser.name || "",
+            email: currentUser.email || "",
+            userId: currentUser._id || currentUser.id,
+            costPerHour: "0",
+            ratePerHour: "",
+            isEditable: false,
+            budgetHours: ""
+          });
+        }
+
+        setUsers(transformedUsers);
+        setTasks(
+          (Array.isArray(transformedProject.tasks) && transformedProject.tasks.length > 0
+            ? transformedProject.tasks
+            : [{ id: 1, taskName: "", description: "", billable: true, budgetHours: "", ratePerHour: "" }]
+          ).map((task: any, index: number) => ({
+            id: task?.id ?? task?._id ?? index + 1,
+            taskName: task?.taskName || task?.name || "",
+            description: task?.description || "",
+            billable: task?.billable !== undefined ? Boolean(task.billable) : true,
+            budgetHours: task?.budgetHours || "",
+            ratePerHour: task?.ratePerHour || ""
+          }))
+        );
+      } catch (error: any) {
+        console.error("Error loading project:", error);
+        toast.error("Failed to load project: " + (error.message || "Unknown error"));
+        navigate("/time-tracking/projects");
+      } finally {
+        setLoadingProject(false);
+      }
+    };
+
+    loadProject();
+  }, [projectId, navigate]);
+
+  useEffect(() => {
+    if (formData.billingMethod !== "task-hours") return;
+    setTasks((prev) => {
+      let changed = false;
+      const next = prev.map((task) => {
+        const hasRate = String(task.ratePerHour || "").trim() !== "";
+        if (hasRate) return task;
+        changed = true;
+        return { ...task, ratePerHour: "0" };
+      });
+      return changed ? next : prev;
+    });
+  }, [formData.billingMethod]);
 
   // Pre-populate form data from location state (when coming from quote)
   useEffect(() => {
@@ -327,7 +468,7 @@ export default function NewProjectForm() {
   const addTask = () => {
     setTasks([
       ...tasks,
-      { id: tasks.length + 1, taskName: "", description: "", billable: false, budgetHours: "", ratePerHour: "" }
+      { id: tasks.length + 1, taskName: "", description: "", billable: false, budgetHours: "", ratePerHour: formData.billingMethod === "task-hours" ? "0" : "" }
     ]);
   };
 
@@ -573,9 +714,8 @@ export default function NewProjectForm() {
         description: formData.description || '',
         billingRate: formData.costBudget ? parseFloat(formData.costBudget) : 0,
         budget: formData.revenueBudget ? parseFloat(formData.revenueBudget) : 0,
-        status: 'planning',
-        billable: true,
-        startDate: new Date(),
+        status: isEditMode ? (project?.status || 'planning') : 'planning',
+        billable: isEditMode ? (project?.billable !== undefined ? project.billable : true) : true,
         customerApprovalEnabled: Boolean(formData.enableCustomerApproval),
         customerApprovalRequired: Boolean(formData.enableCustomerApproval),
         timeEntryApprovalEnabled: Boolean(formData.enableTimeEntryApprovals),
@@ -648,8 +788,10 @@ export default function NewProjectForm() {
         if (newProject[key] === undefined) delete newProject[key];
       });
 
-      const response = await projectsAPI.create(newProject);
-      if (!response?.success) {
+      const response = isEditMode && projectId
+        ? await projectsAPI.update(projectId, newProject)
+        : await projectsAPI.create(newProject);
+      if (!isEditMode && !response?.success) {
         throw new Error("Failed to create project");
       }
 
@@ -659,24 +801,41 @@ export default function NewProjectForm() {
       }
 
       window.dispatchEvent(new Event('projectUpdated'));
-      const successMessage = "Project created successfully.";
+      const successMessage = isEditMode ? "Project updated successfully." : "Project created successfully.";
       toast.success(successMessage);
       setTimeout(() => {
-        navigate("/time-tracking/projects");
+        navigate(isEditMode && projectId ? `/time-tracking/projects/${projectId}` : "/time-tracking/projects");
       }, 100);
     } catch (error) {
-      console.error("Error creating project:", error);
-      toast.error(error.message || "Failed to create project");
+      console.error(isEditMode ? "Error updating project:" : "Error creating project:", error);
+      toast.error(error.message || (isEditMode ? "Failed to update project" : "Failed to create project"));
     }
   };
+
+  const handleClose = () => {
+    navigate(isEditMode && projectId ? `/time-tracking/projects/${projectId}` : "/time-tracking/projects");
+  };
+
+  if (loadingProject) {
+    return (
+      <div className="w-full min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-[#156372] border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading project...</p>
+        </div>
+      </div>
+    );
+  }
 
 
   return (
     <div className="w-full min-h-screen flex flex-col bg-gray-50 overflow-x-hidden">
       <div className="border-b border-gray-200 bg-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
-        <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 m-0">New Project</h1>
+        <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 m-0">
+          {isEditMode ? "Edit Project" : "New Project"}
+        </h1>
         <button
-          onClick={() => navigate("/time-tracking/projects")}
+          onClick={handleClose}
           className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded"
           aria-label="Close project form"
         >
@@ -689,7 +848,7 @@ export default function NewProjectForm() {
           <div className="w-full max-w-4xl px-4 sm:px-6 py-5 sm:py-8 overflow-x-hidden text-[13px] text-gray-700">
             <div className="space-y-8">
           <div className="space-y-6">
-            <h3 className="text-[15px] font-semibold text-gray-800">Project Details</h3>
+            {!isEditMode && <h3 className="text-[15px] font-semibold text-gray-800">Project Details</h3>}
 
             <div className="grid grid-cols-1 gap-y-6">
             {/* Project Name */}
@@ -1666,11 +1825,11 @@ export default function NewProjectForm() {
           onClick={handleSave}
           className="px-12 py-2.5 bg-[#156372] hover:bg-[#0D4A52] text-white rounded-md text-[13px] font-bold transition-all shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#156372] focus:ring-offset-2"
         >
-          Save
+          {isEditMode ? "Save Changes" : "Save"}
         </button>
         <button
           type="button"
-          onClick={() => navigate("/time-tracking/projects")}
+          onClick={handleClose}
           className="px-12 py-2.5 border border-gray-200 text-gray-600 rounded-md text-[13px] font-bold hover:bg-gray-50 transition-all hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-100"
         >
           Cancel

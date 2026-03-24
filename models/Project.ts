@@ -1,5 +1,20 @@
 import mongoose from "mongoose";
 
+const ProjectCommentSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true },
+    text: { type: String, default: "" },
+    content: { type: String, default: "" },
+    authorName: { type: String, default: "You" },
+    authorInitial: { type: String, default: "Y" },
+    createdAt: { type: String, default: () => new Date().toISOString() },
+    bold: { type: Boolean, default: false },
+    italic: { type: Boolean, default: false },
+    underline: { type: Boolean, default: false },
+  },
+  { _id: false }
+);
+
 const ProjectSchema = new mongoose.Schema(
   {
     organizationId: { type: mongoose.Schema.Types.ObjectId, ref: "Organization", required: true, index: true },
@@ -12,6 +27,7 @@ const ProjectSchema = new mongoose.Schema(
     status: { type: String, default: "active", index: true },
     startDate: { type: Date, default: null },
     endDate: { type: Date, default: null },
+    comments: { type: [ProjectCommentSchema], default: [] },
   },
   { timestamps: true, strict: false, minimize: false }
 );

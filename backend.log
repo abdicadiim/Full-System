@@ -1,0 +1,6 @@
+
+> full-system-backend@0.1.0 dev:backend-only
+> tsx watch server.ts
+
+API listening on http://localhost:5000
+DB connected.

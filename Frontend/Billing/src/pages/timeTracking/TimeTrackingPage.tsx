@@ -9,7 +9,6 @@ import AccessDenied from "../../components/AccessDenied";
 import ProjectsPage from "../home/pages/ProjectsPage";
 import NewProjectForm from "./NewProjectForm";
 import ProjectDetailPage from "./ProjectDetailPage";
-import EditProjectForm from "./EditProjectForm";
 import NewLogEntryForm from "./NewLogEntryForm";
 import WeeklyTimeLog from "./WeeklyTimeLog";
 import StartTimerModal from "./StartTimerModal";
@@ -2948,7 +2947,7 @@ export default function TimeTrackingPage() {
         <Route path="projects" element={<TimeTrackingProject />} />
         <Route path="projects/new" element={canCreateTimeTracking ? <NewProjectForm /> : <AccessDenied />} />
         <Route path="projects/:projectId" element={<ProjectDetailPage />} />
-        <Route path="projects/:projectId/edit" element={canEditTimeTracking ? <EditProjectForm /> : <AccessDenied />} />
+        <Route path="projects/:projectId/edit" element={canEditTimeTracking ? <NewProjectForm /> : <AccessDenied />} />
         <Route path="projects/import" element={canCreateTimeTracking ? <ImportProjects /> : <AccessDenied />} />
         <Route path="projects/import-tasks" element={canCreateTimeTracking ? <ImportProjectTasks /> : <AccessDenied />} />
         <Route path="tasks" element={<ProjectsPage />} />

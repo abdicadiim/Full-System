@@ -1,4 +1,5 @@
 import express from "express";
+import mongoose from "mongoose";
 import { Project } from "../models/Project.js";
 import { TimeEntry } from "../models/TimeEntry.js";
 import { requireAuth } from "../midelwares/requireAuth.js";
@@ -23,35 +24,50 @@ router.post("/", async (req, res) => {
   res.status(201).json({ success: true, data: normalizeRow(created.toObject()) });
 });
 
-router.get("/:id", async (req, res) => {
-  const orgId = req.user?.organizationId;
-  const row = await Project.findOne({ _id: req.params.id, organizationId: orgId }).lean();
-  res.json({ success: true, data: normalizeRow(row) });
-});
-
-router.put("/:id", async (req, res) => {
-  const orgId = req.user?.organizationId;
-  const updated = await Project.findOneAndUpdate({ _id: req.params.id, organizationId: orgId }, { $set: req.body }, { new: true }).lean();
-  res.json({ success: true, data: normalizeRow(updated) });
-});
-
-router.delete("/:id", async (req, res) => {
-  const orgId = req.user?.organizationId;
-  await Project.findOneAndDelete({ _id: req.params.id, organizationId: orgId });
-  res.json({ success: true, data: { id: req.params.id } });
-});
-
 // Time entries
 router.get("/:id/time-entries", async (req, res) => {
   const orgId = req.user?.organizationId;
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    return res.status(400).json({ success: false, message: "Invalid project id", data: null });
+  }
   const rows = await TimeEntry.find({ projectId: req.params.id, organizationId: orgId }).lean();
   res.json({ success: true, data: rows.map(normalizeRow) });
 });
 
 router.post("/:id/time-entries", async (req, res) => {
   const orgId = req.user?.organizationId;
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    return res.status(400).json({ success: false, message: "Invalid project id", data: null });
+  }
   const created = await TimeEntry.create({ ...req.body, projectId: req.params.id, organizationId: orgId });
   res.status(201).json({ success: true, data: normalizeRow(created.toObject()) });
+});
+
+router.get("/:id", async (req, res) => {
+  const orgId = req.user?.organizationId;
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    return res.status(400).json({ success: false, message: "Invalid project id", data: null });
+  }
+  const row = await Project.findOne({ _id: req.params.id, organizationId: orgId }).lean();
+  res.json({ success: true, data: normalizeRow(row) });
+});
+
+router.put("/:id", async (req, res) => {
+  const orgId = req.user?.organizationId;
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    return res.status(400).json({ success: false, message: "Invalid project id", data: null });
+  }
+  const updated = await Project.findOneAndUpdate({ _id: req.params.id, organizationId: orgId }, { $set: req.body }, { new: true }).lean();
+  res.json({ success: true, data: normalizeRow(updated) });
+});
+
+router.delete("/:id", async (req, res) => {
+  const orgId = req.user?.organizationId;
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    return res.status(400).json({ success: false, message: "Invalid project id", data: null });
+  }
+  await Project.findOneAndDelete({ _id: req.params.id, organizationId: orgId });
+  res.json({ success: true, data: { id: req.params.id } });
 });
 
 export default router;

@@ -1,10 +1,11 @@
 ﻿import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { projectsAPI, timeEntriesAPI, invoicesAPI, quotesAPI, creditNotesAPI, refundsAPI } from "../../services/api";
+import { projectsAPI, timeEntriesAPI, invoicesAPI, quotesAPI, creditNotesAPI, refundsAPI, taxesAPI, usersAPI } from "../../services/api";
+import { AUTH_USER_UPDATED_EVENT, getCurrentUser } from "../../services/auth";
 import { toast } from "react-toastify";
 import { useCurrency } from "../../hooks/useCurrency";
 import NewLogEntryForm from "./NewLogEntryForm";
-import { ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Search, ArrowUpDown, X, MessageSquare, Briefcase, User, Plus, Minus, Check, Trash2, MoreVertical, Edit3 } from "lucide-react";
+import { ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Search, ArrowUpDown, X, MessageSquare, Briefcase, User, Plus, Minus, Check, Trash2, MoreVertical, Edit3, Clock, Bold, Italic, Underline, Paperclip, Upload, FileText, Loader2, ExternalLink } from "lucide-react";
 
 export default function ProjectDetailPage() {
   const { projectId } = useParams();
@@ -20,18 +21,28 @@ export default function ProjectDetailPage() {
   const [activeTab, setActiveTab] = useState("Overview");
   const [showLogEntryForm, setShowLogEntryForm] = useState(false);
   const [showTransactionDropdown, setShowTransactionDropdown] = useState(false);
-  const [hoveredTransaction, setHoveredTransaction] = useState(null);
   const transactionDropdownRef = useRef(null);
   const [showMoreDropdown, setShowMoreDropdown] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [hoveredMoreOption, setHoveredMoreOption] = useState(null);
+  const [showDeleteTaskModal, setShowDeleteTaskModal] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<any>(null);
+  const [hoveredTaskKey, setHoveredTaskKey] = useState<string | null>(null);
+  const [showDeleteCommentModal, setShowDeleteCommentModal] = useState(false);
+  const [showRemoveUserModal, setShowRemoveUserModal] = useState(false);
+  const [userToRemove, setUserToRemove] = useState<any>(null);
+  const [commentToDelete, setCommentToDelete] = useState<any>(null);
+  const [hoveredUserKey, setHoveredUserKey] = useState<string | null>(null);
   const moreDropdownRef = useRef(null);
   const sortDataDropdownRef = useRef(null);
   const itemNameDropdownRef = useRef(null);
   const itemDescriptionDropdownRef = useRef(null);
-  const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
-  const [attachedFiles, setAttachedFiles] = useState([]);
-  const fileInputRef = useRef(null);
+  const taxDropdownRef = useRef(null);
+  const addUsersDropdownRef = useRef(null);
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [showAttachmentsPopover, setShowAttachmentsPopover] = useState(false);
+  const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
+  const [attachmentMenuIndex, setAttachmentMenuIndex] = useState<number | null>(null);
   const [showInvoicePreferences, setShowInvoicePreferences] = useState(false);
   const [showProjectInvoiceInfo, setShowProjectInvoiceInfo] = useState(false);
   const [invoiceInfoData, setInvoiceInfoData] = useState({
@@ -41,6 +52,16 @@ export default function ProjectDetailPage() {
     tax: "",
     includeUnbilledExpenses: false
   });
+  const getProjectInvoiceInfoDefaults = (sourceProject) => {
+    const saved = sourceProject?.invoicePreferences || {};
+    return {
+      sortData: saved.sortData || "Single Line For The Project",
+      itemName: Array.isArray(saved.itemName) && saved.itemName.length ? saved.itemName : ["Project Name"],
+      itemDescription: Array.isArray(saved.itemDescription) && saved.itemDescription.length ? saved.itemDescription : ["Project Description"],
+      tax: saved.tax || "",
+      includeUnbilledExpenses: !!saved.includeUnbilledExpenses,
+    };
+  };
   const [itemNameDropdownOpen, setItemNameDropdownOpen] = useState(false);
   const [itemDescriptionDropdownOpen, setItemDescriptionDropdownOpen] = useState(false);
   const [taxDropdownOpen, setTaxDropdownOpen] = useState(false);
@@ -48,14 +69,295 @@ export default function ProjectDetailPage() {
   const [sortDataSearch, setSortDataSearch] = useState('');
   const [itemNameSearch, setItemNameSearch] = useState('');
   const [itemDescriptionSearch, setItemDescriptionSearch] = useState('');
+  const [taxSearch, setTaxSearch] = useState('');
+  const [taxRows, setTaxRows] = useState<any[]>([]);
+  const itemNameOptions = ["Project Name", "Project Code"];
+  const itemDescriptionOptions = ["Project Description", "Date Range", "Project Name", "Project Code", "Billed Hours"];
+  const selectedItemNames = Array.isArray(invoiceInfoData.itemName) ? invoiceInfoData.itemName : [];
+  const selectedItemDescriptions = Array.isArray(invoiceInfoData.itemDescription) ? invoiceInfoData.itemDescription : [];
+  const filteredItemNameOptions = itemNameOptions.filter((option) =>
+    !selectedItemNames.includes(option) &&
+    option.toLowerCase().includes(itemNameSearch.trim().toLowerCase())
+  );
+  const filteredItemDescriptionOptions = itemDescriptionOptions.filter((option) =>
+    !selectedItemDescriptions.includes(option) &&
+    option.toLowerCase().includes(itemDescriptionSearch.trim().toLowerCase())
+  );
+
+  const toggleItemNameOption = (option) => {
+    setInvoiceInfoData((prev) => {
+      const current = Array.isArray(prev.itemName) ? prev.itemName : [];
+      const next = current.includes(option)
+        ? current.filter((item) => item !== option)
+        : [...current, option];
+      return { ...prev, itemName: next };
+    });
+  };
+
+  const removeItemNameOption = (option) => {
+    setInvoiceInfoData((prev) => {
+      const current = Array.isArray(prev.itemName) ? prev.itemName : [];
+      return { ...prev, itemName: current.filter((item) => item !== option) };
+    });
+  };
+  const toggleItemDescriptionOption = (option) => {
+    setInvoiceInfoData((prev) => {
+      const current = Array.isArray(prev.itemDescription) ? prev.itemDescription : [];
+      const next = current.includes(option)
+        ? current.filter((item) => item !== option)
+        : [...current, option];
+      return { ...prev, itemDescription: next };
+    });
+  };
+
+  const removeItemDescriptionOption = (option) => {
+    setInvoiceInfoData((prev) => {
+      const current = Array.isArray(prev.itemDescription) ? prev.itemDescription : [];
+      return { ...prev, itemDescription: current.filter((item) => item !== option) };
+    });
+  };
+  const getTaxId = (tax: any) => String(tax?._id || tax?.id || tax?.tax_id || tax?.taxId || tax?.name || tax?.taxName || "");
+  const getTaxName = (tax: any) => String(tax?.name || tax?.taxName || tax?.tax_name || tax?.displayName || tax?.title || "").trim();
+  const getTaxRate = (tax: any) => Number(tax?.rate ?? tax?.taxPercentage ?? tax?.percentage ?? tax?.tax_rate ?? 0);
+  const taxLabel = (tax: any) => `${getTaxName(tax)} [${getTaxRate(tax)}%]`;
+  const getGroupedTaxes = (rows: any[]) => {
+    const rateById = new Map<string, number>();
+    rows.forEach((tax) => {
+      const id = String(tax?._id || tax?.id || "");
+      if (!id) return;
+      const rate = Number(tax?.rate ?? tax?.taxRate ?? 0);
+      rateById.set(id, Number.isFinite(rate) ? rate : 0);
+    });
+
+    const taxesList: Array<{ value: string; label: string }> = [];
+    const compoundTaxes: Array<{ value: string; label: string }> = [];
+    const taxGroups: Array<{ value: string; label: string }> = [];
+
+    rows.forEach((tax) => {
+      if (!tax || tax.isActive === false) return;
+      const name = getTaxName(tax);
+      if (!name) return;
+      const id = String(tax?._id || tax?.id || "");
+      if (!id) return;
+
+      const groupTaxes = Array.isArray(tax?.groupTaxes) ? tax.groupTaxes.map((x: any) => String(x)) : [];
+      const isGroup =
+        tax?.isGroup === true ||
+        String(tax?.kind || "").toLowerCase() === "group" ||
+        String(tax?.type || "").toLowerCase() === "group" ||
+        tax?.description === "__taban_tax_group__" ||
+        groupTaxes.length > 0;
+      const computedRate = isGroup
+        ? Number(groupTaxes.reduce((sum: number, taxId: string) => sum + (rateById.get(taxId) || 0), 0).toFixed(2))
+        : Number.isFinite(Number(tax?.rate ?? tax?.taxRate ?? 0)) ? Number(tax?.rate ?? tax?.taxRate ?? 0) : 0;
+      const label = `${name} [${computedRate}%]`;
+      const option = { value: id, label };
+
+      if (isGroup) taxGroups.push(option);
+      else if (tax?.isCompound) compoundTaxes.push(option);
+      else taxesList.push(option);
+    });
+
+    const dedupe = (items: Array<{ value: string; label: string }>) =>
+      Array.from(new Map(items.map((item) => [item.value, item])).values());
+
+    return [
+      { label: "Tax", options: dedupe(taxesList) },
+      { label: "Compound tax", options: dedupe(compoundTaxes) },
+      { label: "Tax Group", options: dedupe(taxGroups) },
+    ].filter((group) => group.options.length > 0);
+  };
+  const taxGroups = getGroupedTaxes(taxRows);
+  const selectedTaxSelection = String(invoiceInfoData.tax || "").trim();
+  const selectedTaxRecord =
+    taxRows.find((tax) => getTaxId(tax) === selectedTaxSelection) ||
+    taxRows.find((tax) => taxLabel(tax).toLowerCase() === selectedTaxSelection.toLowerCase()) ||
+    taxRows.find((tax) => getTaxName(tax).toLowerCase() === selectedTaxSelection.toLowerCase());
+  const selectedTaxLabel = selectedTaxRecord ? taxLabel(selectedTaxRecord) : selectedTaxSelection;
+  const filteredTaxGroups = taxGroups.map((group) => ({
+    label: group.label,
+    options: group.options.filter((option) => option.label.toLowerCase().includes(taxSearch.toLowerCase())),
+  })).filter((group) => group.options.length > 0);
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [newTaskName, setNewTaskName] = useState('');
+  const [newTaskRatePerHour, setNewTaskRatePerHour] = useState('');
   const [newTaskDescription, setNewTaskDescription] = useState('');
   const [newTaskBillable, setNewTaskBillable] = useState(true);
-  const [newUserName, setNewUserName] = useState('');
-  const [newUserEmail, setNewUserEmail] = useState('');
-  const [addUserRows, setAddUserRows] = useState([{ id: 1, user: '', costPerHour: '' }]);
+  const [taskTimerDefaults, setTaskTimerDefaults] = useState<{ defaultProjectName: string; defaultTaskName: string; defaultBillable: boolean } | null>(null);
+  const [availableUsers, setAvailableUsers] = useState<any[]>([]);
+  const [selectedUsersToAdd, setSelectedUsersToAdd] = useState<any[]>([]);
+  const [addUsersDropdownOpen, setAddUsersDropdownOpen] = useState(false);
+  const [addUsersSearch, setAddUsersSearch] = useState('');
+  const getUserOptionId = (user: any) => String(user?._id || user?.id || user?.value || user?.email || user?.name || user?.displayName || "").trim();
+  const getUserOptionLabel = (user: any) => String(user?.name || user?.displayName || user?.fullName || user?.email || "User").trim();
+  const getUserOptionEmail = (user: any) => String(user?.email || user?.mail || "").trim();
+  const selectedUserIds = new Set(selectedUsersToAdd.map(getUserOptionId));
+  const existingUserIds = new Set((Array.isArray(project?.users) ? project.users : []).map(getUserOptionId));
+  const filteredAvailableUsers = availableUsers.filter((user) => {
+    const id = getUserOptionId(user);
+    if (!id || selectedUserIds.has(id) || existingUserIds.has(id)) return false;
+    const query = addUsersSearch.trim().toLowerCase();
+    if (!query) return true;
+    return getUserOptionLabel(user).toLowerCase().includes(query) || getUserOptionEmail(user).toLowerCase().includes(query);
+  });
+  const openAddUsersModal = () => {
+    setSelectedUsersToAdd([]);
+    setAddUsersSearch('');
+    setAddUsersDropdownOpen(false);
+    setShowAddUserModal(true);
+  };
+  const closeAddUsersModal = () => {
+    setShowAddUserModal(false);
+    setSelectedUsersToAdd([]);
+    setAddUsersSearch('');
+    setAddUsersDropdownOpen(false);
+  };
+  const toggleSelectedUser = (user: any) => {
+    const option = {
+      value: user.value,
+      label: user.label,
+      email: user.email,
+      rate: user.rate,
+    };
+    setSelectedUsersToAdd((prev) => {
+      const exists = prev.some((item) => getUserOptionId(item) === option.value);
+      return exists ? prev.filter((item) => getUserOptionId(item) !== option.value) : [...prev, option];
+    });
+  };
+  const removeSelectedUser = (userValue: string) => {
+    setSelectedUsersToAdd((prev) => prev.filter((item) => getUserOptionId(item) !== userValue));
+  };
+  const handleSaveUsers = async () => {
+    if (!selectedUsersToAdd.length) {
+      toast.error('Please select at least one user');
+      return;
+    }
+
+    const existingUsers = Array.isArray(project?.users) ? project.users : [];
+    const updatedUsers = [...existingUsers];
+
+    selectedUsersToAdd.forEach((user) => {
+      const normalizedId = String(user.value || "").trim();
+      const normalizedLabel = String(user.label || "").trim();
+      const normalizedEmail = String(user.email || normalizedLabel || "").trim();
+      const alreadyExists = updatedUsers.some((existing: any) => {
+        const existingId = getUserOptionId(existing);
+        const existingLabel = getUserOptionLabel(existing);
+        const existingEmail = getUserOptionEmail(existing);
+        return (
+          (normalizedId && existingId === normalizedId) ||
+          (normalizedEmail && existingEmail && existingEmail.toLowerCase() === normalizedEmail.toLowerCase()) ||
+          (normalizedLabel && existingLabel.toLowerCase() === normalizedLabel.toLowerCase())
+        );
+      });
+
+      if (!alreadyExists) {
+        updatedUsers.push({
+          id: normalizedId,
+          name: normalizedLabel,
+          email: normalizedEmail,
+          rate: user.rate || '',
+        });
+      }
+    });
+
+    try {
+      await projectsAPI.update(projectId, { assignedTo: updatedUsers, users: updatedUsers });
+      setProject({ ...project, users: updatedUsers, assignedTo: updatedUsers });
+      window.dispatchEvent(new Event('projectUpdated'));
+      toast.success('Users added');
+      closeAddUsersModal();
+    } catch (error) {
+      console.error('Error adding users:', error);
+      toast.error('Failed to add users: ' + (error.message || 'Unknown error'));
+    }
+  };
+  const handleRemoveUserClick = (user: any) => {
+    setUserToRemove(user);
+    setShowRemoveUserModal(true);
+  };
+  const closeRemoveUserModal = () => {
+    setShowRemoveUserModal(false);
+    setUserToRemove(null);
+  };
+  const handleConfirmRemoveUser = async () => {
+    if (!userToRemove || !project) return;
+    const removeId = getUserOptionId(userToRemove);
+    const removeName = getUserOptionLabel(userToRemove);
+    const removeEmail = getUserOptionEmail(userToRemove);
+    const currentUsers = Array.isArray(project.users) ? project.users : [];
+    const updatedUsers = currentUsers.filter((user: any) => {
+      const userId = getUserOptionId(user);
+      const userName = getUserOptionLabel(user);
+      const userEmail = getUserOptionEmail(user);
+      return !(
+        (removeId && userId === removeId) ||
+        (removeEmail && userEmail && userEmail.toLowerCase() === removeEmail.toLowerCase()) ||
+        (removeName && userName.toLowerCase() === removeName.toLowerCase())
+      );
+    });
+
+    try {
+      await projectsAPI.update(projectId, { assignedTo: updatedUsers, users: updatedUsers });
+      setProject({ ...project, users: updatedUsers, assignedTo: updatedUsers });
+      window.dispatchEvent(new Event('projectUpdated'));
+      toast.success('User removed');
+      closeRemoveUserModal();
+    } catch (error) {
+      console.error('Error removing user:', error);
+      toast.error('Failed to remove user: ' + (error.message || 'Unknown error'));
+    }
+  };
+  const getTaskKey = (task: any, index: number) => String(task?._id || task?.id || task?.taskId || task?.taskName || index);
+  const startTaskTimer = (task: any) => {
+    setTaskTimerDefaults({
+      defaultProjectName: project?.projectName || project?.name || "",
+      defaultTaskName: task?.taskName || "",
+      defaultBillable: task?.billable !== false,
+    });
+    setShowLogEntryForm(true);
+  };
+  const toggleTaskActive = async (task: any, index: number) => {
+    const taskKey = getTaskKey(task, index);
+    const updatedTasks = (project?.tasks || []).map((currentTask: any, currentIndex: number) => {
+      const currentKey = getTaskKey(currentTask, currentIndex);
+      if (currentKey !== taskKey) return currentTask;
+      return { ...currentTask, active: currentTask.active === false ? true : false };
+    });
+    try {
+      await projectsAPI.update(projectId, { tasks: updatedTasks });
+      setProject({ ...project, tasks: updatedTasks });
+      window.dispatchEvent(new Event("projectUpdated"));
+      toast.success(task?.active === false ? "Task marked active" : "Task marked inactive");
+    } catch (error) {
+      console.error("Error updating task status:", error);
+      toast.error("Failed to update task: " + (error.message || "Unknown error"));
+    }
+  };
+  const promptDeleteTask = (task: any, index: number) => {
+    setTaskToDelete({ ...task, index });
+    setShowDeleteTaskModal(true);
+  };
+  const closeDeleteTaskModal = () => {
+    setShowDeleteTaskModal(false);
+    setTaskToDelete(null);
+  };
+  const handleDeleteTask = async () => {
+    if (!taskToDelete || !project) return;
+    const taskKey = getTaskKey(taskToDelete, taskToDelete.index);
+    const updatedTasks = (project.tasks || []).filter((currentTask: any, currentIndex: number) => getTaskKey(currentTask, currentIndex) !== taskKey);
+    try {
+      await projectsAPI.update(projectId, { tasks: updatedTasks });
+      setProject({ ...project, tasks: updatedTasks });
+      window.dispatchEvent(new Event("projectUpdated"));
+      toast.success("Task deleted");
+      closeDeleteTaskModal();
+    } catch (error) {
+      console.error("Error deleting task:", error);
+      toast.error("Failed to delete task: " + (error.message || "Unknown error"));
+    }
+  };
   const [showNewBudgetForm, setShowNewBudgetForm] = useState(false);
   const [budgetFormData, setBudgetFormData] = useState({
     name: "",
@@ -96,13 +398,17 @@ export default function ProjectDetailPage() {
   const [comments, setComments] = useState<Array<{
     id: string;
     text: string;
+    content?: string;
+    authorName?: string;
+    authorInitial?: string;
     createdAt: string;
     bold?: boolean;
     italic?: boolean;
     underline?: boolean;
   }>>([]);
   const goToTransactionsRef = useRef(null);
-  const [commentText, setCommentText] = useState("");
+  const commentEditorRef = useRef<HTMLDivElement>(null);
+  const [isEditorEmpty, setIsEditorEmpty] = useState(true);
   const [isBold, setIsBold] = useState(false);
   const [isItalic, setIsItalic] = useState(false);
   const [isUnderline, setIsUnderline] = useState(false);
@@ -114,6 +420,63 @@ export default function ProjectDetailPage() {
   const [selectedAccounts, setSelectedAccounts] = useState([]);
   const [accountSearchTerm, setAccountSearchTerm] = useState("");
   const [expandedAccountCategories, setExpandedAccountCategories] = useState({});
+
+  const handleAttachmentUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+
+    setIsUploadingAttachments(true);
+    await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+
+    try {
+      const MAX_FILES = 10;
+      const MAX_SIZE = 10 * 1024 * 1024;
+
+      const validFiles = files.filter((file) => file.size <= MAX_SIZE);
+      const rejected = files.length - validFiles.length;
+      if (rejected > 0) {
+        toast.error("Each file must be 10MB or smaller.");
+      }
+
+      if (validFiles.length) {
+        setAttachedFiles((prev) => [...prev, ...validFiles].slice(0, MAX_FILES));
+      }
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } finally {
+      setIsUploadingAttachments(false);
+    }
+
+    if (files.some((file) => file.size <= 10 * 1024 * 1024)) {
+      toast.success("File uploaded successfully.");
+    }
+  };
+
+  const handleRemoveAttachment = (index: number) => {
+    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
+    setAttachmentMenuIndex((current) => (current === index ? null : current));
+    toast.success("File removed successfully.");
+  };
+
+  const handleDownloadAttachment = (file: File) => {
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = file.name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (!bytes) return "0 B";
+    const units = ["B", "KB", "MB", "GB"];
+    const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    const value = bytes / Math.pow(1024, index);
+    return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
+  };
+
+  const isPdfAttachment = (fileName: string) => /\.pdf$/i.test(fileName);
 
   const resolveProjectContext = () => {
     if (!project) {
@@ -150,6 +513,200 @@ export default function ProjectDetailPage() {
       customerId,
       customerName,
       payloadProject,
+    };
+  };
+
+  const sanitizeCommentHtml = (html: string) => {
+    if (!html) return "";
+    if (typeof document === "undefined") return String(html);
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    const allowedTags = new Set(["B", "STRONG", "I", "EM", "U", "BR", "DIV", "P", "SPAN"]);
+
+    const sanitizeNode = (node: Node) => {
+      if (node.nodeType === Node.TEXT_NODE) return;
+      if (node.nodeType !== Node.ELEMENT_NODE) {
+        node.parentNode?.removeChild(node);
+        return;
+      }
+
+      const element = node as HTMLElement;
+      if (!allowedTags.has(element.tagName)) {
+        const text = document.createTextNode(element.textContent || "");
+        element.parentNode?.replaceChild(text, element);
+        return;
+      }
+
+      while (element.attributes.length > 0) {
+        element.removeAttribute(element.attributes[0].name);
+      }
+
+      Array.from(element.childNodes).forEach(sanitizeNode);
+    };
+
+    Array.from(container.childNodes).forEach(sanitizeNode);
+    return container.innerHTML;
+  };
+
+  const escapeHtml = (value: string) =>
+    value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+
+  const commentMarkupToHtml = (value: string) => {
+    const raw = String(value || "");
+    if (/<[a-z][\s\S]*>/i.test(raw)) return sanitizeCommentHtml(raw);
+
+    let result = "";
+    let i = 0;
+    let boldOpen = false;
+    let italicOpen = false;
+    let underlineOpen = false;
+
+    while (i < raw.length) {
+      const twoCharToken = raw.slice(i, i + 2);
+      if (twoCharToken === "**") {
+        result += boldOpen ? "</strong>" : "<strong>";
+        boldOpen = !boldOpen;
+        i += 2;
+        continue;
+      }
+      if (twoCharToken === "__") {
+        result += underlineOpen ? "</u>" : "<u>";
+        underlineOpen = !underlineOpen;
+        i += 2;
+        continue;
+      }
+      if (raw[i] === "*") {
+        result += italicOpen ? "</em>" : "<em>";
+        italicOpen = !italicOpen;
+        i += 1;
+        continue;
+      }
+
+      const char = raw[i];
+      result += char === "\n" ? "<br />" : escapeHtml(char);
+      i += 1;
+    }
+
+    if (italicOpen) result += "</em>";
+    if (underlineOpen) result += "</u>";
+    if (boldOpen) result += "</strong>";
+    return result;
+  };
+
+  const commentMarkupToText = (value: string) => {
+    const raw = String(value || "");
+    if (/<[a-z][\s\S]*>/i.test(raw)) {
+      if (typeof document === "undefined") return raw.replace(/<[^>]*>/g, "");
+      const container = document.createElement("div");
+      container.innerHTML = sanitizeCommentHtml(raw);
+      return container.textContent || "";
+    }
+
+    let result = "";
+    let i = 0;
+    while (i < raw.length) {
+      const twoCharToken = raw.slice(i, i + 2);
+      if (twoCharToken === "**" || twoCharToken === "__") {
+        i += 2;
+        continue;
+      }
+      if (raw[i] === "*") {
+        i += 1;
+        continue;
+      }
+      result += raw[i];
+      i += 1;
+    }
+    return result;
+  };
+
+  const getLoggedInUserDisplay = () => {
+    const currentUser = getCurrentUser();
+    const name = String(
+      currentUser?.name ||
+      currentUser?.displayName ||
+      currentUser?.fullName ||
+      currentUser?.username ||
+      [currentUser?.firstName, currentUser?.lastName].filter(Boolean).join(" ") ||
+      currentUser?.email ||
+      "You"
+    ).trim() || "You";
+    return {
+      name,
+      initial: name.charAt(0).toUpperCase() || "Y",
+    };
+  };
+
+  const [currentUserDisplay, setCurrentUserDisplay] = useState(getLoggedInUserDisplay());
+
+  useEffect(() => {
+    const syncCurrentUser = () => setCurrentUserDisplay(getLoggedInUserDisplay());
+    syncCurrentUser();
+    window.addEventListener("storage", syncCurrentUser);
+    window.addEventListener(AUTH_USER_UPDATED_EVENT, syncCurrentUser as EventListener);
+    return () => {
+      window.removeEventListener("storage", syncCurrentUser);
+      window.removeEventListener(AUTH_USER_UPDATED_EVENT, syncCurrentUser as EventListener);
+    };
+  }, []);
+
+  const getCommentAuthorName = (comment: any) => {
+    const authorName = String(comment?.authorName || "").trim();
+    const authorInitial = String(comment?.authorInitial || "").trim();
+    if (!authorName || authorName === "You" || authorInitial === "Y") return currentUserDisplay.name;
+    return authorName;
+  };
+
+  const getCommentAuthorInitial = (comment: any) => {
+    const authorName = String(comment?.authorName || "").trim();
+    const authorInitial = String(comment?.authorInitial || "").trim();
+    if (!authorName || authorName === "You" || authorInitial === "Y") return currentUserDisplay.initial;
+    return authorInitial || authorName.charAt(0).toUpperCase() || "Y";
+  };
+
+  const syncCommentEditorState = () => {
+    const editor = commentEditorRef.current;
+    if (!editor) return;
+
+    setIsEditorEmpty(!editor.innerText.trim());
+
+    try {
+      setIsBold(document.queryCommandState("bold"));
+      setIsItalic(document.queryCommandState("italic"));
+      setIsUnderline(document.queryCommandState("underline"));
+    } catch {
+      setIsBold(false);
+      setIsItalic(false);
+      setIsUnderline(false);
+    }
+  };
+
+  const normalizeComment = (comment: any, index = 0) => {
+    if (!comment || typeof comment !== "object") return null;
+    const id = String(comment.id || comment._id || `cm-${index}-${Date.now()}`).trim();
+    if (!id) return null;
+    const rawContent = String(comment.content ?? "").trim();
+    const legacyText = String(comment.text ?? "").trim();
+    const content = rawContent || sanitizeCommentHtml(
+      `${comment.bold ? "<b>" : ""}${comment.italic ? "<i>" : ""}${comment.underline ? "<u>" : ""}` +
+      `${legacyText}` +
+      `${comment.underline ? "</u>" : ""}${comment.italic ? "</i>" : ""}${comment.bold ? "</b>" : ""}`
+    );
+    return {
+      id,
+      text: legacyText || content.replace(/<[^>]*>/g, ""),
+      content,
+      authorName: String(comment.authorName || "You").trim() || "You",
+      authorInitial: String(comment.authorInitial || "Y").trim() || "Y",
+      createdAt: String(comment.createdAt || new Date().toISOString()),
+      bold: comment.bold,
+      italic: comment.italic,
+      underline: comment.underline
     };
   };
 
@@ -248,8 +805,60 @@ export default function ProjectDetailPage() {
       setSortDataSearch('');
       setItemNameSearch('');
       setItemDescriptionSearch('');
+      setTaxSearch('');
     }
   }, [showProjectInvoiceInfo]);
+
+  useEffect(() => {
+    let alive = true;
+    const getInitialTaxes = () => {
+      if (typeof localStorage === "undefined") return [];
+      for (const key of ["taban_settings_taxes_v1", "taban_books_taxes"]) {
+        try {
+          const raw = localStorage.getItem(key);
+          const parsed = raw ? JSON.parse(raw) : [];
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch {
+          // ignore malformed cache entries
+        }
+      }
+      return [];
+    };
+    const loadTaxes = async () => {
+      const localTaxes = getInitialTaxes();
+      if (localTaxes.length) setTaxRows(localTaxes);
+      try {
+        const response: any = await taxesAPI.getAll({ status: "active" });
+        const rows = Array.isArray(response?.data)
+          ? response.data
+          : Array.isArray(response?.taxes)
+            ? response.taxes
+            : Array.isArray(response)
+              ? response
+              : [];
+        if (alive && rows.length > 0) {
+          setTaxRows(rows);
+          return;
+        }
+      } catch {
+        // fall back to cached taxes below
+      }
+      if (alive) setTaxRows(localTaxes);
+    };
+
+    void loadTaxes();
+    const handleTaxesUpdated = () => {
+      const localTaxes = getInitialTaxes();
+      if (alive) setTaxRows(localTaxes);
+    };
+    window.addEventListener("taban:taxes-storage-updated", handleTaxesUpdated);
+    window.addEventListener("storage", handleTaxesUpdated);
+    return () => {
+      alive = false;
+      window.removeEventListener("taban:taxes-storage-updated", handleTaxesUpdated);
+      window.removeEventListener("storage", handleTaxesUpdated);
+    };
+  }, []);
 
   const toKey = (value) => String(value ?? "").trim();
   const toNameKey = (value) => String(value ?? "").trim().toLowerCase();
@@ -433,14 +1042,16 @@ export default function ProjectDetailPage() {
     };
   }, [project, projectId]);
 
-  // Load comments for this project
+  // Load comments from the project record
   useEffect(() => {
-    if (projectId) {
-      const allComments = JSON.parse(localStorage.getItem('projectComments') || '{}');
-      const projectComments = allComments[projectId] || [];
-      setComments(projectComments);
+    if (!project) {
+      setComments([]);
+      return;
     }
-  }, [projectId]);
+
+    const projectComments = Array.isArray((project as any).comments) ? (project as any).comments : [];
+    setComments(projectComments.map((comment, index) => normalizeComment(comment, index)).filter(Boolean));
+  }, [project]);
 
   // Load time entries for this project
   useEffect(() => {
@@ -556,6 +1167,9 @@ export default function ProjectDetailPage() {
         }
 
         // Transform database project to match frontend format
+        const normalizedComments = Array.isArray(projectData.comments)
+          ? projectData.comments.map((comment, index) => normalizeComment(comment, index)).filter(Boolean)
+          : [];
         const transformedProject = {
           id: projectData._id || projectData.id,
           projectName: projectData.name || projectData.projectName,
@@ -575,11 +1189,30 @@ export default function ProjectDetailPage() {
           tags: projectData.tags || [],
           tasks: projectData.tasks || [],
           users: projectData.assignedTo || [],
+          invoicePreferences: projectData.invoicePreferences || {},
           isActive: projectData.status !== 'cancelled' && projectData.status !== 'completed',
-          ...projectData // Keep all other fields
+          ...projectData, // Keep all other fields
+          comments: normalizedComments,
         };
 
         setProject(transformedProject);
+
+        if (!normalizedComments.length && projectId) {
+          try {
+            const allComments = JSON.parse(localStorage.getItem("projectComments") || "{}");
+            const legacyComments = Array.isArray(allComments[projectId]) ? allComments[projectId] : [];
+            const migratedComments = legacyComments.map((comment, index) => normalizeComment(comment, index)).filter(Boolean);
+            if (migratedComments.length) {
+              setComments(migratedComments);
+              setProject((prev: any) => (prev ? { ...prev, comments: migratedComments } : prev));
+              await projectsAPI.update(projectId, { comments: migratedComments });
+              delete allComments[projectId];
+              localStorage.setItem("projectComments", JSON.stringify(allComments));
+            }
+          } catch (migrationError) {
+            console.warn("Failed to migrate legacy project comments:", migrationError);
+          }
+        }
       } catch (error) {
         console.error("Error loading project:", error);
         toast.error("Failed to load project: " + (error.message || "Unknown error"));
@@ -613,11 +1246,9 @@ export default function ProjectDetailPage() {
     function handleClickOutside(event) {
       if (transactionDropdownRef.current && !transactionDropdownRef.current.contains(event.target)) {
         setShowTransactionDropdown(false);
-        setHoveredTransaction(null);
       }
       if (moreDropdownRef.current && !moreDropdownRef.current.contains(event.target)) {
         setShowMoreDropdown(false);
-        setHoveredMoreOption(null);
       }
       if (sortDataDropdownRef.current && !sortDataDropdownRef.current.contains(event.target)) {
         setSortDataDropdownOpen(false);
@@ -631,19 +1262,70 @@ export default function ProjectDetailPage() {
         setItemDescriptionDropdownOpen(false);
         setItemDescriptionSearch('');
       }
+      if (addUsersDropdownRef.current && !addUsersDropdownRef.current.contains(event.target)) {
+        setAddUsersDropdownOpen(false);
+        setAddUsersSearch('');
+      }
       if (goToTransactionsRef.current && !goToTransactionsRef.current.contains(event.target)) {
         setShowGoToTransactionsDropdown(false);
       }
     }
 
-    if (showTransactionDropdown || showMoreDropdown || sortDataDropdownOpen || itemNameDropdownOpen || itemDescriptionDropdownOpen || showGoToTransactionsDropdown) {
+    if (showTransactionDropdown || showMoreDropdown || sortDataDropdownOpen || itemNameDropdownOpen || itemDescriptionDropdownOpen || addUsersDropdownOpen || showGoToTransactionsDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showTransactionDropdown, showMoreDropdown, sortDataDropdownOpen, itemNameDropdownOpen, itemDescriptionDropdownOpen, showGoToTransactionsDropdown]);
+  }, [showTransactionDropdown, showMoreDropdown, sortDataDropdownOpen, itemNameDropdownOpen, itemDescriptionDropdownOpen, addUsersDropdownOpen, showGoToTransactionsDropdown]);
+
+  useEffect(() => {
+    if (!showAddUserModal) {
+      setAddUsersDropdownOpen(false);
+      setAddUsersSearch('');
+      return;
+    }
+
+    let mounted = true;
+
+    const loadUsers = async () => {
+      try {
+        const response: any = await usersAPI.getAll({ limit: 1000 });
+        const rows = Array.isArray(response) ? response : (response?.data || []);
+        if (!mounted) return;
+
+        const normalizedUsers = rows
+          .filter((user: any) => {
+            const status = String(user?.status || "").trim().toLowerCase();
+            return status === "active" || user?.isActive === true;
+          })
+          .map((user: any) => {
+            const value = String(user?._id || user?.id || user?.email || user?.name || "").trim();
+            const label = String(user?.name || user?.displayName || user?.fullName || user?.email || "User").trim();
+            if (!value || !label) return null;
+            return {
+              value,
+              label,
+              email: String(user?.email || user?.mail || "").trim(),
+              rate: user?.rate ?? user?.hourlyRate ?? user?.costPerHour ?? "",
+            };
+          })
+          .filter(Boolean);
+
+        setAvailableUsers(normalizedUsers);
+      } catch (error) {
+        console.error("Error loading users:", error);
+        if (mounted) setAvailableUsers([]);
+      }
+    };
+
+    loadUsers();
+
+    return () => {
+      mounted = false;
+    };
+  }, [showAddUserModal]);
 
   // Handle Esc key to clear selection
   useEffect(() => {
@@ -776,30 +1458,87 @@ export default function ProjectDetailPage() {
 
   const hoursData = calculateHours();
 
-  const handleAddComment = () => {
-    const trimmed = commentText.trim();
-    if (!trimmed || !projectId) return;
+  const handleAddComment = async () => {
+    const editor = commentEditorRef.current;
+    const trimmedComment = editor?.innerText.trim() || "";
+    if (!trimmedComment || !projectId) return;
+    const currentUser = getLoggedInUserDisplay();
 
     const newComment = {
       id: `${Date.now()}`,
-      text: trimmed,
+      text: trimmedComment,
+      content: sanitizeCommentHtml(editor?.innerHTML || ""),
+      authorName: currentUser.name,
+      authorInitial: currentUser.initial,
       createdAt: new Date().toISOString(),
-      bold: isBold,
-      italic: isItalic,
-      underline: isUnderline
+      bold: false,
+      italic: false,
+      underline: false
     };
 
     const updatedComments = [newComment, ...comments];
     setComments(updatedComments);
+    setProject((prev: any) => (prev ? { ...prev, comments: updatedComments } : prev));
 
-    const allComments = JSON.parse(localStorage.getItem('projectComments') || '{}');
-    allComments[projectId] = updatedComments;
-    localStorage.setItem('projectComments', JSON.stringify(allComments));
+    try {
+      await projectsAPI.update(projectId, { comments: updatedComments });
 
-    setCommentText("");
-    setIsBold(false);
-    setIsItalic(false);
-    setIsUnderline(false);
+      setIsEditorEmpty(true);
+      setIsBold(false);
+      setIsItalic(false);
+      setIsUnderline(false);
+      if (editor) {
+        editor.innerHTML = "";
+      }
+      toast.success("Comment added successfully.");
+    } catch {
+      setComments(comments);
+      setProject((prev: any) => (prev ? { ...prev, comments } : prev));
+      toast.error("Failed to add comment.");
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string | number) => {
+    if (!projectId) return;
+
+    const previousComments = comments;
+    const updatedComments = previousComments.filter((comment) => String(comment.id) !== String(commentId));
+    setComments(updatedComments);
+    setProject((prev: any) => (prev ? { ...prev, comments: updatedComments } : prev));
+
+    try {
+      await projectsAPI.update(projectId, { comments: updatedComments });
+      toast.success("Comment deleted successfully.");
+      return true;
+    } catch {
+      setComments(previousComments);
+      setProject((prev: any) => (prev ? { ...prev, comments: previousComments } : prev));
+      toast.error("Failed to delete comment.");
+      return false;
+    }
+  };
+
+  const openDeleteCommentModal = (comment: any) => {
+    setCommentToDelete(comment);
+    setShowDeleteCommentModal(true);
+  };
+
+  const closeDeleteCommentModal = () => {
+    setShowDeleteCommentModal(false);
+    setCommentToDelete(null);
+  };
+
+  const confirmDeleteComment = async () => {
+    if (!commentToDelete) return;
+    const deleted = await handleDeleteComment(commentToDelete.id);
+    if (deleted) closeDeleteCommentModal();
+  };
+
+  const applyCommentFormat = (command: "bold" | "italic" | "underline") => {
+    if (!commentEditorRef.current) return;
+    commentEditorRef.current.focus();
+    document.execCommand(command, false);
+    syncCommentEditorState();
   };
 
   if (!project) {
@@ -815,14 +1554,6 @@ export default function ProjectDetailPage() {
 
   const tabs = ["Overview", "Timesheet", "Expenses", "Sales"];
   const isCompletedProject = String(project?.status || "").toLowerCase() === "completed";
-  const actionBadgeCount = Number(
-    project?.badgeCount ||
-    project?.notificationCount ||
-    project?.alertsCount ||
-    project?.tasks?.length ||
-    0
-  );
-
   const statusOptions = ["All", "Draft", "Sent", "Approved", "Accepted", "Paid", "Void", "Overdue"];
 
   const formatSalesDate = (value) => {
@@ -836,11 +1567,12 @@ export default function ProjectDetailPage() {
     }
   };
 
-  const currencyCode = project?.currency || baseCurrencyCode;
+  const currencyCode = baseCurrencyCode;
   const formatMoney = (value: any) =>
     `${currencyCode} ${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const rawBillingMethod = String(project?.billingMethod || "").toLowerCase();
+  const showTaskRatePerHour = rawBillingMethod === "task-hours";
   const billingMethodLabel =
     rawBillingMethod === "fixed" || rawBillingMethod === "fixed_cost" || rawBillingMethod === "fixed cost for project"
       ? "Fixed Cost for Project"
@@ -940,7 +1672,7 @@ export default function ProjectDetailPage() {
                 <>
 
               <button
-                onClick={() => setShowAddUserModal(true)}
+                onClick={openAddUsersModal}
                 className="px-4 py-2 border border-gray-200 rounded bg-white cursor-pointer text-sm hover:bg-gray-50"
               >
                 Add User
@@ -1035,10 +1767,7 @@ export default function ProjectDetailPage() {
                 {showTransactionDropdown && (
                   <div
                     onMouseEnter={() => setShowTransactionDropdown(true)}
-                    onMouseLeave={() => {
-                      setShowTransactionDropdown(false);
-                      setHoveredTransaction(null);
-                    }}
+                    onMouseLeave={() => setShowTransactionDropdown(false)}
                     className="absolute top-full left-0 mt-1 bg-white rounded-md shadow-lg min-w-[220px] max-h-[500px] z-[1000] border border-gray-200 overflow-y-auto"
                   >
                     {/* SALES Section */}
@@ -1115,7 +1844,7 @@ export default function ProjectDetailPage() {
                                 break;
                             }
                           }}
-                          className="px-4 py-2.5 text-sm text-gray-800 cursor-pointer hover:bg-[#156372] hover:text-white my-[1px] transition-colors"
+                          className="px-4 py-2.5 text-sm text-gray-800 cursor-pointer my-[1px] transition-colors"
                         >
                           {option}
                         </div>
@@ -1126,12 +1855,126 @@ export default function ProjectDetailPage() {
                   </div>
                 )}
               </div>
-              <button
-                onClick={() => setShowAttachmentsModal(true)}
-                className="w-8 h-8 border border-gray-200 rounded bg-white cursor-pointer flex items-center justify-center text-sm font-semibold text-gray-700 hover:bg-gray-50"
-              >
-                {actionBadgeCount}
-              </button>
+              <div className="relative">
+                <button
+                  onClick={() => setShowAttachmentsPopover((prev) => !prev)}
+                  className="w-8 h-8 border border-gray-200 rounded bg-white cursor-pointer flex items-center justify-center text-gray-600 hover:bg-gray-50"
+                  aria-label="Attachments"
+                  title="Attachments"
+                >
+                  <Paperclip size={14} strokeWidth={2} />
+                </button>
+                {showAttachmentsPopover && (
+                  <div className="absolute right-0 top-full mt-2 w-[286px] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg z-[220]">
+                    <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                      <h3 className="text-[15px] font-semibold text-slate-900">Attachments</h3>
+                      <button
+                        type="button"
+                        onClick={() => setShowAttachmentsPopover(false)}
+                        className="h-6 w-6 rounded text-red-500 flex items-center justify-center hover:bg-red-50"
+                        aria-label="Close attachments"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                    <div className="px-4 py-4">
+                      {attachedFiles.length === 0 ? (
+                        <div className="py-3 text-center text-[14px] text-slate-700">No Files Attached</div>
+                      ) : (
+                        <div className="max-h-40 space-y-2 overflow-auto">
+                          {attachedFiles.map((file, index) => (
+                            <div key={`${file.name}-${index}`}>
+                              <div
+                                className={`group relative rounded-md px-3 py-2 pr-16 text-[13px] transition-colors ${
+                                  attachmentMenuIndex === index ? "bg-[#eef2ff]" : "bg-white"
+                                }`}
+                              >
+                                <div className="flex items-start gap-2">
+                                  <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-sm ${isPdfAttachment(file.name) ? "bg-red-50 text-red-500" : "bg-slate-50 text-slate-400"}`}>
+                                    <FileText size={12} />
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="truncate text-[13px] text-slate-700">{file.name}</div>
+                                    <div className="text-[12px] text-slate-500">File Size: {formatFileSize(file.size)}</div>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveAttachment(index)}
+                                  className={`absolute right-8 top-1/2 -translate-y-1/2 rounded p-1 text-red-500 transition-opacity hover:bg-red-50 ${
+                                    attachmentMenuIndex === index ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                                  }`}
+                                  aria-label="Remove attachment"
+                                  title="Remove"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              <button
+                                type="button"
+                                onClick={() => setAttachmentMenuIndex((current) => (current === index ? null : index))}
+                                className={`absolute right-2 top-1/2 -translate-y-1/2 rounded-md border p-1 transition-opacity ${
+                                  attachmentMenuIndex === index
+                                      ? "border-blue-500 text-blue-500 bg-white opacity-100 shadow-sm"
+                                      : "border-slate-200 text-slate-600 opacity-0 group-hover:opacity-100 hover:bg-slate-100"
+                                  }`}
+                                  aria-label="Attachment actions"
+                                  title="More"
+                                >
+                                  <MoreVertical size={14} />
+                                </button>
+                                {attachmentMenuIndex === index && (
+                                  <div className="mt-2 flex items-center gap-5 px-8 text-[12px] font-medium text-blue-600">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        handleDownloadAttachment(file);
+                                        setAttachmentMenuIndex(null);
+                                      }}
+                                      className="hover:text-blue-700"
+                                    >
+                                      Download
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveAttachment(index)}
+                                      className="hover:text-blue-700"
+                                    >
+                                      Remove
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDownloadAttachment(file)}
+                                      className="rounded p-1 text-blue-600 hover:bg-blue-50"
+                                      aria-label="Open attachment"
+                                      title="Open"
+                                    >
+                                      <ExternalLink size={13} />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="mt-4 text-center">
+                        <label className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#156372] px-4 py-3 text-[14px] font-semibold text-white shadow-sm hover:opacity-95">
+                          {isUploadingAttachments ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                          <span>{isUploadingAttachments ? "Uploading..." : "Upload your Files"}</span>
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            multiple
+                            className="hidden"
+                            onChange={handleAttachmentUpload}
+                          />
+                        </label>
+                        <p className="mt-2 text-[11px] text-slate-500">You can upload a maximum of 10 files, 10MB each</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
               <div className="relative" ref={moreDropdownRef}>
                 <button
                   onClick={() => setShowMoreDropdown(!showMoreDropdown)}
@@ -1148,9 +1991,10 @@ export default function ProjectDetailPage() {
                   <div className="absolute top-full right-0 mt-1 bg-white rounded-md shadow-lg min-w-[200px] z-[1000] border border-gray-200 overflow-hidden">
                     {/* Invoice Preferences */}
                     <div
-                      className="mx-2 mt-2 mb-1 px-4 py-2.5 text-sm text-white cursor-pointer rounded-lg border border-[#2563eb] bg-[#3b82f6]"
+                      className="mx-2 mt-2 mb-1 rounded-lg border border-transparent px-4 py-2.5 text-sm text-gray-800 cursor-pointer transition-colors hover:bg-gray-100"
                       onClick={(e) => {
                         e.stopPropagation();
+                        setInvoiceInfoData(getProjectInvoiceInfoDefaults(project));
                         setShowMoreDropdown(false);
                         setShowProjectInvoiceInfo(true);
                       }}
@@ -1160,7 +2004,7 @@ export default function ProjectDetailPage() {
 
                     {/* Mark as Inactive */}
                     <div
-                      className="px-4 py-2.5 text-sm text-gray-800 cursor-pointer hover:bg-[#156372] hover:text-white transition-colors"
+                      className="mx-2 mb-1 rounded-lg border border-transparent px-4 py-2.5 text-sm text-gray-800 cursor-pointer transition-colors hover:bg-gray-100"
                       onClick={async (e) => {
                         e.stopPropagation();
                         setShowMoreDropdown(false);
@@ -1180,7 +2024,7 @@ export default function ProjectDetailPage() {
 
                     {/* Mark as Completed */}
                     <div
-                      className="px-4 py-2.5 text-sm text-gray-800 cursor-pointer hover:bg-[#156372] hover:text-white transition-colors"
+                      className="mx-2 mb-1 rounded-lg border border-transparent px-4 py-2.5 text-sm text-gray-800 cursor-pointer transition-colors hover:bg-gray-100"
                       onClick={async (e) => {
                         e.stopPropagation();
                         setShowMoreDropdown(false);
@@ -1200,7 +2044,7 @@ export default function ProjectDetailPage() {
 
                     {/* Clone */}
                     <div
-                      className="px-4 py-2.5 text-sm text-gray-800 cursor-pointer hover:bg-[#156372] hover:text-white transition-colors"
+                      className="mx-2 mb-1 rounded-lg border border-transparent px-4 py-2.5 text-sm text-gray-800 cursor-pointer transition-colors hover:bg-gray-100"
                       onClick={async (e) => {
                         e.stopPropagation();
                         setShowMoreDropdown(false);
@@ -1240,7 +2084,9 @@ export default function ProjectDetailPage() {
                             clonedProjectData.tasks = project.tasks.map(task => ({
                               taskName: task.taskName || '',
                               description: task.description || '',
+                              ratePerHour: task.ratePerHour || task.rate || task.hourlyRate || '',
                               billable: task.billable !== undefined ? task.billable : true,
+                              active: task.active !== false,
                               budgetHours: task.budgetHours || '',
                             }));
                           }
@@ -1271,7 +2117,7 @@ export default function ProjectDetailPage() {
 
                     {/* Add Project Task */}
                     <div
-                      className="px-4 py-2.5 text-sm text-gray-800 cursor-pointer hover:bg-[#156372] hover:text-white transition-colors"
+                      className="mx-2 mb-1 rounded-lg border border-transparent px-4 py-2.5 text-sm text-gray-800 cursor-pointer transition-colors hover:bg-gray-100"
                       onClick={(e) => {
                         e.stopPropagation();
                         setShowMoreDropdown(false);
@@ -1283,26 +2129,20 @@ export default function ProjectDetailPage() {
 
                     {/* Add User */}
                     <div
-                      onMouseEnter={() => setHoveredMoreOption('Add User')}
-                      onMouseLeave={() => setHoveredMoreOption(null)}
                       onClick={() => {
                         setShowMoreDropdown(false);
-                        setShowAddUserModal(true);
+                        openAddUsersModal();
                       }}
-                      style={{
-                        padding: "10px 16px",
-                        fontSize: "14px",
-                        color: hoveredMoreOption === 'Add User' ? "white" : "#1f2937",
-                        cursor: "pointer",
-                        backgroundColor: hoveredMoreOption === 'Add User' ? "#156372" : "transparent"
-                      }}
+                      className="mx-2 mb-1 rounded-lg border border-transparent px-4 py-2.5 text-sm text-gray-800 cursor-pointer transition-colors"
                     >
                       Add User
                     </div>
 
+                    <div className="mx-3 my-1 border-t border-gray-200" />
+
                     {/* Delete */}
                     <div
-                      className="px-4 py-2.5 text-sm text-gray-800 cursor-pointer hover:bg-[#ef4444] hover:text-white transition-colors"
+                      className="mx-2 mb-2 rounded-lg border border-transparent px-4 py-2.5 text-sm text-red-600 cursor-pointer transition-colors hover:bg-red-50 hover:text-red-700"
                       onClick={(e) => {
                         e.stopPropagation();
                         setShowMoreDropdown(false);
@@ -1373,118 +2213,126 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      <div style={{ padding: "20px", width: "100%", maxWidth: "100%", boxSizing: "border-box" }}>
+      <div style={{ padding: "20px 48px 20px 0", width: "100%", maxWidth: "100%", boxSizing: "border-box" }}>
         {showCommentsPanel ? (
-          <div style={{ backgroundColor: "#fff", borderRadius: "6px", border: "1px solid #e5e7eb", padding: "20px" }}>
-            <div style={{ border: "1px solid #e5e7eb", borderRadius: "6px", overflow: "hidden", marginBottom: "16px" }}>
-              <div style={{ display: "flex", gap: "10px", padding: "8px 10px", borderBottom: "1px solid #e5e7eb", backgroundColor: "#f8fafc" }}>
+          <div className="w-full max-w-[920px]">
+            <div className="mb-10 bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+              <div className="flex gap-4 p-3 bg-gray-50/80 border-b border-gray-200">
                 <button
                   type="button"
-                  onClick={() => setIsBold((prev) => !prev)}
-                  style={{
-                    border: "none",
-                    background: "transparent",
-                    fontWeight: "700",
-                    fontSize: "12px",
-                    color: isBold ? "#111827" : "#6b7280",
-                    cursor: "pointer"
-                  }}
+                  className={`p-1.5 rounded-[7px] cursor-pointer transition-all flex items-center justify-center ${isBold ? "text-gray-800 bg-white border border-[#cfd5e3] shadow-sm" : "text-gray-500 border border-transparent hover:bg-gray-100"}`}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => applyCommentFormat("bold")}
+                  title="Bold"
                 >
-                  B
+                  <Bold size={15} />
                 </button>
                 <button
                   type="button"
-                  onClick={() => setIsItalic((prev) => !prev)}
-                  style={{
-                    border: "none",
-                    background: "transparent",
-                    fontStyle: "italic",
-                    fontSize: "12px",
-                    color: isItalic ? "#111827" : "#6b7280",
-                    cursor: "pointer"
-                  }}
+                  className={`p-1.5 rounded-[7px] cursor-pointer transition-all flex items-center justify-center ${isItalic ? "text-gray-800 bg-white border border-[#cfd5e3] shadow-sm" : "text-gray-500 border border-transparent hover:bg-gray-100"}`}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => applyCommentFormat("italic")}
+                  title="Italic"
                 >
-                  I
+                  <Italic size={15} />
                 </button>
                 <button
                   type="button"
-                  onClick={() => setIsUnderline((prev) => !prev)}
-                  style={{
-                    border: "none",
-                    background: "transparent",
-                    textDecoration: "underline",
-                    fontSize: "12px",
-                    color: isUnderline ? "#111827" : "#6b7280",
-                    cursor: "pointer"
-                  }}
+                  className={`p-1.5 rounded-[7px] cursor-pointer transition-all flex items-center justify-center ${isUnderline ? "text-gray-800 bg-white border border-[#cfd5e3] shadow-sm" : "text-gray-500 border border-transparent hover:bg-gray-100"}`}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => applyCommentFormat("underline")}
+                  title="Underline"
                 >
-                  U
+                  <Underline size={15} />
                 </button>
               </div>
-              <textarea
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                placeholder="Add a comment..."
-                style={{
-                  width: "100%",
-                  minHeight: "80px",
-                  padding: "10px",
-                  border: "none",
-                  outline: "none",
-                  resize: "vertical",
-                  fontSize: "13px",
-                  fontWeight: isBold ? "600" : "400",
-                  fontStyle: isItalic ? "italic" : "normal",
-                  textDecoration: isUnderline ? "underline" : "none",
-                  color: "#111827"
-                }}
-              />
-              <div style={{ padding: "8px 10px", borderTop: "1px solid #e5e7eb" }}>
+              <div className="p-0">
+                <div className="relative">
+                  {isEditorEmpty && (
+                    <div className="pointer-events-none absolute left-5 top-4 text-sm text-gray-400">
+                      Add a comment...
+                    </div>
+                  )}
+                  <div
+                  ref={commentEditorRef}
+                  id="comment-textarea"
+                  contentEditable
+                  suppressContentEditableWarning
+                  dir="ltr"
+                  className="min-h-40 w-full px-5 py-4 text-sm text-gray-700 outline-none whitespace-pre-wrap leading-relaxed border-none"
+                  onInput={syncCommentEditorState}
+                  onMouseUp={syncCommentEditorState}
+                  onKeyUp={syncCommentEditorState}
+                  onFocus={syncCommentEditorState}
+                  style={{ textAlign: "left", direction: "ltr" }}
+                />
+                </div>
+              </div>
+              <div className="border-t border-gray-200 px-5 py-4">
                 <button
                   type="button"
+                  className="px-5 py-2 bg-[#156372] text-white rounded text-[13px] font-bold cursor-pointer hover:opacity-90 active:scale-95 transition-all shadow-sm border-none"
                   onClick={handleAddComment}
-                  style={{
-                    padding: "6px 10px",
-                    border: "1px solid #d1d5db",
-                    borderRadius: "4px",
-                    backgroundColor: "#fff",
-                    color: "#374151",
-                    fontSize: "12px",
-                    cursor: "pointer"
-                  }}
                 >
                   Add Comment
                 </button>
               </div>
             </div>
 
-            <div style={{ fontSize: "12px", fontWeight: "600", color: "#6b7280", marginBottom: "8px" }}>
-              ALL COMMENTS
+            <div className="flex items-center gap-4 mb-8">
+              <div className="flex items-center gap-1.5">
+                <h3 className="text-[11px] font-bold text-gray-600 uppercase tracking-[0.2em] whitespace-nowrap">ALL COMMENTS</h3>
+                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-500 px-1.5 text-[11px] font-bold leading-none text-white">
+                  {comments.length}
+                </span>
+              </div>
             </div>
-            <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "12px" }}>
-              {comments.length === 0 ? (
-                <div style={{ fontSize: "12px", color: "#6b7280", textAlign: "center", padding: "24px 0" }}>
-                  No comments yet.
-                </div>
-              ) : (
-                comments.map((comment) => (
-                  <div key={comment.id} style={{ padding: "10px 0", borderBottom: "1px solid #f1f5f9" }}>
-                    <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "4px" }}>
-                      {new Date(comment.createdAt).toLocaleString()}
+
+            {comments.length === 0 ? (
+              <div className="text-center py-20 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
+                <p className="text-sm text-gray-400 font-medium italic">No comments yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-5 pb-20 pr-6">
+                {comments.map((comment) => (
+                  <div key={comment.id} className="group flex items-start gap-3">
+                    <div className="mt-0.5 h-6 w-6 shrink-0 rounded-full border border-[#cfdaf0] bg-white text-[11px] font-semibold text-[#6b7a90] flex items-center justify-center shadow-sm">
+                      {getCommentAuthorInitial(comment)}
                     </div>
-                    <div style={{
-                      fontSize: "13px",
-                      color: "#111827",
-                      fontWeight: comment.bold ? "600" : "400",
-                      fontStyle: comment.italic ? "italic" : "normal",
-                      textDecoration: comment.underline ? "underline" : "none"
-                    }}>
-                      {comment.text}
+                    <div className="flex-1">
+                      <div className="mb-2 flex items-center gap-2 text-[12px]">
+                        <span className="font-semibold text-[#111827]">{getCommentAuthorName(comment)}</span>
+                        <span className="text-[#94a3b8]">•</span>
+                        <span className="text-[#64748b]">
+                          {new Date(comment.createdAt).toLocaleString("en-GB", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit"
+                          })}
+                        </span>
+                      </div>
+                      <div className="rounded-lg bg-[#f8fafc] px-4 py-3 shadow-sm border border-[#eef2f7]">
+                        <div className="flex items-start justify-between gap-4">
+                          <div
+                            className="text-[15px] leading-relaxed text-[#156372] whitespace-pre-wrap font-semibold flex-1"
+                            dangerouslySetInnerHTML={{ __html: commentMarkupToHtml(comment.content || comment.text || "") }}
+                          />
+                          <button
+                            className="mt-0.5 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all cursor-pointer border-none bg-transparent opacity-0 group-hover:opacity-100"
+                            onClick={() => openDeleteCommentModal(comment)}
+                            title="Delete comment"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
         <>
@@ -1937,7 +2785,7 @@ export default function ProjectDetailPage() {
                     Users
                   </h3>
                   <button
-                    onClick={() => setShowAddUserModal(true)}
+                    onClick={openAddUsersModal}
                     style={{
                       padding: "6px 12px",
                       border: "none",
@@ -1978,8 +2826,15 @@ export default function ProjectDetailPage() {
                     {project.users && project.users.length > 0 ? (
                       project.users.map((user, index) => {
                         const userHours = calculateUserHours(user.email || user.name);
+                        const userKey = String(user?._id || user?.id || user?.email || user?.name || index);
+                        const showRemove = hoveredUserKey === userKey;
                         return (
-                          <tr key={index} style={{ borderBottom: "1px solid #e5e7eb" }}>
+                          <tr
+                            key={userKey}
+                            style={{ borderBottom: "1px solid #e5e7eb" }}
+                            onMouseEnter={() => setHoveredUserKey(userKey)}
+                            onMouseLeave={() => setHoveredUserKey((current) => (current === userKey ? null : current))}
+                          >
                             <td style={{ padding: "12px", fontSize: "14px", color: "#333" }}>
                               <div>
                                 <div style={{ fontWeight: "500" }}>{user.name || user.email}</div>
@@ -1991,7 +2846,25 @@ export default function ProjectDetailPage() {
                               {formatMoney(user.costPerHour || user.rate || 0)}
                             </td>
                             <td style={{ padding: "12px", fontSize: "14px", color: "#333" }}>
-                              {user.role || "Admin"}
+                              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                <span>{user.role || "Admin"}</span>
+                                {showRemove && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveUserClick(user)}
+                                    style={{
+                                      border: "none",
+                                      background: "transparent",
+                                      color: "#2563eb",
+                                      cursor: "pointer",
+                                      fontSize: "12px",
+                                      padding: 0
+                                    }}
+                                  >
+                                    Remove
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         );
@@ -2073,17 +2946,65 @@ export default function ProjectDetailPage() {
                     <tbody>
                       {project.tasks.map((task, index) => {
                         const taskHours = calculateTaskHours(task.taskName);
+                        const taskKey = getTaskKey(task, index);
+                        const showTaskActions = hoveredTaskKey === taskKey;
+                        const isTaskActive = task.active !== false;
                         return (
-                          <tr key={index} style={{ borderBottom: "1px solid #e5e7eb" }}>
-                            <td style={{ padding: "12px", fontSize: "14px", color: "#333" }}>{task.taskName}</td>
+                          <tr
+                            key={taskKey}
+                            style={{
+                              borderBottom: "1px solid #e5e7eb",
+                              backgroundColor: isTaskActive ? "transparent" : "#f8fafc",
+                              opacity: isTaskActive ? 1 : 0.72
+                            }}
+                            onMouseEnter={() => setHoveredTaskKey(taskKey)}
+                            onMouseLeave={() => setHoveredTaskKey((current) => (current === taskKey ? null : current))}
+                          >
+                            <td style={{ padding: "12px", fontSize: "14px", color: "#333" }}>
+                              <div>
+                                <div style={{ fontWeight: "500", color: isTaskActive ? "#111827" : "#6b7280" }}>{task.taskName}</div>
+                                {!isTaskActive && (
+                                  <div style={{ fontSize: "12px", color: "#94a3b8" }}>Inactive</div>
+                                )}
+                              </div>
+                            </td>
                             <td style={{ padding: "12px", fontSize: "14px", color: "#333" }}>{taskHours.logged}</td>
                             <td style={{ padding: "12px", fontSize: "14px", color: "#333" }}>{taskHours.billed}</td>
                             <td style={{ padding: "12px", fontSize: "14px", color: "#333" }}>{taskHours.unbilled}</td>
                             <td style={{ padding: "12px", fontSize: "14px", color: "#333" }}>
-                              {baseCurrencyCode}{task.rate || task.hourlyRate || "0.00"}
+                              {baseCurrencyCode}{task.ratePerHour || task.rate || task.hourlyRate || "0.00"}
                             </td>
                             <td style={{ padding: "12px", fontSize: "14px", color: "#333" }}>
-                              {task.billable ? "Billable" : "Non-Billable"}
+                              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                <span>{task.billable ? "Billable" : "Non-Billable"}</span>
+                                {showTaskActions && (
+                                  <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "8px", fontSize: "12px", marginLeft: "12px", width: "100%" }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => startTaskTimer(task)}
+                                      style={{ border: "none", background: "transparent", color: "#111827", cursor: "pointer", padding: 0, paddingRight: "8px", borderRight: "1px solid #d1d5db", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                                    >
+                                      <Clock size={14} />
+                                      Start
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleTaskActive(task, index)}
+                                      style={{ border: "none", background: "transparent", color: "#2563eb", cursor: "pointer", padding: 0, paddingLeft: "8px", paddingRight: "8px", borderRight: "1px solid #d1d5db" }}
+                                    >
+                                      {isTaskActive ? "Mark as Inactive" : "Mark as Active"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => promptDeleteTask(task, index)}
+                                      style={{ border: "none", background: "transparent", color: "#ef4444", cursor: "pointer", padding: 0, paddingLeft: "8px", display: "inline-flex", alignItems: "center" }}
+                                      aria-label="Delete task"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         );
@@ -3341,116 +4262,209 @@ export default function ProjectDetailPage() {
             backgroundColor: "rgba(17, 24, 39, 0.55)",
             zIndex: 2185,
             display: "flex",
-            alignItems: "center",
+            alignItems: "flex-start",
             justifyContent: "center",
-            padding: "20px"
+            padding: "28px 20px 20px"
           }}
         >
           <div
             style={{
               width: "100%",
-              maxWidth: "700px",
+              maxWidth: "560px",
               backgroundColor: "#fff",
-              borderRadius: "10px",
-              overflow: "hidden",
+              borderRadius: "8px",
+              overflow: "visible",
               boxShadow: "0 24px 48px rgba(15, 23, 42, 0.25)",
               border: "1px solid #e5e7eb"
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", borderBottom: "1px solid #e5e7eb" }}>
-              <h2 style={{ margin: 0, fontSize: "34px", fontWeight: "500", color: "#111827" }}>Add users</h2>
+              <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "500", color: "#111827" }}>Add users</h2>
               <button
                 type="button"
-                onClick={() => setShowAddUserModal(false)}
-                style={{ width: "30px", height: "30px", borderRadius: "6px", border: "2px solid #3b82f6", backgroundColor: "#fff", color: "#ef4444", cursor: "pointer", fontSize: "20px", lineHeight: 1 }}
+                onClick={closeAddUsersModal}
+                style={{ width: "30px", height: "30px", borderRadius: "6px", border: "none", backgroundColor: "#fff", color: "#ef4444", cursor: "pointer", fontSize: "18px", lineHeight: 1 }}
               >
                 x
               </button>
             </div>
 
-            <div style={{ padding: "20px" }}>
-              <div style={{ border: "1px solid #e5e7eb", borderRadius: "8px", overflow: "hidden" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "60px 1.3fr 1.3fr", backgroundColor: "#f8fafc", borderBottom: "1px solid #e5e7eb" }}>
-                  <div style={{ padding: "10px", fontSize: "12px", fontWeight: "600", color: "#667085", textTransform: "uppercase" }}>S.NO</div>
-                  <div style={{ padding: "10px", fontSize: "12px", fontWeight: "600", color: "#667085", textTransform: "uppercase", borderLeft: "1px solid #e5e7eb" }}>USER</div>
-                  <div style={{ padding: "10px", fontSize: "12px", fontWeight: "600", color: "#667085", textTransform: "uppercase", borderLeft: "1px solid #e5e7eb" }}>COST PER HOUR ?</div>
-                </div>
-
-                {addUserRows.map((row, idx) => (
-                  <div key={row.id} style={{ display: "grid", gridTemplateColumns: "60px 1.3fr 1.3fr", borderBottom: idx === addUserRows.length - 1 ? "none" : "1px solid #e5e7eb" }}>
-                    <div style={{ padding: "10px", fontSize: "14px", color: "#374151", display: "flex", alignItems: "center", justifyContent: "center" }}>{idx + 1}</div>
-                    <div style={{ padding: "8px", borderLeft: "1px solid #e5e7eb" }}>
-                      <select
-                        value={row.user}
-                        onChange={(e) => setAddUserRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, user: e.target.value } : r)))}
-                        style={{ width: "100%", height: "40px", border: "none", fontSize: "14px", color: row.user ? "#111827" : "#98a2b3", backgroundColor: "transparent" }}
-                      >
-                        <option value="">Select user</option>
-                        {(project?.users || []).map((u, i) => (
-                          <option key={u?._id || u?.id || u?.email || i} value={u?.name || u?.email || ''}>{u?.name || u?.email || 'User'}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div style={{ padding: "8px", borderLeft: "1px solid #e5e7eb", display: "flex", gap: "10px", alignItems: "center" }}>
-                      <span style={{ fontSize: "14px", color: "#1f2937" }}>{baseCurrencyCode}</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={row.costPerHour}
-                        onChange={(e) => setAddUserRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, costPerHour: e.target.value } : r)))}
-                        placeholder="Cost Per Hour"
-                        style={{ width: "100%", height: "34px", border: "none", outline: "none", fontSize: "14px", color: "#374151" }}
-                      />
-                    </div>
+            <div style={{ padding: "18px 20px 20px", position: "relative" }}>
+              <div ref={addUsersDropdownRef} style={{ position: "relative" }}>
+                <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", color: "#ef4444" }}>Select Users*</label>
+                <button
+                  type="button"
+                  onClick={() => setAddUsersDropdownOpen((prev) => !prev)}
+                  style={{
+                    width: "100%",
+                    minHeight: "38px",
+                    border: `1px solid ${addUsersDropdownOpen ? "#3b82f6" : "#d1d5db"}`,
+                    borderRadius: "6px",
+                    backgroundColor: "#fff",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "10px",
+                    padding: "8px 12px",
+                    cursor: "pointer",
+                    boxShadow: addUsersDropdownOpen ? "0 0 0 3px rgba(59, 130, 246, 0.12)" : "none"
+                  }}
+                >
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center", flex: 1, minWidth: 0 }}>
+                    {selectedUsersToAdd.length ? (
+                      selectedUsersToAdd.map((user) => (
+                        <span
+                          key={user.value}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            maxWidth: "100%",
+                            padding: "5px 10px",
+                            borderRadius: "6px",
+                            border: "1px solid #cbd5e1",
+                            backgroundColor: "#f8fafc",
+                            color: "#334155",
+                            fontSize: "13px"
+                          }}
+                        >
+                          <span style={{ maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.label}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeSelectedUser(user.value);
+                            }}
+                            style={{
+                              border: "none",
+                              background: "transparent",
+                              color: "#94a3b8",
+                              cursor: "pointer",
+                              padding: 0,
+                              display: "inline-flex",
+                              alignItems: "center"
+                            }}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))
+                    ) : (
+                      <span style={{ color: "#94a3b8", fontSize: "14px" }}>Select Users</span>
+                    )}
                   </div>
-                ))}
-              </div>
+                  <ChevronDown size={16} color="#94a3b8" style={{ flexShrink: 0, transform: addUsersDropdownOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s ease" }} />
+                </button>
 
-              <button
-                type="button"
-                onClick={() => setAddUserRows((prev) => [...prev, { id: Date.now(), user: '', costPerHour: '' }])}
-                style={{ marginTop: "14px", border: "none", backgroundColor: "#eef2ff", color: "#374151", borderRadius: "6px", padding: "8px 12px", fontSize: "14px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px" }}
-              >
-                <span style={{ width: "16px", height: "16px", borderRadius: "50%", backgroundColor: "#3b82f6", color: "white", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "12px" }}>+</span>
-                Add Another user
-              </button>
+                {addUsersDropdownOpen && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 8px)",
+                      left: 0,
+                      right: 0,
+                      zIndex: 40,
+                      backgroundColor: "#fff",
+                      border: "1px solid #cbd5e1",
+                      borderRadius: "8px",
+                      boxShadow: "0 12px 24px rgba(15, 23, 42, 0.12)",
+                      overflow: "hidden"
+                    }}
+                  >
+                    <div style={{ padding: "10px", borderBottom: "1px solid #e5e7eb" }}>
+                      <div style={{ position: "relative" }}>
+                        <Search size={15} color="#94a3b8" style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+                        <input
+                          type="text"
+                          value={addUsersSearch}
+                          onChange={(e) => setAddUsersSearch(e.target.value)}
+                          placeholder="Search"
+                          style={{
+                            width: "100%",
+                            height: "36px",
+                            border: "1px solid #cbd5e1",
+                            borderRadius: "6px",
+                            padding: "0 12px 0 32px",
+                            fontSize: "14px",
+                            outline: "none",
+                            color: "#111827"
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ maxHeight: "210px", overflowY: "auto" }}>
+                      {filteredAvailableUsers.length ? (
+                        filteredAvailableUsers.map((user) => {
+                          const isSelected = selectedUsersToAdd.some((item) => item.value === user.value);
+                          return (
+                            <button
+                              key={user.value}
+                              type="button"
+                              onClick={() => toggleSelectedUser(user)}
+                              style={{
+                                width: "100%",
+                                border: "none",
+                                backgroundColor: isSelected ? "#3b82f6" : "#fff",
+                                color: isSelected ? "#fff" : "#334155",
+                                padding: "10px 12px",
+                                textAlign: "left",
+                                cursor: "pointer",
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                fontSize: "14px"
+                              }}
+                            >
+                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.label}</span>
+                              {isSelected ? <Check size={16} /> : null}
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <div style={{ padding: "12px", color: "#94a3b8", fontSize: "14px" }}>No users found</div>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        closeAddUsersModal();
+                        navigate("/settings/users");
+                      }}
+                      style={{
+                        width: "100%",
+                        border: "none",
+                        borderTop: "1px solid #e5e7eb",
+                        backgroundColor: "#fff",
+                        padding: "10px 12px",
+                        color: "#156372",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        fontSize: "14px"
+                      }}
+                    >
+                      <Plus size={14} />
+                      Add new user
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
-            <div style={{ display: "flex", gap: "8px", padding: "14px 20px 20px", borderTop: "1px solid #e5e7eb" }}>
+            <div style={{ display: "flex", gap: "8px", padding: "12px 20px 16px", borderTop: "1px solid #e5e7eb" }}>
               <button
                 type="button"
-                onClick={async () => {
-                  const validRows = addUserRows.filter((r) => r.user);
-                  if (!validRows.length) {
-                    toast.error('Please select at least one user');
-                    return;
-                  }
-                  const existingUsers = Array.isArray(project?.users) ? project.users : [];
-                  const addedUsers = validRows.map((r) => ({ name: r.user, email: r.user, rate: r.costPerHour || '' }));
-                  const updatedUsers = [...existingUsers, ...addedUsers];
-                  try {
-                    await projectsAPI.update(projectId, { assignedTo: updatedUsers, users: updatedUsers });
-                    setProject({ ...project, users: updatedUsers, assignedTo: updatedUsers });
-                    window.dispatchEvent(new Event('projectUpdated'));
-                    toast.success('Users added');
-                    setShowAddUserModal(false);
-                    setAddUserRows([{ id: 1, user: '', costPerHour: '' }]);
-                  } catch (error) {
-                    console.error('Error adding users:', error);
-                    toast.error('Failed to add users: ' + (error.message || 'Unknown error'));
-                  }
-                }}
-                style={{ border: "none", backgroundColor: "#22c55e", color: "white", borderRadius: "6px", padding: "8px 16px", fontSize: "15px", cursor: "pointer" }}
+                onClick={handleSaveUsers}
+                style={{ border: "none", backgroundColor: "#156372", color: "white", borderRadius: "6px", padding: "8px 16px", fontSize: "15px", cursor: "pointer" }}
               >
                 Add users
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setShowAddUserModal(false);
-                  setAddUserRows([{ id: 1, user: '', costPerHour: '' }]);
-                }}
+                onClick={closeAddUsersModal}
                 style={{ border: "1px solid #d1d5db", backgroundColor: "#f3f4f6", color: "#111827", borderRadius: "6px", padding: "8px 16px", fontSize: "15px", cursor: "pointer" }}
               >
                 Cancel
@@ -3474,24 +4488,24 @@ export default function ProjectDetailPage() {
             backgroundColor: "rgba(17, 24, 39, 0.55)",
             zIndex: 2190,
             display: "flex",
-            alignItems: "center",
+            alignItems: "flex-start",
             justifyContent: "center",
-            padding: "20px"
+            padding: "28px 20px 20px"
           }}
         >
           <div
             style={{
               width: "100%",
-              maxWidth: "640px",
+              maxWidth: "440px",
               backgroundColor: "#fff",
-              borderRadius: "10px",
+              borderRadius: "8px",
               overflow: "hidden",
               boxShadow: "0 24px 48px rgba(15, 23, 42, 0.25)",
               border: "1px solid #e5e7eb"
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", borderBottom: "1px solid #e5e7eb" }}>
-              <h2 style={{ margin: 0, fontSize: "31px", fontWeight: "500", color: "#111827" }}>Add Project Task</h2>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: "1px solid #e5e7eb" }}>
+              <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "500", color: "#111827" }}>Add Project Task</h2>
               <button
                 type="button"
                 onClick={() => setShowAddTaskModal(false)}
@@ -3499,11 +4513,11 @@ export default function ProjectDetailPage() {
                   width: "30px",
                   height: "30px",
                   borderRadius: "6px",
-                  border: "2px solid #3b82f6",
+                  border: "none",
                   backgroundColor: "#fff",
                   color: "#ef4444",
                   cursor: "pointer",
-                  fontSize: "20px",
+                  fontSize: "18px",
                   lineHeight: 1
                 }}
               >
@@ -3511,28 +4525,45 @@ export default function ProjectDetailPage() {
               </button>
             </div>
 
-            <div style={{ padding: "24px 20px 20px" }}>
-              <div style={{ marginBottom: "16px" }}>
+            <div style={{ padding: "16px 18px 12px" }}>
+              <div style={{ marginBottom: "10px" }}>
                 <label style={{ display: "block", fontSize: "15px", color: "#ef4444", marginBottom: "8px" }}>Task Name*</label>
                 <input
                   type="text"
                   value={newTaskName}
                   onChange={(e) => setNewTaskName(e.target.value)}
-                  style={{ width: "100%", height: "42px", border: "1px solid #d1d5db", borderRadius: "7px", padding: "0 12px", fontSize: "14px", color: "#111827", backgroundColor: "#fff" }}
+                  style={{ width: "100%", height: "38px", border: "1px solid #d1d5db", borderRadius: "7px", padding: "0 12px", fontSize: "14px", color: "#111827", backgroundColor: "#fff" }}
                 />
               </div>
 
-              <div style={{ marginBottom: "12px" }}>
+              {showTaskRatePerHour && (
+                <div style={{ marginBottom: "10px" }}>
+                  <label style={{ display: "block", fontSize: "15px", color: "#374151", marginBottom: "8px" }}>Rate Per Hour</label>
+                  <div style={{ display: "flex", alignItems: "stretch", border: "1px solid #d1d5db", borderRadius: "7px", overflow: "hidden", backgroundColor: "#fff" }}>
+                    <span style={{ padding: "0 12px", display: "inline-flex", alignItems: "center", borderRight: "1px solid #d1d5db", color: "#374151", fontSize: "14px", backgroundColor: "#f8fafc" }}>{baseCurrencyCode}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={newTaskRatePerHour}
+                      onChange={(e) => setNewTaskRatePerHour(e.target.value)}
+                      style={{ flex: 1, height: "38px", border: "none", outline: "none", padding: "0 12px", fontSize: "14px", color: "#111827", backgroundColor: "transparent" }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div style={{ marginBottom: "8px" }}>
                 <label style={{ display: "block", fontSize: "15px", color: "#374151", marginBottom: "8px" }}>Description</label>
                 <textarea
                   value={newTaskDescription}
                   onChange={(e) => setNewTaskDescription(e.target.value)}
-                  rows={3}
-                  style={{ width: "100%", border: "1px solid #d1d5db", borderRadius: "7px", padding: "10px 12px", fontSize: "14px", color: "#111827", backgroundColor: "#fff", resize: "vertical" }}
+                  rows={2}
+                  style={{ width: "100%", border: "1px solid #d1d5db", borderRadius: "7px", padding: "8px 12px", fontSize: "14px", color: "#111827", backgroundColor: "#fff", resize: "vertical", minHeight: "62px" }}
                 />
               </div>
 
-              <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "15px", color: "#374151" }}>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "14px", color: "#374151", marginTop: "2px" }}>
                 <input
                   type="checkbox"
                   checked={newTaskBillable}
@@ -3544,7 +4575,7 @@ export default function ProjectDetailPage() {
               </label>
             </div>
 
-            <div style={{ display: "flex", gap: "8px", padding: "14px 20px 20px", borderTop: "1px solid #e5e7eb" }}>
+            <div style={{ display: "flex", gap: "8px", padding: "12px 18px 16px", borderTop: "1px solid #e5e7eb" }}>
               <button
                 type="button"
                 onClick={async () => {
@@ -3554,9 +4585,11 @@ export default function ProjectDetailPage() {
                   }
                   const newTask = {
                     taskName: newTaskName.trim(),
+                    ratePerHour: showTaskRatePerHour ? newTaskRatePerHour.trim() : "",
                     description: newTaskDescription.trim(),
                     billable: newTaskBillable,
-                    budgetHours: ''
+                    budgetHours: '',
+                    active: true
                   };
                   const updatedTasks = [...(project?.tasks || []), newTask];
                   try {
@@ -3570,11 +4603,12 @@ export default function ProjectDetailPage() {
                     return;
                   }
                   setNewTaskName('');
+                  setNewTaskRatePerHour('');
                   setNewTaskDescription('');
                   setNewTaskBillable(true);
                   setShowAddTaskModal(false);
                 }}
-                style={{ border: "none", backgroundColor: "#22c55e", color: "white", borderRadius: "6px", padding: "8px 16px", fontSize: "15px", cursor: "pointer" }}
+                style={{ border: "none", backgroundColor: "#156372", color: "white", borderRadius: "6px", padding: "8px 16px", fontSize: "15px", cursor: "pointer" }}
               >
                 Save
               </button>
@@ -3583,6 +4617,7 @@ export default function ProjectDetailPage() {
                 onClick={() => {
                   setShowAddTaskModal(false);
                   setNewTaskName('');
+                  setNewTaskRatePerHour('');
                   setNewTaskDescription('');
                   setNewTaskBillable(true);
                 }}
@@ -3609,24 +4644,24 @@ export default function ProjectDetailPage() {
             backgroundColor: "rgba(17, 24, 39, 0.55)",
             zIndex: 2200,
             display: "flex",
-            alignItems: "center",
+            alignItems: "flex-start",
             justifyContent: "center",
-            padding: "20px"
+            padding: "28px 20px 20px"
           }}
         >
           <div
             style={{
               width: "100%",
-              maxWidth: "640px",
+              maxWidth: "480px",
               backgroundColor: "#fff",
               borderRadius: "8px",
-              overflow: "hidden",
+              overflow: "visible",
               boxShadow: "0 24px 48px rgba(15, 23, 42, 0.25)",
               border: "1px solid #e5e7eb"
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid #e5e7eb" }}>
-              <h2 style={{ margin: 0, fontSize: "31px", fontWeight: "500", color: "#111827" }}>Project Invoice Information</h2>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid #e5e7eb", overflow: "hidden", borderTopLeftRadius: "8px", borderTopRightRadius: "8px" }}>
+              <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "500", color: "#111827" }}>Project Invoice Information</h2>
               <button
                 type="button"
                 onClick={() => setShowProjectInvoiceInfo(false)}
@@ -3636,51 +4671,247 @@ export default function ProjectDetailPage() {
               </button>
             </div>
 
-            <div style={{ padding: "22px 20px 18px" }}>
+            <div style={{ padding: "22px 20px 18px", position: "relative", zIndex: 1 }}>
               <div style={{ marginBottom: "16px" }}>
                 <label style={{ display: "block", fontSize: "15px", color: "#ef4444", marginBottom: "8px" }}>How to sort data on invoice*</label>
-                <select
-                  value={invoiceInfoData.sortData}
-                  onChange={(e) => setInvoiceInfoData((prev) => ({ ...prev, sortData: e.target.value }))}
-                  style={{ width: "100%", height: "42px", border: "1px solid #d1d5db", borderRadius: "7px", padding: "0 12px", fontSize: "13px", color: "#374151", backgroundColor: "#fff" }}
-                >
-                  <option value="Single Line For The Project">Single Line For The Project</option>
-                  <option value="Task Wise">Task Wise</option>
-                </select>
-                <div style={{ fontSize: "13px", color: "#64748b", marginTop: "8px" }}>Display the entire project information as a single line item</div>
+                <div className="relative" ref={sortDataDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setSortDataDropdownOpen((prev) => !prev)}
+                    style={{ width: "100%", height: "42px", border: "1px solid #d1d5db", borderRadius: "7px", padding: "0 12px", fontSize: "13px", color: "#374151", backgroundColor: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}
+                  >
+                    <span>{invoiceInfoData.sortData || "Select a value"}</span>
+                    <ChevronDown size={14} color="#6b7280" style={{ transform: sortDataDropdownOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.15s ease" }} />
+                  </button>
+                  {sortDataDropdownOpen && (
+                    <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, backgroundColor: "#fff", border: "1px solid #d1d5db", borderRadius: "7px", boxShadow: "0 10px 24px rgba(15, 23, 42, 0.12)", zIndex: 5000, overflow: "hidden" }}>
+                      {["Single Line For The Project"].map((option) => (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => {
+                            setInvoiceInfoData((prev) => ({ ...prev, sortData: option }));
+                            setSortDataDropdownOpen(false);
+                          }}
+                          style={{ width: "100%", textAlign: "left", padding: "10px 12px", fontSize: "13px", color: "#374151", backgroundColor: invoiceInfoData.sortData === option ? "#f3f4f6" : "#fff", border: "none", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}
+                        >
+                          <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                            <span style={{ fontWeight: 600 }}>{option}</span>
+                            <span style={{ fontSize: "12px", color: "#64748b" }}>Display the entire project information as a single line item</span>
+                          </div>
+                          {invoiceInfoData.sortData === option ? <Check size={14} color="#156372" style={{ flexShrink: 0 }} /> : null}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div style={{ marginBottom: "16px" }}>
                 <label style={{ display: "block", fontSize: "15px", color: "#ef4444", marginBottom: "8px" }}>Show in item name*</label>
-                <div style={{ height: "42px", border: "1px solid #d1d5db", borderRadius: "7px", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 10px", backgroundColor: "#fff" }}>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", backgroundColor: "#f3f4f6", border: "1px solid #d1d5db", borderRadius: "6px", padding: "4px 8px", fontSize: "13px", color: "#374151" }}>
-                    {(invoiceInfoData.itemName && invoiceInfoData.itemName[0]) || "Project Name"} x
-                  </span>
-                  <ChevronDown size={14} color="#6b7280" />
+                <div className="relative" ref={itemNameDropdownRef}>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setItemNameDropdownOpen((prev) => !prev)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setItemNameDropdownOpen((prev) => !prev);
+                      }
+                    }}
+                    style={{ minHeight: "42px", border: "1px solid #d1d5db", borderRadius: "7px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", padding: "6px 10px", backgroundColor: "#fff", cursor: "pointer" }}
+                  >
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center", flex: 1 }}>
+                      {selectedItemNames.length ? selectedItemNames.map((option) => (
+                        <span
+                          key={option}
+                          style={{ display: "inline-flex", alignItems: "center", gap: "6px", backgroundColor: "#f3f4f6", border: "1px solid #d1d5db", borderRadius: "6px", padding: "4px 8px", fontSize: "13px", color: "#374151", maxWidth: "100%" }}
+                        >
+                          <span style={{ whiteSpace: "nowrap" }}>{option}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeItemNameOption(option);
+                            }}
+                            style={{ border: "none", background: "transparent", color: "#9ca3af", cursor: "pointer", display: "inline-flex", alignItems: "center", padding: 0 }}
+                            aria-label={`Remove ${option}`}
+                          >
+                            <X size={12} />
+                          </button>
+                        </span>
+                      )) : <span style={{ fontSize: "13px", color: "#9ca3af" }}>Select options</span>}
+                    </div>
+                    <ChevronDown size={14} color="#6b7280" style={{ flexShrink: 0, transform: itemNameDropdownOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.15s ease" }} />
+                  </div>
+                  {itemNameDropdownOpen && (
+                    <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, backgroundColor: "#fff", border: "1px solid #d1d5db", borderRadius: "7px", boxShadow: "0 10px 24px rgba(15, 23, 42, 0.12)", zIndex: 5000, overflow: "hidden" }}>
+                      <div style={{ padding: "8px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "34px", border: "1px solid #d1d5db", borderRadius: "6px", padding: "0 10px", backgroundColor: "#fff" }}>
+                          <Search size={14} color="#9ca3af" />
+                          <input
+                            type="text"
+                            value={itemNameSearch}
+                            onChange={(e) => setItemNameSearch(e.target.value)}
+                            placeholder="Search"
+                            style={{ border: "none", outline: "none", width: "100%", fontSize: "13px", color: "#374151", backgroundColor: "transparent" }}
+                          />
+                        </div>
+                      </div>
+                      <div style={{ maxHeight: "180px", overflowY: "auto" }}>
+                        {filteredItemNameOptions.length ? filteredItemNameOptions.map((option) => {
+                          const isSelected = selectedItemNames.includes(option);
+                          return (
+                            <button
+                              key={option}
+                              type="button"
+                              onClick={() => toggleItemNameOption(option)}
+                              style={{ width: "100%", textAlign: "left", padding: "10px 12px", fontSize: "13px", color: isSelected ? "#fff" : "#374151", backgroundColor: isSelected ? "#3b82f6" : "#fff", border: "none", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}
+                            >
+                              <span style={{ fontWeight: 500 }}>{option}</span>
+                              {isSelected ? <Check size={14} color="#fff" style={{ flexShrink: 0 }} /> : null}
+                            </button>
+                          );
+                        }) : (
+                          <div style={{ padding: "10px 12px", fontSize: "13px", color: "#6b7280" }}>No options found.</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
               <div style={{ marginBottom: "16px" }}>
                 <label style={{ display: "block", fontSize: "15px", color: "#374151", marginBottom: "8px" }}>Show in item description</label>
-                <div style={{ height: "42px", border: "1px solid #d1d5db", borderRadius: "7px", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 10px", backgroundColor: "#fff" }}>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", backgroundColor: "#f3f4f6", border: "1px solid #d1d5db", borderRadius: "6px", padding: "4px 8px", fontSize: "13px", color: "#374151" }}>
-                    {(invoiceInfoData.itemDescription && invoiceInfoData.itemDescription[0]) || "Project Description"} x
-                  </span>
-                  <ChevronDown size={14} color="#6b7280" />
+                <div className="relative" ref={itemDescriptionDropdownRef}>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setItemDescriptionDropdownOpen((prev) => !prev)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setItemDescriptionDropdownOpen((prev) => !prev);
+                      }
+                    }}
+                    style={{ minHeight: "42px", border: "1px solid #d1d5db", borderRadius: "7px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", padding: "6px 10px", backgroundColor: "#fff", cursor: "pointer" }}
+                  >
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center", flex: 1 }}>
+                      {selectedItemDescriptions.length ? selectedItemDescriptions.map((option) => (
+                        <span
+                          key={option}
+                          style={{ display: "inline-flex", alignItems: "center", gap: "6px", backgroundColor: "#f3f4f6", border: "1px solid #d1d5db", borderRadius: "6px", padding: "4px 8px", fontSize: "13px", color: "#374151", maxWidth: "100%" }}
+                        >
+                          <span style={{ whiteSpace: "nowrap" }}>{option}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeItemDescriptionOption(option);
+                            }}
+                            style={{ border: "none", background: "transparent", color: "#9ca3af", cursor: "pointer", display: "inline-flex", alignItems: "center", padding: 0 }}
+                            aria-label={`Remove ${option}`}
+                          >
+                            <X size={12} />
+                          </button>
+                        </span>
+                      )) : <span style={{ fontSize: "13px", color: "#9ca3af" }}>Select options</span>}
+                    </div>
+                    <ChevronDown size={14} color="#6b7280" style={{ flexShrink: 0, transform: itemDescriptionDropdownOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.15s ease" }} />
+                  </div>
+                  {itemDescriptionDropdownOpen && (
+                    <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, backgroundColor: "#fff", border: "1px solid #d1d5db", borderRadius: "7px", boxShadow: "0 10px 24px rgba(15, 23, 42, 0.12)", zIndex: 5000, overflow: "hidden" }}>
+                      <div style={{ padding: "8px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "34px", border: "1px solid #d1d5db", borderRadius: "6px", padding: "0 10px", backgroundColor: "#fff" }}>
+                          <Search size={14} color="#9ca3af" />
+                          <input
+                            type="text"
+                            value={itemDescriptionSearch}
+                            onChange={(e) => setItemDescriptionSearch(e.target.value)}
+                            placeholder="Search"
+                            style={{ border: "none", outline: "none", width: "100%", fontSize: "13px", color: "#374151", backgroundColor: "transparent" }}
+                          />
+                        </div>
+                      </div>
+                      <div style={{ maxHeight: "180px", overflowY: "auto" }}>
+                        {filteredItemDescriptionOptions.length ? filteredItemDescriptionOptions.map((option) => {
+                          const isSelected = selectedItemDescriptions.includes(option);
+                          return (
+                            <button
+                              key={option}
+                              type="button"
+                              onClick={() => toggleItemDescriptionOption(option)}
+                              style={{ width: "100%", textAlign: "left", padding: "10px 12px", fontSize: "13px", color: isSelected ? "#fff" : "#374151", backgroundColor: isSelected ? "#3b82f6" : "#fff", border: "none", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}
+                            >
+                              <span style={{ fontWeight: 500 }}>{option}</span>
+                              {isSelected ? <Check size={14} color="#fff" style={{ flexShrink: 0 }} /> : null}
+                            </button>
+                          );
+                        }) : (
+                          <div style={{ padding: "10px 12px", fontSize: "13px", color: "#6b7280" }}>No options found.</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
               <div style={{ marginBottom: "8px" }}>
                 <label style={{ display: "block", fontSize: "15px", color: "#374151", marginBottom: "8px" }}>Tax</label>
-                <select
-                  value={invoiceInfoData.tax || ""}
-                  onChange={(e) => setInvoiceInfoData((prev) => ({ ...prev, tax: e.target.value }))}
-                  style={{ width: "100%", height: "42px", border: "1px solid #d1d5db", borderRadius: "7px", padding: "0 12px", fontSize: "14px", color: "#374151", backgroundColor: "#fff" }}
-                >
-                  <option value="">Select a Tax</option>
-                  <option value="VAT 16%">VAT 16%</option>
-                  <option value="GST 18%">GST 18%</option>
-                </select>
+                <div className="relative" ref={taxDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setTaxDropdownOpen((prev) => !prev)}
+                    style={{ width: "100%", height: "42px", border: "1px solid #d1d5db", borderRadius: "7px", padding: "0 12px", fontSize: "13px", color: "#374151", backgroundColor: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}
+                  >
+                    <span>{selectedTaxLabel || "Select a Tax"}</span>
+                    <ChevronDown size={14} color="#6b7280" style={{ transform: taxDropdownOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.15s ease" }} />
+                  </button>
+                  {taxDropdownOpen && (
+                    <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, backgroundColor: "#fff", border: "1px solid #d1d5db", borderRadius: "7px", boxShadow: "0 10px 24px rgba(15, 23, 42, 0.12)", zIndex: 2600, overflow: "hidden" }}>
+                      <div style={{ padding: "8px", borderBottom: "1px solid #e5e7eb" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", height: "34px", border: "1px solid #d1d5db", borderRadius: "6px", padding: "0 10px", backgroundColor: "#fff" }}>
+                          <Search size={14} color="#9ca3af" />
+                          <input
+                            type="text"
+                            value={taxSearch}
+                            onChange={(e) => setTaxSearch(e.target.value)}
+                            placeholder="Search"
+                            style={{ border: "none", outline: "none", width: "100%", fontSize: "13px", color: "#374151", backgroundColor: "transparent" }}
+                          />
+                        </div>
+                      </div>
+                      <div style={{ maxHeight: "220px", overflowY: "auto" }}>
+                        {filteredTaxGroups.length ? filteredTaxGroups.map((group) => (
+                          <div key={group.label}>
+                            <div style={{ padding: "8px 12px 6px", fontSize: "11px", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280" }}>{group.label}</div>
+                            {group.options.map((option) => {
+                              const selected = selectedTaxSelection === option.value || selectedTaxLabel === option.label;
+                              return (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  onClick={() => {
+                                    setInvoiceInfoData((prev) => ({ ...prev, tax: option.value }));
+                                    setTaxDropdownOpen(false);
+                                    setTaxSearch("");
+                                  }}
+                                  style={{ width: "100%", textAlign: "left", padding: "10px 12px", fontSize: "13px", color: selected ? "#fff" : "#374151", backgroundColor: selected ? "#156372" : "#fff", border: "none", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}
+                                >
+                                  <span>{option.label}</span>
+                                  {selected ? <Check size={14} color="#fff" style={{ flexShrink: 0 }} /> : null}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )) : (
+                          <div style={{ padding: "10px 12px", fontSize: "13px", color: "#6b7280" }}>No taxes found</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <div style={{ fontSize: "12px", color: "#667085", marginTop: "6px", lineHeight: 1.4 }}>
                   Note: If no tax is selected, the tax rate that is configured for this customer, or your organization's default tax rate will be used.
                 </div>
@@ -3697,14 +4928,35 @@ export default function ProjectDetailPage() {
               </label>
             </div>
 
-            <div style={{ display: "flex", gap: "8px", padding: "14px 20px 20px", borderTop: "1px solid #e5e7eb" }}>
+            <div style={{ display: "flex", gap: "8px", padding: "12px 20px 16px", borderTop: "1px solid #e5e7eb" }}>
               <button
                 type="button"
-                onClick={() => {
-                  setShowProjectInvoiceInfo(false);
-                  toast.success("Project invoice preferences saved");
+                onClick={async () => {
+                  if (!projectId) return;
+                  const itemName = Array.isArray(invoiceInfoData.itemName) ? invoiceInfoData.itemName.filter(Boolean) : [];
+                  if (!itemName.length) {
+                    toast.error("Select at least one item name field.");
+                    return;
+                  }
+                  const resolvedTaxId = selectedTaxRecord ? getTaxId(selectedTaxRecord) : String(invoiceInfoData.tax || "").trim();
+                  const invoicePreferences = {
+                    sortData: invoiceInfoData.sortData,
+                    itemName,
+                    itemDescription: Array.isArray(invoiceInfoData.itemDescription) ? invoiceInfoData.itemDescription : ["Project Description"],
+                    tax: resolvedTaxId,
+                    includeUnbilledExpenses: !!invoiceInfoData.includeUnbilledExpenses,
+                  };
+                  try {
+                    await projectsAPI.update(projectId, { invoicePreferences });
+                    setProject((prev) => prev ? { ...prev, invoicePreferences } : prev);
+                    setShowProjectInvoiceInfo(false);
+                    toast.success("Invoice preferences saved successfully");
+                  } catch (error) {
+                    console.error("Error saving project invoice preferences:", error);
+                    toast.error("Failed to save project invoice preferences: " + (error.message || "Unknown error"));
+                  }
                 }}
-                style={{ border: "none", backgroundColor: "#22c55e", color: "white", borderRadius: "6px", padding: "8px 16px", fontSize: "15px", cursor: "pointer" }}
+                style={{ border: "none", backgroundColor: "#156372", color: "white", borderRadius: "6px", padding: "8px 16px", fontSize: "15px", cursor: "pointer" }}
               >
                 Add
               </button>
@@ -4208,11 +5460,133 @@ export default function ProjectDetailPage() {
           </div>
         </div>
       )}
+      {showDeleteCommentModal && (
+        <div className="fixed inset-0 z-[300] flex items-start justify-center bg-black/40 pt-16">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200">
+            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+              <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
+                !
+              </div>
+              <h3 className="text-[15px] font-semibold text-slate-800 flex-1">Delete comment?</h3>
+              <button
+                type="button"
+                className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                onClick={closeDeleteCommentModal}
+                aria-label="Close"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="px-5 py-3 text-[13px] text-slate-600">
+              You cannot retrieve this comment once it has been deleted.
+            </div>
+            <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+              <button
+                type="button"
+                className="px-4 py-1.5 rounded-md bg-blue-600 text-white text-[12px] hover:bg-blue-700"
+                onClick={confirmDeleteComment}
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                className="px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50"
+                onClick={closeDeleteCommentModal}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showDeleteTaskModal && (
+        <div className="fixed inset-0 z-[200] flex items-start justify-center bg-black/40 pt-16">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200">
+            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+              <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
+                !
+              </div>
+              <h3 className="text-[15px] font-semibold text-slate-800 flex-1">Delete task?</h3>
+              <button
+                type="button"
+                className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                onClick={closeDeleteTaskModal}
+                aria-label="Close"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="px-5 py-3 text-[13px] text-slate-600">
+              You cannot retrieve this task once it has been deleted.
+            </div>
+            <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+              <button
+                type="button"
+                className="px-4 py-1.5 rounded-md bg-blue-600 text-white text-[12px] hover:bg-blue-700"
+                onClick={handleDeleteTask}
+              >
+                OK
+              </button>
+              <button
+                type="button"
+                className="px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50"
+                onClick={closeDeleteTaskModal}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showRemoveUserModal && (
+        <div className="fixed inset-0 z-[200] flex items-start justify-center bg-black/40 pt-16">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200">
+            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+              <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
+                !
+              </div>
+              <h3 className="text-[15px] font-semibold text-slate-800 flex-1">Remove this user from the project?</h3>
+              <button
+                type="button"
+                className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                onClick={closeRemoveUserModal}
+                aria-label="Close"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="px-5 py-3 text-[13px] text-slate-600">
+              This user will be removed from the project assignment list.
+            </div>
+            <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+              <button
+                type="button"
+                className="px-4 py-1.5 rounded-md bg-blue-600 text-white text-[12px] hover:bg-blue-700"
+                onClick={handleConfirmRemoveUser}
+              >
+                OK
+              </button>
+              <button
+                type="button"
+                className="px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50"
+                onClick={closeRemoveUserModal}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {showLogEntryForm && (
         <NewLogEntryForm
-          onClose={() => setShowLogEntryForm(false)}
-          defaultProjectName={project?.projectName || project?.name || ""}
+          onClose={() => {
+            setShowLogEntryForm(false);
+            setTaskTimerDefaults(null);
+          }}
+          defaultProjectName={taskTimerDefaults?.defaultProjectName || project?.projectName || project?.name || ""}
           defaultDate={new Date()}
+          defaultTaskName={taskTimerDefaults?.defaultTaskName || ""}
+          defaultBillable={taskTimerDefaults?.defaultBillable}
         />
       )}
     </div>

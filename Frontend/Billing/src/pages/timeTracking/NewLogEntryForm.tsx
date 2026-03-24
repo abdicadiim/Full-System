@@ -11,6 +11,8 @@ export default function NewLogEntryForm({
   onClose,
   defaultProjectName = "",
   defaultDate = null,
+  defaultTaskName = "",
+  defaultBillable = undefined,
   onStartTimer = undefined,
 }) {
   const navigate = useNavigate();
@@ -48,11 +50,11 @@ export default function NewLogEntryForm({
   const [logEntryData, setLogEntryData] = useState({
     date: formatDateForInput(defaultDate),
     projectName: defaultProjectName,
-    taskName: '',
+    taskName: defaultTaskName,
     timeSpent: '',
     startTime: '',
     endTime: '',
-    billable: true,
+    billable: defaultBillable !== undefined ? defaultBillable : true,
     user: '',
     notes: ''
   });
