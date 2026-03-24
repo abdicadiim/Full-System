@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
+import { toast } from "react-toastify";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import {
@@ -1076,7 +1077,7 @@ export default function NewCreditNote() {
 
   const handleSaveAndSelectSalesperson = async () => {
     if (!newSalespersonData.name.trim()) {
-      alert("Please enter a name for the salesperson");
+      toast("Please enter a name for the salesperson");
       return;
     }
 
@@ -1095,11 +1096,11 @@ export default function NewCreditNote() {
         setIsNewSalespersonFormOpen(false);
         setIsManageSalespersonsOpen(false);
       } else {
-        alert("Failed to save salesperson");
+        toast("Failed to save salesperson");
       }
     } catch (error: any) {
       console.error("Error saving salesperson:", error);
-      alert("Error saving salesperson: " + (error?.message || "Unknown error"));
+      toast("Error saving salesperson: " + (error?.message || "Unknown error"));
     }
   };
 
@@ -1127,11 +1128,11 @@ export default function NewCreditNote() {
           }));
         }
       } else {
-        alert("Failed to delete salesperson: " + ((response as any)?.message || "Unknown error"));
+        toast("Failed to delete salesperson: " + ((response as any)?.message || "Unknown error"));
       }
     } catch (error: any) {
       console.error("Error deleting salesperson:", error);
-      alert("Error deleting salesperson: " + (error?.message || "Unknown error"));
+      toast("Error deleting salesperson: " + (error?.message || "Unknown error"));
     }
   };
 
@@ -1288,12 +1289,12 @@ export default function NewCreditNote() {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files ? Array.from(e.target.files) : [];
     if (formData.documents.length + files.length > 10) {
-      alert("You can upload a maximum of 10 files");
+      toast("You can upload a maximum of 10 files");
       return;
     }
     const invalidFiles = files.filter(file => file.size > 10 * 1024 * 1024);
     if (invalidFiles.length > 0) {
-      alert(`Some files exceed 10MB limit. Maximum file size is 10MB.`);
+      toast(`Some files exceed 10MB limit. Maximum file size is 10MB.`);
       return;
     }
     const newFiles: CreditNoteDocument[] = files.map(file => ({
@@ -1610,7 +1611,7 @@ export default function NewCreditNote() {
       navigate("/sales/credit-notes");
     } catch (error) {
       console.error("Error saving credit note:", error);
-      alert("Failed to save credit note. Please try again.");
+      toast("Failed to save credit note. Please try again.");
     } finally {
       setSaveLoading(null);
     }
@@ -2064,7 +2065,7 @@ export default function NewCreditNote() {
                       onMouseLeave={(e) => (e.currentTarget as any).style.opacity = "1"}
                       onClick={() => {
                         // Handle Update Reporting Tags
-                        alert("Update Reporting Tags functionality");
+                        toast("Update Reporting Tags functionality");
                       }}
                     >
                       Update Reporting Tags
@@ -4246,3 +4247,4 @@ export default function NewCreditNote() {
     </div >
   );
 }
+

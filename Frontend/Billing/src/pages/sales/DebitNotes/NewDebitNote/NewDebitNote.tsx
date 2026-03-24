@@ -212,7 +212,7 @@ export default function NewDebitNote() {
   const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
   const [reasonSearch, setReasonSearch] = useState("");
   const [isReasonDropdownOpen, setIsReasonDropdownOpen] = useState(false);
-  const [invoiceOptions, setInvoiceOptions] = useState<string[]>([]);
+  const [invoiceOptions, setInvoiceOptions] = useState<any[]>([]);
   const [selectedInvoice, setSelectedInvoice] = useState("");
   const [locationOptions, setLocationOptions] = useState<string[]>(["Head Office"]);
   const [salespersons, setSalespersons] = useState<any[]>([]);
@@ -448,6 +448,36 @@ export default function NewDebitNote() {
   );
 
   const setField = (name: string, value: any) => setFormData((prev) => ({ ...prev, [name]: value }));
+
+  const handleInvoiceSelect = (invoiceNumber: string) => {
+    setSelectedInvoice(invoiceNumber);
+    if (!invoiceNumber) return;
+
+    const invObj = invoiceOptions.find(
+      (inv) => String(inv?.invoiceNumber || inv?.number || inv?.id || inv?._id || "") === invoiceNumber
+    );
+
+    if (invObj) {
+      const invDate = invObj.date || invObj.invoiceDate;
+      const datePart = invDate ? ` dated ${formatDate(new Date(invDate))}` : "";
+      const autoDescription = `Debit Note for Invoice ${invoiceNumber}${datePart}`;
+
+      setItems((prevItems) => {
+        const next = [...prevItems];
+        if (next.length > 0 && !next[0].description) {
+          next[0] = { ...next[0], description: autoDescription };
+        } else if (next.length === 0) {
+          next.push({ id: Date.now(), description: autoDescription, rate: 0, baseRate: 0, tax: "", amount: 0 });
+        }
+        return next;
+      });
+
+      if (!formData.subject) {
+        setField("subject", autoDescription);
+      }
+    }
+  };
+
   const selectedPriceListOption = useMemo(
     () => catalogPriceLists.find((row) => row.name === formData.priceList),
     [catalogPriceLists, formData.priceList]
@@ -745,20 +775,7 @@ export default function NewDebitNote() {
       try {
         const response = await invoicesAPI.getByCustomer(customerId);
         const rows = Array.isArray(response?.data) ? response.data : [];
-        const invoiceNames = rows
-          .map((invoice: any) =>
-            String(
-              invoice?.invoiceNumber ||
-              invoice?.number ||
-              invoice?.invoiceNo ||
-              invoice?.reference ||
-              invoice?.id ||
-              invoice?._id ||
-              ""
-            ).trim()
-          )
-          .filter(Boolean);
-        setInvoiceOptions(Array.from(new Set(invoiceNames)));
+        setInvoiceOptions(rows);
         return;
       } catch {
         // Fallback to customer-embedded invoice references when invoice API fails.
@@ -772,14 +789,7 @@ export default function NewDebitNote() {
         : Array.isArray(customer?.invoiceRefs)
           ? customer.invoiceRefs
           : [];
-    const embeddedInvoiceNames = embeddedInvoices
-      .map((invoice: any) =>
-        typeof invoice === "string"
-          ? invoice
-          : String(invoice?.invoiceNumber || invoice?.number || invoice?.ref || "").trim()
-      )
-      .filter(Boolean);
-    setInvoiceOptions(Array.from(new Set(embeddedInvoiceNames)));
+    setInvoiceOptions(embeddedInvoices.map(inv => typeof inv === 'string' ? { invoiceNumber: inv } : inv));
   };
 
   const handleSalespersonSelect = (salesperson: any) => {
@@ -974,16 +984,30 @@ export default function NewDebitNote() {
                   <select
                     className="h-9 w-full appearance-none rounded-md border border-slate-300 bg-white px-3 pr-8 text-[14px]"
                     value={selectedInvoice}
-                    onChange={(e) => setSelectedInvoice(e.target.value)}
+                    onChange={(e) => handleInvoiceSelect(e.target.value)}
                   >
                     <option value="">Select Invoice</option>
-                    {invoiceOptions.map((invoice) => (
-                      <option key={invoice} value={invoice}>
-                        {invoice}
-                      </option>
-                    ))}
+                    {invoiceOptions.map((invoice) => {
+                      const num = String(invoice?.invoiceNumber || invoice?.number || invoice?.id || invoice?._id || "");
+                      return (
+                        <option key={num} value={num}>
+                          {num}
+                        </option>
+                      );
+                    })}
                   </select>
                   <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                  {selectedInvoice && (() => {
+                    const invObj = invoiceOptions.find(inv => String(inv?.invoiceNumber || inv?.number || inv?.id || inv?._id || "") === selectedInvoice);
+                    if (invObj && (invObj.date || invObj.invoiceDate)) {
+                      return (
+                        <div className="mt-1 text-[12px] text-slate-500">
+                          Invoice Date: {formatDate(new Date(invObj.date || invObj.invoiceDate))}
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
               </div>
             ) : null}

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { toast } from "react-toastify";
 import { useNavigate, useLocation } from "react-router-dom";
 import { X, Download, ChevronDown, ChevronUp, HelpCircle, Search, Check, Lightbulb, Info, LayoutGrid, HardDrive, Box, Square, Cloud, ChevronUp as ChevronUpIcon, Users, FileText, Folder, Building2, Edit, ChevronLeft } from "lucide-react";
 import { getAllDocuments } from "../../../../utils/documentStorage";
@@ -137,14 +138,14 @@ export default function ImportCreditNotes() {
       const maxSize = 25 * 1024 * 1024; // 25MB
 
       if (!validTypes.includes(fileExtension)) {
-        alert("Please select a valid file format (CSV, TSV, or XLS).");
+        toast("Please select a valid file format (CSV, TSV, or XLS).");
         event.target.value = "";
         setSelectedFile(null);
         return;
       }
 
       if (file.size > maxSize) {
-        alert("File size must be less than 25 MB.");
+        toast("File size must be less than 25 MB.");
         event.target.value = "";
         setSelectedFile(null);
         return;
@@ -207,13 +208,13 @@ export default function ImportCreditNotes() {
       const maxSize = 25 * 1024 * 1024; // 25MB
 
       if (!validTypes.includes(fileExtension)) {
-        alert("Please select a valid file format (CSV, TSV, or XLS).");
+        toast("Please select a valid file format (CSV, TSV, or XLS).");
         setSelectedFile(null);
         return;
       }
 
       if (file.size > maxSize) {
-        alert("File size must be less than 25 MB.");
+        toast("File size must be less than 25 MB.");
         setSelectedFile(null);
         return;
       }
@@ -290,7 +291,7 @@ export default function ImportCreditNotes() {
   const handleNext = async () => {
     if (currentStep === "configure") {
       if (!selectedFile) {
-        alert("Please select a file to continue.");
+        toast("Please select a file to continue.");
         return;
       }
       // Parse import file to get headers
@@ -300,7 +301,7 @@ export default function ImportCreditNotes() {
         setCurrentStep("mapFields");
       } catch (error) {
         console.error("Error reading file:", error);
-        alert("Error reading file. Please try again.");
+        toast("Error reading file. Please try again.");
       }
     } else if (currentStep === "mapFields") {
       // Calculate preview data before moving to preview step
@@ -327,7 +328,7 @@ export default function ImportCreditNotes() {
           setCurrentStep("preview");
         } catch (error) {
           console.error("Error reading file:", error);
-          alert("Error reading file. Please try again.");
+          toast("Error reading file. Please try again.");
         }
       } else {
         setCurrentStep("preview");
@@ -474,7 +475,7 @@ export default function ImportCreditNotes() {
 
   const handleImport = async () => {
     if (!selectedFile) {
-      alert("No file selected");
+      toast("No file selected");
       return;
     }
 
@@ -482,7 +483,7 @@ export default function ImportCreditNotes() {
       const { headers, rows } = await parseImportFile(selectedFile);
 
       if (rows.length === 0) {
-        alert("No data found in the file");
+        toast("No data found in the file");
         return;
       }
 
@@ -786,14 +787,14 @@ export default function ImportCreditNotes() {
       }
 
       if (importedCount > 0) {
-        alert(`Successfully imported ${importedCount} credit note(s).${skippedCount > 0 ? ` ${skippedCount} record(s) skipped.` : ''}`);
+        toast(`Successfully imported ${importedCount} credit note(s).${skippedCount > 0 ? ` ${skippedCount} record(s) skipped.` : ''}`);
         navigate("/sales/credit-notes");
       } else {
-        alert(`No credit notes were imported.${errors.length > 0 ? ` ${errors.slice(0, 3).join(" ")}` : ""}`);
+        toast(`No credit notes were imported.${errors.length > 0 ? ` ${errors.slice(0, 3).join(" ")}` : ""}`);
       }
     } catch (error) {
       console.error("Error importing credit notes:", error);
-      alert("Error importing credit notes. Please check the file format and try again.");
+      toast("Error importing credit notes. Please check the file format and try again.");
     }
   };
 
@@ -1811,4 +1812,5 @@ export default function ImportCreditNotes() {
     </div>
   );
 }
+
 

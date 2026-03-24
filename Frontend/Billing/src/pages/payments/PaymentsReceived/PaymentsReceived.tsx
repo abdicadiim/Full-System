@@ -79,7 +79,9 @@ const paymentFields = [
   "Customer Name",
   "Mode",
   "Amount",
-  "Unused Amount"
+  "Unused Amount",
+  "Status",
+  "Payment Type"
 ];
 
 const PAYMENTS_RECEIVED_VISIBLE_COLUMNS_KEY = "payments_received_visible_columns";
@@ -93,6 +95,8 @@ const paymentListColumnOptions = [
   { key: "paymentMode", label: "Mode" },
   { key: "amountReceived", label: "Amount" },
   { key: "unusedAmount", label: "Unused Amount" },
+  { key: "status", label: "Status" },
+  { key: "paymentType", label: "Payment Type" },
 ];
 
 interface Payment {
@@ -125,6 +129,7 @@ export default function PaymentsReceived() {
   const [selectedStatus, setSelectedStatus] = useState("All Payments");
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [viewSearchQuery, setViewSearchQuery] = useState("");
   const [customViews, setCustomViews] = useState(() => getCustomViews().filter(v => v.type === "payments-received"));
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -340,12 +345,14 @@ export default function PaymentsReceived() {
 
   useEffect(() => {
     const initialLoad = async () => {
+      setIsLoading(true);
       const allPayments = await getPayments();
       // Ensure we have CustomView[] from imported module
       const allCustomViews = getCustomViews().filter(v => v.type === "payments-received");
       setPayments(allPayments);
       setCustomViews(allCustomViews);
       applyFilters(allPayments, selectedStatus, allCustomViews);
+      setIsLoading(false);
     };
 
     initialLoad();
@@ -705,7 +712,7 @@ export default function PaymentsReceived() {
   const handleOnlinePayments = () => {
     setIsMoreMenuOpen(false);
     // TODO: Navigate to online payments configuration
-    alert("Online Payments configuration will be implemented here");
+    toast.info("Online Payments configuration will be implemented here");
   };
 
   const handleManageCustomFields = () => {
@@ -718,7 +725,7 @@ export default function PaymentsReceived() {
     setIsMoreMenuOpen(false);
     // Reset column widths (stored in localStorage if needed)
     localStorage.removeItem("payments_received_column_widths");
-    alert("Column widths have been reset");
+    toast.info("Column widths have been reset");
   };
 
   const handleRefreshList = async () => {
@@ -953,59 +960,62 @@ export default function PaymentsReceived() {
 
     return `
       <div style="font-family: Arial, sans-serif; width:794px; min-height:1123px; background:#ffffff; color:#111827; padding:28px;">
-        <div style="position: relative; border:1px solid #e5e7eb; min-height:1000px; padding:38px 56px;">
-          <div style="position:absolute; top:0; left:0; width:0; height:0; border-top:80px solid #22c55e; border-right:80px solid transparent;"></div>
-          <div style="position:absolute; top:12px; left:10px; color:#ffffff; font-size:16px; font-weight:700; transform:rotate(-45deg); transform-origin: 0 0;">${statusLabel}</div>
+        <div style="position: relative; border:1px solid #e5e7eb; min-height:1000px; padding:32px 40px;">
+          <div style="position:absolute; top:0; left:0; width:0; height:0; border-left:46px solid #22c55e; border-bottom:46px solid transparent;"></div>
+          <div style="position:absolute; top:8px; left:3px; color:#ffffff; font-size:10px; font-weight:700; transform:rotate(-45deg); transform-origin: 0 0;">${statusLabel}</div>
 
-          <div style="margin-top:12px;">
-            ${logoPreview ? `<img src="${logoPreview}" alt="Logo" style="height:70px; object-fit:contain; margin-bottom:16px;" />` : ""}
-            <div style="font-size:34px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; margin-bottom:10px;">${companyName}</div>
-            <div style="font-size:22px; color:#4b5563;">${organizationData?.street1 || ""}${organizationData?.street2 ? `, ${organizationData.street2}` : ""}</div>
-            <div style="font-size:22px; color:#4b5563;">${organizationData?.city || ""}${organizationData?.zipCode ? ` ${organizationData.zipCode}` : ""}${organizationData?.stateProvince ? `, ${organizationData.stateProvince}` : ""}</div>
-            <div style="font-size:22px; color:#4b5563;">${organizationData?.country || ""}</div>
-            <div style="font-size:22px; color:#4b5563;">${organizationData?.email || ""}</div>
-          </div>
-
-          <div style="text-align:center; margin-top:46px; margin-bottom:40px;">
-            <div style="font-size:42px; font-weight:700; letter-spacing:0.22em;">PAYMENT RECEIPT</div>
-            <div style="height:1px; background:#d1d5db; width:260px; margin:10px auto 0;"></div>
-          </div>
-
-          <div style="display:flex; align-items:flex-start; gap:34px; margin-bottom:26px;">
-            <div style="flex:1;">
-              <div style="display:flex; justify-content:space-between; padding:13px 0; border-bottom:1px solid #e5e7eb; font-size:23px;">
-                <span style="color:#4b5563;">Payment Date</span>
-                <span style="font-weight:600;">${formatDateForPdf(payment.paymentDate || "")}</span>
-              </div>
-              <div style="display:flex; justify-content:space-between; padding:13px 0; border-bottom:1px solid #e5e7eb; font-size:23px;">
-                <span style="color:#4b5563;">Reference Number</span>
-                <span style="font-weight:600;">${payment.referenceNumber || "-"}</span>
-              </div>
-              <div style="display:flex; justify-content:space-between; padding:13px 0; border-bottom:1px solid #e5e7eb; font-size:23px;">
-                <span style="color:#4b5563;">Payment Mode</span>
-                <span style="font-weight:600;">${payment.paymentMode || "-"}</span>
-              </div>
-            </div>
-            <div style="width:250px; background:#7cb342; color:#ffffff; border-radius:3px; text-align:center; padding:22px 14px;">
-              <div style="font-size:24px; margin-bottom:8px;">Amount Received</div>
-              <div style="font-size:46px; font-weight:700;">${formatCurrencyForPdf(payment.amountReceived || 0, (payment as any).currency || "USD")}</div>
+          <div style="margin-top:6px;">
+            ${logoPreview ? `<img src="${logoPreview}" alt="Logo" style="height:56px; object-fit:contain; margin-bottom:12px;" />` : ""}
+            <div style="font-size:14px; font-weight:700; color:#111827;">${companyName}</div>
+            <div style="margin-top:8px; font-size:11px; color:#6b7280; line-height:1.45;">
+              <div>${organizationData?.street1 || ""}</div>
+              ${organizationData?.street2 ? `<div>${organizationData.street2}</div>` : ""}
+              <div>${organizationData?.city || ""} ${organizationData?.zipCode || ""}</div>
+              <div>${organizationData?.stateProvince || ""}</div>
+              <div>${organizationData?.country || ""}</div>
+              <div>${organizationData?.email || ""}</div>
             </div>
           </div>
 
-          <div style="margin-top:36px; margin-bottom:18px;">
-            <div style="font-size:22px; color:#4b5563; margin-bottom:8px;">Received From</div>
-            <div style="font-size:30px; color:#2563eb; font-weight:700;">${payment.customerName || "-"}</div>
+          <div style="border-top:1px solid #e5e7eb; margin-top:18px; padding-top:10px;">
+            <div style="text-align:center; font-size:12px; letter-spacing:0.08em; color:#374151; margin-bottom:18px;">PAYMENT RECEIPT</div>
+
+            <div style="display:flex; align-items:flex-start; gap:24px; margin-bottom:16px;">
+              <div style="flex:1; max-width:360px;">
+                <div style="display:grid; grid-template-columns:130px 1fr; border-bottom:1px solid #e5e7eb; padding:8px 0;">
+                  <span style="font-size:11px; color:#6b7280;">Payment Date</span>
+                  <span style="font-size:11px; font-weight:600; color:#111827;">${formatDateForPdf(payment.paymentDate || "")}</span>
+                </div>
+                <div style="display:grid; grid-template-columns:130px 1fr; border-bottom:1px solid #e5e7eb; padding:8px 0;">
+                  <span style="font-size:11px; color:#6b7280;">Reference Number</span>
+                  <span style="font-size:11px; font-weight:600; color:#111827;">${payment.referenceNumber || "-"}</span>
+                </div>
+                <div style="display:grid; grid-template-columns:130px 1fr; border-bottom:1px solid #e5e7eb; padding:8px 0;">
+                  <span style="font-size:11px; color:#6b7280;">Payment Mode</span>
+                  <span style="font-size:11px; font-weight:600; color:#111827;">${payment.paymentMode || "-"}</span>
+                </div>
+              </div>
+              <div style="min-width:170px; background:#79a94a; color:#ffffff; text-align:center; padding:12px 12px;">
+                <div style="font-size:10px; font-weight:600; margin-bottom:6px;">Amount Received</div>
+                <div style="font-size:18px; font-weight:700;">${formatCurrencyForPdf(payment.amountReceived || 0, (payment as any).currency || "USD")}</div>
+              </div>
+            </div>
+
+            <div style="margin-top:18px;">
+              <div style="font-size:11px; color:#6b7280; margin-bottom:6px;">Received From</div>
+              <div style="font-size:12px; font-weight:600; color:#2563eb;">${payment.customerName || "-"}</div>
+            </div>
           </div>
 
-          <div style="margin-top:44px;">
-            <div style="font-size:26px; font-weight:700; margin-bottom:12px;">Payment for</div>
-            <table style="width:100%; border-collapse:collapse; font-size:20px;">
+          <div style="border-top:1px solid #e5e7eb; margin-top:22px; padding-top:14px;">
+            <div style="font-size:13px; font-weight:600; color:#111827; margin-bottom:10px;">Payment for</div>
+            <table style="width:100%; border-collapse:collapse; font-size:11px;">
               <thead>
-                <tr style="background:#f3f4f6;">
-                  <th style="text-align:left; padding:12px; border-bottom:1px solid #e5e7eb;">INVOICE NUMBER</th>
-                  <th style="text-align:left; padding:12px; border-bottom:1px solid #e5e7eb;">INVOICE DATE</th>
-                  <th style="text-align:left; padding:12px; border-bottom:1px solid #e5e7eb;">INVOICE AMOUNT</th>
-                  <th style="text-align:left; padding:12px; border-bottom:1px solid #e5e7eb;">PAYMENT AMOUNT</th>
+                <tr style="background:#f3f4f6; border-bottom:1px solid #e5e7eb;">
+                  <th style="text-align:left; padding:8px; font-weight:600; color:#6b7280;">Invoice Number</th>
+                  <th style="text-align:left; padding:8px; font-weight:600; color:#6b7280;">Invoice Date</th>
+                  <th style="text-align:right; padding:8px; font-weight:600; color:#6b7280;">Invoice Amount</th>
+                  <th style="text-align:right; padding:8px; font-weight:600; color:#6b7280;">Payment Amount</th>
                 </tr>
               </thead>
               <tbody>
@@ -1014,7 +1024,7 @@ export default function PaymentsReceived() {
             </table>
           </div>
 
-          <div style="margin-top:22px; text-align:center; color:#9ca3af; font-size:18px;">PDF Template: 'Elite Template'</div>
+          <div style="margin-top:18px; text-align:center; color:#9ca3af; font-size:10px;">PDF Template: Elite Template</div>
         </div>
       </div>
     `;
@@ -1129,7 +1139,7 @@ export default function PaymentsReceived() {
     }
 
     if (!hasAnyPage) {
-      alert("No payments available for PDF download.");
+      toast.error("No payments available for PDF download.");
       return;
     }
 
@@ -1211,10 +1221,10 @@ export default function PaymentsReceived() {
   };
 
   return (
-    <div className="w-full min-h-screen bg-gray-50">
+    <div className="flex flex-col h-full bg-white relative overflow-hidden -m-4 md:-m-6">
       {/* Header - Show Bulk Actions Bar when items are selected, otherwise show normal header */}
       {selectedPayments.size > 0 ? (
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-white">
+        <div className="flex items-center justify-between px-6 py-6 border-b border-gray-100 bg-white relative overflow-visible z-[100]">
           <div className="flex items-center gap-2">
             <button
               className="px-4 py-2 bg-gradient-to-r from-[#156372] to-[#0D4A52] border-none text-white rounded-md text-sm font-medium cursor-pointer hover:opacity-90 transition-all shadow-sm"
@@ -1252,19 +1262,19 @@ export default function PaymentsReceived() {
         </div>
       ) : (
         /* Normal Page Header */
-        <div className="bg-white border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between px-6 py-6 border-b border-gray-100 bg-white relative overflow-visible">
+          <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-2">
               <div className="relative" ref={viewDropdownRef}>
                 <button
                   onClick={() => setIsViewDropdownOpen(!isViewDropdownOpen)}
-                  className={`flex items-center gap-2 bg-transparent border-none rounded-md py-1.5 px-3 cursor-pointer transition-colors ${isViewDropdownOpen ? "bg-blue-50" : "hover:bg-gray-100"}`}
+                  className="flex items-center gap-1.5 py-4 px-3 cursor-pointer group border-b-2 border-slate-900"
                 >
-                  <h1 className="m-0 text-2xl font-semibold text-gray-900">{selectedView}</h1>
+                  <h1 className="m-0 text-[15px] font-bold text-slate-900">{selectedView}</h1>
                   {isViewDropdownOpen ? (
-                    <ChevronUp size={20} className="transition-transform text-gray-500" />
+                    <ChevronUp size={14} className="transition-transform text-[#156372]" />
                   ) : (
-                    <ChevronDown size={20} className="transition-transform text-gray-500" />
+                    <ChevronDown size={14} className="transition-transform text-[#156372]" />
                   )}
                 </button>
 
@@ -1508,7 +1518,7 @@ export default function PaymentsReceived() {
 
 
 
-      <div className="p-6 relative">
+      <div className="flex-1 overflow-auto bg-white min-h-0 custom-scrollbar">
 
         {filteredPayments.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -1518,21 +1528,22 @@ export default function PaymentsReceived() {
             </p>
           </div>
         ) : (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-visible">
-            <div className="overflow-x-auto overflow-y-visible">
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="bg-[#f8f9fc] border-b border-[#e5e7eb]">
-                    <th className="p-4 text-left relative z-[120]">
-                      <div className="relative" ref={tableToolsRef}>
-                        <button
-                          ref={tableToolsButtonRef}
-                          className="p-1.5 rounded hover:bg-gray-200 transition-colors text-blue-600"
-                          onClick={() => setIsTableToolsOpen((prev) => !prev)}
-                          title="Table options"
-                        >
-                          <SlidersHorizontal size={16} />
-                        </button>
+          <div className="bg-white overflow-hidden">
+            <div className="overflow-x-auto overflow-y-visible bg-white min-h-0 custom-scrollbar">
+              <table className="w-full text-left border-collapse min-w-[1200px]">
+                <thead className="bg-[#f6f7fb] sticky top-0 z-10 border-b border-[#e6e9f2]">
+                  <tr className="text-[10px] font-semibold text-[#7b8494] uppercase tracking-wider">
+                    <th className="px-4 py-3 w-16 min-w-[64px] bg-[#f6f7fb]">
+                      <div className="flex items-center gap-2">
+                        <div className="relative" ref={tableToolsRef}>
+                          <button
+                            ref={tableToolsButtonRef}
+                            className="h-6 w-6 flex items-center justify-center rounded border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
+                            onClick={() => setIsTableToolsOpen((prev) => !prev)}
+                            title="Table options"
+                          >
+                            <SlidersHorizontal size={13} className="text-[#1b5e6a]" />
+                          </button>
                         {isTableToolsOpen && typeof document !== "undefined" && createPortal(
                           <div
                             ref={tableToolsMenuRef}
@@ -1562,43 +1573,42 @@ export default function PaymentsReceived() {
                           </div>,
                           document.body
                         )}
+                        </div>
+                        <div className="h-5 w-px bg-gray-200" />
+                        <input
+                          type="checkbox"
+                          checked={selectedPayments.size === filteredPayments.length && filteredPayments.length > 0}
+                          onChange={handleSelectAllPayments}
+                          style={{ accentColor: "#1b5e6a" }}
+                          className="cursor-pointer h-4 w-4 rounded border-gray-300 transition-all focus:ring-0"
+                        />
                       </div>
                     </th>
-                    <th className="p-4 text-left">
-                      <button
-                        className="p-1 hover:bg-gray-200 rounded transition-colors"
-                        onClick={handleSelectAllPayments}
-                      >
-                        {selectedPayments.size === filteredPayments.length && filteredPayments.length > 0 ? (
-                          <CheckSquare size={16} fill="#6b7280" color="#6b7280" />
-                        ) : (
-                          <Square size={16} className="text-gray-400" />
-                        )}
-                      </button>
-                    </th>
                     {isColumnVisible("date") && (
-                      <th className="p-4 text-left text-xs font-semibold text-[#667085] uppercase tracking-wide">
+                      <th className="px-4 py-3 text-left">
                         <button className="flex items-center gap-2 hover:text-blue-600 transition-colors">
                           DATE
                           <ArrowUpDown size={14} className="text-gray-400" />
                         </button>
                       </th>
                     )}
-                    {isColumnVisible("location") && <th className="p-4 text-left text-xs font-semibold text-[#667085] uppercase tracking-wide">LOCATION</th>}
+                    {isColumnVisible("location") && <th className="px-4 py-3 text-left">LOCATION</th>}
                     {isColumnVisible("paymentNumber") && (
-                      <th className="p-4 text-left text-xs font-semibold text-[#667085] uppercase tracking-wide">
+                      <th className="px-4 py-3 text-left">
                         <button className="flex items-center gap-2 hover:text-blue-600 transition-colors">
                           PAYMENT #
                         </button>
                       </th>
                     )}
-                    {isColumnVisible("referenceNumber") && <th className="p-4 text-left text-xs font-semibold text-[#667085] uppercase tracking-wide">REFERENCE NUMBER</th>}
-                    {isColumnVisible("customerName") && <th className="p-4 text-left text-xs font-semibold text-[#667085] uppercase tracking-wide">CUSTOMER NAME</th>}
-                    {isColumnVisible("invoiceNumber") && <th className="p-4 text-left text-xs font-semibold text-[#667085] uppercase tracking-wide">INVOICE#</th>}
-                    {isColumnVisible("paymentMode") && <th className="p-4 text-left text-xs font-semibold text-[#667085] uppercase tracking-wide">MODE</th>}
-                    {isColumnVisible("amountReceived") && <th className="p-4 text-left text-xs font-semibold text-[#667085] uppercase tracking-wide">AMOUNT</th>}
-                    {isColumnVisible("unusedAmount") && <th className="p-4 text-left text-xs font-semibold text-[#667085] uppercase tracking-wide">UNUSED AMOUNT</th>}
-                    <th className="p-4 text-left">
+                    {isColumnVisible("referenceNumber") && <th className="px-4 py-3 text-left">REFERENCE NUMBER</th>}
+                    {isColumnVisible("customerName") && <th className="px-4 py-3 text-left">CUSTOMER NAME</th>}
+                    {isColumnVisible("invoiceNumber") && <th className="px-4 py-3 text-left">INVOICE#</th>}
+                    {isColumnVisible("paymentMode") && <th className="px-4 py-3 text-left">MODE</th>}
+                    {isColumnVisible("amountReceived") && <th className="px-4 py-3 text-left">AMOUNT</th>}
+                    {isColumnVisible("unusedAmount") && <th className="px-4 py-3 text-left">UNUSED AMOUNT</th>}
+                    {isColumnVisible("status") && <th className="px-4 py-3 text-left">STATUS</th>}
+                    {isColumnVisible("paymentType") && <th className="px-4 py-3 text-left">PAYMENT TYPE</th>}
+                    <th className="px-4 py-3 text-left bg-[#f6f7fb]">
                       <button
                         onClick={() => setShowSearchModal(true)}
                         className="cursor-pointer hover:text-gray-700"
@@ -1606,27 +1616,30 @@ export default function PaymentsReceived() {
                         <Search size={16} className="text-gray-500" />
                       </button>
                     </th>
-                    <th className="p-4 text-left"></th>
+                    <th className="px-4 py-3 text-left bg-[#f6f7fb]"></th>
                   </tr>
                 </thead>
-                <tbody>
-                  {isRefreshing ? (
+                <tbody className="divide-y divide-gray-100">
+                  {(isLoading || isRefreshing) ? (
                     Array(5).fill(0).map((_, index) => (
-                    <tr key={`skeleton-${index}`} className="border-b border-[#e5e7eb]">
-                      <td className="p-4"></td>
-                      <td className="p-4">
-                        <div className="w-4 h-4 bg-gray-200 rounded animate-pulse"></div>
+                    <tr key={`skeleton-${index}`} className="animate-pulse border-b border-[#eef1f6] h-[50px]">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="h-6 w-6 shrink-0" aria-hidden />
+                          <span className="h-5 w-px shrink-0 bg-transparent" aria-hidden />
+                          <div className="w-4 h-4 bg-gray-100 rounded"></div>
+                        </div>
                       </td>
-                      <td className="p-4"><div className="h-4 bg-gray-200 rounded animate-pulse w-24"></div></td>
-                      <td className="p-4"><div className="h-4 bg-gray-200 rounded animate-pulse w-28"></div></td>
-                      <td className="p-4"><div className="h-4 bg-gray-200 rounded animate-pulse w-32"></div></td>
-                      <td className="p-4"><div className="h-4 bg-gray-200 rounded animate-pulse w-24"></div></td>
-                      <td className="p-4"><div className="h-4 bg-gray-200 rounded animate-pulse w-40"></div></td>
-                      <td className="p-4"><div className="h-4 bg-gray-200 rounded animate-pulse w-32"></div></td>
-                      <td className="p-4"><div className="h-4 bg-gray-200 rounded animate-pulse w-24"></div></td>
-                      <td className="p-4"><div className="h-4 bg-gray-200 rounded animate-pulse w-24"></div></td>
-                      <td className="p-4"><div className="h-4 bg-gray-200 rounded animate-pulse w-24"></div></td>
-                      <td className="p-4"></td>
+                      <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>
+                      <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-28"></div></td>
+                      <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-32"></div></td>
+                      <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>
+                      <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-40"></div></td>
+                      <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-32"></div></td>
+                      <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>
+                      <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>
+                      <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>
+                      <td className="px-4 py-3"></td>
                     </tr>
                   ))
                 ) : (
@@ -1639,34 +1652,32 @@ export default function PaymentsReceived() {
                             handlePaymentSelect(payment.id);
                           }
                         }}
-                        className={`border-b border-[#e5e7eb] hover:bg-[#eef2f7] transition-colors cursor-pointer ${index % 2 === 0 ? "bg-[#f7f8fb]" : "bg-white"}`}
+                        className="text-[13px] group transition-all hover:bg-[#f8fafc] cursor-pointer h-[50px] border-b border-[#eef1f6]"
                       >
-                        <td className="p-4"></td>
-                        <td className="p-4">
-                          <button
-                            className="p-1 hover:bg-gray-200 rounded transition-colors"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSelectPayment(payment.id);
-                            }}
-                          >
-                            {selectedPayments.has(payment.id) ? (
-                              <CheckSquare size={16} fill="#6b7280" color="#6b7280" />
-                            ) : (
-                              <Square size={16} className="text-gray-400" />
-                            )}
-                          </button>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className="h-6 w-6 shrink-0" aria-hidden />
+                            <span className="h-5 w-px shrink-0 bg-transparent" aria-hidden />
+                            <input
+                              type="checkbox"
+                              checked={selectedPayments.has(payment.id)}
+                              onChange={() => handleSelectPayment(payment.id)}
+                              onClick={(e) => e.stopPropagation()}
+                              style={{ accentColor: "#1b5e6a" }}
+                              className="cursor-pointer h-4 w-4 rounded border-gray-300 transition-all focus:ring-0"
+                            />
+                          </div>
                         </td>
-                        {isColumnVisible("date") && <td className="p-4 text-gray-900">{formatDate(payment.paymentDate || "")}</td>}
-                        {isColumnVisible("location") && <td className="p-4 text-gray-900">{payment.location || "Head Office"}</td>}
+                        {isColumnVisible("date") && <td className="px-4 py-3 text-gray-900">{formatDate(payment.paymentDate || "")}</td>}
+                        {isColumnVisible("location") && <td className="px-4 py-3 text-gray-900">{payment.location || "Head Office"}</td>}
                         {isColumnVisible("paymentNumber") && (
-                          <td className="p-4">
+                          <td className="px-4 py-3">
                             <span className="text-blue-600 hover:text-blue-700 hover:underline font-medium cursor-pointer">
                               {payment.paymentNumber || payment.id}
                             </span>
                           </td>
                         )}
-                        {isColumnVisible("referenceNumber") && <td className="p-4 text-gray-900">
+                        {isColumnVisible("referenceNumber") && <td className="px-4 py-3 text-gray-900">
                           <div
                             className={isClipTextEnabled ? "max-w-[180px] truncate" : ""}
                             title={payment.referenceNumber || "-"}
@@ -1674,7 +1685,7 @@ export default function PaymentsReceived() {
                             {payment.referenceNumber || "-"}
                           </div>
                         </td>}
-                        {isColumnVisible("customerName") && <td className="p-4 text-gray-900">
+                        {isColumnVisible("customerName") && <td className="px-4 py-3 text-gray-900">
                           <div
                             className={isClipTextEnabled ? "max-w-[200px] truncate" : ""}
                             title={
@@ -1698,7 +1709,7 @@ export default function PaymentsReceived() {
                               (typeof payment.customer === 'string' ? payment.customer : "-")}
                           </div>
                         </td>}
-                        {isColumnVisible("invoiceNumber") && <td className="p-4 text-gray-900">
+                        {isColumnVisible("invoiceNumber") && <td className="px-4 py-3 text-gray-900">
                           <div
                             className={isClipTextEnabled ? "max-w-[140px] truncate" : ""}
                             title={
@@ -1716,10 +1727,12 @@ export default function PaymentsReceived() {
                               "-"}
                           </div>
                         </td>}
-                        {isColumnVisible("paymentMode") && <td className="p-4 text-gray-900">{payment.paymentMode || "-"}</td>}
-                        {isColumnVisible("amountReceived") && <td className="p-4 text-gray-900">{formatCurrency(payment.amountReceived || 0, payment.currency)}</td>}
-                        {isColumnVisible("unusedAmount") && <td className="p-4 text-gray-900">{formatCurrency(payment.unusedAmount || payment.amountReceived || 0, payment.currency)}</td>}
-                        <td className="p-4"></td>
+                        {isColumnVisible("paymentMode") && <td className="px-4 py-3 text-gray-900">{payment.paymentMode || "-"}</td>}
+                        {isColumnVisible("amountReceived") && <td className="px-4 py-3 text-gray-900">{formatCurrency(payment.amountReceived || 0, payment.currency)}</td>}
+                        {isColumnVisible("unusedAmount") && <td className="px-4 py-3 text-gray-900">{formatCurrency(payment.unusedAmount || payment.amountReceived || 0, payment.currency)}</td>}
+                        {isColumnVisible("status") && <td className="px-4 py-3 text-gray-900">{payment.status || "-"}</td>}
+                        {isColumnVisible("paymentType") && <td className="px-4 py-3 text-gray-900">{payment.paymentType || payment.type || "-"}</td>}
+                        <td className="px-4 py-3"></td>
                       </tr>
                     ))
                   )}

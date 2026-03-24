@@ -15,7 +15,7 @@ import {
   FileText,
   Trash2,
 } from "lucide-react";
-import { salespersonsAPI, invoicesAPI } from "../../../services/api";
+import { salespersonsAPI, invoicesAPI, subscriptionsAPI } from "../../../services/api";
 import { getCustomerById } from "../salesModel";
 import { useUser } from "../../../lib/auth/UserContext";
 import { runSubscriptionBillingSimulation } from "./subscriptionBilling";
@@ -258,6 +258,43 @@ export default function SubscriptionDetailPage() {
     return String(match?.name || match?.displayName || id).trim();
   }, [selected?.salesperson, selected?.salespersonId, salespersons]);
 
+  const persistSubscriptions = (next: any[]) => {
+    const previous = subscriptions;
+    setSubscriptions(next);
+    try {
+      localStorage.setItem("taban_subscriptions_v1", JSON.stringify(next));
+    } catch {
+      // ignore storage errors
+    }
+    void (async () => {
+      try {
+        const previousById = new Map(
+          previous.map((row: any) => [String(row?.id || row?._id || ""), row]).filter(([id]) => Boolean(id))
+        );
+        const nextById = new Map(
+          next.map((row: any) => [String(row?.id || row?._id || ""), row]).filter(([id]) => Boolean(id))
+        );
+
+        for (const row of next) {
+          const id = String(row?.id || row?._id || "").trim();
+          if (id && previousById.has(id)) {
+            await subscriptionsAPI.update(id, { ...row, id: undefined, _id: undefined });
+          } else {
+            await subscriptionsAPI.create({ ...row, id: undefined, _id: undefined });
+          }
+        }
+
+        for (const [id] of previousById.entries()) {
+          if (!nextById.has(id)) {
+            await subscriptionsAPI.delete(id);
+          }
+        }
+      } catch {
+        // keep local state if API is unavailable
+      }
+    })();
+  };
+
   const clearCouponForSelected = () => {
     if (!selected) return;
     const updated = subscriptions.map((sub: any) => {
@@ -269,12 +306,7 @@ export default function SubscriptionDetailPage() {
         couponValue: "0.00",
       };
     });
-    setSubscriptions(updated);
-    try {
-      localStorage.setItem("taban_subscriptions_v1", JSON.stringify(updated));
-    } catch {
-      // ignore storage errors
-    }
+    persistSubscriptions(updated);
   };
 
   const handleProceedCancel = () => {
@@ -294,12 +326,7 @@ export default function SubscriptionDetailPage() {
         scheduledCancellationDate: sub?.scheduledCancellationDate || new Date().toISOString(),
       };
     });
-    setSubscriptions(next);
-    try {
-      localStorage.setItem("taban_subscriptions_v1", JSON.stringify(next));
-    } catch {
-      // ignore storage errors
-    }
+    persistSubscriptions(next);
     setIsCancelModalOpen(false);
     setCancelReason("");
     setCancelOtherReason("");
@@ -324,12 +351,7 @@ export default function SubscriptionDetailPage() {
         couponValue: nextValue,
       };
     });
-    setSubscriptions(updated);
-    try {
-      localStorage.setItem("taban_subscriptions_v1", JSON.stringify(updated));
-    } catch {
-      // ignore storage errors
-    }
+    persistSubscriptions(updated);
     setSelectedCouponId("");
     setIsAddCouponOpen(false);
     toast.success("Coupon applied successfully.");
@@ -435,12 +457,7 @@ export default function SubscriptionDetailPage() {
       const existingNotes = Array.isArray(sub.notes) ? sub.notes : [];
       return { ...sub, notes: [newNote, ...existingNotes] };
     });
-    setSubscriptions(updated);
-    try {
-      localStorage.setItem("taban_subscriptions_v1", JSON.stringify(updated));
-    } catch {
-      // ignore storage errors
-    }
+    persistSubscriptions(updated);
     setIsAddNoteOpen(false);
   };
 
@@ -451,12 +468,7 @@ export default function SubscriptionDetailPage() {
       const existingNotes = Array.isArray(sub.notes) ? sub.notes : [];
       return { ...sub, notes: existingNotes.filter((note: any) => String(note.id) !== String(noteId)) };
     });
-    setSubscriptions(updated);
-    try {
-      localStorage.setItem("taban_subscriptions_v1", JSON.stringify(updated));
-    } catch {
-      // ignore storage errors
-    }
+    persistSubscriptions(updated);
   };
 
   const saveBillingDateChange = () => {
@@ -478,12 +490,7 @@ export default function SubscriptionDetailPage() {
         nextBillingReason: billingReasonDraft.trim(),
       };
     });
-    setSubscriptions(updated);
-    try {
-      localStorage.setItem("taban_subscriptions_v1", JSON.stringify(updated));
-    } catch {
-      // ignore storage errors
-    }
+    persistSubscriptions(updated);
     setIsChangeBillingOpen(false);
   };
 
@@ -500,12 +507,7 @@ export default function SubscriptionDetailPage() {
       }
       return { ...sub, addonLines };
     });
-    setSubscriptions(updated);
-    try {
-      localStorage.setItem("taban_subscriptions_v1", JSON.stringify(updated));
-    } catch {
-      // ignore storage errors
-    }
+    persistSubscriptions(updated);
   };
 
   const readRows = (key: string) => {
@@ -550,7 +552,16 @@ export default function SubscriptionDetailPage() {
   }, []);
 
   useEffect(() => {
-    const load = () => {
+    const load = async () => {
+      try {
+        const res: any = await subscriptionsAPI.getAll({ limit: 10000 });
+        if (res?.success) {
+          setSubscriptions(Array.isArray(res.data) ? res.data : []);
+          return;
+        }
+      } catch {
+        // fallback below
+      }
       try {
         const raw = localStorage.getItem("taban_subscriptions_v1");
         const parsed = raw ? JSON.parse(raw) : [];
@@ -563,11 +574,13 @@ export default function SubscriptionDetailPage() {
       }
       setSubscriptions([]);
     };
-    load();
+    void load();
     const onStorage = (event: StorageEvent) => {
-      if (!event.key || event.key === "taban_subscriptions_v1") load();
+      if (!event.key || event.key === "taban_subscriptions_v1") {
+        void load();
+      }
     };
-    const onFocus = () => load();
+    const onFocus = () => void load();
     window.addEventListener("storage", onStorage);
     window.addEventListener("focus", onFocus);
     return () => {
@@ -1728,12 +1741,7 @@ export default function SubscriptionDetailPage() {
                           }
                         : row
                     );
-                    setSubscriptions(updated);
-                    try {
-                      localStorage.setItem("taban_subscriptions_v1", JSON.stringify(updated));
-                    } catch {
-                      // ignore storage errors
-                    }
+                    persistSubscriptions(updated);
                     setIsUpdateSalespersonOpen(false);
                   }}
                 >
@@ -1885,12 +1893,7 @@ export default function SubscriptionDetailPage() {
                         customerEmail: nextContacts[0]?.email || row.customerEmail || "",
                       };
                     });
-                    setSubscriptions(updated);
-                    try {
-                      localStorage.setItem("taban_subscriptions_v1", JSON.stringify(updated));
-                    } catch {
-                      // ignore storage errors
-                    }
+                    persistSubscriptions(updated);
                     setIsManageContactsOpen(false);
                   }}
                 >
@@ -1940,13 +1943,8 @@ export default function SubscriptionDetailPage() {
                 onClick={() => {
                   if (!selected?.id) return;
                   const updated = subscriptions.filter((row: any) => row.id !== selected.id);
-                  setSubscriptions(updated);
+                  persistSubscriptions(updated);
                   setSelectedIds((prev) => prev.filter((id) => id !== selected.id));
-                  try {
-                    localStorage.setItem("taban_subscriptions_v1", JSON.stringify(updated));
-                  } catch {
-                    // ignore storage errors
-                  }
                   toast.success("Subscription deleted successfully.");
                   setShowDeleteModal(false);
                   navigate("/sales/subscriptions");

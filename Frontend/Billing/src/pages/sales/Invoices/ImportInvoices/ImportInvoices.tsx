@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { toast } from "react-toastify";
 import { useLocation, useNavigate } from "react-router-dom";
 import { X, Download, ChevronDown, ChevronUp, HelpCircle, Search, Check, Lightbulb, LayoutGrid, HardDrive, Box, Square, Cloud, ChevronUp as ChevronUpIcon, Users, FileText, Folder, Building2, Edit, ChevronLeft, Info } from "lucide-react";
 import { getAllDocuments } from "../../../../utils/documentStorage";
@@ -148,14 +149,14 @@ export default function ImportInvoices({ mode }: { mode?: "invoice" | "retainer"
       const maxSize = 25 * 1024 * 1024; // 25MB
 
       if (!validTypes.includes(fileExtension)) {
-        alert("Please select a valid file format (CSV, TSV, or XLS).");
+        toast("Please select a valid file format (CSV, TSV, or XLS).");
         event.target.value = "";
         setSelectedFile(null);
         return;
       }
 
       if (file.size > maxSize) {
-        alert("File size must be less than 25 MB.");
+        toast("File size must be less than 25 MB.");
         event.target.value = "";
         setSelectedFile(null);
         return;
@@ -218,13 +219,13 @@ export default function ImportInvoices({ mode }: { mode?: "invoice" | "retainer"
       const maxSize = 25 * 1024 * 1024; // 25MB
 
       if (!validTypes.includes(fileExtension)) {
-        alert("Please select a valid file format (CSV, TSV, or XLS).");
+        toast("Please select a valid file format (CSV, TSV, or XLS).");
         setSelectedFile(null);
         return;
       }
 
       if (file.size > maxSize) {
-        alert("File size must be less than 25 MB.");
+        toast("File size must be less than 25 MB.");
         setSelectedFile(null);
         return;
       }
@@ -304,7 +305,7 @@ export default function ImportInvoices({ mode }: { mode?: "invoice" | "retainer"
   const handleNext = async () => {
     if (currentStep === "configure") {
       if (!selectedFile) {
-        alert("Please select a file to continue.");
+        toast("Please select a file to continue.");
         return;
       }
       // Parse import file to get headers
@@ -314,7 +315,7 @@ export default function ImportInvoices({ mode }: { mode?: "invoice" | "retainer"
         setCurrentStep("mapFields");
       } catch (error) {
         console.error("Error reading file:", error);
-        alert("Error reading file. Please try again.");
+        toast("Error reading file. Please try again.");
       }
     } else if (currentStep === "mapFields") {
       // Calculate preview data before moving to preview step
@@ -339,7 +340,7 @@ export default function ImportInvoices({ mode }: { mode?: "invoice" | "retainer"
           setCurrentStep("preview");
         } catch (error) {
           console.error("Error reading file:", error);
-          alert("Error reading file. Please try again.");
+          toast("Error reading file. Please try again.");
         }
       } else {
         setCurrentStep("preview");
@@ -437,7 +438,7 @@ export default function ImportInvoices({ mode }: { mode?: "invoice" | "retainer"
 
   const handleImport = async () => {
     if (!selectedFile) {
-      alert("No file selected");
+      toast("No file selected");
       return;
     }
 
@@ -445,7 +446,7 @@ export default function ImportInvoices({ mode }: { mode?: "invoice" | "retainer"
       const { headers, rows } = await parseImportFile(selectedFile);
 
       if (rows.length === 0) {
-        alert("No data found in the file");
+        toast("No data found in the file");
         return;
       }
 
@@ -718,16 +719,16 @@ export default function ImportInvoices({ mode }: { mode?: "invoice" | "retainer"
 
       // Show success/failure message
       if (importedCount > 0) {
-        alert(`Successfully imported ${importedCount} ${entityLabelSingle}(s).${skippedCount > 0 ? ` ${skippedCount} record(s) skipped.` : ''}`);
+        toast(`Successfully imported ${importedCount} ${entityLabelSingle}(s).${skippedCount > 0 ? ` ${skippedCount} record(s) skipped.` : ''}`);
       } else {
-        alert(`No ${entityLabelSingle}s were imported.${errors.length > 0 ? ` ${errors.slice(0, 3).join(" ")}` : ""}`);
+        toast(`No ${entityLabelSingle}s were imported.${errors.length > 0 ? ` ${errors.slice(0, 3).join(" ")}` : ""}`);
         return;
       }
 
       navigate(returnPath);
     } catch (error) {
       console.error("Error importing invoices:", error);
-      alert(`Error importing ${entityLabelSingle}s. Please check the file format and try again.`);
+      toast(`Error importing ${entityLabelSingle}s. Please check the file format and try again.`);
     }
   };
 
@@ -2023,7 +2024,7 @@ export default function ImportInvoices({ mode }: { mode?: "invoice" | "retainer"
                     setIsDocumentsModalOpen(false);
                     setSelectedDocuments([]);
                   } else {
-                    alert("Please select at least one document to attach.");
+                    toast("Please select at least one document to attach.");
                   }
                 }}
                 className="px-6 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -2038,3 +2039,4 @@ export default function ImportInvoices({ mode }: { mode?: "invoice" | "retainer"
     </div>
   );
 }
+

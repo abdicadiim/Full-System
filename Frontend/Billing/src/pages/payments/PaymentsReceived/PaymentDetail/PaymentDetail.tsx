@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getPaymentById, getPayments, updatePayment, deletePayment, Payment } from "../../../sales/salesModel";
+import { getPaymentById, getPayments, updatePayment, deletePayment, getInvoiceById, updateInvoice, Payment } from "../../../sales/salesModel";
 import { settingsAPI, bankAccountsAPI, refundsAPI, chartOfAccountsAPI } from "../../../../services/api";
 import { useCurrency } from "../../../../hooks/useCurrency";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
+import { toast } from "react-toastify";
 import {
   X, Edit, Send, FileText, MoreVertical,
   ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Plus, Filter,
@@ -119,6 +120,135 @@ export default function PaymentDetail() {
     "Amount",
     "Unused Amount"
   ];
+
+  const roundMoney = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
+  const toStatusKey = (value: any) =>
+    String(value || "")
+      .toLowerCase()
+      .replace(/-/g, "_")
+      .replace(/\s+/g, "_")
+      .trim();
+
+  const getAppliedAmountsByInvoice = (paymentRow: any): Record<string, number> => {
+    const map: Record<string, number> = {};
+    if (!paymentRow || typeof paymentRow !== "object") return map;
+
+    if (paymentRow.invoicePayments && typeof paymentRow.invoicePayments === "object") {
+      Object.entries(paymentRow.invoicePayments).forEach(([invoiceId, amount]) => {
+        const key = String(invoiceId || "").trim();
+        const val = Number(amount || 0);
+        if (key && val > 0) map[key] = roundMoney(val);
+      });
+      if (Object.keys(map).length > 0) return map;
+    }
+
+    if (Array.isArray(paymentRow.allocations)) {
+      paymentRow.allocations.forEach((allocation: any) => {
+        const invoiceId = String(allocation?.invoice?._id || allocation?.invoice?.id || allocation?.invoice || "").trim();
+        const amount = Number(allocation?.amount || 0);
+        if (!invoiceId || amount <= 0) return;
+        map[invoiceId] = roundMoney((map[invoiceId] || 0) + amount);
+      });
+      if (Object.keys(map).length > 0) return map;
+    }
+
+    const fallbackInvoiceId = String(paymentRow.invoiceId || "").trim();
+    const fallbackAmount = Number(paymentRow.amount || paymentRow.amountReceived || 0);
+    if (fallbackInvoiceId && fallbackAmount > 0) {
+      map[fallbackInvoiceId] = roundMoney(fallbackAmount);
+    }
+    return map;
+  };
+
+  const applyPaymentsToInvoices = async (
+    invoiceDeltas: Record<string, number>,
+    paymentMeta: {
+      paymentId: string;
+      paymentNumber: string;
+      paymentDate: string;
+      paymentMode: string;
+      referenceNumber: string;
+    },
+    appliedAmountsByInvoice: Record<string, number>
+  ) => {
+    const entries = Object.entries(invoiceDeltas).filter(([invoiceId, delta]) => String(invoiceId).trim() && Math.abs(Number(delta) || 0) > 0);
+    for (const [invoiceId, deltaRaw] of entries) {
+      const delta = Number(deltaRaw) || 0;
+      const current = await getInvoiceById(String(invoiceId));
+      if (!current) continue;
+
+      const totalAmount = roundMoney(parseFloat(String((current as any).total ?? (current as any).amount ?? 0)) || 0);
+      const currentPaid = roundMoney(parseFloat(String((current as any).amountPaid ?? (current as any).paidAmount ?? 0)) || 0);
+      const nextPaid = Math.max(0, roundMoney(currentPaid + delta));
+      const nextBalance = Math.max(0, roundMoney(totalAmount - nextPaid));
+
+      const currentStatusKey = toStatusKey((current as any).status || "sent");
+      let nextStatus: string = (current as any).status || "sent";
+      if (currentStatusKey !== "void") {
+        if (nextPaid > 0 && nextBalance <= 0) nextStatus = "paid";
+        else if (nextPaid > 0 && nextBalance > 0) nextStatus = "partially_paid";
+        else nextStatus = currentStatusKey === "draft" ? "draft" : "sent";
+      }
+
+      const existingPayments = Array.isArray((current as any).paymentsReceived)
+        ? [...(current as any).paymentsReceived]
+        : Array.isArray((current as any).payments)
+        ? [...(current as any).payments]
+        : [];
+      const paymentIdKey = String(paymentMeta.paymentId || "").trim();
+      const normalizedExisting = existingPayments.filter((row: any) => {
+        const rowPaymentId = String(row?.paymentId || row?.id || row?._id || "").trim();
+        return !(paymentIdKey && rowPaymentId && rowPaymentId === paymentIdKey);
+      });
+
+      const appliedAmount = roundMoney(Number(appliedAmountsByInvoice[invoiceId] || 0));
+      const nextPaymentsReceived =
+        appliedAmount > 0
+          ? [
+              ...normalizedExisting,
+              {
+                paymentId: paymentIdKey,
+                id: paymentIdKey || undefined,
+                paymentNumber: paymentMeta.paymentNumber || "",
+                date: paymentMeta.paymentDate || new Date().toISOString(),
+                paymentMode: paymentMeta.paymentMode || "Cash",
+                referenceNumber: paymentMeta.referenceNumber || "",
+                amount: appliedAmount,
+                balance: nextBalance,
+                balanceAmount: nextBalance,
+              },
+            ]
+          : normalizedExisting;
+
+      await updateInvoice(String(invoiceId), {
+        amountPaid: nextPaid,
+        paidAmount: nextPaid,
+        balanceDue: nextBalance,
+        balance: nextBalance,
+        status: nextStatus,
+        paymentsReceived: nextPaymentsReceived,
+      } as any);
+    }
+  };
+
+  useEffect(() => {
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousBodyHeight = document.body.style.height;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const previousHtmlHeight = document.documentElement.style.height;
+
+    document.body.style.overflow = "hidden";
+    document.body.style.height = "100%";
+    document.documentElement.style.overflow = "hidden";
+    document.documentElement.style.height = "100%";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.body.style.height = previousBodyHeight;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.documentElement.style.height = previousHtmlHeight;
+    };
+  }, []);
 
   useEffect(() => {
     const loadPaymentData = async () => {
@@ -402,13 +532,13 @@ export default function PaymentDetail() {
 
   const handleSidebarOnlinePayments = () => {
     setIsSidebarMoreMenuOpen(false);
-    alert("Online Payments configuration will be implemented here");
+    toast.info("Online Payments configuration will be implemented here");
   };
 
   const handleSidebarResetColumnWidth = () => {
     setIsSidebarMoreMenuOpen(false);
     localStorage.removeItem("payments_received_column_widths");
-    alert("Column widths have been reset");
+    toast.info("Column widths have been reset");
   };
 
   const handleSidebarRefreshList = async () => {
@@ -475,7 +605,7 @@ export default function PaymentDetail() {
     // Close modal after a short delay
     setTimeout(() => {
       setIsEmailModalOpen(false);
-      alert("Email client opened. Please send the email from your email application.");
+      toast.success("Email client opened. Please send the email from your email application.");
     }, 100);
   };
 
@@ -516,7 +646,7 @@ export default function PaymentDetail() {
       pdf.save(`${safePaymentNumber}.pdf`);
     } catch (error) {
       console.error("Error downloading payment receipt PDF:", error);
-      alert("Failed to download PDF. Please try again.");
+      toast.error("Failed to download PDF. Please try again.");
     }
   };
 
@@ -529,19 +659,19 @@ export default function PaymentDetail() {
   const handleRefundSave = async () => {
     // Validate required fields
     if (!refundData.amount || !refundData.refundedOn || !refundData.fromAccount) {
-      alert("Please fill in all required fields: Amount, Refunded On, and From Account");
+      toast.error("Please fill in all required fields: Amount, Refunded On, and From Account");
       return;
     }
 
     // Validate amount
     const refundAmount = parseFloat(refundData.amount);
     if (isNaN(refundAmount) || refundAmount <= 0) {
-      alert("Please enter a valid refund amount");
+      toast.error("Please enter a valid refund amount");
       return;
     }
 
     if (refundAmount > (payment?.amountReceived || 0)) {
-      alert(`Refund amount cannot exceed the payment amount of ${payment?.amountReceived || 0}`);
+      toast.error(`Refund amount cannot exceed the payment amount of ${payment?.amountReceived || 0}`);
       return;
     }
 
@@ -562,7 +692,7 @@ export default function PaymentDetail() {
       const response = await refundsAPI.create(refundPayload);
 
       if (response.success) {
-        alert("Refund processed successfully!");
+        toast.success("Refund processed successfully!");
         setIsRefundModalOpen(false);
 
         // Reset refund form
@@ -585,11 +715,11 @@ export default function PaymentDetail() {
           setRefunds(refundsResponse.data);
         }
       } else {
-        alert(`Failed to process refund: ${response.message || 'Unknown error'}`);
+        toast.error(`Failed to process refund: ${response.message || 'Unknown error'}`);
       }
     } catch (error: any) {
       console.error("Error processing refund:", error);
-      alert(`Error processing refund: ${error.message || 'Please try again'}`);
+      toast.error(`Error processing refund: ${error.message || 'Please try again'}`);
     }
   };
 
@@ -654,16 +784,20 @@ export default function PaymentDetail() {
   };
 
   const persistPaymentMeta = async (attachments: any[], paymentComments: any[]) => {
-    if (!id) return;
+    const paymentId = String(id || payment?.id || (payment as any)?._id || "").trim();
+    if (!paymentId) {
+      toast.error("Unable to save comments/attachments: payment id is missing.");
+      return;
+    }
     try {
-      await updatePayment(id, {
+      await updatePayment(paymentId, {
         attachments,
         comments: paymentComments
       } as any);
       setPayment(prev => prev ? ({ ...prev, attachments, comments: paymentComments } as any) : prev);
     } catch (error) {
       console.error("Error saving payment comments/attachments:", error);
-      alert("Failed to save changes. Please try again.");
+      toast.error("Failed to save changes. Please try again.");
     }
   };
 
@@ -679,14 +813,14 @@ export default function PaymentDetail() {
   const handleFileUpload = async (files: File[]) => {
     const validFiles = Array.from(files).filter(file => {
       if (file.size > 10 * 1024 * 1024) {
-        alert(`File ${file.name} is too large. Maximum size is 10MB.`);
+        toast.error(`File ${file.name} is too large. Maximum size is 10MB.`);
         return false;
       }
       return true;
     });
 
     if (paymentAttachments.length + validFiles.length > 5) {
-      alert("Maximum 5 files allowed. Please remove some files first.");
+      toast.error("Maximum 5 files allowed. Please remove some files first.");
       return;
     }
 
@@ -711,7 +845,7 @@ export default function PaymentDetail() {
       await persistPaymentMeta(updated, comments);
     } catch (error) {
       console.error("Error processing uploaded files:", error);
-      alert("Failed to upload files. Please try again.");
+      toast.error("Failed to upload files. Please try again.");
     }
   };
 
@@ -799,10 +933,10 @@ export default function PaymentDetail() {
       await updatePayment(id, updatedPayment);
       setPayment(updatedPayment);
       setIsVoidReasonModalOpen(false);
-      alert("Payment voided successfully");
+      toast.success("Payment voided successfully");
     } catch (error) {
       console.error("Error voiding payment:", error);
-      alert("Failed to void payment. Please try again.");
+      toast.error("Failed to void payment. Please try again.");
     }
   };
 
@@ -823,26 +957,41 @@ export default function PaymentDetail() {
       await updatePayment(id, updatedPayment);
       setPayment(updatedPayment);
       setIsConvertDraftModalOpen(false);
-      alert("Payment converted to draft");
+      toast.success("Payment converted to draft");
     } catch (error) {
       console.error("Error converting payment to draft:", error);
-      alert("Failed to convert to draft. Please try again.");
+      toast.error("Failed to convert to draft. Please try again.");
     }
   };
 
   const handleMarkAsPaid = async () => {
     if (!payment) return;
     try {
+      const wasPaid = String(payment.status || "").toLowerCase() === "paid";
+      const appliedByInvoice = getAppliedAmountsByInvoice(payment);
       const updatedPayment = {
         ...payment,
         status: "paid",
       };
       await updatePayment(id, updatedPayment);
+      if (!wasPaid && Object.keys(appliedByInvoice).length > 0) {
+        await applyPaymentsToInvoices(
+          appliedByInvoice,
+          {
+            paymentId: String((updatedPayment as any)._id || (updatedPayment as any).id || id || ""),
+            paymentNumber: String((updatedPayment as any).paymentNumber || ""),
+            paymentDate: String((updatedPayment as any).date || (updatedPayment as any).paymentDate || new Date().toISOString()),
+            paymentMode: String((updatedPayment as any).paymentMode || "Cash"),
+            referenceNumber: String((updatedPayment as any).referenceNumber || ""),
+          },
+          appliedByInvoice
+        );
+      }
       setPayment(updatedPayment);
-      alert("Payment marked as paid");
+      toast.success("Payment marked as paid");
     } catch (error) {
       console.error("Error marking payment as paid:", error);
-      alert("Failed to mark as paid. Please try again.");
+      toast.error("Failed to mark as paid. Please try again.");
     }
   };
 
@@ -856,7 +1005,7 @@ export default function PaymentDetail() {
         navigate("/payments/payments-received");
       } catch (error) {
         console.error("Error deleting payment:", error);
-        alert("Failed to delete payment. Please try again.");
+        toast.error("Failed to delete payment. Please try again.");
       }
     }
   };
@@ -874,14 +1023,14 @@ export default function PaymentDetail() {
   return (
     <div className="w-full h-screen bg-gray-50 flex overflow-hidden">
       {/* Left Sidebar */}
-      <div className="w-80 border-r border-gray-200 bg-white h-full overflow-hidden flex flex-col">
-        <div className="h-[74px] px-4 border-b border-gray-200 bg-white flex items-center justify-between">
+      <div className="w-72 border-r border-gray-200 bg-white h-full overflow-hidden flex flex-col">
+        <div className="h-16 px-3 border-b border-gray-200 bg-white flex items-center justify-between">
           <div className="relative flex-1 min-w-0 mr-2" ref={allPaymentsDropdownRef}>
             <button
               onClick={() => setIsAllPaymentsDropdownOpen(!isAllPaymentsDropdownOpen)}
               className="flex items-center gap-2 w-full text-left"
             >
-              <span className="text-xl font-semibold text-gray-900 leading-none truncate">All Received Payments</span>
+              <span className="text-lg font-semibold text-gray-900 leading-none truncate">All Received Payments</span>
               {isAllPaymentsDropdownOpen ? (
                 <ChevronUp size={16} className="text-blue-600 flex-shrink-0" />
               ) : (
@@ -907,17 +1056,17 @@ export default function PaymentDetail() {
             )}
           </div>
 
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-1.5 flex-shrink-0">
             <button
-              className="h-9 w-9 rounded-md bg-[#22c55e] hover:bg-[#16a34a] text-white transition-colors flex items-center justify-center"
+              className="h-8 w-8 rounded-md bg-[#156372] hover:bg-[#0D4A52] text-white transition-colors flex items-center justify-center"
               onClick={() => navigate("/payments/payments-received/new")}
               title="New Payment"
             >
-              <Plus size={18} />
+              <Plus size={16} />
             </button>
             <div className="relative" ref={sidebarMoreMenuRef}>
               <button
-                className="h-9 w-9 rounded-md border border-gray-300 bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors flex items-center justify-center"
+                className="h-8 w-8 rounded-md border border-gray-300 bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors flex items-center justify-center"
                 onClick={() => setIsSidebarMoreMenuOpen(!isSidebarMoreMenuOpen)}
                 title="More"
               >
@@ -1051,25 +1200,28 @@ export default function PaymentDetail() {
               <div
                 key={p.id}
                 onClick={() => navigate(`/payments/payments-received/${p.id}`)}
-                className={`p-4 cursor-pointer transition-colors ${p.id === id ? "bg-blue-50 border-l-4 border-blue-600" : "hover:bg-gray-50"
+                className={`px-3 py-2.5 cursor-pointer transition-colors ${p.id === id ? "bg-blue-50 border-l-4 border-blue-600" : "hover:bg-gray-50"
                   }`}
               >
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-2.5">
                   <div className="mt-1">
                     {p.id === id ? (
-                      <CheckSquare size={16} className="text-gray-600" fill="#6b7280" />
+                      <CheckSquare size={15} className="text-gray-600" fill="#6b7280" />
                     ) : (
-                      <Square size={16} className="text-gray-400" />
+                      <Square size={15} className="text-gray-400" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-gray-900 truncate">{p.customerName || "Unknown"}</div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="font-semibold text-[15px] text-gray-900 truncate">{p.customerName || "Unknown"}</div>
+                      <div className="text-[15px] font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(p.amountReceived || 0, p.currency || (payment?.currency))}</div>
+                    </div>
                     <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
                       <span>{p.paymentNumber || p.id}</span>
                       <span>â€¢</span>
                       <span>{formatDate(p.paymentDate)}</span>
                     </div>
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="flex items-center gap-2 mt-1.5">
                       <span className={`text-xs font-semibold ${p.status === "paid"
                         ? "text-green-700"
                         : p.status === "void"
@@ -1080,7 +1232,6 @@ export default function PaymentDetail() {
                       </span>
                       <span className="text-xs text-gray-500">{p.paymentMode || ""}</span>
                     </div>
-                    <div className="text-sm font-semibold text-gray-900 mt-2">{formatCurrency(p.amountReceived || 0, p.currency || (payment?.currency))}</div>
                   </div>
                 </div>
               </div>
@@ -1092,15 +1243,15 @@ export default function PaymentDetail() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 bg-gray-50 h-full overflow-hidden flex flex-col">
+      <div className="flex-1 bg-[#f3f4f6] h-full overflow-hidden flex flex-col">
         {/* Top Header with Number and Icons */}
-        <div className="bg-white border-b border-gray-200 px-5 py-2.5 z-10 print:hidden flex-shrink-0">
-          <div className="flex items-center justify-between mb-2">
+        <div className="bg-white border-b border-gray-200 px-4 py-1.5 z-10 print:hidden flex-shrink-0">
+          <div className="flex items-center justify-between mb-1">
             <div className="flex flex-col leading-tight">
               <div className="text-sm text-gray-600">
                 Location: <span className="text-[#1f3b82]">{payment.location || "Head Office"}</span>
               </div>
-              <div className="text-[32px] font-semibold text-gray-900 mt-1">
+              <div className="text-[24px] font-semibold text-gray-900 mt-0.5 leading-none">
                 {payment.paymentNumber || payment.id || "1"}
               </div>
             </div>
@@ -1154,7 +1305,7 @@ export default function PaymentDetail() {
 
           {/* Action Buttons Toolbar */}
           {(payment.status || "").toLowerCase() === "void" ? (
-            <div className="flex items-center gap-0 border-t border-gray-200 pt-3">
+            <div className="flex items-center gap-0 border-t border-gray-200 pt-2">
               <div className="relative" ref={pdfDropdownRef}>
                 <button
                   className="flex items-center gap-2 py-2 px-4 bg-transparent border-none text-sm font-medium text-gray-700 cursor-pointer transition-colors hover:bg-gray-50 rounded-md"
@@ -1192,7 +1343,7 @@ export default function PaymentDetail() {
               </button>
             </div>
           ) : (payment.status || "").toLowerCase() === "draft" ? (
-            <div className="flex items-center gap-0 border-t border-gray-200 pt-3">
+            <div className="flex items-center gap-0 border-t border-gray-200 pt-2">
               <button
                 className="flex items-center gap-2 py-2 px-4 bg-transparent border-none text-sm font-medium text-gray-700 cursor-pointer transition-colors hover:bg-gray-50 rounded-md"
                 onClick={() => navigate(`/payments/payments-received/${id}/edit`, { state: { paymentData: payment } })}
@@ -1239,7 +1390,7 @@ export default function PaymentDetail() {
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-0 border-t border-gray-200 pt-3">
+            <div className="flex items-center gap-0 border-t border-gray-200 pt-2">
               <button
                 className="flex items-center gap-2 py-2 px-4 bg-transparent border-none text-sm font-medium text-gray-700 cursor-pointer transition-colors hover:bg-gray-50 rounded-md"
                 onClick={() => navigate(`/payments/payments-received/${id}/edit`, { state: { paymentData: payment } })}
@@ -1327,38 +1478,37 @@ export default function PaymentDetail() {
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-scroll px-4 pb-6">
           {(payment.status || "").toLowerCase() === "draft" && (
-            <div className="mx-5 mt-5 mb-4 border border-gray-200 rounded-md bg-white p-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="max-w-[920px] mx-auto mt-4 mb-4 border border-gray-200 rounded-md bg-white px-6 py-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="text-gray-700">
                 <span className="font-semibold">WHAT'S NEXT?</span> Mark the payment as Paid to confirm that it has been received.
               </div>
               <button
-                className="px-4 py-2 rounded-md bg-[#22c55e] text-white text-sm font-medium hover:bg-[#16a34a] transition-colors self-start md:self-auto"
+                className="px-4 py-2 rounded-md bg-[#156372] text-white text-sm font-medium hover:bg-[#0D4A52] transition-colors self-start md:self-auto"
                 onClick={handleMarkAsPaid}
               >
                 Mark as Paid
               </button>
             </div>
           )}
-
           {/* Receipt Card */}
           <div
             ref={receiptPaperRef}
-            className="max-w-[820px] mx-auto bg-white border border-gray-200 shadow-sm relative mb-12 mt-8 print:shadow-none print:max-w-none print:m-0"
+            className="max-w-[920px] mx-auto bg-white border border-gray-300 shadow-[0_2px_8px_rgba(0,0,0,0.08)] relative mb-8 mt-6 print:shadow-none print:max-w-none print:m-0"
           >
-          <div className="absolute left-0 top-0 w-0 h-0 border-l-[46px] border-l-[#22c55e] border-b-[46px] border-b-transparent" />
+          <div className="absolute left-0 top-0 w-0 h-0 border-l-[46px] border-l-[#156372] border-b-[46px] border-b-transparent" />
           <div className="absolute top-[8px] left-[3px] -rotate-45 text-[10px] font-bold tracking-wide text-white uppercase">
             Paid
           </div>
 
-          <div className="px-7 py-8 sm:px-10 sm:py-9">
+          <div className="px-8 py-9 sm:px-12 sm:py-10 text-[12px] text-gray-700">
             <div className="mb-8">
               {logoPreview && (
                 <img src={logoPreview} alt="Company Logo" className="h-14 object-contain mb-4" />
               )}
-              <div className="text-lg font-semibold text-gray-900">{organizationData.name}</div>
-              <div className="mt-2 text-xs text-gray-500 leading-6">
+              <div className="text-[14px] font-semibold text-gray-900">{organizationData.name}</div>
+              <div className="mt-2 text-[11px] text-gray-500 leading-5">
                 <p>{organizationData.street1}</p>
                 {organizationData.street2 && <p>{organizationData.street2}</p>}
                 <p>{organizationData.city} {organizationData.zipCode}</p>
@@ -1368,46 +1518,47 @@ export default function PaymentDetail() {
               </div>
             </div>
 
-            <div className="border-t border-gray-200 pt-5">
-              <div className="text-center text-[13px] tracking-wide text-gray-700 mb-7">
-                PAYMENT RECEIPT
+            <div className="border-t border-gray-200 pt-6">
+              <div className="text-center text-[13px] tracking-wide text-gray-700 mb-6">
+                {String((payment as any).paymentType || "Payment").toUpperCase()} RECEIPT
+                <div className="h-px bg-gray-200 w-44 mx-auto mt-1.5" />
               </div>
 
               <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-                <div className="w-full md:max-w-[380px]">
+                <div className="w-full md:max-w-[360px]">
                   <div className="grid grid-cols-[130px_1fr] border-b border-gray-200 py-2">
-                    <span className="text-xs text-gray-500">Payment Date</span>
-                    <span className="text-xs font-semibold text-gray-900">{formatDate(payment.paymentDate)}</span>
+                    <span className="text-[11px] text-gray-500">Payment Date</span>
+                    <span className="text-[11px] font-semibold text-gray-900">{formatDate(payment.paymentDate)}</span>
                   </div>
                   <div className="grid grid-cols-[130px_1fr] border-b border-gray-200 py-2">
-                    <span className="text-xs text-gray-500">Reference Number</span>
-                    <span className="text-xs font-semibold text-gray-900">{payment.referenceNumber || "-"}</span>
+                    <span className="text-[11px] text-gray-500">Reference Number</span>
+                    <span className="text-[11px] font-semibold text-gray-900">{payment.referenceNumber || "-"}</span>
                   </div>
                   <div className="grid grid-cols-[130px_1fr] border-b border-gray-200 py-2">
-                    <span className="text-xs text-gray-500">Payment Mode</span>
-                    <span className="text-xs font-semibold text-gray-900">{payment.paymentMode || "Cash"}</span>
+                    <span className="text-[11px] text-gray-500">Payment Mode</span>
+                    <span className="text-[11px] font-semibold text-gray-900">{payment.paymentMode || "Cash"}</span>
                   </div>
                 </div>
 
-                <div className="bg-[#79a94a] text-white px-5 py-4 text-center min-w-[180px] self-start">
-                  <div className="text-[11px] font-medium mb-1">Amount Received</div>
-                  <div className="text-2xl font-bold leading-tight">
+                <div className="bg-gradient-to-r from-[#156372] to-[#0D4A52] text-white px-4 py-3 text-center min-w-[170px] self-start">
+                  <div className="text-[10px] font-medium mb-1">Amount Received</div>
+                  <div className="text-[18px] font-bold leading-tight">
                     {(payment.currency || symbol || baseCurrency?.code || "USD").substring(0, 3)}{parseFloat(payment.amountReceived || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
                 </div>
               </div>
 
               <div className="mt-8">
-                <div className="text-xs text-gray-500 mb-2">Received From</div>
-                <div className="text-sm font-semibold text-blue-600">{payment.customerName}</div>
+                <div className="text-[11px] text-gray-500 mb-2">Received From</div>
+                <div className="text-[12px] font-semibold text-blue-600">{payment.customerName}</div>
               </div>
             </div>
           </div>
 
-          <div className="border-t border-gray-200 px-7 py-7 sm:px-10">
-            <div className="text-base font-semibold text-gray-900 mb-4">Payment for</div>
+          <div className="border-t border-gray-200 px-8 py-7 sm:px-12">
+            <div className="text-[13px] font-semibold text-gray-900 mb-3">Payment for</div>
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-xs">
+              <table className="w-full border-collapse text-[11px]">
                 <thead>
                   <tr className="bg-gray-100 border-b border-gray-200">
                     <th className="px-3 py-2 text-left font-medium text-gray-600">Invoice Number</th>
@@ -1465,7 +1616,7 @@ export default function PaymentDetail() {
             </div>
           </div>
 
-          <div className="px-7 pb-6 sm:px-10 text-xs text-gray-400">
+          <div className="px-7 pb-6 sm:px-10 text-[10px] text-gray-400">
             PDF Template : Elite Template <span className="text-blue-600 cursor-pointer">Change</span>
           </div>
 

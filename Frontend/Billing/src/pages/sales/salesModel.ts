@@ -450,7 +450,13 @@ export const getInvoiceById = async (invoiceId: string): Promise<Invoice | null>
       return {
         ...invoice,
         id: invoice._id || invoice.id,
-        customerName: invoice.customer?.displayName || invoice.customer?.companyName || invoice.customer?.name || "",
+        customerName:
+          invoice.customerName ||
+          (typeof invoice.customer === "string" ? invoice.customer : "") ||
+          invoice.customer?.displayName ||
+          invoice.customer?.companyName ||
+          invoice.customer?.name ||
+          "",
         status: invoice.status || "draft"
       };
     }
@@ -745,7 +751,12 @@ export const getPayments = async (): Promise<Payment[]> => {
       return response.data.map((item: any) => ({
         ...item,
         id: item._id || item.id,
-        customerName: item.customer?.displayName || item.customer?.name || item.customer?.companyName || (typeof item.customer === 'string' ? item.customer : ""),
+        customerName:
+          item.customerName ||
+          item.customer?.displayName ||
+          item.customer?.name ||
+          item.customer?.companyName ||
+          (typeof item.customer === 'string' ? item.customer : ""),
         customerId: item.customer?._id || item.customer,
         amountReceived: item.amount,
         status: item.status || 'paid',
@@ -755,7 +766,7 @@ export const getPayments = async (): Promise<Payment[]> => {
             item.paymentMethod === 'card' ? 'Credit Card' :
               item.paymentMethod === 'bank_transfer' ? 'Bank Transfer' :
                 (item.paymentMethod || 'Other'),
-        referenceNumber: item.paymentReference || item.referenceNumber || ""
+        referenceNumber: item.referenceNumber || item.paymentReference || ""
       }));
     }
     return [];
@@ -776,13 +787,18 @@ export const getPaymentById = async (paymentId: string): Promise<Payment | null>
         status: payment.status || 'paid',
         amountReceived: payment.amount,
         paymentDate: payment.date,
-        customerName: payment.customer?.displayName || payment.customer?.name || "",
+        customerName:
+          payment.customerName ||
+          payment.customer?.displayName ||
+          payment.customer?.name ||
+          payment.customer?.companyName ||
+          (typeof payment.customer === 'string' ? payment.customer : ""),
         paymentMode: payment.paymentMethod === 'cash' ? 'Cash' :
           payment.paymentMethod === 'check' ? 'Check' :
             payment.paymentMethod === 'card' ? 'Credit Card' :
               payment.paymentMethod === 'bank_transfer' ? 'Bank Transfer' :
                 (payment.paymentMethod || 'Other'),
-        referenceNumber: payment.paymentReference || payment.referenceNumber || "",
+        referenceNumber: payment.referenceNumber || payment.paymentReference || "",
         allocations: payment.allocations || []
       };
     }
@@ -879,6 +895,15 @@ export interface CreditNote {
 
 // Credit Notes Storage
 const CREDIT_NOTES_STORAGE_KEY = "taban_books_credit_notes";
+const normalizeCreditNoteReference = (note: any): string =>
+  String(
+    note?.referenceNumber ??
+    note?.reference ??
+    note?.referenceNo ??
+    note?.refNumber ??
+    note?.ref ??
+    ""
+  ).trim();
 
 export const getCreditNotes = async (): Promise<CreditNote[]> => {
   try {
@@ -887,7 +912,8 @@ export const getCreditNotes = async (): Promise<CreditNote[]> => {
       return response.data.map((item: any) => ({
         ...item,
         id: item._id || item.id,
-        customerName: item.customerName || item.customer?.displayName || item.customer?.companyName || item.customer?.name || (typeof item.customer === 'string' ? item.customer : "")
+        customerName: item.customerName || item.customer?.displayName || item.customer?.companyName || item.customer?.name || (typeof item.customer === 'string' ? item.customer : ""),
+        referenceNumber: normalizeCreditNoteReference(item)
       }));
     }
     return [];
@@ -907,7 +933,8 @@ export const getCreditNoteById = async (creditNoteId: string): Promise<CreditNot
         id: note._id || note.id,
         customerId: note.customer?._id || note.customer,
         customerName: note.customer?.displayName || note.customer?.name || "",
-        customerEmail: note.customer?.email || ""
+        customerEmail: note.customer?.email || "",
+        referenceNumber: normalizeCreditNoteReference(note)
       };
     }
     return null;
@@ -941,6 +968,8 @@ export const saveCreditNote = async (creditNoteData: Partial<CreditNote>): Promi
     const apiData: any = {
       ...creditNoteData,
       creditNoteNumber: String((creditNoteData as any).creditNoteNumber || (creditNoteData as any).number || ""),
+      referenceNumber: normalizeCreditNoteReference(creditNoteData as any),
+      reference: normalizeCreditNoteReference(creditNoteData as any),
       customer: creditNoteData.customerId || (creditNoteData as any).customer,
       customerId: creditNoteData.customerId || (creditNoteData as any).customer,
       customerName:
@@ -1000,6 +1029,8 @@ export const updateCreditNote = async (creditNoteId: string, creditNoteData: Par
     const apiData: any = {
       ...creditNoteData,
       creditNoteNumber: String((creditNoteData as any).creditNoteNumber || (creditNoteData as any).number || ""),
+      referenceNumber: normalizeCreditNoteReference(creditNoteData as any),
+      reference: normalizeCreditNoteReference(creditNoteData as any),
       customer: creditNoteData.customerId || (creditNoteData as any).customer,
       customerId: creditNoteData.customerId || (creditNoteData as any).customer,
       customerName:

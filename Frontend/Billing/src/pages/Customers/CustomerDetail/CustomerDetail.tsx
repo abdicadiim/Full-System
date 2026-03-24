@@ -4093,7 +4093,7 @@ export default function CustomerDetail() {
                                             className="px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
                                             onClick={() => {
                                                 setIsNewTransactionDropdownOpen(false);
-                                                navigate("/sales/payments-received/new", { state: { customerId: customer?.id, customerName: customer?.name } });
+                                                navigate("/payments/payments-received/new", { state: { customerId: customer?.id, customerName: customer?.name } });
                                             }}
                                         >
                                             Customer Payment
@@ -6241,7 +6241,7 @@ export default function CustomerDetail() {
                                         className="hidden flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium cursor-pointer hover:bg-blue-700 transition-colors"
                                         onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
                                             e.stopPropagation();
-                                            navigate("/sales/payments-received/new", { state: { customerId: customer?.id, customerName: customer?.name } });
+                                            navigate("/payments/payments-received/new", { state: { customerId: customer?.id, customerName: customer?.name } });
                                         }}
                                     >
                                         <Plus size={14} />

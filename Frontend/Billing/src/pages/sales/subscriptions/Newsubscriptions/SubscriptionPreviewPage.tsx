@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { Check, ChevronDown, Search } from "lucide-react";
-import { creditNotesAPI, invoicesAPI, paymentsReceivedAPI, productsAPI } from "../../../../services/api";
+import { creditNotesAPI, invoicesAPI, paymentsReceivedAPI, productsAPI, subscriptionsAPI } from "../../../../services/api";
 
 type PreviewState = {
   currency?: string;
@@ -753,24 +753,64 @@ const SubscriptionPreviewPage = () => {
               scheduledUpdateDate: existingRow?.scheduledUpdateDate || "",
             };
 
+            const applyMode = String(draft?.applyChanges || state.applyChanges || "immediately");
+            const applyOn =
+              applyMode === "end_of_term"
+                ? existingRow?.nextBillingOn || subscription.nextBillingOn
+                : applyMode === "scheduled"
+                ? formatShortDate(draft?.applyChangesDate || state.applyChangesDate || "")
+                : "";
+
+            let finalSubscription = { ...subscription };
+            try {
+              if (isEditMode) {
+                const editId = String(draft?.id || existingRow?.id || subscription.id || "");
+                if (editId) {
+                  const payload =
+                    applyMode === "immediately"
+                      ? {
+                          ...subscription,
+                          id: undefined,
+                          _id: undefined,
+                        }
+                      : {
+                          scheduledUpdate: { applyOn, mode: applyMode, payload: subscription },
+                          scheduledUpdateDate: applyOn,
+                        };
+                  const updatedRes: any = await subscriptionsAPI.update(editId, payload);
+                  if (updatedRes?.success && updatedRes?.data) {
+                    finalSubscription = { ...finalSubscription, ...updatedRes.data, id: String(updatedRes.data.id || editId) };
+                  } else {
+                    finalSubscription = { ...finalSubscription, id: editId };
+                  }
+                }
+              } else {
+                const createdRes: any = await subscriptionsAPI.create({
+                  ...subscription,
+                  id: undefined,
+                  _id: undefined,
+                });
+                if (createdRes?.success && createdRes?.data) {
+                  finalSubscription = { ...finalSubscription, ...createdRes.data, id: String(createdRes.data.id || finalSubscription.id) };
+                }
+              }
+            } catch {
+              // keep local fallback path below
+            }
+
             let updated = [...existing];
             if (isEditMode && existingIndex >= 0) {
-              const applyMode = String(draft?.applyChanges || state.applyChanges || "immediately");
               if (applyMode === "immediately") {
-                updated[existingIndex] = subscription;
+                updated[existingIndex] = finalSubscription;
               } else {
-                const applyOn =
-                  applyMode === "end_of_term"
-                    ? existingRow?.nextBillingOn || subscription.nextBillingOn
-                    : formatShortDate(draft?.applyChangesDate || state.applyChangesDate || "");
                 updated[existingIndex] = {
                   ...existingRow,
-                  scheduledUpdate: { applyOn, mode: applyMode, payload: subscription },
+                  scheduledUpdate: { applyOn, mode: applyMode, payload: finalSubscription },
                   scheduledUpdateDate: applyOn,
                 };
               }
             } else {
-              updated = [subscription, ...existing];
+              updated = [finalSubscription, ...existing];
             }
             try {
               localStorage.setItem(listKey, JSON.stringify(updated));
@@ -787,7 +827,7 @@ const SubscriptionPreviewPage = () => {
             }
 
             // Auto-generate invoice for new subscriptions when enabled
-            if (!isEditMode && subscription.generateInvoices) {
+            if (!isEditMode && finalSubscription.generateInvoices) {
               try {
                 const nextNumberResponse = await invoicesAPI.getNextNumber("INV-");
                 const nextNumber =
@@ -799,73 +839,71 @@ const SubscriptionPreviewPage = () => {
                 );
                 const todayLabel = formatShortDate(new Date().toISOString());
                 const isBackdatedCycle = Boolean(startDateRaw && startDateRaw < new Date().toISOString().split("T")[0]);
-                if (isBackdatedCycle && !backdatedGenerate) {
-                  // Skip generating invoice for backdated subscriptions when disabled
-                  return;
-                }
-                const invoiceDate = isBackdatedCycle ? todayLabel : createdOnValue;
-                const dueDate = invoiceDate;
-                const invoiceStatus =
-                  totalImmediate <= 0
-                    ? "paid"
-                    : amountReceivedValue >= totalImmediate
-                    ? "paid"
-                    : amountReceivedValue > 0
-                    ? "partially paid"
-                    : "sent";
-                const balanceDue = Math.max(totalImmediate - amountReceivedValue, 0);
-                const items = lineItems.map((item) => ({
-                  itemDetails: item.label,
-                  description: "",
-                  quantity: item.quantity,
-                  rate: item.rate,
-                  tax: item.taxRate ? `${item.taxRate}%` : "",
-                  taxRate: item.taxRate,
-                  amount: item.quantity * item.rate,
-                }));
+                if (!(isBackdatedCycle && !backdatedGenerate)) {
+                  const invoiceDate = isBackdatedCycle ? todayLabel : createdOnValue;
+                  const dueDate = invoiceDate;
+                  const invoiceStatus =
+                    totalImmediate <= 0
+                      ? "paid"
+                      : amountReceivedValue >= totalImmediate
+                      ? "paid"
+                      : amountReceivedValue > 0
+                      ? "partially paid"
+                      : "sent";
+                  const balanceDue = Math.max(totalImmediate - amountReceivedValue, 0);
+                  const items = lineItems.map((item) => ({
+                    itemDetails: item.label,
+                    description: "",
+                    quantity: item.quantity,
+                    rate: item.rate,
+                    tax: item.taxRate ? `${item.taxRate}%` : "",
+                    taxRate: item.taxRate,
+                    amount: item.quantity * item.rate,
+                  }));
 
-                const invoiceResponse = await invoicesAPI.create({
-                  invoiceNumber: nextNumber,
-                  invoiceDate,
-                  date: invoiceDate,
-                  dueDate,
-                  status: invoiceStatus,
-                  customerId: subscription.customerId,
-                  customerName: subscription.customerName,
-                  customerEmail: subscription.customerEmail,
-                  billingAddress: subscription.billingAddress,
-                  shippingAddress: subscription.shippingAddress,
-                  salesperson: subscription.salesperson,
-                  currency: currencyCode,
-                  items,
-                  subTotal: subtotal,
-                  taxAmount,
-                  discountAmount,
-                  total: totalImmediate,
-                  balanceDue,
-                  balance: balanceDue,
-                  amountPaid: amountReceivedValue,
-                  isRecurringInvoice: true,
-                  recurringProfileId: subscription.id,
-                  referenceNumber: subscription.referenceNumber || "",
-                  createdAt: new Date().toISOString(),
-                });
-
-                const createdInvoice = invoiceResponse?.data;
-                if (amountReceivedValue > 0 && createdInvoice?.id) {
-                  await paymentsReceivedAPI.create({
-                    invoiceId: createdInvoice.id,
-                    invoiceNumber: createdInvoice.invoiceNumber || nextNumber,
-                    customerId: subscription.customerId,
-                    customerName: subscription.customerName,
-                    amountReceived: amountReceivedValue,
-                    paymentMode,
-                    depositTo,
-                    referenceNumber,
-                    notes: paymentNotes,
-                    paymentDate: paymentDate || createdOnValue,
-                    status: amountReceivedValue >= totalImmediate ? "paid" : "partially paid",
+                  const invoiceResponse = await invoicesAPI.create({
+                    invoiceNumber: nextNumber,
+                    invoiceDate,
+                    date: invoiceDate,
+                    dueDate,
+                    status: invoiceStatus,
+                    customerId: finalSubscription.customerId,
+                    customerName: finalSubscription.customerName,
+                    customerEmail: finalSubscription.customerEmail,
+                    billingAddress: finalSubscription.billingAddress,
+                    shippingAddress: finalSubscription.shippingAddress,
+                    salesperson: finalSubscription.salesperson,
+                    currency: currencyCode,
+                    items,
+                    subTotal: subtotal,
+                    taxAmount,
+                    discountAmount,
+                    total: totalImmediate,
+                    balanceDue,
+                    balance: balanceDue,
+                    amountPaid: amountReceivedValue,
+                    isRecurringInvoice: true,
+                    recurringProfileId: finalSubscription.id,
+                    referenceNumber: finalSubscription.referenceNumber || "",
+                    createdAt: new Date().toISOString(),
                   });
+
+                  const createdInvoice = invoiceResponse?.data;
+                  if (amountReceivedValue > 0 && createdInvoice?.id) {
+                    await paymentsReceivedAPI.create({
+                      invoiceId: createdInvoice.id,
+                      invoiceNumber: createdInvoice.invoiceNumber || nextNumber,
+                      customerId: finalSubscription.customerId,
+                      customerName: finalSubscription.customerName,
+                      amountReceived: amountReceivedValue,
+                      paymentMode,
+                      depositTo,
+                      referenceNumber,
+                      notes: paymentNotes,
+                      paymentDate: paymentDate || createdOnValue,
+                      status: amountReceivedValue >= totalImmediate ? "paid" : "partially paid",
+                    });
+                  }
                 }
               } catch {
                 // ignore invoice create errors for now

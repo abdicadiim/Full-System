@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { toast } from "react-toastify";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { getInvoiceById, getInvoices, updateInvoice, getPayments, getTaxes, Tax, Invoice, AttachedFile, saveInvoice } from "../../salesModel";
 import { currenciesAPI, invoicesAPI } from "../../../services/api";
@@ -388,10 +389,10 @@ export default function InvoiceDetail() { // Start of component
       const kind = due.getTime() < now.getTime() ? "overdue" : "sent";
 
       await invoicesAPI.sendReminder(id, { kind });
-      alert("Reminder sent successfully!");
+      toast("Reminder sent successfully!");
     } catch (error: any) {
       console.error("Error sending reminder:", error);
-      alert(error?.message || "Failed to send reminder. Please try again.");
+      toast(error?.message || "Failed to send reminder. Please try again.");
     }
   };
 
@@ -405,13 +406,13 @@ export default function InvoiceDetail() { // Start of component
 
       if (result?.success && result.data) {
         setInvoice((prev: any) => ({ ...(prev || {}), ...result.data }));
-        alert(nextStopped ? "Reminders stopped for this invoice" : "Reminders enabled for this invoice");
+        toast(nextStopped ? "Reminders stopped for this invoice" : "Reminders enabled for this invoice");
       } else {
         throw new Error(result?.message || "Failed to update reminder status");
       }
     } catch (error: any) {
       console.error("Error updating reminders stopped:", error);
-      alert(error?.message || "Failed to update reminder status. Please try again.");
+      toast(error?.message || "Failed to update reminder status. Please try again.");
     }
   };
 
@@ -429,20 +430,20 @@ export default function InvoiceDetail() { // Start of component
 
       const date = new Date(`${value}T00:00:00`);
       if (Number.isNaN(date.getTime())) {
-        alert("Invalid date. Please use YYYY-MM-DD.");
+        toast("Invalid date. Please use YYYY-MM-DD.");
         return;
       }
 
       const result = await invoicesAPI.update(id, { expectedPaymentDate: date.toISOString() });
       if (result?.success && result.data) {
         setInvoice((prev: any) => ({ ...(prev || {}), ...result.data }));
-        alert("Expected payment date saved");
+        toast("Expected payment date saved");
       } else {
         throw new Error(result?.message || "Failed to save expected payment date");
       }
     } catch (error: any) {
       console.error("Error saving expected payment date:", error);
-      alert(error?.message || "Failed to save expected payment date. Please try again.");
+      toast(error?.message || "Failed to save expected payment date. Please try again.");
     }
   };
 
@@ -717,11 +718,11 @@ export default function InvoiceDetail() { // Start of component
           // Update in list
           const updatedInvoices = invoices.map(inv => inv.id === id ? updatedInvoice : inv);
           setInvoices(updatedInvoices);
-          alert("Invoice updated successfully.");
+          toast("Invoice updated successfully.");
         }
       } catch (error: any) {
         console.error("Error marking invoice as sent:", error);
-        alert("Failed to mark invoice as sent: " + error.message);
+        toast("Failed to mark invoice as sent: " + error.message);
       }
     }
   };
@@ -738,14 +739,14 @@ export default function InvoiceDetail() { // Start of component
 
   const handleSendEmailSubmit = async () => {
     if (!emailData.to || !emailData.subject) {
-      alert("Please fill in required fields (To and Subject)");
+      toast("Please fill in required fields (To and Subject)");
       return;
     }
 
     // Simple email validation regex
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(emailData.to)) {
-      alert("Please enter a valid email address");
+      toast("Please enter a valid email address");
       return;
     }
 
@@ -753,7 +754,7 @@ export default function InvoiceDetail() { // Start of component
       if (typeof invoicesAPI.sendEmail !== 'function') {
         // Fallback if API method is not yet available in hot reload context (should rarely happen)
         console.warn("invoicesAPI.sendEmail is not defined yet");
-        alert("System update in progress. Please refresh the page and try again.");
+        toast("System update in progress. Please refresh the page and try again.");
         return;
       }
 
@@ -768,7 +769,7 @@ export default function InvoiceDetail() { // Start of component
 
       console.log("Sending email:", emailData);
       setIsSendEmailModalOpen(false);
-      alert("Email sent successfully!");
+      toast("Email sent successfully!");
 
       const resolvePostSendStatus = (dueDateValue: any) => {
         if (!dueDateValue) return "unpaid";
@@ -797,21 +798,21 @@ export default function InvoiceDetail() { // Start of component
       });
     } catch (error) {
       console.error("Error sending email:", error);
-      alert("Failed to send email. Please try again.");
+      toast("Failed to send email. Please try again.");
     }
   };
 
   const handleLogoUpload = (file) => {
     // Check file size (1MB max)
     if (file.size > 1024 * 1024) {
-      alert("File size exceeds 1MB. Please choose a smaller file.");
+      toast("File size exceeds 1MB. Please choose a smaller file.");
       return;
     }
 
     // Check file type
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/bmp'];
     if (!validTypes.includes(file.type)) {
-      alert("Invalid file type. Please upload jpg, jpeg, png, gif, or bmp files.");
+      toast("Invalid file type. Please upload jpg, jpeg, png, gif, or bmp files.");
       return;
     }
 
@@ -846,13 +847,13 @@ export default function InvoiceDetail() { // Start of component
 
   const handleScheduleEmailSubmit = () => {
     if (!scheduleData.to || !scheduleData.subject || !scheduleData.date || !scheduleData.time) {
-      alert("Please fill in required fields (To, Subject, Date, and Time)");
+      toast("Please fill in required fields (To, Subject, Date, and Time)");
       return;
     }
     // TODO: Implement actual email sending
     console.log("Sending email:", emailData);
     setIsSendEmailModalOpen(false);
-    alert("Email sent successfully!");
+    toast("Email sent successfully!");
     setEmailData({
       to: "",
       cc: "",
@@ -868,7 +869,7 @@ export default function InvoiceDetail() { // Start of component
     // TODO: Implement actual email scheduling
     console.log("Scheduling email:", scheduleData);
     setIsScheduleEmailModalOpen(false);
-    alert(`Email scheduled for ${scheduleData.date} at ${scheduleData.time}`);
+    toast(`Email scheduled for ${scheduleData.date} at ${scheduleData.time}`);
     setScheduleData({
       to: "",
       cc: "",
@@ -908,7 +909,7 @@ export default function InvoiceDetail() { // Start of component
 
   const handleGenerateLink = () => {
     if (!linkExpirationDate) {
-      alert("Please select an expiration date");
+      toast("Please select an expiration date");
       return;
     }
 
@@ -929,9 +930,9 @@ export default function InvoiceDetail() { // Start of component
   const handleCopyLink = () => {
     if (generatedLink) {
       navigator.clipboard.writeText(generatedLink).then(() => {
-        alert("Link copied to clipboard!");
+        toast("Link copied to clipboard!");
       }).catch(() => {
-        alert("Unable to copy link. Please copy manually: " + generatedLink);
+        toast("Unable to copy link. Please copy manually: " + generatedLink);
       });
     }
   };
@@ -940,7 +941,7 @@ export default function InvoiceDetail() { // Start of component
     if (window.confirm("Are you sure you want to disable all active links for this invoice?")) {
       setGeneratedLink("");
       setIsLinkGenerated(false);
-      alert("All active links have been disabled.");
+      toast("All active links have been disabled.");
     }
   };
 
@@ -1296,7 +1297,7 @@ export default function InvoiceDetail() { // Start of component
       pdf.save(`Invoice-${invoice.invoiceNumber || invoice.id}.pdf`);
     } catch (error) {
       console.error("Error downloading invoice PDF:", error);
-      alert("Failed to generate PDF. Please try again.");
+      toast("Failed to generate PDF. Please try again.");
     } finally {
       if (wrapper.parentNode) {
         wrapper.parentNode.removeChild(wrapper);
@@ -1326,7 +1327,7 @@ export default function InvoiceDetail() { // Start of component
 
   const navigateToPaymentForm = () => {
     // Navigate to record payment form with invoice pre-filled
-    navigate("/sales/payments-received/new", {
+    navigate("/payments/payments-received/new", {
       state: {
         invoiceId: invoice?.id || invoice?._id,
         invoiceNumber: invoice?.invoiceNumber || invoice?.id,
@@ -1334,7 +1335,9 @@ export default function InvoiceDetail() { // Start of component
         customerName: invoice?.customerName || (typeof invoice?.customer === 'string' ? invoice?.customer : invoice?.customer?.displayName || invoice?.customer?.name),
         amount: invoice?.balance !== undefined ? invoice.balance : (invoice?.balanceDue ?? getInvoiceDisplayTotal(invoice)),
         currency: invoice?.currency || "SOS",
-        invoice: invoice // Pass the full object as well
+        invoice: invoice, // Pass the full object as well
+        showOnlyInvoice: true,
+        returnInvoiceId: invoice?.id || invoice?._id || ""
       }
     });
   };
@@ -1435,7 +1438,7 @@ export default function InvoiceDetail() { // Start of component
 
     const customerId = toEntityId(invoice.customerId || invoice.customer);
     if (!customerId) {
-      alert("Cannot clone this invoice because it has no customer.");
+      toast("Cannot clone this invoice because it has no customer.");
       return;
     }
 
@@ -1472,10 +1475,10 @@ export default function InvoiceDetail() { // Start of component
         return;
       }
 
-      alert("Invoice cloned successfully, but it could not be opened automatically.");
+      toast("Invoice cloned successfully, but it could not be opened automatically.");
     } catch (error: any) {
       console.error("Error cloning invoice:", error);
-      alert(error?.message || "Failed to clone invoice. Please try again.");
+      toast(error?.message || "Failed to clone invoice. Please try again.");
     }
   };
 
@@ -1501,7 +1504,7 @@ export default function InvoiceDetail() { // Start of component
       // TODO: Implement actual deletion logic
       const updatedInvoices = invoices.filter(inv => inv.id !== invoice.id);
       setInvoices(updatedInvoices);
-      alert("Invoice deleted successfully.");
+      toast("Invoice deleted successfully.");
       navigate("/sales/invoices");
     }
   };
@@ -1510,7 +1513,7 @@ export default function InvoiceDetail() { // Start of component
     setIsMoreMenuOpen(false);
     // TODO: Implement invoice preferences functionality
     // This could open a preferences modal or navigate to preferences page
-    alert("Invoice Preferences - Feature coming soon");
+    toast("Invoice Preferences - Feature coming soon");
   };
 
   const handleVoidInvoice = async () => {
@@ -1521,11 +1524,11 @@ export default function InvoiceDetail() { // Start of component
       if (updatedInvoice) {
         setInvoice(updatedInvoice);
         setInvoices((prev) => prev.map((inv) => String(inv.id) === String(id) ? updatedInvoice : inv));
-        alert("Invoice voided successfully.");
+        toast("Invoice voided successfully.");
       }
     } catch (error: any) {
       console.error("Error voiding invoice:", error);
-      alert("Failed to void invoice: " + (error?.message || "Unknown error"));
+      toast("Failed to void invoice: " + (error?.message || "Unknown error"));
     }
   };
 
@@ -1533,14 +1536,14 @@ export default function InvoiceDetail() { // Start of component
   const handleFileUpload = (files) => {
     const validFiles = Array.from(files).filter(file => {
       if (file.size > 10 * 1024 * 1024) {
-        alert(`File ${file.name} is too large. Maximum size is 10MB.`);
+        toast(`File ${file.name} is too large. Maximum size is 10MB.`);
         return false;
       }
       return true;
     });
 
     if (invoiceAttachments.length + validFiles.length > 5) {
-      alert("Maximum 5 files allowed. Please remove some files first.");
+      toast("Maximum 5 files allowed. Please remove some files first.");
       return;
     }
 
@@ -1685,6 +1688,11 @@ export default function InvoiceDetail() { // Start of component
   }
 
   const invoiceTotalsMeta = getInvoiceTotalsMeta(invoice);
+  const invoiceStatus = String(invoice?.status || "").toLowerCase().trim();
+  const isPaidStatus = ["paid", "paid in full", "fully paid", "closed"].includes(invoiceStatus);
+  const isVoidStatus = invoiceStatus === "void";
+  const hasBalanceDue = (Number(invoiceTotalsMeta.balance) || 0) > 0.000001;
+  const canRecordPayment = !isVoidStatus && !isPaidStatus && hasBalanceDue;
 
   return (
     <>
@@ -1961,7 +1969,7 @@ export default function InvoiceDetail() { // Start of component
                 )}
               </div>
 
-              {invoice && (invoice.status?.toLowerCase() === 'unpaid' || invoice.status?.toLowerCase() === 'sent' || invoice.status?.toLowerCase() === 'draft' || invoice.status?.toLowerCase() === 'partially paid' || invoice.status?.toLowerCase() === 'overdue') && (
+              {invoice && canRecordPayment && (
                 <button
                   onClick={handleRecordPayment}
                   className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-gray-100 cursor-pointer"
@@ -3792,4 +3800,5 @@ export default function InvoiceDetail() { // Start of component
     </>
   );
 }
+
 

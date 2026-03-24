@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { toast } from "react-toastify";
 import { X, FileText, CheckCircle, Info } from "lucide-react";
 import { invoicesAPI } from "../../../services/api";
 import { Invoice } from "../../salesModel";
@@ -164,7 +165,7 @@ const ApplyToInvoices: React.FC<ApplyToInvoicesProps> = ({ isOpen, onClose, cred
     const handleSave = async () => {
         // Validate
         if (totalApplied > availableCredits) {
-            alert("Amount applied exceeds available credits.");
+            toast("Amount applied exceeds available credits.");
             return;
         }
 
@@ -183,7 +184,7 @@ const ApplyToInvoices: React.FC<ApplyToInvoicesProps> = ({ isOpen, onClose, cred
             onClose();
         } catch (error) {
             console.error("Error applying credits:", error);
-            alert("Failed to apply credits. Please try again.");
+            toast("Failed to apply credits. Please try again.");
         } finally {
             setSaving(false);
         }
@@ -418,3 +419,4 @@ const ApplyToInvoices: React.FC<ApplyToInvoicesProps> = ({ isOpen, onClose, cred
 };
 
 export default ApplyToInvoices;
+

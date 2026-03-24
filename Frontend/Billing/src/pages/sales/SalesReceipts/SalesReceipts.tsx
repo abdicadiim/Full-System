@@ -28,8 +28,10 @@ import {
   Check,
   CheckCircle,
   Download,
-  RotateCcw
+  RotateCcw,
+  SlidersHorizontal
 } from "lucide-react";
+import SalesReceiptsCustomizeColumnsModal, { SalesReceiptsColumnOption } from "./SalesReceiptsCustomizeColumnsModal";
 
 // import FieldCustomization from "../shared/FieldCustomization";
 
@@ -48,9 +50,38 @@ const viewStatusMap = {
   Void: "void"
 };
 
+const SALES_RECEIPTS_COLUMNS_STORAGE_KEY = "billing_sales_receipts_visible_columns_v1";
+const SALES_RECEIPTS_LIST_COLUMNS: SalesReceiptsColumnOption[] = [
+  { key: "receipt_date", label: "Receipt Date", locked: true },
+  { key: "location", label: "Location" },
+  { key: "receipt_number", label: "Sales Receipt#" },
+  { key: "reference", label: "Reference" },
+  { key: "customer_name", label: "Customer Name" },
+  { key: "payment_mode", label: "Payment Mode" },
+  { key: "status", label: "Status" },
+  { key: "amount", label: "Amount" },
+  { key: "created_by", label: "Created By" }
+];
+
 export default function SalesReceipts() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [isCustomizeModalOpen, setIsCustomizeModalOpen] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(SALES_RECEIPTS_COLUMNS_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const allowed = new Set(SALES_RECEIPTS_LIST_COLUMNS.map((c) => c.key));
+        const filtered = parsed.filter((k: string) => allowed.has(k));
+        if (filtered.length > 0) return filtered;
+      }
+    } catch (_error) {
+      // ignore and use defaults
+    }
+    return SALES_RECEIPTS_LIST_COLUMNS.map((c) => c.key);
+  });
+  const isColumnVisible = (key: string) => visibleColumns.includes(key);
   const [isViewDropdownOpen, setIsViewDropdownOpen] = useState(false);
   const [selectedView, setSelectedView] = useState("All Sales Receipts");
   const [selectedStatus, setSelectedStatus] = useState("All");
@@ -118,6 +149,10 @@ export default function SalesReceipts() {
   const [filteredSalesReceipts, setFilteredSalesReceipts] = useState([]);
   const [selectedReceipts, setSelectedReceipts] = useState([]);
   const [customers, setCustomers] = useState([]);
+
+  useEffect(() => {
+    localStorage.setItem(SALES_RECEIPTS_COLUMNS_STORAGE_KEY, JSON.stringify(visibleColumns));
+  }, [visibleColumns]);
   const [salespersons, setSalespersons] = useState([]);
   const [projects, setProjects] = useState([]);
   const [taxes, setTaxes] = useState([]);
@@ -1396,7 +1431,7 @@ export default function SalesReceipts() {
   };
 
   return (
-    <div className="w-full min-h-screen bg-gray-50">
+    <div className="w-full min-h-screen bg-white -m-4 md:-m-6">
       {/* Header - Show Bulk Actions Bar when items are selected, otherwise show normal header */}
       {selectedReceipts.length > 0 ? (
         /* Bulk Actions Header */
@@ -1773,12 +1808,24 @@ export default function SalesReceipts() {
           </div>
         ) : (
           <div className="bg-white">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse table-fixed bg-white">
+            <div className="overflow-x-auto bg-[#f6f7fb]">
+              <table className="w-full min-w-full text-left border-collapse table-fixed bg-white">
                 <thead className="bg-[#f6f7fb] sticky top-0 z-20 border-b border-[#e6e9f2]">
                   <tr className="text-[10px] font-semibold text-[#7b8494] uppercase tracking-wider">
-                    <th className="px-6 py-3 w-16">
-                      <div className="flex items-center gap-3">
+                    <th className="px-4 py-3 w-16">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsCustomizeModalOpen(true);
+                          }}
+                          className="h-6 w-6 flex items-center justify-center rounded border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
+                          title="Customize Columns"
+                        >
+                          <SlidersHorizontal size={13} className="text-[#1b5e6a]" />
+                        </button>
+                        <div className="h-5 w-px bg-gray-200" />
                         <input
                           type="checkbox"
                           checked={selectedReceipts.length === filteredSalesReceipts.length && filteredSalesReceipts.length > 0}
@@ -1787,19 +1834,20 @@ export default function SalesReceipts() {
                         />
                       </div>
                     </th>
-                    <th className="px-4 py-3">
+                    {isColumnVisible("receipt_date") && <th className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         RECEIPT DATE
                         <ArrowUpDown size={14} className="text-gray-400" />
                       </div>
-                    </th>
-                    <th className="px-4 py-3">SALES RECEIPT#</th>
-                    <th className="px-4 py-3">REFERENCE</th>
-                    <th className="px-4 py-3">CUSTOMER NAME</th>
-                    <th className="px-4 py-3">PAYMENT MODE</th>
-                    <th className="px-4 py-3">STATUS</th>
-                    <th className="px-4 py-3">AMOUNT</th>
-                    <th className="px-4 py-3">CREATED BY</th>
+                    </th>}
+                    {isColumnVisible("location") && <th className="px-4 py-3">LOCATION</th>}
+                    {isColumnVisible("receipt_number") && <th className="px-4 py-3">SALES RECEIPT#</th>}
+                    {isColumnVisible("reference") && <th className="px-4 py-3">REFERENCE</th>}
+                    {isColumnVisible("customer_name") && <th className="px-4 py-3">CUSTOMER NAME</th>}
+                    {isColumnVisible("payment_mode") && <th className="px-4 py-3">PAYMENT MODE</th>}
+                    {isColumnVisible("status") && <th className="px-4 py-3">STATUS</th>}
+                    {isColumnVisible("amount") && <th className="px-4 py-3">AMOUNT</th>}
+                    {isColumnVisible("created_by") && <th className="px-4 py-3">CREATED BY</th>}
                     <th className="px-6 py-3 w-10">
                       <button
                         onClick={handleOpenAdvancedSearch}
@@ -1810,21 +1858,26 @@ export default function SalesReceipts() {
                     </th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="bg-white">
                   {isRefreshing || !hasLoadedOnce ? (
                     Array(5).fill(0).map((_, index) => (
                       <tr key={`skeleton-${index}`} className="border-b border-[#eef1f6] h-[50px] animate-pulse">
                         <td className="px-4 py-3">
-                          <div className="w-4 h-4 bg-gray-100 rounded mx-auto" />
+                          <div className="flex items-center gap-2">
+                            <span className="h-6 w-6 shrink-0" aria-hidden />
+                            <span className="h-5 w-px shrink-0 bg-transparent" aria-hidden />
+                            <div className="w-4 h-4 bg-gray-100 rounded" />
+                          </div>
                         </td>
-                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>
-                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-32"></div></td>
-                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-20"></div></td>
-                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-32"></div></td>
-                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>
-                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-20"></div></td>
-                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>
-                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>
+                        {isColumnVisible("receipt_date") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
+                        {isColumnVisible("location") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
+                        {isColumnVisible("receipt_number") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-32"></div></td>}
+                        {isColumnVisible("reference") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-20"></div></td>}
+                        {isColumnVisible("customer_name") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-32"></div></td>}
+                        {isColumnVisible("payment_mode") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
+                        {isColumnVisible("status") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-20"></div></td>}
+                        {isColumnVisible("amount") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
+                        {isColumnVisible("created_by") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
                         <td className="px-4 py-3"></td>
                       </tr>
                     ))
@@ -1834,15 +1887,12 @@ export default function SalesReceipts() {
                         key={receipt.id}
                         className="text-[13px] h-[50px] group transition-all border-b border-[#eef1f6] cursor-pointer hover:bg-[#f8fafc]"
                         onClick={(e) => {
-                          // Don't navigate if clicking checkbox or filter icon
                           const target = e.target as HTMLElement;
-                          if (!target.closest('input[type="checkbox"]') && !target.closest('svg')) {
-                            console.log("Navigating to receipt detail:", receipt.id, receipt);
+                          if (!target.closest('input[type="checkbox"]') && !target.closest('svg') && !target.closest('button')) {
                             navigate(`/sales/sales-receipts/${receipt.id}`);
                           }
                         }}
                       >
-
                         <td
                           className="px-4 py-3"
                           onClick={(e) => {
@@ -1850,16 +1900,21 @@ export default function SalesReceipts() {
                             handleSelectReceipt(receipt.id, e);
                           }}
                         >
-                          <input
-                            type="checkbox"
-                            checked={selectedReceipts.includes(receipt.id)}
-                            onChange={(e) => handleSelectReceipt(receipt.id, e)}
-                            onClick={(e) => e.stopPropagation()}
-                            className="w-4 h-4 text-[#156372] border-gray-300 rounded focus:ring-blue-500"
-                          />
+                          <div className="flex items-center gap-2">
+                            <span className="h-6 w-6 shrink-0" aria-hidden />
+                            <span className="h-5 w-px shrink-0 bg-transparent" aria-hidden />
+                            <input
+                              type="checkbox"
+                              checked={selectedReceipts.includes(receipt.id)}
+                              onChange={(e) => handleSelectReceipt(receipt.id, e)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-4 h-4 text-[#156372] border-gray-300 rounded focus:ring-blue-500"
+                            />
+                          </div>
                         </td>
-                        <td className="p-4 text-gray-900">{formatDate(receipt.date || receipt.receiptDate)}</td>
-                        <td className="p-4">
+                        {isColumnVisible("receipt_date") && <td className="p-4 text-gray-900">{formatDate(receipt.date || receipt.receiptDate)}</td>}
+                        {isColumnVisible("location") && <td className="p-4 text-gray-900">{receipt.location || receipt.branch || "Head Office"}</td>}
+                        {isColumnVisible("receipt_number") && <td className="p-4">
                           <span
                             className="text-[#156372] hover:text-blue-700 hover:underline font-medium cursor-pointer"
                             onClick={(e) => {
@@ -1867,13 +1922,13 @@ export default function SalesReceipts() {
                               navigate(`/sales/sales-receipts/${receipt.id}`);
                             }}
                           >
-                            {receipt.receiptNumber || receipt.id || "—"}
+                            {receipt.receiptNumber || receipt.id || "-"}
                           </span>
-                        </td>
-                        <td className="p-4 text-gray-900">{receipt.paymentReference || receipt.referenceNumber || "—"}</td>
-                        <td className="p-4 text-gray-900">{receipt.customerName || receipt.customer?.displayName || receipt.customer?.companyName || (typeof receipt.customer === 'string' ? receipt.customer : "—")}</td>
-                        <td className="p-4 text-gray-900">{receipt.paymentMode || "—"}</td>
-                        <td className="p-4">
+                        </td>}
+                        {isColumnVisible("reference") && <td className="p-4 text-gray-900">{receipt.paymentReference || receipt.referenceNumber || "-"}</td>}
+                        {isColumnVisible("customer_name") && <td className="p-4 text-gray-900">{receipt.customerName || receipt.customer?.displayName || receipt.customer?.companyName || (typeof receipt.customer === 'string' ? receipt.customer : "-")}</td>}
+                        {isColumnVisible("payment_mode") && <td className="p-4 text-gray-900">{receipt.paymentMode || "-"}</td>}
+                        {isColumnVisible("status") && <td className="p-4">
                           <span className={`text-xs font-semibold ${(receipt.status || "paid").toLowerCase() === "paid"
                             ? "text-green-700"
                             : (receipt.status || "paid").toLowerCase() === "draft"
@@ -1882,9 +1937,9 @@ export default function SalesReceipts() {
                             }`}>
                             {(receipt.status || "paid").toUpperCase()}
                           </span>
-                        </td>
-                        <td className="p-4 text-gray-900 font-semibold">{formatCurrency(receipt.total || receipt.amount, receipt.currency)}</td>
-                        <td className="p-4 text-gray-900">{receipt.createdBy?.name || (typeof receipt.createdBy === 'string' ? receipt.createdBy : "—")}</td>
+                        </td>}
+                        {isColumnVisible("amount") && <td className="p-4 text-gray-900 font-semibold">{formatCurrency(receipt.total || receipt.amount, receipt.currency)}</td>}
+                        {isColumnVisible("created_by") && <td className="p-4 text-gray-900">{receipt.createdBy?.name || (typeof receipt.createdBy === 'string' ? receipt.createdBy : "-")}</td>}
                         <td className="p-4"></td>
                       </tr>
                     ))
@@ -2313,6 +2368,17 @@ export default function SalesReceipts() {
         </div>
       )}
 
+      <SalesReceiptsCustomizeColumnsModal
+        open={isCustomizeModalOpen}
+        columns={SALES_RECEIPTS_LIST_COLUMNS}
+        value={visibleColumns}
+        onClose={() => setIsCustomizeModalOpen(false)}
+        onSave={(nextVisibleColumns) => {
+          setVisibleColumns(nextVisibleColumns);
+          setIsCustomizeModalOpen(false);
+        }}
+      />
+
       {/* Field Customization Modal */}
       {isFieldCustomizationOpen && (
         <FieldCustomization
@@ -2323,5 +2389,6 @@ export default function SalesReceipts() {
     </div>
   );
 }
+
 
 

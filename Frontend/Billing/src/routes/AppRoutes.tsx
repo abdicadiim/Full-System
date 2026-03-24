@@ -17,6 +17,7 @@ import TaxesRoutes from '../pages/taxes/TaxesRoutes'
 import OrgsRoutes from '../pages/orgs/OrgsRoutes'
 import QuotesRoutes from '../pages/sales/Quotes/QuotesRoutes'
 import NewDebitNote from '../pages/sales/DebitNotes/NewDebitNote/NewDebitNote'
+import InvoiceDetail from '../pages/sales/Invoices/InvoiceDetail/InvoiceDetail'
 import ItemsPage from '../pages/Product-Calalog/items/ItemsPage'
 import ImportItems from '../pages/Product-Calalog/items/ImportItems'
 import PlansPage from '../pages/Product-Calalog/plans/PlansPage'
@@ -66,7 +67,7 @@ function LegacyPaymentsReceivedRedirect() {
     nextPath = '/payments/payments-received'
   }
 
-  return <Navigate to={`${nextPath}${location.search}${location.hash}`} replace />
+  return <Navigate to={`${nextPath}${location.search}${location.hash}`} state={location.state} replace />
 }
 
 function LegacyPurchasesExpensesRedirect() {
@@ -122,6 +123,7 @@ export default function AppRoutes() {
       <Route path="/sales/sales-receipts/*" element={<SalesReceiptsRoutes />} />
       <Route path="/sales/credit-notes/*" element={<CreditNotesRoutes />} />
       <Route path="/sales/debit-notes/new" element={<NewDebitNote />} />
+      <Route path="/sales/debit-notes/:id" element={<InvoiceDetail />} />
 
       <Route path="/sales/subscriptions/*" element={<SubscriptionsRoutes />} />
       <Route path="/subscriptions/*" element={<SubscriptionsRoutes />} />

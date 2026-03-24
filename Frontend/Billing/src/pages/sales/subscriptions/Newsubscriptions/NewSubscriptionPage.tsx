@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { useOrganizationBranding } from "../../../../hooks/useOrganizationBranding";
 import { Customer, Salesperson, getCustomers, getSalespersonsFromAPI, getPlansFromAPI, getBaseCurrency, getItemsFromAPI, getTaxesFromAPI, Tax, getReportingTagsFromAPI, ReportingTag } from "../../salesModel";
-import { customersAPI } from "../../../../services/api";
+import { customersAPI, subscriptionsAPI } from "../../../../services/api";
 import { toast } from "react-toastify";
 import { Country, State } from "country-state-city";
 
@@ -979,14 +979,22 @@ const NewSubscriptionPage = () => {
     useEffect(() => {
         if (draftHydratedRef.current) return;
         const stateDraft = (location.state as any)?.draft;
-        if (!stateDraft && subscriptionId) {
-            try {
-                const rawList = localStorage.getItem("taban_subscriptions_v1");
-                const list = rawList ? JSON.parse(rawList) : [];
-                const rows = Array.isArray(list) ? list : [];
-                const found = rows.find((row: any) => String(row?.id) === String(subscriptionId));
-                if (found) {
-                    const draftFromSubscription = {
+        const hydrate = async () => {
+            if (!stateDraft && subscriptionId) {
+                try {
+                    let found: any = null;
+                    const apiRes: any = await subscriptionsAPI.getById(String(subscriptionId));
+                    if (apiRes?.success && apiRes?.data) {
+                        found = apiRes.data;
+                    }
+                    if (!found) {
+                        const rawList = localStorage.getItem("taban_subscriptions_v1");
+                        const list = rawList ? JSON.parse(rawList) : [];
+                        const rows = Array.isArray(list) ? list : [];
+                        found = rows.find((row: any) => String(row?.id) === String(subscriptionId));
+                    }
+                    if (found) {
+                        const draftFromSubscription = {
                         id: String(found?.id || ""),
                         customerId: String(found?.customerId || ""),
                         customerName: String(found?.customerName || ""),
@@ -1041,29 +1049,31 @@ const NewSubscriptionPage = () => {
                         status: String(found?.status || ""),
                         addonLines: Array.isArray(found?.addonLines) ? found.addonLines : defaultAddonLines,
                     };
-                    setFormData((prev) => ({ ...prev, ...draftFromSubscription }));
-                    if (Array.isArray(found?.addonLines)) {
-                        setAddonLines(found.addonLines);
+                        setFormData((prev) => ({ ...prev, ...draftFromSubscription }));
+                        if (Array.isArray(found?.addonLines)) {
+                            setAddonLines(found.addonLines);
+                        }
+                        draftHydratedRef.current = true;
+                        return;
                     }
-                    draftHydratedRef.current = true;
-                    return;
+                } catch {
+                    // ignore storage errors
                 }
+            }
+            const raw = sessionStorage.getItem("taban_subscription_draft_v1");
+            if (!raw) return;
+            try {
+                const draft = JSON.parse(raw);
+                setFormData((prev) => ({ ...prev, ...draft }));
+                if (Array.isArray(draft.addonLines)) {
+                    setAddonLines(draft.addonLines);
+                }
+                draftHydratedRef.current = true;
             } catch {
-                // ignore storage errors
+                // ignore invalid draft
             }
-        }
-        const raw = sessionStorage.getItem("taban_subscription_draft_v1");
-        if (!raw) return;
-        try {
-            const draft = JSON.parse(raw);
-            setFormData((prev) => ({ ...prev, ...draft }));
-            if (Array.isArray(draft.addonLines)) {
-                setAddonLines(draft.addonLines);
-            }
-            draftHydratedRef.current = true;
-        } catch {
-            // ignore invalid draft
-        }
+        };
+        void hydrate();
     }, []);
 
     useEffect(() => {

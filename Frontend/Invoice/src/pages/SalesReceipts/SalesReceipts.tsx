@@ -68,6 +68,7 @@ export default function SalesReceipts() {
 
   const DEFAULT_COLUMNS: Column[] = [
     { key: "receipt_date", label: "Receipt Date", visible: true, pinned: true, width: 140, locked: true },
+    { key: "location", label: "Location", visible: true, pinned: false, width: 140 },
     { key: "receipt_number", label: "Sales Receipt#", visible: true, pinned: false, width: 160 },
     { key: "reference", label: "Reference", visible: true, pinned: false, width: 150 },
     { key: "customer_name", label: "Customer Name", visible: true, pinned: false, width: 220 },
@@ -124,6 +125,7 @@ export default function SalesReceipts() {
   };
 
   const [isCustomizeModalOpen, setIsCustomizeModalOpen] = useState(false);
+  const isColumnVisible = (key: string) => columns.some((c) => c.key === key && c.visible);
   const resizingRef = useRef<{ col: string; startX: number; startWidth: number } | null>(null);
 
   const visibleColumns = useMemo(() => columns.filter(c => c.visible), [columns]);
@@ -183,6 +185,8 @@ export default function SalesReceipts() {
         return formatDate(receipt.date || receipt.receiptDate);
       case "receipt_number":
         return receipt.receiptNumber || receipt.id || "—";
+      case "location":
+        return receipt.location || receipt.branch || "Head Office";
       case "reference":
         return receipt.paymentReference || receipt.referenceNumber || "—";
       case "customer_name":
@@ -1545,7 +1549,7 @@ export default function SalesReceipts() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-72px)] w-full bg-white font-sans text-gray-800 antialiased relative overflow-hidden">
+    <div className="flex flex-col h-[calc(100vh-72px)] w-full bg-white font-sans text-gray-800 antialiased relative overflow-hidden -m-4 md:-m-6">
       {/* Header - Show Bulk Actions Bar when items are selected, otherwise show normal header */}
       {selectedReceipts.length > 0 ? (
         <div className="flex-none flex items-center justify-between px-6 py-6 bg-white border-b border-gray-100 relative overflow-visible z-[100]">
@@ -1941,12 +1945,24 @@ export default function SalesReceipts() {
           </div>
         ) : (
           <div className="bg-white">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse table-fixed bg-white">
+            <div className="overflow-x-auto bg-[#f6f7fb]">
+              <table className="w-full min-w-full text-left border-collapse table-fixed bg-white">
                 <thead className="bg-[#f6f7fb] sticky top-0 z-20 border-b border-[#e6e9f2]">
                   <tr className="text-[10px] font-semibold text-[#7b8494] uppercase tracking-wider">
-                    <th className="px-6 py-3 w-16">
-                      <div className="flex items-center gap-3">
+                    <th className="px-4 py-3 w-16">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsCustomizeModalOpen(true);
+                          }}
+                          className="h-6 w-6 flex items-center justify-center rounded border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
+                          title="Customize Columns"
+                        >
+                          <SlidersHorizontal size={13} className="text-[#1b5e6a]" />
+                        </button>
+                        <div className="h-5 w-px bg-gray-200" />
                         <input
                           type="checkbox"
                           checked={selectedReceipts.length === filteredSalesReceipts.length && filteredSalesReceipts.length > 0}
@@ -1955,19 +1971,20 @@ export default function SalesReceipts() {
                         />
                       </div>
                     </th>
-                    <th className="px-4 py-3">
+                    {isColumnVisible("receipt_date") && <th className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         RECEIPT DATE
                         <ArrowUpDown size={14} className="text-gray-400" />
                       </div>
-                    </th>
-                    <th className="px-4 py-3">SALES RECEIPT#</th>
-                    <th className="px-4 py-3">REFERENCE</th>
-                    <th className="px-4 py-3">CUSTOMER NAME</th>
-                    <th className="px-4 py-3">PAYMENT MODE</th>
-                    <th className="px-4 py-3">STATUS</th>
-                    <th className="px-4 py-3">AMOUNT</th>
-                    <th className="px-4 py-3">CREATED BY</th>
+                    </th>}
+                    {isColumnVisible("location") && <th className="px-4 py-3">LOCATION</th>}
+                    {isColumnVisible("receipt_number") && <th className="px-4 py-3">SALES RECEIPT#</th>}
+                    {isColumnVisible("reference") && <th className="px-4 py-3">REFERENCE</th>}
+                    {isColumnVisible("customer_name") && <th className="px-4 py-3">CUSTOMER NAME</th>}
+                    {isColumnVisible("payment_mode") && <th className="px-4 py-3">PAYMENT MODE</th>}
+                    {isColumnVisible("status") && <th className="px-4 py-3">STATUS</th>}
+                    {isColumnVisible("amount") && <th className="px-4 py-3">AMOUNT</th>}
+                    {isColumnVisible("created_by") && <th className="px-4 py-3">CREATED BY</th>}
                     <th className="px-6 py-3 w-10">
                       <button
                         onClick={handleOpenAdvancedSearch}
@@ -1978,21 +1995,26 @@ export default function SalesReceipts() {
                     </th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="bg-white">
                   {isRefreshing || !hasLoadedOnce ? (
                     Array(5).fill(0).map((_, index) => (
                       <tr key={`skeleton-${index}`} className="border-b border-[#eef1f6] h-[50px] animate-pulse">
                         <td className="px-4 py-3">
-                          <div className="w-4 h-4 bg-gray-100 rounded mx-auto" />
+                          <div className="flex items-center gap-2">
+                            <span className="h-6 w-6 shrink-0" aria-hidden />
+                            <span className="h-5 w-px shrink-0 bg-transparent" aria-hidden />
+                            <div className="w-4 h-4 bg-gray-100 rounded" />
+                          </div>
                         </td>
-                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>
-                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-32"></div></td>
-                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-20"></div></td>
-                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-32"></div></td>
-                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>
-                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-20"></div></td>
-                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>
-                        <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>
+                        {isColumnVisible("receipt_date") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
+                        {isColumnVisible("location") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
+                        {isColumnVisible("receipt_number") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-32"></div></td>}
+                        {isColumnVisible("reference") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-20"></div></td>}
+                        {isColumnVisible("customer_name") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-32"></div></td>}
+                        {isColumnVisible("payment_mode") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
+                        {isColumnVisible("status") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-20"></div></td>}
+                        {isColumnVisible("amount") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
+                        {isColumnVisible("created_by") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
                         <td className="px-4 py-3"></td>
                       </tr>
                     ))
@@ -2018,40 +2040,49 @@ export default function SalesReceipts() {
                             handleSelectReceipt(receipt.id, e);
                           }}
                         >
-                          <input
-                            type="checkbox"
-                            checked={selectedReceipts.includes(receipt.id)}
-                            onChange={(e) => handleSelectReceipt(receipt.id, e)}
-                            onClick={(e) => e.stopPropagation()}
-                            className="w-4 h-4 text-[#156372] border-gray-300 rounded focus:ring-blue-500"
-                          />
+                          <div className="flex items-center gap-2">
+                            <span className="h-6 w-6 shrink-0" aria-hidden />
+                            <span className="h-5 w-px shrink-0 bg-transparent" aria-hidden />
+                            <input
+                              type="checkbox"
+                              checked={selectedReceipts.includes(receipt.id)}
+                              onChange={(e) => handleSelectReceipt(receipt.id, e)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-4 h-4 text-[#156372] border-gray-300 rounded focus:ring-blue-500"
+                            />
+                          </div>
                         </td>
-                        <td className="p-4 text-gray-900">{typeof receipt.date === "string" ? new Date(receipt.date).toLocaleDateString() : (receipt.receiptDate ? new Date(receipt.receiptDate).toLocaleDateString() : "—")}</td>
-                        <td className="p-4">
-                          <span
-                            className="text-[#156372] hover:text-blue-700 hover:underline font-medium cursor-pointer"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/sales/sales-receipts/${receipt.id}`);
-                            }}
-                          >
-                            {receipt.receiptNumber || receipt.id || "—"}
-                          </span>
-                        </td>
-                        <td className="p-4 text-gray-900">{receipt.paymentReference || receipt.referenceNumber || "—"}</td>
-                        <td className="p-4 text-gray-900 font-medium">{customerName}</td>
-                        <td className="p-4 text-gray-900">{receipt.paymentMode || "—"}</td>
-                        <td className="p-4">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                            String(receipt.status || "paid").toLowerCase() === 'paid' ? 'bg-emerald-50 text-emerald-700' :
-                            String(receipt.status || "void").toLowerCase() === 'void' ? 'bg-rose-50 text-rose-700' :
-                            'bg-slate-100 text-slate-700'
-                          }`}>
-                            {String(receipt.status || "PAID").toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="p-4 font-semibold text-slate-900">{receipt.amount || receipt.total || 0}</td>
-                        <td className="p-4 text-gray-900">{receipt.createdBy || "—"}</td>
+                        {isColumnVisible("receipt_date") && <td className="p-4 text-gray-900">{typeof receipt.date === "string" ? new Date(receipt.date).toLocaleDateString() : (receipt.receiptDate ? new Date(receipt.receiptDate).toLocaleDateString() : "-")}</td>}
+                        {isColumnVisible("location") && <td className="p-4 text-gray-900">{receipt.location || receipt.branch || "Head Office"}</td>}
+                        {isColumnVisible("receipt_number") && (
+                          <td className="p-4">
+                            <span
+                              className="text-[#156372] hover:text-blue-700 hover:underline font-medium cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/sales/sales-receipts/${receipt.id}`);
+                              }}
+                            >
+                              {receipt.receiptNumber || receipt.id || "-"}
+                            </span>
+                          </td>
+                        )}
+                        {isColumnVisible("reference") && <td className="p-4 text-gray-900">{receipt.paymentReference || receipt.referenceNumber || "-"}</td>}
+                        {isColumnVisible("customer_name") && <td className="p-4 text-gray-900 font-medium">{customerName}</td>}
+                        {isColumnVisible("payment_mode") && <td className="p-4 text-gray-900">{receipt.paymentMode || "-"}</td>}
+                        {isColumnVisible("status") && (
+                          <td className="p-4">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                              String(receipt.status || "paid").toLowerCase() === 'paid' ? 'bg-emerald-50 text-emerald-700' :
+                              String(receipt.status || "void").toLowerCase() === 'void' ? 'bg-rose-50 text-rose-700' :
+                              'bg-slate-100 text-slate-700'
+                            }`}>
+                              {String(receipt.status || "PAID").toUpperCase()}
+                            </span>
+                          </td>
+                        )}
+                        {isColumnVisible("amount") && <td className="p-4 font-semibold text-slate-900">{receipt.amount || receipt.total || 0}</td>}
+                        {isColumnVisible("created_by") && <td className="p-4 text-gray-900">{receipt.createdBy || "-"}</td>}
                         <td className="p-4"></td>
                       </tr>
                     )})
@@ -2503,5 +2534,8 @@ export default function SalesReceipts() {
     </div>
   );
 }
+
+
+
 
 

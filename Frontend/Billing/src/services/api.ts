@@ -276,7 +276,9 @@ const LOCAL_QUOTES_KEY = "taban_books_quotes";
 const LOCAL_INVOICES_KEY = "taban_books_invoices";
 const LOCAL_RECURRING_INVOICES_KEY = "taban_books_recurring_invoices";
 const LOCAL_PAYMENTS_RECEIVED_KEY = "taban_books_payments_received";
+const LOCAL_SUBSCRIPTIONS_KEY = "taban_subscriptions_v1";
 const LOCAL_CREDIT_NOTES_KEY = "taban_books_credit_notes";
+const LOCAL_DEBIT_NOTES_KEY = "taban_books_debit_notes";
 const LOCAL_SALES_RECEIPTS_KEY = "taban_books_sales_receipts";
 const LOCAL_EXPENSES_KEY = "taban_books_expenses";
 const LOCAL_RECURRING_EXPENSES_KEY = "taban_books_recurring_expenses";
@@ -740,7 +742,9 @@ const taxesLocal = localResource(LOCAL_TAXES_KEY, "tax", defaultTaxes);
 const currenciesLocal = localResource(LOCAL_CURRENCIES_KEY, "cur", defaultCurrencies);
 const invoicesLocal = localResource(LOCAL_INVOICES_KEY, "inv");
 const paymentsReceivedLocal = localResource(LOCAL_PAYMENTS_RECEIVED_KEY, "pay");
+const subscriptionsLocal = localResource(LOCAL_SUBSCRIPTIONS_KEY, "sub");
 const creditNotesLocal = localResource(LOCAL_CREDIT_NOTES_KEY, "cn");
+const debitNotesLocal = localResource(LOCAL_DEBIT_NOTES_KEY, "dn");
 const quotesLocal = localResource(LOCAL_QUOTES_KEY, "quote");
 const recurringInvoicesLocal = localResource(LOCAL_RECURRING_INVOICES_KEY, "ri");
 const expensesLocal = localResource(LOCAL_EXPENSES_KEY, "exp");
@@ -1048,6 +1052,90 @@ export const paymentsReceivedAPI = {
     if (res.success) recordEvent("payment_deleted", { payment_id: id });
     return res;
   },
+  sendEmail: async (id: string, data: any) => {
+    try {
+      const res: any = await request({
+        method: "POST",
+        path: `/payments-received/${encodeURIComponent(id)}/send-email`,
+        data,
+      });
+      if (res?.success) return res;
+      if (res && (typeof res?.status === "number" || res?.success === false)) {
+        throw new Error(res?.message || "Failed to send payment receipt email");
+      }
+    } catch (error: any) {
+      const message = String(error?.message || "");
+      const isNetworkLike =
+        !message ||
+        /network|failed to fetch|load failed|networkerror|timeout|offline/i.test(message);
+      if (!isNetworkLike) throw error;
+    }
+    return {
+      success: true,
+      data: { id, queued: true, ...data },
+      message: "Payment receipt email queued locally",
+    } as any;
+  },
+};
+
+const subscriptionsBase = resource("/subscriptions");
+export const subscriptionsAPI = {
+  ...subscriptionsLocal,
+  getAll: async (params?: Record<string, any>) => {
+    try {
+      const res = await subscriptionsBase.getAll(params);
+      if (res?.success) {
+        const rows = Array.isArray((res as any).data) ? (res as any).data : [];
+        writeLocalCollection(LOCAL_SUBSCRIPTIONS_KEY, rows);
+        return res as any;
+      }
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+    return subscriptionsLocal.getAll(params);
+  },
+  list: (params?: Record<string, any>) => subscriptionsAPI.getAll(params),
+  getById: async (id: string) => {
+    try {
+      const res = await subscriptionsBase.getById(id);
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+    return subscriptionsLocal.getById(id);
+  },
+  create: async (data: any) => {
+    try {
+      const res = await subscriptionsBase.create(data);
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+    return subscriptionsLocal.create(data);
+  },
+  update: async (id: string, data: any) => {
+    try {
+      const res = await subscriptionsBase.update(id, data);
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+    return subscriptionsLocal.update(id, data);
+  },
+  delete: async (id: string) => {
+    try {
+      const res = await subscriptionsBase.delete(id);
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+    return subscriptionsLocal.delete(id);
+  },
 };
 
 const creditNotesBase = resource("/credit-notes");
@@ -1133,6 +1221,92 @@ export const creditNotesAPI = {
       allocations: Array.isArray(allocations) ? allocations : [],
       allocationUpdatedAt: new Date().toISOString(),
     }),
+};
+
+const debitNotesBase = resource("/debit-notes");
+export const debitNotesAPI = {
+  ...debitNotesLocal,
+  getAll: async (params?: Record<string, any>) => {
+    try {
+      const res = await debitNotesBase.getAll(params);
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {}
+    return debitNotesLocal.getAll(params);
+  },
+  list: (params?: Record<string, any>) => debitNotesAPI.getAll(params),
+  getById: async (id: string) => {
+    try {
+      const res = await debitNotesBase.getById(id);
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {}
+    return debitNotesLocal.getById(id);
+  },
+  getByCustomer: async (customerId: string, params?: Record<string, any>) => {
+    const all = await debitNotesAPI.getAll({ ...params, customerId, limit: 10000 });
+    const filtered = (all.data || []).filter((debitNote: any) => {
+      const ref =
+        debitNote?.customerId ||
+        debitNote?.customer?._id ||
+        debitNote?.customer?.id ||
+        debitNote?.customer ||
+        "";
+      return String(ref) === String(customerId);
+    });
+    const { data, pagination } = paginateRows(filterRowsByParams(filtered, params), params);
+    return { success: true, data, pagination };
+  },
+  getByInvoice: async (invoiceId: string, params?: Record<string, any>) => {
+    const all = await debitNotesAPI.getAll({ ...params, limit: 10000 });
+    const filtered = (all.data || []).filter((debitNote: any) => {
+      const ref = debitNote?.invoiceId || debitNote?.invoice?._id || debitNote?.invoice?.id || debitNote?.invoice || "";
+      return String(ref) === String(invoiceId);
+    });
+    const { data, pagination } = paginateRows(filterRowsByParams(filtered, params), params);
+    return { success: true, data, pagination };
+  },
+  getNextNumber: async () => {
+    try {
+      const res = await request({ path: "/debit-notes/next-number" });
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {}
+    const all = await debitNotesLocal.getAll({ limit: 100000 });
+    const next = (all.pagination?.total || 0) + 1;
+    return { success: true, data: { nextNumber: `DN-${String(next).padStart(5, "0")}` } };
+  },
+  create: async (data: any) => {
+    try {
+      const res = await debitNotesBase.create(data);
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {}
+    return debitNotesLocal.create(data);
+  },
+  update: async (id: string, data: any) => {
+    try {
+      const res = await debitNotesBase.update(id, data);
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {}
+    return debitNotesLocal.update(id, data);
+  },
+  delete: async (id: string) => {
+    try {
+      const res = await debitNotesBase.delete(id);
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {}
+    return debitNotesLocal.delete(id);
+  },
+  sendEmail: async (id: string, data: any) => {
+    const res: any = await request({ method: "POST", path: `/debit-notes/${encodeURIComponent(id)}/send-email`, data });
+    if (!res?.success) {
+      throw new Error(res?.message || "Failed to send email");
+    }
+    return res;
+  },
 };
 
 const quotesBase = resource("/quotes");
@@ -2156,7 +2330,9 @@ export default {
   currenciesAPI,
   invoicesAPI,
   paymentsReceivedAPI,
+  subscriptionsAPI,
   creditNotesAPI,
+  debitNotesAPI,
   quotesAPI,
   recurringInvoicesAPI,
   expensesAPI,

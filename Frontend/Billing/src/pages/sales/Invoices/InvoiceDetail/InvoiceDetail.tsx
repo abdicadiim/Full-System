@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
+import { toast } from "react-toastify";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { getInvoiceById, getInvoices, updateInvoice, getPayments, getTaxes, Tax, Invoice, AttachedFile, saveInvoice } from "../../salesModel";
-import { currenciesAPI, invoicesAPI } from "../../../../services/api";
+import { currenciesAPI, invoicesAPI, debitNotesAPI } from "../../../../services/api";
 import FieldCustomization from "../../../shared/FieldCustomization";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
@@ -89,6 +90,8 @@ const normalizeInvoiceItems = (sourceInvoice: any) => {
 export default function InvoiceDetail() { // Start of component
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isDebitNoteView = location.pathname.includes("/sales/debit-notes/");
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [baseCurrency, setBaseCurrency] = useState("USD");
@@ -148,6 +151,12 @@ export default function InvoiceDetail() { // Start of component
   const [selectedTemplate, setSelectedTemplate] = useState("Standard Template");
   const [taxOptions, setTaxOptions] = useState<Tax[]>([]);
   const [isOrganizationAddressModalOpen, setIsOrganizationAddressModalOpen] = useState(false);
+  const [debitNote, setDebitNote] = useState<any>(null);
+  const [customerRetainerAvailable, setCustomerRetainerAvailable] = useState<number>(0);
+  const [customerRetainerInvoices, setCustomerRetainerInvoices] = useState<any[]>([]);
+  const [isApplyRetainerOpen, setIsApplyRetainerOpen] = useState(false);
+  const [retainerApplyValues, setRetainerApplyValues] = useState<Record<string, number>>({});
+  const [isApplyingRetainer, setIsApplyingRetainer] = useState(false);
   const [organizationData, setOrganizationData] = useState({
     street1: "",
     street2: "",
@@ -192,7 +201,65 @@ export default function InvoiceDetail() { // Start of component
   const [isItalic, setIsItalic] = useState(false);
   const [isUnderline, setIsUnderline] = useState(false);
   const [isStrikethrough, setIsStrikethrough] = useState(false);
-  const location = useLocation();
+
+  const toNumSafe = (value: any, fallback = 0) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+
+  const normalizeKey = (value: any) =>
+    String(value || "")
+      .toLowerCase()
+      .replace(/-/g, "_")
+      .replace(/\s+/g, "_")
+      .trim();
+
+  const isRetainerInvoice = (row: any) => {
+    const typeValue = normalizeKey(row?.invoiceType || row?.type || row?.documentType || "");
+    const number = String(row?.invoiceNumber || row?.retainerNumber || "").toUpperCase();
+    return typeValue.includes("retainer") || number.startsWith("RET-");
+  };
+
+  const getCustomerKey = (row: any) =>
+    String(
+      row?.customer?._id ||
+      row?.customer?.id ||
+      row?.customerId ||
+      ""
+    ).trim();
+
+  const getCustomerName = (row: any) =>
+    String(
+      row?.customerName ||
+      (typeof row?.customer === "string" ? row?.customer : row?.customer?.displayName || row?.customer?.companyName || row?.customer?.name) ||
+      ""
+    ).trim();
+
+  const getRetainerAvailableAmount = (row: any) => {
+    const explicitAvailable = toNumSafe(
+      row?.retainerAvailableAmount ??
+      row?.availableAmount ??
+      row?.unusedAmount ??
+      row?.unusedBalance,
+      NaN
+    );
+    if (Number.isFinite(explicitAvailable) && explicitAvailable > 0) return explicitAvailable;
+
+    const totalAmount = toNumSafe(row?.total ?? row?.amount, 0);
+    const paidAmount = toNumSafe(row?.amountPaid ?? row?.paidAmount, 0);
+    const balanceAmount = toNumSafe(row?.balance ?? row?.balanceDue, NaN);
+
+    const status = normalizeKey(row?.status || "");
+    const drawStatus = normalizeKey(row?.retainerDrawStatus || row?.drawStatus || "");
+    if (status === "paid" || drawStatus === "ready_to_draw" || drawStatus === "partially_drawn") {
+      if (Number.isFinite(balanceAmount) && balanceAmount > 0) return balanceAmount;
+      if (paidAmount > 0) return paidAmount;
+      if (totalAmount > 0) return totalAmount;
+    }
+    return 0;
+  };
+
+  const formatAmountWithCurrency = (amount: number) => `${String(invoice?.currency || baseCurrency)}${Number(amount || 0).toFixed(2)}`;
 
   // Fetch organization profile data
   const fetchOrganizationProfile = async () => {
@@ -330,32 +397,80 @@ export default function InvoiceDetail() { // Start of component
       // Fetch invoice data
       let currentInvoice = null;
       if (id) {
-        currentInvoice = await getInvoiceById(id);
-        if (currentInvoice) {
-          setInvoice(currentInvoice);
-          // Initialize comments and attachments from backend data
-          if (currentInvoice.comments) {
-            setComments(currentInvoice.comments);
-          }
-          if (currentInvoice.attachments) {
-            setInvoiceAttachments(currentInvoice.attachments);
+        if (isDebitNoteView) {
+          const dnResponse: any = await debitNotesAPI.getById(id);
+          const dn = dnResponse?.success ? dnResponse.data : null;
+          if (dn) {
+            currentInvoice = {
+              ...dn,
+              id: String(dn.id || dn._id || id),
+              invoiceNumber: dn.debitNoteNumber || dn.invoiceNumber || String(dn.id || dn._id || id),
+              invoiceDate: dn.date || dn.debitNoteDate || dn.createdAt,
+              date: dn.date || dn.debitNoteDate || dn.createdAt,
+              dueDate: dn.date || dn.debitNoteDate || dn.createdAt,
+              total: Number(dn.total || dn.amount || 0) || 0,
+              balance: Number(dn.balance ?? dn.total ?? 0) || 0,
+              subTotal: Number(dn.subTotal ?? dn.total ?? 0) || 0,
+              status: String(dn.status || "sent"),
+              debitNote: true,
+              associatedInvoiceId: String(dn.invoiceId || ""),
+              associatedInvoiceNumber: String(dn.invoiceNumber || ""),
+            } as any;
+            setInvoice(currentInvoice);
+          } else {
+            navigate("/sales/invoices");
+            return;
           }
         } else {
-          navigate("/sales/invoices");
-          return;
+          currentInvoice = await getInvoiceById(id);
+          if (currentInvoice) {
+            setInvoice(currentInvoice);
+            // Initialize comments and attachments from backend data
+            if (currentInvoice.comments) {
+              setComments(currentInvoice.comments);
+            }
+            if (currentInvoice.attachments) {
+              setInvoiceAttachments(currentInvoice.attachments);
+            }
+          } else {
+            navigate("/sales/invoices");
+            return;
+          }
         }
       }
 
       const allInvoices = await getInvoices();
       setInvoices(allInvoices);
 
+      // Compute available retainer amount for the same customer
+      if (currentInvoice) {
+        const currentCustomerId = getCustomerKey(currentInvoice);
+        const currentCustomerName = getCustomerName(currentInvoice).toLowerCase();
+        const matchingRetainers = (allInvoices || []).filter((row: any) => {
+          if (!isRetainerInvoice(row)) return false;
+          const rowCustomerId = getCustomerKey(row);
+          const rowCustomerName = getCustomerName(row).toLowerCase();
+          const sameCustomer =
+            (currentCustomerId && rowCustomerId && currentCustomerId === rowCustomerId) ||
+            (!!currentCustomerName && rowCustomerName === currentCustomerName);
+          if (!sameCustomer) return false;
+          const status = normalizeKey(row?.status || "");
+          const drawStatus = normalizeKey(row?.retainerDrawStatus || row?.drawStatus || "");
+          return status === "paid" || drawStatus === "ready_to_draw" || drawStatus === "partially_drawn";
+        });
+        const totalAvailable = matchingRetainers.reduce((sum: number, row: any) => sum + getRetainerAvailableAmount(row), 0);
+        setCustomerRetainerInvoices(matchingRetainers);
+        setCustomerRetainerAvailable(Math.max(0, totalAvailable));
+      } else {
+        setCustomerRetainerInvoices([]);
+        setCustomerRetainerAvailable(0);
+      }
+
       const allTaxes = await getTaxes();
       setTaxOptions(allTaxes);
 
       // Get payments for this invoice
-      const allPayments = await getPayments();
-      // Filter payments that are directly associated or have allocations for this invoice
-      const invoicePayments = Array.isArray(allPayments) ? allPayments.filter(p => {
+      const allPayments = Array.isArray(await getPayments()) ? (await getPayments()).filter(p => {
         // Direct association
         if (p.invoiceId === id || p.invoiceNumber === currentInvoice?.invoiceNumber) return true;
         // Check allocations
@@ -367,7 +482,7 @@ export default function InvoiceDetail() { // Start of component
         }
         return false;
       }) : [];
-      setPayments(invoicePayments);
+      setPayments(allPayments);
 
       // Fetch organization profile data
       fetchOrganizationProfile();
@@ -390,6 +505,18 @@ export default function InvoiceDetail() { // Start of component
         }
       }
 
+      // Fetch Debit Note linked to invoice (skip when already in debit-note page)
+      try {
+        if (id && !isDebitNoteView) {
+          const linkedResponse = await debitNotesAPI.getByInvoice(id);
+          if (linkedResponse && linkedResponse.success && linkedResponse.data && linkedResponse.data.length > 0) {
+            setDebitNote(linkedResponse.data[0]);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching debit note:", error);
+      }
+
       // Fetch Base Currency
       try {
         const response = await currenciesAPI.getBaseCurrency();
@@ -402,7 +529,7 @@ export default function InvoiceDetail() { // Start of component
     };
 
     init();
-  }, [id, navigate]);
+  }, [id, navigate, isDebitNoteView]);
 
   // Handle openEmailModal state from navigation
   useEffect(() => {
@@ -456,10 +583,10 @@ export default function InvoiceDetail() { // Start of component
       const kind = due.getTime() < now.getTime() ? "overdue" : "sent";
 
       await invoicesAPI.sendReminder(id, { kind });
-      alert("Reminder sent successfully!");
+      toast("Reminder sent successfully!");
     } catch (error: any) {
       console.error("Error sending reminder:", error);
-      alert(error?.message || "Failed to send reminder. Please try again.");
+      toast(error?.message || "Failed to send reminder. Please try again.");
     }
   };
 
@@ -473,13 +600,13 @@ export default function InvoiceDetail() { // Start of component
 
       if (result?.success && result.data) {
         setInvoice((prev: any) => ({ ...(prev || {}), ...result.data }));
-        alert(nextStopped ? "Reminders stopped for this invoice" : "Reminders enabled for this invoice");
+        toast(nextStopped ? "Reminders stopped for this invoice" : "Reminders enabled for this invoice");
       } else {
         throw new Error(result?.message || "Failed to update reminder status");
       }
     } catch (error: any) {
       console.error("Error updating reminders stopped:", error);
-      alert(error?.message || "Failed to update reminder status. Please try again.");
+      toast(error?.message || "Failed to update reminder status. Please try again.");
     }
   };
 
@@ -497,20 +624,20 @@ export default function InvoiceDetail() { // Start of component
 
       const date = new Date(`${value}T00:00:00`);
       if (Number.isNaN(date.getTime())) {
-        alert("Invalid date. Please use YYYY-MM-DD.");
+        toast("Invalid date. Please use YYYY-MM-DD.");
         return;
       }
 
       const result = await invoicesAPI.update(id, { expectedPaymentDate: date.toISOString() });
       if (result?.success && result.data) {
         setInvoice((prev: any) => ({ ...(prev || {}), ...result.data }));
-        alert("Expected payment date saved");
+        toast("Expected payment date saved");
       } else {
         throw new Error(result?.message || "Failed to save expected payment date");
       }
     } catch (error: any) {
       console.error("Error saving expected payment date:", error);
-      alert(error?.message || "Failed to save expected payment date. Please try again.");
+      toast(error?.message || "Failed to save expected payment date. Please try again.");
     }
   };
 
@@ -785,11 +912,11 @@ export default function InvoiceDetail() { // Start of component
           // Update in list
           const updatedInvoices = invoices.map(inv => inv.id === id ? updatedInvoice : inv);
           setInvoices(updatedInvoices);
-          alert("Invoice updated successfully.");
+          toast("Invoice updated successfully.");
         }
       } catch (error: any) {
         console.error("Error marking invoice as sent:", error);
-        alert("Failed to mark invoice as sent: " + error.message);
+        toast("Failed to mark invoice as sent: " + error.message);
       }
     }
   };
@@ -806,14 +933,14 @@ export default function InvoiceDetail() { // Start of component
 
   const handleSendEmailSubmit = async () => {
     if (!emailData.to || !emailData.subject) {
-      alert("Please fill in required fields (To and Subject)");
+      toast("Please fill in required fields (To and Subject)");
       return;
     }
 
     // Simple email validation regex
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(emailData.to)) {
-      alert("Please enter a valid email address");
+      toast("Please enter a valid email address");
       return;
     }
 
@@ -821,7 +948,7 @@ export default function InvoiceDetail() { // Start of component
       if (typeof invoicesAPI.sendEmail !== 'function') {
         // Fallback if API method is not yet available in hot reload context (should rarely happen)
         console.warn("invoicesAPI.sendEmail is not defined yet");
-        alert("System update in progress. Please refresh the page and try again.");
+        toast("System update in progress. Please refresh the page and try again.");
         return;
       }
 
@@ -836,7 +963,7 @@ export default function InvoiceDetail() { // Start of component
 
       console.log("Sending email:", emailData);
       setIsSendEmailModalOpen(false);
-      alert("Email sent successfully!");
+      toast("Email sent successfully!");
 
       const resolvePostSendStatus = (dueDateValue: any) => {
         if (!dueDateValue) return "unpaid";
@@ -865,21 +992,21 @@ export default function InvoiceDetail() { // Start of component
       });
     } catch (error) {
       console.error("Error sending email:", error);
-      alert("Failed to send email. Please try again.");
+      toast("Failed to send email. Please try again.");
     }
   };
 
   const handleLogoUpload = (file) => {
     // Check file size (1MB max)
     if (file.size > 1024 * 1024) {
-      alert("File size exceeds 1MB. Please choose a smaller file.");
+      toast("File size exceeds 1MB. Please choose a smaller file.");
       return;
     }
 
     // Check file type
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/bmp'];
     if (!validTypes.includes(file.type)) {
-      alert("Invalid file type. Please upload jpg, jpeg, png, gif, or bmp files.");
+      toast("Invalid file type. Please upload jpg, jpeg, png, gif, or bmp files.");
       return;
     }
 
@@ -914,13 +1041,13 @@ export default function InvoiceDetail() { // Start of component
 
   const handleScheduleEmailSubmit = () => {
     if (!scheduleData.to || !scheduleData.subject || !scheduleData.date || !scheduleData.time) {
-      alert("Please fill in required fields (To, Subject, Date, and Time)");
+      toast("Please fill in required fields (To, Subject, Date, and Time)");
       return;
     }
     // TODO: Implement actual email sending
     console.log("Sending email:", emailData);
     setIsSendEmailModalOpen(false);
-    alert("Email sent successfully!");
+    toast("Email sent successfully!");
     setEmailData({
       to: "",
       cc: "",
@@ -936,7 +1063,7 @@ export default function InvoiceDetail() { // Start of component
     // TODO: Implement actual email scheduling
     console.log("Scheduling email:", scheduleData);
     setIsScheduleEmailModalOpen(false);
-    alert(`Email scheduled for ${scheduleData.date} at ${scheduleData.time}`);
+    toast(`Email scheduled for ${scheduleData.date} at ${scheduleData.time}`);
     setScheduleData({
       to: "",
       cc: "",
@@ -976,7 +1103,7 @@ export default function InvoiceDetail() { // Start of component
 
   const handleGenerateLink = () => {
     if (!linkExpirationDate) {
-      alert("Please select an expiration date");
+      toast("Please select an expiration date");
       return;
     }
 
@@ -997,9 +1124,9 @@ export default function InvoiceDetail() { // Start of component
   const handleCopyLink = () => {
     if (generatedLink) {
       navigator.clipboard.writeText(generatedLink).then(() => {
-        alert("Link copied to clipboard!");
+        toast("Link copied to clipboard!");
       }).catch(() => {
-        alert("Unable to copy link. Please copy manually: " + generatedLink);
+        toast("Unable to copy link. Please copy manually: " + generatedLink);
       });
     }
   };
@@ -1008,7 +1135,7 @@ export default function InvoiceDetail() { // Start of component
     if (window.confirm("Are you sure you want to disable all active links for this invoice?")) {
       setGeneratedLink("");
       setIsLinkGenerated(false);
-      alert("All active links have been disabled.");
+      toast("All active links have been disabled.");
     }
   };
 
@@ -1365,7 +1492,7 @@ export default function InvoiceDetail() { // Start of component
       pdf.save(`Invoice-${invoice.invoiceNumber || invoice.id}.pdf`);
     } catch (error) {
       console.error("Error downloading invoice PDF:", error);
-      alert("Failed to generate PDF. Please try again.");
+      toast("Failed to generate PDF. Please try again.");
     } finally {
       if (wrapper.parentNode) {
         wrapper.parentNode.removeChild(wrapper);
@@ -1386,24 +1513,59 @@ export default function InvoiceDetail() { // Start of component
     const hideWarning = localStorage.getItem('hideRecordPaymentWarning');
     if (hideWarning === 'true') {
       // Navigate directly to payment form
-      navigateToPaymentForm();
+      void navigateToPaymentForm();
     } else {
       // Show confirmation modal
       setIsRecordPaymentModalOpen(true);
     }
   };
 
-  const navigateToPaymentForm = () => {
-    // Navigate to record payment form with invoice pre-filled
+  const navigateToPaymentForm = async () => {
+    const fallbackInvoice: any = invoice || {};
+    const linkedInvoiceId = String(
+      (invoice as any)?.associatedInvoiceId ||
+      (invoice as any)?.invoiceId ||
+      ""
+    ).trim();
+
+    let sourceInvoice: any = fallbackInvoice;
+    if (isDebitNoteView && linkedInvoiceId) {
+      try {
+        const linked = await getInvoiceById(linkedInvoiceId);
+        if (linked) sourceInvoice = linked;
+      } catch {
+        // keep fallback
+      }
+    }
+
+    const sourceInvoiceId = isDebitNoteView
+      ? linkedInvoiceId
+      : (sourceInvoice?.id || sourceInvoice?._id || "");
+    const sourceInvoiceObjectId = String(sourceInvoice?.id || sourceInvoice?._id || "").trim();
+    const canPassInvoiceObject = Boolean(sourceInvoiceId && sourceInvoiceObjectId && sourceInvoiceObjectId === String(sourceInvoiceId));
+
+    // Navigate to record payment form with one target invoice pre-filled
     navigate("/sales/payments-received/new", {
       state: {
-        invoiceId: invoice?.id || invoice?._id,
-        invoiceNumber: invoice?.invoiceNumber || invoice?.id,
-        customerId: invoice?.customerId || invoice?.customer?._id || invoice?.customer?.id,
-        customerName: invoice?.customerName || (typeof invoice?.customer === 'string' ? invoice?.customer : invoice?.customer?.displayName || invoice?.customer?.name),
-        amount: invoice?.balance !== undefined ? invoice.balance : (invoice?.balanceDue ?? getInvoiceDisplayTotal(invoice)),
-        currency: invoice?.currency || "SOS",
-        invoice: invoice // Pass the full object as well
+        invoiceId: sourceInvoiceId,
+        invoiceNumber: sourceInvoice?.invoiceNumber || sourceInvoice?.id || sourceInvoiceId,
+        customerId: sourceInvoice?.customerId || sourceInvoice?.customer?._id || sourceInvoice?.customer?.id || fallbackInvoice?.customerId,
+        customerName:
+          sourceInvoice?.customerName ||
+          (typeof sourceInvoice?.customer === 'string'
+            ? sourceInvoice?.customer
+            : sourceInvoice?.customer?.displayName || sourceInvoice?.customer?.name) ||
+          fallbackInvoice?.customerName,
+        amount:
+          sourceInvoice?.balance !== undefined
+            ? sourceInvoice.balance
+            : (sourceInvoice?.balanceDue ?? getInvoiceDisplayTotal(sourceInvoice)),
+        currency: sourceInvoice?.currency || fallbackInvoice?.currency || "SOS",
+        invoice: canPassInvoiceObject ? sourceInvoice : undefined,
+        debitNoteId: isDebitNoteView ? String((invoice as any)?.id || (invoice as any)?._id || "") : "",
+        debitNoteNumber: isDebitNoteView ? String((invoice as any)?.debitNoteNumber || (invoice as any)?.invoiceNumber || "") : "",
+        showOnlyInvoice: true,
+        returnInvoiceId: sourceInvoiceId
       }
     });
   };
@@ -1414,7 +1576,141 @@ export default function InvoiceDetail() { // Start of component
       localStorage.setItem('hideRecordPaymentWarning', 'true');
     }
     setIsRecordPaymentModalOpen(false);
-    navigateToPaymentForm();
+    void navigateToPaymentForm();
+  };
+
+  const getCurrentDocumentBalance = () => {
+    const docTotal = toNumSafe((invoice as any)?.total ?? (invoice as any)?.amount, 0);
+    const explicitBalance = toNumSafe((invoice as any)?.balance ?? (invoice as any)?.balanceDue, NaN);
+    if (Number.isFinite(explicitBalance)) return Math.max(0, explicitBalance);
+    return Math.max(0, docTotal);
+  };
+
+  const handleOpenApplyRetainer = () => {
+    if (!invoice) return;
+    if (!customerRetainerInvoices.length) {
+      toast.info("No paid retainers available for this customer.");
+      return;
+    }
+    const initialValues: Record<string, number> = {};
+    customerRetainerInvoices.forEach((row: any) => {
+      const key = String(row?.id || row?._id || "");
+      if (key) initialValues[key] = 0;
+    });
+    setRetainerApplyValues(initialValues);
+    setIsApplyRetainerOpen(true);
+  };
+
+  const getTotalRetainerApplied = () =>
+    Object.values(retainerApplyValues).reduce((sum, value) => sum + (Number(value) || 0), 0);
+
+  const handleApplyRetainersSubmit = async () => {
+    if (!invoice || isApplyingRetainer) return;
+    const invoiceBalance = getCurrentDocumentBalance();
+    const totalApplied = getTotalRetainerApplied();
+    if (totalApplied <= 0) {
+      toast.error("Enter retainer amount to apply.");
+      return;
+    }
+    if (totalApplied > invoiceBalance) {
+      toast.error("Total applied cannot exceed invoice balance.");
+      return;
+    }
+
+    const rowsToApply = customerRetainerInvoices
+      .map((row: any) => {
+        const rowId = String(row?.id || row?._id || "");
+        const applied = Number(retainerApplyValues[rowId] || 0);
+        const available = getRetainerAvailableAmount(row);
+        return { row, rowId, applied, available };
+      })
+      .filter((entry) => entry.rowId && entry.applied > 0);
+
+    if (!rowsToApply.length) {
+      toast.error("Select at least one retainer amount.");
+      return;
+    }
+
+    const invalidRow = rowsToApply.find((entry) => entry.applied > entry.available);
+    if (invalidRow) {
+      toast.error(`Applied amount is greater than available for ${invalidRow.row?.invoiceNumber || invalidRow.rowId}.`);
+      return;
+    }
+
+    try {
+      setIsApplyingRetainer(true);
+
+      // 1) Update each retainer invoice available balance
+      for (const entry of rowsToApply) {
+        const nextAvailable = Math.max(0, Number(entry.available) - Number(entry.applied));
+        const nextDrawStatus = nextAvailable <= 0 ? "drawn" : "partially_drawn";
+        await updateInvoice(entry.rowId, {
+          balance: nextAvailable,
+          balanceDue: nextAvailable,
+          availableAmount: nextAvailable,
+          unusedAmount: nextAvailable,
+          retainerAvailableAmount: nextAvailable,
+          retainerDrawStatus: nextDrawStatus,
+          drawStatus: nextDrawStatus,
+          status: String(entry.row?.status || "paid"),
+        } as any);
+      }
+
+      // 2) Update current invoice / debit note
+      const nextBalance = Math.max(0, invoiceBalance - totalApplied);
+      const nextStatus = nextBalance <= 0 ? "paid" : ((invoice as any)?.status || "sent");
+      const existingApplications = Array.isArray((invoice as any)?.retainerApplications)
+        ? [...(invoice as any)?.retainerApplications]
+        : [];
+      const newApplications = rowsToApply.map((entry) => ({
+        retainerId: entry.rowId,
+        retainerNumber: String(entry.row?.invoiceNumber || ""),
+        amount: Number(entry.applied),
+        appliedAt: new Date().toISOString(),
+      }));
+      const patchPayload: any = {
+        balance: nextBalance,
+        balanceDue: nextBalance,
+        status: nextStatus,
+        retainerApplications: [...existingApplications, ...newApplications],
+        totalRetainersApplied: toNumSafe((invoice as any)?.totalRetainersApplied, 0) + totalApplied,
+      };
+
+      if (isDebitNoteView) {
+        await debitNotesAPI.update(String((invoice as any)?.id || (invoice as any)?._id || id || ""), patchPayload);
+      } else {
+        await updateInvoice(String((invoice as any)?.id || (invoice as any)?._id || id || ""), patchPayload);
+      }
+
+      setInvoice((prev: any) => (prev ? { ...prev, ...patchPayload } : prev));
+      setCustomerRetainerAvailable((prev) => Math.max(0, prev - totalApplied));
+      setCustomerRetainerInvoices((prev) =>
+        prev.map((row: any) => {
+          const rowId = String(row?.id || row?._id || "");
+          const appliedRow = rowsToApply.find((entry) => entry.rowId === rowId);
+          if (!appliedRow) return row;
+          const available = getRetainerAvailableAmount(row);
+          const nextAvailable = Math.max(0, available - appliedRow.applied);
+          return {
+            ...row,
+            balance: nextAvailable,
+            balanceDue: nextAvailable,
+            availableAmount: nextAvailable,
+            unusedAmount: nextAvailable,
+            retainerAvailableAmount: nextAvailable,
+            retainerDrawStatus: nextAvailable <= 0 ? "drawn" : "partially_drawn",
+          };
+        })
+      );
+
+      setIsApplyRetainerOpen(false);
+      toast.success("Retainers applied successfully.");
+    } catch (error: any) {
+      console.error("Failed to apply retainers:", error);
+      toast.error(error?.message || "Failed to apply retainers.");
+    } finally {
+      setIsApplyingRetainer(false);
+    }
   };
 
   const handleFilterSelect = (filter) => {
@@ -1504,7 +1800,7 @@ export default function InvoiceDetail() { // Start of component
 
     const customerId = toEntityId(invoice.customerId || invoice.customer);
     if (!customerId) {
-      alert("Cannot clone this invoice because it has no customer.");
+      toast("Cannot clone this invoice because it has no customer.");
       return;
     }
 
@@ -1541,10 +1837,10 @@ export default function InvoiceDetail() { // Start of component
         return;
       }
 
-      alert("Invoice cloned successfully, but it could not be opened automatically.");
+      toast("Invoice cloned successfully, but it could not be opened automatically.");
     } catch (error: any) {
       console.error("Error cloning invoice:", error);
-      alert(error?.message || "Failed to clone invoice. Please try again.");
+      toast(error?.message || "Failed to clone invoice. Please try again.");
     }
   };
 
@@ -1570,7 +1866,7 @@ export default function InvoiceDetail() { // Start of component
       // TODO: Implement actual deletion logic
       const updatedInvoices = invoices.filter(inv => inv.id !== invoice.id);
       setInvoices(updatedInvoices);
-      alert("Invoice deleted successfully.");
+      toast("Invoice deleted successfully.");
       navigate("/sales/invoices");
     }
   };
@@ -1579,7 +1875,7 @@ export default function InvoiceDetail() { // Start of component
     setIsMoreMenuOpen(false);
     // TODO: Implement invoice preferences functionality
     // This could open a preferences modal or navigate to preferences page
-    alert("Invoice Preferences - Feature coming soon");
+    toast("Invoice Preferences - Feature coming soon");
   };
 
   const handleVoidInvoice = async () => {
@@ -1590,11 +1886,11 @@ export default function InvoiceDetail() { // Start of component
       if (updatedInvoice) {
         setInvoice(updatedInvoice);
         setInvoices((prev) => prev.map((inv) => String(inv.id) === String(id) ? updatedInvoice : inv));
-        alert("Invoice voided successfully.");
+        toast("Invoice voided successfully.");
       }
     } catch (error: any) {
       console.error("Error voiding invoice:", error);
-      alert("Failed to void invoice: " + (error?.message || "Unknown error"));
+      toast("Failed to void invoice: " + (error?.message || "Unknown error"));
     }
   };
 
@@ -1602,14 +1898,14 @@ export default function InvoiceDetail() { // Start of component
   const handleFileUpload = (files) => {
     const validFiles = Array.from(files).filter(file => {
       if (file.size > 10 * 1024 * 1024) {
-        alert(`File ${file.name} is too large. Maximum size is 10MB.`);
+        toast(`File ${file.name} is too large. Maximum size is 10MB.`);
         return false;
       }
       return true;
     });
 
     if (invoiceAttachments.length + validFiles.length > 5) {
-      alert("Maximum 5 files allowed. Please remove some files first.");
+      toast("Maximum 5 files allowed. Please remove some files first.");
       return;
     }
 
@@ -1757,6 +2053,9 @@ export default function InvoiceDetail() { // Start of component
   const displayItems = normalizeInvoiceItems(invoice);
   const hasProjectItems = displayItems.some((item) => Boolean(item.projectName || item.projectId || item.project));
   const itemsTableTitle = hasProjectItems ? "Project Details" : "Item Table";
+  const invoiceStatusKey = String(invoice?.status || "").toLowerCase().replace(/[\s-]+/g, "_").trim();
+  const canRecordPayment = !["paid", "void"].includes(invoiceStatusKey);
+  const showWhatsNext = !isDebitNoteView && canRecordPayment;
 
   return (
     <>
@@ -1900,11 +2199,16 @@ export default function InvoiceDetail() { // Start of component
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 flex flex-col overflow-y-auto">
+        <div className="flex-1 flex flex-col overflow-y-auto relative">
           {/* Header */}
           <div className="border-b border-gray-200 bg-white flex-shrink-0">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <h1 className="text-[30px] leading-none font-semibold text-gray-900">{invoice.invoiceNumber || invoice.id}</h1>
+            <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200">
+              <div>
+                {isDebitNoteView && (
+                  <div className="text-sm text-[#3f4f8f] mb-0.5">Branch: {String((invoice as any)?.location || "Head Office")}</div>
+                )}
+                <h1 className="text-[36px] leading-none font-semibold text-gray-900">{invoice.invoiceNumber || invoice.id}</h1>
+              </div>
               <div className="flex items-center gap-2">
                 <button
                   className="p-1.5 text-gray-600 border border-gray-300 bg-gray-50 hover:bg-gray-100 rounded cursor-pointer"
@@ -1936,7 +2240,7 @@ export default function InvoiceDetail() { // Start of component
               </div>
             </div>
 
-            <div className="flex items-center gap-1 px-6 py-2 text-[13px] text-gray-700">
+            <div className="flex items-center gap-1 px-6 py-2 text-[13px] text-gray-700 border-b border-gray-200">
               <button
                 onClick={() => navigate(`/sales/invoices/${id}/edit`)}
                 className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-gray-100 cursor-pointer"
@@ -1944,6 +2248,7 @@ export default function InvoiceDetail() { // Start of component
                 <Edit size={13} />
                 Edit
               </button>
+              <div className="h-5 w-px bg-gray-300 mx-1" />
 
               <div className="relative" ref={sendDropdownRef}>
                 <button
@@ -2003,6 +2308,7 @@ export default function InvoiceDetail() { // Start of component
                 <Share2 size={13} />
                 Share
               </button>
+              <div className="h-5 w-px bg-gray-300 mx-1" />
 
               <div className="relative" ref={pdfDropdownRef}>
                 <button
@@ -2010,7 +2316,7 @@ export default function InvoiceDetail() { // Start of component
                   className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-gray-100 cursor-pointer"
                 >
                   <FileText size={13} />
-                  PDF
+                  {isDebitNoteView ? "PDF/Print" : "PDF"}
                   <ChevronDown size={12} />
                 </button>
                 {isPdfDropdownOpen && (
@@ -2033,7 +2339,19 @@ export default function InvoiceDetail() { // Start of component
                 )}
               </div>
 
-              {invoice && (invoice.status?.toLowerCase() === 'unpaid' || invoice.status?.toLowerCase() === 'sent' || invoice.status?.toLowerCase() === 'draft' || invoice.status?.toLowerCase() === 'partially paid' || invoice.status?.toLowerCase() === 'overdue') && (
+              {debitNote && (
+                <button
+                  onClick={() => navigate(`/sales/debit-notes/${debitNote.id || debitNote._id}`)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-[#fff7ed] border border-[#ffedd5] text-[#9a3412] hover:bg-[#ffedd5] font-medium text-[13px] transition-colors shadow-sm"
+                  title={`View Debit Note: ${debitNote.debitNoteNumber || debitNote.invoiceNumber || ""}`}
+                >
+                  <FileText size={13} className="text-[#c2410c]" />
+                  <span>Debit Note: {debitNote.debitNoteNumber || debitNote.invoiceNumber || "View"}</span>
+                </button>
+              )}
+              {debitNote && <div className="h-5 w-px bg-gray-300 mx-1" />}
+
+              {invoice && canRecordPayment && (
                 <button
                   onClick={handleRecordPayment}
                   className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-gray-100 cursor-pointer"
@@ -2042,6 +2360,7 @@ export default function InvoiceDetail() { // Start of component
                   Record Payment
                 </button>
               )}
+              <div className="h-5 w-px bg-gray-300 mx-1" />
 
               <div className="relative ml-1" ref={moreMenuRef}>
                 <button
@@ -2143,11 +2462,29 @@ export default function InvoiceDetail() { // Start of component
                           <Trash2 size={14} />
                           Delete
                         </div>
+                        <div className="h-px bg-gray-200 my-1"></div>
+                        <div
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
+                          onClick={() => navigate(`/sales/debit-notes/new?invoiceId=${id}`)}
+                        >
+                          <Plus size={14} className="text-blue-500" />
+                          Create Debit Note
+                        </div>
                       </>
                     )}
                   </div>
                 )}
               </div>
+
+              {debitNote && (
+                <button
+                  onClick={() => navigate(`/sales/debit-notes/${debitNote.id || debitNote._id}`)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-[#fff7ed] border border-[#ffedd5] text-[#9a3412] hover:bg-[#ffedd5] font-medium text-sm transition-colors"
+                >
+                  <FileText size={14} />
+                  View Debit Note
+                </button>
+              )}
             </div>
           </div>
 
@@ -2161,8 +2498,90 @@ export default function InvoiceDetail() { // Start of component
             </div>
           )}
 
+          {/* Debit Note Header Card */}
+          {isDebitNoteView && (
+            <div className="mx-6 mt-4 rounded border border-gray-200 bg-white">
+              <div className="px-5 py-4 border-b border-gray-200">
+                {customerRetainerAvailable > 0 && (
+                  <div className="flex items-center gap-2 text-base text-gray-900 mb-3">
+                    <FileText size={16} className="text-gray-700" />
+                    <span>
+                      Retainer Available:{" "}
+                      <span className="font-semibold">
+                        {String(invoice?.currency || baseCurrency)}{customerRetainerAvailable.toFixed(2)}
+                      </span>{" "}
+                      <button
+                        type="button"
+                        className="text-[#3b82f6] hover:underline"
+                        onClick={handleOpenApplyRetainer}
+                      >
+                        Apply Now
+                      </button>
+                    </span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 text-base text-gray-900">
+                  <FileText size={16} className="text-gray-700" />
+                  <span>
+                    Associated Invoice:{" "}
+                    <button
+                      type="button"
+                      className="text-[#3b82f6] hover:underline"
+                      onClick={() => {
+                        const invId = String((invoice as any)?.associatedInvoiceId || (invoice as any)?.invoiceId || "");
+                        if (invId) navigate(`/sales/invoices/${invId}`);
+                      }}
+                    >
+                      {String((invoice as any)?.associatedInvoiceNumber || (invoice as any)?.invoiceNumber || "-")}
+                    </button>
+                  </span>
+                </div>
+              </div>
+              <div className="px-5 py-5 border-b border-gray-200 flex items-center gap-3">
+                <Sparkles size={16} className="text-[#7c72ff]" />
+                <span className="text-sm text-gray-800">
+                  <span className="font-semibold">WHAT&apos;S NEXT?</span> Payment Reminder is scheduled to be sent on{" "}
+                  {formatDate((invoice as any)?.dueDate || (invoice as any)?.date || new Date().toISOString())}
+                </span>
+                <button className="text-[#3b82f6] hover:underline text-sm">Stop Reminders</button>
+                <span className="text-sm text-gray-700">|</span>
+                <span className="text-sm text-gray-800">Received payment?</span>
+                <button
+                  onClick={handleRecordPayment}
+                  className="px-3 py-1.5 rounded-md text-sm text-white"
+                  style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
+                >
+                  Record Payment
+                </button>
+              </div>
+              <div className="px-5 py-3 bg-[#f8fafc] text-sm text-gray-700">
+                Get paid faster by setting up online payment gateways.{" "}
+                <button className="text-[#3b82f6] hover:underline">Set Up Now</button>
+              </div>
+            </div>
+          )}
+
+          {!isDebitNoteView && customerRetainerAvailable > 0 && (
+            <div className="mx-6 mt-4 rounded border border-gray-200 bg-white px-5 py-3 flex items-center gap-2 text-sm text-gray-800">
+              <FileText size={15} className="text-gray-700" />
+              <span>
+                Retainer Available:{" "}
+                <span className="font-semibold">
+                  {String(invoice?.currency || baseCurrency)}{customerRetainerAvailable.toFixed(2)}
+                </span>{" "}
+                <button
+                  type="button"
+                  className="text-[#3b82f6] hover:underline"
+                  onClick={handleOpenApplyRetainer}
+                >
+                  Apply Now
+                </button>
+              </span>
+            </div>
+          )}
+
           {/* What's Next Section */}
-          {(invoice.status === "draft" || invoice.status?.toLowerCase() === "sent" || invoice.status?.toLowerCase() === "unpaid" || invoice.status?.toLowerCase() === "partially paid" || invoice.status?.toLowerCase() === "overdue") && (
+          {showWhatsNext && (
             <div className="flex items-center gap-4 p-4 bg-blue-50 border border-blue-200 rounded-lg mx-6 mt-4 flex-shrink-0">
               <Sparkles size={20} className="text-blue-600 flex-shrink-0" />
               <span>WHAT'S NEXT? {invoice.status === "draft" ? "Send this Invoice to your customer or record a payment." : "Record a payment for this invoice."}</span>
@@ -2963,6 +3382,113 @@ export default function InvoiceDetail() { // Start of component
                 <button
                   className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md text-sm font-medium cursor-pointer hover:bg-gray-50"
                   onClick={() => setIsRecordPaymentModalOpen(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isApplyRetainerOpen && invoice && (
+          <div className="absolute inset-0 z-30 bg-white flex flex-col">
+            <div className="px-5 py-3 border-b border-gray-200">
+              <button
+                type="button"
+                className="text-[#2563eb] text-sm mb-1"
+                onClick={() => setIsApplyRetainerOpen(false)}
+              >
+                &#8592;
+              </button>
+              <div className="text-[36px] leading-none font-semibold text-[#111827] mb-1">
+                Apply Retainers ({String((invoice as any)?.invoiceNumber || "")})
+              </div>
+              <div className="text-[26px] text-[#475569]">
+                Retainer Available: {formatAmountWithCurrency(customerRetainerAvailable)}
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-[#f8fafc] text-[#64748b] text-[14px]">
+                    <th className="text-left px-4 py-3">DATE</th>
+                    <th className="text-left px-4 py-3">PAYMENT#</th>
+                    <th className="text-left px-4 py-3">LOCATION</th>
+                    <th className="text-left px-4 py-3">AVAILABLE RETAINER</th>
+                    <th className="text-left px-4 py-3">RETAINERS APPLIED</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customerRetainerInvoices.map((row: any) => {
+                    const rowId = String(row?.id || row?._id || "");
+                    const available = getRetainerAvailableAmount(row);
+                    const applied = toNumSafe(retainerApplyValues[rowId], 0);
+                    return (
+                      <tr key={rowId} className="border-b border-gray-100">
+                        <td className="px-4 py-3 text-[36px] text-[#111827]">
+                          {formatDate(row?.date || row?.invoiceDate || row?.createdAt || "")}
+                        </td>
+                        <td className="px-4 py-3 text-[36px] text-[#111827]">
+                          {String(row?.invoiceNumber || "-")}
+                        </td>
+                        <td className="px-4 py-3 text-[36px] text-[#111827]">
+                          {String(row?.location || row?.selectedLocation || "Head Office")}
+                        </td>
+                        <td className="px-4 py-3 text-[36px] text-[#111827] font-medium">
+                          {formatAmountWithCurrency(available)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <input
+                            type="number"
+                            min={0}
+                            max={available}
+                            step="0.01"
+                            value={applied || ""}
+                            onChange={(e) => {
+                              const next = Math.max(0, toNumSafe(e.target.value, 0));
+                              const clamped = Math.min(next, available);
+                              setRetainerApplyValues((prev) => ({ ...prev, [rowId]: clamped }));
+                            }}
+                            className="w-[220px] h-[44px] border border-[#93c5fd] rounded px-3 text-[32px] text-[#0f172a] outline-none"
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="border-t border-gray-200 px-6 py-4 bg-white">
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-[20px] text-[#64748b]">
+                  Note: If there is any tax applied to the retainer invoice, the tax will be reversed.
+                </div>
+                <div className="text-right">
+                  <div className="text-[36px] text-[#111827]">
+                    {formatAmountWithCurrency(getCurrentDocumentBalance())} - {formatAmountWithCurrency(getTotalRetainerApplied())} = {formatAmountWithCurrency(Math.max(0, getCurrentDocumentBalance() - getTotalRetainerApplied()))}
+                  </div>
+                  <div className="text-[20px] text-[#64748b]">
+                    Invoice Amount - Total Retainers Applied = Invoice Balance
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  disabled={isApplyingRetainer}
+                  onClick={handleApplyRetainersSubmit}
+                  className="px-5 py-2 rounded text-white text-[22px] font-medium disabled:opacity-60"
+                  style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
+                >
+                  {isApplyingRetainer ? "Applying..." : "Apply Retainers"}
+                </button>
+                <button
+                  type="button"
+                  disabled={isApplyingRetainer}
+                  onClick={() => setIsApplyRetainerOpen(false)}
+                  className="px-5 py-2 rounded border border-gray-300 text-[22px] text-[#334155] bg-white disabled:opacity-60"
                 >
                   Cancel
                 </button>
@@ -3865,4 +4391,5 @@ export default function InvoiceDetail() { // Start of component
     </>
   );
 }
+
 

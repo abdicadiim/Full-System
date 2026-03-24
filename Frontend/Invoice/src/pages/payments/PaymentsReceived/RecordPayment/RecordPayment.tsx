@@ -47,6 +47,11 @@ export default function RecordPayment() {
   const location = useLocation();
   const isEditMode = !!id;
   const invoiceId = location.state?.invoiceId;
+  const returnInvoiceId =
+    location.state?.invoiceId ||
+    location.state?.invoice?.id ||
+    location.state?.invoice?._id ||
+    "";
   const { baseCurrency, symbol } = useCurrency();
   const baseCurrencyCode = baseCurrency?.code || "USD";
   const currencySymbol = symbol || "$";
@@ -72,12 +77,13 @@ export default function RecordPayment() {
   });
 
   const isCustomerSelected = !!formData.customerId;
-  const [saveLoading, setSaveLoading] = useState<null | "draft" | "paid">(null);
+  const [saveLoading, setSaveLoading] = useState<null | "draft" | "paid" | "paid_send">(null);
 
   const [customers, setCustomers] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [unpaidInvoices, setUnpaidInvoices] = useState<any[]>([]);
   const [limitToInvoice, setLimitToInvoice] = useState(false);
+  const [lockedInvoiceId, setLockedInvoiceId] = useState("");
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
   const [locationOptions, setLocationOptions] = useState<string[]>(["Head Office"]);
   const [reportingTagDefinitions, setReportingTagDefinitions] = useState<any[]>([]);
@@ -450,7 +456,14 @@ export default function RecordPayment() {
         setSelectedInvoice(inv);
 
         const custName = location.state.customerName || inv.customerName || (typeof inv.customer === 'string' ? inv.customer : inv.customer?.displayName || inv.customer?.name) || "";
-        const custId = location.state.customerId || inv.customerId || inv.customer?._id || inv.customer?.id || "";
+        const custId =
+          location.state.customerId ||
+          inv.customerId ||
+          inv.customer?._id ||
+          inv.customer?.id ||
+          (typeof inv.customer === "string" ? inv.customer : "") ||
+          customers.find((c: any) => String(c?.name || "").trim().toLowerCase() === String(custName || "").trim().toLowerCase())?.id ||
+          "";
         const amt = (location.state.amount || computeInvoiceDue(inv) || inv.balanceDue || inv.total || inv.amount || "").toString();
         setFormData(prev => ({
           ...prev,
@@ -468,10 +481,11 @@ export default function RecordPayment() {
           paymentDate: inv.dueDate ? new Date(inv.dueDate).toISOString().split('T')[0] : (inv.invoiceDate || inv.date ? new Date(inv.invoiceDate || inv.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]),
         }));
 
-        if (custId) {
+        const invoiceIdStr = String(inv.id || inv._id || location.state?.invoiceId || "");
+        if (invoiceIdStr) {
           setLimitToInvoice(true);
-          const invoiceIdStr = String(inv.id || inv._id);
-          await loadInvoicesForPayment([invoiceIdStr], { [invoiceIdStr]: parseFloat(amt) || 0 });
+          setLockedInvoiceId(invoiceIdStr);
+          await loadUnpaidInvoices(custId, custName, invoiceIdStr, parseFloat(amt) || 0);
         }
         return;
       }
@@ -482,11 +496,18 @@ export default function RecordPayment() {
         try {
           const inv = await getInvoiceById(targetInvoiceId);
           if (inv) {
-            setSelectedInvoice(null);
+            setSelectedInvoice(inv);
             const customer = customers.find(c => c.id === inv.customerId || (typeof inv.customer === 'object' ? (inv.customer?._id === c.id || inv.customer?.id === c.id) : false));
 
             const custName = inv.customerName || (typeof inv.customer === 'string' ? inv.customer : inv.customer?.displayName || inv.customer?.name) || "";
-            const custId = inv.customerId || inv.customer?._id || inv.customer?.id || customer?.id || "";
+            const custId =
+              inv.customerId ||
+              inv.customer?._id ||
+              inv.customer?.id ||
+              (typeof inv.customer === "string" ? inv.customer : "") ||
+              customer?.id ||
+              customers.find((c: any) => String(c?.name || "").trim().toLowerCase() === String(custName || "").trim().toLowerCase())?.id ||
+              "";
             const amt = (computeInvoiceDue(inv) || inv.balanceDue || inv.total || inv.amount || "").toString();
             setFormData(prev => ({
               ...prev,
@@ -501,14 +522,34 @@ export default function RecordPayment() {
               paymentDate: inv.dueDate ? new Date(inv.dueDate).toISOString().split('T')[0] : (inv.invoiceDate || inv.date ? new Date(inv.invoiceDate || inv.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]),
             }));
 
-            if (custId) {
-              setLimitToInvoice(true);
-              const invoiceIdStr = String(inv.id || inv._id || targetInvoiceId);
-              await loadInvoicesForPayment([invoiceIdStr], { [invoiceIdStr]: parseFloat(amt) || 0 });
-            }
+            const invoiceIdStr = String(inv.id || inv._id || targetInvoiceId);
+            setLimitToInvoice(true);
+            setLockedInvoiceId(invoiceIdStr);
+            await loadUnpaidInvoices(custId, custName, invoiceIdStr, parseFloat(amt) || 0);
           }
         } catch (error) {
           console.error("Error loading invoice for payment:", error);
+        }
+      }
+
+      // Priority 3: Use customer from state (when coming from customer detail)
+      if (!isEditMode && !location.state?.invoice && !targetInvoiceId) {
+        const stateCustomerId = location.state?.customerId;
+        const stateCustomerName = location.state?.customerName;
+        if (stateCustomerId || stateCustomerName) {
+          const custId = stateCustomerId || "";
+          const custName = stateCustomerName || "";
+          setFormData(prev => ({
+            ...prev,
+            customerName: custName,
+            customerId: custId,
+            currency: baseCurrencyCode,
+          }));
+          if (custId) {
+            setLimitToInvoice(false);
+            setLockedInvoiceId("");
+            await loadUnpaidInvoices(custId, custName);
+          }
         }
       }
     };
@@ -690,9 +731,13 @@ export default function RecordPayment() {
   // Reload unpaid invoices when date range filter changes
   useEffect(() => {
     if (formData.customerId) {
-      loadUnpaidInvoices(formData.customerId, formData.customerName);
+      if (limitToInvoice && lockedInvoiceId) {
+        loadUnpaidInvoices(formData.customerId, formData.customerName, lockedInvoiceId);
+      } else {
+        loadUnpaidInvoices(formData.customerId, formData.customerName);
+      }
     }
-  }, [dateRangeFilter]);
+  }, [dateRangeFilter, formData.customerId, formData.customerName, limitToInvoice, lockedInvoiceId]);
 
   // Helper: compute amount due for an invoice (respecting balanceDue, balance, discounts and paid amounts)
   const computeInvoiceDue = (inv: any) => {
@@ -723,21 +768,19 @@ export default function RecordPayment() {
 
   const loadUnpaidInvoices = async (custId: string, customerName: string, targetInvoiceId: string | null = null, targetAmount: number = 0) => {
     try {
-      // If we're asked to limit to a specific invoice, fetch that invoice only
+      let targetInvoice: any | null = null;
       if (targetInvoiceId) {
+        const stateInvoice = !isEditMode ? (location.state as any)?.invoice : null;
+        const stateInvoiceId = String(stateInvoice?.id || stateInvoice?._id || "");
+        if (stateInvoice && stateInvoiceId && stateInvoiceId === String(targetInvoiceId)) {
+          targetInvoice = { ...stateInvoice, id: stateInvoiceId };
+        }
+      }
+      if (targetInvoiceId && !targetInvoice) {
         try {
-          const inv = await getInvoiceById(String(targetInvoiceId));
-          if (inv) {
-            setUnpaidInvoices([inv]);
-            const invId = inv.id || inv._id;
-            const initialPayments: { [key: string]: number } = {};
-            initialPayments[invId] = targetAmount || parseFloat(invoicePayments[invId] || 0) || 0;
-            setInvoicePayments(initialPayments);
-            return;
-          }
+          targetInvoice = await getInvoiceById(String(targetInvoiceId));
         } catch (err) {
           console.error('Error fetching target invoice:', err);
-          // Fall through to loading all invoices if fetching single invoice fails
         }
       }
 
@@ -776,17 +819,30 @@ export default function RecordPayment() {
         return dateA - dateB;
       });
 
-      setUnpaidInvoices(invoices);
+      if (targetInvoice) {
+        const targetId = targetInvoice.id || targetInvoice._id;
+        const exists = invoices.some((inv: any) => String(inv.id || inv._id) === String(targetId));
+        if (!exists) {
+          invoices = [targetInvoice, ...invoices];
+        }
+      }
+
+      // When opened from a single invoice detail, keep only that invoice in the list.
+      const visibleInvoices = targetInvoiceId
+        ? invoices.filter((inv: any) => String(inv.id || inv._id) === String(targetInvoiceId))
+        : invoices;
+
+      setUnpaidInvoices(visibleInvoices);
 
       // Initialize/Update payment amounts
       const initialPayments: { [key: string]: number } = {};
       let currentAmountReceived = parseFloat(formData.amountReceived) || 0;
       let remainingToDistribute = targetAmount > 0 ? targetAmount : currentAmountReceived;
 
-      invoices.forEach((inv: any) => {
+      visibleInvoices.forEach((inv: any) => {
         const invId = inv.id || inv._id;
         const due = computeInvoiceDue(inv);
-        if (targetInvoiceId && (invId === targetInvoiceId)) {
+        if (targetInvoiceId && String(invId) === String(targetInvoiceId)) {
           initialPayments[invId] = targetAmount;
         } else if (remainingToDistribute > 0 && !targetInvoiceId) {
           // Auto-distribute if we have an amount but no target invoice
@@ -902,6 +958,7 @@ export default function RecordPayment() {
   };
 
   const handleCustomerSelect = async (customer: any) => {
+    const enforceSingleInvoice = Boolean(location.state?.showOnlyInvoice);
     const customerId = customer.id || customer._id;
     const customerName = customer.name || customer.displayName || customer.companyName;
     setFormData(prev => ({
@@ -915,9 +972,15 @@ export default function RecordPayment() {
     setIsCustomerDropdownOpen(false);
     setCustomerSearch("");
     if (customerId) {
-      // User explicitly selected a customer -> clear any invoice-limited mode so we show all unpaid invoices
-      setLimitToInvoice(false);
-      await loadUnpaidInvoices(customerId, customerName);
+      if (enforceSingleInvoice && lockedInvoiceId) {
+        setLimitToInvoice(true);
+        await loadUnpaidInvoices(customerId, customerName, lockedInvoiceId);
+      } else {
+        // User explicitly selected a customer -> clear any invoice-limited mode so we show all unpaid invoices
+        setLimitToInvoice(false);
+        setLockedInvoiceId("");
+        await loadUnpaidInvoices(customerId, customerName);
+      }
 
       // Fetch full customer details and load contact persons
       try {
@@ -1025,7 +1088,7 @@ export default function RecordPayment() {
 
     const newValidFiles = files.filter(file => {
       if (file.size > MAX_FILE_SIZE_BYTES) {
-        alert(`File "${file.name}" exceeds the 5MB limit and will not be uploaded.`);
+        toast.error(`File "${file.name}" exceeds the 5MB limit and will not be uploaded.`);
         return false;
       }
       return true;
@@ -1034,7 +1097,7 @@ export default function RecordPayment() {
     setAttachedFiles(prev => {
       const combinedFiles = [...prev, ...newValidFiles];
       if (combinedFiles.length > MAX_FILES) {
-        alert(`You can upload a maximum of ${MAX_FILES} files. Some files were not added.`);
+        toast.error(`You can upload a maximum of ${MAX_FILES} files. Some files were not added.`);
         return combinedFiles.slice(0, MAX_FILES);
       }
       return combinedFiles;
@@ -1060,13 +1123,13 @@ export default function RecordPayment() {
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file');
+      toast.error('Please select an image file');
       return;
     }
 
     // Validate file size (5MB max)
     if (file.size > 5 * 1024 * 1024) {
-      alert('File size must be less than 5MB');
+      toast.error('File size must be less than 5MB');
       return;
     }
 
@@ -1080,12 +1143,12 @@ export default function RecordPayment() {
   const handleSaveContactPerson = async () => {
     // Validate required fields
     if (!newContactPersonData.firstName || !newContactPersonData.lastName) {
-      alert('Please enter first name and last name');
+      toast.error('Please enter first name and last name');
       return;
     }
 
     if (!formData.customerId) {
-      alert('Please select a customer first');
+      toast.error('Please select a customer first');
       return;
     }
 
@@ -1157,10 +1220,10 @@ export default function RecordPayment() {
       setIsContactPersonModalOpen(false);
 
       // Show success message
-      alert('Contact person added successfully!');
+      toast.success('Contact person added successfully!');
     } catch (error) {
       console.error('Error saving contact person:', error);
-      alert('Failed to save contact person. Please try again.');
+      toast.error('Failed to save contact person. Please try again.');
     }
   };
 
@@ -1289,9 +1352,37 @@ export default function RecordPayment() {
     }
   };
 
-  const handleSave = async (status = "paid") => {
+  const sendPaymentReceiptEmail = async (paymentId: string) => {
+    const recipientEmails = (selectedContactPersons || [])
+      .map((cp: any) => String(cp?.email || "").trim())
+      .filter((email: string) => Boolean(email));
+    const fallbackCustomerEmail = String(
+      customerDetails?.email ||
+      customers.find((c: any) => String(c?.id || c?._id || "") === String(formData.customerId || ""))?.email ||
+      ""
+    ).trim();
+    const to = recipientEmails.length > 0 ? recipientEmails.join(",") : fallbackCustomerEmail;
+
+    if (!to) {
+      toast.warning("Payment saved, but customer email is missing.");
+      return;
+    }
+
+    const payload = {
+      to,
+      subject: `Payment Receipt ${formData.paymentNumber || ""}`.trim(),
+      body: `Dear ${formData.customerName || "Customer"},\n\nThank you for your payment. Please find your payment receipt details attached.\n\nRegards,`,
+      attachPDF: true,
+      paymentId,
+    };
+
+    await paymentsReceivedAPI.sendEmail(paymentId, payload);
+    toast.success("Payment saved and email sent.");
+  };
+
+  const handleSave = async (status = "paid", sendEmailAfterSave = false) => {
     if (saveLoading) return;
-    setSaveLoading(status as "draft" | "paid");
+    setSaveLoading(sendEmailAfterSave ? "paid_send" : (status as "draft" | "paid"));
     try {
       // Validate required fields
       if (!formData.customerId || !formData.customerName) {
@@ -1393,20 +1484,30 @@ export default function RecordPayment() {
             if (Math.abs(diff) > 0) invoiceDeltas[invId] = diff;
           });
 
-          await applyPaymentsToInvoices(
-            invoiceDeltas,
-            {
-              paymentId: String((response as any)?.data?._id || (response as any)?.data?.id || id || ""),
-              paymentNumber: formData.paymentNumber || "",
-              paymentDate: formData.paymentDate || "",
-              paymentMode: formData.paymentMode || "Cash",
-              referenceNumber: formData.referenceNumber || "",
-            },
-            cleanedInvoicePayments
-          );
+          if (String(status).toLowerCase() === "paid") {
+            await applyPaymentsToInvoices(
+              invoiceDeltas,
+              {
+                paymentId: String((response as any)?.data?._id || (response as any)?.data?.id || id || ""),
+                paymentNumber: formData.paymentNumber || "",
+                paymentDate: formData.paymentDate || "",
+                paymentMode: formData.paymentMode || "Cash",
+                referenceNumber: formData.referenceNumber || "",
+              },
+              cleanedInvoicePayments
+            );
+          }
 
-          toast.success("Payment updated successfully.");
-          navigate("/payments/payments-received");
+          if (sendEmailAfterSave && String(status).toLowerCase() === "paid") {
+            await sendPaymentReceiptEmail(String((response as any)?.data?._id || (response as any)?.data?.id || id || ""));
+          } else {
+            toast.success("Payment updated successfully.");
+          }
+          if (returnInvoiceId) {
+            navigate(`/sales/invoices/${returnInvoiceId}`);
+          } else {
+            navigate("/payments/payments-received");
+          }
         } else {
           toast.error("Failed to update payment: " + (response?.message || "Unknown error"));
         }
@@ -1414,20 +1515,30 @@ export default function RecordPayment() {
         // Create new payment
         const response = await paymentsReceivedAPI.create(data);
         if (response && response.success) {
-          await applyPaymentsToInvoices(
-            cleanedInvoicePayments,
-            {
-              paymentId: String((response as any)?.data?._id || (response as any)?.data?.id || ""),
-              paymentNumber: formData.paymentNumber || "",
-              paymentDate: formData.paymentDate || "",
-              paymentMode: formData.paymentMode || "Cash",
-              referenceNumber: formData.referenceNumber || "",
-            },
-            cleanedInvoicePayments
-          );
+          if (String(status).toLowerCase() === "paid") {
+            await applyPaymentsToInvoices(
+              cleanedInvoicePayments,
+              {
+                paymentId: String((response as any)?.data?._id || (response as any)?.data?.id || ""),
+                paymentNumber: formData.paymentNumber || "",
+                paymentDate: formData.paymentDate || "",
+                paymentMode: formData.paymentMode || "Cash",
+                referenceNumber: formData.referenceNumber || "",
+              },
+              cleanedInvoicePayments
+            );
+          }
 
-          toast.success("Payment saved successfully.");
-          navigate("/payments/payments-received");
+          if (sendEmailAfterSave && String(status).toLowerCase() === "paid") {
+            await sendPaymentReceiptEmail(String((response as any)?.data?._id || (response as any)?.data?.id || ""));
+          } else {
+            toast.success("Payment saved successfully.");
+          }
+          if (returnInvoiceId) {
+            navigate(`/sales/invoices/${returnInvoiceId}`);
+          } else {
+            navigate("/payments/payments-received");
+          }
         } else {
           toast.error("Failed to save payment: " + (response?.message || "Unknown error"));
         }
@@ -1481,7 +1592,7 @@ export default function RecordPayment() {
 
   const handleShare = () => {
     if (!selectedInvoice) {
-      alert("Please select an invoice first");
+      toast.error("Please select an invoice first");
       return;
     }
 
@@ -1507,7 +1618,7 @@ export default function RecordPayment() {
 
   const handleGenerateLink = () => {
     if (!linkExpirationDate) {
-      alert("Please select an expiration date");
+      toast.error("Please select an expiration date");
       return;
     }
 
@@ -1525,9 +1636,9 @@ export default function RecordPayment() {
   const handleCopyLink = () => {
     if (generatedLink) {
       navigator.clipboard.writeText(generatedLink).then(() => {
-        alert("Link copied to clipboard!");
+        toast.success("Link copied to clipboard!");
       }).catch(() => {
-        alert("Unable to copy link. Please copy manually: " + generatedLink);
+        toast.error("Unable to copy link. Please copy manually: " + generatedLink);
       });
     }
   };
@@ -1536,11 +1647,17 @@ export default function RecordPayment() {
     if (window.confirm("Are you sure you want to disable all active links for this invoice?")) {
       setGeneratedLink("");
       setIsLinkGenerated(false);
-      alert("All active links have been disabled.");
+      toast.info("All active links have been disabled.");
     }
   };
 
+  const isSingleInvoiceMode = Boolean(location.state?.showOnlyInvoice && lockedInvoiceId);
+
   const filteredInvoices = Array.isArray(invoices) ? invoices.filter(inv => {
+    if (isSingleInvoiceMode) {
+      return String(inv.id || inv._id || "") === String(lockedInvoiceId);
+    }
+
     const searchLower = invoiceSearch.toLowerCase();
     // Safely get customer name string
     const customerName = (
@@ -1628,8 +1745,12 @@ export default function RecordPayment() {
                 <div className="relative" ref={customerDropdownRef}>
                   <div className="flex items-center">
                     <div
-                      className="flex-1 border border-gray-300 rounded-l px-3 py-1.5 text-sm flex items-center justify-between cursor-pointer hover:border-gray-400 bg-white min-h-[36px]"
-                      onClick={() => setIsCustomerDropdownOpen(!isCustomerDropdownOpen)}
+                      className={`flex-1 border border-gray-300 rounded-l px-3 py-1.5 text-sm flex items-center justify-between bg-white min-h-[36px] ${
+                        isSingleInvoiceMode ? "cursor-not-allowed opacity-80" : "cursor-pointer hover:border-gray-400"
+                      }`}
+                      onClick={() => {
+                        if (!isSingleInvoiceMode) setIsCustomerDropdownOpen(!isCustomerDropdownOpen);
+                      }}
                     >
                       <span className={formData.customerName ? "text-gray-900" : "text-gray-400"}>
                         {formData.customerName || "Select Customer"}
@@ -1638,20 +1759,23 @@ export default function RecordPayment() {
                     </div>
                     <button
                       type="button"
-                      className="h-[36px] px-3 text-white rounded-r border transition-colors flex items-center justify-center"
+                      className={`h-[36px] px-3 text-white rounded-r border transition-colors flex items-center justify-center ${
+                        isSingleInvoiceMode ? "opacity-60 cursor-not-allowed" : ""
+                      }`}
                       style={{ backgroundColor: "#156372", borderColor: "#156372" }}
                       onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.backgroundColor = "#0D4A52"}
                       onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.backgroundColor = "#156372"}
                       onClick={(e) => {
                         e.stopPropagation();
-                        setCustomerSearchModalOpen(true);
+                        if (!isSingleInvoiceMode) setCustomerSearchModalOpen(true);
                       }}
+                      disabled={isSingleInvoiceMode}
                     >
                       <Search size={16} />
                     </button>
                   </div>
 
-                {isCustomerDropdownOpen && (
+                {isCustomerDropdownOpen && !isSingleInvoiceMode && (
                   <div className="absolute top-full left-0 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg z-50 max-h-60 overflow-y-auto">
                     <div className="p-2 sticky top-0 bg-white border-b border-gray-100">
                       <div className="flex items-center gap-2 border border-gray-200 rounded px-2 py-1">
@@ -2266,14 +2390,14 @@ export default function RecordPayment() {
             {saveLoading === "draft" ? "Saving..." : "Save as Draft"}
           </button>
           <button
-            onClick={() => handleSave("paid")}
+            onClick={() => handleSave("paid", true)}
             disabled={saveLoading !== null}
-            className={`bg-[#22c55e] text-white px-4 py-2 rounded-md text-sm font-semibold transition-colors flex items-center gap-2 ${saveLoading ? "opacity-60 cursor-not-allowed" : "hover:bg-[#16a34a]"}`}
+            className={`bg-gradient-to-r from-[#156372] to-[#0D4A52] text-white px-4 py-2 rounded-md text-sm font-semibold transition-all flex items-center gap-2 ${saveLoading ? "opacity-60 cursor-not-allowed" : "hover:opacity-90"}`}
           >
-            {saveLoading === "paid" ? (
+            {saveLoading === "paid" || saveLoading === "paid_send" ? (
               <>
                 <Loader2 className="animate-spin" size={16} />
-                Saving...
+                Saving & Sending...
               </>
             ) : (
               <>

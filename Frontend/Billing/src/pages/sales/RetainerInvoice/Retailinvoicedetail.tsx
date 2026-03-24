@@ -1147,22 +1147,38 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
   };
 
   const navigateToRecordPaymentPage = () => {
+    const invoiceId = String((invoice as any)?.id || (invoice as any)?._id || id || "");
+    const customerName = String(
+      (invoice as any)?.customerName ||
+      (typeof (invoice as any)?.customer === "string"
+        ? (invoice as any)?.customer
+        : (invoice as any)?.customer?.displayName ||
+          (invoice as any)?.customer?.companyName ||
+          (invoice as any)?.customer?.name ||
+          "") ||
+      ""
+    );
     navigate("/payments/payments-received/new", {
       state: {
         source: "retainer-invoice",
-        invoiceId: String((invoice as any)?.id || (invoice as any)?._id || id || ""),
+        invoiceId,
         invoiceNumber: String((invoice as any)?.invoiceNumber || ""),
         customerId: String(
           (invoice as any)?.customer?._id ||
             (invoice as any)?.customer?.id ||
             (invoice as any)?.customerId ||
+            (typeof (invoice as any)?.customer === "string" ? (invoice as any)?.customer : "") ||
             ""
         ),
-        customerName: String((invoice as any)?.customerName || ""),
+        customerName,
         amountDue: Number((invoice as any)?.balance ?? (invoice as any)?.balanceDue ?? total ?? 0) || 0,
         totalAmount: Number((invoice as any)?.total ?? (invoice as any)?.amount ?? total ?? 0) || 0,
         currency: String((invoice as any)?.currency || "USD"),
         location: String((invoice as any)?.location || (invoice as any)?.selectedLocation || "Head Office"),
+        amount: Number((invoice as any)?.balance ?? (invoice as any)?.balanceDue ?? total ?? 0) || 0,
+        invoice,
+        showOnlyInvoice: true,
+        returnInvoiceId: invoiceId
       },
     });
   };

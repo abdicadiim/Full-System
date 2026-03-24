@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
+import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import LoadingSpinner from "../../../components/LoadingSpinner";
-import { getCreditNotes, getCustomViews, deleteCustomView, getCreditNoteById, updateCreditNote } from "../salesModel";
+import { getCreditNotes, getCustomViews, deleteCustomView, getCreditNoteById, updateCreditNote, getCustomers } from "../salesModel";
 import FieldCustomization from "../../shared/FieldCustomization";
+import CreditNotesCustomizeColumnsModal, { CreditNotesColumnOption } from "./CreditNotesCustomizeColumnsModal";
 import { settingsAPI, currenciesAPI } from "../../../services/api";
 import { downloadCreditNotesPdf } from "./creditNotePdf";
 import {
@@ -20,13 +22,13 @@ import {
   FileText,
   Square,
   CheckSquare,
-  Pencil,
   Upload,
   Download,
   RotateCcw,
   Trash2,
   Eye,
-  Check
+  Check,
+  SlidersHorizontal
 } from "lucide-react";
 
 const defaultCreditNoteViews = [
@@ -39,6 +41,21 @@ const defaultCreditNoteViews = [
   "Closed",
   "Void"
 ];
+
+const CREDIT_NOTES_LIST_COLUMNS: CreditNotesColumnOption[] = [
+  { key: "date", label: "Date" },
+  { key: "location", label: "Location" },
+  { key: "creditNoteNumber", label: "Credit Note#" },
+  { key: "referenceNumber", label: "Reference Number" },
+  { key: "customerName", label: "Customer Name" },
+  { key: "invoiceNumber", label: "Invoice#" },
+  { key: "status", label: "Status" },
+  { key: "amount", label: "Amount" },
+  { key: "balance", label: "Balance" },
+  { key: "salesPerson", label: "Sales person" }
+];
+
+const CREDIT_NOTES_COLUMNS_STORAGE_KEY = "billing_credit_notes_visible_columns_v1";
 
 interface CreditNote {
   id: string;
@@ -54,6 +71,10 @@ interface CreditNote {
   total?: number;
   amount?: number;
   balance?: number;
+  location?: string;
+  salesPerson?: string;
+  salesperson?: string;
+  salesPersonName?: string;
   currency?: string;
   refunded?: boolean;
   createdTime?: string | number | Date;
@@ -100,8 +121,24 @@ export default function CreditNotes() {
   const [activeSortField, setActiveSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [isFieldCustomizationOpen, setIsFieldCustomizationOpen] = useState(false);
+  const [isCustomizeColumnsOpen, setIsCustomizeColumnsOpen] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(CREDIT_NOTES_COLUMNS_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const allowed = new Set(CREDIT_NOTES_LIST_COLUMNS.map((c) => c.key));
+        const filtered = parsed.filter((k: string) => allowed.has(k));
+        if (filtered.length > 0) return filtered;
+      }
+    } catch (_error) {
+      // ignore parse issues and use defaults
+    }
+    return CREDIT_NOTES_LIST_COLUMNS.map((c) => c.key);
+  });
   const [availableCurrencies, setAvailableCurrencies] = useState<CurrencyListItem[]>([]);
   const [organizationProfile, setOrganizationProfile] = useState<any>(null);
+  const [customerNameMap, setCustomerNameMap] = useState<Record<string, string>>({});
   const [baseCurrency, setBaseCurrency] = useState("USD");
   const [isPreferencesModalOpen, setIsPreferencesModalOpen] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
@@ -171,6 +208,7 @@ export default function CreditNotes() {
   const customerNameCreditNoteDropdownRef = useRef<HTMLDivElement>(null);
   const [isTaxExemptionsCreditNoteDropdownOpen, setIsTaxExemptionsCreditNoteDropdownOpen] = useState(false);
   const taxExemptionsCreditNoteDropdownRef = useRef<HTMLDivElement>(null);
+  const isColumnVisible = (key: string) => visibleColumns.includes(key);
 
   const sortOptions = [
     "Created Time",
@@ -279,10 +317,38 @@ export default function CreditNotes() {
     return { valid: true, message: "", normalizedValue: trimmed };
   };
 
+  const isLikelyMongoId = (value: any) => /^[a-f0-9]{24}$/i.test(String(value || "").trim());
+  const pickCustomerDisplayName = (customer: any) => {
+    if (!customer || typeof customer !== "object") return "";
+    const first = String(customer?.firstName || customer?.firstname || "").trim();
+    const last = String(customer?.lastName || customer?.lastname || "").trim();
+    const fullFromParts = [first, last].filter(Boolean).join(" ").trim();
+    const candidates = [
+      customer?.displayName,
+      customer?.customerName,
+      customer?.companyName,
+      customer?.name,
+      customer?.fullName,
+      customer?.contactName,
+      fullFromParts
+    ];
+    const picked = candidates.find((v) => String(v || "").trim() && !isLikelyMongoId(v));
+    return String(picked || "").trim();
+  };
+  const buildCustomerNameMap = (customers: any[]) =>
+    (Array.isArray(customers) ? customers : []).reduce((acc: Record<string, string>, c: any) => {
+      const id = String(c?.id || c?._id || c?.customerId || "").trim();
+      const name = pickCustomerDisplayName(c);
+      if (id && name) acc[id] = name;
+      return acc;
+    }, {});
+
   const refreshData = async () => {
     setIsRefreshing(true);
     try {
-      const allCreditNotes = await getCreditNotes();
+      const [allCreditNotes, customers] = await Promise.all([getCreditNotes(), getCustomers()]);
+      const customerMap = buildCustomerNameMap(customers);
+      setCustomerNameMap(customerMap);
       const allCustomViews = getCustomViews().filter(v => v.type === "credit-notes");
       setCreditNotes(allCreditNotes);
       setCustomViews(allCustomViews);
@@ -298,7 +364,9 @@ export default function CreditNotes() {
   useEffect(() => {
     const initialLoad = async () => {
       try {
-        const allCreditNotes = await getCreditNotes();
+        const [allCreditNotes, customers] = await Promise.all([getCreditNotes(), getCustomers()]);
+        const customerMap = buildCustomerNameMap(customers);
+        setCustomerNameMap(customerMap);
         const allCustomViews = getCustomViews().filter(v => v.type === "credit-notes");
         if (Array.isArray(allCreditNotes)) {
           setCreditNotes(allCreditNotes);
@@ -454,7 +522,7 @@ export default function CreditNotes() {
     const fieldMap: Record<string, any> = {
       "Date": note.creditNoteDate || note.date || "",
       "Credit Note#": note.creditNoteNumber || note.id || "",
-      "Reference Number": note.referenceNumber || "",
+      "Reference Number": getCreditNoteReferenceNumber(note),
       "Customer Name": note.customerName || note.customer || "",
       "Invoice#": note.invoiceNumber || "",
       "Status": note.status || "open",
@@ -530,6 +598,34 @@ export default function CreditNotes() {
     const numAmount = parseFloat(amount) || 0;
     return `${currency}${numAmount.toFixed(2)}`;
   };
+
+  const getCreditNoteCustomerName = (note: any) => {
+    const fromNested = pickCustomerDisplayName(note?.customer);
+    if (fromNested && String(fromNested).trim()) return String(fromNested).trim();
+
+    const raw = String(note?.customerName || "").trim();
+    const isLikelyId = isLikelyMongoId(raw);
+    if (raw && !isLikelyId) return raw;
+
+    const customerId = String(
+      note?.customerId ||
+      note?.customer?._id ||
+      note?.customer?.id ||
+      (typeof note?.customer === "string" ? note.customer : "") ||
+      ""
+    ).trim();
+    return customerNameMap[customerId] || "-";
+  };
+
+  const getCreditNoteReferenceNumber = (note: any) =>
+    String(
+      note?.referenceNumber ??
+      note?.reference ??
+      note?.referenceNo ??
+      note?.refNumber ??
+      note?.ref ??
+      ""
+    ).trim();
 
   const handleRefreshList = () => {
     if (!isRefreshing) {
@@ -635,7 +731,7 @@ export default function CreditNotes() {
     }
 
     if (dataToExport.length === 0) {
-      alert("No data to export.");
+      toast("No data to export.");
       return;
     }
 
@@ -645,7 +741,7 @@ export default function CreditNotes() {
       ...dataToExport.map(note => [
         formatDate(note.creditNoteDate || note.date),
         note.creditNoteNumber || note.id,
-        note.referenceNumber || "",
+        getCreditNoteReferenceNumber(note),
         note.customerName || note.customer || "",
         note.invoiceNumber || "",
         (note.status || "open").toUpperCase(),
@@ -673,7 +769,7 @@ export default function CreditNotes() {
   //   setCreditNotes(allCreditNotes);
   //   applyFilters(allCreditNotes, selectedStatus);
   //   // Visual feedback
-  //   alert("List refreshed successfully.");
+  //   toast("List refreshed successfully.");
   // };
 
   const handlePreferences = () => {
@@ -685,7 +781,7 @@ export default function CreditNotes() {
     setIsMoreMenuOpen(false);
     // Reset any stored column widths in localStorage if they exist
     localStorage.removeItem("creditNoteColumnWidths");
-    alert("Column widths have been reset to default.");
+    toast("Column widths have been reset to default.");
   };
 
   const handleSelectAll = () => {
@@ -714,18 +810,18 @@ export default function CreditNotes() {
 
   const handleBulkUpdateSubmit = async () => {
     if (!selectedBulkFieldConfig) {
-      alert("Please select a field to update.");
+      toast("Please select a field to update.");
       return;
     }
 
     if (selectedCreditNotes.length === 0) {
-      alert("Please select at least one credit note to update.");
+      toast("Please select at least one credit note to update.");
       return;
     }
 
     const normalized = validateAndNormalizeBulkValue(selectedBulkFieldConfig, String(bulkUpdateValue ?? ""));
     if (!normalized.valid) {
-      alert(normalized.message);
+      toast(normalized.message);
       return;
     }
 
@@ -753,13 +849,13 @@ export default function CreditNotes() {
       setBulkUpdateValue("");
 
       if (failedCount > 0) {
-        alert(`Updated ${successCount} credit note(s). ${failedCount} could not be updated.`);
+        toast(`Updated ${successCount} credit note(s). ${failedCount} could not be updated.`);
       } else {
-        alert(`Successfully updated ${successCount} credit note(s).`);
+        toast(`Successfully updated ${successCount} credit note(s).`);
       }
     } catch (error: any) {
       console.error("Error bulk updating credit notes:", error);
-      alert(error?.message || "Failed to bulk update credit notes.");
+      toast(error?.message || "Failed to bulk update credit notes.");
     }
   };
 
@@ -772,7 +868,7 @@ export default function CreditNotes() {
   const handleDownloadPDF = async () => {
     const selectedNotes = creditNotes.filter(note => selectedCreditNotes.includes(note.id));
     if (selectedNotes.length === 0) {
-      alert("Please select at least one credit note to download as PDF.");
+      toast("Please select at least one credit note to download as PDF.");
       return;
     }
 
@@ -793,13 +889,13 @@ export default function CreditNotes() {
       });
     } catch (error) {
       console.error("Error downloading credit notes PDF:", error);
-      alert("Failed to generate PDF. Please try again.");
+      toast("Failed to generate PDF. Please try again.");
     }
   };
 
   const handleDelete = () => {
     if (selectedCreditNotes.length === 0) {
-      alert("Please select at least one credit note to delete.");
+      toast("Please select at least one credit note to delete.");
       return;
     }
 
@@ -809,7 +905,7 @@ export default function CreditNotes() {
       setCreditNotes(remainingNotes);
       setFilteredCreditNotes(remainingNotes);
       setSelectedCreditNotes([]);
-      alert("Credit notes deleted successfully.");
+      toast("Credit notes deleted successfully.");
     }
   };
 
@@ -856,8 +952,12 @@ export default function CreditNotes() {
     return selectedStatus === view;
   };
 
+  useEffect(() => {
+    localStorage.setItem(CREDIT_NOTES_COLUMNS_STORAGE_KEY, JSON.stringify(visibleColumns));
+  }, [visibleColumns]);
+
   return (
-    <div className="w-full min-h-screen bg-gray-50">
+    <div className="w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] -ml-4 md:-ml-6 min-h-screen bg-white">
       {/* Header - Show Bulk Actions Bar when items are selected, otherwise show normal header */}
       {selectedCreditNotes.length > 0 ? (
         <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-white">
@@ -1253,17 +1353,29 @@ export default function CreditNotes() {
         </div>
       )}
 
-      <div className="p-6 relative">
+      <div className="relative">
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-white overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
-              <thead className="bg-white sticky top-0 z-10 border-b border-gray-200 shadow-sm">
-                <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              <thead className="bg-[#f6f7fb] sticky top-0 z-10 border-b border-[#e6e9f2]">
+                <tr className="text-[10px] font-semibold text-[#7b8494] uppercase tracking-wider">
                   <th className="px-4 py-3 w-16 min-w-[64px]">
                     <div className="flex items-center gap-2">
                       <button
-                        className="p-1 hover:bg-gray-200 rounded transition-colors"
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsCustomizeColumnsOpen(true);
+                        }}
+                        className="h-6 w-6 flex items-center justify-center rounded border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
+                        title="Customize Columns"
+                      >
+                        <SlidersHorizontal size={13} className="text-[#1b5e6a]" />
+                      </button>
+                      <div className="h-5 w-px bg-gray-200" />
+                      <button
+                        className="h-4 w-4 flex items-center justify-center hover:bg-gray-200 rounded transition-colors"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleSelectAll();
@@ -1277,24 +1389,26 @@ export default function CreditNotes() {
                       </button>
                     </div>
                   </th>
-                  <th className="px-4 py-3 text-left">
+                  {isColumnVisible("date") && <th className="px-4 py-3 text-left">
                     <button className="flex items-center gap-2 hover:text-blue-600 transition-colors">
                         DATE
                       </button>
-                  </th>
-                  <th className="px-4 py-3 text-left">
+                  </th>}
+                  {isColumnVisible("location") && <th className="px-4 py-3 text-left">LOCATION</th>}
+                  {isColumnVisible("creditNoteNumber") && <th className="px-4 py-3 text-left">
                     <button className="flex items-center gap-2 hover:text-blue-600 transition-colors">
                         CREDIT NOTE#
                         <ArrowUpDown size={14} className="text-gray-400" />
                       </button>
-                  </th>
-                  <th className="px-4 py-3 text-left">REFERENCE NUMBER</th>
-                  <th className="px-4 py-3 text-left">CUSTOMER NAME</th>
-                  <th className="px-4 py-3 text-left">INVOICE#</th>
-                  <th className="px-4 py-3 text-left">STATUS</th>
-                  <th className="px-4 py-3 text-left">AMOUNT</th>
-                  <th className="px-4 py-3 text-left">BALANCE</th>
-                  <th className="px-4 py-3 text-left">
+                  </th>}
+                  {isColumnVisible("referenceNumber") && <th className="px-4 py-3 text-left">REFERENCE NUMBER</th>}
+                  {isColumnVisible("customerName") && <th className="px-4 py-3 text-left">CUSTOMER NAME</th>}
+                  {isColumnVisible("invoiceNumber") && <th className="px-4 py-3 text-left">INVOICE#</th>}
+                  {isColumnVisible("status") && <th className="px-4 py-3 text-left">STATUS</th>}
+                  {isColumnVisible("amount") && <th className="px-4 py-3 text-left">AMOUNT</th>}
+                  {isColumnVisible("balance") && <th className="px-4 py-3 text-left">BALANCE</th>}
+                  {isColumnVisible("salesPerson") && <th className="px-4 py-3 text-left">SALES PERSON</th>}
+                  <th className="px-4 py-3 text-left bg-[#f6f7fb]">
                       <button
                         onClick={() => setShowSearchModal(true)}
                         className="cursor-pointer hover:text-gray-700"
@@ -1302,7 +1416,6 @@ export default function CreditNotes() {
                         <Search size={16} className="text-gray-500" />
                       </button>
                   </th>
-                  <th className="px-4 py-3 text-left"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -1310,23 +1423,28 @@ export default function CreditNotes() {
                   Array(5).fill(0).map((_, index) => (
                     <tr key={`skeleton-${index}`} className="animate-pulse border-b border-gray-50">
                       <td className="px-4 py-3">
-                        <div className="w-4 h-4 bg-gray-100 rounded"></div>
+                        <div className="flex items-center gap-2">
+                          <span className="h-6 w-6 shrink-0" aria-hidden />
+                          <span className="h-5 w-px shrink-0 bg-transparent" aria-hidden />
+                          <div className="w-4 h-4 bg-gray-100 rounded"></div>
+                        </div>
                       </td>
-                      <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>
-                      <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-32"></div></td>
-                      <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>
-                      <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-32"></div></td>
-                      <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>
-                      <td className="px-4 py-3"><div className="h-6 bg-gray-100 rounded w-20"></div></td>
-                      <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-20"></div></td>
-                      <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-20"></div></td>
-                      <td className="px-4 py-3"></td>
+                      {isColumnVisible("date") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
+                      {isColumnVisible("location") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
+                      {isColumnVisible("creditNoteNumber") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-32"></div></td>}
+                      {isColumnVisible("referenceNumber") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
+                      {isColumnVisible("customerName") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-32"></div></td>}
+                      {isColumnVisible("invoiceNumber") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
+                      {isColumnVisible("status") && <td className="px-4 py-3"><div className="h-6 bg-gray-100 rounded w-20"></div></td>}
+                      {isColumnVisible("amount") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-20"></div></td>}
+                      {isColumnVisible("balance") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-20"></div></td>}
+                      {isColumnVisible("salesPerson") && <td className="px-4 py-3"><div className="h-4 bg-gray-100 rounded w-24"></div></td>}
                       <td className="px-4 py-3"></td>
                     </tr>
                   ))
                 ) : filteredCreditNotes.length === 0 ? (
                   <tr>
-                    <td colSpan="11" className="px-4 py-8 text-center text-gray-500 text-sm">
+                    <td colSpan={visibleColumns.length + 2} className="px-4 py-8 text-center text-gray-500 text-sm">
                       No credit notes found matching the selected filter.
                     </td>
                   </tr>
@@ -1346,26 +1464,31 @@ export default function CreditNotes() {
                         style={isSelected ? { backgroundColor: "#1b5e6a1A" } : {}}
                       >
                         <td className="px-4 py-3">
-                          <button
-                            className="p-1 hover:bg-gray-200 rounded transition-colors"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedCreditNotes(prev =>
-                                prev.includes(note.id)
-                                  ? prev.filter(id => id !== note.id)
-                                  : [...prev, note.id]
-                              );
-                            }}
-                          >
-                            {selectedCreditNotes.includes(note.id) ? (
-                              <CheckSquare size={16} fill="#6b7280" color="#6b7280" />
-                            ) : (
-                              <Square size={16} className="text-gray-400" />
-                            )}
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <span className="h-6 w-6 shrink-0" aria-hidden />
+                            <span className="h-5 w-px shrink-0 bg-transparent" aria-hidden />
+                            <button
+                              className="h-4 w-4 flex items-center justify-center hover:bg-gray-200 rounded transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedCreditNotes(prev =>
+                                  prev.includes(note.id)
+                                    ? prev.filter(id => id !== note.id)
+                                    : [...prev, note.id]
+                                );
+                              }}
+                            >
+                              {selectedCreditNotes.includes(note.id) ? (
+                                <CheckSquare size={16} fill="#6b7280" color="#6b7280" />
+                              ) : (
+                                <Square size={16} className="text-gray-400" />
+                              )}
+                            </button>
+                          </div>
                         </td>
-                        <td className="px-4 py-3 text-[13px] text-slate-600">{formatDate(note.creditNoteDate || note.date)}</td>
-                        <td className="px-4 py-3">
+                        {isColumnVisible("date") && <td className="px-4 py-3 text-[13px] text-slate-600">{formatDate(note.creditNoteDate || note.date)}</td>}
+                        {isColumnVisible("location") && <td className="px-4 py-3 text-[13px] text-slate-600">{note.location || "-"}</td>}
+                        {isColumnVisible("creditNoteNumber") && <td className="px-4 py-3">
                           <span
                             className="text-[13px] font-medium text-[#156372] hover:underline cursor-pointer"
                             onClick={(e) => {
@@ -1375,11 +1498,11 @@ export default function CreditNotes() {
                           >
                             {note.creditNoteNumber || note.id}
                           </span>
-                        </td>
-                        <td className="px-4 py-3 text-[13px] text-slate-600">{note.referenceNumber || ""}</td>
-                        <td className="px-4 py-3 text-[13px] text-slate-600">{note.customerName || note.customer?.displayName || note.customer?.companyName || (typeof note.customer === 'string' ? note.customer : "")}</td>
-                        <td className="px-4 py-3 text-[13px] text-slate-600">{note.invoiceNumber || ""}</td>
-                        <td className="px-4 py-3">
+                        </td>}
+                        {isColumnVisible("referenceNumber") && <td className="px-4 py-3 text-[13px] text-slate-600">{getCreditNoteReferenceNumber(note)}</td>}
+                        {isColumnVisible("customerName") && <td className="px-4 py-3 text-[13px] text-slate-600">{getCreditNoteCustomerName(note)}</td>}
+                        {isColumnVisible("invoiceNumber") && <td className="px-4 py-3 text-[13px] text-slate-600">{note.invoiceNumber || ""}</td>}
+                        {isColumnVisible("status") && <td className="px-4 py-3">
                           <span
                             className={`text-[11px] font-semibold ${(note.status || "open").toLowerCase() === "open"
                               ? "text-green-700"
@@ -1392,22 +1515,11 @@ export default function CreditNotes() {
                           >
                             {(note.status || "open").toUpperCase()}
                           </span>
-                        </td>
-                        <td className="px-4 py-3 text-[13px] text-slate-600 font-semibold">{formatCurrency(note.total || note.amount || 0, note.currency)}</td>
-                        <td className="px-4 py-3 text-[13px] text-slate-600">{formatCurrency(note.balance || note.total || note.amount || 0, note.currency)}</td>
+                        </td>}
+                        {isColumnVisible("amount") && <td className="px-4 py-3 text-[13px] text-slate-600 font-semibold">{formatCurrency(note.total || note.amount || 0, note.currency)}</td>}
+                        {isColumnVisible("balance") && <td className="px-4 py-3 text-[13px] text-slate-600">{formatCurrency(note.balance || note.total || note.amount || 0, note.currency)}</td>}
+                        {isColumnVisible("salesPerson") && <td className="px-4 py-3 text-[13px] text-slate-600">{note.salesPerson || note.salesperson || note.salesPersonName || "-"}</td>}
                         <td className="px-4 py-3"></td>
-                        <td className="px-4 py-3">
-                          <button
-                            className="p-2 hover:bg-blue-50 rounded-lg text-gray-600 hover:text-blue-600 transition-colors"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/sales/credit-notes/${note.id}/edit`);
-                            }}
-                            title="Edit Credit Note"
-                          >
-                            <Pencil size={16} />
-                          </button>
-                        </td>
                       </tr>
                     );
                   })
@@ -1804,6 +1916,17 @@ export default function CreditNotes() {
         </div>
       )}
 
+      <CreditNotesCustomizeColumnsModal
+        open={isCustomizeColumnsOpen}
+        columns={CREDIT_NOTES_LIST_COLUMNS}
+        value={visibleColumns}
+        onClose={() => setIsCustomizeColumnsOpen(false)}
+        onSave={(nextVisibleColumns) => {
+          setVisibleColumns(nextVisibleColumns);
+          setIsCustomizeColumnsOpen(false);
+        }}
+      />
+
       {/* Field Customization Modal */}
       {isFieldCustomizationOpen && (
         <FieldCustomization
@@ -1891,7 +2014,7 @@ export default function CreditNotes() {
                 <button
                   onClick={() => {
                     // TODO: Save preferences to localStorage or backend
-                    alert("Preferences saved successfully!");
+                    toast("Preferences saved successfully!");
                     setIsPreferencesModalOpen(false);
                   }}
                   className="px-6 py-2 bg-red-600 text-white rounded-md text-sm font-medium cursor-pointer hover:bg-red-700"
@@ -1906,4 +2029,6 @@ export default function CreditNotes() {
     </div>
   );
 }
+
+
 

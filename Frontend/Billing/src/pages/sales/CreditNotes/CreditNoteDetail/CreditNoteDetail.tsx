@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { toast } from "react-toastify";
 import { useParams, useNavigate } from "react-router-dom";
 import { getCreditNoteById, getCreditNotes, deleteCreditNote, CreditNote, AttachedFile, updateCreditNote } from "../../salesModel";
 import { currenciesAPI, bankAccountsAPI, chartOfAccountsAPI, refundsAPI, creditNotesAPI, settingsAPI } from "../../../../services/api";
@@ -376,7 +377,7 @@ export default function CreditNoteDetail() {
       });
     } catch (error) {
       console.error("Error downloading credit note PDF:", error);
-      alert("Failed to generate PDF. Please try again.");
+      toast("Failed to generate PDF. Please try again.");
     }
   };
 
@@ -421,13 +422,13 @@ Best regards`,
 
   const handleSendEmailSubmit = () => {
     if (!emailData.to || !emailData.subject) {
-      alert("Please fill in required fields (To and Subject)");
+      toast("Please fill in required fields (To and Subject)");
       return;
     }
     // TODO: Implement actual email sending
     console.log("Sending email:", emailData);
     setIsSendEmailModalOpen(false);
-    alert("Email sent successfully!");
+    toast("Email sent successfully!");
     setEmailData({
       to: "",
       cc: "",
@@ -439,13 +440,13 @@ Best regards`,
 
   const handleScheduleEmailSubmit = () => {
     if (!scheduleData.to || !scheduleData.subject || !scheduleData.date || !scheduleData.time) {
-      alert("Please fill in required fields (To, Subject, Date, and Time)");
+      toast("Please fill in required fields (To, Subject, Date, and Time)");
       return;
     }
     // TODO: Implement actual email scheduling
     console.log("Scheduling email:", scheduleData);
     setIsScheduleEmailModalOpen(false);
-    alert("Email scheduled successfully!");
+    toast("Email scheduled successfully!");
     setScheduleData({
       to: "",
       cc: "",
@@ -460,7 +461,7 @@ Best regards`,
   const handleSendSMS = () => {
     setIsSendDropdownOpen(false);
     // TODO: Implement SMS sending functionality
-    alert("SMS functionality will be implemented soon.");
+    toast("SMS functionality will be implemented soon.");
   };
 
   const [isApplyToInvoicesOpen, setIsApplyToInvoicesOpen] = useState(false);
@@ -476,17 +477,17 @@ Best regards`,
       const response = await creditNotesAPI.applyToInvoices(creditNote.id, allocations);
 
       if (response && response.success) {
-        alert(`Successfully applied credits to ${allocations.length} invoice(s).`);
+        toast(`Successfully applied credits to ${allocations.length} invoice(s).`);
         setIsApplyToInvoicesOpen(false);
         // Refresh data
         const updatedNote = await getCreditNoteById(creditNote.id);
         if (updatedNote) setCreditNote(updatedNote);
       } else {
-        alert("Failed to apply credits: " + (response.message || "Unknown error"));
+        toast("Failed to apply credits: " + (response.message || "Unknown error"));
       }
     } catch (error: any) {
       console.error("Error applying credits:", error);
-      alert("Failed to apply credits: " + (error.message || "Communication error"));
+      toast("Failed to apply credits: " + (error.message || "Communication error"));
     }
   };
 
@@ -513,30 +514,30 @@ Best regards`,
 
       // Basic validation - aligned with Payments refund flow
       if (!refundData.amount || !refundData.refundedOn || !refundData.fromAccount) {
-        alert("Please fill in all required fields: Amount, Refunded On, and From Account");
+        toast("Please fill in all required fields: Amount, Refunded On, and From Account");
         return;
       }
 
       const amt = parseFloat(refundData.amount);
       if (isNaN(amt) || amt <= 0) {
-        alert("Please enter a valid amount.");
+        toast("Please enter a valid amount.");
         return;
       }
 
       const availableBalance = creditNote.balance !== undefined ? creditNote.balance : (creditNote.total || 0);
       if (amt > availableBalance) {
-        alert("Refund amount cannot exceed available balance.");
+        toast("Refund amount cannot exceed available balance.");
         return;
       }
 
       if (!refundData.fromAccountId && !refundData.fromAccount) {
-        alert("Please select an account.");
+        toast("Please select an account.");
         return;
       }
 
       const parsedRefundDate = parseRefundInputDate(refundData.refundedOn);
       if (!parsedRefundDate) {
-        alert("Please enter a valid refund date.");
+        toast("Please enter a valid refund date.");
         return;
       }
       const isoDate = parsedRefundDate.toISOString().split("T")[0];
@@ -554,7 +555,7 @@ Best regards`,
       const res = await refundsAPI.create(payload);
 
       if (res && res.success) {
-        alert("Refund processed successfully!");
+        toast("Refund processed successfully!");
         handleRefundCancel();
 
         // Refresh only the refund-related data without reloading the page
@@ -571,11 +572,11 @@ Best regards`,
           setRefunds(refundsRes.data);
         }
       } else {
-        alert("Failed to process refund: " + (res.message || "Unknown error"));
+        toast("Failed to process refund: " + (res.message || "Unknown error"));
       }
     } catch (error: any) {
       console.error("[REFUND] Error saving refund:", error);
-      alert("Error processing refund: " + (error.message || "Please try again."));
+      toast("Error processing refund: " + (error.message || "Please try again."));
     }
   };
 
@@ -648,14 +649,14 @@ Best regards`,
     if (window.confirm(`Are you sure you want to delete credit note ${creditNote?.creditNoteNumber || creditNote?.id}? This action cannot be undone.`)) {
       try {
         if (!id) {
-          alert('Missing credit note id.');
+          toast('Missing credit note id.');
           return;
         }
         await deleteCreditNote(id);
         navigate("/sales/credit-notes");
       } catch (error) {
         console.error("Error deleting credit note:", error);
-        alert("Failed to delete credit note. Please try again.");
+        toast("Failed to delete credit note. Please try again.");
       }
     }
   };
@@ -679,7 +680,7 @@ Best regards`,
       setCreditNote((prev) => prev ? ({ ...prev, attachedFiles: attachments, comments: nextComments } as any) : prev);
     } catch (error) {
       console.error("Error saving credit note comments/attachments:", error);
-      alert("Failed to save changes. Please try again.");
+      toast("Failed to save changes. Please try again.");
     }
   };
 
@@ -695,14 +696,14 @@ Best regards`,
   const handleFileUpload = async (files: FileList | File[]) => {
     const validFiles = Array.from(files).filter(file => {
       if (file.size > 10 * 1024 * 1024) {
-        alert(`File ${file.name} is too large. Maximum size is 10MB.`);
+        toast(`File ${file.name} is too large. Maximum size is 10MB.`);
         return false;
       }
       return true;
     });
 
     if (creditNoteAttachments.length + validFiles.length > 5) {
-      alert("Maximum 5 files allowed. Please remove some files first.");
+      toast("Maximum 5 files allowed. Please remove some files first.");
       return;
     }
 
@@ -725,7 +726,7 @@ Best regards`,
       await persistCreditNoteMeta(updated, comments);
     } catch (error) {
       console.error("Error uploading credit note attachments:", error);
-      alert("Failed to upload files. Please try again.");
+      toast("Failed to upload files. Please try again.");
     }
   };
 
@@ -2025,14 +2026,14 @@ Best regards`,
                       const res = await settingsAPI.updateOrganizationProfile(payload);
                       if (res && res.success) {
                         setOrganizationProfile(res.data || { ...organizationProfile, ...payload });
-                        alert("Organization profile updated successfully!");
+                        toast("Organization profile updated successfully!");
                         setIsOrganizationAddressModalOpen(false);
                       } else {
-                        alert("Failed to update organization profile: " + (res.message || "Unknown error"));
+                        toast("Failed to update organization profile: " + (res.message || "Unknown error"));
                       }
                     } catch (error: any) {
                       console.error("Error saving organization address:", error);
-                      alert("Error saving organization address: " + error.message);
+                      toast("Error saving organization address: " + error.message);
                     }
                   }}
                 >
@@ -2423,4 +2424,5 @@ Best regards`,
     </div>
   );
 }
+
 

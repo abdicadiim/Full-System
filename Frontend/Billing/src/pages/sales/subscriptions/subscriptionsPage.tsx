@@ -17,6 +17,7 @@ import {
     Pencil,
 } from "lucide-react";
 import { useOrganizationBranding } from "../../../hooks/useOrganizationBranding";
+import { subscriptionsAPI } from "../../../services/api";
 
 const SUBSCRIPTIONS_STORAGE_KEY = "taban_subscriptions_v1";
 
@@ -131,21 +132,34 @@ const SubscriptionsPage = () => {
         localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(columns));
     }, [columns]);
 
+    const loadSubscriptions = async () => {
+        try {
+            const res: any = await subscriptionsAPI.getAll({ limit: 10000 });
+            if (res?.success) {
+                const rows = Array.isArray(res.data) ? res.data : [];
+                setSubscriptions(rows);
+                return;
+            }
+        } catch {
+            // fallback below
+        }
+        try {
+            const raw = localStorage.getItem(SUBSCRIPTIONS_STORAGE_KEY);
+            const parsed = raw ? JSON.parse(raw) : [];
+            setSubscriptions(Array.isArray(parsed) ? parsed : []);
+        } catch {
+            setSubscriptions([]);
+        }
+    };
+
     useEffect(() => {
-        const load = () => {
-            try {
-                const raw = localStorage.getItem(SUBSCRIPTIONS_STORAGE_KEY);
-                const parsed = raw ? JSON.parse(raw) : [];
-                setSubscriptions(Array.isArray(parsed) ? parsed : []);
-            } catch {
-                setSubscriptions([]);
+        void loadSubscriptions();
+        const onStorage = (event: StorageEvent) => {
+            if (!event.key || event.key === SUBSCRIPTIONS_STORAGE_KEY) {
+                void loadSubscriptions();
             }
         };
-        load();
-        const onStorage = (event: StorageEvent) => {
-            if (!event.key || event.key === SUBSCRIPTIONS_STORAGE_KEY) load();
-        };
-        const onFocus = () => load();
+        const onFocus = () => void loadSubscriptions();
         window.addEventListener("storage", onStorage);
         window.addEventListener("focus", onFocus);
         return () => {
@@ -407,12 +421,42 @@ const SubscriptionsPage = () => {
     };
 
     const persistSubscriptions = (next: any[]) => {
+        const previous = subscriptions;
         setSubscriptions(next);
         try {
             localStorage.setItem(SUBSCRIPTIONS_STORAGE_KEY, JSON.stringify(next));
         } catch {
             // ignore write errors (private mode, quota, etc.)
         }
+        void (async () => {
+            try {
+                const previousById = new Map(
+                    previous.map((row: any) => [String(row?.id || row?._id || ""), row]).filter(([id]) => Boolean(id))
+                );
+                const nextById = new Map(
+                    next.map((row: any) => [String(row?.id || row?._id || ""), row]).filter(([id]) => Boolean(id))
+                );
+
+                for (const row of next) {
+                    const id = String(row?.id || row?._id || "").trim();
+                    if (id && previousById.has(id)) {
+                        await subscriptionsAPI.update(id, { ...row, id: undefined, _id: undefined });
+                    } else {
+                        await subscriptionsAPI.create({ ...row, id: undefined, _id: undefined });
+                    }
+                }
+
+                for (const [id] of previousById.entries()) {
+                    if (!nextById.has(id)) {
+                        await subscriptionsAPI.delete(id);
+                    }
+                }
+
+                await loadSubscriptions();
+            } catch {
+                // keep local state when API is unavailable
+            }
+        })();
     };
 
     const openCancelModal = () => {

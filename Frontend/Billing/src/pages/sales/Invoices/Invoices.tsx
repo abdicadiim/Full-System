@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { toast } from "react-toastify";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   ChevronDown,
@@ -118,6 +119,27 @@ export default function Invoices() {
   const [searchQuery, setSearchQuery] = useState("");
   const [viewSearchQuery, setViewSearchQuery] = useState("");
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const isRetainerInvoiceRecord = (invoice: any) => {
+    const rawType = String(
+      invoice?.invoiceType ||
+      invoice?.type ||
+      invoice?.documentType ||
+      invoice?.module ||
+      invoice?.source ||
+      ""
+    ).toLowerCase();
+    const rawNumber = String(invoice?.invoiceNumber || invoice?.number || "").toUpperCase();
+    return Boolean(
+      invoice?.isRetainerInvoice ||
+      invoice?.isRetainer ||
+      invoice?.is_retainer ||
+      invoice?.retainer ||
+      rawType.includes("retainer") ||
+      /^RET[-\d]/.test(rawNumber)
+    );
+  };
+  const stripRetainerInvoices = (records: any[] = []) =>
+    (Array.isArray(records) ? records : []).filter((invoice) => !isRetainerInvoiceRecord(invoice));
   const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set());
   const [hoveredView, setHoveredView] = useState(null);
   const [isFieldCustomizationOpen, setIsFieldCustomizationOpen] = useState(false);
@@ -149,7 +171,7 @@ export default function Invoices() {
         status: selectedStatus !== "All" ? selectedStatus.toLowerCase() : undefined,
         search: searchQuery
       });
-      setInvoices(response.data);
+      setInvoices(stripRetainerInvoices(response.data));
       setTotalItems(response.pagination.total);
       setTotalPages(response.pagination.pages);
     } catch (error) {
@@ -430,7 +452,7 @@ export default function Invoices() {
 
       const response = await getInvoicesPaginated(params);
 
-      setInvoices(response.data);
+      setInvoices(stripRetainerInvoices(response.data));
       setTotalItems(response.pagination.total);
       setTotalPages(response.pagination.pages);
       setIsRefreshing(false);
@@ -602,7 +624,7 @@ export default function Invoices() {
       }
 
       const response = await getInvoicesPaginated(params);
-      setInvoices(response.data);
+      setInvoices(stripRetainerInvoices(response.data));
       setTotalItems(response.pagination.total);
       setTotalPages(response.pagination.pages);
       setCurrentPage(1); // Update current page state
@@ -1033,21 +1055,21 @@ export default function Invoices() {
 
   const handleBulkUpdateSubmit = async () => {
     if (!bulkUpdateField || !bulkUpdateValue.trim()) {
-      alert("Please select a field and enter new information");
+      toast("Please select a field and enter new information");
       return;
     }
     if (!bulkUpdateReason.trim()) {
-      alert("Please enter a reason for bulk updating invoices");
+      toast("Please enter a reason for bulk updating invoices");
       return;
     }
     if (selectedInvoices.size === 0) {
-      alert("Please select at least one invoice");
+      toast("Please select at least one invoice");
       return;
     }
 
     const basePayload = buildBulkUpdatePayload(bulkUpdateField, bulkUpdateValue);
     if (Object.keys(basePayload).length === 0) {
-      alert("Selected field is not supported for bulk update.");
+      toast("Selected field is not supported for bulk update.");
       return;
     }
 
@@ -1079,13 +1101,13 @@ export default function Invoices() {
       setSelectedInvoices(new Set());
 
       if (failedCount === 0) {
-        alert(`Updated ${successCount} invoice(s) successfully.`);
+        toast(`Updated ${successCount} invoice(s) successfully.`);
       } else {
-        alert(`Updated ${successCount} invoice(s). ${failedCount} invoice(s) failed to update.`);
+        toast(`Updated ${successCount} invoice(s). ${failedCount} invoice(s) failed to update.`);
       }
     } catch (error) {
       // console.error("Error during bulk update:", error);
-      alert("Failed to bulk update invoices. Please try again.");
+      toast("Failed to bulk update invoices. Please try again.");
     } finally {
       setIsBulkUpdating(false);
     }
@@ -1567,7 +1589,7 @@ export default function Invoices() {
 
       const validInvoices = detailedInvoices.filter((inv): inv is Invoice => Boolean(inv));
       if (validInvoices.length === 0) {
-        alert("No invoices found to download.");
+        toast("No invoices found to download.");
         return;
       }
 
@@ -1579,7 +1601,7 @@ export default function Invoices() {
       await exportInvoicesToPdf(validInvoices, fileName);
     } catch (error) {
       // console.error("Error generating invoice PDF:", error);
-      alert("Failed to download PDF. Please try again.");
+      toast("Failed to download PDF. Please try again.");
     } finally {
       setIsGeneratingPdf(false);
     }
@@ -1592,7 +1614,7 @@ export default function Invoices() {
     const allInvoiceData = invoices;
 
     if (allInvoiceData.length === 0) {
-      alert("No invoices to export");
+      toast("No invoices to export");
       return;
     }
 
@@ -1685,7 +1707,7 @@ export default function Invoices() {
   const handleExportSubmit = () => {
     const rows = getExportInvoiceRows(invoices);
     if (rows.length === 0) {
-      alert("No invoices available in the current view.");
+      toast("No invoices available in the current view.");
       return;
     }
 
@@ -1702,7 +1724,7 @@ export default function Invoices() {
     }
 
     if (exportData.password?.trim()) {
-      alert("File password protection is not supported for this export in the current build.");
+      toast("File password protection is not supported for this export in the current build.");
     }
 
     setIsExportCurrentViewModalOpen(false);
@@ -1756,7 +1778,7 @@ export default function Invoices() {
 
   const handleGenerateLink = () => {
     if (!linkExpirationDate) {
-      alert("Please select an expiration date");
+      toast("Please select an expiration date");
       return;
     }
 
@@ -1777,10 +1799,10 @@ export default function Invoices() {
   const handleCopyLink = () => {
     if (generatedLink) {
       navigator.clipboard.writeText(generatedLink).then(() => {
-        alert("Invoice link copied to clipboard");
+        toast("Invoice link copied to clipboard");
         setShowShareModal(false);
       }).catch(() => {
-        alert("Unable to copy link. Please copy manually: " + generatedLink);
+        toast("Unable to copy link. Please copy manually: " + generatedLink);
       });
     }
   };
@@ -1789,7 +1811,7 @@ export default function Invoices() {
     if (window.confirm("Are you sure you want to disable all active links for this invoice?")) {
       setGeneratedLink("");
       setIsLinkGenerated(false);
-      alert("All active links have been disabled.");
+      toast("All active links have been disabled.");
     }
   };
 
@@ -1839,20 +1861,20 @@ export default function Invoices() {
 
       // Refresh the invoices list
       const allInvoices = await getInvoices();
-      setInvoices(allInvoices);
+      setInvoices(stripRetainerInvoices(allInvoices as any[]));
 
       setIsMarkAsSentModalOpen(false);
       setSelectedInvoices(new Set());
 
       if (failedCount === 0 && skippedCount === 0 && updatedCount > 0) {
-        alert(`Marked ${updatedCount} invoice(s) as paid successfully`);
+        toast(`Marked ${updatedCount} invoice(s) as paid successfully`);
       } else if (updatedCount > 0) {
-        alert(`Marked ${updatedCount} invoice(s) as paid. Skipped: ${skippedCount}. Failed: ${failedCount}.`);
+        toast(`Marked ${updatedCount} invoice(s) as paid. Skipped: ${skippedCount}. Failed: ${failedCount}.`);
       } else {
-        alert("No invoices were updated. Selected invoices may already be marked as paid.");
+        toast("No invoices were updated. Selected invoices may already be marked as paid.");
       }
     } catch (error) {
-      alert("Failed to mark invoices as paid. Please try again.");
+      toast("Failed to mark invoices as paid. Please try again.");
     }
   };
 
@@ -1948,7 +1970,7 @@ export default function Invoices() {
   const handleRefreshList = async () => {
     // Reload invoices
     const allInvoices = await getInvoices();
-    setInvoices(allInvoices);
+    setInvoices(stripRetainerInvoices(allInvoices as any[]));
     setIsMoreMenuOpen(false);
   };
 
@@ -1960,7 +1982,7 @@ export default function Invoices() {
 
   const handleDelete = async () => {
     if (selectedInvoices.size === 0) {
-      alert("Please select at least one invoice.");
+      toast("Please select at least one invoice.");
       return;
     }
 
@@ -1978,13 +2000,13 @@ export default function Invoices() {
       // Clear selection
       setSelectedInvoices(new Set());
 
-      alert(`${invoiceIds.length} invoice(s) deleted successfully.`);
+      toast(`${invoiceIds.length} invoice(s) deleted successfully.`);
     }
   };
 
   const handleMarkAsPaidAction = () => {
     if (selectedInvoices.size === 0) {
-      alert("Please select at least one invoice.");
+      toast("Please select at least one invoice.");
       return;
     }
     setIsMarkAsSentModalOpen(true);
@@ -1992,7 +2014,7 @@ export default function Invoices() {
 
   // const handleDissociateSalesOrders = () => {
   //   // Placeholder
-  //   alert("Dissociate Sales Orders functionality is not yet implemented.");
+  //   toast("Dissociate Sales Orders functionality is not yet implemented.");
   // };
 
   return (
@@ -2004,10 +2026,10 @@ export default function Invoices() {
         </div>
       )}
 
-      <div className="border-b border-gray-100 bg-white sticky top-0 z-[100]">
+      <div className="border-b border-gray-100 bg-white sticky top-0 z-[200]">
         {selectedInvoices.size > 0 ? (
           /* Bulk Action Header */
-          <div className="flex-none flex items-center justify-between px-6 py-6 bg-white relative overflow-visible z-[100]">
+          <div className="flex-none flex items-center justify-between px-6 py-6 bg-white relative overflow-visible z-[210]">
             <div className="flex min-w-0 flex-1 items-center gap-3 pl-4 pr-2 overflow-visible">
               <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
                 <button
@@ -2107,7 +2129,7 @@ export default function Invoices() {
                 </button>
 
                 {isInvoiceDropdownOpen && (
-                  <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-2xl z-[100] py-2">
+                  <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-2xl z-[250] py-2">
                     <div className="px-3 pb-2 border-b border-gray-100">
                       <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-md border border-gray-200">
                         <Search size={14} className="text-gray-400" />
@@ -2140,15 +2162,63 @@ export default function Invoices() {
             </div>
 
             <div className="flex flex-wrap items-center gap-3 sm:gap-2 mr-4">
-              <button
+              <div className="relative flex items-center" ref={newDropdownRef}>
+                <button
                 onClick={handleCreateNewInvoice}
-                className="h-[38px] cursor-pointer transition-all text-white px-5 rounded-lg border-[#0D4A52] border-b-[4px] hover:brightness-110 hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:translate-y-[1px] text-sm font-semibold shadow-sm flex items-center justify-center gap-2"
+                  className="h-[38px] cursor-pointer transition-all text-white pl-4 pr-3 rounded-l-lg border-[#0D4A52] border-b-[4px] hover:brightness-110 hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:translate-y-[1px] text-sm font-semibold shadow-sm flex items-center justify-center gap-2"
                 style={{ background: "linear-gradient(180deg, #156372 0%, #0D4A52 100%)" }}
                 type="button"
               >
                 <Plus size={16} strokeWidth={3} />
-                <span>New</span>
-              </button>
+                  <span>New</span>
+                </button>
+                
+                <div className="w-[1px] h-[38px] bg-white opacity-25 border-b-[4px] border-[#0D4A52]" />
+                
+                <button
+                  type="button"
+                  onClick={() => setIsNewDropdownOpen((prev) => !prev)}
+                  className="h-[38px] cursor-pointer transition-all text-white px-2.5 rounded-r-lg border-[#0D4A52] border-b-[4px] hover:brightness-110 hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:translate-y-[1px] shadow-sm flex items-center justify-center"
+                  style={{ background: "linear-gradient(180deg, #156372 0%, #0D4A52 100%)" }}
+                >
+                  <ChevronDown size={14} className={`transition-transform duration-200 ${isNewDropdownOpen ? "rotate-180" : ""}`} strokeWidth={3} />
+                </button>
+
+                {isNewDropdownOpen && (
+                  <div className="absolute top-[calc(100%+8px)] right-0 w-56 bg-white border border-gray-200 rounded-lg shadow-xl z-[250] py-1.5 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleCreateNewInvoice();
+                        setIsNewDropdownOpen(false);
+                      }}
+                      className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                    >
+                      Invoice
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleCreateNewCreditNote();
+                        setIsNewDropdownOpen(false);
+                      }}
+                      className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                    >
+                      Credit Note
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleCreateDebitNote();
+                        setIsNewDropdownOpen(false);
+                      }}
+                      className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                    >
+                      Debit Note
+                    </button>
+                  </div>
+                )}
+              </div>
 
               <div className="relative" ref={moreMenuRef}>
                 <button
@@ -2160,7 +2230,7 @@ export default function Invoices() {
                   <MoreHorizontal size={18} className="text-gray-500" />
                 </button>
                 {isMoreMenuOpen && (
-                  <div className="absolute top-full right-0 mt-1 w-64 bg-white border border-gray-100 rounded-lg shadow-xl py-2 z-[110]">
+                  <div className="absolute top-full right-0 mt-1 w-64 bg-white border border-gray-100 rounded-lg shadow-xl py-2 z-[250]">
                     <div className="relative">
                       <button
                         onClick={() => {
@@ -2547,7 +2617,7 @@ export default function Invoices() {
                                   className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-[#156372] to-[#0D4A52] text-white hover:opacity-90 text-sm font-medium text-left my-1 mx-2 rounded shadow-sm"
                                   onClick={() => {
                                     setActiveActionInvoiceId(null);
-                                    navigate(`/sales/payments-received/new`, { state: { invoiceId: invoice.id } });
+                                    navigate(`/payments/payments-received/new`, { state: { invoiceId: invoice.id } });
                                   }}
                                 >
                                   <CreditCard size={16} />
@@ -3129,7 +3199,7 @@ export default function Invoices() {
                     onClick={() => {
                       // TODO: Save preferences to localStorage or backend
                       console.log("Saving preferences:", preferences);
-                      alert("Preferences saved successfully!");
+                      toast("Preferences saved successfully!");
                       setIsPreferencesOpen(false);
                     }}
                     className="px-6 py-2 bg-gradient-to-r from-[#156372] to-[#0D4A52] text-white rounded-md text-sm font-medium cursor-pointer hover:opacity-90 shadow-sm"
@@ -4134,5 +4204,6 @@ export default function Invoices() {
     </div>
   );
 }
+
 
 

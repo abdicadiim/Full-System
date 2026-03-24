@@ -24,6 +24,16 @@ import { couponsRoutes } from "./routes/couponsRoutes.js";
 import priceListsRoutes from "./routes/priceListsRoutes.js";
 import quotesRoutes from "./routes/quotesRoutes.js";
 import invoicesRoutes from "./routes/invoicesRoutes.js";
+import expensesRoutes from "./routes/expensesRoutes.js";
+import projectsRoutes from "./routes/projectsRoutes.js";
+import billsRoutes from "./routes/billsRoutes.js";
+import paymentsRoutes from "./routes/paymentsRoutes.js";
+import paymentsMadeRoutes from "./routes/paymentsMadeRoutes.js";
+import creditNotesRoutes from "./routes/creditNotesRoutes.js";
+import recurringInvoicesRoutes from "./routes/recurringInvoicesRoutes.js";
+import salesReceiptsRoutes from "./routes/salesReceiptsRoutes.js";
+import debitNotesRoutes from "./routes/debitNotesRoutes.js";
+import subscriptionsRoutes from "./routes/subscriptionsRoutes.js";
 if (!MONGO_URI) {
     // eslint-disable-next-line no-console
     console.warn("Missing MONGO_URI/MONGODB_URI. Server will start, but DB features will fail.");
@@ -38,7 +48,7 @@ else if (!JWT_SECRET) {
 }
 const app = express();
 app.disable("x-powered-by");
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "20mb" }));
 app.use(cookieParser());
 app.use(cors({
     origin: FRONTEND_URL || true,
@@ -78,6 +88,16 @@ app.use("/api/coupons", couponsRoutes);
 app.use("/api/price-lists", priceListsRoutes);
 app.use("/api/quotes", quotesRoutes);
 app.use("/api/invoices", invoicesRoutes);
+app.use("/api/expenses", expensesRoutes);
+app.use("/api/projects", projectsRoutes);
+app.use("/api/bills", billsRoutes);
+app.use("/api/payments-received", paymentsRoutes);
+app.use("/api/payments-made", paymentsMadeRoutes);
+app.use("/api/credit-notes", creditNotesRoutes);
+app.use("/api/recurring-invoices", recurringInvoicesRoutes);
+app.use("/api/sales-receipts", salesReceiptsRoutes);
+app.use("/api/debit-notes", debitNotesRoutes);
+app.use("/api/subscriptions", subscriptionsRoutes);
 app.use("/api", (_req, res) => {
     res.status(501).json({ success: false, message: "Not implemented", data: null });
 });

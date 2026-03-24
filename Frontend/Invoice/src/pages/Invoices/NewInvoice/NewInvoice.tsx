@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import {
@@ -974,7 +974,7 @@ const handleSalespersonSelect = (salesperson: any) => {
 };
 const handleSaveAndSelectSalesperson = async () => {
   if (!newSalespersonData.name?.trim()) {
-    alert("Please enter a name for the salesperson");
+    toast("Please enter a name for the salesperson");
     return;
   }
   try {
@@ -993,7 +993,7 @@ const handleSaveAndSelectSalesperson = async () => {
     }
   } catch (error: any) {
     console.error("Error saving salesperson:", error);
-    alert("Error saving salesperson: " + (error?.message || "Unknown error"));
+    toast("Error saving salesperson: " + (error?.message || "Unknown error"));
   }
 };
 const handleSaveContactPerson = asyncNoop;
@@ -1749,14 +1749,14 @@ const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
 
   // Validate file count
   if (formData.attachedFiles.length + files.length > 10) {
-    alert("You can upload a maximum of 10 files");
+    toast("You can upload a maximum of 10 files");
     return;
   }
 
   // Validate file sizes (10MB each)
   const invalidFiles = files.filter(file => file.size > 10 * 1024 * 1024);
   if (invalidFiles.length > 0) {
-    alert(`Some files exceed 10MB limit. Maximum file size is 10MB.`);
+    toast(`Some files exceed 10MB limit. Maximum file size is 10MB.`);
     return;
   }
 
@@ -1930,6 +1930,34 @@ const isDuplicateInvoiceNumberError = (error: any) => {
 };
 
 const fetchLatestInvoiceNumber = async () => {
+  try {
+    const allSeries: any = await transactionNumberSeriesAPI.getAll({ limit: 1000 });
+    const rows = Array.isArray(allSeries?.data) ? allSeries.data : [];
+    const invoiceSeries =
+      rows.find((row: any) => {
+        const moduleName = String(row?.module || row?.moduleName || "").toLowerCase().trim();
+        const status = String(row?.status || "active").toLowerCase().trim();
+        return (moduleName === "invoice" || moduleName === "invoices") && status !== "inactive";
+      }) || null;
+
+    if (invoiceSeries) {
+      const seriesId = String(invoiceSeries?.id || invoiceSeries?._id || "").trim();
+      if (seriesId) {
+        const nextRes: any = await transactionNumberSeriesAPI.getNextNumber(seriesId);
+        const fromSeries = nextRes?.data?.nextNumber || nextRes?.data?.next_number;
+        if (nextRes?.success && fromSeries) {
+          const latestNumber = String(fromSeries);
+          setFormData((prev) => ({ ...prev, invoiceNumber: latestNumber }));
+          const trailingDigits = latestNumber.match(/(\d+)$/)?.[1];
+          if (trailingDigits) setInvoiceNextNumber(trailingDigits);
+          return latestNumber;
+        }
+      }
+    }
+  } catch (error) {
+    console.warn("Failed to read transaction series for invoice number:", error);
+  }
+
   const response = await invoicesAPI.getNextNumber(invoicePrefix || "INV-");
   const nextNumber = response?.data?.invoiceNumber || response?.data?.nextNumber;
   if (response && response.success && nextNumber) {
@@ -2020,7 +2048,7 @@ const handleSaveAndSend = async (overridingStatus?: string) => {
     });
 
     if (stockValidationErrors.length > 0) {
-      alert(`Cannot create invoice: Insufficient stock for the following items:\n${stockValidationErrors.join('\n')}\n\nPlease update inventory or reduce quantities.`);
+      toast(`Cannot create invoice: Insufficient stock for the following items:\n${stockValidationErrors.join('\n')}\n\nPlease update inventory or reduce quantities.`);
       return;
     }
     */
@@ -2239,7 +2267,7 @@ return (
                       });
                       setScanInput("");
                     } else {
-                      alert("Item not found. Please check the SKU or item name.");
+                      toast("Item not found. Please check the SKU or item name.");
                     }
                   }
                 }}
@@ -2317,8 +2345,8 @@ return (
                                   {customerNo && <span className={`ml-2 text-xs font-normal ${isSelected ? "text-blue-100" : "text-gray-400"}`}>| {customerNo}</span>}
                                 </div>
                                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                  {email && <span className={`text-xs ${isSelected ? "text-blue-100" : "text-gray-400"}`}>✉ {email}</span>}
-                                  {phone && <span className={`text-xs ${isSelected ? "text-blue-100" : "text-gray-400"}`}>📋 {phone}</span>}
+                                  {email && <span className={`text-xs ${isSelected ? "text-blue-100" : "text-gray-400"}`}>? {email}</span>}
+                                  {phone && <span className={`text-xs ${isSelected ? "text-blue-100" : "text-gray-400"}`}>?? {phone}</span>}
                                 </div>
                               </div>
                             </div>
@@ -3707,7 +3735,7 @@ return (
           {/* Additional Fields */}
           <div className="border-t border-gray-200 pt-6 mt-6 mb-24">
             <p className="text-sm text-gray-600">
-              Additional Fields: Start adding custom fields for your invoices by going to Settings ➔ Sales ➔ Invoices.
+              Additional Fields: Start adding custom fields for your invoices by going to Settings ? Sales ? Invoices.
             </p>
           </div>
         </div>
@@ -4337,7 +4365,7 @@ return (
                         Configure multiple transaction number series to auto-generate transaction numbers with unique prefixes according to your business needs.
                       </p>
                       <button className="text-[#156372] hover:text-[#0D4A52] text-sm font-medium">
-                        Configure →
+                        Configure ?
                       </button>
                     </div>
                   </div>
@@ -5275,7 +5303,7 @@ return (
                               <div className="flex-1">
                                 <div className="font-medium text-gray-900">{selectedItem.name}</div>
                                 <div className="text-xs text-gray-500 mt-1">
-                                  SKU: {selectedItem.sku} • {formData.currency}{Number(selectedItem.rate || 0).toFixed(2)}
+                                  SKU: {selectedItem.sku} � {formData.currency}{Number(selectedItem.rate || 0).toFixed(2)}
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
@@ -5976,7 +6004,7 @@ return (
                     <button
                       onClick={() => {
                         // TODO: Save preferences to localStorage or backend
-                        alert("Preferences saved successfully!");
+                        toast("Preferences saved successfully!");
                         setIsPreferencesOpen(false);
                       }}
                       className="px-6 py-2 bg-red-600 text-white rounded-md text-sm font-medium cursor-pointer hover:bg-red-700"
@@ -6750,6 +6778,7 @@ return (
 }
 
 export default NewInvoice;
+
 
 
 

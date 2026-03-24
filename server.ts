@@ -29,9 +29,12 @@ import expensesRoutes from "./routes/expensesRoutes.js";
 import projectsRoutes from "./routes/projectsRoutes.js";
 import billsRoutes from "./routes/billsRoutes.js";
 import paymentsRoutes from "./routes/paymentsRoutes.js";
+import paymentsMadeRoutes from "./routes/paymentsMadeRoutes.js";
 import creditNotesRoutes from "./routes/creditNotesRoutes.js";
 import recurringInvoicesRoutes from "./routes/recurringInvoicesRoutes.js";
 import salesReceiptsRoutes from "./routes/salesReceiptsRoutes.js";
+import debitNotesRoutes from "./routes/debitNotesRoutes.js";
+import subscriptionsRoutes from "./routes/subscriptionsRoutes.js";
 
 if (!MONGO_URI) {
   // eslint-disable-next-line no-console
@@ -98,9 +101,12 @@ app.use("/api/expenses", expensesRoutes);
 app.use("/api/projects", projectsRoutes);
 app.use("/api/bills", billsRoutes);
 app.use("/api/payments-received", paymentsRoutes);
+app.use("/api/payments-made", paymentsMadeRoutes);
 app.use("/api/credit-notes", creditNotesRoutes);
 app.use("/api/recurring-invoices", recurringInvoicesRoutes);
 app.use("/api/sales-receipts", salesReceiptsRoutes);
+app.use("/api/debit-notes", debitNotesRoutes);
+app.use("/api/subscriptions", subscriptionsRoutes);
 
 app.use("/api", (_req, res) => {
   res.status(501).json({ success: false, message: "Not implemented", data: null });

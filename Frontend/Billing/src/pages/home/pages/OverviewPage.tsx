@@ -76,8 +76,8 @@ function ChartShell({
       <div className="relative" style={{ height }}>
         {leftLabels ? (
           <div className="absolute inset-0 flex flex-col justify-between py-2 text-[10px] text-slate-400">
-            {leftLabels.map((label) => (
-              <span key={label}>{label}</span>
+            {leftLabels.map((label, index) => (
+              <span key={`${label || "left"}-${index}`}>{label}</span>
             ))}
           </div>
         ) : null}
@@ -94,10 +94,10 @@ function ChartShell({
         </div>
 
         <div className="mt-2 grid text-[10px] text-slate-400" style={{ gridTemplateColumns: `repeat(${labels.length}, minmax(0, 1fr))` }}>
-          {labels.map((label) => (
-            <div key={label} className="text-center leading-tight">
-              {label.split("\n").map((part) => (
-                <div key={part}>{part}</div>
+          {labels.map((label, labelIndex) => (
+            <div key={`${label || "label"}-${labelIndex}`} className="text-center leading-tight">
+              {label.split("\n").map((part, partIndex) => (
+                <div key={`${part || "part"}-${labelIndex}-${partIndex}`}>{part}</div>
               ))}
             </div>
           ))}

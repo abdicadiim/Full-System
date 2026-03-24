@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { toast } from "react-toastify";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   X,
@@ -83,7 +84,7 @@ export default function SendCreditNoteEmail() {
 
   const handleSend = async () => {
     if (!emailData.sendTo) {
-      alert("Please enter a recipient email address");
+      toast("Please enter a recipient email address");
       return;
     }
     try {
@@ -98,11 +99,11 @@ export default function SendCreditNoteEmail() {
         attachSystemPDF: attachCreditNotePDF,
         attachments: [],
       });
-      alert("Email sent successfully!");
+      toast("Email sent successfully!");
       navigate(`/sales/credit-notes/${id}`);
     } catch (error: any) {
       console.error("Error sending credit note email:", error);
-      alert(error?.message || "Failed to send email. Please try again.");
+      toast(error?.message || "Failed to send email. Please try again.");
     } finally {
       setIsSending(false);
     }
@@ -502,4 +503,5 @@ export default function SendCreditNoteEmail() {
     </div>
   );
 }
+
 

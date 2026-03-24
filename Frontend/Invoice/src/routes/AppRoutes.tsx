@@ -47,7 +47,7 @@ function LegacyPaymentsReceivedRedirect() {
     nextPath = '/payments/payments-received'
   }
 
-  return <Navigate to={`${nextPath}${location.search}${location.hash}`} replace />
+  return <Navigate to={`${nextPath}${location.search}${location.hash}`} state={location.state} replace />
 }
 
 function LegacyPurchasesExpensesRedirect() {

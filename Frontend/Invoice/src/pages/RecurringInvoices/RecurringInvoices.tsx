@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import {
   ChevronDown,
-  ChevronRight,
   Plus,
   MoreVertical,
   Play,
@@ -24,7 +23,8 @@ import {
   Trash2,
   Mail,
   SlidersHorizontal,
-  Lock
+  Lock,
+  GripVertical
 } from "lucide-react";
 import { getRecurringInvoices, updateRecurringInvoice, deleteRecurringInvoice, getCustomViews, deleteCustomView, generateInvoiceFromRecurring, RecurringInvoice, getCustomers, getSalespersonsFromAPI } from "../salesModel";
 import { exportToCSV, exportToExcel, exportToPDF } from "./exportUtils";
@@ -95,8 +95,6 @@ export default function RecurringInvoices() {
   const [tempVisibleColumns, setTempVisibleColumns] = useState<string[]>([...visibleColumns]);
   const [isCustomizeColumnsModalOpen, setIsCustomizeColumnsModalOpen] = useState(false);
   const [columnSearchTerm, setColumnSearchTerm] = useState("");
-  const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
-  const [headerMenuPosition, setHeaderMenuPosition] = useState({ top: 0, left: 0 });
   const searchTypeOptions = [
     "Customers",
     "Items",
@@ -172,7 +170,7 @@ export default function RecurringInvoices() {
       case "customerName":
         return (
           <span className="text-gray-900">
-            {recurringInvoice.customerName || recurringInvoice.customer?.displayName || recurringInvoice.customer?.companyName || (typeof recurringInvoice.customer === 'string' ? recurringInvoice.customer : "--")}
+            {resolveRecurringCustomerName(recurringInvoice)}
           </span>
         );
       case "profileName":
@@ -379,6 +377,45 @@ export default function RecurringInvoices() {
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [bulkCustomers, recurringInvoices]);
+
+  const customerNameById = useMemo(
+    () => new Map(customerBulkOptions.map((option) => [String(option.value), String(option.label)])),
+    [customerBulkOptions]
+  );
+
+  const isLikelyMongoId = (value: any) => /^[a-f0-9]{24}$/i.test(String(value || "").trim());
+  const resolveRecurringCustomerName = (recurringInvoice: any) => {
+    const first = String(recurringInvoice?.customer?.firstName || "").trim();
+    const last = String(recurringInvoice?.customer?.lastName || "").trim();
+    const fullName = [first, last].filter(Boolean).join(" ").trim();
+
+    const fromFields = String(
+      recurringInvoice?.customerName ||
+      recurringInvoice?.customer?.displayName ||
+      recurringInvoice?.customer?.companyName ||
+      recurringInvoice?.customer?.name ||
+      fullName ||
+      ""
+    ).trim();
+
+    if (fromFields && !isLikelyMongoId(fromFields)) return fromFields;
+
+    const customerId = String(
+      recurringInvoice?.customerId ||
+      recurringInvoice?.customer?._id ||
+      recurringInvoice?.customer?.id ||
+      (typeof recurringInvoice?.customer === "string" ? recurringInvoice.customer : "") ||
+      ""
+    ).trim();
+
+    if (customerId && customerNameById.has(customerId)) {
+      return String(customerNameById.get(customerId));
+    }
+    if (fromFields && customerNameById.has(fromFields)) {
+      return String(customerNameById.get(fromFields));
+    }
+    return "--";
+  };
 
   const salespersonBulkOptions = useMemo(() => {
     const fromDatabase = bulkSalespersons
@@ -1106,7 +1143,7 @@ export default function RecurringInvoices() {
   };
 
   return (
-    <div className="w-full min-h-screen bg-gray-50">
+    <div className="w-full min-h-screen bg-white">
       {/* Success Notification */}
       {showSuccessNotification && (
         <div className="fixed top-4 right-4 flex items-center gap-3 px-4 py-3 bg-green-50 border border-green-200 rounded-lg shadow-lg z-50">
@@ -1167,14 +1204,20 @@ export default function RecurringInvoices() {
         </div>
       ) : (
         /* Normal Page Header */
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between px-6 py-6 border-b border-gray-100 bg-white z-30 relative overflow-visible">
+          <div className="flex items-center gap-8 pl-4">
             <div className="relative" ref={viewDropdownRef}>
               <button
                 onClick={() => setIsViewDropdownOpen(!isViewDropdownOpen)}
-                className="p-1 text-gray-600 hover:text-gray-900 cursor-pointer"
+                className="flex items-center gap-1.5 py-4 cursor-pointer group border-b-2 border-[#156372] -mb-[1px] bg-transparent outline-none"
               >
-                <ChevronRight size={20} className="text-gray-600" />
+                <h1 className="text-[15px] leading-none font-bold text-slate-900 transition-colors">
+                  {selectedView}
+                </h1>
+                <ChevronDown
+                  size={14}
+                  className={`transition-transform duration-200 text-[#156372] ${isViewDropdownOpen ? "rotate-180" : ""}`}
+                />
               </button>
 
               {/* Dropdown Menu */}
@@ -1259,7 +1302,6 @@ export default function RecurringInvoices() {
                 </div>
               )}
             </div>
-            <h1 className="text-3xl font-bold text-gray-800">{selectedView}</h1>
           </div>
 
           {/* Action Buttons */}
@@ -1380,40 +1422,46 @@ export default function RecurringInvoices() {
         </div>
       )}
 
-      <div className="p-6 relative">
+      <div className="relative">
 
         {!hasLoadedOnce ? (
-          <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="p-3 text-left"></th>
-                  {visibleColumns.map((colKey) => {
-                    const col = recurringColumnOptions.find(c => c.key === colKey);
-                    if (!col) return null;
-                    return (
-                      <th key={colKey} className="p-3 text-left text-xs font-semibold text-gray-700 uppercase">
-                        {col.label}
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-              <tbody>
-                {Array(5).fill(0).map((_, index) => (
-                  <tr key={`initial-skeleton-${index}`} className="border-b border-gray-200">
-                    <td className="p-3">
-                      <div className="w-4 h-4 bg-gray-200 rounded animate-pulse"></div>
-                    </td>
-                    {visibleColumns.map((colKey) => (
-                      <td key={`initial-${index}-${colKey}`} className="p-3">
-                        <div className="h-4 bg-gray-200 rounded animate-pulse w-24"></div>
-                      </td>
-                    ))}
+          <div className="bg-white">
+            <div className="overflow-x-auto bg-[#f6f7fb]">
+              <table className="w-full min-w-full border-collapse text-sm bg-white">
+                <thead className="bg-[#f6f7fb] border-b border-[#e6e9f2] sticky top-0 z-20">
+                  <tr className="text-[10px] font-semibold text-[#7b8494] uppercase tracking-wider">
+                    <th className="px-4 py-3 w-16"></th>
+                    {visibleColumns.map((colKey) => {
+                      const col = recurringColumnOptions.find(c => c.key === colKey);
+                      if (!col) return null;
+                      return (
+                        <th key={colKey} className="px-4 py-3 text-left">
+                          {col.label}
+                        </th>
+                      );
+                    })}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="bg-white">
+                  {Array(5).fill(0).map((_, index) => (
+                    <tr key={`initial-skeleton-${index}`} className="border-b border-[#eef1f6] h-[50px]">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="h-6 w-6 shrink-0" aria-hidden />
+                          <span className="h-5 w-px shrink-0 bg-transparent" aria-hidden />
+                          <div className="w-4 h-4 bg-gray-200 rounded animate-pulse"></div>
+                        </div>
+                      </td>
+                      {visibleColumns.map((colKey) => (
+                        <td key={`initial-${index}-${colKey}`} className="px-4 py-3">
+                          <div className="h-4 bg-gray-200 rounded animate-pulse w-24"></div>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : filteredRecurringInvoices.length === 0 && !isRefreshing ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -1461,39 +1509,40 @@ export default function RecurringInvoices() {
             </button>
           </div>
         ) : (
-          <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-
-                  <th className="p-3 text-left">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        className="w-4 h-4 cursor-pointer"
-                        checked={selectedInvoices.length === filteredRecurringInvoices.length && filteredRecurringInvoices.length > 0}
-                        onChange={handleSelectAll}
-                      />
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                          setHeaderMenuPosition({ top: rect.bottom + window.scrollY, left: rect.left + window.scrollX });
-                          setIsHeaderMenuOpen(true);
-                        }}
-                        className="p-1 text-gray-500 hover:text-gray-700 cursor-pointer"
-                        title="Customize Columns"
-                      >
-                        <SlidersHorizontal size={14} />
-                      </button>
-                    </div>
-                  </th>
+          <div className="bg-white">
+            <div className="overflow-x-auto bg-[#f6f7fb]">
+              <table className="w-full min-w-full border-collapse text-sm bg-white">
+                <thead className="bg-[#f6f7fb] border-b border-[#e6e9f2] sticky top-0 z-20">
+                  <tr className="text-[10px] font-semibold text-[#7b8494] uppercase tracking-wider">
+                    <th className="px-4 py-3 w-16">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setTempVisibleColumns([...visibleColumns]);
+                            setColumnSearchTerm("");
+                            setIsCustomizeColumnsModalOpen(true);
+                          }}
+                          className="h-6 w-6 flex items-center justify-center rounded border border-gray-200 bg-white hover:bg-gray-50 cursor-pointer"
+                          title="Customize Columns"
+                        >
+                          <SlidersHorizontal size={13} className="text-[#1b5e6a]" />
+                        </button>
+                        <div className="h-5 w-px bg-gray-200" />
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 cursor-pointer"
+                          checked={selectedInvoices.length === filteredRecurringInvoices.length && filteredRecurringInvoices.length > 0}
+                          onChange={handleSelectAll}
+                        />
+                      </div>
+                    </th>
                   {visibleColumns.map((colKey) => {
                     const col = recurringColumnOptions.find(c => c.key === colKey);
                     if (!col) return null;
                     if (colKey === "amount") {
                       return (
-                        <th key={colKey} className="p-3 text-left text-xs font-semibold text-gray-700 uppercase">
+                        <th key={colKey} className="px-4 py-3 text-left">
                           <div className="flex items-center gap-2">
                             {col.label}
                             <button
@@ -1507,21 +1556,25 @@ export default function RecurringInvoices() {
                       );
                     }
                     return (
-                      <th key={colKey} className="p-3 text-left text-xs font-semibold text-gray-700 uppercase">{col.label}</th>
+                      <th key={colKey} className="px-4 py-3 text-left">{col.label}</th>
                     );
                   })}
-                </tr>
-              </thead>
-              <tbody>
+                  </tr>
+                </thead>
+                <tbody className="bg-white">
                 {isRefreshing ? (
                   Array(5).fill(0).map((_, index) => (
-                    <tr key={`skeleton-${index}`} className="border-b border-gray-200">
+                    <tr key={`skeleton-${index}`} className="border-b border-[#eef1f6] h-[50px]">
 
-                      <td className="p-3">
-                        <div className="w-4 h-4 bg-gray-200 rounded animate-pulse"></div>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="h-6 w-6 shrink-0" aria-hidden />
+                          <span className="h-5 w-px shrink-0 bg-transparent" aria-hidden />
+                          <div className="w-4 h-4 bg-gray-200 rounded animate-pulse"></div>
+                        </div>
                       </td>
                       {visibleColumns.map((colKey) => (
-                        <td key={`${index}-${colKey}`} className="p-3">
+                        <td key={`${index}-${colKey}`} className="px-4 py-3">
                           <div className="h-4 bg-gray-200 rounded animate-pulse w-24"></div>
                         </td>
                       ))}
@@ -1531,29 +1584,34 @@ export default function RecurringInvoices() {
                   filteredRecurringInvoices.map((recurringInvoice) => (
                     <tr
                       key={recurringInvoice.id}
-                      className="border-b border-gray-200 hover:bg-gray-50 cursor-pointer transition-colors"
+                      className="border-b border-[#eef1f6] hover:bg-[#f8fafc] cursor-pointer transition-colors h-[50px]"
                       onClick={() => navigate(`/sales/recurring-invoices/${String(recurringInvoice.id)}`)}
                     >
 
-                      <td className="p-3" onClick={(e) => handleSelectInvoice(String(recurringInvoice.id), e)}>
-                        <input
-                          type="checkbox"
-                          className="w-4 h-4 cursor-pointer"
-                          checked={selectedInvoices.includes(String(recurringInvoice.id))}
-                          onChange={(e) => handleSelectInvoice(String(recurringInvoice.id), e)}
-                          onClick={(e) => e.stopPropagation()}
-                        />
+                      <td className="px-4 py-3" onClick={(e) => handleSelectInvoice(String(recurringInvoice.id), e)}>
+                        <div className="flex items-center gap-2">
+                          <span className="h-6 w-6 shrink-0" aria-hidden />
+                          <span className="h-5 w-px shrink-0 bg-transparent" aria-hidden />
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4 cursor-pointer"
+                            checked={selectedInvoices.includes(String(recurringInvoice.id))}
+                            onChange={(e) => handleSelectInvoice(String(recurringInvoice.id), e)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </div>
                       </td>
                       {visibleColumns.map((colKey) => (
-                        <td key={`${recurringInvoice.id}-${colKey}`} className="p-3">
+                        <td key={`${recurringInvoice.id}-${colKey}`} className="px-4 py-3">
                           {renderRecurringCell(recurringInvoice, colKey)}
                         </td>
                       ))}
                     </tr>
                   ))
                 )}
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
@@ -3016,97 +3074,81 @@ export default function RecurringInvoices() {
           />
         )
       }
-      {/* Header Menu Overlay - Rendered outside table to avoid clipping */}
-      {isHeaderMenuOpen && (
-        <>
-          <div className="fixed inset-0 z-[1000]" onClick={() => setIsHeaderMenuOpen(false)}></div>
-          <div
-            className="fixed bg-white border border-gray-200 rounded-md shadow-xl z-[1001] py-1 w-48 animate-in fade-in zoom-in-95 duration-100"
-            style={{ top: `${headerMenuPosition.top}px`, left: `${headerMenuPosition.left}px` }}
-          >
-            <div
-              className="px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer flex items-center gap-2"
-              onClick={() => {
-                setTempVisibleColumns([...visibleColumns]);
-                setIsCustomizeColumnsModalOpen(true);
-                setIsHeaderMenuOpen(false);
-              }}
-            >
-              <SlidersHorizontal size={14} />
-              <span>Customize Columns</span>
-            </div>
-          </div>
-        </>
-      )}
       {/* Customize Columns Modal */}
       {isCustomizeColumnsModalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[3000]">
-          <div className="bg-white rounded-lg shadow-2xl w-full max-w-[500px] overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-[#f9fafb]">
+        <div
+          className="fixed inset-0 z-[3000] flex items-start justify-center bg-black/40 p-4 pt-3"
+          onClick={() => setIsCustomizeColumnsModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-xl rounded-2xl bg-white shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-gray-200 bg-gray-50">
               <div className="flex items-center gap-3">
-                <SlidersHorizontal size={18} className="text-gray-500" />
-                <h3 className="text-[15px] font-semibold text-gray-800">Customize Columns</h3>
+                <SlidersHorizontal size={18} className="text-slate-600" />
+                <h3 className="text-[18px] font-semibold text-slate-900">Customize Columns</h3>
               </div>
-              <div className="flex items-center gap-4">
-                <span className="text-xs text-gray-500 font-medium">{tempVisibleColumns.length} of {recurringColumnOptions.length} Selected</span>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-slate-600 font-medium">{tempVisibleColumns.length} of {recurringColumnOptions.length} Selected</span>
                 <button
                   onClick={() => setIsCustomizeColumnsModalOpen(false)}
-                  className="w-7 h-7 flex items-center justify-center border border-blue-200 rounded shadow-sm hover:bg-gray-50 transition-colors group"
+                  className="h-9 w-9 rounded-lg text-[#1d5cff] hover:bg-[#1d5cff]/10 transition-colors flex items-center justify-center"
                 >
-                  <X size={16} className="text-red-500 group-hover:text-red-600" />
+                  <X size={16} />
                 </button>
               </div>
             </div>
             <div className="px-6 py-4">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Search"
                   value={columnSearchTerm}
                   onChange={(e) => setColumnSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full h-11 rounded-lg border border-gray-200 pl-10 pr-3 text-sm outline-none focus:border-[#1d5cff]"
                 />
               </div>
             </div>
-            <div className="px-2 pb-6 max-h-[400px] overflow-y-auto">
-              {recurringColumnOptions
-                .filter(col => col.label.toLowerCase().includes(columnSearchTerm.toLowerCase()))
-                .map((col) => {
-                  const isChecked = tempVisibleColumns.includes(col.key);
-                  return (
-                    <div
-                      key={col.key}
-                      className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 group cursor-pointer transition-colors"
-                      onClick={() => {
-                        if (col.locked) return;
-                        if (isChecked) {
-                          setTempVisibleColumns(prev => prev.filter(k => k !== col.key));
-                        } else {
-                          setTempVisibleColumns(prev => [...prev, col.key]);
-                        }
-                      }}
-                    >
-                      <div className="flex-1 flex items-center gap-3">
-                        {col.locked ? (
-                          <div className="w-4 h-4 flex items-center justify-center">
-                            <Lock size={12} className="text-gray-500" />
-                          </div>
-                        ) : (
+            <div className="px-6 pb-4">
+              <div className="max-h-[420px] overflow-y-auto pr-2">
+                <div className="flex flex-col gap-2">
+                  {recurringColumnOptions
+                    .filter(col => col.label.toLowerCase().includes(columnSearchTerm.toLowerCase()))
+                    .map((col) => {
+                      const isChecked = tempVisibleColumns.includes(col.key);
+                      return (
+                        <label
+                          key={col.key}
+                          className="flex items-center gap-3 rounded-lg bg-gray-50 px-3 py-3 hover:bg-gray-100 transition-colors cursor-pointer"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            if (col.locked) return;
+                            if (isChecked) {
+                              setTempVisibleColumns(prev => prev.filter(k => k !== col.key));
+                            } else {
+                              setTempVisibleColumns(prev => [...prev, col.key]);
+                            }
+                          }}
+                        >
+                          <GripVertical size={16} className="text-slate-400 shrink-0" />
                           <input
                             type="checkbox"
                             checked={isChecked}
-                            onChange={() => { }}
-                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 pointer-events-none"
+                            disabled={col.locked}
+                            onChange={() => {}}
+                            className="h-4 w-4 rounded border-gray-300 text-[#1d5cff] focus:ring-0 disabled:opacity-60 pointer-events-none"
                           />
-                        )}
-                        <span className={`text-[13.5px] ${isChecked ? 'text-gray-900 font-medium' : 'text-gray-600'}`}>{col.label}</span>
-                      </div>
-                    </div>
-                  );
-                })}
+                          <span className="text-sm text-slate-700 flex-1">{col.label}</span>
+                          {col.locked ? <Lock size={14} className="text-slate-400 shrink-0" /> : null}
+                        </label>
+                      );
+                    })}
+                </div>
+              </div>
             </div>
-            <div className="flex items-center justify-start gap-3 px-6 py-4 border-t border-gray-100 bg-[#f9fafb]">
+            <div className="flex items-center justify-start gap-3 px-6 py-4 border-t border-gray-200 bg-white">
               <button
                 onClick={() => {
                   const normalized = normalizeRecurringColumns(tempVisibleColumns);
@@ -3114,13 +3156,13 @@ export default function RecurringInvoices() {
                   localStorage.setItem("taban_recurring_invoices_columns", JSON.stringify(normalized));
                   setIsCustomizeColumnsModalOpen(false);
                 }}
-                className="px-6 py-2 bg-blue-500 text-white rounded text-[13px] font-medium hover:bg-blue-600 transition-colors shadow-sm"
+                className="px-5 py-2.5 rounded-lg bg-[#156372] text-white text-sm font-semibold hover:bg-[#0D4A52] transition-colors"
               >
                 Save
               </button>
               <button
                 onClick={() => setIsCustomizeColumnsModalOpen(false)}
-                className="px-6 py-2 bg-white border border-gray-200 text-gray-700 rounded text-[13px] font-medium hover:bg-gray-50 transition-colors"
+                className="px-5 py-2.5 rounded-lg border border-gray-300 bg-white text-slate-700 text-sm font-medium hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>

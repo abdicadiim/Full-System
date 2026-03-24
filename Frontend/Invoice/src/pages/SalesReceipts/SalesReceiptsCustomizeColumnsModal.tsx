@@ -52,7 +52,7 @@ export default function SalesReceiptsCustomizeColumnsModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-3"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -72,7 +72,7 @@ export default function SalesReceiptsCustomizeColumnsModal({
             </span>
             <button
               type="button"
-              className="h-9 w-9 rounded-lg border border-[#1d5cff] text-[#1d5cff] hover:bg-[#1d5cff]/10 transition-colors flex items-center justify-center"
+              className="h-9 w-9 rounded-lg text-[#1d5cff] hover:bg-[#1d5cff]/10 transition-colors flex items-center justify-center"
               onClick={onClose}
               aria-label="Close"
             >
@@ -130,7 +130,7 @@ export default function SalesReceiptsCustomizeColumnsModal({
         <div className="flex items-center justify-start gap-3 px-6 py-4 border-t border-gray-200 bg-white">
           <button
             type="button"
-            className="px-5 py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-colors"
+            className="px-5 py-2.5 rounded-lg bg-[#156372] text-white text-sm font-semibold hover:bg-[#0D4A52] transition-colors"
             onClick={() => onSave(ensureLocked(tempVisible, columns))}
           >
             Save

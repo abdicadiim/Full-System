@@ -628,7 +628,7 @@ export default function NewRetailInvoice() {
     const fallbackName = `${quickCustomerForm.firstName} ${quickCustomerForm.lastName}`.trim();
     const displayName = quickCustomerForm.displayName.trim() || quickCustomerForm.companyName.trim() || fallbackName;
     if (!displayName) {
-      alert("Display Name is required.");
+      toast.error("Display Name is required.");
       return;
     }
 
@@ -708,7 +708,7 @@ export default function NewRetailInvoice() {
       setIsNewCustomerQuickActionOpen(false);
     } catch (error: any) {
       console.error("Error creating customer from retainer quick action:", error);
-      alert(error?.message || "Failed to create customer.");
+      toast.error(error?.message || "Failed to create customer.");
     } finally {
       setIsSavingQuickCustomer(false);
     }
@@ -716,7 +716,7 @@ export default function NewRetailInvoice() {
 
   const handleSave = async (status: "draft" | "sent") => {
     if (!customerId) {
-      alert("Please select a customer.");
+      toast.error("Please select a customer.");
       return;
     }
 
@@ -845,7 +845,7 @@ export default function NewRetailInvoice() {
       }
     } catch (error: any) {
       console.error("Error saving retail invoice:", error);
-      alert(error?.message || "Failed to save invoice");
+      toast.error(error?.message || "Failed to save invoice");
     } finally {
       setLoading(false);
       setSavingMode(null);
