@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import { Expense } from "../models/Expense.js";
 
 const requireOrgId = (req: express.Request, res: express.Response) => {
-  const orgId = req.user?.organizationId;
+  const orgId = (req as any).user?.organizationId;
   if (!orgId) {
     res.status(401).json({ success: false, message: "Unauthenticated", data: null });
     return null;

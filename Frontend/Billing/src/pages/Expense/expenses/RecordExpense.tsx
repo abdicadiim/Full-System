@@ -18,26 +18,27 @@ import {
   Bookmark,
   File,
   Trash2,
+  PlusCircle,
 } from "lucide-react";
 import DatePicker from "../../../components/DatePicker";
 import NewVendorModal from "../bills/NewVendorModal";
 import { vendorsAPI, customersAPI, expensesAPI, chartOfAccountsAPI, journalEntriesAPI, projectsAPI, currenciesAPI as dbCurrenciesAPI, taxesAPI, reportingTagsAPI, locationsAPI } from "../../../services/api";
 import NewCurrencyModal from "../../settings/organization-settings/setup-configurations/currencies/NewCurrencyModal";
 import NewTaxModal from "../../../../components/modals/NewTaxModal";
-import { createTaxLocal } from "../../settings/organization-settings/taxes-compliance/TAX/storage";
+import { TAX_GROUP_MARKER, createTaxLocal, isTaxGroupRecord, readTaxesLocal } from "../../settings/organization-settings/taxes-compliance/TAX/storage";
 import { useCurrency } from "../../../hooks/useCurrency";
 import { filterActiveRecords } from "../shared/activeFilters";
 import RecordMileage from "./RecordMileage";
 import { toast } from "react-toastify";
 
 // Accounts API
-const accountsAPI = {
+  const accountsAPI = {
   getAll: async () => {
     const response = await chartOfAccountsAPI.getAccounts({ isActive: true });
     return { success: true, data: response?.data || [] };
   },
   create: async (data: any) => {
-    const response = await chartOfAccountsAPI.createAccount(data);
+    const response: any = await chartOfAccountsAPI.createAccount(data);
     return {
       success: Boolean(response?.success),
       code: response?.success ? 0 : 1,
@@ -267,6 +268,7 @@ export default function RecordExpense() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const expenseAccountRef = useRef(null);
   const locationRef = useRef(null);
+  const currencyRef = useRef(null);
   const customerRef = useRef(null);
   const projectRef = useRef(null);
   const uploadDropdownRef = useRef(null);
@@ -369,6 +371,7 @@ export default function RecordExpense() {
   const [expenseTaxDropdownOpen, setExpenseTaxDropdownOpen] = useState(false);
   const [expenseTaxSearch, setExpenseTaxSearch] = useState("");
   const [amountCurrencyOpen, setAmountCurrencyOpen] = useState(false);
+  const [currencyDropdownOpen, setCurrencyDropdownOpen] = useState(false);
   const [bulkLocationOpenIndex, setBulkLocationOpenIndex] = useState<number | null>(null);
   const [bulkLocationSearch, setBulkLocationSearch] = useState("");
   const [bulkTaxOpenIndex, setBulkTaxOpenIndex] = useState<number | null>(null);
@@ -378,6 +381,10 @@ export default function RecordExpense() {
   const [bulkProjectOpenIndex, setBulkProjectOpenIndex] = useState<number | null>(null);
   const [bulkProjectSearch, setBulkProjectSearch] = useState("");
   const [bulkRowMenuOpenIndex, setBulkRowMenuOpenIndex] = useState<number | null>(null);
+  const [bulkRowMenuPosition, setBulkRowMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const [itemRowMenuOpenIndex, setItemRowMenuOpenIndex] = useState<number | null>(null);
+  const [itemRowMenuPosition, setItemRowMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const [itemRowTagsOpenIndex, setItemRowTagsOpenIndex] = useState<number | null>(null);
   const [bulkCategoryOpenIndex, setBulkCategoryOpenIndex] = useState<number | null>(null);
   const [bulkCategorySearch, setBulkCategorySearch] = useState("");
   const [bulkCurrencyOpenIndex, setBulkCurrencyOpenIndex] = useState<number | null>(null);
@@ -433,6 +440,7 @@ export default function RecordExpense() {
     setProjectOpen(false);
     setProjectSearch("");
     setUploadDropdownOpen(false);
+    setCurrencyDropdownOpen(false);
     setVendorSearchCriteriaOpen(false);
     setCustomerSearchCriteriaOpen(false);
     setParentAccountOpen(false);
@@ -556,6 +564,9 @@ export default function RecordExpense() {
     setBulkCurrencyOpenIndex(null);
     setBulkCurrencySearch("");
     setBulkRowMenuOpenIndex(null);
+    setBulkRowMenuPosition(null);
+    setItemRowMenuOpenIndex(null);
+    setItemRowMenuPosition(null);
   };
 
   const normalizeProjectRecords = (records: any[]) => {
@@ -776,7 +787,7 @@ export default function RecordExpense() {
       }
 
       try {
-        const taxesResponse = await taxesAPI.getAll({ status: "active" });
+        const taxesResponse: any = await taxesAPI.getAll();
         const taxListRaw = Array.isArray(taxesResponse)
           ? taxesResponse
           : Array.isArray(taxesResponse?.data)
@@ -785,25 +796,19 @@ export default function RecordExpense() {
               ? taxesResponse.taxes
               : Array.isArray(taxesResponse?.data?.taxes)
                 ? taxesResponse.data.taxes
-                : Array.isArray(taxesResponse?.results)
-                  ? taxesResponse.results
-                  : [];
-        const cachedTaxesRaw = (() => {
-          try {
-            const raw = localStorage.getItem("taban_books_taxes");
-            const parsed = raw ? JSON.parse(raw) : [];
-            return Array.isArray(parsed) ? parsed : [];
-          } catch {
-            return [];
-          }
-        })();
+            : Array.isArray(taxesResponse?.results)
+              ? taxesResponse.results
+              : [];
+        const cachedTaxesRaw = readTaxesLocal();
         const combinedTaxes = [...taxListRaw, ...cachedTaxesRaw];
         const dedupedTaxes = Array.from(
           new Map(
-            combinedTaxes.map((tax: any) => {
-              const id = String(tax?._id || tax?.id || tax?.tax_id || tax?.taxId || tax?.name || tax?.taxName || tax?.tax_name || "").trim();
-              return [id.toLowerCase(), tax];
-            }).filter(([id]: any) => Boolean(id))
+            combinedTaxes
+              .map((tax: any): [string, any] => {
+                const id = String(tax?._id || tax?.id || tax?.tax_id || tax?.taxId || tax?.name || tax?.taxName || tax?.tax_name || "").trim();
+                return [id.toLowerCase(), tax];
+              })
+              .filter(([id]) => Boolean(id))
           ).values()
         );
         const normalizedTaxes = dedupedTaxes.filter((tax: any) => {
@@ -811,13 +816,17 @@ export default function RecordExpense() {
           return name.length > 0;
         });
         const activeTaxes = normalizedTaxes.filter((tax: any) => tax?.isActive !== false && tax?.is_active !== false);
+        console.debug("Expense taxes loaded", {
+          apiCount: taxListRaw.length,
+          settingsCount: cachedTaxesRaw.length,
+          mergedCount: normalizedTaxes.length,
+          activeCount: activeTaxes.length,
+        });
         setTaxes(activeTaxes.length > 0 ? activeTaxes : normalizedTaxes);
       } catch (error) {
         console.error("Error loading taxes:", error);
         try {
-          const raw = localStorage.getItem("taban_books_taxes");
-          const parsed = raw ? JSON.parse(raw) : [];
-          setTaxes(Array.isArray(parsed) ? parsed : []);
+          setTaxes(readTaxesLocal());
         } catch {
           setTaxes([]);
         }
@@ -994,14 +1003,26 @@ export default function RecordExpense() {
     accountType: "Fixed Asset",
     accountName: "",
     isSubAccount: false,
+    parentAccount: "",
     accountCode: "",
     description: "",
     zohoExpense: false,
   });
   const [activeTab, setActiveTab] = useState("expense");
   const [isItemized, setIsItemized] = useState(false);
+  const [itemizedShowAdditionalInformation, setItemizedShowAdditionalInformation] = useState(true);
   const [reportingTagDefinitions, setReportingTagDefinitions] = useState<any[]>([]);
-  const [itemRows, setItemRows] = useState([
+  type ItemRow = {
+    id: number;
+    itemDetails: string;
+    account: string;
+    tax: string;
+    quantity: number;
+    rate: number;
+    amount: number;
+    reportingTags?: any[];
+  };
+  const [itemRows, setItemRows] = useState<ItemRow[]>([
     {
       id: 1,
       itemDetails: "",
@@ -1009,7 +1030,8 @@ export default function RecordExpense() {
       tax: "",
       quantity: 100,
       rate: 0.00,
-      amount: 0.00
+      amount: 0.00,
+      reportingTags: [],
     }
   ]);
   const [discount, setDiscount] = useState({ value: 0, type: "%" });
@@ -1028,29 +1050,89 @@ export default function RecordExpense() {
     return dateStr;
   };
 
+  const createBulkExpenseRow = (overrides: Record<string, any> = {}) => ({
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    date: (() => {
+      const today = new Date();
+      const d = String(today.getDate()).padStart(2, "0");
+      const m = String(today.getMonth() + 1).padStart(2, "0");
+      const y = today.getFullYear();
+      return `${d}/${m}/${y}`;
+    })(),
+    expenseAccount: "",
+    amount: "",
+    currency: initialCurrencyCode,
+    location: initialLocationName,
+    tax: "",
+    is_inclusive_tax: true,
+    customerName: "",
+    projects: "",
+    billable: false,
+    reportingTags: [] as any[],
+    ...overrides,
+  });
+
+  function buildItemReportingTags() {
+    return (Array.isArray(reportingTagDefinitions) ? reportingTagDefinitions : []).map((def: any) => ({
+      tagId: String(def?.tagId || def?.id || def?._id || ""),
+      id: String(def?.id || def?.tagId || def?._id || ""),
+      name: String(def?.name || def?.tagName || def?.tag_name || "Reporting Tag"),
+      value: "",
+      options: Array.isArray(def?.options) ? def.options : [],
+      isMandatory: Boolean(def?.isMandatory || def?.mandatory || def?.required || def?.is_required || def?.isMandatoryTag),
+    }));
+  }
+
+  const normalizeRowReportingTags = (tags: any[]) => {
+    const nextTags = Array.isArray(tags) ? tags : [];
+    if (nextTags.length > 0) {
+      return nextTags.map((tag: any) => {
+        const matchedDefinition = reportingTagDefinitions.find((def: any) =>
+          String(def?.tagId || def?.id || "").toLowerCase() === String(tag?.tagId || tag?.id || "").toLowerCase() ||
+          String(def?.name || def?.tagName || "").toLowerCase() === String(tag?.name || "").toLowerCase()
+        );
+        return {
+          tagId: String(tag?.tagId || tag?.id || matchedDefinition?.tagId || ""),
+          id: String(tag?.id || tag?.tagId || matchedDefinition?.tagId || ""),
+          name: String(tag?.name || matchedDefinition?.name || matchedDefinition?.tagName || "Reporting Tag"),
+          value: String(tag?.value || ""),
+          options: Array.isArray(tag?.options) ? tag.options : Array.isArray(matchedDefinition?.options) ? matchedDefinition.options : [],
+          isMandatory: Boolean(
+            tag?.isMandatory ||
+            tag?.mandatory ||
+            tag?.required ||
+            tag?.is_required ||
+            tag?.isMandatoryTag ||
+            matchedDefinition?.isMandatory
+          ),
+        };
+      });
+    }
+    return buildItemReportingTags();
+  };
+
+  const createItemRow = (overrides: Partial<ItemRow> = {}): ItemRow => ({
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    itemDetails: "",
+    account: "",
+    tax: "",
+    quantity: 1,
+    rate: 0,
+    amount: 0,
+    reportingTags: buildItemReportingTags(),
+    ...overrides,
+  });
+
+  const syncItemRowsTotal = (rows: any[]) => {
+    const total = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    setFormData((prev) => ({ ...prev, amount: total.toString() }));
+  };
+
   // Bulk expenses state
   const [bulkExpenses, setBulkExpenses] = useState(
-    Array.from({ length: 10 }, (_, i) => ({
-      id: Date.now() + i,
-      date: (() => {
-        const today = new Date();
-        const d = String(today.getDate()).padStart(2, '0');
-        const m = String(today.getMonth() + 1).padStart(2, '0');
-        const y = today.getFullYear();
-        return `${d}/${m}/${y}`;
-      })(),
-      expenseAccount: "",
-      amount: "",
-      currency: initialCurrencyCode,
-      location: initialLocationName,
-      tax: "",
-      is_inclusive_tax: true,
-      customerName: "",
-      projects: "",
-      billable: false,
-      reportingTags: [] as any[],
-    }))
+    Array.from({ length: 10 }, () => createBulkExpenseRow())
   );
+  const [bulkShowAdditionalInformation, setBulkShowAdditionalInformation] = useState(true);
   const [formData, setFormData] = useState({
     location: initialLocationName,
     date: (() => {
@@ -1174,8 +1256,23 @@ export default function RecordExpense() {
   }, [baseCurrencyCode]);
 
   useEffect(() => {
+    if (!isItemized || reportingTagDefinitions.length === 0) return;
+    setItemRows((prev) => {
+      let changed = false;
+      const next = prev.map((row) => {
+        const rowTags = Array.isArray((row as any).reportingTags) ? (row as any).reportingTags : [];
+        if (rowTags.length > 0) return row;
+        changed = true;
+        return { ...row, reportingTags: buildItemReportingTags() };
+      });
+      return changed ? next : prev;
+    });
+  }, [isItemized, reportingTagDefinitions]);
+
+  useEffect(() => {
     const hasAnyBulkOpen =
       bulkRowMenuOpenIndex !== null ||
+      itemRowMenuOpenIndex !== null ||
       bulkLocationOpenIndex !== null ||
       bulkTaxOpenIndex !== null ||
       bulkCustomerOpenIndex !== null ||
@@ -1192,6 +1289,7 @@ export default function RecordExpense() {
     return () => document.removeEventListener("mousedown", handleOutside);
   }, [
     bulkRowMenuOpenIndex,
+    itemRowMenuOpenIndex,
     bulkLocationOpenIndex,
     bulkTaxOpenIndex,
     bulkCustomerOpenIndex,
@@ -1281,7 +1379,8 @@ export default function RecordExpense() {
             tax: "",
             quantity: line.quantity || 1,
             rate: line.rate || line.amount || 0,
-            amount: line.amount || 0
+            amount: line.amount || 0,
+            reportingTags: normalizeRowReportingTags(line.reportingTags || line.reporting_tags || []),
           })));
         }
       } else if (clonedData) {
@@ -1333,7 +1432,8 @@ export default function RecordExpense() {
             tax: "",
             quantity: line.quantity || 1,
             rate: line.rate || line.amount || 0,
-            amount: line.amount || 0
+            amount: line.amount || 0,
+            reportingTags: normalizeRowReportingTags(line.reportingTags || line.reporting_tags || []),
           })));
         }
       } else if (projectName || customerName) {
@@ -1655,6 +1755,22 @@ export default function RecordExpense() {
       }
     }
 
+    const invalidItemizedRow = isItemized
+      ? itemRows.find((row) => {
+          const rowTags = normalizeRowReportingTags((row as any).reportingTags);
+          return rowTags.some((tag: any) => Boolean(tag?.isMandatory) && String(tag?.value || "").trim() === "");
+        })
+      : null;
+    if (invalidItemizedRow) {
+      const rowIndex = itemRows.findIndex((row) => row.id === invalidItemizedRow.id);
+      if (rowIndex >= 0) {
+        setItemRowTagsOpenIndex(rowIndex);
+      }
+      alert("Please fill in all mandatory reporting tags before saving.");
+      setSaveLoadingState(null);
+      return false;
+    }
+
     // Validate required fields for single expense
     if (!formData.date || !formData.expenseAccount || !formData.amount || !formData.paidThrough) {
       alert("Please fill in all required fields (Date, Expense Account, Amount, Paid Through)");
@@ -1749,11 +1865,21 @@ export default function RecordExpense() {
         expenseData.line_items = itemRows
           .filter(row => row.account && row.amount > 0)
           .map((row, index) => {
+            const selectedReportingTags = (Array.isArray((row as any).reportingTags) ? (row as any).reportingTags : [])
+              .filter((tag: any) => String(tag?.value || "").trim() !== "")
+              .map((tag: any) => ({
+                tagId: String(tag?.tagId || tag?.id || ""),
+                id: String(tag?.id || tag?.tagId || ""),
+                name: String(tag?.name || ""),
+                value: String(tag?.value || ""),
+              }))
+              .filter((tag: any) => tag.tagId || tag.id);
             return {
               account_name: row.account, // Send account name instead of ID
               description: row.itemDetails || "",
               amount: row.amount,
               item_order: index + 1,
+              reportingTags: selectedReportingTags,
             };
           });
       }
@@ -1803,6 +1929,10 @@ export default function RecordExpense() {
     } finally {
       setSaveLoadingState(null);
     }
+  };
+
+  const handleSaveClick = () => {
+    void handleSave();
   };
 
 
@@ -1878,7 +2008,8 @@ export default function RecordExpense() {
           tax: "",
           quantity: 100,
           rate: 0.00,
-          amount: 0.00
+          amount: 0.00,
+          reportingTags: [],
         }]);
         setTaxAmountOverride("");
         setTaxAmountEditOpen(false);
@@ -2045,6 +2176,10 @@ export default function RecordExpense() {
     const label = taxLabel(tax).toLowerCase();
     return label.includes(expenseTaxSearch.toLowerCase());
   });
+  const filteredExpenseNormalTaxes = filteredExpenseTaxes.filter((tax: any) => !isTaxGroupRecord(tax) && !tax?.isCompound);
+  const filteredExpenseCompoundTaxes = filteredExpenseTaxes.filter((tax: any) => !isTaxGroupRecord(tax) && !!tax?.isCompound);
+  const filteredExpenseTaxGroups = filteredExpenseTaxes.filter((tax: any) => isTaxGroupRecord(tax) || tax?.description === TAX_GROUP_MARKER);
+  const hasExpenseTaxes = filteredExpenseTaxes.length > 0;
   const filteredCustomerProjects = customerProjects.filter((project) =>
     String(project?.name || "").toLowerCase().includes(projectSearch.toLowerCase())
   );
@@ -2072,6 +2207,12 @@ export default function RecordExpense() {
       ) {
         setLocationOpen(false);
         setLocationSearch("");
+      }
+      if (
+        currencyRef.current &&
+        !(currencyRef.current as HTMLDivElement).contains(event.target as Node)
+      ) {
+        setCurrencyDropdownOpen(false);
       }
 
       if (
@@ -2257,7 +2398,9 @@ export default function RecordExpense() {
         const rows = [createdCustomer, ...prev];
         const deduped = Array.from(
           new Map(
-            rows.map((c: any) => [String(c?._id || c?.id || "").toLowerCase(), c]).filter(([id]: any) => Boolean(id))
+            rows
+              .map((c: any): [string, any] => [String(c?._id || c?.id || "").toLowerCase(), c])
+              .filter(([id]) => Boolean(id))
           ).values()
         );
         return filterActiveRecords(deduped as any[]);
@@ -2288,6 +2431,7 @@ export default function RecordExpense() {
     let createdTax = payload?.tax || payload?.data || payload;
     const inputName = String(createdTax?.name || createdTax?.taxName || "").trim();
     const inputRate = Number(createdTax?.rate ?? createdTax?.taxPercentage ?? createdTax?.percentage ?? 0);
+    const inputIsCompound = createdTax?.isCompound === true || createdTax?.is_compound === true;
 
     if (!inputName) {
       setIsNewTaxModalOpen(false);
@@ -2301,15 +2445,22 @@ export default function RecordExpense() {
         rate: Number.isFinite(inputRate) ? inputRate : 0,
         isActive: true,
         type: "both",
+        isCompound: inputIsCompound,
       }) || createdTax;
     } catch (error) {
       console.error("Error creating tax in local settings storage:", error);
       try {
-        const createRes = await taxesAPI.create({
+        const compoundPayload = {
           name: inputName,
           rate: Number.isFinite(inputRate) ? inputRate : 0,
           status: "active",
           isActive: true,
+          isCompound: inputIsCompound,
+          kind: "tax",
+          type: "both",
+        };
+        const createRes: any = await taxesAPI.create({
+          ...compoundPayload,
         });
         createdTax = createRes?.data || createRes?.tax || createRes || createdTax;
       } catch (fallbackError) {
@@ -2323,6 +2474,7 @@ export default function RecordExpense() {
       id: String(createdTax?._id || createdTax?.id || createdTax?.tax_id || createdTax?.taxId || `tax_${Date.now()}`),
       name: String(createdTax?.name || createdTax?.taxName || inputName).trim(),
       rate: Number(createdTax?.rate ?? createdTax?.taxPercentage ?? createdTax?.percentage ?? inputRate ?? 0),
+      isCompound: createdTax?.isCompound === true || createdTax?.is_compound === true || inputIsCompound,
       isActive: createdTax?.isActive !== false && createdTax?.is_active !== false,
     };
 
@@ -2333,7 +2485,9 @@ export default function RecordExpense() {
       const rows = [...prev, normalizedTax];
       const deduped = Array.from(
         new Map(
-          rows.map((tax: any) => [String(getTaxId(tax)).toLowerCase(), tax]).filter(([id]: any) => Boolean(id))
+          rows
+            .map((tax: any): [string, any] => [String(getTaxId(tax)).toLowerCase(), tax])
+            .filter(([id]) => Boolean(id))
         ).values()
       );
       return deduped;
@@ -2356,13 +2510,25 @@ export default function RecordExpense() {
   };
 
 
-  const handleNewAccountChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value, type } = e.target;
-    const checked = (e.target as HTMLInputElement).checked;
+  const handleNewAccountChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement> | {
+      target: { name: string; value: string; type?: string; checked?: boolean };
+    }
+  ) => {
+    const { name, value, type, checked } = e.target as {
+      name: string;
+      value: string;
+      type?: string;
+      checked?: boolean;
+    };
     setNewAccountData((prev) => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : value,
+      [name]: type === "checkbox" ? Boolean(checked) : value,
     }));
+  };
+
+  const handleSaveAndNewClick = () => {
+    void handleSaveAndNew();
   };
 
   const handleSaveAndSelect = async () => {
@@ -2433,6 +2599,7 @@ export default function RecordExpense() {
           accountType: "Fixed Asset",
           accountName: "",
           isSubAccount: false,
+          parentAccount: "",
           accountCode: "",
           description: "",
           zohoExpense: false,
@@ -2816,7 +2983,7 @@ export default function RecordExpense() {
             <button
               className={`px-5 py-3 text-sm font-medium rounded-t-md border border-b-0 transition-colors ${activeTab === "mileage"
                 ? "bg-white text-[#334155] border-[#d1d5db] border-t-[3px] border-t-[#156372]"
-                : "bg-[#f8fafc] text-[#2563eb] border-transparent"
+                : "bg-[#f8fafc] text-[#156372] border-transparent"
                 }`}
               onClick={() => setActiveTab("mileage")}
             >
@@ -2919,17 +3086,38 @@ export default function RecordExpense() {
 
                   <div className="grid grid-cols-[160px_1fr] items-center gap-4">
                     <label className="text-sm font-medium text-gray-900">Currency</label>
-                    <div className="max-w-[460px]">
-                      <select
-                        name="currency"
-                        value={formData.currency}
-                        onChange={handleChange}
-                        className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
+                    <div className="max-w-[460px] relative" ref={currencyRef}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          closeAllDropdowns();
+                          setCurrencyDropdownOpen((prev) => !prev);
+                        }}
+                        className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372] flex items-center justify-between"
                       >
-                        {currencyOptions.map((code) => (
-                          <option key={code} value={code}>{code}</option>
-                        ))}
-                      </select>
+                        <span>{formData.currency || currencyOptions[0] || "USD"}</span>
+                        <ChevronDown size={14} className="text-gray-500" />
+                      </button>
+                      {currencyDropdownOpen && (
+                        <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-md border border-gray-200 bg-white shadow-lg">
+                          {currencyOptions.map((code) => {
+                            const selected = String(formData.currency || currencyOptions[0] || "").toUpperCase() === String(code).toUpperCase();
+                            return (
+                              <button
+                                key={code}
+                                type="button"
+                                onClick={() => {
+                                  setFormData((prev) => ({ ...prev, currency: code }));
+                                  setCurrencyDropdownOpen(false);
+                                }}
+                                className={`w-full px-3 py-2 text-left text-sm ${selected ? "font-medium text-[#156372]" : "text-gray-700"} hover:bg-gray-50 hover:text-gray-900`}
+                              >
+                                {code}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -2990,7 +3178,7 @@ export default function RecordExpense() {
                     })
                   )}
 
-                  <button onClick={() => setIsItemized(false)} className="text-[#2563eb] text-sm mb-2 flex items-center gap-1 hover:underline">
+                  <button onClick={() => setIsItemized(false)} className="text-[#156372] text-sm mb-2 flex items-center gap-1 hover:underline">
                     &lt; Back to single expense view
                   </button>
 
@@ -3000,170 +3188,386 @@ export default function RecordExpense() {
                     <label className="flex items-center gap-2 text-gray-700"><input type="radio" className="accent-[#156372]" readOnly />At Line Item Level</label>
                   </div>
 
-                  <div className="border border-gray-200 bg-white">
-                    <table className="w-full text-sm">
+                  <div className="border border-gray-200 bg-white overflow-hidden">
+                    <table className="w-full table-fixed text-sm">
                       <thead>
                         <tr className="bg-[#f8fafc] border-b border-gray-200">
                           <th className="w-6"></th>
-                          <th className="text-left py-2 px-3 text-xs font-medium text-red-600 uppercase">Expense Account</th>
-                          <th className="text-left py-2 px-3 text-xs font-medium text-gray-700 uppercase">Notes</th>
-                          <th className="text-left py-2 px-3 text-xs font-medium text-gray-700 uppercase">Tax</th>
-                          <th className="text-left py-2 px-3 text-xs font-medium text-red-600 uppercase">Amount</th>
+                          <th className="w-[170px] text-left py-2 px-3 text-xs font-medium text-red-600 uppercase whitespace-nowrap">Expense Account</th>
+                          <th className="w-[240px] text-left py-2 px-3 text-xs font-medium text-gray-700 uppercase whitespace-nowrap">Notes</th>
+                          <th className="w-[170px] text-left py-2 px-3 text-xs font-medium text-gray-700 uppercase whitespace-nowrap">Tax</th>
+                          <th className="w-[120px] text-left py-2 px-3 text-xs font-medium text-red-600 uppercase whitespace-nowrap">Amount</th>
                           <th className="w-8"></th>
                         </tr>
                       </thead>
                       <tbody>
-                        {itemRows.map((row, idx) => (
-                          <tr key={row.id} className="border-b border-gray-100">
-                            <td className="px-1 text-gray-400">
-                              <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor"><circle cx="2" cy="2" r="1.2" /><circle cx="2" cy="8" r="1.2" /><circle cx="2" cy="14" r="1.2" /><circle cx="8" cy="2" r="1.2" /><circle cx="8" cy="8" r="1.2" /><circle cx="8" cy="14" r="1.2" /></svg>
-                            </td>
-                            <td className="py-2 px-3">
-                              <div className="relative itemized-account-dropdown">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setOpenItemizedTaxIndex(null);
-                                    setItemizedTaxSearch("");
-                                    setOpenItemizedAccountIndex(openItemizedAccountIndex === idx ? null : idx);
-                                  }}
-                                  className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-left flex items-center justify-between"
-                                >
-                                  <span className={row.account ? "text-gray-900" : "text-gray-400"}>
-                                    {row.account || ""}
-                                  </span>
-                                  <ChevronDown size={14} className="text-gray-500" />
-                                </button>
-                                {openItemizedAccountIndex === idx && (
-                                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50">
-                                    <div className="p-2 border-b border-gray-200 flex items-center gap-2">
-                                      <Search size={14} className="text-gray-400" />
-                                      <input
-                                        type="text"
-                                        value={itemizedAccountSearch}
-                                        onChange={(e) => setItemizedAccountSearch(e.target.value)}
-                                        placeholder="Search"
-                                        className="flex-1 border-none outline-none text-sm"
-                                        autoFocus
-                                      />
-                                    </div>
-                                    <div className="max-h-[220px] overflow-y-auto py-1">
-                                      {filteredItemizedExpenseAccounts.map((acc) => {
-                                        const selected = row.account === acc;
-                                        return (
-                                          <button
-                                            key={`${idx}-${acc}`}
-                                            type="button"
-                                            onClick={() => {
-                                              const next = [...itemRows];
-                                              next[idx].account = acc;
-                                              setItemRows(next);
-                                              setOpenItemizedAccountIndex(null);
-                                              setItemizedAccountSearch("");
-                                            }}
-                                            className={`w-full px-3 py-2 text-left text-sm ${selected
-                                              ? "text-[#156372] font-medium hover:bg-[#156372] hover:text-white"
-                                              : "text-gray-700 hover:bg-[#156372] hover:text-white"
-                                              }`}
-                                          >
-                                            {acc}
-                                          </button>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                            <td className="py-2 px-3">
-                              <textarea value={row.itemDetails} onChange={(e) => { const next = [...itemRows]; next[idx].itemDetails = e.target.value; setItemRows(next); }} placeholder="Max. 500 characters" className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372] resize-none" rows={2} />
-                            </td>
-                            <td className="py-2 px-3">
-                              <div className="relative itemized-tax-dropdown">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setOpenItemizedAccountIndex(null);
-                                    setItemizedAccountSearch("");
-                                    setOpenItemizedTaxIndex(openItemizedTaxIndex === idx ? null : idx);
-                                  }}
-                                  className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-left flex items-center justify-between"
-                                >
-                                  <span className={(row as any).tax ? "text-gray-900" : "text-gray-400"}>
-                                    {(row as any).tax || "Select a Tax"}
-                                  </span>
-                                  <ChevronDown size={14} className="text-gray-500" />
-                                </button>
-                                {openItemizedTaxIndex === idx && (
-                                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50">
-                                    <div className="p-2 border-b border-gray-200 flex items-center gap-2">
-                                      <Search size={14} className="text-gray-400" />
-                                      <input
-                                        type="text"
-                                        value={itemizedTaxSearch}
-                                        onChange={(e) => setItemizedTaxSearch(e.target.value)}
-                                        placeholder="Search"
-                                        className="flex-1 border-none outline-none text-sm"
-                                        autoFocus
-                                      />
-                                    </div>
-                                    <div className="px-3 py-2 text-xs font-semibold text-gray-500">Compound tax</div>
-                                    <div className="max-h-[220px] overflow-y-auto py-1">
-                                      {filteredItemizedTaxes.map((tax: any) => {
-                                        const label = taxLabel(tax);
-                                        const selected = (row as any).tax === label;
-                                        return (
-                                          <button
-                                            key={`${idx}-${getTaxId(tax)}`}
-                                            type="button"
-                                            onClick={() => {
-                                              const next = [...itemRows] as any[];
-                                              next[idx].tax = label;
-                                              setItemRows(next);
-                                              setOpenItemizedTaxIndex(null);
-                                              setItemizedTaxSearch("");
-                                            }}
-                                            className={`w-full px-3 py-2 text-left text-sm ${selected
-                                              ? "text-[#156372] font-medium hover:bg-[#156372] hover:text-white"
-                                              : "text-gray-700 hover:bg-[#156372] hover:text-white"
-                                              }`}
-                                          >
-                                            {label}
-                                          </button>
-                                        );
-                                      })}
-                                    </div>
+                        {itemRows.map((row, idx) => {
+                          const rowTags = normalizeRowReportingTags((row as any).reportingTags);
+                          const hasMandatoryTag = rowTags.some((tag: any) => Boolean(tag?.isMandatory));
+                          const selectedCount = rowTags.filter((tag: any) => String(tag?.value || "").trim() !== "").length;
+                          const totalCount = rowTags.length;
+
+                          return (
+                            <React.Fragment key={row.id}>
+                              <tr className="border-b border-gray-100">
+                                <td className="px-1 text-gray-400">
+                                  <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor"><circle cx="2" cy="2" r="1.2" /><circle cx="2" cy="8" r="1.2" /><circle cx="2" cy="14" r="1.2" /><circle cx="8" cy="2" r="1.2" /><circle cx="8" cy="8" r="1.2" /><circle cx="8" cy="14" r="1.2" /></svg>
+                                </td>
+                                <td className="py-2 px-3 align-top">
+                                  <div className="relative itemized-account-dropdown">
                                     <button
                                       type="button"
                                       onClick={() => {
                                         setOpenItemizedTaxIndex(null);
-                                        openNewTaxQuickAction({ type: "itemized", index: idx });
+                                        setItemizedTaxSearch("");
+                                        setOpenItemizedAccountIndex(openItemizedAccountIndex === idx ? null : idx);
                                       }}
-                                      className="w-full border-t border-gray-200 px-3 py-2 text-left text-sm text-[#156372] hover:bg-[#156372] hover:text-white flex items-center gap-2"
+                                      className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-left flex items-center justify-between"
                                     >
-                                      <Plus size={14} />
-                                      New Tax
+                                      <span className={row.account ? "text-gray-900" : "text-gray-400"}>
+                                        {row.account || ""}
+                                      </span>
+                                      <ChevronDown size={14} className="text-gray-500" />
+                                    </button>
+                                    {openItemizedAccountIndex === idx && (
+                                      <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50">
+                                        <div className="p-2 border-b border-gray-200 flex items-center gap-2">
+                                          <Search size={14} className="text-gray-400" />
+                                          <input
+                                            type="text"
+                                            value={itemizedAccountSearch}
+                                            onChange={(e) => setItemizedAccountSearch(e.target.value)}
+                                            placeholder="Search"
+                                            className="flex-1 border-none outline-none text-sm"
+                                            autoFocus
+                                          />
+                                        </div>
+                                        <div className="max-h-[220px] overflow-y-auto py-1">
+                                          {filteredItemizedExpenseAccounts.map((acc) => {
+                                            const selected = row.account === acc;
+                                            return (
+                                              <button
+                                                key={`${idx}-${acc}`}
+                                                type="button"
+                                                onClick={() => {
+                                                  const next = [...itemRows];
+                                                  next[idx].account = acc;
+                                                  setItemRows(next);
+                                                  setOpenItemizedAccountIndex(null);
+                                                  setItemizedAccountSearch("");
+                                                }}
+                                                className={`w-full px-3 py-2 text-left text-sm ${selected
+                                                  ? "text-[#156372] font-medium hover:bg-[#156372] hover:text-white"
+                                                  : "text-gray-700 hover:bg-[#156372] hover:text-white"
+                                                  }`}
+                                              >
+                                                {acc}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="py-2 px-3 align-top">
+                                  <textarea value={row.itemDetails} onChange={(e) => { const next = [...itemRows]; next[idx].itemDetails = e.target.value; setItemRows(next); }} placeholder="Max. 500 characters" style={{ width: "170px", minWidth: "170px", maxWidth: "170px", height: "36px", minHeight: "36px", padding: "4px 8px", boxSizing: "border-box" }} className="rounded-md border border-gray-300 text-[13px] leading-tight outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372] resize-y" rows={1} />
+                                </td>
+                                <td className="py-2 px-3 align-top">
+                                  <div className="relative itemized-tax-dropdown">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenItemizedAccountIndex(null);
+                                        setItemizedAccountSearch("");
+                                        setOpenItemizedTaxIndex(openItemizedTaxIndex === idx ? null : idx);
+                                      }}
+                                      className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-left flex items-center justify-between"
+                                    >
+                                      <span className={(row as any).tax ? "text-gray-900" : "text-gray-400"}>
+                                        {(row as any).tax || "Select a Tax"}
+                                      </span>
+                                      <ChevronDown size={14} className="text-gray-500" />
+                                    </button>
+                                    {openItemizedTaxIndex === idx && (
+                                      <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50">
+                                        <div className="p-2 border-b border-gray-200 flex items-center gap-2">
+                                          <Search size={14} className="text-gray-400" />
+                                          <input
+                                            type="text"
+                                            value={itemizedTaxSearch}
+                                            onChange={(e) => setItemizedTaxSearch(e.target.value)}
+                                            placeholder="Search"
+                                            className="flex-1 border-none outline-none text-sm"
+                                            autoFocus
+                                          />
+                                        </div>
+                                        <div className="px-3 py-2 text-xs font-semibold text-gray-500">Compound tax</div>
+                                        <div className="max-h-[220px] overflow-y-auto py-1">
+                                          {filteredItemizedTaxes.map((tax: any) => {
+                                            const label = taxLabel(tax);
+                                            const selected = (row as any).tax === label;
+                                            return (
+                                              <button
+                                                key={`${idx}-${getTaxId(tax)}`}
+                                                type="button"
+                                                onClick={() => {
+                                                  const next = [...itemRows] as any[];
+                                                  next[idx].tax = label;
+                                                  setItemRows(next);
+                                                  setOpenItemizedTaxIndex(null);
+                                                  setItemizedTaxSearch("");
+                                                }}
+                                                className={`w-full px-3 py-2 text-left text-sm ${selected
+                                                  ? "text-[#156372] font-medium hover:bg-[#156372] hover:text-white"
+                                                  : "text-gray-700 hover:bg-[#156372] hover:text-white"
+                                                  }`}
+                                              >
+                                                {label}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setOpenItemizedTaxIndex(null);
+                                            openNewTaxQuickAction({ type: "itemized", index: idx });
+                                          }}
+                                          className="w-full border-t border-gray-200 px-3 py-2 text-left text-sm text-[#156372] hover:bg-[#156372] hover:text-white flex items-center gap-2"
+                                        >
+                                          <Plus size={14} />
+                                          New Tax
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="py-2 px-3 w-[120px] align-top">
+                                  <input type="number" value={row.amount || ""} onChange={(e) => { const next = [...itemRows]; next[idx].amount = parseFloat(e.target.value) || 0; setItemRows(next); const total = next.reduce((sum, r) => sum + (Number(r.amount) || 0), 0); setFormData(prev => ({ ...prev, amount: total.toString() })); }} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372]" />
+                                </td>
+                                <td className="text-center">
+                                  <div className="relative inline-block" data-bulk-dropdown="true">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const nextIndex = itemRowMenuOpenIndex === idx ? null : idx;
+                                        if (nextIndex === idx) {
+                                          const rect = e.currentTarget.getBoundingClientRect();
+                                          const menuWidth = 160;
+                                          const left = Math.max(12, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 12));
+                                          const top = Math.min(rect.bottom + 6, window.innerHeight - 220);
+                                          setItemRowMenuPosition({ top, left });
+                                        } else {
+                                          setItemRowMenuPosition(null);
+                                        }
+                                        setItemRowMenuOpenIndex(nextIndex);
+                                      }}
+                                      className="text-gray-500 hover:text-gray-700 p-1"
+                                    >
+                                      <MoreVertical size={16} />
                                     </button>
                                   </div>
-                                )}
-                              </div>
-                            </td>
-                            <td className="py-2 px-3 w-[140px]">
-                              <input type="number" value={row.amount || ""} onChange={(e) => { const next = [...itemRows]; next[idx].amount = parseFloat(e.target.value) || 0; setItemRows(next); const total = next.reduce((sum, r) => sum + (Number(r.amount) || 0), 0); setFormData(prev => ({ ...prev, amount: total.toString() })); }} className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372]" />
-                            </td>
-                            <td className="text-center">
-                              <button onClick={() => { const next = itemRows.filter((_, i) => i !== idx); setItemRows(next); const total = next.reduce((sum, r) => sum + (Number(r.amount) || 0), 0); setFormData(prev => ({ ...prev, amount: total.toString() })); }} className="text-gray-500 hover:text-gray-700 p-1"><MoreVertical size={16} /></button>
-                            </td>
-                          </tr>
-                        ))}
+                                </td>
+                              </tr>
+                              <tr className="border-b border-gray-100">
+                                <td colSpan={6} className="px-0 py-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => setItemRowTagsOpenIndex((prev) => (prev === idx ? null : idx))}
+                                    className="w-full border-0 border-t border-gray-100 bg-white px-3 py-3 text-left text-sm text-gray-700 flex items-center gap-2"
+                                  >
+                                    <Bookmark size={14} className={hasMandatoryTag ? "text-red-600" : "text-gray-500"} />
+                                    <span className={hasMandatoryTag ? "text-red-600" : "text-gray-700"}>Reporting Tags{hasMandatoryTag ? "*" : ""}</span>
+                                    {selectedCount > 0 && (
+                                      <span className="ml-auto text-xs text-gray-500">
+                                        {selectedCount} of {totalCount} selected
+                                      </span>
+                                    )}
+                                  </button>
+                                  {itemRowTagsOpenIndex === idx && itemizedShowAdditionalInformation && (
+                                    <div className="border-t border-gray-100 bg-[#fafafa] px-4 py-3">
+                                      <div className="grid gap-4 md:grid-cols-3">
+                                        {rowTags.slice(0, 3).map((tag: any, tagIndex: number) => {
+                                          const options = Array.isArray(tag?.options) ? tag.options : [];
+                                          const tagKey = String(tag?.tagId || tag?.id || tag?.name || tagIndex);
+                                          return (
+                                            <div key={`item-row-tag-${row.id}-${tagKey}-${tagIndex}`} className="flex flex-col gap-2">
+                                              <label className={`text-sm font-medium ${tag?.isMandatory ? "text-red-600" : "text-gray-900"}`}>
+                                                {String(tag?.name || "Reporting Tag")}{tag?.isMandatory ? "*" : ""}
+                                              </label>
+                                              <select
+                                                value={String(tag?.value || "")}
+                                                onChange={(e) => {
+                                                  const value = e.target.value;
+                                                  setItemRows((prev) => {
+                                                    const next = [...prev];
+                                                    const current = (next[idx] || {}) as ItemRow;
+                                                    const currentTags = normalizeRowReportingTags(current.reportingTags);
+                                                    currentTags[tagIndex] = { ...currentTags[tagIndex], value };
+                                                    next[idx] = { ...current, reportingTags: currentTags };
+                                                    return next;
+                                                  });
+                                                }}
+                                                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
+                                              >
+                                                <option value="">None</option>
+                                                {options.map((option: string) => (
+                                                  <option key={`${tagKey}-${option}`} value={option}>{option}</option>
+                                                ))}
+                                              </select>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            </React.Fragment>
+                          );
+                        })}
                       </tbody>
                     </table>
-                    <div className="border-t border-gray-200 px-3 py-4 text-sm text-gray-700 flex items-center gap-2"><Bookmark size={14} className="text-gray-500" />Reporting Tags<ChevronDown size={14} className="text-gray-500" /></div>
+                    {typeof document !== "undefined" && document.body && itemRowMenuOpenIndex !== null && itemRowMenuPosition && createPortal(
+                      <div
+                        data-bulk-dropdown="true"
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          position: "fixed",
+                          top: `${itemRowMenuPosition.top}px`,
+                          left: `${itemRowMenuPosition.left}px`,
+                          width: "160px",
+                          minWidth: "160px",
+                          background: "white",
+                          border: "1px solid #d1d5db",
+                          borderRadius: "8px",
+                          boxShadow: "0 10px 18px rgba(0,0,0,0.12)",
+                          zIndex: 999999,
+                          overflow: "hidden",
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const rowIndex = itemRowMenuOpenIndex;
+                            if (rowIndex === null) return;
+                            const source = itemRows[rowIndex];
+                            if (!source) return;
+                            const clone = {
+                              ...source,
+                              id: Date.now() + Math.floor(Math.random() * 1000),
+                            };
+                            const next = [...itemRows];
+                            next.splice(rowIndex + 1, 0, clone);
+                            setItemRows(next);
+                            syncItemRowsTotal(next);
+                            setItemRowMenuOpenIndex(null);
+                            setItemRowMenuPosition(null);
+                          }}
+                          style={{
+                            width: "100%",
+                            padding: "8px 10px",
+                            border: "none",
+                            background: "white",
+                            color: "#4b5563",
+                            textAlign: "left",
+                            fontSize: "12px",
+                            cursor: "pointer",
+                          }}
+                          onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = "#f3f4f6")}
+                          onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = "white")}
+                        >
+                          Clone
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const rowIndex = itemRowMenuOpenIndex;
+                            if (rowIndex === null) return;
+                            const next = [...itemRows];
+                            next.splice(rowIndex + 1, 0, createItemRow());
+                            setItemRows(next);
+                            syncItemRowsTotal(next);
+                            setItemRowMenuOpenIndex(null);
+                            setItemRowMenuPosition(null);
+                          }}
+                          style={{
+                            width: "100%",
+                            padding: "8px 10px",
+                            border: "none",
+                            borderTop: "1px solid #e5e7eb",
+                            background: "white",
+                            color: "#4b5563",
+                            textAlign: "left",
+                            fontSize: "12px",
+                            cursor: "pointer",
+                          }}
+                          onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = "#f3f4f6")}
+                          onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = "white")}
+                        >
+                          Insert New Row
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setItemizedShowAdditionalInformation((prev) => !prev);
+                            setItemRowMenuOpenIndex(null);
+                            setItemRowMenuPosition(null);
+                          }}
+                          style={{
+                            width: "100%",
+                            padding: "8px 10px",
+                            border: "none",
+                            borderTop: "1px solid #e5e7eb",
+                            background: "white",
+                            color: "#4b5563",
+                            textAlign: "left",
+                            fontSize: "12px",
+                            cursor: "pointer",
+                          }}
+                          onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = "#f3f4f6")}
+                          onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = "white")}
+                        >
+                          {itemizedShowAdditionalInformation ? "Hide Additional Information" : "Show Additional Information"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const rowIndex = itemRowMenuOpenIndex;
+                            if (rowIndex === null) return;
+                            if (itemRows.length <= 1) return;
+                            const next = itemRows.filter((_, i) => i !== rowIndex);
+                            setItemRows(next);
+                            syncItemRowsTotal(next);
+                            setItemRowMenuOpenIndex(null);
+                            setItemRowMenuPosition(null);
+                          }}
+                          style={{
+                            width: "100%",
+                            padding: "8px 10px",
+                            border: "none",
+                            borderTop: "1px solid #e5e7eb",
+                            background: "white",
+                            color: "#4b5563",
+                            textAlign: "left",
+                            fontSize: "12px",
+                            cursor: "pointer",
+                          }}
+                          onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = "#f3f4f6")}
+                          onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = "white")}
+                        >
+                          Remove
+                        </button>
+                      </div>,
+                      document.body
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between py-3">
-                    <button onClick={() => setItemRows([...itemRows, { id: Date.now(), itemDetails: "", account: "", tax: "", quantity: 1, rate: 0, amount: 0 } as any])} className="px-3 py-1.5 rounded-md bg-[#eef2ff] text-[#2563eb] text-sm font-medium flex items-center gap-1"><Plus size={14} />Add New Row</button>
-                    <div className="flex items-center gap-10"><span className="text-base font-semibold text-gray-900">Expense Total ( {formData.currency || baseCurrencyCode} )</span><span className="text-[28px] font-semibold text-gray-900">{parseFloat(formData.amount || "0").toFixed(2)}</span></div>
+                    <button onClick={() => setItemRows([...itemRows, createItemRow()])} className="px-3 py-1.5 rounded-md bg-[#156372] text-white text-sm font-medium flex items-center gap-1 hover:bg-[#0D4A52]"><Plus size={14} />Add New Row</button>
+                    <div className="flex items-center gap-6"><span className="text-sm font-semibold text-gray-900">Expense Total ( {formData.currency || baseCurrencyCode} )</span><span className="text-[20px] font-semibold leading-none text-gray-900">{parseFloat(formData.amount || "0").toFixed(2)}</span></div>
                   </div>
 
                   <div className="h-px bg-gray-200 my-6"></div>
@@ -3268,8 +3672,7 @@ export default function RecordExpense() {
                           </div>
                         )}
                       </div>
-                      <button onClick={() => setCustomerSearchModalOpen(true)} className="h-[38px] px-3 bg-[#16a34a] text-white rounded-r-md rounded-l-none hover:bg-[#15803d] transition-colors" type="button"><Search size={16} /></button>
-                      <label className={`flex items-center gap-1.5 text-sm ${formData.customer_id ? "text-gray-700" : "text-gray-400"}`}><input type="checkbox" name="billable" checked={!!formData.billable} disabled={!formData.customer_id} onChange={handleChange} className="h-4 w-4 rounded border-gray-300 text-[#156372] focus:ring-[#156372] disabled:cursor-not-allowed" />Billable</label>
+                      <button onClick={() => setCustomerSearchModalOpen(true)} className="h-[38px] px-3 bg-[#156372] text-white rounded-r-md rounded-l-none hover:bg-[#0D4A52] transition-colors" type="button"><Search size={16} /></button>
                     </div>
                   </div>
 
@@ -3362,9 +3765,9 @@ export default function RecordExpense() {
                   )}
                 </div>
 
-                <div className="w-[380px]">
+                <div className="w-[320px]">
                   {uploadedFiles.length > 0 ? (
-                    <div className="bg-white border border-[#cbd5e1] rounded-xl min-h-[440px] flex flex-col overflow-hidden">
+                    <div className="bg-white border border-[#cbd5e1] rounded-xl min-h-[360px] flex flex-col overflow-hidden">
                       <div className="px-4 py-3 border-b border-[#dbe1ea]">
                         <div className="flex w-full items-stretch">
                           <button
@@ -3372,7 +3775,6 @@ export default function RecordExpense() {
                             className="flex-1 bg-transparent text-[#334155] py-1.5 px-2 text-sm font-medium flex items-center justify-center gap-2"
                           >
                             <UploadIcon size={15} />
-                            Upload your Files
                             <ChevronDown size={14} className="text-gray-400" />
                           </button>
                         </div>
@@ -3385,32 +3787,35 @@ export default function RecordExpense() {
                             className="max-h-[260px] w-auto rounded-md border border-gray-200 object-contain"
                           />
                         ) : (
-                          <>
-                            <div className="w-24 h-24 rounded-xl bg-[#eff6ff] flex items-center justify-center">
-                              <File size={38} className="text-[#2563eb]" />
+                          <div className="mx-auto flex w-full max-w-[200px] flex-col items-center rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-[#eff6ff]">
+                              <File size={28} className="text-[#2563eb]" />
                             </div>
-                            <p className="mt-3 text-lg font-semibold text-[#334155]">{getDocumentTypeLabel(uploadedFiles[0])}</p>
-                          </>
+                            <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#64748b]">
+                              Document
+                            </p>
+                            <p className="mt-1 break-all text-[13px] font-medium text-[#334155]">
+                              {String(uploadedFiles[0]?.name || "Uploaded file")}
+                            </p>
+                            <p className="mt-1 text-[11px] text-[#64748b]">
+                              {getDocumentTypeLabel(uploadedFiles[0])}
+                            </p>
+                          </div>
                         )}
-                        <p className="mt-3 text-[22px] text-[#475569] break-all">{uploadedFiles[0]?.name}</p>
                       </div>
                       <div className="px-4 py-3 border-t border-dashed border-[#dbe1ea] flex items-center justify-between">
-                        <span className="text-[24px] text-[#475569]">1 of {uploadedFiles.length} Files</span>
+                        <span className="text-[16px] text-[#475569]">1 of {uploadedFiles.length} Files</span>
                         <button onClick={() => handleRemoveFile(uploadedFiles[0].id)} className="text-[#ef4444] hover:text-[#dc2626]">
-                          <Trash2 size={15} />
+                          <Trash2 size={13} />
                         </button>
                       </div>
                     </div>
                   ) : (
-                    <div className="bg-white border border-dashed border-[#cbd5e1] rounded-lg p-8 min-h-[440px] flex flex-col items-center text-center">
-                      <div className="w-16 h-16 bg-teal-50 rounded-lg flex items-center justify-center mb-6"><ImageIcon size={32} className="text-blue-900" /></div>
-                      <h3 className="text-base font-semibold text-gray-900 mb-1">Drag or Drop your Receipts</h3>
-                      <p className="text-xs text-gray-500 mb-8">Maximum file size allowed is 10MB</p>
-                      <div className="flex w-full items-stretch">
-                        <button onClick={handleUploadClick} className="flex-1 bg-[#f1f5f9] border border-[#d1d5db] text-[#334155] py-2.5 px-4 rounded-l-md text-sm font-medium flex items-center justify-center gap-2 hover:bg-[#e2e8f0] transition-colors"><UploadIcon size={16} />Upload your Files</button>
-                        <button className="px-3 bg-[#f1f5f9] border border-[#d1d5db] border-l-0 rounded-r-md text-gray-500 hover:bg-[#e2e8f0]"><ChevronDown size={14} /></button>
-                      </div>
-                    </div>
+                    <button type="button" onClick={handleUploadClick} className="bg-white border border-dashed border-[#d4dce8] rounded-[14px] px-8 py-8 h-[300px] w-full flex flex-col items-center justify-center text-center cursor-pointer">
+                      <ImageIcon size={36} className="text-[#103d49] mb-8" />
+                      <h3 className="text-[18px] font-semibold text-gray-900 leading-tight mb-1">Drag or Drop your Receipts</h3>
+                      <p className="text-xs text-gray-500">Maximum file size allowed is 10MB</p>
+                    </button>
                   )}
                   <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" multiple accept="image/*,.pdf" />
                 </div>
@@ -3585,7 +3990,7 @@ export default function RecordExpense() {
                           </table>
                           <div className="flex justify-between items-center mt-2">
                             <button
-                              onClick={() => setItemRows([...itemRows, { id: Date.now(), itemDetails: "", account: "", tax: "", quantity: 1, rate: 0, amount: 0 }])}
+                              onClick={() => setItemRows([...itemRows, { id: Date.now(), itemDetails: "", account: "", tax: "", quantity: 1, rate: 0, amount: 0, reportingTags: [] }])}
                               className="text-xs text-[#156372] hover:underline"
                             >
                               + Add another line
@@ -3732,7 +4137,7 @@ export default function RecordExpense() {
                             name="amountIs"
                             checked={formData.is_inclusive_tax === true}
                             onChange={() => setFormData(prev => ({ ...prev, is_inclusive_tax: true }))}
-                            className="peer h-4 w-4 cursor-pointer appearance-none rounded-full border border-gray-300 checked:border-[#2196F3] checked:bg-[#2196F3] transition-all"
+                            className="peer h-4 w-4 cursor-pointer appearance-none rounded-full border border-gray-300 checked:border-[#156372] checked:bg-[#156372] transition-all"
                           />
                           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-white opacity-0 peer-checked:opacity-100 pointer-events-none"></div>
                         </div>
@@ -3745,7 +4150,7 @@ export default function RecordExpense() {
                             name="amountIs"
                             checked={formData.is_inclusive_tax === false}
                             onChange={() => setFormData(prev => ({ ...prev, is_inclusive_tax: false }))}
-                            className="peer h-4 w-4 cursor-pointer appearance-none rounded-full border border-gray-300 checked:border-[#2196F3] checked:bg-[#2196F3] transition-all"
+                            className="peer h-4 w-4 cursor-pointer appearance-none rounded-full border border-gray-300 checked:border-[#156372] checked:bg-[#156372] transition-all"
                           />
                           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-white opacity-0 peer-checked:opacity-100 pointer-events-none"></div>
                         </div>
@@ -3764,91 +4169,133 @@ export default function RecordExpense() {
                         <button
                           type="button"
                           onClick={() => setExpenseTaxDropdownOpen((prev) => !prev)}
-                          className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-left flex items-center justify-between outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
+                          className="h-[34px] w-full rounded border border-gray-300 bg-white px-3 text-left text-[13px] transition-colors hover:border-gray-400 outline-none"
+                          style={expenseTaxDropdownOpen ? { borderColor: "#156372" } : {}}
                         >
-                          <span className={formData.tax ? "text-gray-900" : "text-gray-400"}>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className={formData.tax ? "text-[#1f2937]" : "text-[#6b7280]"}>
                             {formData.tax
                               ? taxLabel(taxes.find((tax: any) => getTaxId(tax) === String(formData.tax)) || { name: formData.tax, rate: 0 })
                               : "Select a Tax"}
-                          </span>
-                          <span className="flex items-center">
-                            {formData.tax && (
-                              <span
-                                role="button"
-                                tabIndex={0}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setFormData((prev) => ({ ...prev, tax: "" }));
-                                  setTaxAmountOverride("");
-                                  setTaxAmountEditOpen(false);
-                                  setTaxAmountEditValue("");
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter" || e.key === " ") {
-                                    e.preventDefault();
-                                    setFormData((prev) => ({ ...prev, tax: "" }));
-                                    setTaxAmountOverride("");
-                                    setTaxAmountEditOpen(false);
-                                    setTaxAmountEditValue("");
-                                  }
-                                }}
-                                className="text-red-500 hover:text-red-600 px-2"
-                              >
-                                <X size={14} />
-                              </span>
-                            )}
-                            {formData.tax && <span className="h-5 w-px bg-gray-200" />}
-                            <span className="px-2">
-                            {expenseTaxDropdownOpen ? (
-                              <ChevronUp size={14} className="text-gray-500" />
-                            ) : (
-                              <ChevronDown size={14} className="text-gray-500" />
-                            )}
                             </span>
-                          </span>
+                            <ChevronDown
+                              size={14}
+                              className={`transition-transform ${expenseTaxDropdownOpen ? "rotate-180" : ""}`}
+                              style={{ color: "#156372" }}
+                            />
+                          </div>
                         </button>
                         {expenseTaxDropdownOpen && (
-                          <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50">
-                            <div className="p-2 border-b border-gray-200 flex items-center gap-2">
-                              <Search size={14} className="text-gray-400" />
-                              <input
-                                type="text"
-                                value={expenseTaxSearch}
-                                onChange={(e) => setExpenseTaxSearch(e.target.value)}
-                                placeholder="Search"
-                                className="flex-1 border-none outline-none text-sm"
-                                autoFocus
-                              />
+                          <div className="absolute left-0 top-full z-[9999] mt-1 w-full rounded-xl border border-[#d6dbe8] bg-white p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+                            <div className="p-2">
+                              <div className="flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-all focus-within:bg-white" style={{ borderColor: "#156372" }}>
+                                <Search size={14} className="text-slate-400" />
+                                <input
+                                  type="text"
+                                  value={expenseTaxSearch}
+                                  onChange={(e) => setExpenseTaxSearch(e.target.value)}
+                                  placeholder="Search..."
+                                  className="w-full border-none bg-transparent text-[13px] text-slate-700 outline-none placeholder:text-slate-400"
+                                  autoFocus
+                                />
+                              </div>
                             </div>
-                            <div className="px-3 py-2 text-xs font-semibold text-gray-500">Compound tax</div>
-                            <div className="max-h-[220px] overflow-y-auto py-1">
-                              {filteredExpenseTaxes.map((tax: any) => {
-                                const taxId = getTaxId(tax);
-                                const label = taxLabel(tax);
-                                const selected = String(formData.tax || "") === taxId;
-                                return (
-                                  <button
-                                    key={taxId}
-                                    type="button"
-                                    onClick={() => {
-                                      setFormData((prev) => ({ ...prev, tax: taxId }));
-                                      setTaxAmountOverride("");
-                                      setTaxAmountEditOpen(false);
-                                      setTaxAmountEditValue("");
-                                      setExpenseTaxDropdownOpen(false);
-                                      setExpenseTaxSearch("");
-                                    }}
-                                    className={`w-full px-3 py-2 text-left text-sm ${selected
-                                      ? "text-[#156372] font-medium hover:bg-[#156372] hover:text-white"
-                                      : "text-gray-700 hover:bg-[#156372] hover:text-white"
-                                      }`}
-                                  >
-                                    {label}
-                                  </button>
-                                );
-                              })}
-                              {filteredExpenseTaxes.length === 0 && (
-                                <div className="px-3 py-2 text-sm text-gray-500">No taxes found</div>
+                            <div className="max-h-64 overflow-y-auto py-1 custom-scrollbar">
+                              {!hasExpenseTaxes ? (
+                                <div className="px-4 py-3 text-center text-[13px] text-slate-400">No taxes found</div>
+                              ) : (
+                                <>
+                                  {filteredExpenseNormalTaxes.length > 0 && (
+                                    <>
+                                      <div className="px-4 py-1.5 text-[10px] font-extrabold uppercase tracking-widest text-slate-700">Tax</div>
+                                      {filteredExpenseNormalTaxes.map((tax: any) => {
+                                        const taxId = getTaxId(tax);
+                                        const label = taxLabel(tax);
+                                        const selected = String(formData.tax || "") === taxId;
+                                        return (
+                                          <button
+                                            key={taxId}
+                                            type="button"
+                                            onClick={() => {
+                                              setFormData((prev) => ({ ...prev, tax: taxId }));
+                                              setTaxAmountOverride("");
+                                              setTaxAmountEditOpen(false);
+                                              setTaxAmountEditValue("");
+                                              setExpenseTaxDropdownOpen(false);
+                                              setExpenseTaxSearch("");
+                                            }}
+                                            className={`flex w-full items-center justify-between rounded-lg py-2 text-[13px] transition-colors px-4 ${selected ? "font-medium text-white" : "text-slate-700 hover:bg-slate-50"}`}
+                                            style={selected ? { backgroundColor: "#156372" } : undefined}
+                                          >
+                                            <span>{label}</span>
+                                          </button>
+                                        );
+                                      })}
+                                    </>
+                                  )}
+
+                                  {filteredExpenseCompoundTaxes.length > 0 && (
+                                    <>
+                                      <div className="mt-1 px-4 py-1.5 text-[10px] font-extrabold uppercase tracking-widest text-slate-700">
+                                        Compound tax
+                                      </div>
+                                      {filteredExpenseCompoundTaxes.map((tax: any) => {
+                                        const taxId = getTaxId(tax);
+                                        const label = taxLabel(tax);
+                                        const selected = String(formData.tax || "") === taxId;
+                                        return (
+                                          <button
+                                            key={taxId}
+                                            type="button"
+                                            onClick={() => {
+                                              setFormData((prev) => ({ ...prev, tax: taxId }));
+                                              setTaxAmountOverride("");
+                                              setTaxAmountEditOpen(false);
+                                              setTaxAmountEditValue("");
+                                              setExpenseTaxDropdownOpen(false);
+                                              setExpenseTaxSearch("");
+                                            }}
+                                            className={`flex w-full items-center justify-between rounded-lg py-2 text-[13px] transition-colors px-4 ${selected ? "font-medium text-white" : "text-slate-700 hover:bg-slate-50"}`}
+                                            style={selected ? { backgroundColor: "#156372" } : undefined}
+                                          >
+                                            <span>{label}</span>
+                                          </button>
+                                        );
+                                      })}
+                                    </>
+                                  )}
+
+                                  {filteredExpenseTaxGroups.length > 0 && (
+                                    <>
+                                      <div className="mt-1 px-4 py-1.5 text-[10px] font-extrabold uppercase tracking-widest text-slate-700">
+                                        Tax Group
+                                      </div>
+                                      {filteredExpenseTaxGroups.map((tax: any) => {
+                                        const taxId = getTaxId(tax);
+                                        const label = taxLabel(tax);
+                                        const selected = String(formData.tax || "") === taxId;
+                                        return (
+                                          <button
+                                            key={taxId}
+                                            type="button"
+                                            onClick={() => {
+                                              setFormData((prev) => ({ ...prev, tax: taxId }));
+                                              setTaxAmountOverride("");
+                                              setTaxAmountEditOpen(false);
+                                              setTaxAmountEditValue("");
+                                              setExpenseTaxDropdownOpen(false);
+                                              setExpenseTaxSearch("");
+                                            }}
+                                            className={`flex w-full items-center justify-between rounded-lg py-2 text-[13px] transition-colors px-4 ${selected ? "font-medium text-white" : "text-slate-700 hover:bg-slate-50"}`}
+                                            style={selected ? { backgroundColor: "#156372" } : undefined}
+                                          >
+                                            <span>{label}</span>
+                                          </button>
+                                        );
+                                      })}
+                                    </>
+                                  )}
+                                </>
                               )}
                             </div>
                             <button
@@ -3856,9 +4303,10 @@ export default function RecordExpense() {
                               onClick={() => {
                                 openNewTaxQuickAction({ type: "expense" });
                               }}
-                              className="w-full border-t border-gray-200 px-3 py-2 text-left text-sm text-[#156372] hover:bg-[#156372] hover:text-white flex items-center gap-2"
+                              className="w-full flex items-center gap-2 border-t border-slate-100 px-4 py-2.5 text-[13px] font-medium transition-colors hover:bg-slate-50"
+                              style={{ color: "#156372" }}
                             >
-                              <Plus size={14} />
+                              <PlusCircle size={14} />
                               New Tax
                             </button>
                           </div>
@@ -3952,7 +4400,8 @@ export default function RecordExpense() {
                         value={formData.notes}
                         onChange={handleChange}
                         placeholder="Max. 500 characters"
-                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372] min-h-[100px] resize-none"
+                        rows={4}
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372] min-h-[110px] resize-y"
                       />
                     </div>
                   </div>
@@ -4062,17 +4511,6 @@ export default function RecordExpense() {
                       >
                         <Search size={16} />
                       </button>
-                      <label className={`ml-3 flex items-center gap-1.5 text-sm ${formData.customer_id ? "text-gray-700" : "text-gray-400"}`}>
-                        <input
-                          type="checkbox"
-                          name="billable"
-                          checked={!!formData.billable}
-                          disabled={!formData.customer_id}
-                          onChange={handleChange}
-                          className="h-4 w-4 rounded border-gray-300 text-[#156372] focus:ring-[#156372] disabled:cursor-not-allowed"
-                        />
-                        Billable
-                      </label>
                     </div>
                   </div>
 
@@ -4211,16 +4649,15 @@ export default function RecordExpense() {
                 </div>
 
                 {/* Right Section - Receipts */}
-                <div className="w-[380px]">
+                <div className="w-[320px]">
                   {uploadedFiles.length > 0 ? (
-                    <div className="bg-white border border-[#cbd5e1] rounded-xl min-h-[440px] flex flex-col overflow-hidden">
+                    <div className="bg-white border border-[#cbd5e1] rounded-xl min-h-[360px] flex flex-col overflow-hidden">
                       <div className="px-4 py-3 border-b border-[#dbe1ea]">
                         <button
                           onClick={handleUploadClick}
                           className="w-full bg-transparent text-[#334155] py-1.5 px-2 text-sm font-medium flex items-center justify-center gap-2"
                         >
                           <UploadIcon size={15} />
-                          Upload your Files
                           <ChevronDown size={14} className="text-gray-400" />
                         </button>
                       </div>
@@ -4249,27 +4686,18 @@ export default function RecordExpense() {
                       </div>
                     </div>
                   ) : (
-                    <div className="bg-white border border-dashed border-[#cbd5e1] rounded-lg p-8 min-h-[440px] flex flex-col items-center text-center">
-                      <div className="w-16 h-16 bg-teal-50 rounded-lg flex items-center justify-center mb-6">
+                    <div
+                      className="bg-white border border-dashed border-[#cbd5e1] rounded-lg px-5 py-4 min-h-[300px] flex cursor-pointer flex-col items-center text-center"
+                      onClick={handleUploadClick}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      <div className="w-16 h-16 bg-teal-50 rounded-lg flex items-center justify-center mb-4">
                         <ImageIcon size={32} className="text-blue-900" />
                       </div>
                       <h3 className="text-base font-semibold text-gray-900 mb-1">Drag or Drop your Receipts</h3>
-                      <p className="text-xs text-gray-500 mb-8">Maximum file size allowed is 10MB</p>
+                      <p className="text-xs text-gray-500 mb-4">Maximum file size allowed is 10MB</p>
 
-                      <div className="flex w-full items-stretch">
-                        <button
-                          onClick={handleUploadClick}
-                          className="flex-1 bg-[#f1f5f9] border border-[#d1d5db] text-[#334155] py-2.5 px-4 rounded-l-md text-sm font-medium flex items-center justify-center gap-2 hover:bg-[#e2e8f0] transition-colors"
-                        >
-                          <UploadIcon size={16} />
-                          Upload your Files
-                        </button>
-                        <button
-                          className="px-3 bg-[#f1f5f9] border border-[#d1d5db] border-l-0 rounded-r-md text-gray-500 hover:bg-[#e2e8f0]"
-                        >
-                          <ChevronDown size={14} />
-                        </button>
-                      </div>
                     </div>
                   )}
                   <input
@@ -4312,12 +4740,16 @@ export default function RecordExpense() {
                         <th style={{ padding: "10px", textAlign: "left", fontSize: "11px", fontWeight: "600", color: "#6b7280", textTransform: "uppercase", whiteSpace: "nowrap" }}>
                           PROJECTS
                         </th>
-                        <th style={{ padding: "10px", textAlign: "center", fontSize: "11px", fontWeight: "600", color: "#6b7280", textTransform: "uppercase", whiteSpace: "nowrap" }}>
-                          BILLABLE
-                        </th>
-                        <th style={{ padding: "10px", textAlign: "left", fontSize: "11px", fontWeight: "600", color: "#dc2626", textTransform: "uppercase", whiteSpace: "nowrap" }}>
-                          REPORTING TAGS
-                        </th>
+                        {bulkShowAdditionalInformation && (
+                          <>
+                            <th style={{ padding: "10px", textAlign: "center", fontSize: "11px", fontWeight: "600", color: "#6b7280", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                              BILLABLE
+                            </th>
+                            <th style={{ padding: "10px", textAlign: "left", fontSize: "11px", fontWeight: "600", color: "#dc2626", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                              REPORTING TAGS
+                            </th>
+                          </>
+                        )}
                         <th style={{ padding: "10px 6px", textAlign: "center", width: "44px", minWidth: "44px", position: "sticky", right: 0, background: "#f9fafb", zIndex: 2 }}></th>
                       </tr>
                     </thead>
@@ -4939,63 +5371,67 @@ export default function RecordExpense() {
                             </div>
                           </td>
 
-                          {/* BILLABLE */}
-                          <td style={{ padding: "6px 10px", textAlign: "center" }}>
-                            <input
-                              type="checkbox"
-                              checked={expense.billable}
-                              onChange={(e) => {
-                                const newExpenses = [...bulkExpenses];
-                                newExpenses[index].billable = e.target.checked;
-                                setBulkExpenses(newExpenses);
-                              }}
-                              style={{ width: "16px", height: "16px", cursor: "pointer" }}
-                            />
-                          </td>
-
-                          {/* REPORTING TAGS */}
-                          <td style={{ padding: "6px 10px" }}>
-                            {(() => {
-                              const rowTags = Array.isArray((expense as any).reportingTags) ? (expense as any).reportingTags : [];
-                              const selectedCount = rowTags.filter((tag: any) => String(tag?.value || "").trim() !== "").length;
-                              const totalCount = Array.isArray(reportingTagDefinitions) && reportingTagDefinitions.length > 0
-                                ? reportingTagDefinitions.length
-                                : rowTags.length;
-                              const hasSelection = selectedCount > 0 && totalCount > 0;
-
-                              return (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const rowTags = Array.isArray((expense as any).reportingTags) ? (expense as any).reportingTags : [];
-                                    const draft: Record<string, string> = {};
-                                    rowTags.forEach((tag: any) => {
-                                      const tagId = String(tag?.tagId || tag?.id || "").trim();
-                                      if (tagId) draft[tagId] = String(tag?.value || "");
-                                    });
-                                    setAssociateTagsRowIndex(index);
-                                    setAssociateTagsDraft(draft);
-                                    setAssociateTagsModalOpen(true);
+                          {bulkShowAdditionalInformation && (
+                            <>
+                              {/* BILLABLE */}
+                              <td style={{ padding: "6px 10px", textAlign: "center" }}>
+                                <input
+                                  type="checkbox"
+                                  checked={expense.billable}
+                                  onChange={(e) => {
+                                    const newExpenses = [...bulkExpenses];
+                                    newExpenses[index].billable = e.target.checked;
+                                    setBulkExpenses(newExpenses);
                                   }}
-                                  style={{
-                                    border: "none",
-                                    background: "#f3f4f6",
-                                    color: hasSelection ? "#065f46" : "#374151",
-                                    borderRadius: "4px",
-                                    padding: "5px 8px",
-                                    fontSize: "13px",
-                                    cursor: "pointer",
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: "6px",
-                                  }}
-                                >
-                                  <Bookmark size={12} />
-                                  {hasSelection ? `${selectedCount} out of ${totalCount} selected.` : "Associate Tags"}
-                                </button>
-                              );
-                            })()}
-                          </td>
+                                  style={{ width: "16px", height: "16px", cursor: "pointer" }}
+                                />
+                              </td>
+
+                              {/* REPORTING TAGS */}
+                              <td style={{ padding: "6px 10px" }}>
+                                {(() => {
+                                  const rowTags = Array.isArray((expense as any).reportingTags) ? (expense as any).reportingTags : [];
+                                  const selectedCount = rowTags.filter((tag: any) => String(tag?.value || "").trim() !== "").length;
+                                  const totalCount = Array.isArray(reportingTagDefinitions) && reportingTagDefinitions.length > 0
+                                    ? reportingTagDefinitions.length
+                                    : rowTags.length;
+                                  const hasSelection = selectedCount > 0 && totalCount > 0;
+
+                                  return (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const rowTags = Array.isArray((expense as any).reportingTags) ? (expense as any).reportingTags : [];
+                                        const draft: Record<string, string> = {};
+                                        rowTags.forEach((tag: any) => {
+                                          const tagId = String(tag?.tagId || tag?.id || "").trim();
+                                          if (tagId) draft[tagId] = String(tag?.value || "");
+                                        });
+                                        setAssociateTagsRowIndex(index);
+                                        setAssociateTagsDraft(draft);
+                                        setAssociateTagsModalOpen(true);
+                                      }}
+                                      style={{
+                                        border: "none",
+                                        background: "#f3f4f6",
+                                        color: hasSelection ? "#065f46" : "#374151",
+                                        borderRadius: "4px",
+                                        padding: "5px 8px",
+                                        fontSize: "13px",
+                                        cursor: "pointer",
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: "6px",
+                                      }}
+                                    >
+                                      <Bookmark size={12} />
+                                      {hasSelection ? `${selectedCount} out of ${totalCount} selected.` : "Associate Tags"}
+                                    </button>
+                                  );
+                                })()}
+                              </td>
+                            </>
+                          )}
 
                           {/* Actions */}
                           <td style={{ padding: "6px 6px", textAlign: "center", width: "44px", minWidth: "44px", position: "sticky", right: 0, background: "#ffffff", zIndex: bulkRowMenuOpenIndex === index ? 200 : 1 }}>
@@ -5004,7 +5440,17 @@ export default function RecordExpense() {
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setBulkRowMenuOpenIndex((prev) => (prev === index ? null : index));
+                                  const nextIndex = bulkRowMenuOpenIndex === index ? null : index;
+                                  if (nextIndex === index) {
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    const menuWidth = 180;
+                                    const left = Math.max(12, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 12));
+                                    const top = Math.min(rect.bottom + 6, window.innerHeight - 220);
+                                    setBulkRowMenuPosition({ top, left });
+                                  } else {
+                                    setBulkRowMenuPosition(null);
+                                  }
+                                  setBulkRowMenuOpenIndex(nextIndex);
                                 }}
                                 style={{
                                   border: "none",
@@ -5019,71 +5465,6 @@ export default function RecordExpense() {
                               >
                                 <MoreVertical size={18} />
                               </button>
-                              {bulkRowMenuOpenIndex === index && (
-                                <div
-                                  onClick={(e) => e.stopPropagation()}
-                                  style={{
-                                    position: "absolute",
-                                    top: "calc(100% + 4px)",
-                                    right: 0,
-                                    minWidth: "110px",
-                                    background: "white",
-                                    border: "1px solid #d1d5db",
-                                    borderRadius: "8px",
-                                    boxShadow: "0 10px 18px rgba(0,0,0,0.12)",
-                                    zIndex: 999,
-                                    overflow: "hidden",
-                                  }}
-                                >
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setBulkExpenses((prev) => {
-                                        const clone = { ...prev[index], id: Date.now() + Math.floor(Math.random() * 1000) };
-                                        const next = [...prev];
-                                        next.splice(index + 1, 0, clone);
-                                        return next;
-                                      });
-                                      setBulkRowMenuOpenIndex(null);
-                                    }}
-                                    style={{
-                                      width: "100%",
-                                      padding: "8px 12px",
-                                      border: "none",
-                                      background: "#3b82f6",
-                                      color: "white",
-                                      textAlign: "left",
-                                      fontSize: "13px",
-                                      cursor: "pointer",
-                                    }}
-                                  >
-                                    Clone
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setBulkExpenses((prev) => {
-                                        if (prev.length <= 1) return prev;
-                                        return prev.filter((_, i) => i !== index);
-                                      });
-                                      setBulkRowMenuOpenIndex(null);
-                                    }}
-                                    style={{
-                                      width: "100%",
-                                      padding: "8px 12px",
-                                      border: "none",
-                                      borderTop: "1px solid #e5e7eb",
-                                      background: "white",
-                                      color: "#4b5563",
-                                      textAlign: "left",
-                                      fontSize: "13px",
-                                      cursor: "pointer",
-                                    }}
-                                  >
-                                    Remove
-                                  </button>
-                                </div>
-                              )}
                             </div>
                           </td>
                         </tr>
@@ -5097,20 +5478,14 @@ export default function RecordExpense() {
                   <button
                     type="button"
                     onClick={() => {
-                      setBulkExpenses([...bulkExpenses, {
-                        id: Date.now(),
-                        date: "",
-                        expenseAccount: "",
-                        amount: "",
-                        currency: baseCurrencyCode || "USD",
-                        location: locationOptions[0] || "Head Office",
-                        tax: "",
-                        is_inclusive_tax: true,
-                        customerName: "",
-                        projects: "",
-                        billable: false,
-                        reportingTags: [],
-                      }]);
+                      setBulkExpenses((prev) => [
+                        ...prev,
+                        createBulkExpenseRow({
+                          date: "",
+                          currency: baseCurrencyCode || "USD",
+                          location: locationOptions[0] || "Head Office",
+                        }),
+                      ]);
                     }}
                     style={{
                       padding: "0",
@@ -5130,6 +5505,132 @@ export default function RecordExpense() {
             </div>
           )}
 
+          {typeof document !== "undefined" && document.body && bulkRowMenuOpenIndex !== null && bulkRowMenuPosition && createPortal(
+            <div
+              data-bulk-dropdown="true"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: "fixed",
+                top: `${bulkRowMenuPosition.top}px`,
+                left: `${bulkRowMenuPosition.left}px`,
+                minWidth: "180px",
+                background: "white",
+                border: "1px solid #d1d5db",
+                borderRadius: "8px",
+                boxShadow: "0 10px 18px rgba(0,0,0,0.12)",
+                zIndex: 999999,
+                overflow: "hidden",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  const rowIndex = bulkRowMenuOpenIndex;
+                  if (rowIndex === null) return;
+                  setBulkExpenses((prev) => {
+                    const clone = { ...prev[rowIndex], id: Date.now() + Math.floor(Math.random() * 1000) };
+                    const next = [...prev];
+                    next.splice(rowIndex + 1, 0, clone);
+                    return next;
+                  });
+                  setBulkRowMenuOpenIndex(null);
+                  setBulkRowMenuPosition(null);
+                }}
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  border: "none",
+                  background: "#3b82f6",
+                  color: "white",
+                  textAlign: "left",
+                  fontSize: "13px",
+                  cursor: "pointer",
+                }}
+              >
+                Clone
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const rowIndex = bulkRowMenuOpenIndex;
+                  if (rowIndex === null) return;
+                  setBulkExpenses((prev) => {
+                    const next = [...prev];
+                    next.splice(rowIndex + 1, 0, createBulkExpenseRow({
+                      date: "",
+                      currency: baseCurrencyCode || "USD",
+                      location: locationOptions[0] || "Head Office",
+                    }));
+                    return next;
+                  });
+                  setBulkRowMenuOpenIndex(null);
+                  setBulkRowMenuPosition(null);
+                }}
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  border: "none",
+                  borderTop: "1px solid #e5e7eb",
+                  background: "white",
+                  color: "#4b5563",
+                  textAlign: "left",
+                  fontSize: "13px",
+                  cursor: "pointer",
+                }}
+              >
+                Insert New Row
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setBulkShowAdditionalInformation((prev) => !prev);
+                  setBulkRowMenuOpenIndex(null);
+                  setBulkRowMenuPosition(null);
+                }}
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  border: "none",
+                  borderTop: "1px solid #e5e7eb",
+                  background: "white",
+                  color: "#4b5563",
+                  textAlign: "left",
+                  fontSize: "13px",
+                  cursor: "pointer",
+                }}
+              >
+                {bulkShowAdditionalInformation ? "Hide Additional Information" : "Show Additional Information"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const rowIndex = bulkRowMenuOpenIndex;
+                  if (rowIndex === null) return;
+                  setBulkExpenses((prev) => {
+                    if (prev.length <= 1) return prev;
+                    return prev.filter((_, i) => i !== rowIndex);
+                  });
+                  setBulkRowMenuOpenIndex(null);
+                  setBulkRowMenuPosition(null);
+                }}
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  border: "none",
+                  borderTop: "1px solid #e5e7eb",
+                  background: "white",
+                  color: "#4b5563",
+                  textAlign: "left",
+                  fontSize: "13px",
+                  cursor: "pointer",
+                }}
+              >
+                Remove
+              </button>
+            </div>,
+            document.body
+          )}
+
 
           {/* Bottom Action Buttons */}
           {activeTab !== "mileage" && (
@@ -5137,16 +5638,16 @@ export default function RecordExpense() {
               <button
                 type="button"
                 className="bg-[#156372] hover:bg-[#0D4A52] text-white px-6 py-2.5 rounded-md border border-[#156372] text-sm font-medium"
-                onClick={handleSave}
+                onClick={handleSaveClick}
                 disabled={!!saveLoadingState}
               >
                 {saveLoadingState === "save" ? "Saving..." : (isEdit ? "Update" : "Save")} <span className="text-xs opacity-75">(Alt+S)</span>
               </button>
               {!isEdit && (
-                <button
+              <button
                   type="button"
                   className="bg-white text-gray-700 px-6 py-2.5 rounded-md border border-gray-300 hover:bg-gray-50 text-sm font-medium"
-                  onClick={handleSaveAndNew}
+                  onClick={handleSaveAndNewClick}
                   disabled={!!saveLoadingState}
                 >
                   {saveLoadingState === "saveAndNew" ? "Saving..." : "Save and New"} <span className="text-xs opacity-75">(Alt+N)</span>

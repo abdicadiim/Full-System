@@ -17,6 +17,9 @@ export default function Layout({ children }) {
     location.pathname.startsWith("/products/checkout-button") ||
     location.pathname.startsWith("/products/pricing-widgets/new");
   const isFullWidthPage =
+    location.pathname === "/expenses" ||
+    location.pathname === "/expenses/receipts" ||
+    location.pathname === "/expenses/recurring-expenses" ||
     location.pathname.startsWith("/time-tracking") ||
     location.pathname.startsWith("/sales/subscriptions") ||
     location.pathname.startsWith("/sales/customers") ||

@@ -41,6 +41,7 @@ import {
   SlidersHorizontal,
   Info,
   Paperclip,
+  PlusCircle,
 } from "lucide-react";
 
 const EXPENSES_KEY = "expenses_v1";
@@ -1689,10 +1690,10 @@ export default function Expenses() {
   };
 
   return (
-    <div className="w-full border border-gray-200 bg-white">
+    <div className="flex flex-col h-[calc(100vh-72px)] w-full bg-white font-sans text-gray-800 antialiased relative overflow-hidden">
       {/* Header */}
       {selectedExpenses.length === 0 && (
-        <div className="border-b border-gray-200 bg-white px-6 py-4">
+        <div className="flex-none border-b border-gray-100 bg-white px-6 py-6">
           <div className="flex items-center justify-between gap-4">
             <div className="flex flex-1 items-center gap-6">
               <button
@@ -1718,10 +1719,14 @@ export default function Expenses() {
                     {expenseViews.map((view) => (
                       <button
                         key={view}
-                        className={`flex w-full items-center justify-between px-4 py-2 text-left text-sm ${selectedView === view ? "border-l-[3px] border-l-[#156372] bg-[#15637210] text-gray-700" : "bg-transparent text-gray-700 hover:bg-gray-50"}`}
+                        className={`flex w-full items-center justify-between px-4 py-2 text-left text-sm ${selectedView === view ? "bg-transparent text-gray-700" : "bg-transparent text-gray-700 hover:bg-gray-50"}`}
                         onClick={() => handleViewSelect(view)}
                       >
-                        <span className="flex-1">{view}</span>
+                        <span
+                          className={`inline-flex items-center rounded-md px-2 py-1 ${selectedView === view ? "border border-[#156372] text-[#156372]" : "border border-transparent text-gray-700"}`}
+                        >
+                          {view}
+                        </span>
                         <Star
                           size={16}
                           className="h-4 w-4 text-gray-400"
@@ -1738,7 +1743,7 @@ export default function Expenses() {
                         navigate("/expenses/custom-view/new");
                       }}
                     >
-                      <Plus size={16} />
+                      <PlusCircle size={16} className="text-[#156372]" />
                       New Custom View
                     </button>
                   </div>
@@ -1772,7 +1777,7 @@ export default function Expenses() {
                 />
               </div>
               <button
-                className="flex cursor-pointer items-center gap-1 rounded-md border-none bg-emerald-500 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600"
+                className="flex cursor-pointer items-center gap-1 rounded-md border-none bg-[#156372] px-4 py-2 text-sm font-medium text-white hover:bg-[#0f4f5a]"
                 onClick={() => navigate("/expenses/new")}
               >
                 <Plus size={16} />
@@ -1957,10 +1962,10 @@ export default function Expenses() {
       )}
 
       {/* Main content area */}
-      <div className="p-0">
+      <div className="flex-1 overflow-auto bg-white min-h-0 custom-scrollbar">
         {/* Action Bar - Shows when items are selected */}
         {selectedExpenses.length > 0 && (
-          <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-3">
+          <div className="flex items-center justify-between border-b border-gray-100 bg-white px-4 py-3">
             <div className="flex items-center gap-3">
               <button
                 onClick={handleBulkUpdate}
@@ -2002,11 +2007,10 @@ export default function Expenses() {
           </div>
         )}
 
-        <div className="overflow-x-auto border-t border-gray-200">
-          <table className="w-full min-w-0 border-collapse table-fixed bg-white" style={{ minWidth: `${tableMinWidth}px` }}>
-            <thead className="border-b border-gray-200 bg-gray-50">
+        <table className="w-full min-w-0 border-collapse table-fixed text-[13px] bg-white" style={{ minWidth: `${tableMinWidth}px` }}>
+            <thead className="sticky top-0 z-20 border-b border-gray-200 bg-[#f6f7fb]">
               <tr>
-                <th className="group/header relative px-3 py-3 text-left text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.select }}>
+                <th className="group/header relative px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.select }}>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -2034,50 +2038,50 @@ export default function Expenses() {
                   {renderResizeHandle("select")}
                 </th>
                 {isColumnVisible("date") && (
-                <th className="group/header relative whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.date }}>
+                <th className="group/header relative whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.date }}>
                   DATE
                   {renderResizeHandle("date")}
                 </th>
                 )}
                 {isColumnVisible("location") && (
-                <th className="group/header relative whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.location }}>
+                <th className="group/header relative whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.location }}>
                   LOCATION
                   {renderResizeHandle("location")}
                 </th>
                 )}
                 {isColumnVisible("expenseAccount") && (
-                <th className="group/header relative whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.expenseAccount }}>
+                <th className="group/header relative whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.expenseAccount }}>
                   EXPENSE ACCOUNT
                   {renderResizeHandle("expenseAccount")}
                 </th>
                 )}
                 {isColumnVisible("reference") && (
-                <th className="group/header relative whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.reference }}>
+                <th className="group/header relative whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.reference }}>
                   REFERENCE#
                   {renderResizeHandle("reference")}
                 </th>
                 )}
                 {isColumnVisible("customerName") && (
-                <th className="group/header relative whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.customerName }}>
+                <th className="group/header relative whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.customerName }}>
                   CUSTOMER NAME
                   {renderResizeHandle("customerName")}
                 </th>
                 )}
                 {isColumnVisible("status") && (
-                <th className="group/header relative whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.status }}>
+                <th className="group/header relative whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.status }}>
                   STATUS
                   {renderResizeHandle("status")}
                 </th>
                 )}
                 {isColumnVisible("amount") && (
-                <th className="group/header relative whitespace-nowrap px-3 py-3 text-right text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.amount }}>
+                <th className="group/header relative whitespace-nowrap px-4 py-3 text-right text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.amount }}>
                   <div className="flex items-center justify-between">
                     AMOUNT
                   </div>
                   {renderResizeHandle("amount")}
                 </th>
                 )}
-                <th className="whitespace-nowrap px-3 py-3 text-center text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.actions }}>
+                <th className="whitespace-nowrap px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500" style={{ width: columnWidths.actions }}>
                   <button
                     className="mx-auto flex cursor-pointer items-center border-none bg-transparent p-1 text-gray-500"
                     onClick={() => setShowSearchModal(true)}
@@ -2091,35 +2095,35 @@ export default function Expenses() {
               {isRefreshing ? (
                 // Skeleton loading rows
                 Array.from({ length: 5 }).map((_, index) => (
-                  <tr key={`skeleton-${index}`} className="cursor-pointer border-b border-gray-200">
-                    <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-900" style={{ width: columnWidths.select }}>
+                  <tr key={`skeleton-${index}`} className="group cursor-pointer border-b border-[#eef1f6] h-[50px] hover:bg-[#f8fafc]">
+                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900" style={{ width: columnWidths.select }}>
                       <div className="flex items-center gap-2">
                         <span className="inline-block w-[14px] shrink-0" aria-hidden="true"></span>
                         <div className="h-4 w-4 animate-pulse rounded bg-gray-200"></div>
                       </div>
                     </td>
-                    {isColumnVisible("date") && <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-900" style={{ width: columnWidths.date }}>
+                    {isColumnVisible("date") && <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900" style={{ width: columnWidths.date }}>
                       <div className="h-4 w-[80px] animate-pulse rounded bg-gray-200"></div>
                     </td>}
-                    {isColumnVisible("location") && <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-900" style={{ width: columnWidths.location }}>
+                    {isColumnVisible("location") && <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900" style={{ width: columnWidths.location }}>
                       <div className="h-4 w-[100px] animate-pulse rounded bg-gray-200"></div>
                     </td>}
-                    {isColumnVisible("expenseAccount") && <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-900" style={{ width: columnWidths.expenseAccount }}>
+                    {isColumnVisible("expenseAccount") && <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900" style={{ width: columnWidths.expenseAccount }}>
                       <div className="h-4 w-[150px] animate-pulse rounded bg-gray-200"></div>
                     </td>}
-                    {isColumnVisible("reference") && <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-900" style={{ width: columnWidths.reference }}>
+                    {isColumnVisible("reference") && <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900" style={{ width: columnWidths.reference }}>
                       <div className="h-4 w-[80px] animate-pulse rounded bg-gray-200"></div>
                     </td>}
-                    {isColumnVisible("customerName") && <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-900" style={{ width: columnWidths.customerName }}>
+                    {isColumnVisible("customerName") && <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900" style={{ width: columnWidths.customerName }}>
                       <div className="h-4 w-[100px] animate-pulse rounded bg-gray-200"></div>
                     </td>}
-                    {isColumnVisible("status") && <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-900" style={{ width: columnWidths.status }}>
+                    {isColumnVisible("status") && <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900" style={{ width: columnWidths.status }}>
                       <div className="h-4 w-[80px] animate-pulse rounded bg-gray-200"></div>
                     </td>}
-                    {isColumnVisible("amount") && <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-900" style={{ width: columnWidths.amount }}>
+                    {isColumnVisible("amount") && <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900" style={{ width: columnWidths.amount }}>
                       <div className="h-4 w-[70px] animate-pulse rounded bg-gray-200"></div>
                     </td>}
-                    <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-900" style={{ width: columnWidths.actions }}>
+                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900" style={{ width: columnWidths.actions }}>
                       <div className="mx-auto h-4 w-4 animate-pulse rounded bg-gray-200"></div>
                     </td>
                   </tr>
@@ -2128,7 +2132,7 @@ export default function Expenses() {
                 filteredExpenses.map((expense) => (
                   <tr
                     key={expense.id}
-                    className={`cursor-pointer border-b border-gray-200 ${selectedExpenses.includes(expense.id) ? "bg-[#15637210]" : "bg-transparent hover:bg-gray-50"}`}
+                    className={`group cursor-pointer border-b border-[#eef1f6] h-[50px] ${selectedExpenses.includes(expense.id) ? "bg-[#15637210]" : "bg-transparent hover:bg-[#f8fafc]"}`}
                     onClick={(e) => {
                       // Don't navigate if clicking on checkbox
                       if ((e.target as HTMLInputElement).type !== "checkbox") {
@@ -2136,7 +2140,7 @@ export default function Expenses() {
                       }
                     }}
                   >
-                    <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-900" onClick={(e) => e.stopPropagation()}>
+                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-2">
                         <span className="inline-block w-[14px] shrink-0" aria-hidden="true"></span>
                         <input
@@ -2153,9 +2157,9 @@ export default function Expenses() {
                         />
                       </div>
                     </td>
-                    {isColumnVisible("date") && <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-900" style={{ width: columnWidths.date }}>{expense.date}</td>}
-                    {isColumnVisible("location") && <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-900" style={{ width: columnWidths.location }}>{expense.location}</td>}
-                    {isColumnVisible("expenseAccount") && <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-900" style={{ width: columnWidths.expenseAccount }}>
+                    {isColumnVisible("date") && <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900" style={{ width: columnWidths.date }}>{expense.date}</td>}
+                    {isColumnVisible("location") && <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900" style={{ width: columnWidths.location }}>{expense.location}</td>}
+                    {isColumnVisible("expenseAccount") && <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900" style={{ width: columnWidths.expenseAccount }}>
                       <span
                         className="cursor-pointer text-blue-500 no-underline"
                         onClick={(e) => e.stopPropagation()}
@@ -2163,15 +2167,15 @@ export default function Expenses() {
                         {expense.expenseAccount}
                       </span>
                     </td>}
-                    {isColumnVisible("reference") && <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-900" style={{ width: columnWidths.reference }}>{expense.reference || ""}</td>}
-                    {isColumnVisible("customerName") && <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-900" style={{ width: columnWidths.customerName }}>{expense.customerName || ""}</td>}
-                    {isColumnVisible("status") && <td className="whitespace-nowrap px-3 py-3 text-sm font-medium text-[#7b88a3]" style={{ width: columnWidths.status }}>
+                    {isColumnVisible("reference") && <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900" style={{ width: columnWidths.reference }}>{expense.reference || ""}</td>}
+                    {isColumnVisible("customerName") && <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900" style={{ width: columnWidths.customerName }}>{expense.customerName || ""}</td>}
+                    {isColumnVisible("status") && <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-[#7b88a3]" style={{ width: columnWidths.status }}>
                       {(expense.status || "").toUpperCase()}
                     </td>}
-                    {isColumnVisible("amount") && <td className="whitespace-nowrap px-3 py-3 text-right text-sm font-medium text-gray-900" style={{ width: columnWidths.amount }}>
+                    {isColumnVisible("amount") && <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium text-gray-900" style={{ width: columnWidths.amount }}>
                       {expense.currencySymbol || symbol || baseCurrency?.symbol || "KSh"} {parseFloat(expense.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>}
-                    <td className="whitespace-nowrap px-3 py-3 text-center text-sm text-gray-700" style={{ width: columnWidths.actions }}>
+                    <td className="whitespace-nowrap px-4 py-3 text-center text-sm text-gray-700" style={{ width: columnWidths.actions }}>
                       {hasAnyAttachment(expense) ? <Paperclip size={14} className="mx-auto" /> : null}
                     </td>
                   </tr>
@@ -2184,8 +2188,7 @@ export default function Expenses() {
                 </tr>
               )}
             </tbody>
-          </table>
-        </div>
+        </table>
       </div>
 
       {showCustomizeColumnsModal && (

@@ -60,15 +60,15 @@ router.post("/time-entries", async (req, res) => {
 
   const hours = Number(req.body?.hours || 0);
   const minutes = Number(req.body?.minutes || 0);
-  const duration = Number(req.body?.duration ?? (hours * 60 + minutes) ?? 0);
+  const duration = Number(req.body?.duration ?? (hours * 60 + minutes));
 
   const created = await TimeEntry.create({
     ...req.body,
     organizationId: orgId,
     projectId,
-    projectName: project.name || project.projectName || req.body?.projectName || "",
-    customerId: String(project.customer?._id || project.customerId || req.body?.customerId || ""),
-    customerName: String(project.customer?.name || project.customerName || req.body?.customerName || ""),
+    projectName: (project as any).name || (project as any).projectName || req.body?.projectName || "",
+    customerId: String((project as any).customer?._id || (project as any).customerId || req.body?.customerId || ""),
+    customerName: String((project as any).customer?.name || (project as any).customerName || req.body?.customerName || ""),
     taskName: String(req.body?.taskName || req.body?.task || ""),
     userName: String(req.body?.userName || req.body?.user || ""),
     date: req.body?.date ? new Date(req.body.date) : new Date(),

@@ -225,13 +225,13 @@ export default function AddLocationPage() {
               .map((r: any) => String(r?.seriesName || r?.name || "").trim())
               .filter(Boolean)
           )
-        ).sort((a, b) => a.localeCompare(b));
+        ).sort((a: any, b: any) => String(a).localeCompare(String(b))) as string[];
         setTxSeriesNames(names);
         if (!formData.transactionNumberSeriesId && names.length > 0) {
-          setFormData((prev) => ({ ...prev, transactionNumberSeriesId: names[0] }));
+          setFormData((prev) => ({ ...prev, transactionNumberSeriesId: names[0] || "" }));
         }
         if (!formData.defaultTransactionNumberSeriesId && names.length > 0) {
-          setFormData((prev) => ({ ...prev, defaultTransactionNumberSeriesId: names[0] }));
+          setFormData((prev) => ({ ...prev, defaultTransactionNumberSeriesId: names[0] || "" }));
         }
       } catch (e) {
         console.warn("Failed to load transaction series:", e);

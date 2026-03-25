@@ -341,13 +341,13 @@ export default function EditLocationPage() {
               .map((r: any) => String(r?.seriesName || r?.name || "").trim())
               .filter(Boolean)
           )
-        ).sort((a, b) => a.localeCompare(b));
+        ).sort((a: any, b: any) => String(a).localeCompare(String(b))) as string[];
         setTxSeriesNames(names);
         if (names.length > 0) {
           setFormData((prev) => ({
             ...prev,
-            transactionNumberSeriesId: prev.transactionNumberSeriesId || names[0],
-            defaultTransactionNumberSeriesId: prev.defaultTransactionNumberSeriesId || names[0],
+            transactionNumberSeriesId: prev.transactionNumberSeriesId || names[0] || "",
+            defaultTransactionNumberSeriesId: prev.defaultTransactionNumberSeriesId || names[0] || "",
           }));
         }
       } catch (e) {

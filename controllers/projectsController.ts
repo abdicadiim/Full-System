@@ -3,7 +3,7 @@ import { Project } from "../models/Project.js";
 import { recordEvent } from "../services/eventService.js";
 
 const requireOrgId = (req: express.Request, res: express.Response) => {
-  const orgId = req.user?.organizationId;
+  const orgId = (req as any).user?.organizationId;
   if (!orgId) {
     res.status(401).json({ success: false, message: "Unauthenticated", data: null });
     return null;
