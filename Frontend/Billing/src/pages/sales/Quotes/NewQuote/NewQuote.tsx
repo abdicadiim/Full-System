@@ -381,6 +381,7 @@ const NewQuote = () => {
   const bulkActionsRef = useRef(null);
   const [isTheseDropdownOpen, setIsTheseDropdownOpen] = useState(false);
   const [showAdditionalInformation, setShowAdditionalInformation] = useState(false);
+  const [additionalInfoItemIds, setAdditionalInfoItemIds] = useState<string[]>([]);
   const [isNewItemModalOpen, setIsNewItemModalOpen] = useState(false);
   const [isReportingTagsModalOpen, setIsReportingTagsModalOpen] = useState(false);
   const [availableReportingTags, setAvailableReportingTags] = useState<any[]>([]);
@@ -454,6 +455,7 @@ const NewQuote = () => {
 
   // Load customers from localStorage
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [isCustomersLoading, setIsCustomersLoading] = useState(true);
 
   const isCustomerActive = (customer: any) => {
     const status = String(customer?.status || "").toLowerCase();
@@ -465,9 +467,31 @@ const NewQuote = () => {
   // Load items from localStorage
   const [availableItems, setAvailableItems] = useState<any[]>(defaultSampleItems as any[]);
 
+  const loadCustomersForDropdown = async () => {
+    try {
+      setIsCustomersLoading(true);
+      const rows = await getCustomers();
+      const normalizedCustomers = (rows || []).map((c: any) => ({
+        ...c,
+        id: c._id || c.id,
+        name: c.displayName || c.companyName || `${c.firstName || ''} ${c.lastName || ''}`.trim() || "Unknown"
+      }));
+      setCustomers(normalizedCustomers.filter(isCustomerActive));
+    } catch (error) {
+      console.error("Error loading customers:", error);
+      setCustomers([]);
+    } finally {
+      setIsCustomersLoading(false);
+    }
+  };
+
   // Quote number configuration state
   const [isQuoteNumberModalOpen, setIsQuoteNumberModalOpen] = useState(false);
   const [quoteNumberMode, setQuoteNumberMode] = useState("auto"); // "auto" or "manual"
+
+  useEffect(() => {
+    void loadCustomersForDropdown();
+  }, []);
   const [quotePrefix, setQuotePrefix] = useState("QT-");
   const [quoteNextNumber, setQuoteNextNumber] = useState("000002");
   const [quoteSeriesRow, setQuoteSeriesRow] = useState<any | null>(null);
@@ -481,6 +505,7 @@ const NewQuote = () => {
   const [priceListSwitchDialog, setPriceListSwitchDialog] = useState<PriceListSwitchDialogState | null>(null);
   const [isLocationFeatureEnabled, setIsLocationFeatureEnabled] = useState(false);
   const [locationOptions, setLocationOptions] = useState<string[]>(["Head Office"]);
+  const [isLocationDropdownOpen, setIsLocationDropdownOpen] = useState(false);
   const taxPreferenceDropdownRef = useRef<HTMLDivElement | null>(null);
   const priceListDropdownRef = useRef<HTMLDivElement | null>(null);
 
@@ -934,11 +959,10 @@ const NewQuote = () => {
       setIsLoading(true);
       try {
         // Load heavy dropdown data in parallel.
-          const [
-            customersResult,
-            projectsResult,
-            salespersonsResult,
-            itemsResult,
+        const [
+          projectsResult,
+          salespersonsResult,
+          itemsResult,
             plansResult,
             quoteNumberResult,
             txSeriesResult,
@@ -947,8 +971,7 @@ const NewQuote = () => {
             settingsResult,
             taxesResult,
             generalSettingsResult
-          ] = await Promise.allSettled([
-            getCustomers(),
+        ] = await Promise.allSettled([
             getProjects(),
             getSalespersonsFromAPI(),
             getItemsFromAPI(),
@@ -961,18 +984,6 @@ const NewQuote = () => {
             getTaxes(),
             settingsAPI.getGeneralSettings()
           ]);
-
-        if (customersResult.status === "fulfilled") {
-          const normalizedCustomers = (customersResult.value || []).map((c: any) => ({
-            ...c,
-            id: c._id || c.id,
-            name: c.displayName || c.companyName || `${c.firstName || ''} ${c.lastName || ''}`.trim() || "Unknown"
-          }));
-          setCustomers(normalizedCustomers.filter(isCustomerActive));
-        } else {
-          console.error("Error loading customers:", customersResult.reason);
-          setCustomers([]);
-        }
 
         if (projectsResult.status === "fulfilled") {
           setProjects(Array.isArray(projectsResult.value) ? projectsResult.value : []);
@@ -4258,12 +4269,20 @@ const NewQuote = () => {
                       placeholder="Select or add a customer"
                       value={formData.customerName}
                       readOnly
-                      onClick={() => setIsCustomerDropdownOpen(!isCustomerDropdownOpen)}
+                      onClick={() => {
+                        if (!customers.length && !isCustomersLoading) {
+                          void loadCustomersForDropdown();
+                        }
+                        setIsCustomerDropdownOpen(!isCustomerDropdownOpen);
+                      }}
                     />
                     <div
                       className="absolute right-10 top-0 bottom-0 flex items-center px-2 cursor-pointer"
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (!customers.length && !isCustomersLoading) {
+                          void loadCustomersForDropdown();
+                        }
                         setIsCustomerDropdownOpen(!isCustomerDropdownOpen);
                       }}
                     >
@@ -4306,7 +4325,12 @@ const NewQuote = () => {
                         </div>
                       </div>
                       <div className="max-h-60 overflow-y-auto p-2 space-y-1">
-                        {filteredCustomers.length > 0 ? (
+                        {isCustomersLoading ? (
+                          <div className="p-3 text-center text-sm text-gray-500 flex items-center justify-center gap-2">
+                            <Loader2 size={14} className="animate-spin" />
+                            Loading customers...
+                          </div>
+                        ) : filteredCustomers.length > 0 ? (
                           filteredCustomers.map(customer => {
                             const customerId = customer.id || customer._id;
                             const customerName = customer.name || customer.displayName || customer.companyName || "";
@@ -4420,17 +4444,31 @@ const NewQuote = () => {
                     Location
                   </label>
                   <div className="w-full max-w-[300px] relative">
-                    <select
-                      name="selectedLocation"
-                      value={formData.selectedLocation}
-                      onChange={handleChange}
-                      className="w-full h-10 px-3 pr-8 border border-gray-300 rounded text-sm text-gray-700 bg-white appearance-none focus:outline-none focus:border-[#156372]"
+                    <button
+                      type="button"
+                      className="w-full h-10 px-3 pr-8 border border-gray-300 rounded text-sm text-gray-700 bg-white flex items-center justify-between focus:outline-none focus:border-[#156372]"
+                      onClick={() => setIsLocationDropdownOpen((prev) => !prev)}
                     >
-                      {locationOptions.map((loc) => (
-                        <option key={loc} value={loc}>{loc}</option>
-                      ))}
-                    </select>
-                    <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <span className="truncate">{formData.selectedLocation || "Head Office"}</span>
+                      <ChevronDown size={14} className="text-gray-400" />
+                    </button>
+                    {isLocationDropdownOpen && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded shadow-lg z-50 overflow-hidden">
+                        {locationOptions.map((loc) => (
+                          <button
+                            type="button"
+                            key={loc}
+                            className={`w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 ${formData.selectedLocation === loc ? "bg-gray-100 font-medium" : ""}`}
+                            onClick={() => {
+                              setFormData((prev: any) => ({ ...prev, selectedLocation: loc }));
+                              setIsLocationDropdownOpen(false);
+                            }}
+                          >
+                            {loc}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -4629,7 +4667,7 @@ const NewQuote = () => {
                           filteredSalespersons.map(salesperson => (
                             <div
                               key={salesperson.id || salesperson._id}
-                              className="px-4 py-2 text-sm text-gray-700 hover:bg-[#156372] hover:text-white cursor-pointer truncate"
+                              className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 cursor-pointer truncate"
                               onClick={() => handleSalespersonSelect(salesperson)}
                             >
                               {salesperson.name}
@@ -4867,7 +4905,7 @@ const NewQuote = () => {
                             setShowAdditionalInformation(!showAdditionalInformation);
                             setIsBulkActionsOpen(false);
                           }}
-                          className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                          className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
                         >
                           {showAdditionalInformation ? "Hide All Additional Information" : "Show All Additional Information"}
                         </button>
@@ -4977,7 +5015,7 @@ const NewQuote = () => {
                                     </div>
                                   )}
                                 </div>
-                                {showAdditionalInformation && (
+                                {(showAdditionalInformation || additionalInfoItemIds.includes(String(item.id))) && (
                                   <>
                                     <textarea
                                       value={item.description || ""}
@@ -5077,7 +5115,7 @@ const NewQuote = () => {
                                         <button
                                           key={taxId}
                                           type="button"
-                                          className={`w-full px-3 py-2 text-left text-sm ${selected ? "bg-[#156372] text-white" : "text-gray-700 hover:bg-gray-50"}`}
+                                          className={`w-full px-3 py-2 text-left text-sm ${selected ? "bg-gray-100 text-gray-900" : "text-gray-700 hover:bg-gray-50"}`}
                                           onClick={() => {
                                             handleItemChange(item.id, "tax", taxId);
                                             setOpenTaxDropdowns(prev => ({ ...prev, [item.id]: false }));
@@ -5144,17 +5182,30 @@ const NewQuote = () => {
                               <div className="absolute top-full right-0 mt-0 min-w-[200px] bg-white border border-gray-200 rounded shadow-lg z-[80] overflow-hidden">
                                 <button
                                   type="button"
-                                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
                                   onClick={() => {
-                                    setShowAdditionalInformation(false);
+                                    const itemId = String(item.id);
+                                    const isGlobal = showAdditionalInformation;
+                                    if (isGlobal) {
+                                      setShowAdditionalInformation(false);
+                                      setAdditionalInfoItemIds([itemId]);
+                                    } else {
+                                      setAdditionalInfoItemIds((prev) =>
+                                        prev.includes(itemId)
+                                          ? prev.filter((id) => id !== itemId)
+                                          : [...prev, itemId]
+                                      );
+                                    }
                                     setOpenItemMenuId(null);
                                   }}
                                 >
-                                  Hide Additional Information
+                                  {(showAdditionalInformation || additionalInfoItemIds.includes(String(item.id)))
+                                    ? "Hide Additional Information"
+                                    : "Show Additional Information"}
                                 </button>
                                 <button
                                   type="button"
-                                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
                                   onClick={() => {
                                     handleDuplicateItem(item.id);
                                     setOpenItemMenuId(null);
@@ -5164,7 +5215,7 @@ const NewQuote = () => {
                                 </button>
                                 <button
                                   type="button"
-                                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
                                   onClick={() => {
                                     const index = formData.items.findIndex((i: any) => i.id === item.id);
                                     if (index >= 0) {
@@ -5177,7 +5228,7 @@ const NewQuote = () => {
                                 </button>
                                 <button
                                   type="button"
-                                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
                                   onClick={() => {
                                     const index = formData.items.findIndex((i: any) => i.id === item.id);
                                     if (index >= 0) {
@@ -5191,7 +5242,7 @@ const NewQuote = () => {
                                 </button>
                                 <button
                                   type="button"
-                                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
                                   onClick={() => {
                                     const index = formData.items.findIndex((i: any) => i.id === item.id);
                                     if (index >= 0) {
@@ -5213,7 +5264,7 @@ const NewQuote = () => {
               </div>
 
               {/* Add Row Buttons */}
-              <div className="flex items-center gap-3 mt-4">
+              <div className="flex items-center gap-3 mt-4 ml-0 lg:ml-[240px]">
                 <div className="relative">
                   <button
                     className="flex items-center gap-2 px-4 py-2 bg-[#eef3ff] border border-[#d7deef] text-[#1f3f79] rounded-md text-sm font-medium hover:bg-[#e7eefb] transition-colors"
@@ -5249,7 +5300,7 @@ const NewQuote = () => {
 
 
               {/* Summary and Notes Section */}
-              <div className="mt-5 pb-32 space-y-6">
+              <div className="mt-5 pb-16 space-y-6">
                 <div className="grid grid-cols-1 xl:grid-cols-[1fr_500px] gap-8 items-start">
                   <div className="flex-1 w-full max-w-[520px]">
                     <label className="block text-sm text-gray-700 mb-2 font-medium">Customer Notes</label>
@@ -5460,40 +5511,36 @@ const NewQuote = () => {
                     />
                     <p className="mt-2 text-xs text-gray-500">You can upload a maximum of 5 files, 10MB each</p>
                     {formData.attachedFiles.length > 0 && (
-                      <p className="mt-1 text-xs text-[#156372]">{formData.attachedFiles.length} file(s) attached</p>
+                      <div className="mt-3 space-y-2">
+                        {formData.attachedFiles.map((file: any) => (
+                          <div
+                            key={file.id}
+                            className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-gray-800">{file.name}</p>
+                              <p className="text-xs text-gray-500">File Size: {(Number(file.size || 0) / 1024).toFixed(1)} KB</p>
+                            </div>
+                            <button
+                              type="button"
+                              className="shrink-0 rounded-md p-2 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                              onClick={() => handleRemoveFile(file.id)}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 </div>
 
                 <div className="border-t border-gray-200 pt-5">
                   <div className="space-y-4">
-                    <div className="ml-6 text-sm text-gray-700">
-                      <p className="flex flex-wrap items-center">
-                        <span>Want to get paid faster?</span>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 262 162" className="h-4 w-auto ml-1">
-                          <ellipse fill="#FF5F00" cx="130.4" cy="81.2" rx="30.1" ry="62.3"></ellipse>
-                          <path fill="#EB001B" d="M100.3 81.2c0-25.3 11.9-47.7 30.1-62.3C117 8.4 100 2 81.6 2 37.8 2 2.4 37.4 2.4 81.2c0 43.8 35.4 79.2 79.2 79.2 18.5 0 35.4-6.4 48.8-16.9-18.5-14.6-30.1-37.2-30.1-62.3z"></path>
-                          <path fill="#F79E1B" d="M179.2 2c-18.5 0-35.4 6.4-48.8 16.9 18.3 14.5 30.1 37 30.1 62.3 0 25.3-11.7 47.7-30.1 62.3 13.4 10.6 30.4 16.9 48.8 16.9 43.8 0 79.2-35.4 79.2-79.2C258.4 37.4 223 2 179.2 2z"></path>
-                        </svg>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 620.07" className="h-3 w-auto ml-1">
-                          <path d="M728.98 10.95L477.61 610.69h-164l-123.7-478.62c-7.51-29.48-14.04-40.28-36.88-52.7C115.76 59.14 54.18 40.17 0 28.39l3.68-17.44h263.99c33.65 0 63.9 22.4 71.54 61.15l65.33 347.04L566 10.95h162.98zm642.59 403.93c.66-158.29-218.88-167.01-217.37-237.72.47-21.52 20.96-44.4 65.81-50.24 22.23-2.91 83.48-5.13 152.95 26.84l27.25-127.18c-37.33-13.55-85.36-26.59-145.12-26.59-153.35 0-261.27 81.52-262.18 198.25-.99 86.34 77.03 134.52 135.81 163.21 60.47 29.38 80.76 48.26 80.53 74.54-.43 40.23-48.23 57.99-92.9 58.69-77.98 1.2-123.23-21.1-159.3-37.87L928.93 588.2c36.25 16.63 103.16 31.14 172.53 31.87 162.99 0 269.61-80.51 270.11-205.19m404.94 195.82H1920L1794.75 10.95h-132.44c-29.78 0-54.9 17.34-66.02 44l-232.81 555.74h162.91l32.35-89.59h199.05l18.73 89.59zM1603.4 398.19l81.66-225.18 47 225.18h-128.65zM950.66 10.95L822.37 610.69H667.23L795.57 10.95h155.09z" fill="#1434cb"></path>
-                        </svg>
-                      </p>
-                      <p className="mt-2 text-gray-500">
-                        <span>Configure payment gateways and receive payments online.</span>
-                        <button type="button" className="ml-1 text-[#0b63ce] hover:text-[#0a56b3] font-medium">
-                          Set up Payment Gateway
-                        </button>
-                      </p>
-                    </div>
+                    <div className="ml-6 text-sm text-gray-700" />
                   </div>
                 </div>
 
-                <div className="border-t border-gray-200 mt-8 pt-10 mb-24">
-                  <p className="text-sm leading-normal text-gray-600">
-                    <span className="font-semibold text-gray-700">Additional Fields:</span> Start adding custom fields for your quotes by going to <span className="italic">Settings</span> <span className="font-semibold">➔</span> <span className="italic">Sales</span> <span className="font-semibold">➔</span> <span className="italic">Quotes</span>.
-                  </p>
-                </div>
               </div>
             </div>
           </div>
@@ -5707,8 +5754,9 @@ const NewQuote = () => {
       )}
 
       {/* Sticky Footer */}
-      <div className="fixed bottom-0 left-0 lg:left-[220px] right-0 bg-white border-t border-gray-200 px-8 py-4 flex items-center justify-between z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-        <div className="flex items-center gap-3">
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 py-4 z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+        <div className="px-8 lg:pl-[240px]">
+          <div className="flex items-center gap-3">
           <button
             onClick={handleSaveDraft}
             disabled={saveLoading !== null}
@@ -5731,11 +5779,7 @@ const NewQuote = () => {
           >
             Cancel
           </button>
-        </div>
-
-        <div className="text-sm text-gray-600">
-          PDF Template: <span className="text-gray-500">'Standard Template'</span>
-          <button type="button" className="ml-2 text-[#156372] hover:text-[#0D4A52] font-medium">Change</button>
+          </div>
         </div>
       </div>
 
@@ -8332,6 +8376,7 @@ const NewQuote = () => {
 };
 
 export default NewQuote;
+
 
 
 
