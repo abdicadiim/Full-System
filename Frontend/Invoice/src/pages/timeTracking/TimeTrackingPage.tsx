@@ -165,6 +165,7 @@ function TimeEntriesPage() {
             user: userName,
             billable: entry.billable !== undefined ? entry.billable : false,
             notes: entry.description || entry.notes || '--',
+            comments: Array.isArray(entry.comments) ? entry.comments : [],
           };
         });
 
@@ -320,6 +321,10 @@ function TimesheetTable() {
   const [isBold, setIsBold] = useState(false);
   const [isItalic, setIsItalic] = useState(false);
   const [isUnderline, setIsUnderline] = useState(false);
+  const commentEditorRef = useRef<HTMLDivElement>(null);
+  const [commentIsEditorEmpty, setCommentIsEditorEmpty] = useState(true);
+  const [showDeleteCommentModal, setShowDeleteCommentModal] = useState(false);
+  const [commentToDelete, setCommentToDelete] = useState<any>(null);
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'calendar'
   const [calendarDate, setCalendarDate] = useState(new Date()); // Current month/year for calendar
   const [selectedDateForLogEntry, setSelectedDateForLogEntry] = useState(null); // Selected date for new log entry
@@ -611,13 +616,220 @@ function TimesheetTable() {
   // Load comments when entry is selected
   useEffect(() => {
     if (selectedEntry) {
-      const allComments = JSON.parse(localStorage.getItem('timesheetComments') || '{}');
-      const entryComments = allComments[selectedEntry.id] || [];
-      setComments(entryComments);
+      const entryComments = Array.isArray(selectedEntry.comments) ? selectedEntry.comments : [];
+      if (entryComments.length) {
+        setComments(entryComments);
+      } else {
+        const legacyStore = JSON.parse(localStorage.getItem('timesheetComments') || '{}');
+        const legacyComments = Array.isArray(legacyStore[selectedEntry.id]) ? legacyStore[selectedEntry.id] : [];
+        setComments(legacyComments);
+        if (legacyComments.length) {
+          void timeEntriesAPI.update(selectedEntry.id, { comments: legacyComments }).catch((error) => {
+            console.error("Failed to migrate legacy timesheet comments:", error);
+          });
+        }
+      }
     } else {
       setComments([]);
     }
   }, [selectedEntry]);
+
+  const sanitizeCommentHtml = (html: string) => {
+    if (!html) return "";
+    if (typeof document === "undefined") return String(html);
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    const allowedTags = new Set(["B", "STRONG", "I", "EM", "U", "BR", "DIV", "P", "SPAN"]);
+
+    const sanitizeNode = (node: Node) => {
+      if (node.nodeType === Node.TEXT_NODE) return;
+      if (node.nodeType !== Node.ELEMENT_NODE) {
+        node.parentNode?.removeChild(node);
+        return;
+      }
+
+      const element = node as HTMLElement;
+      if (!allowedTags.has(element.tagName)) {
+        const text = document.createTextNode(element.textContent || "");
+        element.parentNode?.replaceChild(text, element);
+        return;
+      }
+
+      while (element.attributes.length > 0) {
+        element.removeAttribute(element.attributes[0].name);
+      }
+
+      Array.from(element.childNodes).forEach(sanitizeNode);
+    };
+
+    Array.from(container.childNodes).forEach(sanitizeNode);
+    return container.innerHTML;
+  };
+
+  const escapeHtml = (value: string) =>
+    value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+
+  const commentMarkupToHtml = (value: string) => {
+    const raw = String(value || "");
+    if (/<[a-z][\s\S]*>/i.test(raw)) return sanitizeCommentHtml(raw);
+
+    let result = "";
+    let i = 0;
+    let boldOpen = false;
+    let italicOpen = false;
+    let underlineOpen = false;
+
+    while (i < raw.length) {
+      const twoCharToken = raw.slice(i, i + 2);
+      if (twoCharToken === "**") {
+        result += boldOpen ? "</strong>" : "<strong>";
+        boldOpen = !boldOpen;
+        i += 2;
+        continue;
+      }
+      if (twoCharToken === "__") {
+        result += underlineOpen ? "</u>" : "<u>";
+        underlineOpen = !underlineOpen;
+        i += 2;
+        continue;
+      }
+      if (raw[i] === "*") {
+        result += italicOpen ? "</em>" : "<em>";
+        italicOpen = !italicOpen;
+        i += 1;
+        continue;
+      }
+
+      const char = raw[i];
+      result += char === "\n" ? "<br />" : escapeHtml(char);
+      i += 1;
+    }
+
+    if (italicOpen) result += "</em>";
+    if (underlineOpen) result += "</u>";
+    if (boldOpen) result += "</strong>";
+    return result;
+  };
+
+  const getLoggedInUserDisplay = () => {
+    const currentUser = getCurrentUser();
+    const name = String(
+      currentUser?.name ||
+      currentUser?.displayName ||
+      currentUser?.fullName ||
+      currentUser?.username ||
+      [currentUser?.firstName, currentUser?.lastName].filter(Boolean).join(" ") ||
+      currentUser?.email ||
+      "You"
+    ).trim() || "You";
+    return {
+      name,
+      initial: name.charAt(0).toUpperCase() || "Y",
+    };
+  };
+
+  const getCommentAuthorName = (comment: any) => {
+    const fallback = getLoggedInUserDisplay();
+    const authorName = String(comment?.authorName || "").trim();
+    const authorInitial = String(comment?.authorInitial || "").trim();
+    if (!authorName || authorName === "You" || authorInitial === "Y") return fallback.name;
+    return authorName;
+  };
+
+  const getCommentAuthorInitial = (comment: any) => {
+    const fallback = getLoggedInUserDisplay();
+    const authorName = String(comment?.authorName || "").trim();
+    const authorInitial = String(comment?.authorInitial || "").trim();
+    if (!authorName || authorName === "You" || authorInitial === "Y") return fallback.initial;
+    return authorInitial || authorName.charAt(0).toUpperCase() || "Y";
+  };
+
+  const normalizeComment = (comment: any, index = 0) => {
+    if (!comment || typeof comment !== "object") return null;
+    const id = String(comment.id || comment._id || `cm-${index}-${Date.now()}`).trim();
+    if (!id) return null;
+    const rawContent = String(comment.content ?? "").trim();
+    const legacyText = String(comment.text ?? "").trim();
+    const content = rawContent || sanitizeCommentHtml(
+      `${comment.bold ? "<b>" : ""}${comment.italic ? "<i>" : ""}${comment.underline ? "<u>" : ""}` +
+      `${legacyText}` +
+      `${comment.underline ? "</u>" : ""}${comment.italic ? "</i>" : ""}${comment.bold ? "</b>" : ""}`
+    );
+    return {
+      id,
+      text: legacyText || content.replace(/<[^>]*>/g, ""),
+      content,
+      authorName: String(comment.authorName || getLoggedInUserDisplay().name).trim() || "You",
+      authorInitial: String(comment.authorInitial || getLoggedInUserDisplay().initial).trim() || "Y",
+      createdAt: String(comment.createdAt || new Date().toISOString()),
+      bold: comment.bold,
+      italic: comment.italic,
+      underline: comment.underline
+    };
+  };
+
+  const syncCommentEditorState = () => {
+    const editor = commentEditorRef.current;
+    const isEmpty = !(editor?.innerText || "").trim();
+    setCommentIsEditorEmpty(isEmpty);
+    try {
+      setIsBold(document.queryCommandState("bold"));
+      setIsItalic(document.queryCommandState("italic"));
+      setIsUnderline(document.queryCommandState("underline"));
+    } catch {
+      setIsBold(false);
+      setIsItalic(false);
+      setIsUnderline(false);
+    }
+  };
+
+  const applyCommentFormat = (command: "bold" | "italic" | "underline") => {
+    if (!commentEditorRef.current) return;
+    commentEditorRef.current.focus();
+    document.execCommand(command, false);
+    syncCommentEditorState();
+  };
+
+  const openDeleteCommentModal = (comment: any) => {
+    setCommentToDelete(comment);
+    setShowDeleteCommentModal(true);
+  };
+
+  const closeDeleteCommentModal = () => {
+    setShowDeleteCommentModal(false);
+    setCommentToDelete(null);
+  };
+
+  const handleDeleteComment = async (commentId: string | number) => {
+    if (!selectedEntry) return false;
+    const previousComments = Array.isArray(selectedEntry.comments) ? selectedEntry.comments : comments;
+    const updatedComments = previousComments.filter((comment: any) => String(comment.id) !== String(commentId));
+    try {
+      await timeEntriesAPI.update(selectedEntry.id, { comments: updatedComments });
+      setComments(updatedComments);
+      setSelectedEntry((prev: any) => (prev ? { ...prev, comments: updatedComments } : prev));
+      setTimeEntries((prev: any[]) =>
+        prev.map((entry) => (String(entry.id) === String(selectedEntry.id) ? { ...entry, comments: updatedComments } : entry))
+      );
+      toast.success("Comment deleted successfully.");
+      return true;
+    } catch (error) {
+      console.error("Failed to delete timesheet comment:", error);
+      toast.error("Failed to delete comment.");
+      return false;
+    }
+  };
+
+  const confirmDeleteComment = async () => {
+    if (!commentToDelete) return;
+    const deleted = await handleDeleteComment(commentToDelete.id);
+    if (deleted) closeDeleteCommentModal();
+  };
 
   const formatDuration = (entry) => {
     const hours = Number(entry?.hours ?? 0);
@@ -657,16 +869,31 @@ function TimesheetTable() {
     if (!selectedEntry) return;
     try {
       const projectObj = getProjectForEntry(selectedEntry);
+      const currentUser = getCurrentUser();
+      const currentUserName =
+        currentUser?.name ||
+        currentUser?.username ||
+        currentUser?.fullName ||
+        currentUser?.displayName ||
+        currentUser?.email ||
+        "";
       const [hours, minutes] = String(toHHMM(selectedEntry)).split(":").map((v) => Number(v) || 0);
       const payload = {
         project: selectedEntry.projectId || projectObj?.id || projectObj?._id,
+        projectId: selectedEntry.projectId || projectObj?.id || projectObj?._id,
+        projectName: projectObj?.projectName || projectObj?.name || selectedEntry.projectName || "",
         user: resolveUserIdForEntry(selectedEntry),
+        userId: resolveUserIdForEntry(selectedEntry),
+        userName: currentUserName || selectedEntry.userName || "",
         date: selectedEntry.date ? new Date(selectedEntry.date).toISOString() : new Date().toISOString(),
         hours,
         minutes,
+        timeSpent: String(toHHMM(selectedEntry)),
         description: selectedEntry.notes || selectedEntry.description || '',
         billable: selectedEntry.billable !== undefined ? selectedEntry.billable : true,
         task: selectedEntry.taskName || selectedEntry.task || '',
+        taskName: selectedEntry.taskName || selectedEntry.task || '',
+        notes: selectedEntry.notes || selectedEntry.description || '',
       };
       await timeEntriesAPI.create(payload);
       toast.success("Time entry cloned successfully!");
@@ -734,19 +961,41 @@ function TimesheetTable() {
   };
 
   const handleAddComment = () => {
-    if (!selectedEntry || !commentText.trim()) return;
+    const editor = commentEditorRef.current;
+    const trimmedComment = editor?.innerText.trim() || "";
+    if (!selectedEntry || !trimmedComment) return;
+    const currentUser = getLoggedInUserDisplay();
     const newComment = {
-      id: Date.now(),
-      text: commentText.trim(),
+      id: `${Date.now()}`,
+      text: trimmedComment,
+      content: sanitizeCommentHtml(editor?.innerHTML || ""),
+      authorName: currentUser.name,
+      authorInitial: currentUser.initial,
       createdAt: new Date().toISOString(),
+      bold: false,
+      italic: false,
+      underline: false,
     };
-    const allComments = JSON.parse(localStorage.getItem('timesheetComments') || '{}');
-    const entryComments = allComments[selectedEntry.id] || [];
-    const nextComments = [...entryComments, newComment];
-    allComments[selectedEntry.id] = nextComments;
-    localStorage.setItem('timesheetComments', JSON.stringify(allComments));
-    setComments(nextComments);
-    setCommentText('');
+    const nextComments = [...(Array.isArray(selectedEntry.comments) ? selectedEntry.comments : comments), newComment]
+      .map((comment, index) => normalizeComment(comment, index))
+      .filter(Boolean);
+    void (async () => {
+      try {
+        await timeEntriesAPI.update(selectedEntry.id, { comments: nextComments });
+        setComments(nextComments);
+        setSelectedEntry((prev) => (prev ? { ...prev, comments: nextComments } : prev));
+        setTimeEntries((prev) => prev.map((entry) => (String(entry.id) === String(selectedEntry.id) ? { ...entry, comments: nextComments } : entry)));
+        if (editor) editor.innerHTML = "";
+        setCommentIsEditorEmpty(true);
+        setIsBold(false);
+        setIsItalic(false);
+        setIsUnderline(false);
+        toast.success("Comment added successfully.");
+      } catch (error) {
+        console.error("Failed to save timesheet comment:", error);
+        toast.error("Failed to add comment");
+      }
+    })();
   };
 
   // Load projects from database
@@ -945,6 +1194,7 @@ function TimesheetTable() {
             billingRate: entry.billingRate || 0,
             notes: entry.description || entry.notes || '',
             billingStatus: entry.billingStatus || 'Unbilled',
+            comments: Array.isArray(entry.comments) ? entry.comments : [],
             // Don't spread entry to avoid overwriting our transformed fields
           };
         });
@@ -1369,13 +1619,20 @@ function TimesheetTable() {
         // Create time entry
         const newEntry = {
           project: projectObj.id,
+          projectId: projectObj.id,
+          projectName: projectObj.projectName || projectObj.name || "",
           user: currentUser.id,
+          userId: currentUser.id,
+          userName: currentUserName,
           date: new Date().toISOString(),
           hours: hours,
           minutes: minutes,
+          timeSpent: `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`,
           description: timerNotes || '',
           billable: activeBillable,
           task: activeTaskName,
+          taskName: activeTaskName,
+          notes: timerNotes || '',
         };
 
         await timeEntriesAPI.create(newEntry);
@@ -2442,67 +2699,152 @@ function TimesheetTable() {
 
             {activeTab === 'comments' && (
               <div className="space-y-4">
-                <div className="rounded-lg border border-gray-200 bg-white">
-                  <div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-2 py-2">
+                <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                  <div className="flex items-center gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3">
                     <button
-                      onClick={() => setIsBold((v) => !v)}
-                      className={`h-7 w-7 rounded border ${isBold ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-gray-200 text-gray-600'} text-xs font-semibold`}
+                      onClick={() => applyCommentFormat("bold")}
+                      className={`h-7 w-7 rounded border ${isBold ? "border-blue-500 bg-blue-50 text-blue-600" : "border-gray-200 text-gray-600"} text-xs font-semibold`}
+                      type="button"
                     >
                       B
                     </button>
                     <button
-                      onClick={() => setIsItalic((v) => !v)}
-                      className={`h-7 w-7 rounded border ${isItalic ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-gray-200 text-gray-600'} text-xs italic`}
+                      onClick={() => applyCommentFormat("italic")}
+                      className={`h-7 w-7 rounded border ${isItalic ? "border-blue-500 bg-blue-50 text-blue-600" : "border-gray-200 text-gray-600"} text-xs italic`}
+                      type="button"
                     >
                       I
                     </button>
                     <button
-                      onClick={() => setIsUnderline((v) => !v)}
-                      className={`h-7 w-7 rounded border ${isUnderline ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-gray-200 text-gray-600'} text-xs underline`}
+                      onClick={() => applyCommentFormat("underline")}
+                      className={`h-7 w-7 rounded border ${isUnderline ? "border-blue-500 bg-blue-50 text-blue-600" : "border-gray-200 text-gray-600"} text-xs underline`}
+                      type="button"
                     >
                       U
                     </button>
                   </div>
-                  <textarea
-                    value={commentText}
-                    onChange={(e) => setCommentText(e.target.value)}
-                    className="w-full resize-none border-none px-3 py-2 text-sm focus:outline-none"
-                    rows={3}
-                    placeholder="Add a comment"
-                    style={{
-                      fontWeight: isBold ? "600" : "400",
-                      fontStyle: isItalic ? "italic" : "normal",
-                      textDecoration: isUnderline ? "underline" : "none",
-                    }}
-                  />
-                  <div className="flex justify-start border-t border-gray-200 px-2 py-2">
+                  <div className="p-0">
+                    <div className="relative">
+                      {commentIsEditorEmpty && (
+                        <div className="pointer-events-none absolute left-5 top-4 text-sm text-gray-400">
+                          Add a comment...
+                        </div>
+                      )}
+                      <div
+                        ref={commentEditorRef}
+                        id="timesheet-comment-textarea"
+                        contentEditable
+                        suppressContentEditableWarning
+                        dir="ltr"
+                        className="min-h-40 w-full px-5 py-4 text-sm text-gray-700 outline-none whitespace-pre-wrap leading-relaxed border-none"
+                        onInput={syncCommentEditorState}
+                        onMouseUp={syncCommentEditorState}
+                        onKeyUp={syncCommentEditorState}
+                        onFocus={syncCommentEditorState}
+                        style={{ textAlign: "left", direction: "ltr" }}
+                      />
+                    </div>
+                  </div>
+                  <div className="border-t border-gray-200 px-5 py-4">
                     <button
+                      type="button"
+                      className="px-5 py-2 bg-[#156372] text-white rounded text-[13px] font-bold cursor-pointer hover:opacity-90 active:scale-95 transition-all shadow-sm border-none"
                       onClick={handleAddComment}
-                      className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
                     >
                       Add Comment
                     </button>
                   </div>
                 </div>
 
-                <div className="border-t border-gray-200 pt-3">
-                  <div className="text-[11px] font-semibold text-gray-500">ALL COMMENTS</div>
-                  <div className="mt-2 space-y-2">
-                    {comments.length === 0 && (
-                      <div className="text-xs text-gray-500">No comments yet.</div>
-                    )}
-                    {comments.map((c) => (
-                      <div key={c.id} className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-700">
-                        <div>{c.text}</div>
-                        <div className="mt-1 text-[10px] text-gray-400">
-                          {new Date(c.createdAt).toLocaleString()}
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="text-[11px] font-bold text-gray-600 uppercase tracking-[0.2em] whitespace-nowrap">ALL COMMENTS</h3>
+                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-500 px-1.5 text-[11px] font-bold leading-none text-white">
+                      {comments.length}
+                    </span>
+                  </div>
+                </div>
+
+                {comments.length === 0 ? (
+                  <div className="text-center py-20 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
+                    <p className="text-sm text-gray-400 font-medium italic">No comments yet.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-5 pb-20 pr-2">
+                    {comments.map((comment) => (
+                      <div key={comment.id} className="group flex items-start gap-3">
+                        <div className="mt-0.5 h-6 w-6 shrink-0 rounded-full border border-[#cfdaf0] bg-white text-[11px] font-semibold text-[#6b7a90] flex items-center justify-center shadow-sm">
+                          {getCommentAuthorInitial(comment)}
+                        </div>
+                        <div className="flex-1">
+                          <div className="mb-2 flex items-center gap-2 text-[12px]">
+                            <span className="font-semibold text-[#111827]">{getCommentAuthorName(comment)}</span>
+                            <span className="text-[#94a3b8]">•</span>
+                            <span className="text-[#64748b]">
+                              {new Date(comment.createdAt).toLocaleString("en-GB", {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit"
+                              })}
+                            </span>
+                          </div>
+                          <div className="rounded-lg bg-[#f8fafc] px-4 py-3 shadow-sm border border-[#eef2f7]">
+                            <div className="flex items-start justify-between gap-4">
+                              <div
+                                className="text-[15px] leading-relaxed text-[#156372] whitespace-pre-wrap font-semibold flex-1"
+                                dangerouslySetInnerHTML={{ __html: commentMarkupToHtml(comment.content || comment.text || "") }}
+                              />
+                              <button
+                                className="mt-0.5 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all cursor-pointer border-none bg-transparent opacity-0 group-hover:opacity-100"
+                                onClick={() => openDeleteCommentModal(comment)}
+                                title="Delete comment"
+                                type="button"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     ))}
                   </div>
-                </div>
+                )}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {showDeleteCommentModal && commentToDelete && (
+        <div className="fixed inset-0 z-[2200] flex items-center justify-center bg-black/40 p-4" onClick={closeDeleteCommentModal}>
+          <div className="w-full max-w-md rounded-xl bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-center gap-3 border-b border-gray-200 px-5 py-4">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+                <Trash2 size={16} />
+              </div>
+              <div>
+                <div className="text-base font-semibold text-gray-900">Delete comment?</div>
+                <div className="text-xs text-gray-500">You cannot retrieve this comment once it has been deleted.</div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 px-5 py-4">
+              <button
+                type="button"
+                onClick={closeDeleteCommentModal}
+                className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteComment}
+                className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+              >
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -2716,6 +3058,15 @@ function EditLogEntryModal({ entry, projects, users, userById, onClose, onSaved,
     notes: entry?.notes || entry?.description || '',
     billable: entry?.billable !== undefined ? entry.billable : true,
   });
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+  const [showTaskDropdown, setShowTaskDropdown] = useState(false);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [projectSearchTerm, setProjectSearchTerm] = useState('');
+  const [taskSearchTerm, setTaskSearchTerm] = useState('');
+  const [userSearchTerm, setUserSearchTerm] = useState('');
+  const projectDropdownRef = useRef(null);
+  const taskDropdownRef = useRef(null);
+  const userDropdownRef = useRef(null);
 
   const selectedProject = projects.find((p) => p.projectName === form.projectName);
   const tasks = selectedProject?.tasks || [];
@@ -2723,6 +3074,21 @@ function EditLogEntryModal({ entry, projects, users, userById, onClose, onSaved,
   const currencyCode = String(selectedProject?.currency || "USD").substring(0, 3).toUpperCase();
   const [h, m] = String(form.timeSpent || "00:00").split(":").map((v) => Number(v) || 0);
   const totalCost = (h + m / 60) * costPerHour;
+  const filteredProjects = projects.filter((project) => {
+    const query = projectSearchTerm.toLowerCase();
+    if (!query) return true;
+    const projectName = String(project.projectName || '').toLowerCase();
+    const projectCode = String(project.projectNumber || project.projectCode || project.code || project.number || '').toLowerCase();
+    return projectName.includes(query) || projectCode.includes(query);
+  });
+  const filteredTasks = tasks.filter((task) => {
+    const taskName = String(task.taskName || task.name || '').toLowerCase();
+    return taskName.includes(taskSearchTerm.toLowerCase());
+  });
+  const filteredUsers = users.filter((user) => {
+    const displayName = String(user?.name || user?.fullName || user?.username || user?.email || '').toLowerCase();
+    return displayName.includes(userSearchTerm.toLowerCase());
+  });
 
   return (
     <div className="w-full max-w-[600px] overflow-hidden rounded-lg bg-white shadow-2xl">
@@ -2736,7 +3102,7 @@ function EditLogEntryModal({ entry, projects, users, userById, onClose, onSaved,
         </button>
       </div>
 
-      <div className="p-6">
+      <div className="flex flex-col gap-3 p-4">
         <div className="mb-5">
           <label className="mb-1.5 block text-sm font-medium text-[#ef4444]">
             Date<span className="text-red-500">*</span>
@@ -2753,22 +3119,69 @@ function EditLogEntryModal({ entry, projects, users, userById, onClose, onSaved,
           <label className="mb-1.5 block text-sm font-medium text-[#ef4444]">
             Project Name<span className="text-red-500">*</span>
           </label>
-          <div className="relative">
-            <select
+          <div className="relative" ref={projectDropdownRef}>
+            <input
+              type="text"
               value={form.projectName}
-              onChange={(e) => setForm({ ...form, projectName: e.target.value, taskName: '' })}
-              className="w-full appearance-none rounded-md border border-blue-500 bg-white px-3 py-2.5 pr-9 text-sm outline-none focus:border-blue-500"
+              readOnly
+              onClick={() => {
+                setShowProjectDropdown((open) => !open);
+                setProjectSearchTerm('');
+              }}
+              placeholder="Select a project"
+              className="w-full cursor-pointer rounded-md border border-blue-500 bg-white px-3 py-2.5 pr-9 text-sm text-gray-900 outline-none focus:border-blue-500"
+            />
+            <span
+              className="pointer-events-none absolute right-3 top-[54%] -translate-y-1/2 text-gray-500"
+              style={{ transform: showProjectDropdown ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}
             >
-              <option value="">Select a project</option>
-              {projects.map((project) => (
-                <option key={project.id || project._id} value={project.projectName}>
-                  {project.projectName}
-                </option>
-              ))}
-            </select>
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
               <ChevronDown size={14} />
             </span>
+            {showProjectDropdown && (
+              <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-md border border-gray-300 bg-white shadow-lg">
+                <div className="border-b border-gray-200 p-2">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={projectSearchTerm}
+                      onChange={(e) => setProjectSearchTerm(e.target.value)}
+                      placeholder="Search"
+                      className="w-full rounded-md border border-gray-300 py-2 pl-3 pr-3 text-sm outline-none focus:border-blue-500"
+                      autoFocus
+                    />
+                  </div>
+                </div>
+                <div className="max-h-[180px] overflow-auto py-1">
+                  {filteredProjects.length === 0 ? (
+                    <div className="px-4 py-3 text-sm text-gray-500">No projects found</div>
+                  ) : (
+                    filteredProjects.map((project) => {
+                      const projectName = project.projectName || 'Untitled Project';
+                      const projectCode = String(project.projectNumber || project.projectCode || project.code || project.number || '').trim();
+                      const label = projectCode ? `${projectName} (${projectCode})` : projectName;
+                      const isActive = form.projectName === projectName;
+                      return (
+                        <button
+                          key={project.id || project._id || projectName}
+                          type="button"
+                          onClick={() => {
+                            setForm({ ...form, projectName, taskName: '' });
+                            setShowProjectDropdown(false);
+                            setProjectSearchTerm('');
+                          }}
+                          className={`mx-2 flex w-[calc(100%-16px)] items-center justify-between rounded px-3 py-2 text-left text-sm ${
+                            isActive ? 'text-gray-700' : 'text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          <span className="truncate">{label}</span>
+                          {isActive && <span className="ml-3 font-semibold">✓</span>}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -2776,26 +3189,73 @@ function EditLogEntryModal({ entry, projects, users, userById, onClose, onSaved,
           <label className="mb-1.5 block text-sm font-medium text-[#ef4444]">
             Task Name<span className="text-red-500">*</span>
           </label>
-          <div className="relative">
-            <select
+          <div className="relative" ref={taskDropdownRef}>
+            <input
+              type="text"
               value={form.taskName}
-              onChange={(e) => setForm({ ...form, taskName: e.target.value })}
-              className="w-full appearance-none rounded-md border border-gray-300 bg-white px-3 py-2.5 pr-9 text-sm outline-none focus:border-blue-500"
+              readOnly
+              onClick={() => {
+                if (form.projectName) {
+                  setShowTaskDropdown((open) => !open);
+                  setTaskSearchTerm('');
+                }
+              }}
               disabled={!form.projectName}
+              placeholder={form.projectName ? 'Select task' : 'Select project first'}
+              className={`w-full cursor-pointer rounded-md border bg-white px-3 py-2.5 pr-9 text-sm outline-none ${
+                form.projectName ? 'border-blue-500 text-gray-900 focus:border-blue-500' : 'cursor-not-allowed border-gray-300 text-gray-400'
+              }`}
+            />
+            <span
+              className="pointer-events-none absolute right-3 top-[54%] -translate-y-1/2 text-gray-500"
+              style={{ transform: showTaskDropdown ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}
             >
-              <option value="">{form.projectName ? "Select task" : "Select project first"}</option>
-              {tasks.map((task, idx) => {
-                const name = task.taskName || task.name || `Task ${idx + 1}`;
-                return (
-                  <option key={`${name}-${idx}`} value={name}>
-                    {name}
-                  </option>
-                );
-              })}
-            </select>
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
               <ChevronDown size={14} />
             </span>
+            {showTaskDropdown && form.projectName && (
+              <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-md border border-gray-300 bg-white shadow-lg">
+                <div className="border-b border-gray-200 p-2">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={taskSearchTerm}
+                      onChange={(e) => setTaskSearchTerm(e.target.value)}
+                      placeholder="Search"
+                      className="w-full rounded-md border border-gray-300 py-2 pl-8 pr-3 text-sm outline-none focus:border-blue-500"
+                      autoFocus
+                    />
+                    <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-[#8b5cf6]" />
+                  </div>
+                </div>
+                <div className="max-h-[180px] overflow-auto py-1">
+                  {filteredTasks.length === 0 ? (
+                    <div className="px-4 py-3 text-sm text-gray-500">No tasks found</div>
+                  ) : (
+                    filteredTasks.map((task, index) => {
+                      const taskName = task.taskName || task.name || `Task ${index + 1}`;
+                      const isActive = form.taskName === taskName;
+                      return (
+                        <button
+                          type="button"
+                          key={`${taskName}-${index}`}
+                          onClick={() => {
+                            setForm({ ...form, taskName });
+                            setShowTaskDropdown(false);
+                            setTaskSearchTerm('');
+                          }}
+                          className={`mx-2 flex w-[calc(100%-16px)] items-center justify-between rounded px-3 py-2 text-left text-sm ${
+                            isActive ? 'text-gray-700' : 'text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          <span className="truncate">{taskName}</span>
+                          {isActive && <span className="ml-3 font-semibold">✓</span>}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -2817,26 +3277,67 @@ function EditLogEntryModal({ entry, projects, users, userById, onClose, onSaved,
           <label className="mb-1.5 block text-sm font-medium text-[#ef4444]">
             User<span className="text-red-500">*</span>
           </label>
-          <div className="relative">
-            <select
-              value={form.userId}
-              onChange={(e) => setForm({ ...form, userId: e.target.value })}
-              className="w-full appearance-none rounded-md border border-gray-300 bg-white px-3 py-2.5 pr-9 text-sm outline-none focus:border-blue-500"
+          <div className="relative z-[60]" ref={userDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setShowUserDropdown((open) => !open)}
+              className="flex w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2.5 pr-3 text-left text-sm text-gray-900 outline-none focus:border-blue-500"
             >
-              <option value="">Select user</option>
-              {users.map((u, idx) => {
-                const id = u?._id || u?.id || u?.userId || String(idx);
-                const name = u?.name || u?.fullName || u?.username || u?.email || 'User';
-                return (
-                  <option key={id} value={id}>
-                    {name}
-                  </option>
-                );
-              })}
-            </select>
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
-              <ChevronDown size={14} />
-            </span>
+              <span className={form.userId ? "text-gray-900" : "text-gray-400"}>
+                {form.userId
+                  ? (users.find((u, idx) => (u?._id || u?.id || u?.userId || String(idx)) === form.userId)?.name ||
+                    users.find((u, idx) => (u?._id || u?.id || u?.userId || String(idx)) === form.userId)?.fullName ||
+                    users.find((u, idx) => (u?._id || u?.id || u?.userId || String(idx)) === form.userId)?.username ||
+                    users.find((u, idx) => (u?._id || u?.id || u?.userId || String(idx)) === form.userId)?.email ||
+                    "Select user")
+                  : "Select user"}
+              </span>
+              <ChevronDown size={14} className={`text-gray-500 transition-transform ${showUserDropdown ? "rotate-180" : ""}`} />
+            </button>
+            {showUserDropdown && (
+              <div className="absolute top-full z-[9999] mt-1 w-full overflow-hidden rounded-md border border-gray-300 bg-white shadow-xl">
+                <div className="border-b border-gray-200 p-2">
+                  <div className="relative">
+                    <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={userSearchTerm}
+                      onChange={(e) => setUserSearchTerm(e.target.value)}
+                      placeholder="Search"
+                      className="w-full rounded-md border border-blue-400 py-2 pl-9 pr-3 text-sm outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+                <div className="max-h-[140px] overflow-y-auto">
+                  {filteredUsers.length > 0 ? (
+                    filteredUsers.map((user, idx) => {
+                      const id = user?._id || user?.id || user?.userId || String(idx);
+                      const name = user?.name || user?.fullName || user?.username || user?.email || 'User';
+                      const selected = form.userId === id;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => {
+                            setForm({ ...form, userId: id });
+                            setShowUserDropdown(false);
+                            setUserSearchTerm('');
+                          }}
+                          className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
+                            selected ? "text-gray-700" : "hover:bg-blue-50 text-gray-700"
+                          }`}
+                        >
+                          <span>{name}</span>
+                          {selected && <span>✓</span>}
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <div className="px-3 py-2 text-sm text-gray-500">No users found</div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

@@ -4,8 +4,10 @@ import { projectsAPI, timeEntriesAPI, invoicesAPI, quotesAPI, creditNotesAPI, re
 import { AUTH_USER_UPDATED_EVENT, getCurrentUser } from "../../services/auth";
 import { toast } from "react-toastify";
 import { useCurrency } from "../../hooks/useCurrency";
+import { syncRemoteTimer } from "../../lib/timeTracking/timerSync";
+import { calculateElapsedTime } from "../../lib/timeTracking/timerService";
 import NewLogEntryForm from "./NewLogEntryForm";
-import { ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Search, ArrowUpDown, X, MessageSquare, Briefcase, User, Plus, Minus, Check, Trash2, MoreVertical, Edit3, Clock, Bold, Italic, Underline, Paperclip, Upload, FileText, Loader2, ExternalLink, AlertTriangle } from "lucide-react";
+import { ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Search, ArrowUpDown, X, MessageSquare, Briefcase, User, Plus, Minus, Check, Trash2, MoreVertical, Edit3, Clock, Pause, Bold, Italic, Underline, Paperclip, Upload, FileText, Loader2, ExternalLink, AlertTriangle } from "lucide-react";
 
 export default function ProjectDetailPage() {
   const { projectId } = useParams();
@@ -13,6 +15,7 @@ export default function ProjectDetailPage() {
   const { code: rawCurrencyCode } = useCurrency();
   const baseCurrencyCode = rawCurrencyCode ? rawCurrencyCode.split(' ')[0].substring(0, 3).toUpperCase() : "KES";
   const [project, setProject] = useState(null);
+  const [loadingProject, setLoadingProject] = useState(true);
   const [salesInvoices, setSalesInvoices] = useState<any[]>([]);
   const [salesQuotes, setSalesQuotes] = useState<any[]>([]);
   const [salesRetainerInvoices, setSalesRetainerInvoices] = useState<any[]>([]);
@@ -20,10 +23,29 @@ export default function ProjectDetailPage() {
   const [salesRefunds, setSalesRefunds] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState("Overview");
   const [showLogEntryForm, setShowLogEntryForm] = useState(false);
+  const [logEntryFormTitle, setLogEntryFormTitle] = useState("New Log Entry");
+  const [logEntryFormEntryId, setLogEntryFormEntryId] = useState<string | null>(null);
   const [showTransactionDropdown, setShowTransactionDropdown] = useState(false);
   const transactionDropdownRef = useRef(null);
   const [showMoreDropdown, setShowMoreDropdown] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showDeleteTimesheetModal, setShowDeleteTimesheetModal] = useState(false);
+  const [isDeletingTimesheets, setIsDeletingTimesheets] = useState(false);
+  const [pendingDeleteTimesheetIds, setPendingDeleteTimesheetIds] = useState<string[]>([]);
+  const [selectedEntry, setSelectedEntry] = useState<any>(null);
+  const [showEntryMenu, setShowEntryMenu] = useState(false);
+  const [openRowEntryMenuId, setOpenRowEntryMenuId] = useState<string | null>(null);
+  const [entryDrawerTab, setEntryDrawerTab] = useState<"otherDetails" | "comments">("otherDetails");
+  const [entryComments, setEntryComments] = useState<Array<any>>([]);
+  const entryCommentEditorRef = useRef<HTMLDivElement>(null);
+  const [entryIsEditorEmpty, setEntryIsEditorEmpty] = useState(true);
+  const [entryIsBold, setEntryIsBold] = useState(false);
+  const [entryIsItalic, setEntryIsItalic] = useState(false);
+  const [entryIsUnderline, setEntryIsUnderline] = useState(false);
+  const entryMenuRef = useRef<HTMLDivElement | null>(null);
+  const rowEntryMenuRef = useRef<HTMLDivElement | null>(null);
+  const [showDeleteEntryCommentModal, setShowDeleteEntryCommentModal] = useState(false);
+  const [entryCommentToDelete, setEntryCommentToDelete] = useState<any>(null);
   const [showDeleteTaskModal, setShowDeleteTaskModal] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<any>(null);
   const [hoveredTaskKey, setHoveredTaskKey] = useState<string | null>(null);
@@ -32,6 +54,8 @@ export default function ProjectDetailPage() {
   const [userToRemove, setUserToRemove] = useState<any>(null);
   const [commentToDelete, setCommentToDelete] = useState<any>(null);
   const [hoveredUserKey, setHoveredUserKey] = useState<string | null>(null);
+  const [hoveredEntryId, setHoveredEntryId] = useState<string | null>(null);
+  const [runningTimerState, setRunningTimerState] = useState<any>(null);
   const moreDropdownRef = useRef(null);
   const sortDataDropdownRef = useRef(null);
   const itemNameDropdownRef = useRef(null);
@@ -202,7 +226,7 @@ export default function ProjectDetailPage() {
   const [newTaskRatePerHour, setNewTaskRatePerHour] = useState('');
   const [newTaskDescription, setNewTaskDescription] = useState('');
   const [newTaskBillable, setNewTaskBillable] = useState(true);
-  const [taskTimerDefaults, setTaskTimerDefaults] = useState<{ defaultProjectName: string; defaultTaskName: string; defaultBillable: boolean } | null>(null);
+  const [taskTimerDefaults, setTaskTimerDefaults] = useState<{ defaultProjectName: string; defaultTaskName: string; defaultBillable: boolean; defaultTimeSpent?: string; defaultUser?: string; defaultNotes?: string; defaultDate?: string | Date } | null>(null);
   const [availableUsers, setAvailableUsers] = useState<any[]>([]);
   const [selectedUsersToAdd, setSelectedUsersToAdd] = useState<any[]>([]);
   const [addUsersDropdownOpen, setAddUsersDropdownOpen] = useState(false);
@@ -219,6 +243,36 @@ export default function ProjectDetailPage() {
     if (!query) return true;
     return getUserOptionLabel(user).toLowerCase().includes(query) || getUserOptionEmail(user).toLowerCase().includes(query);
   });
+
+  useEffect(() => {
+    const syncTimerState = () => {
+      const savedTimerState = localStorage.getItem("timerState");
+      if (!savedTimerState) {
+        setRunningTimerState(null);
+        return;
+      }
+
+      try {
+        const timerState = JSON.parse(savedTimerState);
+        setRunningTimerState(timerState);
+      } catch {
+        setRunningTimerState(null);
+      }
+    };
+
+    syncTimerState();
+    const handleTimerUpdate = () => syncTimerState();
+
+    window.addEventListener("timerStateUpdated", handleTimerUpdate);
+    window.addEventListener("storage", handleTimerUpdate);
+
+    const intervalId = window.setInterval(syncTimerState, 1000);
+    return () => {
+      window.removeEventListener("timerStateUpdated", handleTimerUpdate);
+      window.removeEventListener("storage", handleTimerUpdate);
+      window.clearInterval(intervalId);
+    };
+  }, []);
   const openAddUsersModal = () => {
     setSelectedUsersToAdd([]);
     setAddUsersSearch('');
@@ -328,13 +382,314 @@ export default function ProjectDetailPage() {
     }
   };
   const getTaskKey = (task: any, index: number) => String(task?._id || task?.id || task?.taskId || task?.taskName || index);
+  const formatRunningTime = (seconds: number) => {
+    const totalSeconds = Math.max(0, Math.floor(Number(seconds || 0)));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const secs = totalSeconds % 60;
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  };
+  const getActiveTimerEntryId = () => String(runningTimerState?.sourceEntryId || runningTimerState?.entryId || "");
+  const isRunningForEntry = (entry: any) => {
+    if (!runningTimerState?.isTimerRunning) return false;
+    const entryId = String(entry?.id || entry?._id || "");
+    const activeEntryId = getActiveTimerEntryId();
+    return Boolean(activeEntryId && entryId && activeEntryId === entryId);
+  };
+  const pauseRunningTimer = () => {
+    const savedTimerState = localStorage.getItem("timerState");
+    if (!savedTimerState) return;
+    try {
+      const timerState = JSON.parse(savedTimerState);
+      const pausedElapsedTime = calculateElapsedTime(timerState);
+      const updatedTimerState = {
+        ...timerState,
+        elapsedTime: pausedElapsedTime,
+        pausedElapsedTime,
+        isTimerRunning: false,
+        lastUpdated: Date.now(),
+      };
+      delete updatedTimerState.startTime;
+      localStorage.setItem("timerState", JSON.stringify(updatedTimerState));
+      syncRemoteTimer(updatedTimerState as any);
+      window.dispatchEvent(new CustomEvent("timerStateUpdated"));
+      toast.success("The timer has been paused.");
+    } catch (error) {
+      console.error("Failed to pause timer:", error);
+    }
+  };
   const startTaskTimer = (task: any) => {
     setTaskTimerDefaults({
       defaultProjectName: project?.projectName || project?.name || "",
       defaultTaskName: task?.taskName || "",
       defaultBillable: task?.billable !== false,
     });
+    setLogEntryFormTitle("New Log Entry");
+    setLogEntryFormEntryId(null);
     setShowLogEntryForm(true);
+  };
+  const startEntryTimer = (entry: any) => {
+    const projectName = entry?.projectName || project?.projectName || project?.name || "";
+    const taskName = entry?.taskName || entry?.task || "";
+    if (!projectName || !taskName) {
+      toast.error("Please select a project and task");
+      return;
+    }
+
+    const timerState = {
+      isTimerRunning: true,
+      startTime: Date.now(),
+      elapsedTime: 0,
+      pausedElapsedTime: 0,
+      timerNotes: entry?.notes || entry?.description || "",
+      associatedProject: projectName,
+      selectedProjectForTimer: projectName,
+      selectedTaskForTimer: taskName,
+      isBillable: entry?.billable !== false,
+      sourceEntryId: String(entry?.id || entry?._id || ""),
+      lastUpdated: Date.now(),
+    };
+
+    localStorage.setItem("timerState", JSON.stringify(timerState));
+    syncRemoteTimer(timerState as any);
+    window.dispatchEvent(new CustomEvent("timerStateUpdated"));
+    toast.success("The timer has been started.");
+  };
+  const openEditEntryForm = (entry: any) => {
+    if (!entry) return;
+    setTaskTimerDefaults({
+      defaultProjectName: entry?.projectName || project?.projectName || project?.name || "",
+      defaultTaskName: entry?.taskName || entry?.task || "",
+      defaultBillable: entry?.billable !== false,
+      defaultDate: entry?.date || new Date(),
+      defaultTimeSpent: entry?.timeSpent || "",
+      defaultUser: entry?.userName || entry?.user?.name || entry?.user || entry?.userEmail || "",
+      defaultNotes: entry?.notes || entry?.description || "",
+    });
+    setLogEntryFormTitle("Edit Log Entry");
+    setLogEntryFormEntryId(String(entry?.id || entry?._id || ""));
+    setShowLogEntryForm(true);
+  };
+  const openDeleteTimesheetModal = (ids: string[] = [...selectedEntries]) => {
+    if (!ids.length) return;
+    setPendingDeleteTimesheetIds([...ids]);
+    setShowDeleteTimesheetModal(true);
+  };
+  const closeDeleteTimesheetModal = () => {
+    if (isDeletingTimesheets) return;
+    setShowDeleteTimesheetModal(false);
+    setPendingDeleteTimesheetIds([]);
+  };
+  const confirmDeleteTimesheets = async () => {
+    if (!pendingDeleteTimesheetIds.length) {
+      closeDeleteTimesheetModal();
+      return;
+    }
+    setIsDeletingTimesheets(true);
+    try {
+      await Promise.all(pendingDeleteTimesheetIds.map((entryId) => timeEntriesAPI.delete(entryId)));
+      toast.success(
+        pendingDeleteTimesheetIds.length === 1
+          ? "Time entry deleted successfully."
+          : `${pendingDeleteTimesheetIds.length} time entries deleted successfully.`
+      );
+      setSelectedEntries([]);
+      setShowEntryMenu(false);
+      if (selectedEntry && pendingDeleteTimesheetIds.includes(selectedEntry.id)) {
+        setSelectedEntry(null);
+      }
+      const response = await timeEntriesAPI.getByProject(projectId);
+      const data = Array.isArray(response) ? response : (response?.data || []);
+      const transformedEntries = data.map(entry => ({
+        id: entry._id || entry.id,
+        projectId: entry.project?._id || entry.projectId,
+        projectName: entry.project?.name || entry.projectName,
+        userId: entry.user?._id || entry.userId,
+        userName: entry.user?.name || entry.userName,
+        rawDate: entry.date || null,
+        date: entry.date ? new Date(entry.date).toLocaleDateString() : '--',
+        hours: entry.hours || 0,
+        minutes: entry.minutes || 0,
+        timeSpent: entry.timeSpent || (entry.hours !== undefined ? `${entry.hours}h ${entry.minutes || 0}m` : '0h'),
+        description: entry.description || '',
+        task: entry.task || entry.taskName || '',
+        taskName: entry.task || entry.taskName || '',
+        billable: entry.billable !== undefined ? entry.billable : true,
+        notes: entry.description || entry.notes || '',
+        billingStatus: entry.billingStatus || 'Unbilled',
+      }));
+      setTimeEntries(transformedEntries);
+      window.dispatchEvent(new Event('timeEntryUpdated'));
+    } catch (error) {
+      console.error("Error deleting time entries:", error);
+      toast.error("Failed to delete time entries");
+    } finally {
+      setIsDeletingTimesheets(false);
+      setShowDeleteTimesheetModal(false);
+      setPendingDeleteTimesheetIds([]);
+    }
+  };
+  const getEntryDuration = (entry: any) => {
+    if (!entry) return "--";
+    if (entry.timeSpent) return entry.timeSpent;
+    const hours = Number(entry.hours || 0);
+    const minutes = Number(entry.minutes || 0);
+    return `${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m`;
+  };
+  const getEntryProjectName = (entry: any) => entry?.projectName || project?.projectName || project?.name || "--";
+  const getEntryCustomerName = () =>
+    project?.customerName ||
+    project?.customer?.displayName ||
+    project?.customer?.companyName ||
+    project?.customer?.name ||
+    "--";
+  const getEntryUserName = (entry: any) =>
+    entry?.userName ||
+    entry?.user?.name ||
+    entry?.user ||
+    entry?.userEmail ||
+    "--";
+  const getTimeSpentHHMM = (entry: any) => {
+    const raw = String(entry?.timeSpent || "");
+    const match = raw.match(/(\d+)\s*h.*?(\d+)\s*m/i);
+    if (match) {
+      return `${String(Number(match[1] || 0)).padStart(2, "0")}:${String(Number(match[2] || 0)).padStart(2, "0")}`;
+    }
+    if (raw.includes(":")) return raw;
+    const hours = Number(entry?.hours || 0);
+    const minutes = Number(entry?.minutes || 0);
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+  };
+  const handleEntryRowClick = (entry: any) => {
+    setSelectedEntry(entry);
+    setShowEntryMenu(false);
+    setEntryDrawerTab("otherDetails");
+  };
+  const handleEntryClone = async (entryToClone = selectedEntry) => {
+    if (!entryToClone) return;
+    try {
+      const [hours, minutes] = getTimeSpentHHMM(entryToClone).split(":").map((v) => Number(v) || 0);
+      await timeEntriesAPI.create({
+        project: projectId,
+        projectId,
+        projectName: project?.projectName || project?.name || entryToClone.projectName || "",
+        customerId: project?.customerId || project?.customer?._id || project?.customer?.id || project?.customer || undefined,
+        customerName: getEntryCustomerName(),
+        user: entryToClone.userId || entryToClone.user?._id || entryToClone.user || undefined,
+        userId: entryToClone.userId || entryToClone.user?._id || entryToClone.user || undefined,
+        userName: getEntryUserName(entryToClone),
+        date: entryToClone.date ? new Date(entryToClone.date).toISOString() : new Date().toISOString(),
+        hours,
+        minutes,
+        timeSpent: `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`,
+        description: entryToClone.notes || entryToClone.description || "",
+        billable: entryToClone.billable !== false,
+        task: entryToClone.taskName || entryToClone.task || "",
+        taskName: entryToClone.taskName || entryToClone.task || "",
+        notes: entryToClone.notes || entryToClone.description || "",
+      });
+      toast.success("Time entry cloned successfully!");
+      window.dispatchEvent(new Event("timeEntryUpdated"));
+      setShowEntryMenu(false);
+      setOpenRowEntryMenuId(null);
+    } catch (error) {
+      console.error("Error cloning time entry:", error);
+      toast.error("Failed to clone time entry");
+    }
+  };
+  const handleDeleteSelectedEntry = (entryToDelete = selectedEntry) => {
+    if (!entryToDelete) return;
+    openDeleteTimesheetModal([entryToDelete.id]);
+    setShowEntryMenu(false);
+    setOpenRowEntryMenuId(null);
+  };
+  const handleAddEntryComment = () => {
+    const editor = entryCommentEditorRef.current;
+    const trimmedComment = editor?.innerText.trim() || "";
+    if (!selectedEntry || !trimmedComment) return;
+    const currentUser = getLoggedInUserDisplay();
+    const newComment = {
+      id: `${Date.now()}`,
+      text: trimmedComment,
+      content: sanitizeCommentHtml(editor?.innerHTML || ""),
+      authorName: currentUser.name,
+      authorInitial: currentUser.initial,
+      createdAt: new Date().toISOString(),
+      bold: false,
+      italic: false,
+      underline: false
+    };
+    void (async () => {
+      const nextComments = [...(Array.isArray(selectedEntry.comments) ? selectedEntry.comments : entryComments), newComment]
+        .map((comment, index) => normalizeComment(comment, index))
+        .filter(Boolean);
+      try {
+        await timeEntriesAPI.update(selectedEntry.id, { comments: nextComments });
+        setEntryComments(nextComments);
+        setSelectedEntry((prev: any) => (prev ? { ...prev, comments: nextComments } : prev));
+        setTimeEntries((prev: any[]) =>
+          prev.map((entry) => (String(entry.id) === String(selectedEntry.id) ? { ...entry, comments: nextComments } : entry))
+        );
+        if (editor) editor.innerHTML = "";
+        setEntryIsEditorEmpty(true);
+        setEntryIsBold(false);
+        setEntryIsItalic(false);
+        setEntryIsUnderline(false);
+        toast.success("Comment added successfully.");
+      } catch (error) {
+        console.error("Failed to save timesheet comment:", error);
+        toast.error("Failed to add comment.");
+      }
+    })();
+  };
+  const handleDeleteEntryComment = async (commentId: string | number) => {
+    if (!selectedEntry) return false;
+    const previousComments = Array.isArray(selectedEntry.comments) ? selectedEntry.comments : entryComments;
+    const updatedComments = previousComments.filter((comment: any) => String(comment.id) !== String(commentId));
+    try {
+      await timeEntriesAPI.update(selectedEntry.id, { comments: updatedComments });
+      setEntryComments(updatedComments);
+      setSelectedEntry((prev: any) => (prev ? { ...prev, comments: updatedComments } : prev));
+      setTimeEntries((prev: any[]) =>
+        prev.map((entry) => (String(entry.id) === String(selectedEntry.id) ? { ...entry, comments: updatedComments } : entry))
+      );
+      toast.success("Comment deleted successfully.");
+      return true;
+    } catch (error) {
+      console.error("Failed to delete timesheet comment:", error);
+      toast.error("Failed to delete comment.");
+      return false;
+    }
+  };
+  const openDeleteEntryCommentModal = (comment: any) => {
+    setEntryCommentToDelete(comment);
+    setShowDeleteEntryCommentModal(true);
+  };
+  const closeDeleteEntryCommentModal = () => {
+    setShowDeleteEntryCommentModal(false);
+    setEntryCommentToDelete(null);
+  };
+  const confirmDeleteEntryComment = async () => {
+    if (!entryCommentToDelete) return;
+    const deleted = await handleDeleteEntryComment(entryCommentToDelete.id);
+    if (deleted) closeDeleteEntryCommentModal();
+  };
+  const syncEntryCommentEditorState = () => {
+    const editor = entryCommentEditorRef.current;
+    const isEmpty = !(editor?.innerText || "").trim();
+    setEntryIsEditorEmpty(isEmpty);
+  };
+  const applyEntryCommentFormat = (command: "bold" | "italic" | "underline") => {
+    if (!entryCommentEditorRef.current) return;
+    entryCommentEditorRef.current.focus();
+    document.execCommand(command, false);
+    syncEntryCommentEditorState();
+  };
+  const openEntryCommentsHistory = (entry: any) => {
+    setSelectedEntry(entry);
+    setEntryDrawerTab("comments");
+    setShowEntryMenu(false);
+    setOpenRowEntryMenuId(null);
   };
   const toggleTaskActive = async (task: any, index: number) => {
     const taskKey = getTaskKey(task, index);
@@ -387,7 +742,6 @@ export default function ProjectDetailPage() {
   const [expenseAccounts, setExpenseAccounts] = useState([]);
   const [timeEntries, setTimeEntries] = useState([]);
   const [selectedEntries, setSelectedEntries] = useState([]);
-  const [hoveredEntryId, setHoveredEntryId] = useState(null);
   const [statusFilter, setStatusFilter] = useState("All");
   const [periodFilter, setPeriodFilter] = useState("All");
   const [expenses, setExpenses] = useState([]);
@@ -1117,6 +1471,75 @@ export default function ProjectDetailPage() {
     setComments(projectComments.map((comment, index) => normalizeComment(comment, index)).filter(Boolean));
   }, [project]);
 
+  useEffect(() => {
+    if (!selectedEntry) {
+      setEntryComments([]);
+      if (entryCommentEditorRef.current) {
+        entryCommentEditorRef.current.innerHTML = "";
+      }
+      setEntryIsEditorEmpty(true);
+      return;
+    }
+    let cancelled = false;
+    const loadEntryComments = async () => {
+      const dbComments = Array.isArray(selectedEntry.comments) ? selectedEntry.comments : [];
+      const normalizedDbComments = dbComments.map((comment, index) => normalizeComment(comment, index)).filter(Boolean);
+      if (normalizedDbComments.length) {
+        if (!cancelled) setEntryComments(normalizedDbComments);
+        return;
+      }
+
+      const legacyCommentsStore = (() => {
+        if (typeof localStorage === "undefined") return {};
+        try {
+          return JSON.parse(localStorage.getItem("timesheetComments") || "{}");
+        } catch {
+          return {};
+        }
+      })();
+      const legacyComments = Array.isArray(legacyCommentsStore[selectedEntry.id]) ? legacyCommentsStore[selectedEntry.id] : [];
+      const normalizedLegacyComments = legacyComments.map((comment, index) => normalizeComment(comment, index)).filter(Boolean);
+      if (normalizedLegacyComments.length) {
+        if (!cancelled) setEntryComments(normalizedLegacyComments);
+        try {
+          await timeEntriesAPI.update(selectedEntry.id, { comments: normalizedLegacyComments });
+          if (!cancelled) {
+            setSelectedEntry((prev: any) => (prev ? { ...prev, comments: normalizedLegacyComments } : prev));
+            setTimeEntries((prev: any[]) =>
+              prev.map((entry) => (String(entry.id) === String(selectedEntry.id) ? { ...entry, comments: normalizedLegacyComments } : entry))
+            );
+          }
+        } catch (error) {
+          console.error("Failed to migrate legacy timesheet comments:", error);
+        }
+        return;
+      }
+
+      if (!cancelled) setEntryComments([]);
+    };
+
+    void loadEntryComments();
+    if (entryCommentEditorRef.current) {
+      entryCommentEditorRef.current.innerHTML = "";
+    }
+    setEntryIsEditorEmpty(true);
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedEntry]);
+
+  useEffect(() => {
+    const handleDocumentMouseDown = (event: MouseEvent) => {
+      if (!openRowEntryMenuId) return;
+      const target = event.target;
+      if (target instanceof Element && target.closest("[data-entry-row-menu]")) return;
+      setOpenRowEntryMenuId(null);
+    };
+
+    document.addEventListener("mousedown", handleDocumentMouseDown);
+    return () => document.removeEventListener("mousedown", handleDocumentMouseDown);
+  }, [openRowEntryMenuId]);
+
   // Load time entries for this project
   useEffect(() => {
     const loadTimeEntries = async () => {
@@ -1125,6 +1548,14 @@ export default function ProjectDetailPage() {
       try {
         const response = await timeEntriesAPI.getByProject(projectId);
         const data = Array.isArray(response) ? response : (response?.data || []);
+        const legacyCommentsStore = (() => {
+          if (typeof localStorage === "undefined") return {};
+          try {
+            return JSON.parse(localStorage.getItem("timesheetComments") || "{}");
+          } catch {
+            return {};
+          }
+        })();
 
         // Transform database entries to match frontend format
         const transformedEntries = data.map(entry => ({
@@ -1133,16 +1564,29 @@ export default function ProjectDetailPage() {
           projectName: entry.project?.name || entry.projectName,
           userId: entry.user?._id || entry.userId,
           userName: entry.user?.name || entry.userName,
+          rawDate: entry.date || null,
           date: entry.date ? new Date(entry.date).toLocaleDateString() : '--',
           hours: entry.hours || 0,
           minutes: entry.minutes || 0,
-          timeSpent: entry.hours ? `${entry.hours}h ${entry.minutes || 0}m` : '0h',
+          timeSpent: entry.timeSpent || (entry.hours !== undefined ? `${entry.hours}h ${entry.minutes || 0}m` : '0h'),
           description: entry.description || '',
           task: entry.task || entry.taskName || '',
           taskName: entry.task || entry.taskName || '',
           billable: entry.billable !== undefined ? entry.billable : true,
           notes: entry.description || entry.notes || '',
           billingStatus: entry.billingStatus || 'Unbilled',
+          comments: (() => {
+            const entryId = String(entry._id || entry.id || "");
+            const dbComments = Array.isArray(entry.comments) ? entry.comments : [];
+            const legacyComments = Array.isArray(legacyCommentsStore[entryId]) ? legacyCommentsStore[entryId] : [];
+            const mergedComments = dbComments.length ? dbComments : legacyComments;
+            if (!dbComments.length && legacyComments.length && entryId) {
+              void timeEntriesAPI.update(entryId, { comments: legacyComments }).catch((error) => {
+                console.error("Failed to migrate legacy timesheet comments:", error);
+              });
+            }
+            return mergedComments.map((comment, index) => normalizeComment(comment, index)).filter(Boolean);
+          })(),
         }));
 
         setTimeEntries(transformedEntries);
@@ -1219,6 +1663,7 @@ export default function ProjectDetailPage() {
 
   useEffect(() => {
     const loadProject = async () => {
+      setLoadingProject(true);
       try {
         const response = await projectsAPI.getById(projectId);
         // Handle response format: { success: true, data: {...} } or direct object
@@ -1286,6 +1731,8 @@ export default function ProjectDetailPage() {
         console.error("Error loading project:", error);
         toast.error("Failed to load project: " + (error.message || "Unknown error"));
         navigate('/time-tracking');
+      } finally {
+        setLoadingProject(false);
       }
     };
 
@@ -1527,6 +1974,220 @@ export default function ProjectDetailPage() {
 
   const hoursData = calculateHours();
 
+  const parseProjectDetailDate = (value: any) => {
+    if (!value) return null;
+    if (value instanceof Date) {
+      const date = new Date(value);
+      if (isNaN(date.getTime())) return null;
+      date.setHours(0, 0, 0, 0);
+      return date;
+    }
+
+    if (typeof value === "string") {
+      const slashMatch = value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+      if (slashMatch) {
+        const date = new Date(Number(slashMatch[3]), Number(slashMatch[2]) - 1, Number(slashMatch[1]));
+        date.setHours(0, 0, 0, 0);
+        return isNaN(date.getTime()) ? null : date;
+      }
+
+      const longMatch = value.match(/(\d{1,2})\s+(\w{3})\s+(\d{4})/);
+      if (longMatch) {
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const monthIndex = months.indexOf(longMatch[2]);
+        if (monthIndex !== -1) {
+          const date = new Date(Number(longMatch[3]), monthIndex, Number(longMatch[1]));
+          date.setHours(0, 0, 0, 0);
+          return isNaN(date.getTime()) ? null : date;
+        }
+      }
+    }
+
+    const fallbackDate = new Date(value);
+    if (isNaN(fallbackDate.getTime())) return null;
+    fallbackDate.setHours(0, 0, 0, 0);
+    return fallbackDate;
+  };
+
+  const addDaysToDate = (date: Date, days: number) => {
+    const next = new Date(date);
+    next.setDate(next.getDate() + days);
+    return next;
+  };
+
+  const addMonthsToDate = (date: Date, months: number) => {
+    const next = new Date(date);
+    next.setMonth(next.getMonth() + months);
+    return next;
+  };
+
+  const startOfMonth = (date: Date) => {
+    const next = new Date(date);
+    next.setDate(1);
+    next.setHours(0, 0, 0, 0);
+    return next;
+  };
+
+  const endOfMonth = (date: Date) => {
+    const next = new Date(date);
+    next.setMonth(next.getMonth() + 1, 0);
+    next.setHours(0, 0, 0, 0);
+    return next;
+  };
+
+  const startOfQuarter = (date: Date) => {
+    const month = date.getMonth();
+    const quarterStartMonth = month - (month % 3);
+    const next = new Date(date.getFullYear(), quarterStartMonth, 1);
+    next.setHours(0, 0, 0, 0);
+    return next;
+  };
+
+  const endOfQuarter = (date: Date) => endOfMonth(addMonthsToDate(startOfQuarter(date), 2));
+
+  const startOfYear = (date: Date) => {
+    const next = new Date(date.getFullYear(), 0, 1);
+    next.setHours(0, 0, 0, 0);
+    return next;
+  };
+
+  const getChartBucketLabel = (date: Date, bucketMode: "day" | "month") => {
+    if (bucketMode === "month") {
+      return date.toLocaleDateString("en-GB", { month: "short" });
+    }
+    return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+  };
+
+  const getChartBucketKey = (date: Date, bucketMode: "day" | "month") =>
+    bucketMode === "month"
+      ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
+      : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+
+  const buildChartData = (range: string, entries: any[]) => {
+    const normalizedEntries = entries
+      .map((entry) => ({ entry, date: parseProjectDetailDate(entry.rawDate || entry.date) }))
+      .filter(({ date }) => date);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let startDate = new Date(today);
+    let endDate = new Date(today);
+    let bucketMode: "day" | "month" = "day";
+
+    if (range === "Today") {
+      startDate = new Date(today);
+      endDate = new Date(today);
+    } else if (range === "Yesterday") {
+      startDate = addDaysToDate(today, -1);
+      endDate = addDaysToDate(today, -1);
+    } else if (range === "This Week") {
+      startDate = new Date(today);
+      startDate.setDate(today.getDate() - today.getDay());
+      endDate = addDaysToDate(startDate, 6);
+    } else if (range === "Previous Week") {
+      startDate = new Date(today);
+      startDate.setDate(today.getDate() - today.getDay() - 7);
+      endDate = addDaysToDate(startDate, 6);
+    } else if (range === "This Month") {
+      startDate = startOfMonth(today);
+      endDate = endOfMonth(today);
+    } else if (range === "Previous Month") {
+      const previousMonth = addMonthsToDate(startOfMonth(today), -1);
+      startDate = startOfMonth(previousMonth);
+      endDate = endOfMonth(previousMonth);
+    } else if (range === "This Quarter") {
+      startDate = startOfQuarter(today);
+      endDate = endOfQuarter(today);
+      bucketMode = "month";
+    } else if (range === "Previous Quarter") {
+      const previousQuarter = addMonthsToDate(startOfQuarter(today), -3);
+      startDate = startOfQuarter(previousQuarter);
+      endDate = endOfQuarter(previousQuarter);
+      bucketMode = "month";
+    } else if (range === "This Year") {
+      startDate = startOfYear(today);
+      endDate = new Date(today.getFullYear(), 11, 31);
+      endDate.setHours(0, 0, 0, 0);
+      bucketMode = "month";
+    } else if (range === "Previous Year") {
+      const previousYear = today.getFullYear() - 1;
+      startDate = new Date(previousYear, 0, 1);
+      endDate = new Date(previousYear, 11, 31);
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(0, 0, 0, 0);
+      bucketMode = "month";
+    } else if (range === "All") {
+      if (normalizedEntries.length > 0) {
+        const dates = normalizedEntries.map(({ date }) => date as Date);
+        const minDate = new Date(Math.min(...dates.map((date) => date.getTime())));
+        const maxDate = new Date(Math.max(...dates.map((date) => date.getTime())));
+        const spanDays = Math.max(1, Math.ceil((maxDate.getTime() - minDate.getTime()) / 86400000) + 1);
+        bucketMode = spanDays > 90 ? "month" : "day";
+        if (bucketMode === "month") {
+          startDate = startOfMonth(minDate);
+          endDate = endOfMonth(maxDate);
+        } else {
+          startDate = minDate;
+          endDate = maxDate;
+        }
+      } else {
+        startDate = addDaysToDate(today, -6);
+        endDate = today;
+      }
+    }
+
+    const buckets: Array<{
+      key: string;
+      label: string;
+      date: Date;
+      loggedMinutes: number;
+      billableMinutes: number;
+      billedMinutes: number;
+      unbilledMinutes: number;
+    }> = [];
+
+    for (let cursor = new Date(startDate); cursor <= endDate; cursor = bucketMode === "month" ? addMonthsToDate(cursor, 1) : addDaysToDate(cursor, 1)) {
+      buckets.push({
+        key: getChartBucketKey(cursor, bucketMode),
+        label: getChartBucketLabel(cursor, bucketMode),
+        date: new Date(cursor),
+        loggedMinutes: 0,
+        billableMinutes: 0,
+        billedMinutes: 0,
+        unbilledMinutes: 0,
+      });
+    }
+
+    const bucketMap = new Map(buckets.map((bucket) => [bucket.key, bucket]));
+
+    normalizedEntries.forEach(({ entry, date }) => {
+      const entryDate = date as Date;
+      if (entryDate < startDate || entryDate > endDate) return;
+      const bucketKey = getChartBucketKey(entryDate, bucketMode);
+      const bucket = bucketMap.get(bucketKey);
+      if (!bucket) return;
+
+      const minutes = parseTimeToMinutes(entry.timeSpent);
+      bucket.loggedMinutes += minutes;
+      if (entry.billable) {
+        bucket.billableMinutes += minutes;
+        if (entry.billingStatus === "Invoiced" || entry.billingStatus === "Billed") {
+          bucket.billedMinutes += minutes;
+        } else {
+          bucket.unbilledMinutes += minutes;
+        }
+      }
+    });
+
+    return {
+      bucketMode,
+      buckets,
+    };
+  };
+
+  const chartData = buildChartData(dateRange, timeEntries);
+
   const handleAddComment = async () => {
     const editor = commentEditorRef.current;
     const trimmedComment = editor?.innerText.trim() || "";
@@ -1610,6 +2271,39 @@ export default function ProjectDetailPage() {
     syncCommentEditorState();
   };
 
+  if (loadingProject) {
+    return (
+      <div className="min-h-screen bg-white">
+        <div className="h-[70px] border-b border-slate-200 bg-white" />
+        <div className="p-6 space-y-6">
+          <div className="h-8 w-56 rounded bg-slate-200 animate-pulse" />
+          <div className="h-12 rounded-lg bg-slate-100 border border-slate-200 animate-pulse" />
+          <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
+            <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="h-6 w-40 rounded bg-slate-200 animate-pulse" />
+              <div className="h-4 w-32 rounded bg-slate-200 animate-pulse" />
+              <div className="h-4 w-28 rounded bg-slate-200 animate-pulse" />
+              <div className="h-4 w-24 rounded bg-slate-200 animate-pulse" />
+              <div className="h-4 w-36 rounded bg-slate-200 animate-pulse" />
+              <div className="h-4 w-20 rounded bg-slate-200 animate-pulse" />
+            </div>
+            <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="h-6 w-44 rounded bg-slate-200 animate-pulse" />
+              <div className="h-64 rounded bg-slate-100 animate-pulse" />
+              <div className="h-28 rounded bg-slate-100 animate-pulse" />
+            </div>
+          </div>
+          <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="h-5 w-24 rounded bg-slate-200 animate-pulse" />
+            <div className="h-12 rounded bg-slate-100 animate-pulse" />
+            <div className="h-12 rounded bg-slate-100 animate-pulse" />
+            <div className="h-12 rounded bg-slate-100 animate-pulse" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!project) {
     return (
       <div style={{ padding: "40px", textAlign: "center" }}>
@@ -1636,7 +2330,8 @@ export default function ProjectDetailPage() {
     }
   };
 
-  const currencyCode = baseCurrencyCode;
+  const projectCurrencyCode = String(baseCurrencyCode).split(' ')[0].substring(0, 3).toUpperCase();
+  const currencyCode = projectCurrencyCode;
   const formatMoney = (value: any) =>
     `${currencyCode} ${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -1684,12 +2379,186 @@ export default function ProjectDetailPage() {
     rawBillingMethod === "fixed"
       ? Math.max(totalProjectCost - billedFromInvoices, 0)
       : (hoursData.unbilledMinutes / 60) * billingRate;
+  const chartTotals = chartData.buckets.reduce(
+    (acc, bucket) => {
+      acc.loggedMinutes += bucket.loggedMinutes;
+      acc.billableMinutes += bucket.billableMinutes;
+      acc.billedMinutes += bucket.billedMinutes;
+      acc.unbilledMinutes += bucket.unbilledMinutes;
+      return acc;
+    },
+    { loggedMinutes: 0, billableMinutes: 0, billedMinutes: 0, unbilledMinutes: 0 }
+  );
+  const chartLoggedAmount =
+    rawBillingMethod === "fixed"
+      ? totalProjectCost
+      : (chartTotals.loggedMinutes / 60) * billingRate;
+  const chartBillableAmount =
+    rawBillingMethod === "fixed"
+      ? totalProjectCost
+      : (chartTotals.billableMinutes / 60) * billingRate;
+  const chartBilledAmount =
+    rawBillingMethod === "fixed"
+      ? billedFromInvoices
+      : (chartTotals.billedMinutes / 60) * billingRate;
+  const chartUnbilledAmount =
+    rawBillingMethod === "fixed"
+      ? Math.max(totalProjectCost - billedFromInvoices, 0)
+      : (chartTotals.unbilledMinutes / 60) * billingRate;
+  const chartWidth = Math.max(625, chartData.buckets.length * 75);
+  const chartSlotWidth = chartWidth / Math.max(chartData.buckets.length, 1);
+  const chartBarWidth = Math.min(24, Math.max(12, chartSlotWidth / 3));
+  const projectHoursValues = chartData.buckets.map((bucket) => bucket.loggedMinutes / 60);
+  const profitabilityBillableValues = chartData.buckets.map((bucket) => bucket.billableMinutes / 60);
+  const profitabilityUnbilledValues = chartData.buckets.map((bucket) => bucket.unbilledMinutes / 60);
+  const projectChartMaxValue = Math.max(6, Math.ceil(Math.max(...projectHoursValues, 0) / 2) * 2);
+  const profitabilityChartMaxValue = Math.max(20, Math.ceil(Math.max(...profitabilityBillableValues, ...profitabilityUnbilledValues, 0) / 5) * 5);
+  const projectChartTicks = Array.from({ length: 4 }, (_, index) => Number(((projectChartMaxValue / 3) * (3 - index)).toFixed(1)));
+  const profitabilityChartTicks = Array.from({ length: 5 }, (_, index) => Number(((profitabilityChartMaxValue / 4) * (4 - index)).toFixed(1)));
+  const projectChartPoints = chartData.buckets
+    .map((bucket, index) => {
+      const x = chartData.buckets.length === 1 ? chartWidth / 2 : (index / Math.max(chartData.buckets.length - 1, 1)) * chartWidth;
+      const y = 220 - ((bucket.loggedMinutes / 60) / projectChartMaxValue) * 180;
+      return `${x},${y}`;
+    })
+    .join(" ");
   const totalExpensesAmount = expenses.reduce(
     (sum, expense) => sum + Number(expense?.amount || expense?.total || 0),
     0
   );
-  const actualCost = totalExpensesAmount;
-  const actualRevenue = billedAmount;
+
+  const renderProfitabilitySummaryChart = () => (
+    <>
+      <div style={{ height: "300px", position: "relative", marginBottom: "24px" }}>
+        <div style={{ height: "260px", paddingLeft: "40px", paddingRight: "20px", borderBottom: "1px solid #e5e7eb", position: "relative", overflow: "hidden" }}>
+          <div style={{ position: "absolute", left: "0", top: "0", bottom: "0", display: "flex", flexDirection: "column", justifyContent: "space-between", fontSize: "11px", color: "#9ca3af", paddingBottom: "10px", width: "35px" }}>
+            {profitabilityChartTicks.map((value, index) => (
+              <span key={index}>{Number.isInteger(value) ? value : value.toFixed(1)}</span>
+            ))}
+          </div>
+
+          <div style={{ height: "100%", paddingTop: "10px", paddingBottom: "30px", position: "relative", marginLeft: "40px", width: "100%" }}>
+            <svg width="100%" height="100%" viewBox={`0 0 ${chartWidth} 230`} preserveAspectRatio="xMidYMid meet" role="img" aria-label="Bar Chart" style={{ position: "absolute", top: "10px", left: 0 }}>
+              {[0, 1, 2, 3, 4, 5].map((i) => {
+                const y = (i / 5) * 230;
+                return <line key={i} x1="0" y1={y} x2={chartWidth} y2={y} stroke="#f3f4f6" strokeWidth="1" />;
+              })}
+              {chartData.buckets.map((bucket, index) => {
+                const centerX = chartData.buckets.length === 1 ? chartWidth / 2 : (index / Math.max(chartData.buckets.length - 1, 1)) * chartWidth;
+                const billableHeight = ((bucket.billableMinutes / 60) / profitabilityChartMaxValue) * 190;
+                const unbilledHeight = ((bucket.unbilledMinutes / 60) / profitabilityChartMaxValue) * 190;
+                return (
+                  <g key={bucket.key}>
+                    <rect x={centerX - chartBarWidth - 2} y={230 - billableHeight} width={chartBarWidth} height={billableHeight} fill="#93c5fd" />
+                    <rect x={centerX + 2} y={230 - unbilledHeight} width={chartBarWidth} height={unbilledHeight} fill="#fbbf24" />
+                  </g>
+                );
+              })}
+            </svg>
+
+            <div style={{ position: "absolute", bottom: "-25px", left: "0", right: "40px", display: "flex", justifyContent: "space-between", width: "100%" }}>
+              {chartData.buckets.map((bucket) => (
+                <span key={bucket.key} style={{ fontSize: "11px", color: "#9ca3af" }}>
+                  {bucket.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: "24px", marginTop: "20px", paddingLeft: "40px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <div style={{ width: "16px", height: "4px", backgroundColor: "#93c5fd", borderRadius: "2px" }} />
+            <span style={{ fontSize: "13px", color: "#374151" }}>Billable Hours</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <div style={{ width: "16px", height: "4px", backgroundColor: "#fbbf24", borderRadius: "2px" }} />
+            <span style={{ fontSize: "13px", color: "#374151" }}>Unbilled Hours</span>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ height: "1px", backgroundColor: "#f3f4f6", margin: "0 -24px 24px -24px" }} />
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "16px" }}>
+        <div style={{ textAlign: "center", borderRight: "1px solid #e5e7eb", paddingRight: "8px" }}>
+          <div style={{ fontSize: "13px", color: "#6b7280", marginBottom: "6px" }}>Logged Hours</div>
+          <div style={{ fontSize: "16px", color: "#2563eb", fontWeight: "600" }}>{formatMinutesToTime(chartTotals.loggedMinutes)}</div>
+          <div style={{ fontSize: "14px", color: "#111827", fontWeight: "500" }}>{formatMoney(chartLoggedAmount)}</div>
+        </div>
+        <div style={{ textAlign: "center", borderRight: "1px solid #e5e7eb", paddingRight: "8px" }}>
+          <div style={{ fontSize: "13px", color: "#6b7280", marginBottom: "6px" }}>Billable Hours</div>
+          <div style={{ fontSize: "16px", color: "#2563eb", fontWeight: "600" }}>{formatMinutesToTime(chartTotals.billableMinutes)}</div>
+          <div style={{ fontSize: "14px", color: "#111827", fontWeight: "500" }}>{formatMoney(chartBillableAmount)}</div>
+        </div>
+        <div style={{ textAlign: "center", borderRight: "1px solid #e5e7eb", paddingRight: "8px" }}>
+          <div style={{ fontSize: "13px", color: "#6b7280", marginBottom: "6px" }}>Billed Hours</div>
+          <div style={{ fontSize: "16px", color: "#2563eb", fontWeight: "600" }}>{formatMinutesToTime(chartTotals.billedMinutes)}</div>
+          <div style={{ fontSize: "14px", color: "#111827", fontWeight: "500" }}>{formatMoney(chartBilledAmount)}</div>
+        </div>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: "13px", color: "#6b7280", marginBottom: "6px" }}>Unbilled Hours</div>
+          <div style={{ fontSize: "16px", color: "#2563eb", fontWeight: "600" }}>{formatMinutesToTime(chartTotals.unbilledMinutes)}</div>
+          <div style={{ fontSize: "14px", color: "#111827", fontWeight: "500" }}>{formatMoney(chartUnbilledAmount)}</div>
+        </div>
+      </div>
+    </>
+  );
+
+  const renderProjectHoursChart = () => (
+    <>
+      <div style={{ height: "300px", position: "relative", marginBottom: "12px" }}>
+        <div style={{ height: "240px", paddingLeft: "40px", paddingRight: "20px", borderBottom: "1px solid #e5e7eb", position: "relative", overflow: "hidden" }}>
+          <div style={{ position: "absolute", left: "6px", top: "50%", transform: "translateY(-50%)", fontSize: "11px", color: "#9ca3af" }}>
+            Hours
+          </div>
+          <div style={{ position: "absolute", left: "0", top: "0", bottom: "0", display: "flex", flexDirection: "column", justifyContent: "space-between", fontSize: "11px", color: "#9ca3af", paddingBottom: "10px", width: "35px" }}>
+            {projectChartTicks.map((value, index) => (
+              <span key={index}>{Number.isInteger(value) ? `${value}h` : `${value.toFixed(1)}h`}</span>
+            ))}
+          </div>
+
+          <div style={{ height: "100%", paddingTop: "10px", paddingBottom: "30px", position: "relative", marginLeft: "40px", width: "100%" }}>
+            <svg width="100%" height="100%" viewBox={`0 0 ${chartWidth} 220`} preserveAspectRatio="xMidYMid meet" role="img" aria-label="Bar Chart" style={{ position: "absolute", top: "10px", left: 0 }}>
+              {[0, 1, 2, 3].map((i) => {
+                const y = (i / 3) * 220;
+                return <line key={i} x1="0" y1={y} x2={chartWidth} y2={y} stroke="#f3f4f6" strokeWidth="1" />;
+              })}
+              <polyline points={projectChartPoints} fill="none" stroke="#60a5fa" strokeWidth="2" />
+              {chartData.buckets.map((bucket, index) => {
+                const centerX = chartData.buckets.length === 1 ? chartWidth / 2 : (index / Math.max(chartData.buckets.length - 1, 1)) * chartWidth;
+                const y = 220 - ((bucket.loggedMinutes / 60) / projectChartMaxValue) * 180;
+                return <circle key={bucket.key} cx={centerX} cy={y} r="3" fill="#60a5fa" />;
+              })}
+            </svg>
+
+            <div style={{ position: "absolute", bottom: "-25px", left: "0", right: "40px", display: "flex", justifyContent: "space-between", width: "100%" }}>
+              {chartData.buckets.map((bucket) => (
+                <span key={bucket.key} style={{ fontSize: "11px", color: "#9ca3af" }}>
+                  {bucket.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: "12px", marginTop: "18px", justifyContent: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <div style={{ width: "16px", height: "4px", backgroundColor: "#60a5fa", borderRadius: "2px" }} />
+            <span style={{ fontSize: "13px", color: "#374151" }}>Logged Hours</span>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ height: "1px", backgroundColor: "#e5e7eb", margin: "0 -24px 16px -24px" }} />
+
+      <div style={{ textAlign: "center", marginTop: "8px" }}>
+        <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "4px" }}>Logged Hours</div>
+        <div style={{ fontSize: "16px", color: "#2563eb", fontWeight: "600" }}>{formatMinutesToTime(chartTotals.loggedMinutes)}</div>
+        <div style={{ fontSize: "14px", color: "#111827", fontWeight: "500" }}>{formatMoney(chartLoggedAmount)}</div>
+      </div>
+    </>
+  );
 
   const filterByStatus = (items, status) => {
     if (!items || status === "All") return items;
@@ -1750,7 +2619,7 @@ export default function ProjectDetailPage() {
                 onClick={async () => {
                   if (!project) return;
                   try {
-                    const clonedProjectData = {
+                    const clonedProjectData: any = {
                       name: (project.projectName || project.name || "Project") + " (Clone)",
                       description: project.description || "",
                       status: project.status || "planning",
@@ -1761,6 +2630,23 @@ export default function ProjectDetailPage() {
                       startDate: new Date(),
                       endDate: project.endDate ? new Date(project.endDate) : null,
                     };
+                    if (project.customer || project.customerId || project.customerName) {
+                      const customerId =
+                        project.customer?._id ||
+                        project.customer?.id ||
+                        project.customerId ||
+                        project.customer ||
+                        "";
+                      const customerName =
+                        project.customerName ||
+                        project.customer?.displayName ||
+                        project.customer?.companyName ||
+                        project.customer?.name ||
+                        "";
+                      clonedProjectData.customer = project.customer || project.customerId || undefined;
+                      clonedProjectData.customerId = customerId || undefined;
+                      clonedProjectData.customerName = customerName || undefined;
+                    }
                     await projectsAPI.create(clonedProjectData);
                     window.dispatchEvent(new Event('projectUpdated'));
                     toast.success('Project cloned successfully!');
@@ -1867,15 +2753,21 @@ export default function ProjectDetailPage() {
                                 break;
                             }
                           }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = "#e5e7eb";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = "transparent";
+                          }}
                           style={{
                             margin: '1px 8px',
                             padding: '10px 12px',
                             fontSize: '16px',
                             borderRadius: '10px',
                             cursor: 'pointer',
-                            border: option === 'Create Quote' ? '2px solid #3b82f6' : '2px solid transparent',
-                            backgroundColor: option === 'Create Quote' ? '#3b82f6' : 'transparent',
-                            color: option === 'Create Quote' ? '#fff' : '#1f2937',
+                            border: '2px solid transparent',
+                            backgroundColor: 'transparent',
+                            color: '#1f2937',
                             transition: 'all 0.2s'
                           }}
                         >
@@ -1913,7 +2805,7 @@ export default function ProjectDetailPage() {
                                 break;
                             }
                           }}
-                          className="px-4 py-2.5 text-sm text-gray-800 cursor-pointer my-[1px] transition-colors"
+                          className="px-4 py-2.5 text-sm text-gray-800 cursor-pointer my-[1px] transition-colors hover:bg-gray-200"
                         >
                           {option}
                         </div>
@@ -2183,8 +3075,22 @@ export default function ProjectDetailPage() {
                           };
 
                           // Copy customer if exists
-                          if (project.customer || project.customerId) {
-                            clonedProjectData.customer = project.customer || project.customerId;
+                          if (project.customer || project.customerId || project.customerName) {
+                            const customerId =
+                              project.customer?._id ||
+                              project.customer?.id ||
+                              project.customerId ||
+                              project.customer ||
+                              "";
+                            const customerName =
+                              project.customerName ||
+                              project.customer?.displayName ||
+                              project.customer?.companyName ||
+                              project.customer?.name ||
+                              "";
+                            clonedProjectData.customer = project.customer || project.customerId || undefined;
+                            clonedProjectData.customerId = customerId || undefined;
+                            clonedProjectData.customerName = customerName || undefined;
                           }
 
                           // Copy assigned users if exists
@@ -2280,7 +3186,7 @@ export default function ProjectDetailPage() {
               </button>
             </div>
             </div>
-<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", marginBottom: "12px", borderBottom: "1px solid #e5e7eb" }}>
+<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
             <div style={{ display: "flex", gap: "0px" }}>
               {tabs.map((tab) => (
                 <button
@@ -2328,7 +3234,7 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      <div style={{ padding: "20px 48px 20px 0", width: "100%", maxWidth: "100%", boxSizing: "border-box" }}>
+      <div style={{ padding: "8px 48px 20px 0", width: "100%", maxWidth: "100%", boxSizing: "border-box" }}>
         {showCommentsPanel ? (
           <div className="w-full max-w-[920px]">
             <div className="mb-10 bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
@@ -2601,281 +3507,41 @@ export default function ProjectDetailPage() {
                       Profitability Summary
                     </button>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "4px", cursor: "pointer" }}>
-                    <span style={{ fontSize: "13px", color: "#2563eb", fontWeight: "500" }}>{dateRange}</span>
-                    <ChevronDown size={14} color="#6b7280" />
+                  <div style={{ position: "relative", display: "inline-block" }}>
+                    <select
+                      value={dateRange}
+                      onChange={(e) => setDateRange(e.target.value)}
+                      style={{
+                        border: "1px solid #e2e8f0",
+                        padding: "6px 28px 6px 10px",
+                        borderRadius: "6px",
+                        fontSize: "12px",
+                        cursor: "pointer",
+                        backgroundColor: "transparent",
+                        color: "#2563eb",
+                        appearance: "none",
+                        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 9L1 4h10z'/%3E%3C/svg%3E")`,
+                        backgroundRepeat: "no-repeat",
+                        backgroundPosition: "right 8px center",
+                        paddingRight: "28px"
+                      }}
+                    >
+                      <option value="All">All</option>
+                      <option value="Today">Today</option>
+                      <option value="This Week">This Week</option>
+                      <option value="This Month">This Month</option>
+                      <option value="This Quarter">This Quarter</option>
+                      <option value="This Year">This Year</option>
+                      <option value="Yesterday">Yesterday</option>
+                      <option value="Previous Week">Previous Week</option>
+                      <option value="Previous Month">Previous Month</option>
+                      <option value="Previous Quarter">Previous Quarter</option>
+                      <option value="Previous Year">Previous Year</option>
+                    </select>
                   </div>
                 </div>
 
-                {hoursView === "Profitability Summary" ? (
-                  <>
-                    {/* Profitability Summary - Line Chart */}
-                    <div style={{
-                      height: "300px",
-                      position: "relative",
-                      marginBottom: "24px"
-                    }}>
-                      <div style={{
-                        height: "260px",
-                        paddingLeft: "40px",
-                        paddingRight: "20px",
-                        borderBottom: "1px solid #e5e7eb",
-                        position: "relative"
-                      }}>
-                        {/* Y-axis labels */}
-                        <div style={{
-                          position: "absolute",
-                          left: "0",
-                          top: "0",
-                          bottom: "0",
-                          display: "flex",
-                          flexDirection: "column",
-                          justifyContent: "space-between",
-                          fontSize: "11px",
-                          color: "#9ca3af",
-                          paddingBottom: "10px",
-                          width: "35px"
-                        }}>
-                          <span>5K</span>
-                          <span>4K</span>
-                          <span>3K</span>
-                          <span>2K</span>
-                          <span>1K</span>
-                          <span>0</span>
-                        </div>
-
-                        {/* Line Chart Area */}
-                        <div style={{
-                          height: "100%",
-                          paddingTop: "10px",
-                          paddingBottom: "30px",
-                          position: "relative",
-                          marginLeft: "40px"
-                        }}>
-                          <svg
-                            width="100%"
-                            height="100%"
-                            viewBox="0 0 600 230"
-                            preserveAspectRatio="none"
-                            style={{ position: "absolute", top: "10px", left: 0 }}
-                          >
-                            {/* Grid lines */}
-                            {[0, 1, 2, 3, 4, 5].map(i => {
-                              const y = (i / 5) * 230;
-                              return (
-                                <line
-                                  key={i}
-                                  x1="0"
-                                  y1={y}
-                                  x2="600"
-                                  y2={y}
-                                  stroke="#f3f4f6"
-                                  strokeWidth="1"
-                                />
-                              );
-                            })}
-                            {/* Billable Hours line (light blue) - flat line at bottom (no data) */}
-                            <polyline
-                              points="0,230 100,230 200,230 300,230 400,230 500,230 600,230"
-                              fill="none"
-                              stroke="#93c5fd"
-                              strokeWidth="2"
-                            />
-                            {/* Unbilled Hours line (yellow-orange) - flat line at bottom (no data) */}
-                            <polyline
-                              points="0,230 100,230 200,230 300,230 400,230 500,230 600,230"
-                              fill="none"
-                              stroke="#fb923c"
-                              strokeWidth="2"
-                            />
-                          </svg>
-
-                          {/* Date labels on X-axis */}
-                          <div style={{
-                            position: "absolute",
-                            bottom: "-25px",
-                            left: "0",
-                            right: "40px",
-                            display: "flex",
-                            justifyContent: "space-between"
-                          }}>
-                            {['21 Dec', '22 Dec', '23 Dec', '24 Dec', '25 Dec', '26 Dec', '27 Dec'].map((date, i) => (
-                              <span key={i} style={{ fontSize: "11px", color: "#9ca3af" }}>
-                                {date}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Legend */}
-                      <div style={{
-                        display: "flex",
-                        gap: "24px",
-                        marginTop: "20px",
-                        paddingLeft: "40px"
-                      }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <div style={{ width: "16px", height: "4px", backgroundColor: "#93c5fd", borderRadius: "2px" }}></div>
-                          <span style={{ fontSize: "13px", color: "#374151" }}>Billable Hours</span>
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <div style={{ width: "16px", height: "4px", backgroundColor: "#fb923c", borderRadius: "2px" }}></div>
-                          <span style={{ fontSize: "13px", color: "#374151" }}>Unbilled Hours</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Divider Line */}
-                    <div style={{ height: "1px", backgroundColor: "#f3f4f6", margin: "0 -24px 24px -24px" }}></div>
-
-                    {/* Actuals Summary */}
-                    <div style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: "24px"
-                    }}>
-                      <div style={{ textAlign: "center" }}>
-                        <div style={{ fontSize: "13px", color: "#6b7280", marginBottom: "6px" }}>Actual Cost</div>
-                        <div style={{ fontSize: "16px", fontWeight: "600", color: "#111827" }}>{formatMoney(actualCost)}</div>
-                      </div>
-                      <div style={{ textAlign: "center" }}>
-                        <div style={{ fontSize: "13px", color: "#6b7280", marginBottom: "6px" }}>Actual Revenue</div>
-                        <div style={{ fontSize: "16px", fontWeight: "600", color: "#111827" }}>{formatMoney(actualRevenue)}</div>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    {/* Project Hours - Logged Hours Line Chart */}
-                    <div style={{
-                      height: "300px",
-                      position: "relative",
-                      marginBottom: "12px"
-                    }}>
-                      <div style={{
-                        height: "240px",
-                        paddingLeft: "40px",
-                        paddingRight: "20px",
-                        borderBottom: "1px solid #e5e7eb",
-                        position: "relative"
-                      }}>
-                        <div style={{
-                          position: "absolute",
-                          left: "6px",
-                          top: "50%",
-                          transform: "translateY(-50%)",
-                          fontSize: "11px",
-                          color: "#9ca3af"
-                        }}>
-                          Hours
-                        </div>
-                        {/* Y-axis labels */}
-                        <div style={{
-                          position: "absolute",
-                          left: "0",
-                          top: "0",
-                          bottom: "0",
-                          display: "flex",
-                          flexDirection: "column",
-                          justifyContent: "space-between",
-                          fontSize: "11px",
-                          color: "#9ca3af",
-                          paddingBottom: "10px",
-                          width: "35px"
-                        }}>
-                          <span>6h</span>
-                          <span>4h</span>
-                          <span>2h</span>
-                          <span>0</span>
-                        </div>
-
-                        {/* Line Chart Area */}
-                        <div style={{
-                          height: "100%",
-                          paddingTop: "10px",
-                          paddingBottom: "30px",
-                          position: "relative",
-                          marginLeft: "40px"
-                        }}>
-                          <svg
-                            width="100%"
-                            height="100%"
-                            viewBox="0 0 600 220"
-                            preserveAspectRatio="none"
-                            style={{ position: "absolute", top: "10px", left: 0 }}
-                          >
-                            {/* Grid lines */}
-                            {[0, 1, 2, 3].map(i => {
-                              const y = (i / 3) * 220;
-                              return (
-                                <line
-                                  key={i}
-                                  x1="0"
-                                  y1={y}
-                                  x2="600"
-                                  y2={y}
-                                  stroke="#f3f4f6"
-                                  strokeWidth="1"
-                                />
-                              );
-                            })}
-                            {/* Logged Hours line (flat until data exists) */}
-                            <polyline
-                              points="0,220 100,220 200,220 300,220 400,220 500,220 600,220"
-                              fill="none"
-                              stroke="#60a5fa"
-                              strokeWidth="2"
-                            />
-                          </svg>
-
-                          {/* Date labels on X-axis */}
-                          <div style={{
-                            position: "absolute",
-                            bottom: "-25px",
-                            left: "0",
-                            right: "40px",
-                            display: "flex",
-                            justifyContent: "space-between"
-                          }}>
-                            {["09 Mar", "10 Mar", "11 Mar", "12 Mar", "13 Mar", "14 Mar", "15 Mar"].map((date, i) => (
-                              <span key={i} style={{ fontSize: "11px", color: "#9ca3af" }}>
-                                {date}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Legend */}
-                      <div style={{
-                        display: "flex",
-                        gap: "12px",
-                        marginTop: "18px",
-                        justifyContent: "center"
-                      }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <div style={{ width: "16px", height: "4px", backgroundColor: "#60a5fa", borderRadius: "2px" }}></div>
-                          <span style={{ fontSize: "13px", color: "#374151" }}>Logged Hours</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div style={{ height: "1px", backgroundColor: "#e5e7eb", margin: "0 -24px 16px -24px" }}></div>
-
-                    {/* Logged Hours Summary */}
-                    <div style={{
-                      textAlign: "center",
-                      marginTop: "8px"
-                    }}>
-                      <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "4px" }}>Logged Hours</div>
-                      <div style={{ fontSize: "16px", color: "#2563eb", fontWeight: "600" }}>{hoursData.logged}</div>
-                      <div style={{ fontSize: "14px", color: "#111827", fontWeight: "500" }}>
-                        {formatMoney(loggedAmount)}
-                      </div>
-                    </div>
-                  </>
-                )}
+                {hoursView === "Profitability Summary" ? renderProfitabilitySummaryChart() : renderProjectHoursChart()}
               </div>
               </div>
             </div>
@@ -3051,7 +3717,7 @@ export default function ProjectDetailPage() {
                           UNBILLED HOURS
                         </th>
                         <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: "600", color: "#6b7280", textTransform: "uppercase" }}>
-                          RATE ({baseCurrencyCode})
+                          RATE ({currencyCode})
                         </th>
                         <th style={{ padding: "12px", textAlign: "left", fontSize: "12px", fontWeight: "600", color: "#6b7280", textTransform: "uppercase" }}>
                           TYPE
@@ -3087,7 +3753,7 @@ export default function ProjectDetailPage() {
                             <td style={{ padding: "12px", fontSize: "14px", color: "#333" }}>{taskHours.billed}</td>
                             <td style={{ padding: "12px", fontSize: "14px", color: "#333" }}>{taskHours.unbilled}</td>
                             <td style={{ padding: "12px", fontSize: "14px", color: "#333" }}>
-                              {baseCurrencyCode}{task.ratePerHour || task.rate || task.hourlyRate || "0.00"}
+                              {currencyCode}{task.ratePerHour || task.rate || task.hourlyRate || "0.00"}
                             </td>
                             <td style={{ padding: "12px", fontSize: "14px", color: "#333" }}>
                               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -3139,95 +3805,98 @@ export default function ProjectDetailPage() {
           {/* Timesheet Tab */}
           {activeTab === "Timesheet" && (
             <div style={{
-              backgroundColor: "#fff",
-              borderRadius: "6px",
-              padding: "24px",
-              border: "1px solid #e5e7eb"
+              backgroundColor: "transparent",
+              borderRadius: "0",
+              padding: "24px 0 0",
+              border: "none",
+              boxShadow: "none"
             }}>
               {/* VIEW BY Filters */}
-              <div style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "12px",
-                marginBottom: "16px"
-              }}>
-                <span style={{ fontSize: "12px", fontWeight: "600", color: "#64748b", letterSpacing: "0.02em" }}>VIEW BY:</span>
-                <div style={{ position: "relative", display: "inline-block" }}>
-                  <select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    style={{
-                      border: "1px solid #e2e8f0",
-                      padding: "6px 28px 6px 10px",
-                      borderRadius: "6px",
-                      fontSize: "12px",
-                      cursor: "pointer",
-                      backgroundColor: "#fff",
-                      color: "#475569",
-                      appearance: "none",
-                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 9L1 4h10z'/%3E%3C/svg%3E")`,
-                      backgroundRepeat: "no-repeat",
-                      backgroundPosition: "right 8px center",
-                      paddingRight: "28px"
-                    }}
-                  >
-                    <option value="__all_header" disabled>All</option>
-                    <option value="All">All</option>
-                    <option value="__billing_header" disabled>Billing Status</option>
-                    <option value="Non-Billable">Non-Billable</option>
-                    <option value="Billable">Billable</option>
-                    <option value="Yet to Invoice">Yet to Invoice</option>
-                    <option value="Invoiced">Invoiced</option>
-                    <option value="__approvals_header" disabled>Approvals</option>
-                    <option value="Yet to Create Approval">Yet to Create Approval</option>
-                    <option value="Approved">Approved</option>
-                    <option value="Rejected">Rejected</option>
-                    <option value="Yet to submit">Yet to submit</option>
-                    <option value="Yet to Approve">Yet to Approve</option>
-                    <option value="__customer_approvals_header" disabled>Customer Approvals</option>
-                    <option value="Yet to Create Customer Approval">Yet to Create Customer Approval</option>
-                    <option value="Approved by Customer">Approved by Customer</option>
-                    <option value="Rejected by Customer">Rejected by Customer</option>
-                    <option value="Yet to Submit to Customer">Yet to Submit to Customer</option>
-                    <option value="Customer Yet to Approve">Customer Yet to Approve</option>
-                  </select>
+              {selectedEntries.length === 0 && (
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "12px",
+                  marginBottom: "16px"
+                }}>
+                  <span style={{ fontSize: "12px", fontWeight: "600", color: "#64748b", letterSpacing: "0.02em" }}>VIEW BY:</span>
+                  <div style={{ position: "relative", display: "inline-block" }}>
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                      style={{
+                        border: "1px solid #e2e8f0",
+                        padding: "6px 28px 6px 10px",
+                        borderRadius: "6px",
+                        fontSize: "12px",
+                        cursor: "pointer",
+                        backgroundColor: "transparent",
+                        color: "#475569",
+                        appearance: "none",
+                        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 9L1 4h10z'/%3E%3C/svg%3E")`,
+                        backgroundRepeat: "no-repeat",
+                        backgroundPosition: "right 8px center",
+                        paddingRight: "28px"
+                      }}
+                    >
+                      <option value="__all_header" disabled>All</option>
+                      <option value="All">All</option>
+                      <option value="__billing_header" disabled>Billing Status</option>
+                      <option value="Non-Billable">Non-Billable</option>
+                      <option value="Billable">Billable</option>
+                      <option value="Yet to Invoice">Yet to Invoice</option>
+                      <option value="Invoiced">Invoiced</option>
+                      <option value="__approvals_header" disabled>Approvals</option>
+                      <option value="Yet to Create Approval">Yet to Create Approval</option>
+                      <option value="Approved">Approved</option>
+                      <option value="Rejected">Rejected</option>
+                      <option value="Yet to submit">Yet to submit</option>
+                      <option value="Yet to Approve">Yet to Approve</option>
+                      <option value="__customer_approvals_header" disabled>Customer Approvals</option>
+                      <option value="Yet to Create Customer Approval">Yet to Create Customer Approval</option>
+                      <option value="Approved by Customer">Approved by Customer</option>
+                      <option value="Rejected by Customer">Rejected by Customer</option>
+                      <option value="Yet to Submit to Customer">Yet to Submit to Customer</option>
+                      <option value="Customer Yet to Approve">Customer Yet to Approve</option>
+                    </select>
+                  </div>
+                  <div style={{ position: "relative", display: "inline-block" }}>
+                    <select
+                      value={periodFilter}
+                      onChange={(e) => setPeriodFilter(e.target.value)}
+                      style={{
+                        border: "1px solid #e2e8f0",
+                        padding: "6px 28px 6px 10px",
+                        borderRadius: "6px",
+                        fontSize: "12px",
+                        cursor: "pointer",
+                        backgroundColor: "transparent",
+                        color: "#475569",
+                        appearance: "none",
+                        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 9L1 4h10z'/%3E%3C/svg%3E")`,
+                        backgroundRepeat: "no-repeat",
+                        backgroundPosition: "right 8px center",
+                        paddingRight: "28px"
+                      }}
+                    >
+                      <option value="__all_header" disabled>All</option>
+                      <option value="All">All</option>
+                      <option value="__current_header" disabled>Current</option>
+                      <option value="Today">Today</option>
+                      <option value="This Week">This Week</option>
+                      <option value="This Month">This Month</option>
+                      <option value="This Quarter">This Quarter</option>
+                      <option value="This Year">This Year</option>
+                      <option value="__previous_header" disabled>Previous</option>
+                      <option value="Yesterday">Yesterday</option>
+                      <option value="Previous Week">Previous Week</option>
+                      <option value="Previous Month">Previous Month</option>
+                      <option value="Previous Quarter">Previous Quarter</option>
+                      <option value="Previous Year">Previous Year</option>
+                    </select>
+                  </div>
                 </div>
-                <div style={{ position: "relative", display: "inline-block" }}>
-                  <select
-                    value={periodFilter}
-                    onChange={(e) => setPeriodFilter(e.target.value)}
-                    style={{
-                      border: "1px solid #e2e8f0",
-                      padding: "6px 28px 6px 10px",
-                      borderRadius: "6px",
-                      fontSize: "12px",
-                      cursor: "pointer",
-                      backgroundColor: "#fff",
-                      color: "#475569",
-                      appearance: "none",
-                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 9L1 4h10z'/%3E%3C/svg%3E")`,
-                      backgroundRepeat: "no-repeat",
-                      backgroundPosition: "right 8px center",
-                      paddingRight: "28px"
-                    }}
-                  >
-                    <option value="__all_header" disabled>All</option>
-                    <option value="All">All</option>
-                    <option value="__current_header" disabled>Current</option>
-                    <option value="Today">Today</option>
-                    <option value="This Week">This Week</option>
-                    <option value="This Month">This Month</option>
-                    <option value="This Quarter">This Quarter</option>
-                    <option value="This Year">This Year</option>
-                    <option value="__previous_header" disabled>Previous</option>
-                    <option value="Yesterday">Yesterday</option>
-                    <option value="Previous Week">Previous Week</option>
-                    <option value="Previous Month">Previous Month</option>
-                    <option value="Previous Quarter">Previous Quarter</option>
-                    <option value="Previous Year">Previous Year</option>
-                  </select>
-                </div>
-              </div>
+              )}
 
               {/* Action Buttons - Show when entries are selected */}
               {selectedEntries.length > 0 && (
@@ -3282,10 +3951,7 @@ export default function ProjectDetailPage() {
                     </button>
                     <button
                       onClick={() => {
-                        // Handle Delete
-                        if (window.confirm(`Are you sure you want to delete ${selectedEntries.length} timesheet(s)?`)) {
-                          setSelectedEntries([]);
-                        }
+                        openDeleteTimesheetModal();
                       }}
                       style={{
                         padding: "8px",
@@ -3299,7 +3965,7 @@ export default function ProjectDetailPage() {
                         justifyContent: "center"
                       }}
                     >
-                      <Trash2 size={16} />
+                      <Trash2 size={16} color="#dc2626" />
                     </button>
                     <button
                       onClick={() => {
@@ -3430,6 +4096,35 @@ export default function ProjectDetailPage() {
                   }
                 };
 
+                const isPastDate = (dateString) => {
+                  if (!dateString) return false;
+                  try {
+                    let date;
+                    if (typeof dateString === "string") {
+                      const dateMatch = dateString.match(/(\d{1,2})\s+(\w{3})\s+(\d{4})/);
+                      if (dateMatch) {
+                        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                        const monthIndex = months.indexOf(dateMatch[2]);
+                        if (monthIndex !== -1) {
+                          date = new Date(parseInt(dateMatch[3]), monthIndex, parseInt(dateMatch[1]));
+                        } else {
+                          date = new Date(dateString);
+                        }
+                      } else {
+                        date = new Date(dateString);
+                      }
+                    } else {
+                      date = new Date(dateString);
+                    }
+                    if (isNaN(date.getTime())) return false;
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    return date < today;
+                  } catch {
+                    return false;
+                  }
+                };
+
                 return (
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead>
@@ -3465,23 +4160,17 @@ export default function ProjectDetailPage() {
                           Time
                         </th>
                         <th style={{ padding: "8px 10px", textAlign: "left", fontSize: "11px", fontWeight: "600", color: "#64748b", textTransform: "uppercase" }}>
-                          Total Cost
-                        </th>
-                        <th style={{ padding: "8px 10px", textAlign: "left", fontSize: "11px", fontWeight: "600", color: "#64748b", textTransform: "uppercase" }}>
-                          Approvals
-                        </th>
-                        <th style={{ padding: "8px 10px", textAlign: "left", fontSize: "11px", fontWeight: "600", color: "#64748b", textTransform: "uppercase" }}>
-                          Customer Approvals
-                        </th>
-                        <th style={{ padding: "8px 10px", textAlign: "left", fontSize: "11px", fontWeight: "600", color: "#64748b", textTransform: "uppercase" }}>
                           Billing Status
+                        </th>
+                        <th style={{ padding: "8px 10px", textAlign: "right", fontSize: "11px", fontWeight: "600", color: "#64748b", textTransform: "uppercase", width: "140px" }}>
+                          &nbsp;
                         </th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredEntries.length === 0 ? (
                         <tr>
-                          <td colSpan={9} style={{ padding: "40px", textAlign: "center", color: "#6b7280", fontSize: "14px" }}>
+                          <td colSpan={7} style={{ padding: "40px", textAlign: "center", color: "#6b7280", fontSize: "14px" }}>
                             There are no timesheets.
                           </td>
                         </tr>
@@ -3503,30 +4192,19 @@ export default function ProjectDetailPage() {
                           // Handle multiple task names (split by newline or comma)
                           const taskNames = entry.taskName ? entry.taskName.split(",").flatMap(t => t.split("\\n")).map(t => t.trim()).filter(t => t) : ["N/A"];
                           const isHovered = hoveredEntryId === entry.id;
-                          const totalCostValue =
-                            entry.totalCost ??
-                            entry.totalCostAmount ??
-                            entry.cost ??
-                            entry.amount ??
-                            "0.00";
-                          const approvalsText =
-                            entry.approvals ||
-                            entry.approvalStatus ||
-                            entry.status ||
-                            "Pending Submission";
-                          const customerApprovalsText =
-                            entry.customerApproval ||
-                            entry.customerApprovalStatus ||
-                            "--";
+                          const isActiveTimerRow = isRunningForEntry(entry);
+                          const activeElapsedTime = isActiveTimerRow ? calculateElapsedTime(runningTimerState || {}) : 0;
 
                           return (
                             <tr
                               key={entry.id}
+                              onClick={() => handleEntryRowClick(entry)}
                               onMouseEnter={() => setHoveredEntryId(entry.id)}
                               onMouseLeave={() => setHoveredEntryId(null)}
                               style={{
                                 borderBottom: "1px solid #e5e7eb",
-                                backgroundColor: isHovered ? "#f9fafb" : "transparent"
+                                backgroundColor: isActiveTimerRow ? "#eef6ff" : selectedEntry?.id === entry.id ? "#e8f0da" : isHovered ? "#f9fafb" : "transparent",
+                                cursor: "pointer"
                               }}
                             >
                               <td style={{ padding: "8px 10px", fontSize: "13px", color: "#111827" }}>
@@ -3557,22 +4235,159 @@ export default function ProjectDetailPage() {
                                 ))}
                               </td>
                               <td style={{ padding: "8px 10px", fontSize: "13px", color: "#111827" }}>
-                                {entry.user || entry.userEmail || "N/A"}
+                                {entry.userName || entry.user?.name || entry.user || entry.userEmail || "N/A"}
                               </td>
                               <td style={{ padding: "8px 10px", fontSize: "13px", color: "#111827" }}>
-                                {entry.timeSpent || "00:00"}
-                              </td>
-                              <td style={{ padding: "8px 10px", fontSize: "13px", color: "#111827" }}>
-                                {baseCurrencyCode}{totalCostValue}
-                              </td>
-                              <td style={{ padding: "8px 10px", fontSize: "13px", color: "#111827" }}>
-                                {approvalsText}
-                              </td>
-                              <td style={{ padding: "8px 10px", fontSize: "13px", color: "#111827" }}>
-                                {customerApprovalsText}
+                                {isActiveTimerRow ? formatRunningTime(activeElapsedTime) : (entry.timeSpent || "00:00")}
                               </td>
                               <td style={{ padding: "8px 10px", fontSize: "13px", color: billingStatusColor }}>
                                 {billingStatusText}
+                              </td>
+                              <td style={{ padding: "8px 10px", fontSize: "13px", color: "#111827", textAlign: "right" }}>
+                                <div style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "6px",
+                                  opacity: isHovered ? 1 : 0,
+                                  transform: isHovered ? "translateY(0)" : "translateY(2px)",
+                                  transition: "opacity 0.15s ease, transform 0.15s ease",
+                                  pointerEvents: isHovered ? "auto" : "none"
+                                }}>
+                                  {isActiveTimerRow ? (
+                                    <>
+                                      <div className="inline-flex h-7 items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 text-[12px] font-semibold text-blue-700">
+                                        <Clock size={13} />
+                                        <span>{formatRunningTime(activeElapsedTime)}</span>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          pauseRunningTimer();
+                                        }}
+                                        style={{
+                                          width: "24px",
+                                          height: "24px",
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                          border: "1px solid #d1d5db",
+                                          borderRadius: "6px",
+                                          backgroundColor: "#ffffff",
+                                          color: "#2563eb",
+                                          cursor: "pointer"
+                                        }}
+                                        aria-label="Pause timer"
+                                      >
+                                        <Pause size={13} />
+                                      </button>
+                                    </>
+                                  ) : !isPastDate(entry.date) && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        startEntryTimer(entry);
+                                      }}
+                                      style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: "4px",
+                                        padding: "3px 8px",
+                                        border: "1px solid #d1d5db",
+                                        borderRadius: "6px",
+                                        backgroundColor: "#ffffff",
+                                        color: "#111827",
+                                        fontSize: "12px",
+                                        cursor: "pointer"
+                                      }}
+                                    >
+                                      <Clock size={13} />
+                                      Start
+                                    </button>
+                                  )}
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        openEditEntryForm(entry);
+                                      }}
+                                      style={{
+                                        width: "24px",
+                                        height: "24px",
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        border: "1px solid #d1d5db",
+                                        borderRadius: "6px",
+                                        backgroundColor: "#ffffff",
+                                        color: "#111827",
+                                        cursor: "pointer"
+                                    }}
+                                    aria-label="Edit time entry"
+                                  >
+                                    <Edit3 size={13} />
+                                  </button>
+                                  <div className="relative" data-entry-row-menu ref={openRowEntryMenuId === entry.id ? rowEntryMenuRef : undefined}>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenRowEntryMenuId((current) => (current === entry.id ? null : entry.id));
+                                      }}
+                                      style={{
+                                        width: "24px",
+                                        height: "24px",
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        border: "1px solid #d1d5db",
+                                        borderRadius: "6px",
+                                        backgroundColor: "#ffffff",
+                                        color: "#111827",
+                                        cursor: "pointer"
+                                      }}
+                                      aria-label="More actions"
+                                    >
+                                      <MoreVertical size={13} />
+                                    </button>
+                                    {openRowEntryMenuId === entry.id && (
+                                      <div className="absolute right-0 bottom-full z-50 mb-1 w-44 rounded-md border border-gray-200 bg-white py-1 text-sm shadow-lg">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleEntryClone(entry);
+                                            setOpenRowEntryMenuId(null);
+                                          }}
+                                          className="w-full px-3 py-2 text-left text-gray-700 hover:bg-gray-50"
+                                        >
+                                          Clone
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteSelectedEntry(entry);
+                                          }}
+                                          className="w-full px-3 py-2 text-left text-red-600 hover:bg-red-50 hover:text-red-700"
+                                        >
+                                          Delete
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            openEntryCommentsHistory(entry);
+                                          }}
+                                          className="w-full px-3 py-2 text-left text-gray-700 hover:bg-gray-50"
+                                        >
+                                          Comments & History
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
                               </td>
                             </tr>
                           );
@@ -4655,7 +5470,7 @@ export default function ProjectDetailPage() {
                 <div style={{ marginBottom: "10px" }}>
                   <label style={{ display: "block", fontSize: "15px", color: "#374151", marginBottom: "8px" }}>Rate Per Hour</label>
                   <div style={{ display: "flex", alignItems: "stretch", border: "1px solid #d1d5db", borderRadius: "7px", overflow: "hidden", backgroundColor: "#fff" }}>
-                    <span style={{ padding: "0 12px", display: "inline-flex", alignItems: "center", borderRight: "1px solid #d1d5db", color: "#374151", fontSize: "14px", backgroundColor: "#f8fafc" }}>{baseCurrencyCode}</span>
+                    <span style={{ padding: "0 12px", display: "inline-flex", alignItems: "center", borderRight: "1px solid #d1d5db", color: "#374151", fontSize: "14px", backgroundColor: "#f8fafc" }}>{currencyCode}</span>
                     <input
                       type="number"
                       min="0"
@@ -5697,12 +6512,314 @@ export default function ProjectDetailPage() {
           onClose={() => {
             setShowLogEntryForm(false);
             setTaskTimerDefaults(null);
+            setLogEntryFormTitle("New Log Entry");
+            setLogEntryFormEntryId(null);
           }}
+          formTitle={logEntryFormTitle}
+          entryId={logEntryFormEntryId || undefined}
           defaultProjectName={taskTimerDefaults?.defaultProjectName || project?.projectName || project?.name || ""}
-          defaultDate={new Date()}
+          defaultDate={taskTimerDefaults?.defaultDate || new Date()}
           defaultTaskName={taskTimerDefaults?.defaultTaskName || ""}
           defaultBillable={taskTimerDefaults?.defaultBillable}
+          defaultTimeSpent={taskTimerDefaults?.defaultTimeSpent || ""}
+          defaultUser={taskTimerDefaults?.defaultUser || ""}
+          defaultNotes={taskTimerDefaults?.defaultNotes || ""}
         />
+      )}
+      {selectedEntry && (
+        <div className="fixed right-0 top-[53px] h-[calc(100vh-53px)] w-[360px] border-l border-gray-200 bg-white shadow-lg z-50 flex flex-col">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+            <div className="text-sm font-semibold text-gray-900">
+              {`${getEntryUserName(selectedEntry)}'s Log Entry`}
+            </div>
+            <div className="flex items-center gap-2" ref={entryMenuRef}>
+              <button
+                onClick={() => openEditEntryForm(selectedEntry)}
+                className="h-7 w-7 rounded border border-gray-200 text-gray-600 flex items-center justify-center hover:bg-gray-50"
+              >
+                <Edit3 size={14} />
+              </button>
+              <div className="relative">
+                <button
+                  onClick={() => setShowEntryMenu((v) => !v)}
+                  className="h-7 w-7 rounded border border-gray-200 text-gray-600 flex items-center justify-center hover:bg-gray-50"
+                >
+                  <MoreVertical size={14} />
+                </button>
+                {showEntryMenu && (
+                  <div className="absolute right-0 mt-2 w-32 rounded-md border border-gray-200 bg-white py-1 text-sm shadow-lg">
+                    <button
+                      onClick={handleEntryClone}
+                      className="w-full px-3 py-2 text-left text-gray-700 hover:bg-gray-50"
+                    >
+                      Clone
+                    </button>
+                    <button
+                      onClick={handleDeleteSelectedEntry}
+                      className="w-full px-3 py-2 text-left text-red-600 hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  setSelectedEntry(null);
+                  setShowEntryMenu(false);
+                  setEntryDrawerTab("otherDetails");
+                }}
+                className="h-7 w-7 rounded border border-gray-200 text-red-500 flex items-center justify-center hover:bg-red-50"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+
+          <div className="p-4 border-b border-gray-200">
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-4 text-center">
+              <div className="text-xs text-gray-500">
+                {selectedEntry.date || "--"}
+              </div>
+              <div className="text-xl font-semibold text-gray-900 mt-1">
+                {getEntryDuration(selectedEntry)}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-6 px-4 pt-3 text-sm">
+            <button
+              onClick={() => setEntryDrawerTab("otherDetails")}
+              className={`pb-2 border-b-2 ${entryDrawerTab === "otherDetails" ? "border-blue-500 text-blue-600" : "border-transparent text-gray-600"}`}
+            >
+              Other Details
+            </button>
+            <button
+              onClick={() => setEntryDrawerTab("comments")}
+              className={`pb-2 border-b-2 ${entryDrawerTab === "comments" ? "border-blue-500 text-blue-600" : "border-transparent text-gray-600"}`}
+            >
+              Comments
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-auto px-4 py-3">
+            {entryDrawerTab === "otherDetails" && (
+              <div className="space-y-3 text-sm text-gray-700">
+                <div className="flex justify-between"><span className="text-gray-500">Project Name :</span><span>{getEntryProjectName(selectedEntry)}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Customer Name :</span><span>{getEntryCustomerName()}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Task Name :</span><span>{selectedEntry.taskName || selectedEntry.task || "--"}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">User Name :</span><span>{getEntryUserName(selectedEntry)}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Total Cost :</span><span>{formatMoney(Number(selectedEntry.totalCost || selectedEntry.totalCostAmount || selectedEntry.cost || selectedEntry.amount || 0))}</span></div>
+              </div>
+            )}
+            {entryDrawerTab === "comments" && (
+              <div className="w-full max-w-[920px]">
+                <div className="mb-6 bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+                  <div className="flex gap-4 p-3 bg-gray-50/80 border-b border-gray-200">
+                    <button
+                      type="button"
+                      className={`p-1.5 rounded-[7px] cursor-pointer transition-all flex items-center justify-center ${entryIsBold ? "text-gray-800 bg-white border border-[#cfd5e3] shadow-sm" : "text-gray-500 border border-transparent hover:bg-gray-100"}`}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => applyEntryCommentFormat("bold")}
+                      title="Bold"
+                    >
+                      <Bold size={15} />
+                    </button>
+                    <button
+                      type="button"
+                      className={`p-1.5 rounded-[7px] cursor-pointer transition-all flex items-center justify-center ${entryIsItalic ? "text-gray-800 bg-white border border-[#cfd5e3] shadow-sm" : "text-gray-500 border border-transparent hover:bg-gray-100"}`}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => applyEntryCommentFormat("italic")}
+                      title="Italic"
+                    >
+                      <Italic size={15} />
+                    </button>
+                    <button
+                      type="button"
+                      className={`p-1.5 rounded-[7px] cursor-pointer transition-all flex items-center justify-center ${entryIsUnderline ? "text-gray-800 bg-white border border-[#cfd5e3] shadow-sm" : "text-gray-500 border border-transparent hover:bg-gray-100"}`}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => applyEntryCommentFormat("underline")}
+                      title="Underline"
+                    >
+                      <Underline size={15} />
+                    </button>
+                  </div>
+                  <div className="p-0">
+                    <div className="relative">
+                      {entryIsEditorEmpty && (
+                        <div className="pointer-events-none absolute left-5 top-4 text-sm text-gray-400">
+                          Add a comment...
+                        </div>
+                      )}
+                      <div
+                        ref={entryCommentEditorRef}
+                        id="entry-comment-textarea"
+                        contentEditable
+                        suppressContentEditableWarning
+                        dir="ltr"
+                        className="min-h-40 w-full px-5 py-4 text-sm text-gray-700 outline-none whitespace-pre-wrap leading-relaxed border-none"
+                        onInput={syncEntryCommentEditorState}
+                        onMouseUp={syncEntryCommentEditorState}
+                        onKeyUp={syncEntryCommentEditorState}
+                        onFocus={syncEntryCommentEditorState}
+                        style={{ textAlign: "left", direction: "ltr" }}
+                      />
+                    </div>
+                  </div>
+                  <div className="border-t border-gray-200 px-5 py-4">
+                    <button
+                      type="button"
+                      className="px-5 py-2 bg-[#156372] text-white rounded text-[13px] font-bold cursor-pointer hover:opacity-90 active:scale-95 transition-all shadow-sm border-none"
+                      onClick={handleAddEntryComment}
+                    >
+                      Add Comment
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="text-[11px] font-bold text-gray-600 uppercase tracking-[0.2em] whitespace-nowrap">ALL COMMENTS</h3>
+                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-500 px-1.5 text-[11px] font-bold leading-none text-white">
+                      {entryComments.length}
+                    </span>
+                  </div>
+                </div>
+
+                {entryComments.length === 0 ? (
+                  <div className="text-center py-20 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
+                    <p className="text-sm text-gray-400 font-medium italic">No comments yet.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-5 pb-20 pr-2">
+                    {entryComments.map((comment) => (
+                      <div key={comment.id} className="group flex items-start gap-3">
+                        <div className="mt-0.5 h-6 w-6 shrink-0 rounded-full border border-[#cfdaf0] bg-white text-[11px] font-semibold text-[#6b7a90] flex items-center justify-center shadow-sm">
+                          {getCommentAuthorInitial(comment)}
+                        </div>
+                        <div className="flex-1">
+                          <div className="mb-2 flex items-center gap-2 text-[12px]">
+                            <span className="font-semibold text-[#111827]">{getCommentAuthorName(comment)}</span>
+                            <span className="text-[#94a3b8]">•</span>
+                            <span className="text-[#64748b]">
+                              {new Date(comment.createdAt).toLocaleString("en-GB", {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit"
+                              })}
+                            </span>
+                          </div>
+                          <div className="rounded-lg bg-[#f8fafc] px-4 py-3 shadow-sm border border-[#eef2f7]">
+                            <div className="flex items-start justify-between gap-4">
+                              <div
+                                className="text-[15px] leading-relaxed text-[#156372] whitespace-pre-wrap font-semibold flex-1"
+                                dangerouslySetInnerHTML={{ __html: commentMarkupToHtml(comment.content || comment.text || "") }}
+                              />
+                              <button
+                                className="mt-0.5 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all cursor-pointer border-none bg-transparent opacity-0 group-hover:opacity-100"
+                                onClick={() => openDeleteEntryCommentModal(comment)}
+                                title="Delete comment"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {showDeleteEntryCommentModal && (
+        <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200">
+            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+              <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
+                !
+              </div>
+              <h3 className="text-[15px] font-semibold text-slate-800 flex-1">Delete comment?</h3>
+              <button
+                type="button"
+                className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                onClick={closeDeleteEntryCommentModal}
+                aria-label="Close"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="px-5 py-3 text-[13px] text-slate-600">
+              You cannot retrieve this comment once it has been deleted.
+            </div>
+            <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+              <button
+                type="button"
+                className="px-4 py-1.5 rounded-md bg-[#156372] text-white text-[12px] hover:opacity-90"
+                onClick={confirmDeleteEntryComment}
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                className="px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50"
+                onClick={closeDeleteEntryCommentModal}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showDeleteTimesheetModal && (
+        <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200">
+            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+              <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
+                !
+              </div>
+              <h3 className="text-[15px] font-semibold text-slate-800 flex-1">
+                {pendingDeleteTimesheetIds.length === 1 ? "Delete time entry?" : `Delete ${pendingDeleteTimesheetIds.length} time entries?`}
+              </h3>
+              <button
+                type="button"
+                className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                onClick={closeDeleteTimesheetModal}
+                aria-label="Close"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="px-5 py-3 text-[13px] text-slate-600">
+              {pendingDeleteTimesheetIds.length === 1
+                ? "You cannot retrieve this time entry once it has been deleted."
+                : "You cannot retrieve these time entries once they have been deleted."}
+            </div>
+            <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+              <button
+                type="button"
+                className={`px-4 py-1.5 rounded-md bg-blue-600 text-white text-[12px] hover:bg-blue-700 ${isDeletingTimesheets ? "opacity-70 cursor-not-allowed" : ""}`}
+                onClick={confirmDeleteTimesheets}
+                disabled={isDeletingTimesheets}
+              >
+                {isDeletingTimesheets && <Loader2 size={14} className="animate-spin" />}
+                {isDeletingTimesheets ? "Deleting..." : "Delete"}
+              </button>
+              <button
+                type="button"
+                className={`px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50 ${isDeletingTimesheets ? "opacity-70 cursor-not-allowed" : ""}`}
+                onClick={closeDeleteTimesheetModal}
+                disabled={isDeletingTimesheets}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

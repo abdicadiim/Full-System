@@ -1944,7 +1944,79 @@ className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-
       )}
 
       <div className="flex-1 overflow-hidden bg-white flex flex-col">
-        {viewMode === 'list' ? (
+        {loadingProjects ? (
+          viewMode === 'list' ? (
+            <div className="flex-1 overflow-auto border-t border-gray-200 bg-white">
+              <table className="w-full border-collapse bg-white">
+                <thead className="sticky top-0 z-20 bg-gray-50 shadow-sm">
+                  <tr className="border-b border-gray-200 bg-gray-50">
+                    <th className="w-[60px] px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
+                      <div className="h-4 w-4 rounded bg-gray-200 animate-pulse" />
+                    </th>
+                    {visibleProjectColumns.some((col) => col.key === "customerName") && (
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">CUSTOMER NAME</th>
+                    )}
+                    {visibleProjectColumns.some((col) => col.key === "projectName") && (
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">PROJECT NAME</th>
+                    )}
+                    {visibleProjectColumns.some((col) => col.key === "billingMethod") && (
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">BILLING METHOD</th>
+                    )}
+                    {visibleProjectColumns.some((col) => col.key === "rate") && (
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">RATE</th>
+                    )}
+                    {visibleProjectColumns.some((col) => col.key === "status") && (
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">PROJECT STATUS</th>
+                    )}
+                    <th className="w-[40px] px-4 py-3 text-right">
+                      <div className="ml-auto h-4 w-4 rounded bg-gray-200 animate-pulse" />
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: 6 }).map((_, index) => (
+                    <tr key={index} className="border-b border-gray-100">
+                      <td className="px-4 py-4">
+                        <div className="h-4 w-4 rounded bg-gray-200 animate-pulse" />
+                      </td>
+                      {visibleProjectColumns.some((col) => col.key === "customerName") && (
+                        <td className="px-4 py-4"><div className="h-4 w-28 rounded bg-gray-200 animate-pulse" /></td>
+                      )}
+                      {visibleProjectColumns.some((col) => col.key === "projectName") && (
+                        <td className="px-4 py-4"><div className="h-4 w-36 rounded bg-gray-200 animate-pulse" /></td>
+                      )}
+                      {visibleProjectColumns.some((col) => col.key === "billingMethod") && (
+                        <td className="px-4 py-4"><div className="h-4 w-32 rounded bg-gray-200 animate-pulse" /></td>
+                      )}
+                      {visibleProjectColumns.some((col) => col.key === "rate") && (
+                        <td className="px-4 py-4"><div className="h-4 w-16 rounded bg-gray-200 animate-pulse" /></td>
+                      )}
+                      {visibleProjectColumns.some((col) => col.key === "status") && (
+                        <td className="px-4 py-4"><div className="h-6 w-16 rounded-full bg-gray-200 animate-pulse" /></td>
+                      )}
+                      <td className="px-4 py-4" />
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-start gap-5 p-6">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <div key={index} className="w-[260px] rounded-lg border border-gray-200 bg-white px-5 py-6 shadow-sm">
+                  <div className="flex flex-col items-center text-center gap-2">
+                    <div className="h-7 w-40 rounded bg-gray-200 animate-pulse" />
+                    <div className="h-4 w-28 rounded bg-gray-200 animate-pulse" />
+                  </div>
+                  <div className="mt-6 flex flex-col items-center gap-2">
+                    <div className="h-5 w-24 rounded bg-gray-200 animate-pulse" />
+                    <div className="h-4 w-20 rounded bg-gray-200 animate-pulse" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        ) : viewMode === 'list' ? (
           <div className="flex-1 overflow-auto border-t border-gray-200 bg-white">
             <table className="w-full border-collapse bg-white">
               <thead className="sticky top-0 z-20 bg-gray-50 shadow-sm">
@@ -2035,7 +2107,7 @@ className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-gray-
                     <td className="px-4 py-3" />
                   </tr>
                 ))}
-                {projects.length === 0 && (
+                {filteredAndSortedProjects.length === 0 && (
                   <tr>
                     <td colSpan={visibleProjectColumns.length + 2} className="px-4 py-10 text-center text-sm text-gray-500">
                       No projects found. Click "+ New" to create your first project.

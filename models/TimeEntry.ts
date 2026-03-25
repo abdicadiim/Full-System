@@ -1,5 +1,20 @@
 import mongoose from "mongoose";
 
+const TimeEntryCommentSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true },
+    text: { type: String, default: "" },
+    content: { type: String, default: "" },
+    authorName: { type: String, default: "" },
+    authorInitial: { type: String, default: "" },
+    createdAt: { type: String, default: () => new Date().toISOString() },
+    bold: { type: Boolean, default: false },
+    italic: { type: Boolean, default: false },
+    underline: { type: Boolean, default: false },
+  },
+  { _id: false }
+);
+
 const TimeEntrySchema = new mongoose.Schema(
   {
     organizationId: { type: mongoose.Schema.Types.ObjectId, ref: "Organization", required: true, index: true },
@@ -12,6 +27,7 @@ const TimeEntrySchema = new mongoose.Schema(
     billingStatus: { type: String, default: "unbilled", index: true },
     userName: { type: String, default: "" },
     taskName: { type: String, default: "" },
+    comments: { type: [TimeEntryCommentSchema], default: [] },
   },
   { timestamps: true, strict: false, minimize: false }
 );
