@@ -1,20 +1,19 @@
 import React, { useState, useEffect, useRef } from "react";
 import { toast } from "react-toastify";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { getInvoiceById, getInvoices, updateInvoice, getPayments, getTaxes, Tax, Invoice, AttachedFile, saveInvoice } from "../../salesModel";
-import { currenciesAPI, invoicesAPI, debitNotesAPI } from "../../../../services/api";
+import { getInvoiceById, getInvoices, updateInvoice, getPayments, getTaxes, getCreditNotesByInvoiceId, deletePayment, Tax, Invoice, AttachedFile, saveInvoice } from "../../salesModel";
+import { currenciesAPI, invoicesAPI, debitNotesAPI, creditNotesAPI, paymentsReceivedAPI, bankAccountsAPI, refundsAPI } from "../../../../services/api";
 import FieldCustomization from "../../../shared/FieldCustomization";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import {
-  X, Edit, Send, Share2, FileText, Clock, MoreVertical,
+  X, Edit, Send, Share2, FileText, Clock, MoreVertical, MoreHorizontal,
   ChevronDown, ChevronUp, ChevronRight, Sparkles, Plus, Filter,
   ArrowUpDown, CheckSquare, Square, Search, Star, Download, Mail, Calendar, AlertTriangle,
   Paperclip, MessageSquare, Link2, RotateCw, Repeat, Minus, Copy, BookOpen, Trash2, Settings,
   HelpCircle, FileUp, Bold, Italic, Underline, Check, Upload, Pencil, Banknote,
   Strikethrough, AlignLeft, AlignCenter, AlignRight, AlignJustify, Link as LinkIcon, Image as ImageIcon
 } from "lucide-react";
-import { getInvoiceStatusDisplay } from "../../../../utils/invoiceUtils";
 import { getStatesByCountry } from "../../../../constants/locationData";
 
 const normalizeInvoiceItems = (sourceInvoice: any) => {
@@ -101,7 +100,9 @@ export default function InvoiceDetail() { // Start of component
   const [isSendDropdownOpen, setIsSendDropdownOpen] = useState(false);
   const [isRemindersDropdownOpen, setIsRemindersDropdownOpen] = useState(false);
   const [isPdfDropdownOpen, setIsPdfDropdownOpen] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [isAllInvoicesDropdownOpen, setIsAllInvoicesDropdownOpen] = useState(false);
+  const [showSidebarMoreDropdown, setShowSidebarMoreDropdown] = useState(false);
   const [filterSearch, setFilterSearch] = useState("");
   const [isSendEmailModalOpen, setIsSendEmailModalOpen] = useState(false);
   const [isScheduleEmailModalOpen, setIsScheduleEmailModalOpen] = useState(false);
@@ -122,6 +123,28 @@ export default function InvoiceDetail() { // Start of component
     time: ""
   });
   const [isRecordPaymentModalOpen, setIsRecordPaymentModalOpen] = useState(false);
+  const [isPaymentsSectionOpen, setIsPaymentsSectionOpen] = useState(false);
+  const [openPaymentMenuId, setOpenPaymentMenuId] = useState<string | null>(null);
+  const [creditsAppliedCount, setCreditsAppliedCount] = useState(0);
+  const [creditsAppliedRows, setCreditsAppliedRows] = useState<any[]>([]);
+  const [paymentInfoTab, setPaymentInfoTab] = useState<"payments" | "credits" | "associated">("payments");
+  const [associatedInvoiceRow, setAssociatedInvoiceRow] = useState<any>(null);
+  const [showDeletePaymentModal, setShowDeletePaymentModal] = useState(false);
+  const [selectedPaymentForDelete, setSelectedPaymentForDelete] = useState<any>(null);
+  const [isDeletingPayment, setIsDeletingPayment] = useState(false);
+  const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
+  const [selectedPaymentForRefund, setSelectedPaymentForRefund] = useState<any>(null);
+  const [isSavingRefund, setIsSavingRefund] = useState(false);
+  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+  const [refundData, setRefundData] = useState({
+    amount: "",
+    refundedOn: "",
+    paymentMode: "",
+    referenceNumber: "",
+    fromAccount: "",
+    fromAccountId: "",
+    description: ""
+  });
   const [doNotShowAgain, setDoNotShowAgain] = useState(false);
   // Share Modal States
   const [showShareModal, setShowShareModal] = useState(false);
@@ -154,9 +177,17 @@ export default function InvoiceDetail() { // Start of component
   const [debitNote, setDebitNote] = useState<any>(null);
   const [customerRetainerAvailable, setCustomerRetainerAvailable] = useState<number>(0);
   const [customerRetainerInvoices, setCustomerRetainerInvoices] = useState<any[]>([]);
+  const [customerCreditsAvailable, setCustomerCreditsAvailable] = useState<number>(0);
   const [isApplyRetainerOpen, setIsApplyRetainerOpen] = useState(false);
   const [retainerApplyValues, setRetainerApplyValues] = useState<Record<string, number>>({});
   const [isApplyingRetainer, setIsApplyingRetainer] = useState(false);
+  const [isApplyAdjustmentsModalOpen, setIsApplyAdjustmentsModalOpen] = useState(false);
+  const [isApplyingAdjustments, setIsApplyingAdjustments] = useState(false);
+  const [isRemovingAppliedCreditId, setIsRemovingAppliedCreditId] = useState<string | null>(null);
+  const [applyAdjustmentRows, setApplyAdjustmentRows] = useState<any[]>([]);
+  const [applyAdjustmentValues, setApplyAdjustmentValues] = useState<Record<string, number>>({});
+  const [applyOnDate, setApplyOnDate] = useState(new Date().toISOString().split("T")[0]);
+  const [useApplyDate, setUseApplyDate] = useState(true);
   const [organizationData, setOrganizationData] = useState({
     street1: "",
     street2: "",
@@ -185,6 +216,7 @@ export default function InvoiceDetail() { // Start of component
   const moreMenuRef = useRef(null);
   const remindersDropdownRef = useRef(null);
   const allInvoicesDropdownRef = useRef(null);
+  const sidebarMoreRef = useRef(null);
   const sendDropdownRef = useRef(null);
   const pdfDropdownRef = useRef(null);
 
@@ -203,7 +235,11 @@ export default function InvoiceDetail() { // Start of component
   const [isStrikethrough, setIsStrikethrough] = useState(false);
 
   const toNumSafe = (value: any, fallback = 0) => {
-    const parsed = Number(value);
+    if (typeof value === "number") return Number.isFinite(value) ? value : fallback;
+    const raw = String(value ?? "").trim();
+    if (!raw) return fallback;
+    const normalized = raw.replace(/,/g, "").replace(/[^0-9.\-]/g, "");
+    const parsed = Number(normalized);
     return Number.isFinite(parsed) ? parsed : fallback;
   };
 
@@ -218,6 +254,30 @@ export default function InvoiceDetail() { // Start of component
     const typeValue = normalizeKey(row?.invoiceType || row?.type || row?.documentType || "");
     const number = String(row?.invoiceNumber || row?.retainerNumber || "").toUpperCase();
     return typeValue.includes("retainer") || number.startsWith("RET-");
+  };
+
+  const stripRetainerInvoices = (records: any[] = []) =>
+    (Array.isArray(records) ? records : []).filter((row) => !isRetainerInvoice(row));
+
+  const getSidebarStatusDisplay = (inv: any) => {
+    const raw = normalizeKey(inv?.status || "");
+    const total = toNumSafe(inv?.total ?? inv?.amount, 0);
+    const paid = toNumSafe(inv?.amountPaid ?? inv?.paidAmount, 0);
+    const computedBalance = inv?.balance !== undefined
+      ? toNumSafe(inv.balance, 0)
+      : inv?.balanceDue !== undefined
+        ? toNumSafe(inv.balanceDue, 0)
+        : Math.max(0, total - paid);
+    const balance = Math.max(0, computedBalance);
+    const dueDate = inv?.dueDate ? new Date(inv.dueDate) : null;
+    const isOverdueByDate = !!(dueDate && !Number.isNaN(dueDate.getTime()) && dueDate.getTime() < Date.now() && balance > 0);
+
+    if (raw === "paid" || (total > 0 && balance <= 0)) return { text: "Paid", color: "bg-green-100 text-green-700" };
+    if (raw.includes("partial") || (total > 0 && balance > 0 && balance < total)) return { text: "Partially Paid", color: "bg-blue-100 text-blue-700" };
+    if (raw === "draft") return { text: "Draft", color: "bg-gray-100 text-gray-600" };
+    if (raw === "void") return { text: "Void", color: "bg-gray-200 text-gray-600" };
+    if (isOverdueByDate || raw === "overdue") return { text: "Overdue", color: "bg-red-100 text-red-600" };
+    return { text: "Unpaid", color: "bg-blue-100 text-blue-700" };
   };
 
   const getCustomerKey = (row: any) =>
@@ -260,6 +320,146 @@ export default function InvoiceDetail() { // Start of component
   };
 
   const formatAmountWithCurrency = (amount: number) => `${String(invoice?.currency || baseCurrency)}${Number(amount || 0).toFixed(2)}`;
+
+  const getPaymentStatusLabel = (payment: any) => {
+    const raw = normalizeKey(payment?.status || "");
+    if (raw === "draft") return "Draft";
+    if (raw === "void") return "Void";
+    if (raw === "paid" || raw === "completed" || raw === "success") return "Paid";
+    return "Paid";
+  };
+
+  const getPaymentStatusClass = (payment: any) => {
+    const status = getPaymentStatusLabel(payment).toLowerCase();
+    if (status === "paid") return "text-green-600";
+    if (status === "draft") return "text-amber-600";
+    if (status === "void") return "text-gray-500";
+    return "text-gray-700";
+  };
+
+  const roundMoney = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
+  const getAccountId = (account: any): string => String(account?._id || account?.id || "").trim();
+  const getAccountDisplayName = (account: any): string =>
+    String(account?.displayName || account?.accountName || account?.name || "").trim();
+  const refundPaymentModeOptions = ["Cash", "Check", "Credit Card", "Debit Card", "Bank Transfer", "PayPal", "Other"];
+
+  const getAppliedAmountsByInvoice = (paymentRow: any): Record<string, number> => {
+    const map: Record<string, number> = {};
+    if (!paymentRow || typeof paymentRow !== "object") return map;
+
+    if (paymentRow.invoicePayments && typeof paymentRow.invoicePayments === "object") {
+      Object.entries(paymentRow.invoicePayments).forEach(([invoiceId, amount]) => {
+        const key = String(invoiceId || "").trim();
+        const val = Number(amount || 0);
+        if (key && val > 0) map[key] = roundMoney(val);
+      });
+      if (Object.keys(map).length > 0) return map;
+    }
+
+    if (Array.isArray(paymentRow.allocations)) {
+      paymentRow.allocations.forEach((allocation: any) => {
+        const invoiceId = String(allocation?.invoice?._id || allocation?.invoice?.id || allocation?.invoice || "").trim();
+        const amount = Number(allocation?.amount || 0);
+        if (!invoiceId || amount <= 0) return;
+        map[invoiceId] = roundMoney((map[invoiceId] || 0) + amount);
+      });
+      if (Object.keys(map).length > 0) return map;
+    }
+
+    const fallbackInvoiceId = String(paymentRow.invoiceId || "").trim();
+    const fallbackAmount = Number(paymentRow.amount || paymentRow.amountReceived || 0);
+    if (fallbackInvoiceId && fallbackAmount > 0) map[fallbackInvoiceId] = roundMoney(fallbackAmount);
+    return map;
+  };
+
+  const isPaymentLinkedToInvoice = (paymentRow: any, currentInvoice: any, routeInvoiceId: any, extraIds: string[] = [], extraNumbers: string[] = []) => {
+    const targetIds = new Set(
+      [routeInvoiceId, currentInvoice?.id, currentInvoice?._id, ...extraIds]
+        .map((v) => String(v || "").trim())
+        .filter(Boolean)
+    );
+    const targetNumbers = new Set(
+      [currentInvoice?.invoiceNumber, ...extraNumbers]
+        .map((v) => String(v || "").trim().toLowerCase())
+        .filter(Boolean)
+    );
+
+    const directInvoiceId = String(paymentRow?.invoiceId || "").trim();
+    const directInvoiceNumber = String(paymentRow?.invoiceNumber || "").trim().toLowerCase();
+    if ((directInvoiceId && targetIds.has(directInvoiceId)) || (directInvoiceNumber && targetNumbers.has(directInvoiceNumber))) {
+      return true;
+    }
+
+    const byMap = getAppliedAmountsByInvoice(paymentRow);
+    if (Object.keys(byMap).some((invoiceId) => targetIds.has(String(invoiceId || "").trim()))) {
+      return true;
+    }
+
+    if (Array.isArray(paymentRow?.allocations)) {
+      return paymentRow.allocations.some((allocation: any) => {
+        const allocationInvoiceId = String(
+          allocation?.invoiceId ||
+          allocation?.invoice?._id ||
+          allocation?.invoice?.id ||
+          allocation?.invoice ||
+          ""
+        ).trim();
+        const allocationInvoiceNumber = String(
+          allocation?.invoiceNumber ||
+          allocation?.invoice?.invoiceNumber ||
+          ""
+        ).trim().toLowerCase();
+        return (
+          (allocationInvoiceId && targetIds.has(allocationInvoiceId)) ||
+          (allocationInvoiceNumber && targetNumbers.has(allocationInvoiceNumber))
+        );
+      });
+    }
+
+    return false;
+  };
+
+  const applyInvoicePaymentDeltas = async (invoiceDeltas: Record<string, number>, paymentId: string) => {
+    for (const [invoiceId, deltaRaw] of Object.entries(invoiceDeltas)) {
+      const delta = Number(deltaRaw || 0);
+      if (!invoiceId || !Number.isFinite(delta) || delta === 0) continue;
+      const current = await getInvoiceById(String(invoiceId));
+      if (!current) continue;
+
+      const totalAmount = roundMoney(toNumSafe((current as any).total ?? (current as any).amount, 0));
+      const currentPaid = roundMoney(toNumSafe((current as any).amountPaid ?? (current as any).paidAmount, 0));
+      const nextPaid = Math.max(0, roundMoney(currentPaid + delta));
+      const nextBalance = Math.max(0, roundMoney(totalAmount - nextPaid));
+
+      const currentStatusKey = normalizeKey((current as any).status || "sent");
+      let nextStatus: string = (current as any).status || "sent";
+      if (currentStatusKey !== "void") {
+        if (nextPaid > 0 && nextBalance <= 0) nextStatus = "paid";
+        else if (nextPaid > 0 && nextBalance > 0) nextStatus = "partially_paid";
+        else nextStatus = currentStatusKey === "draft" ? "draft" : "sent";
+      }
+
+      const existingPayments = Array.isArray((current as any).paymentsReceived)
+        ? [...(current as any).paymentsReceived]
+        : Array.isArray((current as any).payments)
+        ? [...(current as any).payments]
+        : [];
+
+      const nextPaymentsReceived = existingPayments.filter((row: any) => {
+        const rowPaymentId = String(row?.paymentId || row?.id || row?._id || "").trim();
+        return !(paymentId && rowPaymentId && paymentId === rowPaymentId);
+      });
+
+      await updateInvoice(String(invoiceId), {
+        amountPaid: nextPaid,
+        paidAmount: nextPaid,
+        balanceDue: nextBalance,
+        balance: nextBalance,
+        status: nextStatus,
+        paymentsReceived: nextPaymentsReceived,
+      } as any);
+    }
+  };
 
   // Fetch organization profile data
   const fetchOrganizationProfile = async () => {
@@ -394,6 +594,11 @@ export default function InvoiceDetail() { // Start of component
 
   useEffect(() => {
     const init = async () => {
+      const paymentsPromise = getPayments();
+      const invoicesPromise = getInvoices();
+      const taxesPromise = getTaxes();
+      const bankAccountsPromise = bankAccountsAPI.getAll().catch(() => []);
+
       // Fetch invoice data
       let currentInvoice = null;
       if (id) {
@@ -439,8 +644,38 @@ export default function InvoiceDetail() { // Start of component
         }
       }
 
-      const allInvoices = await getInvoices();
-      setInvoices(allInvoices);
+      // Get payments for this invoice quickly
+      const paymentsRaw = await paymentsPromise;
+      const associatedInvoiceId = String((currentInvoice as any)?.associatedInvoiceId || (currentInvoice as any)?.invoiceId || "");
+      const associatedInvoiceNumber = String((currentInvoice as any)?.associatedInvoiceNumber || "");
+      const allPayments = Array.isArray(paymentsRaw)
+        ? paymentsRaw.filter((p: any) =>
+            isPaymentLinkedToInvoice(
+              p,
+              currentInvoice,
+              id,
+              associatedInvoiceId ? [associatedInvoiceId] : [],
+              associatedInvoiceNumber ? [associatedInvoiceNumber] : []
+            )
+          )
+        : [];
+      setPayments(allPayments);
+
+      const allInvoices = await invoicesPromise;
+      setInvoices(stripRetainerInvoices(allInvoices as any[]));
+
+      if (isDebitNoteView && currentInvoice) {
+        const linkedId = String((currentInvoice as any)?.associatedInvoiceId || (currentInvoice as any)?.invoiceId || "");
+        const linkedNumber = String((currentInvoice as any)?.associatedInvoiceNumber || "");
+        const linked = (Array.isArray(allInvoices) ? allInvoices : []).find((row: any) => {
+          const rowId = String(row?.id || row?._id || "");
+          const rowNumber = String(row?.invoiceNumber || "");
+          return (linkedId && rowId === linkedId) || (!!linkedNumber && rowNumber === linkedNumber);
+        });
+        setAssociatedInvoiceRow(linked || null);
+      } else {
+        setAssociatedInvoiceRow(null);
+      }
 
       // Compute available retainer amount for the same customer
       if (currentInvoice) {
@@ -461,28 +696,100 @@ export default function InvoiceDetail() { // Start of component
         const totalAvailable = matchingRetainers.reduce((sum: number, row: any) => sum + getRetainerAvailableAmount(row), 0);
         setCustomerRetainerInvoices(matchingRetainers);
         setCustomerRetainerAvailable(Math.max(0, totalAvailable));
+
+        let creditRows: any[] = [];
+        try {
+          if (currentCustomerId) {
+            const byCustomer = await creditNotesAPI.getByCustomer(currentCustomerId, { limit: 10000 });
+            creditRows = Array.isArray((byCustomer as any)?.data) ? (byCustomer as any).data : [];
+          }
+          if (!creditRows.length) {
+            const allCredits = await creditNotesAPI.getAll({ limit: 10000 });
+            const allRows = Array.isArray((allCredits as any)?.data) ? (allCredits as any).data : [];
+            creditRows = allRows.filter((row: any) => {
+              const rowCustomerId = getCustomerKey(row);
+              const rowCustomerName = getCustomerName(row).toLowerCase();
+              return (
+                (currentCustomerId && rowCustomerId && currentCustomerId === rowCustomerId) ||
+                (!!currentCustomerName && rowCustomerName === currentCustomerName)
+              );
+            });
+          }
+        } catch {
+          creditRows = [];
+        }
+        const totalCredits = creditRows.reduce((sum: number, row: any) => {
+          const status = normalizeKey(row?.status || "");
+          if (status === "void" || status === "closed") return sum;
+          const available = toNumSafe(row?.balance ?? row?.unusedAmount ?? row?.availableAmount, 0);
+          return sum + (available > 0 ? available : 0);
+        }, 0);
+        setCustomerCreditsAvailable(Math.max(0, totalCredits));
       } else {
         setCustomerRetainerInvoices([]);
         setCustomerRetainerAvailable(0);
+        setCustomerCreditsAvailable(0);
       }
 
-      const allTaxes = await getTaxes();
+      const allTaxes = await taxesPromise;
       setTaxOptions(allTaxes);
 
-      // Get payments for this invoice
-      const allPayments = Array.isArray(await getPayments()) ? (await getPayments()).filter(p => {
-        // Direct association
-        if (p.invoiceId === id || p.invoiceNumber === currentInvoice?.invoiceNumber) return true;
-        // Check allocations
-        if (p.allocations && Array.isArray(p.allocations)) {
-          return p.allocations.some(a => {
-            const invId = a.invoice?._id || a.invoice?.id || a.invoice;
-            return invId === id || invId === currentInvoice?._id || invId === currentInvoice?.id;
-          });
-        }
-        return false;
-      }) : [];
-      setPayments(allPayments);
+      const bankAccountsRes: any = await bankAccountsPromise;
+      if (Array.isArray(bankAccountsRes)) {
+        setBankAccounts(bankAccountsRes);
+      } else if (bankAccountsRes?.success && Array.isArray(bankAccountsRes.data)) {
+        setBankAccounts(bankAccountsRes.data);
+      } else {
+        setBankAccounts([]);
+      }
+
+      const creditTargetId = isDebitNoteView
+        ? String((currentInvoice as any)?.associatedInvoiceId || (currentInvoice as any)?.invoiceId || "")
+        : String(id || "");
+      const creditNotes = creditTargetId ? await getCreditNotesByInvoiceId(creditTargetId) : [];
+      const creditRowsComputed = (Array.isArray(creditNotes) ? creditNotes : []).map((note: any) => {
+        const allocationApplied = Array.isArray(note?.allocations)
+          ? note.allocations.reduce((sum: number, allocation: any) => {
+              const allocationInvoiceId = String(
+                allocation?.invoiceId ||
+                  allocation?.invoice?._id ||
+                  allocation?.invoice?.id ||
+                  allocation?.invoice ||
+                  ""
+              );
+              const amount = toNumSafe(allocation?.amount, 0);
+              return allocationInvoiceId === creditTargetId ? sum + amount : sum;
+            }, 0)
+          : 0;
+        const explicitApplied = toNumSafe(note?.appliedAmount ?? note?.amountApplied, 0);
+        const total = toNumSafe(note?.total ?? note?.amount, 0);
+        const balance = toNumSafe(note?.balance ?? note?.unusedAmount ?? note?.availableAmount, 0);
+        const inferredApplied = total > 0 ? Math.max(0, total - Math.max(0, balance)) : 0;
+        const appliedAmount = allocationApplied > 0 ? allocationApplied : explicitApplied > 0 ? explicitApplied : inferredApplied;
+        return {
+          id: String(note?.id || note?._id || ""),
+          date: note?.date || note?.creditNoteDate || note?.createdAt || "",
+          transactionNumber: String(note?.creditNoteNumber || note?.creditNumber || note?.number || "-"),
+          appliedAmount: toNumSafe(appliedAmount, 0),
+        };
+      }).filter((row: any) => row.appliedAmount > 0);
+
+      const invoiceLevelCreditsApplied = toNumSafe((currentInvoice as any)?.creditsApplied, 0);
+      const normalizedCreditRows =
+        creditRowsComputed.length > 0
+          ? creditRowsComputed
+          : invoiceLevelCreditsApplied > 0
+            ? [{
+                id: `credit-summary-${String((currentInvoice as any)?.id || (currentInvoice as any)?._id || "current")}`,
+                date: (currentInvoice as any)?.invoiceDate || (currentInvoice as any)?.date || new Date().toISOString(),
+                transactionNumber: "Applied Credit",
+                appliedAmount: invoiceLevelCreditsApplied,
+              }]
+            : [];
+
+      const appliedCount = normalizedCreditRows.length;
+      setCreditsAppliedCount(appliedCount);
+      setCreditsAppliedRows(normalizedCreditRows);
 
       // Fetch organization profile data
       fetchOrganizationProfile();
@@ -531,6 +838,43 @@ export default function InvoiceDetail() { // Start of component
     init();
   }, [id, navigate, isDebitNoteView]);
 
+  useEffect(() => {
+    setIsPaymentsSectionOpen(false);
+    setOpenPaymentMenuId(null);
+    setCreditsAppliedCount(0);
+    setCreditsAppliedRows([]);
+    setPaymentInfoTab("payments");
+    setAssociatedInvoiceRow(null);
+  }, [id, isDebitNoteView]);
+
+  useEffect(() => {
+    if (!isRefundModalOpen || !selectedPaymentForRefund) return;
+
+    const today = new Date().toISOString().split("T")[0];
+    const defaultAccount = bankAccounts[0];
+    const defaultAccountName = getAccountDisplayName(defaultAccount);
+    const defaultAccountId = getAccountId(defaultAccount);
+    const paymentAmount = Number(selectedPaymentForRefund.amountReceived ?? selectedPaymentForRefund.amount ?? 0) || 0;
+
+    setRefundData({
+      amount: paymentAmount > 0 ? String(roundMoney(paymentAmount)) : "",
+      refundedOn: today,
+      paymentMode: String(selectedPaymentForRefund.paymentMode || selectedPaymentForRefund.paymentMethod || "Cash"),
+      referenceNumber: "",
+      fromAccount: String(selectedPaymentForRefund.depositTo || defaultAccountName || ""),
+      fromAccountId: String(
+        bankAccounts.find((account: any) =>
+          getAccountDisplayName(account) === String(selectedPaymentForRefund.depositTo || "").trim()
+        )?._id ||
+          bankAccounts.find((account: any) =>
+            getAccountDisplayName(account) === String(selectedPaymentForRefund.depositTo || "").trim()
+          )?.id ||
+          defaultAccountId
+      ),
+      description: `Refund for payment ${selectedPaymentForRefund.paymentNumber || selectedPaymentForRefund.id || ""}`.trim()
+    });
+  }, [isRefundModalOpen, selectedPaymentForRefund, bankAccounts]);
+
   // Handle openEmailModal state from navigation
   useEffect(() => {
     if (location.state?.openEmailModal && id) {
@@ -561,6 +905,9 @@ export default function InvoiceDetail() { // Start of component
       }
       if (customizeDropdownRef.current && !customizeDropdownRef.current.contains(event.target as Node)) {
         setIsCustomizeDropdownOpen(false);
+      }
+      if (sidebarMoreRef.current && !sidebarMoreRef.current.contains(event.target as Node)) {
+        setShowSidebarMoreDropdown(false);
       }
     };
 
@@ -926,9 +1273,26 @@ export default function InvoiceDetail() { // Start of component
   };
 
   const handleSendEmail = () => {
-    setIsSendDropdownOpen(false);
     if (!id) return;
-    navigate(`/sales/invoices/${id}/email`);
+    const customerEmail = String(
+      (invoice as any)?.customerEmail ||
+      (typeof invoice?.customer === "object" ? invoice?.customer?.email || "" : "") ||
+      ""
+    ).trim();
+    const customerName = String(
+      invoice?.customerName ||
+      (typeof invoice?.customer === "object"
+        ? invoice?.customer?.displayName || invoice?.customer?.companyName || invoice?.customer?.name || ""
+        : "") ||
+      ""
+    ).trim();
+    navigate(`/sales/invoices/${id}/email`, {
+      state: {
+        customerEmail,
+        sendTo: customerEmail,
+        customerName,
+      },
+    });
   };
 
   const handleSendEmailSubmit = async () => {
@@ -1447,6 +1811,7 @@ export default function InvoiceDetail() { // Start of component
   const handleDownloadPDF = async () => {
     setIsPdfDropdownOpen(false);
     if (!invoice) return;
+    setIsDownloadingPdf(true);
 
     const wrapper = document.createElement("div");
     wrapper.style.position = "fixed";
@@ -1494,6 +1859,7 @@ export default function InvoiceDetail() { // Start of component
       console.error("Error downloading invoice PDF:", error);
       toast("Failed to generate PDF. Please try again.");
     } finally {
+      setIsDownloadingPdf(false);
       if (wrapper.parentNode) {
         wrapper.parentNode.removeChild(wrapper);
       }
@@ -1587,18 +1953,491 @@ export default function InvoiceDetail() { // Start of component
   };
 
   const handleOpenApplyRetainer = () => {
+    void handleOpenApplyCredits("retainer");
+  };
+
+  const handleOpenApplyCredits = async (sourceFilter: "all" | "credit" | "retainer" = "all") => {
     if (!invoice) return;
-    if (!customerRetainerInvoices.length) {
-      toast.info("No paid retainers available for this customer.");
+    const targetInvoiceId = String(
+      isDebitNoteView
+        ? (invoice as any)?.associatedInvoiceId || (invoice as any)?.invoiceId || ""
+        : (invoice as any)?.id || (invoice as any)?._id || id || ""
+    ).trim();
+    if (!targetInvoiceId) {
+      toast.error("Invoice id not found.");
       return;
     }
-    const initialValues: Record<string, number> = {};
-    customerRetainerInvoices.forEach((row: any) => {
-      const key = String(row?.id || row?._id || "");
-      if (key) initialValues[key] = 0;
+
+    const customerId = String(
+      isDebitNoteView
+        ? (invoice as any)?.customerId || ""
+        : getCustomerKey(invoice)
+    ).trim();
+    const customerName = String(
+      isDebitNoteView
+        ? (invoice as any)?.customerName || ""
+        : getCustomerName(invoice)
+    ).toLowerCase();
+    const toStatus = (value: any) => String(value || "").toLowerCase().replace(/[\s-]+/g, "_");
+
+    const creditsPromise = (async () => {
+      try {
+        if (customerId) {
+          const byCustomer = await creditNotesAPI.getByCustomer(customerId, { limit: 10000 });
+          const rows = Array.isArray((byCustomer as any)?.data) ? (byCustomer as any).data : [];
+          if (rows.length) return rows;
+        }
+        const allRes = await creditNotesAPI.getAll({ limit: 10000 });
+        const allRows = Array.isArray((allRes as any)?.data) ? (allRes as any).data : [];
+        return allRows.filter((row: any) => {
+          const rowCustomerId = getCustomerKey(row);
+          const rowCustomerName = getCustomerName(row).toLowerCase();
+          return (
+            (customerId && rowCustomerId && customerId === rowCustomerId) ||
+            (!!customerName && rowCustomerName === customerName)
+          );
+        });
+      } catch {
+        return [];
+      }
+    })();
+
+    const retainersPromise = (async () => {
+      try {
+        const allRows = await getInvoices();
+        return (Array.isArray(allRows) ? allRows : []).filter((row: any) => {
+          if (!isRetainerInvoice(row)) return false;
+          const rowCustomerId = getCustomerKey(row);
+          const rowCustomerName = getCustomerName(row).toLowerCase();
+          const sameCustomer =
+            (customerId && rowCustomerId && customerId === rowCustomerId) ||
+            (!!customerName && rowCustomerName === customerName);
+          if (!sameCustomer) return false;
+          const rowId = String(row?.id || row?._id || "").trim();
+          if (rowId && invoice && rowId === String((invoice as any)?.id || (invoice as any)?._id || "")) return false;
+          const availableExplicit = toNumSafe(row?.retainerAvailableAmount ?? row?.availableAmount ?? row?.unusedAmount ?? row?.unusedBalance, 0);
+          const availableFallback = Math.max(
+            0,
+            toNumSafe(row?.balance ?? row?.balanceDue ?? row?.amountPaid ?? row?.paidAmount ?? row?.total ?? row?.amount, 0)
+          );
+          const available = roundMoney(availableExplicit > 0 ? availableExplicit : availableFallback);
+          // Show retainers in the same modal when they still have available balance.
+          return available > 0;
+        });
+      } catch {
+        return [];
+      }
+    })();
+
+    const [creditRowsRaw, retainerRowsRaw] = await Promise.all([creditsPromise, retainersPromise]);
+
+    const creditRows = (Array.isArray(creditRowsRaw) ? creditRowsRaw : [])
+      .map((row: any) => {
+        const available = roundMoney(Math.max(0, toNumSafe(row?.balance ?? row?.unusedAmount ?? row?.availableAmount, 0)));
+        return {
+          rowKey: `credit:${String(row?.id || row?._id || "")}`,
+          sourceType: "credit" as const,
+          id: String(row?.id || row?._id || ""),
+          transactionNumber: String(row?.creditNoteNumber || row?.creditNumber || row?.number || "Credit"),
+          date: row?.creditNoteDate || row?.date || row?.createdAt || "",
+          location: String(row?.locationName || row?.location || "Head Office"),
+          creditAmount: roundMoney(toNumSafe(row?.total ?? row?.amount, 0)),
+          availableAmount: available,
+          raw: row,
+        };
+      })
+      .filter((row: any) => row.id && row.availableAmount > 0);
+
+    const retainerRows = (Array.isArray(retainerRowsRaw) ? retainerRowsRaw : [])
+      .map((row: any) => {
+        const availableExplicit = toNumSafe(row?.retainerAvailableAmount ?? row?.availableAmount ?? row?.unusedAmount ?? row?.unusedBalance, 0);
+        const fallback = Math.max(0, toNumSafe(row?.balance ?? row?.balanceDue ?? row?.amountPaid ?? row?.paidAmount ?? row?.total ?? row?.amount, 0));
+        const available = roundMoney(availableExplicit > 0 ? availableExplicit : fallback);
+        return {
+          rowKey: `retainer:${String(row?.id || row?._id || "")}`,
+          sourceType: "retainer" as const,
+          id: String(row?.id || row?._id || ""),
+          transactionNumber: String(row?.invoiceNumber || row?.retainerNumber || "Retainer"),
+          date: row?.invoiceDate || row?.date || row?.createdAt || "",
+          location: String(row?.locationName || row?.location || "Head Office"),
+          creditAmount: roundMoney(toNumSafe(row?.total ?? row?.amount, 0)),
+          availableAmount: available,
+          raw: row,
+        };
+      })
+      .filter((row: any) => row.id && row.availableAmount > 0);
+
+    const combinedRows =
+      sourceFilter === "credit"
+        ? creditRows
+        : sourceFilter === "retainer"
+          ? retainerRows
+          : [...creditRows, ...retainerRows];
+
+    if (!combinedRows.length) {
+      if (sourceFilter === "retainer") {
+        toast.info("No retainers available for this customer.");
+      } else if (sourceFilter === "credit") {
+        toast.info("No credits available for this customer.");
+      } else {
+        toast.info("No credits or retainers available for this customer.");
+      }
+      return;
+    }
+
+    const initialValues = combinedRows.reduce((acc: Record<string, number>, row: any) => {
+      acc[row.rowKey] = 0;
+      return acc;
+    }, {});
+
+    setApplyAdjustmentRows(combinedRows);
+    setApplyAdjustmentValues(initialValues);
+    setApplyOnDate(new Date().toISOString().split("T")[0]);
+    setUseApplyDate(true);
+    setIsApplyAdjustmentsModalOpen(true);
+  };
+
+  const handleDeleteRecordedPayment = async () => {
+    if (!selectedPaymentForDelete) return;
+    const paymentId = String(
+      selectedPaymentForDelete.id ||
+      selectedPaymentForDelete._id ||
+      ""
+    ).trim();
+    if (!paymentId) {
+      toast.error("Payment id not found.");
+      return;
+    }
+
+    try {
+      setIsDeletingPayment(true);
+      const statusKey = normalizeKey(selectedPaymentForDelete.status || "paid");
+      const shouldReverse = ["paid", "completed", "success"].includes(statusKey);
+      if (shouldReverse) {
+        const applied = getAppliedAmountsByInvoice(selectedPaymentForDelete);
+        const reverseDeltas: Record<string, number> = {};
+        Object.entries(applied).forEach(([invId, amount]) => {
+          const value = Number(amount || 0);
+          if (invId && value > 0) reverseDeltas[invId] = -value;
+        });
+        if (Object.keys(reverseDeltas).length > 0) {
+          await applyInvoicePaymentDeltas(reverseDeltas, paymentId);
+        }
+      }
+
+      await deletePayment(paymentId);
+
+      const paymentsRaw = await getPayments();
+      const allPayments = Array.isArray(paymentsRaw)
+        ? paymentsRaw.filter((p: any) => {
+            const associatedInvoiceId = String((invoice as any)?.associatedInvoiceId || (invoice as any)?.invoiceId || "");
+            const associatedInvoiceNumber = String((invoice as any)?.associatedInvoiceNumber || "");
+            return isPaymentLinkedToInvoice(
+              p,
+              invoice,
+              id,
+              associatedInvoiceId ? [associatedInvoiceId] : [],
+              associatedInvoiceNumber ? [associatedInvoiceNumber] : []
+            );
+          })
+        : [];
+      setPayments(allPayments);
+
+      if (id && !isDebitNoteView) {
+        const refreshedInvoice = await getInvoiceById(id);
+        if (refreshedInvoice) {
+          setInvoice(refreshedInvoice);
+          setInvoices((prev) => prev.map((row) => (row.id === refreshedInvoice.id ? refreshedInvoice : row)));
+        }
+      }
+
+      setShowDeletePaymentModal(false);
+      setSelectedPaymentForDelete(null);
+      setOpenPaymentMenuId(null);
+      toast.success("Payment deleted and invoice updated.");
+    } catch (error: any) {
+      console.error("Failed to delete payment from invoice detail:", error);
+      toast.error(error?.message || "Failed to delete payment.");
+    } finally {
+      setIsDeletingPayment(false);
+    }
+  };
+
+  const handleDissociateAndAddAsCredit = async () => {
+    if (!selectedPaymentForDelete || !invoice) return;
+    const paymentId = String(
+      selectedPaymentForDelete.id ||
+      selectedPaymentForDelete._id ||
+      ""
+    ).trim();
+    if (!paymentId) {
+      toast.error("Payment id not found.");
+      return;
+    }
+
+    const targetInvoiceId = String(
+      isDebitNoteView
+        ? (invoice as any)?.associatedInvoiceId || (invoice as any)?.invoiceId || ""
+        : invoice.id || invoice._id || id || ""
+    ).trim();
+    if (!targetInvoiceId) {
+      toast.error("Invoice id not found.");
+      return;
+    }
+
+    const targetInvoiceNumber = String(
+      isDebitNoteView
+        ? (invoice as any)?.associatedInvoiceNumber || ""
+        : invoice.invoiceNumber || ""
+    ).trim();
+
+    try {
+      setIsDeletingPayment(true);
+
+      const statusKey = normalizeKey(selectedPaymentForDelete.status || "paid");
+      const shouldReverse = ["paid", "completed", "success"].includes(statusKey);
+
+      const appliedByInvoice = getAppliedAmountsByInvoice(selectedPaymentForDelete);
+      const candidateIds = [targetInvoiceId, String(id || "").trim(), String(invoice.id || "").trim(), String(invoice._id || "").trim()].filter(Boolean);
+      let dissociatedAmount = 0;
+      for (const invId of candidateIds) {
+        if (appliedByInvoice[invId] > 0) {
+          dissociatedAmount = Number(appliedByInvoice[invId] || 0);
+          break;
+        }
+      }
+      if (dissociatedAmount <= 0) {
+        const paymentInvoiceId = String(selectedPaymentForDelete.invoiceId || "").trim();
+        if (candidateIds.includes(paymentInvoiceId)) {
+          dissociatedAmount = Number(selectedPaymentForDelete.amountReceived ?? selectedPaymentForDelete.amount ?? 0);
+        }
+      }
+      dissociatedAmount = roundMoney(Math.max(0, dissociatedAmount));
+      if (dissociatedAmount <= 0) {
+        toast.error("No allocated amount found for this invoice.");
+        return;
+      }
+
+      if (shouldReverse) {
+        await applyInvoicePaymentDeltas({ [targetInvoiceId]: -dissociatedAmount }, paymentId);
+      }
+
+      const currentInvoiceIds = new Set(candidateIds);
+      const currentInvoiceNumbers = new Set([targetInvoiceNumber, String(invoice.invoiceNumber || "").trim()].filter(Boolean));
+
+      const nextAllocations = Array.isArray(selectedPaymentForDelete.allocations)
+        ? selectedPaymentForDelete.allocations.filter((allocation: any) => {
+            const allocationInvoiceId = String(allocation?.invoice?._id || allocation?.invoice?.id || allocation?.invoice || allocation?.invoiceId || "").trim();
+            const allocationInvoiceNumber = String(allocation?.invoiceNumber || allocation?.invoice?.invoiceNumber || "").trim();
+            return !currentInvoiceIds.has(allocationInvoiceId) && !currentInvoiceNumbers.has(allocationInvoiceNumber);
+          })
+        : [];
+
+      const nextInvoicePayments =
+        selectedPaymentForDelete.invoicePayments && typeof selectedPaymentForDelete.invoicePayments === "object"
+          ? Object.entries(selectedPaymentForDelete.invoicePayments).reduce((acc: Record<string, number>, [invId, amount]) => {
+              const key = String(invId || "").trim();
+              if (!key || currentInvoiceIds.has(key)) return acc;
+              const numericAmount = Number(amount || 0);
+              if (numericAmount > 0) acc[key] = roundMoney(numericAmount);
+              return acc;
+            }, {})
+          : undefined;
+
+      const paymentInvoiceId = String(selectedPaymentForDelete.invoiceId || selectedPaymentForDelete.invoice?._id || selectedPaymentForDelete.invoice?.id || selectedPaymentForDelete.invoice || "").trim();
+      const paymentInvoiceNumber = String(selectedPaymentForDelete.invoiceNumber || "").trim();
+      const shouldClearDirectInvoiceLink = currentInvoiceIds.has(paymentInvoiceId) || currentInvoiceNumbers.has(paymentInvoiceNumber);
+
+      const paymentPatch: any = {
+        allocations: nextAllocations,
+        invoicePayments: nextInvoicePayments || {},
+        amountUsedForPayments: Object.values(nextInvoicePayments || {}).reduce((sum, value) => sum + Number(value || 0), 0),
+        unappliedAmount: roundMoney(
+          Number(selectedPaymentForDelete.amountReceived ?? selectedPaymentForDelete.amount ?? 0) -
+          Object.values(nextInvoicePayments || {}).reduce((sum, value) => sum + Number(value || 0), 0)
+        ),
+      };
+      if (shouldClearDirectInvoiceLink) {
+        paymentPatch.invoiceId = "";
+        paymentPatch.invoiceNumber = "";
+      }
+      await paymentsReceivedAPI.update(paymentId, paymentPatch);
+
+      const creditNotesRes = await creditNotesAPI.getAll({ limit: 10000 });
+      const creditRows = Array.isArray((creditNotesRes as any)?.data) ? (creditNotesRes as any).data : [];
+      const maxSerial = creditRows.reduce((max: number, row: any) => {
+        const match = String(row?.creditNoteNumber || "").match(/(\d+)$/);
+        const value = match ? Number(match[1]) : 0;
+        return Number.isFinite(value) ? Math.max(max, value) : max;
+      }, 0);
+      const nextCreditNoteNumber = `CN-${String(maxSerial + 1).padStart(6, "0")}`;
+
+      const sourceCustomerId = isDebitNoteView ? String((invoice as any)?.customerId || "") : getCustomerKey(invoice);
+      const sourceCustomerName = isDebitNoteView ? String((invoice as any)?.customerName || "") : getCustomerName(invoice);
+
+      await creditNotesAPI.create({
+        creditNoteNumber: nextCreditNoteNumber,
+        customerId: sourceCustomerId,
+        customerName: sourceCustomerName,
+        invoiceId: targetInvoiceId,
+        invoiceNumber: targetInvoiceNumber,
+        date: new Date().toISOString(),
+        creditNoteDate: new Date().toISOString(),
+        total: dissociatedAmount,
+        amount: dissociatedAmount,
+        balance: dissociatedAmount,
+        status: "open",
+        currency: selectedPaymentForDelete.currency || invoice.currency || baseCurrency || "USD",
+        source: "payment_dissociation",
+        sourcePaymentId: paymentId,
+        sourceInvoiceId: targetInvoiceId,
+        sourceInvoiceNumber: targetInvoiceNumber,
+        notes: `Created from dissociated payment ${selectedPaymentForDelete.paymentNumber || paymentId}.`,
+      });
+
+      const paymentsRaw = await getPayments();
+      const allPayments = Array.isArray(paymentsRaw)
+        ? paymentsRaw.filter((p: any) => {
+            const associatedInvoiceId = String((invoice as any)?.associatedInvoiceId || (invoice as any)?.invoiceId || "");
+            const associatedInvoiceNumber = String((invoice as any)?.associatedInvoiceNumber || "");
+            return isPaymentLinkedToInvoice(
+              p,
+              invoice,
+              id,
+              associatedInvoiceId ? [associatedInvoiceId] : [],
+              associatedInvoiceNumber ? [associatedInvoiceNumber] : []
+            );
+          })
+        : [];
+      setPayments(allPayments);
+
+      if (id && !isDebitNoteView) {
+        const refreshedInvoice = await getInvoiceById(id);
+        if (refreshedInvoice) {
+          setInvoice(refreshedInvoice);
+          setInvoices((prev) => prev.map((row) => (row.id === refreshedInvoice.id ? refreshedInvoice : row)));
+        }
+      }
+
+      setShowDeletePaymentModal(false);
+      setSelectedPaymentForDelete(null);
+      setOpenPaymentMenuId(null);
+      toast.success("Payment dissociated and moved to customer credit.");
+    } catch (error: any) {
+      console.error("Failed to dissociate payment and create credit:", error);
+      toast.error(error?.message || "Failed to dissociate payment.");
+    } finally {
+      setIsDeletingPayment(false);
+    }
+  };
+
+  const handleOpenRefundModal = (paymentRow: any) => {
+    setSelectedPaymentForRefund(paymentRow);
+    setIsRefundModalOpen(true);
+  };
+
+  const handleCloseRefundModal = () => {
+    if (isSavingRefund) return;
+    setIsRefundModalOpen(false);
+    setSelectedPaymentForRefund(null);
+    setRefundData({
+      amount: "",
+      refundedOn: "",
+      paymentMode: "",
+      referenceNumber: "",
+      fromAccount: "",
+      fromAccountId: "",
+      description: ""
     });
-    setRetainerApplyValues(initialValues);
-    setIsApplyRetainerOpen(true);
+  };
+
+  const handleRefundSave = async () => {
+    if (!selectedPaymentForRefund) return;
+
+    const paymentId = String(selectedPaymentForRefund.id || selectedPaymentForRefund._id || "").trim();
+    if (!paymentId) {
+      toast.error("Payment id not found.");
+      return;
+    }
+
+    const refundAmount = Number(refundData.amount || 0);
+    const maxAmount = Number(selectedPaymentForRefund.amountReceived ?? selectedPaymentForRefund.amount ?? 0) || 0;
+
+    if (!refundAmount || refundAmount <= 0) {
+      toast.error("Please enter a valid refund amount.");
+      return;
+    }
+    if (refundAmount > maxAmount) {
+      toast.error("Refund amount cannot exceed the payment amount.");
+      return;
+    }
+    if (!refundData.refundedOn) {
+      toast.error("Please choose the refund date.");
+      return;
+    }
+    if (!refundData.fromAccount && !refundData.fromAccountId) {
+      toast.error("Please choose the refund account.");
+      return;
+    }
+
+    try {
+      setIsSavingRefund(true);
+
+      const payload = {
+        paymentId,
+        invoiceId: String(invoice?.id || invoice?._id || id || "").trim(),
+        amount: roundMoney(refundAmount),
+        refundDate: refundData.refundedOn,
+        paymentMethod: refundData.paymentMode || "Cash",
+        referenceNumber: refundData.referenceNumber,
+        fromAccount: refundData.fromAccountId || refundData.fromAccount,
+        description: refundData.description
+      };
+
+      const response: any = await refundsAPI.create(payload);
+      if (!response?.success) {
+        throw new Error(response?.message || "Failed to process refund.");
+      }
+
+      const [paymentsRaw, refreshedInvoice] = await Promise.all([
+        getPayments(),
+        id && !isDebitNoteView ? getInvoiceById(id) : Promise.resolve(invoice)
+      ]);
+
+      const associatedInvoiceId = String((invoice as any)?.associatedInvoiceId || (invoice as any)?.invoiceId || "");
+      const associatedInvoiceNumber = String((invoice as any)?.associatedInvoiceNumber || "");
+      const allPayments = Array.isArray(paymentsRaw)
+        ? paymentsRaw.filter((p: any) =>
+            isPaymentLinkedToInvoice(
+              p,
+              refreshedInvoice || invoice,
+              id,
+              associatedInvoiceId ? [associatedInvoiceId] : [],
+              associatedInvoiceNumber ? [associatedInvoiceNumber] : []
+            )
+          )
+        : [];
+      setPayments(allPayments);
+
+      if (refreshedInvoice) {
+        setInvoice(refreshedInvoice as any);
+        setInvoices((prev) =>
+          prev.map((row: any) => {
+            const rowId = String(row?.id || row?._id || "").trim();
+            const refreshedId = String((refreshedInvoice as any)?.id || (refreshedInvoice as any)?._id || "").trim();
+            return rowId && rowId === refreshedId ? (refreshedInvoice as any) : row;
+          })
+        );
+      }
+
+      toast.success("Refund saved successfully.");
+      handleCloseRefundModal();
+    } catch (error: any) {
+      console.error("Failed to process refund:", error);
+      toast.error(error?.message || "Failed to process refund.");
+    } finally {
+      setIsSavingRefund(false);
+    }
   };
 
   const getTotalRetainerApplied = () =>
@@ -1710,6 +2549,235 @@ export default function InvoiceDetail() { // Start of component
       toast.error(error?.message || "Failed to apply retainers.");
     } finally {
       setIsApplyingRetainer(false);
+    }
+  };
+
+  const handleAdjustmentValueChange = (rowKey: string, rawValue: string, maxValue: number) => {
+    const numeric = Math.max(0, Math.min(maxValue, toNumSafe(rawValue, 0)));
+    setApplyAdjustmentValues((prev) => ({ ...prev, [rowKey]: numeric }));
+  };
+
+  const handleApplyAdjustments = async () => {
+    if (!invoice || isApplyingAdjustments) return;
+    const invoiceId = String(
+      isDebitNoteView
+        ? (invoice as any)?.associatedInvoiceId || (invoice as any)?.invoiceId || ""
+        : (invoice as any)?.id || (invoice as any)?._id || id || ""
+    ).trim();
+    if (!invoiceId) {
+      toast.error("Invoice id not found.");
+      return;
+    }
+
+    const rowsToApply = applyAdjustmentRows
+      .map((row: any) => ({ ...row, applied: roundMoney(toNumSafe(applyAdjustmentValues[row.rowKey], 0)) }))
+      .filter((row: any) => row.applied > 0);
+    if (!rowsToApply.length) {
+      toast.error("Enter amount to apply.");
+      return;
+    }
+
+    const total = roundMoney(toNumSafe((invoice as any)?.total ?? (invoice as any)?.amount, 0));
+    const paid = roundMoney(toNumSafe((invoice as any)?.paidAmount ?? (invoice as any)?.amountPaid, 0));
+    const currentCredits = roundMoney(toNumSafe((invoice as any)?.creditsApplied, 0));
+    const currentRetainers = roundMoney(toNumSafe((invoice as any)?.retainerAppliedAmount ?? (invoice as any)?.retainersApplied ?? (invoice as any)?.retainerAmountApplied ?? (invoice as any)?.retainerAppliedTotal, 0));
+    const currentBalance = roundMoney(Math.max(0, toNumSafe((invoice as any)?.balance ?? (invoice as any)?.balanceDue, total - paid - currentCredits - currentRetainers)));
+    const totalToApply = roundMoney(rowsToApply.reduce((sum: number, row: any) => sum + row.applied, 0));
+    if (totalToApply > currentBalance) {
+      toast.error("Applied amount cannot exceed invoice balance.");
+      return;
+    }
+
+    try {
+      setIsApplyingAdjustments(true);
+      let creditTotal = 0;
+      let retainerTotal = 0;
+      const retainerApplications: any[] = [];
+
+      for (const row of rowsToApply) {
+        if (row.sourceType === "credit") {
+          const nextBalance = roundMoney(Math.max(0, toNumSafe(row.availableAmount, 0) - toNumSafe(row.applied, 0)));
+          const existingAllocations = Array.isArray(row.raw?.allocations) ? [...row.raw.allocations] : [];
+          await creditNotesAPI.update(String(row.id), {
+            balance: nextBalance,
+            creditsUsed: roundMoney(toNumSafe(row.raw?.creditsUsed, 0) + toNumSafe(row.applied, 0)),
+            status: nextBalance <= 0 ? "closed" : (row.raw?.status || "open"),
+            allocations: [
+              ...existingAllocations,
+              {
+                invoiceId,
+                amount: row.applied,
+                date: useApplyDate ? applyOnDate : new Date().toISOString().split("T")[0],
+              },
+            ],
+            allocationUpdatedAt: new Date().toISOString(),
+          });
+          creditTotal += toNumSafe(row.applied, 0);
+        } else {
+          const nextAvailable = roundMoney(Math.max(0, toNumSafe(row.availableAmount, 0) - toNumSafe(row.applied, 0)));
+          await updateInvoice(String(row.id), {
+            retainerAvailableAmount: nextAvailable,
+            retainerDrawStatus: nextAvailable <= 0 ? "drawn" : "partially_drawn",
+          } as any);
+          retainerTotal += toNumSafe(row.applied, 0);
+          retainerApplications.push({
+            retainerId: String(row.id),
+            retainerNumber: String(row.transactionNumber || ""),
+            amount: row.applied,
+            appliedOn: useApplyDate ? applyOnDate : new Date().toISOString().split("T")[0],
+          });
+        }
+      }
+
+      const nextCreditsApplied = roundMoney(currentCredits + creditTotal);
+      const nextRetainerApplied = roundMoney(currentRetainers + retainerTotal);
+      const nextBalance = roundMoney(Math.max(0, total - paid - nextCreditsApplied - nextRetainerApplied));
+      const statusKey = normalizeKey((invoice as any)?.status || "sent");
+      const nextStatus =
+        statusKey === "void"
+          ? (invoice as any)?.status
+          : nextBalance <= 0
+            ? "paid"
+            : paid > 0 || nextCreditsApplied > 0 || nextRetainerApplied > 0
+              ? "partially_paid"
+              : (statusKey === "draft" ? "draft" : "sent");
+
+      const existingRetainerApps = Array.isArray((invoice as any)?.retainerApplications)
+        ? [...(invoice as any).retainerApplications]
+        : [];
+
+      const patchPayload: any = {
+        creditsApplied: nextCreditsApplied,
+        retainerAppliedAmount: nextRetainerApplied,
+        retainersApplied: nextRetainerApplied,
+        retainerAmountApplied: nextRetainerApplied,
+        retainerAppliedTotal: nextRetainerApplied,
+        retainerApplications: [...existingRetainerApps, ...retainerApplications],
+        balance: nextBalance,
+        balanceDue: nextBalance,
+        amountDue: nextBalance,
+        status: nextStatus,
+      };
+      if (isDebitNoteView) {
+        await debitNotesAPI.update(String((invoice as any)?.id || (invoice as any)?._id || id || ""), patchPayload);
+      } else {
+        await updateInvoice(invoiceId, patchPayload);
+      }
+
+      setInvoice((prev: any) => (prev ? { ...prev, ...patchPayload } : prev));
+      setCustomerCreditsAvailable((prev) => Math.max(0, roundMoney(prev - creditTotal)));
+      setCustomerRetainerAvailable((prev) => Math.max(0, roundMoney(prev - retainerTotal)));
+
+      if (creditTotal > 0) {
+        const appendedCreditRows = rowsToApply
+          .filter((row: any) => row.sourceType === "credit")
+          .map((row: any) => ({
+            id: row.id,
+            date: useApplyDate ? applyOnDate : new Date().toISOString(),
+            transactionNumber: row.transactionNumber,
+            appliedAmount: row.applied,
+          }));
+        setCreditsAppliedRows((prev) => [...appendedCreditRows, ...prev]);
+        setCreditsAppliedCount((prev) => prev + appendedCreditRows.length);
+      }
+
+      setIsApplyAdjustmentsModalOpen(false);
+      setIsApplyRetainerOpen(false);
+      toast.success("Credits/retainers applied successfully.");
+    } catch (error: any) {
+      console.error("Failed to apply credits/retainers:", error);
+      toast.error(error?.message || "Failed to apply credits/retainers.");
+    } finally {
+      setIsApplyingAdjustments(false);
+    }
+  };
+
+  const handleRemoveAppliedCredit = async (creditRow: any) => {
+    if (!invoice || !creditRow?.id) return;
+    const invoiceId = String(
+      isDebitNoteView
+        ? (invoice as any)?.associatedInvoiceId || (invoice as any)?.invoiceId || ""
+        : (invoice as any)?.id || (invoice as any)?._id || id || ""
+    ).trim();
+    if (!invoiceId) return;
+    const creditNoteId = String(creditRow.id || "").trim();
+    const amountToReverse = roundMoney(Math.max(0, toNumSafe(creditRow.appliedAmount, 0)));
+    if (!creditNoteId || amountToReverse <= 0) return;
+
+    try {
+      setIsRemovingAppliedCreditId(creditNoteId);
+      const noteRes = await creditNotesAPI.getById(creditNoteId);
+      const note = (noteRes as any)?.data || noteRes;
+      if (!note) {
+        toast.error("Credit note not found.");
+        return;
+      }
+
+      let remainingToRemove = amountToReverse;
+      const existingAllocations = Array.isArray(note?.allocations) ? note.allocations : [];
+      const nextAllocations: any[] = [];
+      existingAllocations.forEach((allocation: any) => {
+        const allocationInvoiceId = String(allocation?.invoiceId || allocation?.invoice?._id || allocation?.invoice?.id || allocation?.invoice || "").trim();
+        const allocationAmount = roundMoney(toNumSafe(allocation?.amount, 0));
+        if (allocationInvoiceId !== invoiceId || allocationAmount <= 0 || remainingToRemove <= 0) {
+          nextAllocations.push(allocation);
+          return;
+        }
+        const removedNow = Math.min(allocationAmount, remainingToRemove);
+        const leftover = roundMoney(allocationAmount - removedNow);
+        remainingToRemove = roundMoney(remainingToRemove - removedNow);
+        if (leftover > 0) nextAllocations.push({ ...allocation, amount: leftover });
+      });
+
+      const nextCreditBalance = roundMoney(toNumSafe(note?.balance ?? note?.unusedAmount ?? note?.availableAmount, 0) + amountToReverse);
+      const nextCreditsUsed = Math.max(0, roundMoney(toNumSafe(note?.creditsUsed, 0) - amountToReverse));
+      await creditNotesAPI.update(creditNoteId, {
+        balance: nextCreditBalance,
+        creditsUsed: nextCreditsUsed,
+        allocations: nextAllocations,
+        status: "open",
+        allocationUpdatedAt: new Date().toISOString(),
+      });
+
+      const total = roundMoney(toNumSafe((invoice as any)?.total ?? (invoice as any)?.amount, 0));
+      const paid = roundMoney(toNumSafe((invoice as any)?.paidAmount ?? (invoice as any)?.amountPaid, 0));
+      const currentCredits = roundMoney(toNumSafe((invoice as any)?.creditsApplied, 0));
+      const currentRetainers = roundMoney(toNumSafe((invoice as any)?.retainerAppliedAmount ?? (invoice as any)?.retainersApplied ?? (invoice as any)?.retainerAmountApplied ?? (invoice as any)?.retainerAppliedTotal, 0));
+      const nextCreditsApplied = Math.max(0, roundMoney(currentCredits - amountToReverse));
+      const nextBalance = roundMoney(Math.max(0, total - paid - nextCreditsApplied - currentRetainers));
+      const statusKey = normalizeKey((invoice as any)?.status || "sent");
+      const nextStatus =
+        statusKey === "void"
+          ? (invoice as any)?.status
+          : nextBalance <= 0
+            ? "paid"
+            : paid > 0 || nextCreditsApplied > 0 || currentRetainers > 0
+              ? "partially_paid"
+              : (statusKey === "draft" ? "draft" : "sent");
+
+      const patchPayload: any = {
+        creditsApplied: nextCreditsApplied,
+        balance: nextBalance,
+        balanceDue: nextBalance,
+        amountDue: nextBalance,
+        status: nextStatus,
+      };
+      if (isDebitNoteView) {
+        await debitNotesAPI.update(String((invoice as any)?.id || (invoice as any)?._id || id || ""), patchPayload);
+      } else {
+        await updateInvoice(invoiceId, patchPayload);
+      }
+      setInvoice((prev: any) => (prev ? { ...prev, ...patchPayload } : prev));
+
+      setCreditsAppliedRows((prev) => prev.filter((row: any) => String(row.id) !== creditNoteId));
+      setCreditsAppliedCount((prev) => Math.max(0, prev - 1));
+      setCustomerCreditsAvailable((prev) => roundMoney(prev + amountToReverse));
+      toast.success("Applied credit removed and returned to credit note.");
+    } catch (error: any) {
+      console.error("Failed to remove applied credit:", error);
+      toast.error(error?.message || "Failed to remove applied credit.");
+    } finally {
+      setIsRemovingAppliedCreditId(null);
     }
   };
 
@@ -2041,6 +3109,15 @@ export default function InvoiceDetail() { // Start of component
     setCommentUnderline(false);
   };
 
+  const handleRefreshSidebarInvoices = async () => {
+    try {
+      const allInvoices = await getInvoices();
+      setInvoices(stripRetainerInvoices(allInvoices as any[]));
+    } catch (error) {
+      console.error("Failed to refresh invoices:", error);
+    }
+  };
+
   const filteredStatusOptions = statusFilters.filter(filter =>
     filter.toLowerCase().includes(filterSearch.toLowerCase())
   );
@@ -2056,6 +3133,33 @@ export default function InvoiceDetail() { // Start of component
   const invoiceStatusKey = String(invoice?.status || "").toLowerCase().replace(/[\s-]+/g, "_").trim();
   const canRecordPayment = !["paid", "void"].includes(invoiceStatusKey);
   const showWhatsNext = !isDebitNoteView && canRecordPayment;
+  const creditAppliedAmount = Number(invoiceTotalsMeta.creditsApplied) || 0;
+  const retainerAppliedAmount = (() => {
+    const direct =
+      toNumber((invoice as any)?.retainerAppliedAmount) ||
+      toNumber((invoice as any)?.retainersApplied) ||
+      toNumber((invoice as any)?.retainerAmountApplied) ||
+      toNumber((invoice as any)?.retainerAppliedTotal);
+    if (direct > 0) return direct;
+    const apps = Array.isArray((invoice as any)?.retainerApplications)
+      ? (invoice as any).retainerApplications
+      : [];
+    return apps.reduce((sum: number, row: any) => {
+      const value =
+        toNumber(row?.appliedAmount) ||
+        toNumber(row?.amountApplied) ||
+        toNumber(row?.amount) ||
+        toNumber(row?.applied);
+      return sum + (value > 0 ? value : 0);
+    }, 0);
+  })();
+  const shouldShowPaymentsAndCreditsSection =
+    payments.length > 0 ||
+    creditsAppliedRows.length > 0 ||
+    creditsAppliedCount > 0 ||
+    creditAppliedAmount > 0 ||
+    retainerAppliedAmount > 0 ||
+    (isDebitNoteView && ((invoice as any)?.associatedInvoiceId || (invoice as any)?.invoiceId));
 
   return (
     <>
@@ -2110,21 +3214,21 @@ export default function InvoiceDetail() { // Start of component
           }
         }
       `}</style>
-      <div className="w-full h-screen flex bg-white overflow-hidden">
+      <div className="w-full h-[calc(100vh-4rem)] min-h-0 flex bg-[#f8fafc] overflow-hidden">
         {/* Left Sidebar */}
-        <div className="w-80 border-r border-gray-200 bg-white flex flex-col h-screen overflow-hidden">
-          <div className="flex items-center justify-between p-4 border-b border-gray-200">
+        <div className="w-[320px] lg:w-[320px] md:w-[270px] border-r border-gray-200 bg-white flex flex-col h-full min-h-0 overflow-hidden hidden md:flex">
+          <div className="relative z-20 flex items-center justify-between px-4 h-[74px] border-b border-gray-200">
             <div className="relative flex-1" ref={allInvoicesDropdownRef}>
               <button
                 onClick={() => setIsAllInvoicesDropdownOpen(!isAllInvoicesDropdownOpen)}
-                className="w-full flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-700 cursor-pointer hover:bg-gray-50"
+                className="inline-flex items-center gap-1 text-[18px] font-semibold text-gray-900 cursor-pointer"
               >
                 {isAllInvoicesDropdownOpen ? (
-                  <ChevronUp size={16} className="text-gray-500" />
+                  <ChevronUp size={16} className="text-[#156372]" />
                 ) : (
-                  <ChevronDown size={16} className="text-gray-500" />
+                  <ChevronDown size={16} className="text-[#156372]" />
                 )}
-                <span className="text-sm font-medium text-gray-700">All Invoices</span>
+                <span>All Invoices</span>
               </button>
 
               {/* Filter Dropdown */}
@@ -2171,6 +3275,71 @@ export default function InvoiceDetail() { // Start of component
                 </div>
               )}
             </div>
+            <div className="relative flex items-center gap-2 ml-2" ref={sidebarMoreRef}>
+              <button
+                className="p-2 rounded-md cursor-pointer text-white border border-[#0D4A52] shadow-sm bg-[#156372] hover:bg-[#0D4A52]"
+                onClick={() => navigate("/sales/invoices/new")}
+                title="New Invoice"
+              >
+                <Plus size={16} />
+              </button>
+              <button
+                className="p-2 text-gray-600 hover:bg-gray-100 rounded-md cursor-pointer border border-gray-200"
+                onClick={() => setShowSidebarMoreDropdown((prev) => !prev)}
+                title="More"
+              >
+                <MoreHorizontal size={16} />
+              </button>
+              {showSidebarMoreDropdown && (
+                <div className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-[120] min-w-[220px]">
+                  <button
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    onClick={() => {
+                      setShowSidebarMoreDropdown(false);
+                      navigate("/sales/invoices?sort=created_time");
+                    }}
+                  >
+                    Sort by
+                  </button>
+                  <button
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    onClick={() => {
+                      setShowSidebarMoreDropdown(false);
+                      navigate("/sales/invoices/import");
+                    }}
+                  >
+                    Import Invoices
+                  </button>
+                  <button
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    onClick={() => {
+                      setShowSidebarMoreDropdown(false);
+                      navigate("/settings/invoices");
+                    }}
+                  >
+                    Preferences
+                  </button>
+                  <button
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    onClick={async () => {
+                      setShowSidebarMoreDropdown(false);
+                      await handleRefreshSidebarInvoices();
+                    }}
+                  >
+                    Refresh List
+                  </button>
+                  <button
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    onClick={() => {
+                      setShowSidebarMoreDropdown(false);
+                      navigate("/sales/invoices");
+                    }}
+                  >
+                    Go To List
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto">
             {invoices.map((inv) => (
@@ -2189,9 +3358,14 @@ export default function InvoiceDetail() { // Start of component
                     <span>{formatDate(inv.invoiceDate || inv.date)}</span>
                     {inv.orderNumber && <span>{inv.orderNumber}</span>}
                   </div>
-                  <div className={`text-xs font-medium px-2 py-0.5 rounded-full inline-block ${getInvoiceStatusDisplay(inv).color}`}>
-                    {getInvoiceStatusDisplay(inv).text}
-                  </div>
+                  {(() => {
+                    const statusDisplay = getSidebarStatusDisplay(inv);
+                    return (
+                      <div className={`text-xs font-medium px-2 py-0.5 rounded-full inline-block ${statusDisplay.color}`}>
+                        {statusDisplay.text}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             ))}
@@ -2199,15 +3373,15 @@ export default function InvoiceDetail() { // Start of component
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 flex flex-col overflow-y-auto relative">
+        <div className="flex-1 flex flex-col overflow-hidden relative">
           {/* Header */}
           <div className="border-b border-gray-200 bg-white flex-shrink-0">
             <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200">
               <div>
-                {isDebitNoteView && (
-                  <div className="text-sm text-[#3f4f8f] mb-0.5">Branch: {String((invoice as any)?.location || "Head Office")}</div>
-                )}
-                <h1 className="text-[36px] leading-none font-semibold text-gray-900">{invoice.invoiceNumber || invoice.id}</h1>
+                <div className="text-[14px] text-gray-500 mb-0.5">
+                  Location: <span className="text-[#1d4ed8]">{String((invoice as any)?.location || "Head Office")}</span>
+                </div>
+                <h1 className="text-[32px] leading-none font-semibold text-gray-900">{invoice.invoiceNumber || invoice.id}</h1>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -2242,7 +3416,11 @@ export default function InvoiceDetail() { // Start of component
 
             <div className="flex items-center gap-1 px-6 py-2 text-[13px] text-gray-700 border-b border-gray-200">
               <button
-                onClick={() => navigate(`/sales/invoices/${id}/edit`)}
+                onClick={() => {
+                  const editId = String((invoice as any)?.id || (invoice as any)?._id || id || "").trim();
+                  if (!editId) return;
+                  navigate(`/sales/invoices/${editId}/edit`, { state: { invoice } });
+                }}
                 className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-gray-100 cursor-pointer"
               >
                 <Edit size={13} />
@@ -2250,56 +3428,13 @@ export default function InvoiceDetail() { // Start of component
               </button>
               <div className="h-5 w-px bg-gray-300 mx-1" />
 
-              <div className="relative" ref={sendDropdownRef}>
-                <button
-                  onClick={() => setIsSendDropdownOpen(!isSendDropdownOpen)}
-                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-gray-100 cursor-pointer"
-                >
-                  <Mail size={13} />
-                  Send
-                  <ChevronDown size={12} />
-                </button>
-                {isSendDropdownOpen && (
-                  <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 min-w-[220px]">
-                    <div
-                      className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
-                      onClick={handleSendEmail}
-                    >
-                      <Mail size={14} />
-                      Send Email
-                    </div>
-                    <div
-                      className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
-                      onClick={handleScheduleEmail}
-                    >
-                      <Clock size={14} />
-                      Schedule Email
-                    </div>
-                    <div className="h-px bg-gray-200 my-1"></div>
-                    <div
-                      className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
-                      onClick={handleSendReminderNow}
-                    >
-                      <Send size={14} />
-                      Send Reminder Now
-                    </div>
-                    <div
-                      className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
-                      onClick={handleSetExpectedPaymentDate}
-                    >
-                      <Calendar size={14} />
-                      Expected Payment Date
-                    </div>
-                    <div
-                      className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
-                      onClick={handleToggleStopReminders}
-                    >
-                      <AlertTriangle size={14} className="text-orange-500" />
-                      {(invoice as any)?.remindersStopped ? "Enable Reminders" : "Stop Reminders"}
-                    </div>
-                  </div>
-                )}
-              </div>
+              <button
+                onClick={handleSendEmail}
+                className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-gray-100 cursor-pointer"
+              >
+                <Mail size={13} />
+                Send
+              </button>
 
               <button
                 className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-gray-100 cursor-pointer"
@@ -2310,34 +3445,14 @@ export default function InvoiceDetail() { // Start of component
               </button>
               <div className="h-5 w-px bg-gray-300 mx-1" />
 
-              <div className="relative" ref={pdfDropdownRef}>
-                <button
-                  onClick={() => setIsPdfDropdownOpen(!isPdfDropdownOpen)}
-                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-gray-100 cursor-pointer"
-                >
-                  <FileText size={13} />
-                  {isDebitNoteView ? "PDF/Print" : "PDF"}
-                  <ChevronDown size={12} />
-                </button>
-                {isPdfDropdownOpen && (
-                  <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 min-w-[180px]">
-                    <div
-                      className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
-                      onClick={handleDownloadPDF}
-                    >
-                      <Download size={14} />
-                      Download PDF
-                    </div>
-                    <div
-                      className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
-                      onClick={handleViewInvoiceInNewPage}
-                    >
-                      <FileText size={14} />
-                      Display as New Page
-                    </div>
-                  </div>
-                )}
-              </div>
+              <button
+                onClick={isDownloadingPdf ? undefined : handleDownloadPDF}
+                disabled={isDownloadingPdf}
+                className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-gray-100 cursor-pointer disabled:opacity-60"
+              >
+                <FileText size={13} className={isDownloadingPdf ? "animate-pulse" : ""} />
+                {isDownloadingPdf ? "Downloading..." : "PDF"}
+              </button>
 
               {debitNote && (
                 <button
@@ -2488,13 +3603,221 @@ export default function InvoiceDetail() { // Start of component
             </div>
           </div>
 
-          {/* Payments Received Section */}
-          {payments.length > 0 && (
-            <div className="px-6 py-3 border-b border-gray-200 bg-white flex-shrink-0">
-              <div className="flex items-center gap-2 text-sm text-gray-700">
-                <span>Payments Received {payments.length}</span>
-                <ChevronDown size={14} className="text-gray-500" />
-              </div>
+          <div className="flex-1 overflow-y-auto">
+          {/* Payments / Credits Applied Section */}
+          {shouldShowPaymentsAndCreditsSection && (
+            <div className="mx-6 mt-4 rounded border border-gray-200 bg-white">
+              <button
+                type="button"
+                onClick={() => setIsPaymentsSectionOpen((prev) => !prev)}
+                className="w-full flex items-center justify-between px-4 py-3 text-left"
+              >
+                <div className="flex items-center gap-4 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPaymentInfoTab("payments");
+                    }}
+                    className={`flex items-center gap-2 pb-1 border-b-2 ${paymentInfoTab === "payments" ? "border-[#2563eb]" : "border-transparent"}`}
+                  >
+                    <span className="text-[12px] font-medium text-gray-800">Payments Received</span>
+                    <span className="text-[12px] text-[#2563eb]">{payments.length}</span>
+                  </button>
+                  <div className="h-4 w-px bg-gray-300" />
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPaymentInfoTab("credits");
+                    }}
+                    className={`flex items-center gap-2 pb-1 border-b-2 ${paymentInfoTab === "credits" ? "border-[#2563eb]" : "border-transparent"}`}
+                  >
+                    <span className="text-[12px] font-medium text-gray-800">Credits Applied</span>
+                    <span className="text-[12px] text-[#2563eb]">{creditsAppliedCount}</span>
+                  </button>
+                  {isDebitNoteView && ((invoice as any)?.associatedInvoiceId || (invoice as any)?.invoiceId) && (
+                    <>
+                      <div className="h-4 w-px bg-gray-300" />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPaymentInfoTab("associated");
+                        }}
+                        className={`text-[12px] font-medium pb-1 border-b-2 ${paymentInfoTab === "associated" ? "border-[#2563eb] text-[#2563eb]" : "border-transparent text-gray-800 hover:text-[#2563eb]"}`}
+                      >
+                        Associated Invoices
+                      </button>
+                    </>
+                  )}
+                  {(creditAppliedAmount > 0 || retainerAppliedAmount > 0) && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {creditAppliedAmount > 0 && (
+                        <span className="inline-flex items-center rounded-full bg-blue-50 text-blue-700 px-2 py-0.5 text-[11px] font-medium">
+                          Credit Note Applied: {formatCurrency(creditAppliedAmount, invoice.currency)}
+                        </span>
+                      )}
+                      {retainerAppliedAmount > 0 && (
+                        <span className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 text-[11px] font-medium">
+                          Retainer Applied: {formatCurrency(retainerAppliedAmount, invoice.currency)}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <ChevronDown size={16} className={`text-gray-500 transition-transform ${isPaymentsSectionOpen ? "rotate-0" : "-rotate-90"}`} />
+              </button>
+              {isPaymentsSectionOpen && (
+                <div className="border-t border-gray-200 overflow-x-auto relative z-[20]">
+                  {paymentInfoTab === "associated" && isDebitNoteView ? (
+                    <div>
+                      <div className="px-4 py-2 text-[14px] text-gray-900">Invoice</div>
+                      <table className="w-full text-left">
+                        <thead className="bg-[#f6f7fb]">
+                          <tr className="text-[12px] text-[#6b7280]">
+                            <th className="px-4 py-2 font-medium">Date</th>
+                            <th className="px-4 py-2 font-medium">Invoice Number</th>
+                            <th className="px-4 py-2 font-medium text-right">Invoice Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="border-t border-gray-100">
+                            <td className="px-4 py-3 text-[12px] text-gray-800">
+                              {formatDate((associatedInvoiceRow as any)?.invoiceDate || (associatedInvoiceRow as any)?.date || (invoice as any)?.date)}
+                            </td>
+                            <td className="px-4 py-3 text-[12px] text-[#2563eb]">
+                              {(associatedInvoiceRow as any)?.invoiceNumber || (invoice as any)?.associatedInvoiceNumber || "-"}
+                            </td>
+                            <td className="px-4 py-3 text-[12px] text-gray-900 text-right">
+                              {formatCurrency(
+                                toNumSafe((associatedInvoiceRow as any)?.total ?? (associatedInvoiceRow as any)?.amount ?? (associatedInvoiceRow as any)?.balance ?? (invoice as any)?.total ?? 0, 0),
+                                (associatedInvoiceRow as any)?.currency || invoice.currency
+                              )}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : paymentInfoTab === "credits" ? (
+                    <table className="w-full text-left">
+                      <thead className="bg-[#f6f7fb]">
+                        <tr className="text-[12px] text-[#6b7280] uppercase">
+                          <th className="px-4 py-2 font-medium">Date</th>
+                          <th className="px-4 py-2 font-medium">Transaction#</th>
+                          <th className="px-4 py-2 font-medium">Credits Applied</th>
+                          <th className="px-4 py-2 font-medium w-12"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {creditsAppliedRows.length > 0 ? creditsAppliedRows.map((row: any, rowIndex: number) => (
+                          <tr key={row.id || row.transactionNumber || rowIndex} className="border-t border-gray-100">
+                            <td className="px-4 py-3 text-[12px] text-gray-800">{formatDate(row.date)}</td>
+                            <td className="px-4 py-3 text-[12px] text-[#2563eb]">{row.transactionNumber}</td>
+                            <td className="px-4 py-3 text-[12px] text-gray-900">{formatCurrency(row.appliedAmount, invoice.currency)}</td>
+                            <td className="px-4 py-3 text-right">
+                              <button
+                                type="button"
+                                disabled={isRemovingAppliedCreditId === String(row.id)}
+                                className="text-gray-500 hover:text-gray-700 disabled:opacity-50"
+                                onClick={() => {
+                                  void handleRemoveAppliedCredit(row);
+                                }}
+                              >
+                                {isRemovingAppliedCreditId === String(row.id) ? <RotateCw size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                              </button>
+                            </td>
+                          </tr>
+                        )) : (
+                          <tr>
+                            <td colSpan={4} className="px-4 py-6 text-[12px] text-gray-500 text-center">No applied credits</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <table className="w-full text-left">
+                      <thead className="bg-[#f6f7fb]">
+                        <tr className="text-[12px] text-[#6b7280] uppercase">
+                          <th className="px-4 py-2 font-medium">Date</th>
+                          <th className="px-4 py-2 font-medium">Payment #</th>
+                          <th className="px-4 py-2 font-medium">Reference#</th>
+                          <th className="px-4 py-2 font-medium">Status</th>
+                          <th className="px-4 py-2 font-medium">Payment Mode</th>
+                          <th className="px-4 py-2 font-medium">Amount</th>
+                          <th className="px-4 py-2 font-medium">Early Payment Discount</th>
+                          <th className="px-4 py-2 font-medium">...</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {payments.map((payment: any, paymentIndex: number) => (
+                          <tr key={String(payment.id || payment._id || payment.paymentNumber || paymentIndex)} className="border-t border-gray-100">
+                            <td className="px-4 py-3 text-[12px] text-gray-800">{formatDate(payment.paymentDate || payment.date)}</td>
+                            <td className="px-4 py-3 text-[12px] text-[#2563eb]">{payment.paymentNumber || "-"}</td>
+                            <td className="px-4 py-3 text-[12px] text-gray-700">{payment.referenceNumber || payment.paymentReference || payment.reference || "-"}</td>
+                            <td className={`px-4 py-3 text-[12px] ${getPaymentStatusClass(payment)}`}>{getPaymentStatusLabel(payment)}</td>
+                            <td className="px-4 py-3 text-[12px] text-gray-700">{payment.paymentMode || payment.paymentMethod || "-"}</td>
+                            <td className="px-4 py-3 text-[12px] text-gray-900">{formatCurrency(payment.amountReceived ?? payment.amount ?? 0, payment.currency || invoice.currency)}</td>
+                            <td className="px-4 py-3 text-[12px] text-gray-700">{formatCurrency(0, payment.currency || invoice.currency)}</td>
+                            <td className="px-4 py-3 text-[12px] text-gray-500 relative overflow-visible">
+                              {(() => {
+                                const rowMenuId = String(payment.id || payment._id || payment.paymentNumber || paymentIndex);
+                                const paymentId = String(payment.id || payment._id || "");
+                                return (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="px-1 py-0.5 rounded hover:bg-gray-100 text-gray-600"
+                                      onClick={() => setOpenPaymentMenuId((prev) => (prev === rowMenuId ? null : rowMenuId))}
+                                    >
+                                      <MoreHorizontal size={14} />
+                                    </button>
+                                    {openPaymentMenuId === rowMenuId && (
+                                      <div className="absolute right-0 bottom-8 w-[140px] bg-white border border-gray-200 rounded-lg shadow-xl z-[999] py-1">
+                                        <button
+                                          className="w-full flex items-center gap-2 px-4 py-2 text-[13px] text-gray-700 hover:bg-gray-50"
+                                          onClick={() => {
+                                            setOpenPaymentMenuId(null);
+                                            if (paymentId) navigate(`/payments/payments-received/${paymentId}`);
+                                          }}
+                                        >
+                                          <Pencil size={13} />
+                                          Edit
+                                        </button>
+                                      <button
+                                        className="w-full flex items-center gap-2 px-4 py-2 text-[13px] text-gray-700 hover:bg-gray-50"
+                                        onClick={() => {
+                                          setOpenPaymentMenuId(null);
+                                          handleOpenRefundModal(payment);
+                                        }}
+                                      >
+                                          <Banknote size={13} />
+                                          Refund
+                                        </button>
+                                        <button
+                                          className="w-full flex items-center gap-2 px-4 py-2 text-[13px] text-gray-700 hover:bg-gray-50"
+                                          onClick={() => {
+                                            setOpenPaymentMenuId(null);
+                                            setSelectedPaymentForDelete(payment);
+                                            setShowDeletePaymentModal(true);
+                                          }}
+                                        >
+                                          <Trash2 size={13} />
+                                          Delete
+                                        </button>
+                                      </div>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -2502,7 +3825,7 @@ export default function InvoiceDetail() { // Start of component
           {isDebitNoteView && (
             <div className="mx-6 mt-4 rounded border border-gray-200 bg-white">
               <div className="px-5 py-4 border-b border-gray-200">
-                {customerRetainerAvailable > 0 && (
+                {invoiceStatusKey !== "paid" && customerRetainerAvailable > 0 && (
                   <div className="flex items-center gap-2 text-base text-gray-900 mb-3">
                     <FileText size={16} className="text-gray-700" />
                     <span>
@@ -2561,22 +3884,32 @@ export default function InvoiceDetail() { // Start of component
             </div>
           )}
 
-          {!isDebitNoteView && customerRetainerAvailable > 0 && (
-            <div className="mx-6 mt-4 rounded border border-gray-200 bg-white px-5 py-3 flex items-center gap-2 text-sm text-gray-800">
-              <FileText size={15} className="text-gray-700" />
-              <span>
-                Retainer Available:{" "}
-                <span className="font-semibold">
-                  {String(invoice?.currency || baseCurrency)}{customerRetainerAvailable.toFixed(2)}
-                </span>{" "}
-                <button
-                  type="button"
-                  className="text-[#3b82f6] hover:underline"
-                  onClick={handleOpenApplyRetainer}
-                >
-                  Apply Now
-                </button>
-              </span>
+          {!isDebitNoteView && invoiceStatusKey !== "paid" && (customerCreditsAvailable > 0 || customerRetainerAvailable > 0) && (
+            <div className="mx-6 mt-4 rounded border border-gray-200 bg-white">
+              <div className="px-5 py-4 space-y-3 text-[14px] text-gray-900">
+                {customerCreditsAvailable > 0 && (
+                  <div className="flex items-center gap-2">
+                    <FileText size={15} className="text-gray-700" />
+                    <span>
+                      Credits Available: <span className="font-semibold">{formatCurrency(customerCreditsAvailable, invoice.currency)}</span>{" "}
+                      <button type="button" className="text-[#3b82f6] hover:underline" onClick={() => void handleOpenApplyCredits("credit")}>Apply Now</button>
+                    </span>
+                  </div>
+                )}
+                {customerRetainerAvailable > 0 && (
+                  <div className="flex items-center gap-2">
+                    <Repeat size={15} className="text-gray-700" />
+                    <span>
+                      Retainer Available: <span className="font-semibold">{formatAmountWithCurrency(customerRetainerAvailable)}</span>{" "}
+                      <button type="button" className="text-[#3b82f6] hover:underline" onClick={handleOpenApplyRetainer}>Apply Now</button>
+                    </span>
+                  </div>
+                )}
+              </div>
+              <div className="px-5 py-3 bg-[#f8fafc] border-t border-gray-200 text-sm text-gray-700">
+                Get paid faster by setting up online payment gateways.{" "}
+                <button className="text-[#3b82f6] hover:underline">Set Up Now</button>
+              </div>
             </div>
           )}
 
@@ -2617,16 +3950,11 @@ export default function InvoiceDetail() { // Start of component
           )}
 
           {/* Invoice Document */}
-          <div className="p-8 bg-gray-100 flex justify-center">
+          <div className="p-3 bg-gray-50">
             <div
-              className="bg-white shadow-lg relative print-content"
+              className="w-full max-w-[920px] mx-auto bg-white border border-[#d1d5db] shadow-sm overflow-hidden relative print-content"
               data-print-content
               style={{ width: "210mm", minHeight: "297mm", padding: "20mm" }}
-              onMouseEnter={() => setIsInvoiceDocumentHovered(true)}
-              onMouseLeave={() => {
-                setIsInvoiceDocumentHovered(false);
-                setIsCustomizeDropdownOpen(false);
-              }}
             >
               {/* Status Ribbon */}
               {(invoice.status === "draft" || invoice.status?.toLowerCase() === "paid" || invoice.status?.toLowerCase() === "sent" || invoice.status?.toLowerCase() === "unpaid") && (
@@ -2642,85 +3970,6 @@ export default function InvoiceDetail() { // Start of component
                 </div>
               )}
 
-              {/* Customize Button - appears on hover */}
-              {isInvoiceDocumentHovered && (
-                <div className="absolute top-0 right-0 z-10" ref={customizeDropdownRef}>
-                  <button
-                    className="flex items-center gap-2 px-4 py-2 text-white rounded-md text-sm font-medium cursor-pointer transition-opacity shadow-md"
-                    style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                    onMouseEnter={(e) => e.currentTarget.style.opacity = "0.9"}
-                    onMouseLeave={(e) => e.currentTarget.style.opacity = "1"}
-                    onClick={() => setIsCustomizeDropdownOpen(!isCustomizeDropdownOpen)}
-                  >
-                    <Settings size={16} />
-                    Customize
-                    <ChevronDown size={14} />
-                  </button>
-                  {isCustomizeDropdownOpen && (
-                    <div className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 min-w-[220px]">
-                      <div
-                        className="px-4 py-2 text-sm text-gray-600 cursor-pointer hover:bg-gray-50"
-                        onClick={() => {
-                          setIsCustomizeDropdownOpen(false);
-                          // Handle Standard Template action
-                          console.log("Standard Template");
-                        }}
-                      >
-                        Standard Template
-                      </div>
-                      <div
-                        className="px-4 py-2 text-sm text-white cursor-pointer transition-opacity"
-                        style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                        onMouseEnter={(e) => e.currentTarget.style.opacity = "0.9"}
-                        onMouseLeave={(e) => e.currentTarget.style.opacity = "1"}
-                        onClick={() => {
-                          setIsCustomizeDropdownOpen(false);
-                          setIsChooseTemplateModalOpen(true);
-                        }}
-                      >
-                        Change Template
-                      </div>
-                      <div
-                        className="px-4 py-2 text-sm text-gray-600 cursor-pointer hover:bg-gray-50"
-                        onClick={() => {
-                          setIsCustomizeDropdownOpen(false);
-                          // Handle Edit Template action
-                          console.log("Edit Template");
-                        }}
-                      >
-                        Edit Template
-                      </div>
-                      <div
-                        className="px-4 py-2 text-sm text-gray-600 cursor-pointer hover:bg-gray-50"
-                        onClick={() => {
-                          setIsCustomizeDropdownOpen(false);
-                          setIsOrganizationAddressModalOpen(true);
-                        }}
-                      >
-                        Update Logo & Address
-                      </div>
-                      <div
-                        className="px-4 py-2 text-sm text-gray-600 cursor-pointer hover:bg-gray-50"
-                        onClick={() => {
-                          setIsCustomizeDropdownOpen(false);
-                          navigate("/settings/invoices");
-                        }}
-                      >
-                        Manage Custom Fields
-                      </div>
-                      <div
-                        className="px-4 py-2 text-sm text-gray-600 cursor-pointer hover:bg-gray-50"
-                        onClick={() => {
-                          setIsCustomizeDropdownOpen(false);
-                          setIsTermsAndConditionsModalOpen(true);
-                        }}
-                      >
-                        Terms & Conditions
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
 
               {/* Document Header */}
               <div className="flex justify-between items-start mb-12 mt-8">
@@ -2978,8 +4227,220 @@ export default function InvoiceDetail() { // Start of component
               </div>
             </div>
           </div>
+          </div>
 
         </div>
+
+        {showDeletePaymentModal && selectedPaymentForDelete && (
+          <div className="fixed inset-0 z-[120] bg-black/40 flex items-start justify-center pt-12">
+            <div className="w-full max-w-[560px] bg-white rounded-lg shadow-xl border border-gray-200">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+                <h3 className="text-[22px] font-medium text-gray-900 leading-none">Delete Recorded Payment?</h3>
+                <button
+                  className="w-8 h-8 rounded-full hover:bg-gray-100 text-gray-500 flex items-center justify-center"
+                  onClick={() => {
+                    if (isDeletingPayment) return;
+                    setShowDeletePaymentModal(false);
+                    setSelectedPaymentForDelete(null);
+                  }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="px-5 py-4">
+                <div className="flex items-start gap-4 mb-4">
+                  <div className="w-10 h-10 rounded-full border-2 border-amber-400 text-amber-500 flex items-center justify-center mt-1">
+                    <AlertTriangle size={20} />
+                  </div>
+                  <p className="text-[12px] text-gray-700 leading-6">
+                    You&apos;re deleting a payment of{" "}
+                    {formatCurrency(
+                      selectedPaymentForDelete.amountReceived ?? selectedPaymentForDelete.amount ?? 0,
+                      selectedPaymentForDelete.currency || invoice?.currency
+                    )}
+                    . You can either dissociate this payment from this invoice and add it as a credit to the customer, or delete this payment entirely.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <button
+                    disabled={isDeletingPayment}
+                    className="w-full bg-[#f1f5f9] hover:bg-[#e2e8f0] disabled:opacity-60 disabled:cursor-not-allowed text-left px-4 py-2.5 rounded-lg text-[14px] text-gray-700 flex items-center justify-between"
+                    onClick={() => {
+                      void handleDissociateAndAddAsCredit();
+                    }}
+                  >
+                    <span>Dissociate & Add As Credit</span>
+                    <ChevronRight size={16} />
+                  </button>
+                  <button
+                    disabled={isDeletingPayment}
+                    className="w-full bg-[#f1f5f9] hover:bg-[#e2e8f0] disabled:opacity-60 disabled:cursor-not-allowed text-left px-4 py-2.5 rounded-lg text-[14px] text-gray-700 flex items-center justify-between"
+                    onClick={() => {
+                      void handleDeleteRecordedPayment();
+                    }}
+                  >
+                    <span>{isDeletingPayment ? "Deleting Payment..." : "Delete Payment"}</span>
+                    {isDeletingPayment ? <RotateCw size={16} className="animate-spin" /> : <ChevronRight size={16} />}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isRefundModalOpen && selectedPaymentForRefund && (
+          <div className="fixed inset-0 z-[120] bg-black/40 flex items-start justify-center pt-8 px-4" onClick={handleCloseRefundModal}>
+            <div className="w-full max-w-[1100px] bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+                <h3 className="text-[22px] font-medium text-gray-900 leading-none">Refund</h3>
+                <button
+                  className="w-8 h-8 rounded-full hover:bg-gray-100 text-gray-500 flex items-center justify-center"
+                  onClick={handleCloseRefundModal}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="px-5 py-5 space-y-5 max-h-[80vh] overflow-y-auto">
+                <div className="flex items-center gap-4">
+                  <div className="w-11 h-11 rounded-xl bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-500">
+                    <Banknote size={18} />
+                  </div>
+                  <div>
+                    <div className="text-[13px] text-gray-500">Customer Name</div>
+                    <div className="text-[18px] font-medium text-gray-900">
+                      {selectedPaymentForRefund.customerName || invoice?.customerName || invoice?.customer || "-"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-[#f8fafc] border border-gray-200 rounded-lg p-5">
+                  <label className="block text-[14px] font-medium text-gray-700 mb-2">Total Refund Amount</label>
+                  <div className="max-w-[320px] flex border border-gray-300 rounded-md overflow-hidden bg-white">
+                    <div className="px-3 flex items-center text-[14px] text-gray-600 border-r border-gray-300 bg-gray-50">
+                      {String(selectedPaymentForRefund.currency || invoice?.currency || baseCurrency || "USD").slice(0, 3)}
+                    </div>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      max={Number(selectedPaymentForRefund.amountReceived ?? selectedPaymentForRefund.amount ?? 0) || 0}
+                      value={refundData.amount}
+                      onChange={(e) => setRefundData((prev) => ({ ...prev, amount: e.target.value }))}
+                      className="flex-1 px-3 py-2.5 text-[14px] text-gray-800 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-5">
+                  <div>
+                    <label className="block text-[14px] text-gray-700 mb-2">
+                      Refunded On<span className="text-red-500 ml-1">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={refundData.refundedOn}
+                      onChange={(e) => setRefundData((prev) => ({ ...prev, refundedOn: e.target.value }))}
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-[14px] text-gray-800 outline-none focus:border-[#156372]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[14px] text-gray-700 mb-2">Payment Mode</label>
+                    <select
+                      value={refundData.paymentMode}
+                      onChange={(e) => setRefundData((prev) => ({ ...prev, paymentMode: e.target.value }))}
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-[14px] text-gray-800 outline-none focus:border-[#156372] bg-white"
+                    >
+                      {refundPaymentModeOptions.map((mode) => (
+                        <option key={mode} value={mode}>
+                          {mode}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[14px] text-gray-700 mb-2">Reference#</label>
+                    <input
+                      type="text"
+                      value={refundData.referenceNumber}
+                      onChange={(e) => setRefundData((prev) => ({ ...prev, referenceNumber: e.target.value }))}
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-[14px] text-gray-800 outline-none focus:border-[#156372]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[14px] text-gray-700 mb-2">
+                      From Account<span className="text-red-500 ml-1">*</span>
+                    </label>
+                    <select
+                      value={refundData.fromAccountId || refundData.fromAccount}
+                      onChange={(e) => {
+                        const selected = bankAccounts.find((account: any) => {
+                          const accountId = getAccountId(account);
+                          const accountName = getAccountDisplayName(account);
+                          return accountId === e.target.value || accountName === e.target.value;
+                        });
+                        setRefundData((prev) => ({
+                          ...prev,
+                          fromAccount: selected ? getAccountDisplayName(selected) : e.target.value,
+                          fromAccountId: selected ? getAccountId(selected) : ""
+                        }));
+                      }}
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-[14px] text-gray-800 outline-none focus:border-[#156372] bg-white"
+                    >
+                      <option value="">Select account</option>
+                      {bankAccounts.map((account: any, index: number) => {
+                        const accountId = getAccountId(account) || `account-${index}`;
+                        const accountName = getAccountDisplayName(account) || `Account ${index + 1}`;
+                        return (
+                          <option key={accountId} value={accountId}>
+                            {accountName}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+
+                  <div className="md:col-span-2 max-w-[420px]">
+                    <label className="block text-[14px] text-gray-700 mb-2">Description</label>
+                    <textarea
+                      rows={3}
+                      value={refundData.description}
+                      onChange={(e) => setRefundData((prev) => ({ ...prev, description: e.target.value }))}
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-[14px] text-gray-800 outline-none focus:border-[#156372] resize-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-gray-200 text-[13px] text-gray-500">
+                  Note: Once you save this refund, the payment received will be dissociated from the related invoice(s), changing the invoice status to Unpaid.
+                </div>
+              </div>
+
+              <div className="px-5 py-4 border-t border-gray-200 flex items-center gap-3">
+                <button
+                  type="button"
+                  disabled={isSavingRefund}
+                  onClick={handleRefundSave}
+                  className="px-5 py-2 bg-[#3b82f6] text-white rounded-md text-[14px] font-medium hover:bg-[#2563eb] disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isSavingRefund ? "Saving..." : "Save"}
+                </button>
+                <button
+                  type="button"
+                  disabled={isSavingRefund}
+                  onClick={handleCloseRefundModal}
+                  className="px-5 py-2 border border-gray-300 text-gray-700 rounded-md text-[14px] font-medium hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Send Email Modal */}
         {isSendEmailModalOpen && (
@@ -3382,6 +4843,126 @@ export default function InvoiceDetail() { // Start of component
                 <button
                   className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md text-sm font-medium cursor-pointer hover:bg-gray-50"
                   onClick={() => setIsRecordPaymentModalOpen(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isApplyAdjustmentsModalOpen && invoice && (
+          <div className="fixed inset-0 z-[130] bg-black/40 flex items-start justify-center pt-8 px-4">
+            <div className="w-full max-w-[900px] bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+                <h3 className="text-[16px] font-semibold text-gray-900">
+                  Apply credits to {String((invoice as any)?.invoiceNumber || "")}
+                </h3>
+                <button
+                  className="text-red-500 hover:text-red-600"
+                  onClick={() => {
+                    if (isApplyingAdjustments) return;
+                    setIsApplyAdjustmentsModalOpen(false);
+                  }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="px-5 py-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-[15px] font-medium text-gray-800">Credits to Apply</h4>
+                  <div className="flex items-center gap-3 text-[13px] text-gray-700">
+                    <span>Set Applied on Date</span>
+                    <button
+                      type="button"
+                      onClick={() => setUseApplyDate((prev) => !prev)}
+                      className={`w-11 h-6 rounded-full relative transition-colors ${useApplyDate ? "bg-[#1f6f84]" : "bg-gray-300"}`}
+                    >
+                      <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${useApplyDate ? "left-5" : "left-0.5"}`} />
+                    </button>
+                    {useApplyDate && (
+                      <input
+                        type="date"
+                        value={applyOnDate}
+                        onChange={(e) => setApplyOnDate(e.target.value)}
+                        className="border border-gray-300 rounded px-2 py-1 text-[14px]"
+                      />
+                    )}
+                    <span>
+                      Invoice Balance:{" "}
+                      <span className="font-semibold">
+                        {formatCurrency(getCurrentDocumentBalance(), invoice.currency)}
+                        {` (${formatDate((invoice as any)?.invoiceDate || new Date().toISOString())})`}
+                      </span>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="border border-gray-200 rounded overflow-hidden">
+                  <table className="w-full text-left">
+                    <thead className="bg-[#f6f7fb]">
+                      <tr className="text-[12px] uppercase text-[#6b7280]">
+                        <th className="px-3 py-2 font-medium">Transaction#</th>
+                        <th className="px-3 py-2 font-medium">Transaction Date</th>
+                        <th className="px-3 py-2 font-medium">Location</th>
+                        <th className="px-3 py-2 font-medium text-right">Credit Amount</th>
+                        <th className="px-3 py-2 font-medium text-right">Credits Available</th>
+                        <th className="px-3 py-2 font-medium">Credits Applied Date</th>
+                        <th className="px-3 py-2 font-medium text-right">Early Payment Discount</th>
+                        <th className="px-3 py-2 font-medium text-right">Credits to Apply</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {applyAdjustmentRows.map((row: any, index: number) => (
+                        <tr key={row.rowKey || index} className="border-t border-gray-100">
+                          <td className="px-3 py-2 text-[12px] text-gray-800">{row.transactionNumber}</td>
+                          <td className="px-3 py-2 text-[12px] text-gray-800">{formatDate(row.date)}</td>
+                          <td className="px-3 py-2 text-[12px] text-gray-800">{row.location || "Head Office"}</td>
+                          <td className="px-3 py-2 text-[12px] text-right text-gray-900">{formatCurrency(row.creditAmount, invoice.currency)}</td>
+                          <td className="px-3 py-2 text-[12px] text-right text-gray-900">{formatCurrency(row.availableAmount, invoice.currency)}</td>
+                          <td className="px-3 py-2 text-[12px] text-gray-800">{formatDate(useApplyDate ? applyOnDate : new Date().toISOString())}</td>
+                          <td className="px-3 py-2 text-[12px] text-right text-gray-900">{formatCurrency(0, invoice.currency)}</td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              value={applyAdjustmentValues[row.rowKey] ?? 0}
+                              onChange={(e) => handleAdjustmentValueChange(row.rowKey, e.target.value, Number(row.availableAmount || 0))}
+                              placeholder="Enter amount"
+                              className="w-full border border-gray-300 rounded px-2 py-1 text-right text-[12px]"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="mt-4 flex justify-end">
+                  <div className="w-[290px] bg-[#f8fafc] border border-gray-200 rounded p-3 text-[13px] space-y-2">
+                    <div className="flex justify-between"><span>Amount to Credit:</span><span className="font-semibold">{formatCurrency(Object.values(applyAdjustmentValues).reduce((s, v) => s + toNumSafe(v, 0), 0), invoice.currency)}</span></div>
+                    <div className="flex justify-between"><span>Total Discount:</span><span>{formatCurrency(0, invoice.currency)}</span></div>
+                    <div className="flex justify-between"><span>Invoice Balance Due:</span><span className="font-semibold">{formatCurrency(Math.max(0, getCurrentDocumentBalance() - Object.values(applyAdjustmentValues).reduce((s, v) => s + toNumSafe(v, 0)),), invoice.currency)}</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 px-5 py-4 border-t border-gray-200 bg-gray-50">
+                <button
+                  type="button"
+                  disabled={isApplyingAdjustments}
+                  onClick={() => void handleApplyAdjustments()}
+                  className="px-4 py-2 rounded text-white text-[14px] font-medium bg-[#3b82f6] hover:bg-[#2563eb] disabled:opacity-60"
+                >
+                  {isApplyingAdjustments ? "Applying..." : "Apply Credits"}
+                </button>
+                <button
+                  type="button"
+                  disabled={isApplyingAdjustments}
+                  onClick={() => setIsApplyAdjustmentsModalOpen(false)}
+                  className="px-4 py-2 rounded border border-gray-300 text-[14px] text-gray-700 bg-white hover:bg-gray-50"
                 >
                   Cancel
                 </button>

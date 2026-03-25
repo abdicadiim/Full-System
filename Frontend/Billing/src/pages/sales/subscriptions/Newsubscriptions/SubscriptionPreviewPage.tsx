@@ -694,6 +694,7 @@ const SubscriptionPreviewPage = () => {
             const nextBillingOnValue = nextBillingOn || String(existingRow?.nextBillingOn || "");
             const amountReceivedValue = receivedPayment ? totalImmediate : 0;
             const subscription = {
+              ...(draft && typeof draft === "object" ? draft : {}),
               id: String(draft?.id || existingRow?.id || `sub-${Date.now()}`),
               createdOn: createdOnValue,
               activatedOn: activatedOnValue,
@@ -751,6 +752,7 @@ const SubscriptionPreviewPage = () => {
               roundOffPreference: String(draft?.roundOffPreference || existingRow?.roundOffPreference || "No Rounding"),
               scheduledUpdate: existingRow?.scheduledUpdate || null,
               scheduledUpdateDate: existingRow?.scheduledUpdateDate || "",
+              formSnapshot: draft && typeof draft === "object" ? draft : {},
             };
 
             const applyMode = String(draft?.applyChanges || state.applyChanges || "immediately");
@@ -762,6 +764,8 @@ const SubscriptionPreviewPage = () => {
                 : "";
 
             let finalSubscription = { ...subscription };
+            let createdViaApi = false;
+            let backendGeneratedInvoice = false;
             try {
               if (isEditMode) {
                 const editId = String(draft?.id || existingRow?.id || subscription.id || "");
@@ -791,6 +795,13 @@ const SubscriptionPreviewPage = () => {
                   _id: undefined,
                 });
                 if (createdRes?.success && createdRes?.data) {
+                  createdViaApi = true;
+                  backendGeneratedInvoice = Boolean(
+                    createdRes?.data?.generatedInvoiceId ||
+                      createdRes?.data?.generatedInvoiceNumber ||
+                      createdRes?.data?.generatedInvoice?.id ||
+                      createdRes?.data?.generatedInvoice?._id
+                  );
                   finalSubscription = { ...finalSubscription, ...createdRes.data, id: String(createdRes.data.id || finalSubscription.id) };
                 }
               }
@@ -827,7 +838,7 @@ const SubscriptionPreviewPage = () => {
             }
 
             // Auto-generate invoice for new subscriptions when enabled
-            if (!isEditMode && finalSubscription.generateInvoices) {
+            if (!isEditMode && finalSubscription.generateInvoices && (!createdViaApi || !backendGeneratedInvoice)) {
               try {
                 const nextNumberResponse = await invoicesAPI.getNextNumber("INV-");
                 const nextNumber =

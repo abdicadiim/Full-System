@@ -96,6 +96,10 @@ export default function SendInvoiceEmail() {
       email: String(orgProfile?.email || user?.email || "").trim(),
     };
   };
+  const getOrganizationName = () => {
+    const orgProfile = readLocalJson("organization_profile") || readLocalJson("org_profile") || {};
+    return String(orgProfile?.organizationName || getLocalPrimarySender().name || "Taban Enterprise").trim() || "Taban Enterprise";
+  };
   const getLocalEmailTemplateByKey = (templateKey: string) => {
     const templateKeys = [
       "taban_books_email_templates",
@@ -215,15 +219,16 @@ export default function SendInvoiceEmail() {
             const isDebitNote = !!invoiceData.debitNote;
             const docLabel = isDebitNote ? "Debit Note" : "Invoice";
             const iBalance = formatCurrency(balanceDueAmount, invoiceData.currency);
-            const defaultBody = buildInvoiceEmailHtml(invoiceData, customerDisplayName, sName);
-            let templateSubject = `${docLabel} - ${iNumber} from Taban Enterprise`;
+            const organizationName = getOrganizationName();
+            const defaultBody = buildInvoiceEmailHtml(invoiceData, customerDisplayName, organizationName);
+            let templateSubject = `${docLabel} - ${iNumber} from ${organizationName}`;
             let templateBody = defaultBody;
 
             const template = getLocalEmailTemplateByKey("invoice_notification");
             if (template) {
               templateSubject = applyEmailTemplate(template.subject || templateSubject, {
                 InvoiceNumber: iNumber,
-                CompanyName: "Taban Enterprise",
+                CompanyName: organizationName,
                 CustomerName: customerDisplayName,
                 InvoiceDate: iDate,
                 Amount: iBalance,
@@ -234,7 +239,7 @@ export default function SendInvoiceEmail() {
               if (templateBodySource && containsHtmlMarkup(templateBodySource)) {
                 templateBody = applyEmailTemplate(templateBodySource, {
                   InvoiceNumber: iNumber,
-                  CompanyName: "Taban Enterprise",
+                  CompanyName: organizationName,
                   CustomerName: customerDisplayName,
                   InvoiceDate: iDate,
                   Amount: iBalance,
@@ -300,7 +305,7 @@ export default function SendInvoiceEmail() {
     })}`;
   };
 
-  const buildInvoiceEmailHtml = (invoiceData: any, customerName: string, fromName: string) => {
+  const buildInvoiceEmailHtml = (invoiceData: any, customerName: string, organizationName: string) => {
     const invoiceNumber = String(invoiceData?.invoiceNumber || invoiceData?.id || "-");
     const invoiceDate = formatDate(invoiceData?.invoiceDate || invoiceData?.date);
     const dueDate = invoiceData?.dueDate ? formatDate(invoiceData.dueDate) : "";
@@ -351,7 +356,7 @@ export default function SendInvoiceEmail() {
 
     <div style="margin-top: 30px; padding-top: 20px;">
       <p style="margin: 0; color: #6b7280; font-size: 14px;">Regards,</p>
-      <p style="margin: 5px 0 0 0; font-weight: bold; font-size: 14px;">${escapeHtml(fromName)}</p>
+      <p style="margin: 5px 0 0 0; font-weight: bold; font-size: 14px;">${escapeHtml(organizationName)}</p>
     </div>
   </div>
 </div>`;

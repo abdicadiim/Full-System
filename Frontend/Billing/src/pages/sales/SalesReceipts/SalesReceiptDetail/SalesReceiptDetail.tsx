@@ -228,6 +228,19 @@ export default function SalesReceiptDetail() {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [isMoreMenuOpen, isAllReceiptsDropdownOpen, isPdfDropdownOpen, isEmailModalOpen, isAttachmentMenuOpen, isCustomizeDropdownOpen]);
+  // Keep browser scroll locked so only this detail view panels scroll (same behavior as Quote detail).
+  useEffect(() => {
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+    };
+  }, []);
 
   // Default seller info (should come from settings/profile)
   const sellerInfo = receipt?.organizationProfile ? {
@@ -673,17 +686,17 @@ ${sellerInfo.name}`
 
 
   return (
-    <div className="w-full h-screen bg-[#f4f5fb] flex overflow-hidden">
+    <div className="w-full h-[calc(100vh-4rem)] min-h-0 flex bg-[#f8fafc] overflow-hidden">
       {/* Left Sidebar */}
-      <aside className="w-[320px] bg-white border-r border-gray-200 flex flex-col">
-        <div className="h-[56px] px-4 border-b border-gray-200 flex items-center justify-between">
-          <button className="text-[13px] font-semibold text-gray-900 flex items-center gap-2">
+      <aside className="w-[320px] lg:w-[320px] md:w-[270px] border-r border-gray-200 bg-white flex flex-col h-full min-h-0 overflow-hidden hidden md:flex">
+        <div className="flex items-center justify-between px-4 h-[74px] border-b border-gray-200">
+          <button className="text-[18px] font-semibold text-gray-900 flex items-center gap-2">
             All Sales Receipts
             <ChevronDown size={14} className="text-gray-500" />
           </button>
           <div className="flex items-center gap-2">
             <button
-              className="h-8 w-8 rounded-md bg-emerald-500 text-white flex items-center justify-center hover:bg-emerald-600"
+              className="h-8 w-8 rounded-md bg-[#3b82f6] text-white flex items-center justify-center hover:bg-[#2563eb] border border-[#2563eb] shadow-sm"
               onClick={() => navigate("/sales/sales-receipts/new")}
               title="New Sales Receipt"
             >
@@ -701,7 +714,7 @@ ${sellerInfo.name}`
             <ChevronDown size={12} className="text-gray-500" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto bg-[#f8fafc]">
           {filteredReceipts.map((r: any) => {
             const receiptId = String(r.id || r._id || "");
             const isActive = String(id) === receiptId;
@@ -737,12 +750,12 @@ ${sellerInfo.name}`
       </aside>
 
       {/* Right Detail Panel */}
-      <section className="flex-1 flex flex-col min-w-0">
-        <div className="bg-white border-b border-gray-200 px-6 h-[56px] flex items-center justify-between">
+      <section className="flex-1 flex flex-col overflow-hidden">
+        <div className="bg-white border-b border-gray-200 px-4 h-[74px] flex items-center justify-between">
           <div>
-            <div className="text-[11px] text-gray-500">Location: {sellerInfo.location || "Head Office"}</div>
+            <div className="text-sm text-gray-600">Location: {sellerInfo.location || "Head Office"}</div>
             <div className="flex items-center gap-2">
-              <div className="text-[16px] font-semibold text-gray-900">{receipt.receiptNumber || receipt.id}</div>
+              <div className="text-[24px] leading-tight font-semibold text-gray-900">{receipt.receiptNumber || receipt.id}</div>
               {String(receipt.status || "").toLowerCase() !== "void" && String(receipt.status || "").trim() ? (
                 <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded border border-gray-200 text-gray-500 bg-gray-50">
                   {receipt.status}
@@ -867,7 +880,7 @@ ${sellerInfo.name}`
           />
         </div>
 
-        <div className="bg-[#f7f7fb] border-b border-gray-200 px-6 h-[44px] flex items-center">
+        <div className="flex flex-wrap items-center gap-1.5 p-2 md:p-3 border-b border-gray-200 bg-[#f8fafc]">
           <div className="flex items-center gap-4 text-[12px] text-gray-700">
             {String(receipt.status || "").toLowerCase() !== "void" && (
               <>
@@ -934,7 +947,7 @@ ${sellerInfo.name}`
         </div>
 
         {/* Main Scrollable Content */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto bg-[#f8fafc]">
           <div className="max-w-7xl mx-auto py-4">
             {/* Receipt Section */}
             <div
@@ -1808,5 +1821,7 @@ ${sellerInfo.name}`
     </div>
   );
 }
+
+
 
 

@@ -1,17 +1,17 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { toast } from "react-toastify";
 import { useParams, useNavigate } from "react-router-dom";
 import { getCreditNoteById, getCreditNotes, deleteCreditNote, CreditNote, AttachedFile, updateCreditNote } from "../../salesModel";
-import { currenciesAPI, bankAccountsAPI, chartOfAccountsAPI, refundsAPI, creditNotesAPI, settingsAPI } from "../../../services/api";
+import { currenciesAPI, bankAccountsAPI, chartOfAccountsAPI, refundsAPI, creditNotesAPI, invoicesAPI, settingsAPI, customersAPI } from "../../../services/api";
 import ApplyToInvoices from "./ApplyToInvoices";
 import CreditNotePreview from "./CreditNotePreview";
 import { downloadCreditNotesPdf } from "../creditNotePdf";
 import {
   X, Edit, Send, FileText, MoreVertical,
   ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Plus, Filter,
-  ArrowUpDown, CheckSquare, Square, Search, Star, RotateCcw, Printer, Mail, MessageSquare, Calendar,
+  ArrowUpDown, CheckSquare, Square, Search, Star, Mail, MessageSquare, Calendar,
   HelpCircle, Bell, Monitor, MessageCircle, ArrowRight, Volume2, Paperclip, FileUp, Bold, Italic, Underline,
-  Settings, Upload, User, ChevronDown as ChevronDownIcon, CheckCircle
+  Settings, Upload, User, ChevronDown as ChevronDownIcon, CheckCircle, Trash2
 } from "lucide-react";
 
 const statusFilters = [
@@ -42,6 +42,8 @@ export default function CreditNoteDetail() {
   const [creditNote, setCreditNote] = useState<CreditNote | null>(null);
   const [creditNotes, setCreditNotes] = useState<CreditNote[]>([]);
   const [baseCurrency, setBaseCurrency] = useState("USD");
+  const [invoicesLookup, setInvoicesLookup] = useState<Record<string, any>>({});
+  const [isCreditAppliedInvoicesOpen, setIsCreditAppliedInvoicesOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isSendDropdownOpen, setIsSendDropdownOpen] = useState(false);
   const [isPdfDropdownOpen, setIsPdfDropdownOpen] = useState(false);
@@ -137,7 +139,6 @@ export default function CreditNoteDetail() {
   const [refundDateCalendar, setRefundDateCalendar] = useState(new Date());
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
   const [refunds, setRefunds] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState("statement"); // Added for separating Journal and Statement
   const [organizationProfile, setOrganizationProfile] = useState<any>(null);
 
   const paymentModeOptions = ["Cash", "Check", "Credit Card", "Debit Card", "Bank Transfer", "PayPal", "Other"];
@@ -152,9 +153,43 @@ export default function CreditNoteDetail() {
         if (!id) return;
         const creditNoteData = await getCreditNoteById(id);
         if (creditNoteData) {
-          setCreditNote(creditNoteData);
-          setCreditNoteAttachments(Array.isArray((creditNoteData as any).attachedFiles) ? (creditNoteData as any).attachedFiles : []);
-          setComments(Array.isArray((creditNoteData as any).comments) ? (creditNoteData as any).comments : []);
+          let resolvedCreditNote = creditNoteData as any;
+          const currentCustomerName = String(
+            resolvedCreditNote?.customerName ||
+            (typeof resolvedCreditNote?.customer === "object"
+              ? resolvedCreditNote?.customer?.displayName || resolvedCreditNote?.customer?.companyName || resolvedCreditNote?.customer?.name || ""
+              : "")
+          ).trim();
+          const customerId = String(
+            typeof resolvedCreditNote?.customer === "object"
+              ? resolvedCreditNote?.customer?._id || resolvedCreditNote?.customer?.id || ""
+              : resolvedCreditNote?.customerId || resolvedCreditNote?.customer || ""
+          ).trim();
+
+          if (!currentCustomerName && customerId) {
+            try {
+              const customerRes: any = await customersAPI.getById(customerId);
+              const customerData = customerRes?.data || customerRes;
+              const resolvedCustomerName = String(
+                customerData?.displayName || customerData?.companyName || customerData?.name || ""
+              ).trim();
+              if (resolvedCustomerName) {
+                resolvedCreditNote = {
+                  ...resolvedCreditNote,
+                  customerName: resolvedCustomerName,
+                  customer: typeof resolvedCreditNote?.customer === "object"
+                    ? { ...resolvedCreditNote.customer, ...customerData }
+                    : resolvedCreditNote?.customer,
+                };
+              }
+            } catch (customerError) {
+              console.error("Error resolving credit note customer:", customerError);
+            }
+          }
+
+          setCreditNote(resolvedCreditNote);
+          setCreditNoteAttachments(Array.isArray((resolvedCreditNote as any).attachedFiles) ? (resolvedCreditNote as any).attachedFiles : []);
+          setComments(Array.isArray((resolvedCreditNote as any).comments) ? (resolvedCreditNote as any).comments : []);
         } else {
           navigate("/sales/credit-notes");
         }
@@ -237,6 +272,22 @@ export default function CreditNoteDetail() {
       }
     };
     fetchBaseCurrency();
+
+    const fetchInvoicesLookup = async () => {
+      try {
+        const res = await invoicesAPI.getAll({ limit: 2000 });
+        const rows = Array.isArray((res as any)?.data) ? (res as any).data : [];
+        const map: Record<string, any> = {};
+        rows.forEach((row: any) => {
+          const rowId = String(row?.id || row?._id || "").trim();
+          if (rowId) map[rowId] = row;
+        });
+        setInvoicesLookup(map);
+      } catch (error) {
+        console.error("Failed to load invoices lookup for credit note applications:", error);
+      }
+    };
+    fetchInvoicesLookup();
   }, [id, navigate]);
 
   // Initialize refund data when modal opens
@@ -381,10 +432,9 @@ export default function CreditNoteDetail() {
     }
   };
 
-  const handlePrint = () => {
-    setIsPdfDropdownOpen(false);
-    window.print();
-  };
+  const remainingCreditBalance = toNumber((creditNote as any)?.balance ?? (creditNote as any)?.total ?? 0);
+  const creditNoteStatus = String((creditNote as any)?.status || "").toLowerCase();
+  const canApplyToInvoices = Boolean(creditNote) && remainingCreditBalance > 0 && creditNoteStatus !== "closed";
 
   const handleSendEmail = () => {
     setIsSendDropdownOpen(false);
@@ -470,13 +520,91 @@ Best regards`,
     setIsApplyToInvoicesOpen(true);
   };
 
+  function toNumber(value: any) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : 0;
+  }
+
+  const creditAppliedInvoicesRows = useMemo(() => {
+    const source = (creditNote as any)?.allocations || (creditNote as any)?.appliedInvoices || [];
+    const rows = (Array.isArray(source) ? source : [])
+      .map((row: any, index: number) => {
+        const invoiceId = String(row?.invoiceId || row?.id || "").trim();
+        const linked = invoiceId ? invoicesLookup[invoiceId] : null;
+        const invoiceNumber =
+          String(row?.invoiceNumber || row?.number || linked?.invoiceNumber || linked?.number || "").trim() || "-";
+        const amount = Number(row?.amount || row?.appliedAmount || 0) || 0;
+        const date = String(row?.date || row?.appliedDate || row?.createdAt || "").trim();
+        return {
+          rowKey: `${invoiceId || "row"}-${index}`,
+          index,
+          invoiceId,
+          invoiceNumber,
+          amount,
+          date
+        };
+      })
+      .filter((row: any) => row.amount > 0);
+
+    return rows.sort(
+      (a: any, b: any) =>
+        new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime()
+    );
+  }, [creditNote, invoicesLookup]);
+
   const handleSaveAllocations = async (allocations: any[]) => {
     try {
       if (!creditNote || !creditNote.id) return;
+      const appliedTotal = allocations.reduce((sum, row) => sum + toNumber(row?.amount), 0);
 
       const response = await creditNotesAPI.applyToInvoices(creditNote.id, allocations);
 
       if (response && response.success) {
+        const currentBalance = toNumber((creditNote as any)?.balance ?? (creditNote as any)?.total ?? 0);
+        const nextBalance = Math.max(0, currentBalance - appliedTotal);
+        await creditNotesAPI.update(creditNote.id, {
+          balance: nextBalance,
+          creditsUsed: toNumber((creditNote as any)?.creditsUsed) + appliedTotal,
+          status: nextBalance <= 0 ? "closed" : ((creditNote as any)?.status || "open"),
+          allocationUpdatedAt: new Date().toISOString()
+        });
+
+        await Promise.all(
+          allocations.map(async (allocation: any) => {
+            const invoiceId = String(allocation?.invoiceId || "").trim();
+            const allocationAmount = toNumber(allocation?.amount);
+            if (!invoiceId || allocationAmount <= 0) return;
+            try {
+              const invoiceRes = await invoicesAPI.getById(invoiceId);
+              const invoiceData: any = (invoiceRes as any)?.data || invoiceRes;
+              if (!invoiceData) return;
+
+              const invoiceTotal = toNumber(invoiceData?.total ?? invoiceData?.amount ?? invoiceData?.grandTotal);
+              const paidAmount = toNumber(invoiceData?.paidAmount ?? invoiceData?.amountPaid);
+              const prevCredits = toNumber(invoiceData?.creditsApplied ?? invoiceData?.creditAppliedAmount);
+              const nextCredits = prevCredits + allocationAmount;
+              const nextBalanceDue = Math.max(0, invoiceTotal - paidAmount - nextCredits);
+              const normalizedStatus = String(invoiceData?.status || "").toLowerCase().replace(/\s+/g, "_");
+              const nextStatus =
+                nextBalanceDue <= 0
+                  ? "paid"
+                  : ["draft", "void", "cancelled"].includes(normalizedStatus)
+                    ? invoiceData?.status
+                    : "partially_paid";
+
+              await invoicesAPI.update(invoiceId, {
+                creditsApplied: nextCredits,
+                balance: nextBalanceDue,
+                balanceDue: nextBalanceDue,
+                amountDue: nextBalanceDue,
+                status: nextStatus
+              });
+            } catch (invoiceError) {
+              console.error(`Failed to update invoice ${invoiceId} after credit allocation`, invoiceError);
+            }
+          })
+        );
+
         toast(`Successfully applied credits to ${allocations.length} invoice(s).`);
         setIsApplyToInvoicesOpen(false);
         // Refresh data
@@ -488,6 +616,60 @@ Best regards`,
     } catch (error: any) {
       console.error("Error applying credits:", error);
       toast("Failed to apply credits: " + (error.message || "Communication error"));
+    }
+  };
+
+  const handleRemoveAppliedInvoice = async (rowToRemove: any) => {
+    if (!creditNote?.id) return;
+    if (!window.confirm("Remove this applied credit from the invoice?")) return;
+
+    try {
+      const source = (creditNote as any)?.allocations || (creditNote as any)?.appliedInvoices || [];
+      const currentAllocations = Array.isArray(source) ? source : [];
+      const nextAllocations = currentAllocations.filter((_: any, index: number) => index !== rowToRemove.index);
+
+      const currentBalance = Number((creditNote as any)?.balance ?? (creditNote as any)?.total ?? 0) || 0;
+      const currentCreditsUsed = Number((creditNote as any)?.creditsUsed ?? 0) || 0;
+      const restoreAmount = Number(rowToRemove?.amount || 0) || 0;
+      const nextBalance = Math.max(0, currentBalance + restoreAmount);
+      const nextCreditsUsed = Math.max(0, currentCreditsUsed - restoreAmount);
+
+      await creditNotesAPI.update(creditNote.id, {
+        allocations: nextAllocations,
+        balance: nextBalance,
+        creditsUsed: nextCreditsUsed,
+        status: nextBalance > 0 ? "open" : ((creditNote as any)?.status || "closed")
+      });
+
+      if (rowToRemove?.invoiceId) {
+        try {
+          const invoiceRes = await invoicesAPI.getById(String(rowToRemove.invoiceId));
+          const invoiceData: any = (invoiceRes as any)?.data || invoiceRes;
+          if (invoiceData) {
+            const invoiceTotal = Number(invoiceData?.total ?? invoiceData?.amount ?? 0) || 0;
+            const invoicePaid = Number(invoiceData?.paidAmount ?? invoiceData?.amountPaid ?? 0) || 0;
+            const prevCredits = Number(invoiceData?.creditsApplied ?? invoiceData?.creditAppliedAmount ?? 0) || 0;
+            const nextCredits = Math.max(0, prevCredits - restoreAmount);
+            const nextDue = Math.max(0, invoiceTotal - invoicePaid - nextCredits);
+            await invoicesAPI.update(String(rowToRemove.invoiceId), {
+              creditsApplied: nextCredits,
+              balance: nextDue,
+              balanceDue: nextDue,
+              amountDue: nextDue,
+              status: nextDue <= 0 ? "paid" : invoicePaid > 0 || nextCredits > 0 ? "partially_paid" : "sent"
+            });
+          }
+        } catch (invoiceError) {
+          console.error("Failed to restore invoice after removing applied credit", invoiceError);
+        }
+      }
+
+      const updatedNote = await getCreditNoteById(creditNote.id);
+      if (updatedNote) setCreditNote(updatedNote);
+      toast("Applied credit removed.");
+    } catch (error: any) {
+      console.error("Failed to remove applied credit:", error);
+      toast(error?.message || "Failed to remove applied credit.");
     }
   };
 
@@ -831,21 +1013,20 @@ Best regards`,
   }
 
   return (
-    <div className="w-full min-h-screen bg-gray-50 flex">
+    <div className="w-full h-[calc(100vh-4rem)] min-h-0 flex bg-[#f8fafc] overflow-hidden">
       {/* Left Sidebar */}
-      <div className="w-80 border-r border-gray-200 bg-white overflow-y-auto">
-        <div className="p-4 border-b border-gray-200">
-          <div className="relative mb-3" ref={allCreditNotesDropdownRef}>
+      <div className="w-[320px] lg:w-[320px] md:w-[270px] border-r border-gray-200 bg-white flex flex-col h-full min-h-0 overflow-hidden hidden md:flex">        <div className="relative z-20 flex items-center justify-between px-4 h-[74px] border-b border-gray-200">
+          <div className="relative flex-1" ref={allCreditNotesDropdownRef}>
             <button
               onClick={() => setIsAllCreditNotesDropdownOpen(!isAllCreditNotesDropdownOpen)}
-              className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-lg text-gray-600 transition-colors w-full"
+              className="inline-flex items-center gap-1 text-[18px] font-semibold text-gray-900 cursor-pointer"
             >
               {isAllCreditNotesDropdownOpen ? (
-                <ChevronUp size={16} />
+                <ChevronUp size={16} className="text-[#156372]" />
               ) : (
-                <ChevronDown size={16} />
+                <ChevronDown size={16} className="text-[#156372]" />
               )}
-              <span className="text-sm font-semibold text-gray-900">All Credit Notes</span>
+              <span>All Credit Notes</span>
             </button>
 
             {/* Filter Dropdown */}
@@ -898,41 +1079,41 @@ Best regards`,
               </div>
             )}
           </div>
+
+          <button
+            className="p-2 rounded-md cursor-pointer text-white border border-[#0D4A52] shadow-sm bg-[#156372] hover:bg-[#0D4A52] ml-2"
+            onClick={() => navigate("/sales/credit-notes/new")}
+            title="New Credit Note"
+          >
+            <Plus size={16} />
+          </button>
         </div>
-        <div className="divide-y divide-gray-200">
+
+        <div className="flex-1 overflow-y-auto">
           {creditNotes.map((note) => (
             <div
               key={note.id}
               onClick={() => note.id && navigate(`/sales/credit-notes/${note.id}`)}
-              className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors ${note.id === id ? "" : ""
-                }`}
-              style={note.id === id ? { backgroundColor: "rgba(21, 99, 114, 0.1)", borderLeft: "4px solid #156372" } : {}}
+              className={`flex items-center gap-3 p-3 cursor-pointer border-b border-gray-100 hover:bg-gray-50 ${note.id === id ? "bg-blue-50 border-l-4 border-l-blue-600" : ""}`}
             >
-              <div className="flex items-start gap-3">
-                <div className="mt-1">
-                  <Square size={14} className="text-gray-400" />
+              <Square size={14} className="text-gray-400" />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-gray-900 truncate mb-1">{note.customerName || (typeof note.customer === 'object' ? (note.customer?.displayName || note.customer?.name) : note.customer) || "-"}</div>
+                <div className="text-sm font-medium text-gray-900 mb-1">{formatCurrency(note.total || note.amount, note.currency)}</div>
+                <div className="flex items-center gap-1 text-xs text-gray-600 mb-1">
+                  <span>{note.creditNoteNumber || note.id}</span>
+                  <span>{formatDate(note.creditNoteDate || note.date)}</span>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-gray-900 truncate">{note.customerName || (typeof note.customer === 'object' ? (note.customer?.displayName || note.customer?.name) : note.customer) || "-"}</div>
-                  <div className="text-sm font-semibold text-gray-900 mt-1">{formatCurrency(note.total || note.amount, note.currency)}</div>
-                  <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-                    <span>{note.creditNoteNumber || note.id}</span>
-                    <span>•</span>
-                    <span>{formatDate(note.creditNoteDate || note.date)}</span>
-                  </div>
-                  <div className="mt-2">
-                    <span className={`text-xs font-semibold ${(note.status || "open").toLowerCase() === "open"
-                      ? "text-green-700"
-                      : (note.status || "open").toLowerCase() === "closed"
-                        ? "text-gray-700"
-                        : (note.status || "open").toLowerCase() === "draft"
-                          ? "text-yellow-700"
-                          : "text-red-700"
-                      }`}>
-                      {(note.status || "open").toUpperCase()}
-                    </span>
-                  </div>
-                </div>
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-full inline-block ${(note.status || "open").toLowerCase() === "open"
+                  ? "bg-green-100 text-green-700"
+                  : (note.status || "open").toLowerCase() === "closed"
+                    ? "bg-gray-200 text-gray-700"
+                    : (note.status || "open").toLowerCase() === "draft"
+                      ? "bg-yellow-100 text-yellow-700"
+                      : "bg-red-100 text-red-700"
+                  }`}>
+                  {(note.status || "open").toUpperCase()}
+                </span>
               </div>
             </div>
           ))}
@@ -940,11 +1121,16 @@ Best regards`,
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-y-auto relative">
+      <div className="flex-1 flex flex-col overflow-hidden relative">
         {/* Top Header Bar */}
-        <div className="bg-white border-b border-gray-200 px-6 py-3">
+        <div className="bg-white border-b border-gray-200 px-6 py-3 flex-shrink-0">
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold text-gray-900">{creditNote.creditNoteNumber || creditNote.id}</h1>
+            <div>
+              <div className="text-[14px] text-gray-500">
+                Location: <span className="text-[#1d4ed8]">{(creditNote as any)?.location || "Head Office"}</span>
+              </div>
+              <h1 className="text-[32px] leading-none font-semibold text-gray-900">{creditNote.creditNoteNumber || creditNote.id}</h1>
+            </div>
             <div className="flex items-center gap-3">
               <div className="relative">
                 <button
@@ -996,7 +1182,7 @@ Best regards`,
         </div>
 
         {/* Secondary Action Bar */}
-        <div className="bg-white border-b border-gray-200 px-6 py-2">
+        <div className="bg-white border-b border-gray-200 px-6 py-2 flex-shrink-0">
           <div className="flex items-center gap-0">
             <button
               onClick={() => navigate(`/sales/credit-notes/${id}/edit`)}
@@ -1028,7 +1214,7 @@ Best regards`,
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors border-r border-gray-200 pr-4"
               >
                 <FileText size={16} />
-                PDF/Print
+                PDF
                 <ChevronDown size={14} />
               </button>
               {isPdfDropdownOpen && (
@@ -1037,27 +1223,18 @@ Best regards`,
                     <FileText size={16} />
                     PDF
                   </div>
-                  <div className="p-3 cursor-pointer flex items-center gap-2 text-sm text-gray-700 transition-colors" onMouseEnter={(e: React.MouseEvent) => (e.target as HTMLElement).style.backgroundColor = "rgba(21, 99, 114, 0.1)"} onMouseLeave={(e: React.MouseEvent) => (e.target as HTMLElement).style.backgroundColor = "transparent"} onClick={handlePrint}>
-                    <Printer size={16} />
-                    Print
-                  </div>
                 </div>
               )}
             </div>
-            <button
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors border-r border-gray-200 pr-4"
-              onClick={handleApplyToInvoices}
-            >
-              <ArrowRight size={16} />
-              Apply to Invoices
-            </button>
-            <button
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors border-r border-gray-200 pr-4"
-              onClick={handleRefund}
-            >
-              <RotateCcw size={16} />
-              Refund
-            </button>
+            {canApplyToInvoices && (
+              <button
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors border-r border-gray-200 pr-4"
+                onClick={handleApplyToInvoices}
+              >
+                <ArrowRight size={16} />
+                Apply to Invoices
+              </button>
+            )}
             <div className="relative" ref={moreMenuRef}>
               <button
                 onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
@@ -1076,141 +1253,82 @@ Best regards`,
         </div>
 
         {/* Credit Note Document */}
-        <div className="p-6 max-w-5xl mx-auto">
-          <div
-            className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 relative"
-            onMouseEnter={() => setIsCreditNoteDocumentHovered(true)}
-            onMouseLeave={() => {
-              setIsCreditNoteDocumentHovered(false);
-              setIsCustomizeDropdownOpen(false);
-            }}
-          >
-            {/* Open Ribbon */}
-            {(creditNote.status === "open" || creditNote.status === "draft") && (
-              <div className={`absolute top-4 left-6 text-xs font-bold uppercase ${creditNote.status === "open" ? "" : "text-gray-500"}`}
-                style={creditNote.status === "open" ? { color: "#156372" } : {}}
-              >
-                {creditNote.status === "open" ? "Open" : "Draft"}
+        <div className="flex-1 overflow-y-auto p-3 bg-gray-50">
+          <div className="w-full max-w-[1280px] mx-auto mb-3 border border-gray-200 rounded-md bg-white overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setIsCreditAppliedInvoicesOpen((prev) => !prev)}
+              className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-50"
+            >
+              <div className="text-sm font-semibold text-gray-800">
+                Credit Applied Invoices <span className="text-[#3b82f6] ml-1">{creditAppliedInvoicesRows.length}</span>
               </div>
-            )}
+              <ChevronDown
+                size={16}
+                className={`text-gray-500 transition-transform ${isCreditAppliedInvoicesOpen ? "rotate-180" : ""}`}
+              />
+            </button>
 
-            {/* Document Header Removed - Replaced by CreditNotePreview */}
-
-            {/* Tabs Navigation */}
-            <div className="flex border-b border-gray-200 mb-8 space-x-8">
-              <button
-                className={`pb-4 text-sm font-semibold transition-all relative ${activeTab === "statement" ? "text-blue-600" : "text-gray-500 hover:text-gray-700"}`}
-                onClick={() => setActiveTab("statement")}
-              >
-                Statement
-                {activeTab === "statement" && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full" />}
-              </button>
-              <button
-                className={`pb-4 text-sm font-semibold transition-all relative ${activeTab === "journal" ? "text-blue-600" : "text-gray-500 hover:text-gray-700"}`}
-                onClick={() => setActiveTab("journal")}
-              >
-                Journal
-                {activeTab === "journal" && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full" />}
-              </button>
-            </div>
-
-            {activeTab === "statement" && (
-              <>
-                <CreditNotePreview
-                  creditNote={creditNote}
-                  organizationProfile={organizationProfile}
-                  baseCurrency={baseCurrency}
-                  onCustomerClick={(customerId) => navigate(`/sales/customers/${customerId}`)}
-                />
-              </>
-            )}
-
-            {activeTab === "journal" && (
-              <div className="animate-in fade-in duration-300">
-                <div className="border-b border-gray-100 pb-4 mb-6">
-                  <div className="flex items-center gap-2 mb-4">
-                    <span className="text-xs text-gray-500">Amount is displayed in your base currency</span>
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700">
-                      {creditNote.currency || "USD"}
-                    </span>
-                  </div>
-                  <h3 className="text-lg font-bold text-gray-900">Credit Note</h3>
-                </div>
-
-                <div className="mt-4">
-                  <table className="min-w-full">
-                    <thead>
+            {isCreditAppliedInvoicesOpen && (
+              <div className="border-t border-gray-200">
+                <table className="w-full">
+                  <thead className="bg-[#f6f7fb]">
+                    <tr className="text-xs font-semibold text-[#697386]">
+                      <th className="text-left px-5 py-3">Date</th>
+                      <th className="text-left px-5 py-3">Invoice Number</th>
+                      <th className="text-left px-5 py-3">Amount Credited</th>
+                      <th className="text-right px-5 py-3" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {creditAppliedInvoicesRows.length === 0 ? (
                       <tr>
-                        <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider pb-3 w-1/2">ACCOUNT</th>
-                        <th className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wider pb-3">DEBIT</th>
-                        <th className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wider pb-3">CREDIT</th>
+                        <td colSpan={4} className="px-5 py-6 text-sm text-gray-500 text-center">
+                          No invoices have credits applied from this credit note.
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50 border-t border-gray-100">
-                      {(() => {
-                        const totalAmount = creditNote.total || creditNote.amount || 0;
-                        const subTotal = creditNote.subtotal || creditNote.subTotal || 0;
-                        const shipping = creditNote.shipping || 0;
-                        // Calculate correct subtotal (Sales) by subtracting shipping if it's included in total but not subtotal logic, 
-                        // usually Subtotal = Sales. Shipping is separate.
-                        const salesAmount = subTotal;
-
-                        return (
-                          <>
-                            {/* Accounts Receivable - Credited (Asset decreases) */}
-                            <tr>
-                              <td className="py-4 text-sm text-gray-900">Accounts Receivable</td>
-                              <td className="py-4 text-sm text-gray-900 text-right text-gray-400">0.00</td>
-                              <td className="py-4 text-sm text-gray-900 text-right">{formatCurrencyNumber(totalAmount)}</td>
-                            </tr>
-
-                            {/* Shipping / Other Charges - Debited (Expense/Revenue reversal) */}
-                            {shipping > 0 && (
-                              <tr>
-                                <td className="py-4 text-sm text-gray-900">Other Charges</td>
-                                <td className="py-4 text-sm text-gray-900 text-right">{formatCurrencyNumber(shipping)}</td>
-                                <td className="py-4 text-sm text-gray-900 text-right text-gray-400">0.00</td>
-                              </tr>
-                            )}
-
-                            {/* Sales - Debited (Revenue decreases) */}
-                            <tr>
-                              <td className="py-4 text-sm text-gray-900">Sales</td>
-                              <td className="py-4 text-sm text-gray-900 text-right">{formatCurrencyNumber(salesAmount)}</td>
-                              <td className="py-4 text-sm text-gray-900 text-right text-gray-400">0.00</td>
-                            </tr>
-
-                            {/* Tax - Debited (Liability decreases) */}
-                            {(creditNote.tax > 0 || (creditNote.taxes && creditNote.taxes.length > 0)) && (
-                              <tr>
-                                <td className="py-4 text-sm text-gray-900">Tax Payable</td>
-                                <td className="py-4 text-sm text-gray-900 text-right">
-                                  {formatCurrencyNumber(creditNote.tax || (creditNote.taxes ? creditNote.taxes.reduce((s: any, t: any) => s + (t.amount || 0), 0) : 0))}
-                                </td>
-                                <td className="py-4 text-sm text-gray-900 text-right text-gray-400">0.00</td>
-                              </tr>
-                            )}
-
-                            {/* Cost of Goods Sold & Inventory Asset */}
-                            {/* Note: These would typically require more data from the backend about linked items/inventory. 
-                                Placeholder logic or omitted if data not available. 
-                                Assuming standard service/simple item journal for now as per plan. 
-                            */}
-
-                            {/* Totals Row */}
-                            <tr className="border-t border-gray-200">
-                              <td className="py-4 text-sm font-bold text-gray-900"></td>
-                              <td className="py-4 text-sm font-bold text-gray-900 text-right">{formatCurrencyNumber(totalAmount)}</td>
-                              <td className="py-4 text-sm font-bold text-gray-900 text-right">{formatCurrencyNumber(totalAmount)}</td>
-                            </tr>
-                          </>
-                        );
-                      })()}
-                    </tbody>
-                  </table>
-                </div>
+                    ) : (
+                      creditAppliedInvoicesRows.map((row: any) => (
+                        <tr key={row.rowKey} className="border-t border-gray-100 text-sm">
+                          <td className="px-5 py-3 text-gray-800">{formatDate(row.date)}</td>
+                          <td className="px-5 py-3">
+                            <button
+                              type="button"
+                              className="text-[#3b82f6] hover:underline"
+                              onClick={() => row.invoiceId && navigate(`/sales/invoices/${row.invoiceId}`)}
+                            >
+                              {row.invoiceNumber}
+                            </button>
+                          </td>
+                          <td className="px-5 py-3 text-gray-900">
+                            {formatCurrency(row.amount, (creditNote as any)?.currency || baseCurrency)}
+                          </td>
+                          <td className="px-5 py-3 text-right">
+                            <button
+                              type="button"
+                              className="text-gray-500 hover:text-red-600"
+                              onClick={() => handleRemoveAppliedInvoice(row)}
+                              title="Remove Applied Credit"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             )}
+          </div>
+
+          <div className="w-full max-w-[920px] mx-auto relative">
+
+            <CreditNotePreview
+              creditNote={creditNote}
+              organizationProfile={organizationProfile}
+              baseCurrency={baseCurrency}
+            />
           </div>
         </div>
 
@@ -2424,5 +2542,6 @@ Best regards`,
     </div>
   );
 }
+
 
 

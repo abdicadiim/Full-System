@@ -481,6 +481,10 @@ export default function NewCreditNote() {
   useEffect(() => {
     const loadData = async () => {
       try {
+        let loadedCustomers: any[] = [];
+        let loadedSalespersons: any[] = [];
+        let loadedTaxes: any[] = [];
+
         // Load customers from backend
         try {
           const customersResponse = await customersAPI.getAll();
@@ -490,6 +494,7 @@ export default function NewCreditNote() {
               id: c._id || c.id,
               name: c.displayName || c.companyName || `${c.firstName || ''} ${c.lastName || ''}`.trim() || "Unknown"
             }));
+            loadedCustomers = normalizedCustomers;
             setCustomers(normalizedCustomers);
           }
         } catch (error) {
@@ -500,7 +505,9 @@ export default function NewCreditNote() {
         try {
           const salespersonsResponse = await salespersonsAPI.getAll();
           if (salespersonsResponse && salespersonsResponse.success && salespersonsResponse.data) {
-            setSalespersons(salespersonsResponse.data.map((s: any) => normalizeSalesperson(s)));
+            const normalizedSalespersons = salespersonsResponse.data.map((s: any) => normalizeSalesperson(s));
+            loadedSalespersons = normalizedSalespersons;
+            setSalespersons(normalizedSalespersons);
           }
         } catch (error) {
           console.error('Error loading salespersons:', error);
@@ -516,6 +523,7 @@ export default function NewCreditNote() {
               name: t.name || t.label || t.taxName || t.tax_name || t.title || t.displayName,
               rate: Number(t.rate ?? t.taxRate ?? t.percentage ?? t.value ?? 0)
             }));
+            loadedTaxes = normalizedTaxes;
             setTaxOptions(normalizedTaxes);
           }
         } catch (error) {
@@ -721,20 +729,109 @@ export default function NewCreditNote() {
           try {
             const existing = await getCreditNoteById(id!);
             if (existing) {
-              setFormData(prev => ({
-                ...prev,
-                ...existing,
-                creditNoteDate: existing.date ? formatDate(existing.date) : prev.creditNoteDate
+              const normalizedReference = String(
+                (existing as any)?.referenceNumber ??
+                (existing as any)?.reference ??
+                (existing as any)?.referenceNo ??
+                (existing as any)?.refNumber ??
+                ""
+              ).trim();
+
+              const mappedItems = (Array.isArray((existing as any)?.items) ? (existing as any).items : []).map((item: any, index: number) => {
+                const quantity = Number(item?.quantity ?? item?.qty ?? 1) || 1;
+                const rate = Number(item?.rate ?? item?.unitPrice ?? item?.price ?? 0) || 0;
+                const rawItem = item?.item;
+                const normalizedItemId = rawItem && typeof rawItem === "object"
+                  ? String(rawItem?._id || rawItem?.id || item?.itemId || "")
+                  : String(item?.itemId || rawItem || "");
+                const itemDetails = String(
+                  item?.itemDetails ||
+                  item?.name ||
+                  item?.description ||
+                  (rawItem && typeof rawItem === "object" ? rawItem?.name || rawItem?.itemDetails || "" : "")
+                );
+                const taxId = resolveItemTaxId(item, loadedTaxes.length ? loadedTaxes : taxOptions);
+                const amount = Number(item?.amount ?? item?.total ?? (quantity * rate)) || 0;
+                const account = String(
+                  item?.account ||
+                  resolveItemAccount(item) ||
+                  (rawItem && typeof rawItem === "object" ? resolveItemAccount(rawItem) : "")
+                );
+
+                return {
+                  id: Number(item?.id) || Date.now() + index,
+                  itemId: normalizedItemId || undefined,
+                  itemDetails,
+                  account,
+                  quantity,
+                  rate,
+                  tax: taxId,
+                  amount,
+                  reportingTags: Array.isArray(item?.reportingTags) ? item.reportingTags : []
+                };
+              });
+
+              const mappedDocuments: CreditNoteDocument[] = (Array.isArray((existing as any)?.attachedFiles) ? (existing as any).attachedFiles : []).map((file: any, index: number) => ({
+                id: Number(file?.id) || Date.now() + index,
+                name: String(file?.name || file?.filename || file?.originalName || `Attachment ${index + 1}`),
+                size: Number(file?.size || file?.fileSize || 0) || 0,
+                file: null
               }));
 
-              // Find objects to set selected state
-              const custs = (await customersAPI.getAll()).data;
-              const cust = custs?.find((c: any) => (c._id || c.id) === (existing.customer || (existing as any).customerId));
-              if (cust) setSelectedCustomer({ ...cust, id: cust._id || cust.id, name: cust.displayName || cust.name });
+              setFormData(prev => ({
+                ...prev,
+                customerName:
+                  existing.customerName ||
+                  (typeof existing.customer === "object"
+                    ? ((existing.customer as any)?.displayName || (existing.customer as any)?.name || (existing.customer as any)?.companyName || "")
+                    : prev.customerName) ||
+                  prev.customerName,
+                creditNoteNumber: (existing as any).creditNoteNumber || prev.creditNoteNumber,
+                referenceNumber: normalizedReference || prev.referenceNumber,
+                creditNoteDate: (existing as any).date ? formatDate((existing as any).date) : prev.creditNoteDate,
+                accountsReceivable: (existing as any).accountsReceivable || prev.accountsReceivable,
+                salesperson:
+                  typeof (existing as any).salesperson === "object"
+                    ? ((existing as any).salesperson?.name || "")
+                    : ((existing as any).salesperson || ""),
+                subject: (existing as any).subject || "",
+                items: mappedItems.length ? mappedItems : prev.items,
+                subTotal: Number((existing as any).subtotal ?? (existing as any).subTotal ?? prev.subTotal) || 0,
+                discount: Number((existing as any).discount ?? prev.discount) || 0,
+                discountType: (existing as any).discountType || prev.discountType,
+                shippingCharges: Number((existing as any).shippingCharges ?? (existing as any).shipping ?? prev.shippingCharges) || 0,
+                adjustment: Number((existing as any).adjustment ?? prev.adjustment) || 0,
+                total: Number((existing as any).total ?? (existing as any).amount ?? prev.total) || 0,
+                currency: (existing as any).currency || prev.currency,
+                customerNotes: (existing as any).customerNotes || (existing as any).notes || "",
+                termsAndConditions: (existing as any).termsAndConditions || (existing as any).terms || "",
+                documents: mappedDocuments
+              }));
 
-              const spData = (await salespersonsAPI.getAll()).data;
-              const sp = spData?.find((s: any) => s.name === (existing as any).salesperson);
-              if (sp) setSelectedSalesperson(sp);
+              const customerId = String(
+                (typeof existing.customer === "object" ? (existing.customer as any)?._id || (existing.customer as any)?.id : existing.customer) ||
+                (existing as any).customerId ||
+                ""
+              );
+              const cust = loadedCustomers.find((c: any) => String(c?._id || c?.id || c?.customerId || "") === customerId);
+              if (cust) {
+                setSelectedCustomer({ ...cust, id: cust._id || cust.id, name: cust.displayName || cust.name });
+              } else if (customerId || existing.customerName) {
+                setSelectedCustomer({
+                  id: customerId || "unknown",
+                  name: existing.customerName || (typeof existing.customer === "string" ? existing.customer : "")
+                } as any);
+              }
+
+              const salespersonName = String(
+                typeof (existing as any).salesperson === "object"
+                  ? ((existing as any).salesperson?.name || "")
+                  : ((existing as any).salesperson || "")
+              ).trim().toLowerCase();
+              if (salespersonName) {
+                const sp = loadedSalespersons.find((s: any) => String(s?.name || "").trim().toLowerCase() === salespersonName);
+                if (sp) setSelectedSalesperson(sp);
+              }
             }
           } catch (error) {
             console.error("Error fetching credit note:", error);

@@ -39,7 +39,10 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({
     const balance = creditNote.balance ?? total;
 
     return (
-        <div className="w-full max-w-4xl mx-auto bg-white shadow-lg rounded-lg overflow-hidden border border-gray-200 relative">
+        <div
+            className="w-full max-w-full mx-auto bg-white border border-[#d1d5db] shadow-sm overflow-hidden relative rounded-none"
+            style={{ width: "210mm", minHeight: "297mm" }}
+        >
             {/* Status Ribbon */}
             {(creditNote.status === 'open' || creditNote.status === 'draft') && (
                 <div className="absolute top-8 -left-12 w-48 text-center py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-xs font-bold uppercase tracking-wider transform -rotate-45 shadow-lg z-10">
@@ -105,10 +108,7 @@ const CreditNotePreview: React.FC<CreditNotePreviewProps> = ({
                         <div className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-2">
                             Bill To
                         </div>
-                        <div
-                            className={`text-base font-semibold text-blue-600 mb-1 ${creditNote.customerId ? 'cursor-pointer hover:underline' : ''}`}
-                            onClick={() => creditNote.customerId && onCustomerClick?.(creditNote.customerId)}
-                        >
+                        <div className="text-base font-semibold text-gray-900 mb-1">
                             {creditNote.customerName ||
                                 (typeof creditNote.customer === 'object'
                                     ? (creditNote.customer?.displayName || creditNote.customer?.name)

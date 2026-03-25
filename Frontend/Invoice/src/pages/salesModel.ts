@@ -384,6 +384,17 @@ export interface Invoice {
   customerNotes?: string;
   termsAndConditions?: string;
   attachedFiles?: AttachedFile[];
+  attachments?: AttachedFile[];
+  comments?: any[];
+  customerAddress?: {
+    street1?: string;
+    street2?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+    country?: string;
+  };
+  poNumber?: string;
   balanceDue?: number;
   balance?: number;
   amountPaid?: number;
@@ -795,6 +806,8 @@ export interface Payment {
   customer?: any;
   customerName?: string;
   customerId?: string;
+  invoiceId?: string;
+  invoiceNumber?: string;
   amount?: number;
   amountReceived?: number;
   date: string;
@@ -1199,11 +1212,37 @@ export const deleteCreditNote = async (creditNoteId: string): Promise<CreditNote
 
 export const getCreditNotesByInvoiceId = async (invoiceId: string): Promise<CreditNote[]> => {
   try {
-    const response = await creditNotesAPI.getByInvoice(invoiceId);
-    if (response && response.success && response.data) {
-      return response.data;
-    }
-    return [];
+    const normalizedInvoiceId = String(invoiceId || "");
+    const response = await creditNotesAPI.getByInvoice(normalizedInvoiceId);
+    const directRows: CreditNote[] =
+      response && response.success && Array.isArray(response.data) ? response.data : [];
+
+    const allResponse = await creditNotesAPI.getAll({ limit: 10000 });
+    const allRows: CreditNote[] =
+      allResponse && allResponse.success && Array.isArray(allResponse.data) ? allResponse.data : [];
+
+    const fromAllocations = allRows.filter((note: any) =>
+      Array.isArray(note?.allocations) &&
+      note.allocations.some((allocation: any) => {
+        const allocationInvoiceId = String(
+          allocation?.invoiceId ||
+          allocation?.invoice?._id ||
+          allocation?.invoice?.id ||
+          allocation?.invoice ||
+          ""
+        );
+        return allocationInvoiceId === normalizedInvoiceId;
+      })
+    );
+
+    const merged = [...directRows, ...fromAllocations];
+    const seen = new Set<string>();
+    return merged.filter((note: any) => {
+      const noteId = String(note?.id || note?._id || "");
+      if (!noteId || seen.has(noteId)) return false;
+      seen.add(noteId);
+      return true;
+    });
   } catch (error) {
     console.error("Error fetching credit notes by invoice ID:", error);
     return [];
