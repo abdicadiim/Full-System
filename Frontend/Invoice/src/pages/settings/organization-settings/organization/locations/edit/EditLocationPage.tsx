@@ -483,13 +483,13 @@ export default function EditLocationPage() {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Location Type Section */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-transparent rounded-none border-0 p-6">
           <h2 className="text-sm font-semibold text-gray-900 mb-4">Location Type</h2>
           <div className="grid grid-cols-2 gap-4">
             <label className={`relative flex flex-col p-4 border-2 rounded-lg cursor-pointer transition ${
               formData.type === "Business" 
-                ? "border-blue-500 bg-blue-50" 
-                : "border-gray-200 hover:border-gray-300"
+                ? "border-blue-500 ring-1 ring-blue-500/20 bg-transparent" 
+                : "border-gray-200 hover:border-gray-300 bg-transparent"
             }`}>
               <div className="flex items-center gap-3 mb-2">
                 <input
@@ -509,8 +509,8 @@ export default function EditLocationPage() {
 
             <label className={`relative flex flex-col p-4 border-2 rounded-lg cursor-pointer transition ${
               formData.type === "Warehouse" 
-                ? "border-blue-500 bg-blue-50" 
-                : "border-gray-200 hover:border-gray-300"
+                ? "border-blue-500 ring-1 ring-blue-500/20 bg-transparent" 
+                : "border-gray-200 hover:border-gray-300 bg-transparent"
             }`}>
               <div className="flex items-center gap-3 mb-2">
                 <input
@@ -532,7 +532,7 @@ export default function EditLocationPage() {
 
         {/* Logo Field - Only show for Business Location */}
         {formData.type === "Business" && (
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="bg-transparent rounded-none border-0 p-6">
             <div className="grid grid-cols-3 gap-4">
               <label className="text-sm font-medium text-gray-700">Logo</label>
               <div className="col-span-2 space-y-4">
@@ -541,7 +541,7 @@ export default function EditLocationPage() {
                 <button
                   type="button"
                   onClick={() => setIsLogoDropdownOpen(!isLogoDropdownOpen)}
-                  className="w-full px-3 py-2 border border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-white"
+                  className="w-full px-3 py-2 border border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-transparent"
                 >
                   <span>{formData.logo}</span>
                   {isLogoDropdownOpen ? (
@@ -552,7 +552,7 @@ export default function EditLocationPage() {
                 </button>
 
                 {isLogoDropdownOpen && (
-                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
+                  <div className="absolute z-50 w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg shadow-lg">
                     <div className="p-2 border-b border-gray-200">
                       <div className="relative">
                         <Search size={16} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
@@ -649,7 +649,7 @@ export default function EditLocationPage() {
         )}
 
         {/* Name Field */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-transparent rounded-none border-0 p-6">
           <div className="grid grid-cols-3 gap-4">
             <label className="text-sm font-medium text-gray-700 flex items-center">
               Name<span className="text-red-500 ml-1">*</span>
@@ -683,7 +683,7 @@ export default function EditLocationPage() {
 
         {/* Parent Location Field - Show for Warehouse or Business Location when checkbox is checked */}
         {(formData.type === "Warehouse" || (formData.type === "Business" && formData.isChildLocation)) && (
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="bg-transparent rounded-none border-0 p-6">
             <div className="grid grid-cols-3 gap-4 items-center">
               <label className="text-sm font-medium text-gray-700 flex items-center">
                 Parent Location<span className="text-red-500 ml-1">*</span>
@@ -692,7 +692,7 @@ export default function EditLocationPage() {
                 <button
                   type="button"
                   onClick={() => setIsParentLocationDropdownOpen(!isParentLocationDropdownOpen)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-white"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-transparent"
                 >
                   <span className={selectedParentLocation ? "text-gray-900" : "text-gray-500"}>
                     {selectedParentLocation ? selectedParentLocation.name : "Select Location"}
@@ -705,8 +705,8 @@ export default function EditLocationPage() {
                 </button>
 
                 {isParentLocationDropdownOpen && (
-                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    <div className="p-2 border-b border-gray-200 sticky top-0 bg-white">
+                  <div className="absolute z-50 w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    <div className="p-2 border-b border-gray-200 sticky top-0 bg-transparent">
                       <div className="relative">
                         <Search size={16} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
                         <input
@@ -748,7 +748,7 @@ export default function EditLocationPage() {
         )}
 
         {/* Address Section */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-transparent rounded-none border-0 p-6">
           <h2 className="text-sm font-semibold text-gray-900 mb-4">Address</h2>
           <div className="space-y-4">
             <div className="grid grid-cols-3 gap-4">
@@ -862,7 +862,7 @@ export default function EditLocationPage() {
         </div>
 
         {/* Website URL - Show for both Business and Warehouse */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-transparent rounded-none border-0 p-6">
           <div className="grid grid-cols-3 gap-4 items-center">
             <label className="text-sm font-medium text-gray-700">Website URL</label>
             <input
@@ -877,7 +877,7 @@ export default function EditLocationPage() {
         </div>
 
         {/* Primary Contact - Show for both Business and Warehouse */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-transparent rounded-none border-0 p-6">
           <div className="grid grid-cols-3 gap-4 items-center">
             <label className="text-sm font-medium text-gray-700 flex items-center">
               Primary Contact
@@ -902,7 +902,7 @@ export default function EditLocationPage() {
         {formData.type === "Business" && (
           <>
             {/* Transaction Number Series */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <div className="bg-transparent rounded-none border-0 p-6">
               <div className="grid grid-cols-3 gap-4 items-center">
                 <label className="text-sm font-medium text-gray-700 flex items-center">
                   Transaction Number Series<span className="text-red-500 ml-1">*</span>
@@ -911,7 +911,7 @@ export default function EditLocationPage() {
                   <button
                     type="button"
                     onClick={() => setIsTransactionSeriesDropdownOpen(!isTransactionSeriesDropdownOpen)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-white"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-transparent"
                   >
                     <span className={formData.transactionSeries ? "text-gray-900" : "text-gray-500"}>
                       {formData.transactionSeries || "Add Transaction Series"}
@@ -924,8 +924,8 @@ export default function EditLocationPage() {
                   </button>
 
                   {isTransactionSeriesDropdownOpen && (
-                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                      <div className="p-2 border-b border-gray-200 sticky top-0 bg-white">
+                    <div className="absolute z-50 w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      <div className="p-2 border-b border-gray-200 sticky top-0 bg-transparent">
                         <div className="relative">
                           <Search size={16} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
                           <input
@@ -974,7 +974,7 @@ export default function EditLocationPage() {
             </div>
 
             {/* Default Transaction Number Series */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <div className="bg-transparent rounded-none border-0 p-6">
               <div className="grid grid-cols-3 gap-4 items-center">
                 <label className="text-sm font-medium text-gray-700 flex items-center">
                   Default Transaction Number Series<span className="text-red-500 ml-1">*</span>
@@ -983,7 +983,7 @@ export default function EditLocationPage() {
                   <button
                     type="button"
                     onClick={() => setIsDefaultTransactionSeriesDropdownOpen(!isDefaultTransactionSeriesDropdownOpen)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-white"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-transparent"
                   >
                     <span className={formData.defaultTransactionSeries ? "text-gray-900" : "text-gray-500"}>
                       {formData.defaultTransactionSeries || "Default Transaction Series"}
@@ -996,8 +996,8 @@ export default function EditLocationPage() {
                   </button>
 
                   {isDefaultTransactionSeriesDropdownOpen && (
-                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                      <div className="p-2 border-b border-gray-200 sticky top-0 bg-white">
+                    <div className="absolute z-50 w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      <div className="p-2 border-b border-gray-200 sticky top-0 bg-transparent">
                         <div className="relative">
                           <Search size={16} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
                           <input
@@ -1050,7 +1050,7 @@ export default function EditLocationPage() {
         )}
 
         {/* Location Access - Show for both Business and Warehouse */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-transparent rounded-none border-0 p-6">
           <div className="grid grid-cols-3 gap-4">
             <label className="text-sm font-medium text-gray-700">Location Access</label>
             <div className="col-span-2">
@@ -1086,15 +1086,15 @@ export default function EditLocationPage() {
                               <button
                                 type="button"
                                 onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-white"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-transparent"
                               >
                                 <span className="text-gray-500">Select users</span>
                                 <ChevronDown size={16} className="text-gray-500" />
                               </button>
 
                               {isUserDropdownOpen && (
-                                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                                  <div className="p-2 border-b border-gray-200 sticky top-0 bg-white">
+                                <div className="absolute z-50 w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                  <div className="p-2 border-b border-gray-200 sticky top-0 bg-transparent">
                                     <div className="relative">
                                       <Search size={16} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
                                       <input
@@ -1136,7 +1136,7 @@ export default function EditLocationPage() {
                             </div>
                           </td>
                           <td className="py-2 px-3">
-                            <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white">
+                            <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-transparent">
                               <option>User's Role</option>
                             </select>
                           </td>
@@ -1204,14 +1204,14 @@ export default function EditLocationPage() {
           <button
             type="submit"
             disabled={isSaving}
-            className="px-6 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSaving ? 'Updating...' : 'Update'}
           </button>
           <button
             type="button"
             onClick={handleCancel}
-            className="px-6 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition"
+            className="px-6 py-2 bg-gray-200 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-300 transition"
           >
             Cancel
           </button>

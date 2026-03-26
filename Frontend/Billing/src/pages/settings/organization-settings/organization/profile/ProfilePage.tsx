@@ -1042,6 +1042,77 @@ export default function ProfilePage() {
     loadPrimarySender();
   }, []);
 
+  useEffect(() => {
+    if (loadingProfile) return;
+
+    const liveOrgProfile = {
+      organizationName: orgName,
+      name: orgName,
+      industry,
+      location,
+      logo: logoPreview || "",
+      logoUrl: logoPreview || "",
+      email,
+      website,
+      baseCurrency: baseCurrency.split(" - ")[0],
+      orgLanguage,
+      timeZone,
+      dateFormat,
+      dateSeparator,
+      address: {
+        street1,
+        street2,
+        city,
+        zipCode,
+        state,
+        country: location,
+        phone,
+        fax,
+      },
+    };
+
+    if (orgName) {
+      document.title = orgName;
+    }
+
+    try {
+      localStorage.setItem("org_profile", JSON.stringify(liveOrgProfile));
+      localStorage.setItem("organization_profile", JSON.stringify(liveOrgProfile));
+    } catch {
+      // ignore storage sync failures
+    }
+
+    window.dispatchEvent(new CustomEvent("organizationProfileUpdated", {
+      detail: liveOrgProfile,
+    }));
+
+    window.dispatchEvent(new CustomEvent("brandingUpdated", {
+      detail: {
+        logo: logoPreview || "",
+      },
+    }));
+  }, [
+    loadingProfile,
+    orgName,
+    industry,
+    location,
+    logoPreview,
+    email,
+    website,
+    baseCurrency,
+    orgLanguage,
+    timeZone,
+    dateFormat,
+    dateSeparator,
+    street1,
+    street2,
+    city,
+    zipCode,
+    state,
+    phone,
+    fax,
+  ]);
+
   // Save profile function
   const handleSave = async () => {
     setIsSaving(true);
@@ -1187,6 +1258,8 @@ export default function ProfilePage() {
             organizationName: orgName,
             industry: industry,
             location: location,
+            logo: logoBase64,
+            logoUrl: logoBase64,
             email: email,
             website: website,
             baseCurrency: baseCurrency.split(" - ")[0],
@@ -1207,6 +1280,16 @@ export default function ProfilePage() {
             },
           };
           localStorage.setItem("organization_profile", JSON.stringify(updatedOrgProfile));
+
+          window.dispatchEvent(new CustomEvent("organizationProfileUpdated", {
+            detail: updatedOrgProfile,
+          }));
+
+          window.dispatchEvent(new CustomEvent("brandingUpdated", {
+            detail: {
+              logo: logoBase64,
+            },
+          }));
         } catch {
           // ignore local storage sync failures
         }
@@ -1257,7 +1340,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl">
+    <div className="relative p-6 max-w-4xl pb-28">
       <div className="mb-6">
         <div className="flex items-center gap-3 mb-2">
           <h1 className="text-2xl font-semibold text-gray-900">Organization Profile</h1>
@@ -1736,20 +1819,20 @@ export default function ProfilePage() {
       </div>
 
       {/* Action Buttons */}
-      <div className="flex items-center justify-end gap-3">
-        <button
-          onClick={() => window.history.back()}
-          className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          disabled={isSaving}
-        >
-          Cancel
-        </button>
+      <div className="sticky bottom-0 z-20 -mx-6 mt-8 flex items-center justify-start gap-3 bg-transparent px-6 py-4">
         <button
           onClick={handleSave}
           disabled={isSaving}
           className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSaving ? 'Saving...' : 'Save'}
+        </button>
+        <button
+          onClick={() => window.history.back()}
+          className="px-4 py-2 rounded-lg border border-gray-300 bg-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-300"
+          disabled={isSaving}
+        >
+          Cancel
         </button>
       </div>
 

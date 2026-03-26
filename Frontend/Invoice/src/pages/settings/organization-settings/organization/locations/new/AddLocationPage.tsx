@@ -445,7 +445,7 @@ export default function AddLocationPage() {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Location Type Section */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-transparent rounded-none border-0 p-6">
           <h2 className="text-sm font-semibold text-gray-900 mb-4">Location Type</h2>
           <div className="grid grid-cols-2 gap-4">
             <label className={`relative flex flex-col p-4 border-2 rounded-lg cursor-pointer transition ${
@@ -494,7 +494,7 @@ export default function AddLocationPage() {
 
         {/* Logo Field - Only show for Business Location */}
         {formData.type === "Business" && (
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="bg-transparent rounded-none border-0 p-6">
             <div className="grid grid-cols-3 gap-4">
               <label className="text-sm font-medium text-gray-700">Logo</label>
               <div className="col-span-2 space-y-4">
@@ -503,7 +503,7 @@ export default function AddLocationPage() {
                 <button
                   type="button"
                   onClick={() => setIsLogoDropdownOpen(!isLogoDropdownOpen)}
-                  className="w-full px-3 py-2 border border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-white"
+                  className="w-full px-3 py-2 border border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-transparent"
                 >
                   <span>{formData.logo}</span>
                   {isLogoDropdownOpen ? (
@@ -514,7 +514,7 @@ export default function AddLocationPage() {
                 </button>
 
                 {isLogoDropdownOpen && (
-                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
+                  <div className="absolute z-50 w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg shadow-lg">
                     <div className="p-2 border-b border-gray-200">
                       <div className="relative">
                         <Search size={16} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
@@ -611,7 +611,7 @@ export default function AddLocationPage() {
         )}
 
         {/* Name Field */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-transparent rounded-none border-0 p-6">
           <div className="grid grid-cols-3 gap-4">
             <label className="text-sm font-medium text-gray-700 flex items-center">
               Name<span className="text-red-500 ml-1">*</span>
@@ -645,7 +645,7 @@ export default function AddLocationPage() {
 
         {/* Parent Location Field - Show for Warehouse or Business Location when checkbox is checked */}
         {(formData.type === "Warehouse" || (formData.type === "Business" && formData.isChildLocation)) && (
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="bg-transparent rounded-none border-0 p-6">
             <div className="grid grid-cols-3 gap-4 items-center">
               <label className="text-sm font-medium text-gray-700 flex items-center">
                 Parent Location<span className="text-red-500 ml-1">*</span>
@@ -654,7 +654,7 @@ export default function AddLocationPage() {
                 <button
                   type="button"
                   onClick={() => setIsParentLocationDropdownOpen(!isParentLocationDropdownOpen)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-white"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-transparent"
                 >
                   <span className={selectedParentLocation ? "text-gray-900" : "text-gray-500"}>
                     {selectedParentLocation ? selectedParentLocation.name : "Select Location"}
@@ -667,8 +667,8 @@ export default function AddLocationPage() {
                 </button>
 
                 {isParentLocationDropdownOpen && (
-                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    <div className="p-2 border-b border-gray-200 sticky top-0 bg-white">
+                  <div className="absolute z-50 w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    <div className="p-2 border-b border-gray-200 sticky top-0 bg-transparent">
                       <div className="relative">
                         <Search size={16} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
                         <input
@@ -710,7 +710,7 @@ export default function AddLocationPage() {
         )}
 
         {/* Address Section */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-transparent rounded-none border-0 p-6">
           <h2 className="text-sm font-semibold text-gray-900 mb-4">Address</h2>
           <div className="space-y-4">
             <div className="grid grid-cols-3 gap-4">
@@ -824,7 +824,7 @@ export default function AddLocationPage() {
         </div>
 
         {/* Website URL - Show for both Business and Warehouse */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-transparent rounded-none border-0 p-6">
           <div className="grid grid-cols-3 gap-4 items-center">
             <label className="text-sm font-medium text-gray-700">Website URL</label>
             <input
@@ -839,7 +839,7 @@ export default function AddLocationPage() {
         </div>
 
         {/* Primary Contact - Show for both Business and Warehouse */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-transparent rounded-none border-0 p-6">
           <div className="grid grid-cols-3 gap-4 items-center">
             <label className="text-sm font-medium text-gray-700 flex items-center">
               Primary Contact
@@ -864,7 +864,7 @@ export default function AddLocationPage() {
         {formData.type === "Business" && (
           <>
             {/* Transaction Number Series */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <div className="bg-transparent rounded-none border-0 p-6">
               <div className="grid grid-cols-3 gap-4 items-center">
                 <label className="text-sm font-medium text-gray-700 flex items-center">
                   Transaction Number Series<span className="text-red-500 ml-1">*</span>
@@ -873,7 +873,7 @@ export default function AddLocationPage() {
                   <button
                     type="button"
                     onClick={() => setIsTransactionSeriesDropdownOpen(!isTransactionSeriesDropdownOpen)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-white"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-transparent"
                   >
                     <span className={formData.transactionSeries ? "text-gray-900" : "text-gray-500"}>
                       {formData.transactionSeries || "Add Transaction Series"}
@@ -886,8 +886,8 @@ export default function AddLocationPage() {
                   </button>
 
                   {isTransactionSeriesDropdownOpen && (
-                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                      <div className="p-2 border-b border-gray-200 sticky top-0 bg-white">
+                  <div className="absolute z-50 w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    <div className="p-2 border-b border-gray-200 sticky top-0 bg-transparent">
                         <div className="relative">
                           <Search size={16} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
                           <input
@@ -936,7 +936,7 @@ export default function AddLocationPage() {
             </div>
 
             {/* Default Transaction Number Series */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <div className="bg-transparent rounded-none border-0 p-6">
               <div className="grid grid-cols-3 gap-4 items-center">
                 <label className="text-sm font-medium text-gray-700 flex items-center">
                   Default Transaction Number Series<span className="text-red-500 ml-1">*</span>
@@ -945,7 +945,7 @@ export default function AddLocationPage() {
                   <button
                     type="button"
                     onClick={() => setIsDefaultTransactionSeriesDropdownOpen(!isDefaultTransactionSeriesDropdownOpen)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-white"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-transparent"
                   >
                     <span className={formData.defaultTransactionSeries ? "text-gray-900" : "text-gray-500"}>
                       {formData.defaultTransactionSeries || "Default Transaction Series"}
@@ -958,8 +958,8 @@ export default function AddLocationPage() {
                   </button>
 
                   {isDefaultTransactionSeriesDropdownOpen && (
-                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                      <div className="p-2 border-b border-gray-200 sticky top-0 bg-white">
+                    <div className="absolute z-50 w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      <div className="p-2 border-b border-gray-200 sticky top-0 bg-transparent">
                         <div className="relative">
                           <Search size={16} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
                           <input
@@ -1012,11 +1012,11 @@ export default function AddLocationPage() {
         )}
 
         {/* Location Access - Show for both Business and Warehouse */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-transparent rounded-none border-0 p-6">
           <div className="grid grid-cols-3 gap-4">
             <label className="text-sm font-medium text-gray-700">Location Access</label>
             <div className="col-span-2">
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <div className="bg-transparent border-0 rounded-none p-4">
                 {formData.locationAccess.length === 0 ? (
                   <>
                     <p className="text-sm font-semibold text-gray-900 mb-2">No users selected</p>
@@ -1048,15 +1048,15 @@ export default function AddLocationPage() {
                               <button
                                 type="button"
                                 onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-white"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-transparent"
                               >
                                 <span className="text-gray-500">Select users</span>
                                 <ChevronDown size={16} className="text-gray-500" />
                               </button>
 
                               {isUserDropdownOpen && (
-                                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                                  <div className="p-2 border-b border-gray-200 sticky top-0 bg-white">
+                                <div className="absolute z-50 w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                  <div className="p-2 border-b border-gray-200 sticky top-0 bg-transparent">
                                     <div className="relative">
                                       <Search size={16} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
                                       <input
@@ -1098,7 +1098,7 @@ export default function AddLocationPage() {
                             </div>
                           </td>
                           <td className="py-2 px-3">
-                            <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white">
+                            <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-transparent">
                               <option>User's Role</option>
                             </select>
                           </td>
@@ -1173,7 +1173,7 @@ export default function AddLocationPage() {
           <button
             type="button"
             onClick={handleCancel}
-            className="px-6 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition"
+            className="px-6 py-2 bg-gray-200 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-300 transition"
           >
             Cancel
           </button>

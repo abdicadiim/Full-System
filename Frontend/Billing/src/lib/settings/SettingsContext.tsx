@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import { useUser } from '../auth/UserContext';
 
 const SettingsContext = createContext(null);
@@ -68,17 +68,67 @@ function setDocumentFavicon(href: string) {
   const link = existing || (document.createElement("link") as HTMLLinkElement);
   link.rel = existing?.rel || "icon";
   link.type = "image/png";
-  link.href = href;
-  if (!existing) head.appendChild(link);
+  const commit = (iconHref: string) => {
+    link.href = iconHref;
+    if (!existing) head.appendChild(link);
+  };
+
+  const renderCircularFavicon = (source: string) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const size = 64;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        commit(source);
+        return;
+      }
+
+      ctx.clearRect(0, 0, size, size);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+      ctx.drawImage(img, 0, 0, size, size);
+      ctx.restore();
+
+      commit(canvas.toDataURL("image/png"));
+    };
+    img.onerror = () => commit(source);
+    img.src = source;
+  };
+
+  if (href.startsWith("data:image")) {
+    renderCircularFavicon(href);
+    return;
+  }
+
+  renderCircularFavicon(href);
 }
 
 export function SettingsProvider({ children }) {
   // Load settings from localStorage or use defaults
+  const brandingUpdatedLocallyRef = useRef(false);
   const [settings, setSettings] = useState(() => {
     const saved = localStorage.getItem('appSettings');
+    let parsedBranding = null;
+    try {
+      const savedBranding = localStorage.getItem("organization_branding");
+      if (savedBranding) parsedBranding = JSON.parse(savedBranding);
+    } catch {}
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+        const accentColor = String(parsedBranding?.accentColor || parsed.theme?.accentColor || DEFAULT_THEME.accentColor).trim();
+        const appearanceRaw = String(parsedBranding?.appearance || parsed.branding?.appearance || "").trim();
+        const appearance = appearanceRaw === "system" ? "dark" : (appearanceRaw || parsed.branding?.appearance || "dark");
+        const sidebarDarkFrom = String(parsedBranding?.sidebarDarkFrom || "").trim();
+        const sidebarLightFrom = String(parsedBranding?.sidebarLightFrom || "").trim();
+        const logo = String(parsedBranding?.logo || parsed.branding?.logoUrl || "").trim();
         return {
           general: {
             schoolDisplayName: parsed.general?.schoolDisplayName || 'Taban Enterprise',
@@ -88,17 +138,19 @@ export function SettingsProvider({ children }) {
           },
           branding: {
             primaryColor: parsed.branding?.primaryColor || DEFAULT_THEME.primaryColor,
-            logoUrl: parsed.branding?.logoUrl || '',
+            logoUrl: logo,
             logoFile: parsed.branding?.logoFile || '',
-            appearance: parsed.branding?.appearance || 'dark',
+            appearance,
           },
           theme: {
             primaryColor: parsed.theme?.primaryColor || DEFAULT_THEME.primaryColor,
-            sidebarColor: parsed.theme?.sidebarColor || DEFAULT_THEME.sidebarColor,
+            sidebarColor: appearance === "light"
+              ? (sidebarLightFrom || parsed.theme?.sidebarColor || DEFAULT_THEME.sidebarColor)
+              : (sidebarDarkFrom || parsed.theme?.sidebarColor || DEFAULT_THEME.sidebarColor),
             headerColor: parsed.theme?.headerColor || DEFAULT_THEME.headerColor,
             buttonColor: parsed.theme?.buttonColor || DEFAULT_THEME.buttonColor,
-            buttonHoverColor: parsed.theme?.buttonHoverColor || DEFAULT_THEME.buttonHoverColor,
-            accentColor: parsed.theme?.accentColor || DEFAULT_THEME.accentColor,
+            buttonHoverColor: accentColor || parsed.theme?.buttonHoverColor || DEFAULT_THEME.buttonHoverColor,
+            accentColor,
           },
         };
       } catch (e) {
@@ -228,7 +280,7 @@ export function SettingsProvider({ children }) {
       .then((res) => res.json().catch(() => null))
       .then((payload) => {
         const branding = payload?.success ? payload?.data : null;
-        if (!branding) return;
+        if (!branding || brandingUpdatedLocallyRef.current) return;
         try {
           localStorage.setItem("organization_branding", JSON.stringify(branding));
         } catch {}
@@ -241,6 +293,7 @@ export function SettingsProvider({ children }) {
     const handleBrandingUpdate = (event: any) => {
       const detail = event?.detail;
       if (!detail) return;
+      brandingUpdatedLocallyRef.current = true;
       try {
         localStorage.setItem("organization_branding", JSON.stringify(detail));
       } catch {}
@@ -249,6 +302,21 @@ export function SettingsProvider({ children }) {
 
     window.addEventListener("brandingUpdated" as any, handleBrandingUpdate);
     return () => window.removeEventListener("brandingUpdated" as any, handleBrandingUpdate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const handleOrganizationProfileUpdate = (event: any) => {
+      const detail = event?.detail;
+      if (!detail) return;
+      try {
+        localStorage.setItem("organization_profile", JSON.stringify(detail));
+      } catch {}
+      applyOrganizationProfileToSettings(detail);
+    };
+
+    window.addEventListener("organizationProfileUpdated" as any, handleOrganizationProfileUpdate);
+    return () => window.removeEventListener("organizationProfileUpdated" as any, handleOrganizationProfileUpdate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

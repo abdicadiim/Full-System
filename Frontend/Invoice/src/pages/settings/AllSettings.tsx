@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, X, Building2, Users, Receipt, Settings as SettingsIcon, Palette, Zap, Package, CreditCard, ShoppingCart, ShoppingBag, Puzzle, Plug, Code } from "lucide-react";
 import { useUser } from "../../lib/auth/UserContext";
+import { useSettings } from "../../lib/settings/SettingsContext";
 
 export default function AllSettings() {
   const navigate = useNavigate();
@@ -10,7 +11,9 @@ export default function AllSettings() {
   const [selectedCategory, setSelectedCategory] = useState(null);
 
   const { user } = useUser();
+  const { settings } = useSettings();
   const permissions = user?.permissions;
+  const organizationName = String(settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "").trim() || "Organization";
 
   // Helper to check permissions
   // Return true if access allowed
@@ -248,7 +251,7 @@ export default function AllSettings() {
             </div>
             <div>
               <div className="text-lg font-semibold text-gray-900">All Settings</div>
-              <div className="text-sm text-gray-500">TABAN ENTERPRISES</div>
+              <div className="text-sm text-gray-500">{organizationName}</div>
             </div>
           </div>
 

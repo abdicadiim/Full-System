@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { Search, X, Building2, Users, Receipt, Settings as SettingsIcon, Palette, Zap, Package, CreditCard, ShoppingCart, ShoppingBag, Puzzle, Plug, Code, FileText } from "lucide-react";
 import { getToken, API_BASE_URL } from "../../services/auth";
+import { useSettings } from "../../lib/settings/SettingsContext";
 
 const simpleSettingsNav = [
   { label: "Organization Profile", path: "/settings/profile", icon: Building2 },
@@ -38,17 +39,16 @@ const simpleSettingsNav = [
 export default function SettingsLayout({ children }: { children?: React.ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { settings } = useSettings();
   const sidebarScrollRef = useRef<HTMLDivElement | null>(null);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [appearance, setAppearance] = useState("dark");
-  const [accentColor, setAccentColor] = useState("#2f6fed");
-  const [sidebarColors, setSidebarColors] = useState({
-    darkFrom: "#156372",
-    darkTo: "#156372",
-    lightFrom: "#f9fafb",
-    lightTo: "#f3f4f6",
-  });
+  const organizationName = String(settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "").trim() || "Organization";
+  const accentColor = String(settings?.theme?.accentColor || "#3b82f6").trim();
+  const isLightAccent = accentColor.toLowerCase() === "#ffffff" || accentColor.toLowerCase() === "#fff" || accentColor.toLowerCase() === "white";
+  const activeSidebarColor = accentColor;
+  const activeSidebarTextColor = isLightAccent ? "#1f2937" : "#ffffff";
 
   // Load branding data on mount
   useEffect(() => {
@@ -65,16 +65,6 @@ export default function SettingsLayout({ children }: { children?: React.ReactNod
           const data = await response.json();
           if (data.success && data.data) {
             setAppearance(data.data.appearance || "dark");
-            // Keep sidebar highlight color consistent with the desired UI
-            if (data.data.accentColor) {
-              setAccentColor(data.data.accentColor);
-            }
-            setSidebarColors({
-              darkFrom: data.data.sidebarDarkFrom || "#156372",
-              darkTo: data.data.sidebarDarkTo || "#156372",
-              lightFrom: data.data.sidebarLightFrom || "#f9fafb",
-              lightTo: data.data.sidebarLightTo || "#f3f4f6",
-            });
           }
         }
       } catch (error) {
@@ -87,20 +77,9 @@ export default function SettingsLayout({ children }: { children?: React.ReactNod
   // Listen to branding updated events
   useEffect(() => {
     const handleBrandingUpdate = (event: any) => {
-      const { appearance: newAppearance, accentColor: newAccentColor, sidebarDarkFrom, sidebarDarkTo, sidebarLightFrom, sidebarLightTo } = event.detail;
+      const { appearance: newAppearance } = event.detail;
       if (newAppearance) {
         setAppearance(newAppearance);
-      }
-      if (newAccentColor) {
-        setAccentColor(newAccentColor);
-      }
-      if (sidebarDarkFrom || sidebarDarkTo || sidebarLightFrom || sidebarLightTo) {
-        setSidebarColors(prev => ({
-          darkFrom: sidebarDarkFrom || prev.darkFrom,
-          darkTo: sidebarDarkTo || prev.darkTo,
-          lightFrom: sidebarLightFrom || prev.lightFrom,
-          lightTo: sidebarLightTo || prev.lightTo,
-        }));
       }
     };
 
@@ -160,7 +139,7 @@ export default function SettingsLayout({ children }: { children?: React.ReactNod
             </div>
             <div>
               <div className="text-lg font-semibold text-gray-900 leading-tight">All Settings</div>
-              <div className="text-sm text-gray-500">TABAN ENTERPRISES</div>
+              <div className="text-sm text-gray-500">{organizationName}</div>
             </div>
           </div>
 
@@ -212,7 +191,7 @@ export default function SettingsLayout({ children }: { children?: React.ReactNod
                       ? "font-semibold"
                       : "text-slate-700 hover:bg-slate-100"
                       }`}
-                    style={active ? { backgroundColor: "rgba(47, 111, 237, 0.12)", color: accentColor } : {}}
+                    style={active ? { backgroundColor: activeSidebarColor, color: activeSidebarTextColor, boxShadow: `0 0 0 1px ${activeSidebarColor} inset` } : {}}
                   >
                     <Icon size={16} className={active ? "text-current" : "text-gray-400"} />
                     <span className="text-left">{item.label}</span>

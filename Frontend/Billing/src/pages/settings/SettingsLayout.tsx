@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import { Search, X, Building2, Users, Receipt, Settings as SettingsIcon, Palette, Zap, Package, CreditCard, ShoppingCart, ShoppingBag, Puzzle, Plug, Code, ChevronDown, ChevronRight } from "lucide-react";
+import { Search, X, Building2, Users, Receipt, Settings as SettingsIcon, Palette, Zap, CreditCard, ShoppingCart, ShoppingBag, Puzzle, Plug, Code, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
 import { getToken, API_BASE_URL } from "../../services/auth";
+import { useSettings } from "../../lib/settings/SettingsContext";
 
 const ACCENT = "#156372";
 
@@ -10,6 +11,7 @@ const organizationSettings = [
     icon: Building2,
     color: "green",
     title: "Organization",
+    path: "/settings/profile",
     items: [
       { label: "Profile", path: "/settings/profile" },
       { label: "Branding", path: "/settings/branding" },
@@ -22,15 +24,20 @@ const organizationSettings = [
     icon: Users,
     color: "pink",
     title: "Users & Roles",
+    path: "/settings/users",
     items: [
       { label: "Users", path: "/settings/users" },
       { label: "Roles", path: "/settings/roles" },
+      { label: "User Preferences", path: "/settings/user-preferences" },
     ],
   },
   {
     icon: Receipt,
-    color: "blue",
+    color: "sky",
+    iconSize: 18,
+    iconStrokeWidth: 2.25,
     title: "Taxes & Compliance",
+    path: "/settings/taxes",
     items: [
       { label: "Taxes", path: "/settings/taxes" },
     ],
@@ -39,10 +46,10 @@ const organizationSettings = [
     icon: SettingsIcon,
     color: "orange",
     title: "Setup & Configurations",
+    path: "/settings/general",
     items: [
       { label: "General", path: "/settings/general" },
       { label: "Currencies", path: "/settings/currencies" },
-      { label: "Opening Balances", path: "/settings/opening-balances" },
       { label: "Reminders", path: "/settings/reminders" },
     ],
   },
@@ -50,6 +57,7 @@ const organizationSettings = [
     icon: Palette,
     color: "yellow",
     title: "Customization",
+    path: "/settings/customization",
     items: [
       { label: "Hosted Payment Pages", path: "/settings/online-payments" },
       { label: "Transaction Number Series", path: "/settings/customization/transaction-number-series" },
@@ -63,6 +71,7 @@ const organizationSettings = [
     icon: Zap,
     color: "red",
     title: "Automation",
+    path: "/settings/workflow-actions",
     items: [
       { label: "Workflow Actions", path: "/settings/workflow-actions" },
       { label: "Workflow Logs", path: "/settings/workflow-logs" },
@@ -76,6 +85,7 @@ const moduleSettings = [
     icon: SettingsIcon,
     color: "green",
     title: "General",
+    path: "/settings/customers-vendors",
     items: [
       { label: "Customers", path: "/settings/customers-vendors" },
       { label: "Products", path: "/settings/items" },
@@ -85,17 +95,10 @@ const moduleSettings = [
     ],
   },
   {
-    icon: Package,
-    color: "pink",
-    title: "Inventory",
-    items: [
-      { label: "Inventory Adjustments", path: "/settings/inventory-adjustments" },
-    ],
-  },
-  {
     icon: CreditCard,
     color: "orange",
     title: "Online Payments",
+    path: "/settings/online-payments",
     items: [
       { label: "Payment Gateways", path: "/settings/online-payments" },
     ],
@@ -104,8 +107,8 @@ const moduleSettings = [
     icon: ShoppingCart,
     color: "green",
     title: "Sales",
+    path: "/settings/quotes",
     items: [
-      { label: "Customers", path: "/sales/customers" },
       { label: "Quotes", path: "/settings/quotes" },
       { label: "Invoices", path: "/settings/invoices" },
       { label: "Recurring Invoices", path: "/settings/recurring-invoices" },
@@ -117,23 +120,45 @@ const moduleSettings = [
     ],
   },
   {
+    icon: RefreshCw,
+    color: "green",
+    title: "Subscriptions",
+    path: "/sales/subscriptions",
+    items: [
+      { label: "General", path: "/settings/subscription/general" },
+      { label: "Billing Preferences", path: "/settings/subscription/billing-preferences" },
+      { label: "Advance Billing", path: "/settings/subscription/advance-billing" },
+      { label: "Dunning Management", path: "/settings/subscription/dunning-management" },
+      { label: "Cancellation Preferences", path: "/settings/subscription/cancellation-preferences" },
+    ],
+  },
+  {
     icon: ShoppingBag,
     color: "green",
     title: "Purchases",
+    path: "/settings/expenses",
     items: [
       { label: "Expenses", path: "/settings/expenses" },
       { label: "Recurring Expenses", path: "/settings/recurring-expenses" },
-      { label: "Purchase Orders", path: "/settings/purchase-orders" },
-      { label: "Bills", path: "/settings/bills" },
-      { label: "Recurring Bills", path: "/settings/recurring-bills" },
-      { label: "Payments Made", path: "/settings/payments-made" },
-      { label: "Vendor Credits", path: "/settings/vendor-credits" },
+    ],
+  },
+  {
+    icon: Users,
+    color: "green",
+    title: "Customer Portal",
+    path: "/settings/customer-portal",
+    items: [
+      { label: "General", path: "/settings/customer-portal" },
+      { label: "Subscription Management", path: "/settings/customer-portal" },
     ],
   },
   {
     icon: Puzzle,
-    color: "blue",
+    color: "indigo",
+    iconSize: 18,
+    iconStrokeWidth: 2.25,
     title: "Custom Modules",
+    path: "/settings/custom-modules",
     items: [
       { label: "Overview", path: "/settings/custom-modules" },
     ],
@@ -144,20 +169,30 @@ const extensionSettings = [
   {
     icon: Plug,
     color: "green",
-    title: "Integrations",
+    title: "Integrations & Marketplaces",
+    path: "/settings/integrations/zoho",
     items: [
       { label: "Zoho Apps", path: "/settings/integrations/zoho" },
       { label: "WhatsApp", path: "/settings/integrations/whatsapp" },
+      { label: "SMS Integrations", path: "/settings/integrations/sms" },
+      { label: "Accounting", path: "/settings/integrations/accounting" },
+      { label: "Other Apps", path: "/settings/integrations/other-apps" },
       { label: "Marketplace", path: "/settings/marketplace" },
     ],
   },
   {
     icon: Code,
     color: "orange",
-    title: "Developer Space",
+    title: "Developer Data",
+    path: "/settings/developer/webhooks",
     items: [
-      { label: "Webhooks", path: "/settings/developer/webhooks" },
+      { label: "Incoming Webhooks", path: "/settings/developer/webhooks" },
+      { label: "Connections", path: "/settings/developer/connections" },
       { label: "API Usage", path: "/settings/developer/api-usage" },
+      { label: "Signals", path: "/settings/developer/signals" },
+      { label: "Data Management", path: "/settings/developer/data-management" },
+      { label: "Deluge Components Usage", path: "/settings/developer/deluge-components-usage" },
+      { label: "Web Forms", path: "/settings/developer/web-forms" },
     ],
   },
 ];
@@ -165,38 +200,21 @@ const extensionSettings = [
 export default function SettingsLayout({ children }: { children?: React.ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { settings } = useSettings();
   const [searchQuery, setSearchQuery] = useState("");
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    organization: true,
-  });
+  const [openSectionKey, setOpenSectionKey] = useState<string>("organization");
   const [appearance, setAppearance] = useState("dark");
-  const [accentColor, setAccentColor] = useState("#3b82f6");
   const [sidebarColors, setSidebarColors] = useState({
     darkFrom: "#156372",
     darkTo: "#156372",
     lightFrom: "#f9fafb",
     lightTo: "#f3f4f6",
   });
-
-  // Auto-expand sections based on current path
-  useEffect(() => {
-    const path = location.pathname;
-    setExpandedSections(prev => {
-      const newExpanded = { ...prev };
-
-      [...organizationSettings, ...moduleSettings, ...extensionSettings].forEach((section) => {
-        const sectionKey = section.title.toLowerCase().replace(/\s+/g, '-');
-        const hasActiveItem = section.items.some(item =>
-          path === item.path || path.startsWith(item.path + '/')
-        );
-        if (hasActiveItem) {
-          newExpanded[sectionKey] = true;
-        }
-      });
-
-      return newExpanded;
-    });
-  }, [location.pathname]);
+  const organizationName = String(settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "").trim() || "Organization";
+  const accentColor = String(settings?.theme?.accentColor || "#3b82f6").trim();
+  const isLightAccent = accentColor.toLowerCase() === "#ffffff" || accentColor.toLowerCase() === "#fff" || accentColor.toLowerCase() === "white";
+  const activeSidebarColor = accentColor;
+  const activeSidebarTextColor = isLightAccent ? "#1f2937" : "#ffffff";
 
   // Load branding data on mount
   useEffect(() => {
@@ -213,7 +231,6 @@ export default function SettingsLayout({ children }: { children?: React.ReactNod
           const data = await response.json();
           if (data.success && data.data) {
             setAppearance(data.data.appearance || "dark");
-            setAccentColor(data.data.accentColor || "#3b82f6");
             setSidebarColors({
               darkFrom: data.data.sidebarDarkFrom || "#156372",
               darkTo: data.data.sidebarDarkTo || "#156372",
@@ -232,12 +249,9 @@ export default function SettingsLayout({ children }: { children?: React.ReactNod
   // Listen to branding updated events
   useEffect(() => {
     const handleBrandingUpdate = (event: any) => {
-      const { appearance: newAppearance, accentColor: newAccentColor, sidebarDarkFrom, sidebarDarkTo, sidebarLightFrom, sidebarLightTo } = event.detail;
+      const { appearance: newAppearance, sidebarDarkFrom, sidebarDarkTo, sidebarLightFrom, sidebarLightTo } = event.detail;
       if (newAppearance) {
         setAppearance(newAppearance);
-      }
-      if (newAccentColor) {
-        setAccentColor(newAccentColor);
       }
       if (sidebarDarkFrom || sidebarDarkTo || sidebarLightFrom || sidebarLightTo) {
         setSidebarColors(prev => ({
@@ -275,18 +289,13 @@ export default function SettingsLayout({ children }: { children?: React.ReactNod
     };
   }, []);
 
-  const toggleSection = (section: string) => {
-    setExpandedSections(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }));
-  };
-
   const getColorClasses = (color: string) => {
     const colors: Record<string, string> = {
       green: "bg-green-100 text-green-600",
       pink: "bg-pink-100 text-pink-600",
       blue: "bg-blue-100 text-blue-600",
+      sky: "bg-sky-100 text-sky-600",
+      indigo: "bg-indigo-100 text-indigo-600",
       orange: "bg-orange-100 text-orange-600",
       yellow: "bg-yellow-100 text-yellow-600",
       red: "bg-red-100 text-red-600",
@@ -299,51 +308,77 @@ export default function SettingsLayout({ children }: { children?: React.ReactNod
     return location.pathname === path || location.pathname.startsWith(path + '/');
   };
 
+  const sectionIsActive = (section: any) => {
+    if (section.path && isActive(section.path)) return true;
+    return Array.isArray(section.items) && section.items.some((item: any) => {
+      const itemPath = typeof item === "object" ? item.path : null;
+      return itemPath ? isActive(itemPath) : false;
+    });
+  };
+
+  useEffect(() => {
+    const activeSection = [...organizationSettings, ...moduleSettings, ...extensionSettings].find((section) =>
+      sectionIsActive(section)
+    );
+
+    if (activeSection) {
+      setOpenSectionKey(activeSection.title.toLowerCase().replace(/\s+/g, "-"));
+    }
+  }, [location.pathname]);
+
   const renderSection = (section: any, idx: number) => {
     const Icon = section.icon;
-    const sectionKey = section.title.toLowerCase().replace(/\s+/g, '-');
-    const isExpanded = expandedSections[sectionKey];
+    const active = sectionIsActive(section);
+    const iconSize = section.iconSize ?? 16;
+    const iconStrokeWidth = section.iconStrokeWidth ?? 2;
+    const sectionKey = section.title.toLowerCase().replace(/\s+/g, "-");
+    const isExpanded = openSectionKey === sectionKey;
     return (
       <div key={idx} className="mb-1">
         <button
-          onClick={() => toggleSection(sectionKey)}
-          className={`w-full flex items-center gap-2 px-2 py-2 text-sm font-medium rounded-lg transition ${appearance === "light"
-            ? "text-gray-700 hover:bg-gray-50"
-            : "text-gray-200 hover:bg-white/10"
+          onClick={() => setOpenSectionKey(sectionKey)}
+          className={`w-full flex items-center gap-2 px-2 py-2 text-sm font-medium rounded-lg transition ${active
+            ? "text-white"
+            : isExpanded
+              ? "bg-white border border-gray-200 text-gray-900"
+              : appearance === "light"
+                ? "text-gray-700 hover:bg-gray-50"
+                : "text-gray-200 hover:bg-white/10"
             }`}
+          style={active ? {
+          backgroundColor: activeSidebarColor,
+          borderColor: activeSidebarColor,
+          boxShadow: `0 0 0 1px ${activeSidebarColor} inset`,
+          color: activeSidebarTextColor,
+          } : {}}
         >
-          {isExpanded ? (
-            <ChevronDown size={16} />
-          ) : (
-            <ChevronRight size={16} />
-          )}
+          {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           <div className={`p-1 rounded-md flex-shrink-0 flex items-center justify-center ${getColorClasses(section.color)}`}>
-            <Icon size={16} />
+            <Icon size={iconSize} strokeWidth={iconStrokeWidth} />
           </div>
           <span className="flex-1 text-left">{section.title}</span>
         </button>
         {isExpanded && (
           <div className="ml-6 mt-1 space-y-1">
             {section.items.map((item: any, itemIdx: number) => {
-              const active = isActive(item.path);
+              const label = typeof item === "string" ? item : item.label;
+              const itemPath = typeof item === "object" ? item.path : null;
+              const itemActive = itemPath ? isActive(itemPath) : false;
               return (
                 <button
                   key={itemIdx}
-                  onClick={() => navigate(item.path)}
-                  className={`w-full text-left px-3 py-2 text-sm rounded-lg transition ${active
+                  onClick={() => itemPath && navigate(itemPath)}
+                  className={`w-full text-left px-3 py-2 text-sm rounded-lg transition ${itemActive
                     ? "font-medium"
                     : appearance === "light"
                       ? "text-gray-600 hover:bg-gray-50"
                       : "text-gray-300 hover:bg-white/10"
                     }`}
-                  style={active ? {
-                    backgroundColor: `${accentColor}15`,
-                    color: accentColor
-                  } : {}}
+                  style={itemActive ? { backgroundColor: activeSidebarColor, color: activeSidebarTextColor, boxShadow: `0 0 0 1px ${activeSidebarColor} inset` } : {}}
                 >
                   <div className="flex items-center justify-between">
-                    <span>{item.label}</span>
-                    {item.badge && (
+                    <span>{label}</span>
+                    {typeof item === "object" && item.badge && (
                       <span className="text-xs bg-red-500 text-white px-1.5 py-0.5 rounded">
                         {item.badge}
                       </span>
@@ -393,7 +428,7 @@ export default function SettingsLayout({ children }: { children?: React.ReactNod
             {/* Extension Settings */}
             <div className="mb-6">
               <div className={`text-xs font-semibold uppercase mb-2 px-2 ${appearance === "light" ? "text-gray-500" : "text-gray-400"}`}>
-                EXTENSIONS & TOOLS
+                EXTENSION AND DEVELOPER DATA
               </div>
               {extensionSettings.map((section, idx) => renderSection(section, idx))}
             </div>
@@ -415,12 +450,9 @@ export default function SettingsLayout({ children }: { children?: React.ReactNod
                     <path d="M12.5 5l-5 5 5 5" stroke="#374151" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </button>
-                <div className="w-8 h-8 rounded bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
-                  B
-                </div>
                 <div>
                   <div className="text-lg font-semibold text-gray-900">All Settings</div>
-                  <div className="text-sm text-gray-500">TABAN ENTERPRISES</div>
+                  <div className="text-sm text-gray-500">{organizationName}</div>
                 </div>
               </div>
 

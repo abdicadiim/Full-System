@@ -561,7 +561,7 @@ export default function EditLocationPage() {
         </div>
       )}
 
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm max-w-5xl">
+      <div className="bg-transparent border-0 rounded-none overflow-hidden shadow-none max-w-5xl">
         <form onSubmit={handleSubmit}>
           {/* Location Type Section */}
           <div className="px-6 py-4 border-b border-gray-200">
@@ -569,8 +569,8 @@ export default function EditLocationPage() {
             <div className="grid grid-cols-2 gap-4">
               <label className={`relative flex flex-col p-4 border rounded-lg cursor-pointer transition ${
                 formData.type === "Business"
-                  ? "border-blue-500 ring-1 ring-blue-500/20 bg-white"
-                  : "border-gray-200 hover:border-gray-300 bg-white"
+                  ? "border-blue-500 ring-1 ring-blue-500/20 bg-transparent"
+                  : "border-gray-200 hover:border-gray-300 bg-transparent"
               }`}>
                 <div className="flex items-center gap-3 mb-2">
                   <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
@@ -585,8 +585,8 @@ export default function EditLocationPage() {
               </label>
               <label className={`relative flex flex-col p-4 border rounded-lg cursor-pointer transition ${
                 formData.type === "Warehouse"
-                  ? "border-blue-500 ring-1 ring-blue-500/20 bg-white"
-                  : "border-gray-200 hover:border-gray-300 bg-white"
+                  ? "border-blue-500 ring-1 ring-blue-500/20 bg-transparent"
+                  : "border-gray-200 hover:border-gray-300 bg-transparent"
               }`}>
                 <div className="flex items-center gap-3 mb-2">
                   <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
@@ -612,7 +612,7 @@ export default function EditLocationPage() {
                     <button
                       type="button"
                       onClick={() => setIsLogoDropdownOpen(!isLogoDropdownOpen)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-white transition-colors"
+                      className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-transparent transition-colors"
                     >
                       <span className={formData.logo?.startsWith("data:") ? "text-blue-600 font-medium" : "text-gray-700"}>
                           {formData.logo?.startsWith("data:") ? "Custom Logo Uploaded" : (formData.logo || "Select Logo Option")}
@@ -621,7 +621,7 @@ export default function EditLocationPage() {
                     </button>
 
                     {isLogoDropdownOpen && (
-                      <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg overflow-hidden">
+                      <div className="absolute z-50 w-full mt-1 bg-gray-50 border border-gray-200 rounded shadow-lg overflow-hidden">
                         <div className="py-1">
                           <button
                             type="button"
@@ -651,7 +651,7 @@ export default function EditLocationPage() {
                     <div className="mt-4 flex items-start gap-6">
                       <div 
                         onClick={handleLogoClick}
-                        className="w-48 h-28 border-2 border-dashed border-gray-200 rounded-lg bg-gray-50/30 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors group"
+                        className="w-48 h-28 border-2 border-dashed border-gray-200 rounded-lg bg-transparent flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors group"
                       >
                         {logoPreview ? (
                           <div className="relative w-full h-full flex items-center justify-center p-2">
@@ -734,7 +734,7 @@ export default function EditLocationPage() {
                   <button
                     type="button"
                     onClick={() => setIsParentDropdownOpen(!isParentDropdownOpen)}
-                    className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm text-left flex items-center justify-between bg-white overflow-hidden"
+                    className="w-full px-3 py-1.5 border border-gray-300 rounded text-sm text-left flex items-center justify-between bg-transparent overflow-hidden"
                   >
                     <span className={formData.parentLocation === "None" || !formData.parentLocation ? "text-gray-400" : "text-gray-700"}>
                         {formData.parentLocation === "None" || !formData.parentLocation ? "Select Location" : formData.parentLocation}
@@ -742,7 +742,7 @@ export default function EditLocationPage() {
                     <ChevronDown size={14} className="text-gray-400 flex-shrink-0" />
                   </button>
                   {isParentDropdownOpen && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg overflow-hidden">
+                    <div className="absolute z-10 w-full mt-1 bg-gray-50 border border-gray-200 rounded shadow-lg overflow-hidden">
                         <div className="p-2 border-b border-gray-100">
                             <div className="relative">
                               <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -817,7 +817,7 @@ export default function EditLocationPage() {
                       value={formData.address.country}
                       onChange={handleChange}
                       disabled={formData.type === "Business"}
-                      className={`col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm ${formData.type === "Business" ? "bg-gray-50 text-gray-500 cursor-not-allowed" : "bg-white"}`}
+                      className={`col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm ${formData.type === "Business" ? "bg-gray-50 text-gray-500 cursor-not-allowed" : "bg-transparent"}`}
                     >
                         {COUNTRIES.map((country) => (
                           <option key={country} value={country}>
@@ -862,7 +862,7 @@ export default function EditLocationPage() {
                 name="primaryContact"
                 value={formData.primaryContact}
                 onChange={handleChange}
-                className="col-span-2 px-3 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm bg-white"
+                className="col-span-2 px-3 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm bg-transparent"
               >
                 <option value="">Select Primary Contact</option>
                 {allUsers.map(u => (
@@ -882,7 +882,7 @@ export default function EditLocationPage() {
                           value={formData.transactionNumberSeriesId}
                           onChange={handleChange}
                           disabled={loadingTxSeries}
-                          className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm bg-white"
+                          className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm bg-transparent"
                         >
                             <option value="">{loadingTxSeries ? "Loading..." : "Select Transaction Series"}</option>
                             {txSeriesNames.map((name) => (
@@ -899,7 +899,7 @@ export default function EditLocationPage() {
                           value={formData.defaultTransactionNumberSeriesId}
                           onChange={handleChange}
                           disabled={loadingTxSeries}
-                          className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm bg-white"
+                          className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm bg-transparent"
                         >
                             <option value="">{loadingTxSeries ? "Loading..." : "Select Default Series"}</option>
                             {txSeriesNames.map((name) => (
@@ -919,7 +919,7 @@ export default function EditLocationPage() {
                 <p className="text-[10px] text-gray-400 mt-1">Define who can manage this location.</p>
               </div>
               <div className="col-span-2">
-                <div className="border border-gray-200 rounded-lg bg-white">
+                <div className="border border-gray-200 rounded-lg bg-transparent">
                   <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
                     <div className="flex items-center gap-2 text-xs text-gray-600">
                       <div className="w-2 h-2 rounded-full bg-blue-600"></div>
@@ -991,13 +991,13 @@ export default function EditLocationPage() {
                               <button 
                                 type="button"
                                 onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-                                className="w-full px-3 py-2 border border-gray-200 rounded text-xs text-left text-gray-500 hover:border-gray-300 transition-colors flex items-center justify-between bg-white"
+                                className="w-full px-3 py-2 border border-gray-200 rounded text-xs text-left text-gray-500 hover:border-gray-300 transition-colors flex items-center justify-between bg-transparent"
                               >
                                 <span>Select users</span>
                                 <ChevronDown size={14} />
                               </button>
                               {isUserDropdownOpen && (
-                                <div className="absolute z-50 w-full bottom-full mb-1 bg-white border border-gray-200 rounded shadow-lg overflow-hidden">
+                                <div className="absolute z-50 w-full bottom-full mb-1 bg-gray-50 border border-gray-200 rounded shadow-lg overflow-hidden">
                                   <div className="p-2 border-b border-gray-100">
                                     <div className="relative">
                                       <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -1063,7 +1063,7 @@ export default function EditLocationPage() {
             <button
               type="button"
               onClick={handleCancel}
-              className="px-6 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded hover:bg-gray-50 transition-colors"
+            className="px-6 py-2 bg-gray-200 border border-gray-300 text-gray-700 text-sm font-medium rounded hover:bg-gray-300 transition-colors"
             >
               Cancel
             </button>

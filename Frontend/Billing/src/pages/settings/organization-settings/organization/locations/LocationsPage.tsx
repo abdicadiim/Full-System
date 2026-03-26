@@ -14,7 +14,6 @@ import { locationsAPI } from "../../../../../services/api";
 export default function LocationsPage() {
   const navigate = useNavigate();
   const [isEnabled, setIsEnabled] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [locations, setLocations] = useState([]);
   const [isLoadingLocations, setIsLoadingLocations] = useState(false);
   const [hoveredRowId, setHoveredRowId] = useState(null);
@@ -42,12 +41,10 @@ export default function LocationsPage() {
         setLocations(readLocations());
       } finally {
         setIsLoadingLocations(false);
-        setIsLoading(false);
       }
     };
 
     void init();
-    if (!enabled) setIsLoading(false);
   }, []);
 
   const loadLocations = () => {
@@ -165,16 +162,6 @@ export default function LocationsPage() {
     ].filter(Boolean);
     return parts.length > 0 ? parts.join(", ") : "—";
   };
-
-  if (isLoading) {
-    return (
-      <div className="w-full h-full p-6">
-        <div className="text-center py-8">
-          <div className="text-gray-500">Loading...</div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="w-full h-full">
@@ -301,7 +288,7 @@ export default function LocationsPage() {
       ) : (
         <div className="w-full h-full flex flex-col">
           {/* Header with Title and Action Buttons */}
-          <div className="px-6 pt-6 pb-4 bg-white border-b border-gray-200 flex-shrink-0">
+          <div className="px-6 pt-6 pb-4 bg-transparent border-b border-gray-200 flex-shrink-0">
             <div className="flex items-center justify-between">
               <h1 className="text-2xl font-semibold text-gray-900">Locations</h1>
               <div className="flex items-center gap-4">
@@ -325,10 +312,10 @@ export default function LocationsPage() {
           {/* Locations Table - Full width scrollable content */}
           <div className="flex-1 overflow-y-auto">
             <div className="p-6">
-              <div className="bg-white rounded-lg border border-gray-200 overflow-visible">
+              <div className="bg-transparent rounded-none border-0 overflow-visible">
                 <table className="w-full">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200">
+                    <tr className="bg-transparent">
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                         LOCATION
                       </th>
@@ -346,7 +333,7 @@ export default function LocationsPage() {
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200" ref={tableBodyRef}>
+                  <tbody className="bg-transparent" ref={tableBodyRef}>
                     {isLoadingLocations ? (
                       <tr>
                         <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
@@ -364,7 +351,7 @@ export default function LocationsPage() {
                         <tr
                           key={location._id}
                           data-location-id={location._id || location.id}
-                          className="group relative"
+                          className="group relative border-0"
                           onMouseEnter={() => setHoveredRowId(location._id)}
                           onMouseLeave={() => setHoveredRowId(null)}
                         >
@@ -396,7 +383,7 @@ export default function LocationsPage() {
                                 {/* Red Dropdown Icon - always visible on hover */}
                                 <button
                                   onClick={(e) => handleDropdownClick(location._id, e)}
-                                  className="w-6 h-6 rounded-full bg-gray-400 flex items-center justify-center hover:bg-gray-500 transition text-white shadow-sm"
+                                  className="w-6 h-6 rounded-full bg-gray-500 flex items-center justify-center hover:bg-gray-600 transition text-white shadow-sm"
                                   aria-label="More options"
                                 >
                                   <ChevronDown size={14} className="text-white" />

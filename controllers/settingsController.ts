@@ -61,6 +61,18 @@ const buildOrganizationProfilePayload = (org: any) => ({
   },
 });
 
+const buildOrganizationBrandingPayload = (org: any) => ({
+  appearance: (org as any).brandingAppearance || "dark",
+  accentColor: (org as any).brandingAccentColor || "#3b82f6",
+  keepZohoBranding: Boolean((org as any).brandingKeepZohoBranding),
+  logoUrl: (org as any).logoUrl || "",
+  logo: (org as any).logoUrl || "",
+  sidebarDarkFrom: (org as any).sidebarDarkFrom || "#156372",
+  sidebarDarkTo: (org as any).sidebarDarkTo || "#156372",
+  sidebarLightFrom: (org as any).sidebarLightFrom || "#f9fafb",
+  sidebarLightTo: (org as any).sidebarLightTo || "#f3f4f6",
+});
+
 export const getOrganizationProfile = async (req: express.Request, res: express.Response) => {
   if (AUTH_BYPASS) {
     return res.json({
@@ -191,16 +203,7 @@ export const getOrganizationBranding = async (req: express.Request, res: express
 
   return res.json({
     success: true,
-    data: {
-      appearance: (org as any).brandingAppearance || "dark",
-      accentColor: (org as any).brandingAccentColor || "#3b82f6",
-      keepZohoBranding: Boolean((org as any).brandingKeepZohoBranding),
-      logo: (org as any).logoUrl || "",
-      sidebarDarkFrom: (org as any).sidebarDarkFrom || "#156372",
-      sidebarDarkTo: (org as any).sidebarDarkTo || "#156372",
-      sidebarLightFrom: (org as any).sidebarLightFrom || "#f9fafb",
-      sidebarLightTo: (org as any).sidebarLightTo || "#f3f4f6",
-    },
+    data: buildOrganizationBrandingPayload(org),
   });
 };
 
@@ -224,8 +227,10 @@ export const updateOrganizationBranding = async (req: express.Request, res: expr
   if (typeof keepZohoBranding === "boolean") patch.brandingKeepZohoBranding = keepZohoBranding;
 
   const MAX_BRANDING_LEN = 2_000_000; // ~2MB string (supports data: URLs)
-  const logo = typeof body.logo === "string" ? body.logo.trim() : "";
-  if (logo) patch.logoUrl = logo.slice(0, MAX_BRANDING_LEN);
+  if (Object.prototype.hasOwnProperty.call(body, "logo")) {
+    const logo = typeof body.logo === "string" ? body.logo.trim() : "";
+    patch.logoUrl = logo.slice(0, MAX_BRANDING_LEN);
+  }
 
   const setColor = (key: string, field: string) => {
     const value = typeof (body as any)[key] === "string" ? String((body as any)[key]).trim() : "";
@@ -240,5 +245,5 @@ export const updateOrganizationBranding = async (req: express.Request, res: expr
   const updated = await Organization.findByIdAndUpdate(orgId, { $set: patch }, { new: true }).lean();
   if (!updated) return res.status(404).json({ success: false, message: "Organization not found", data: null });
 
-  return res.json({ success: true, data: { ok: true } });
+  return res.json({ success: true, data: buildOrganizationBrandingPayload(updated) });
 };

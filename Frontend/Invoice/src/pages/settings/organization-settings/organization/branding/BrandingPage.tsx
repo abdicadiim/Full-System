@@ -8,7 +8,23 @@ export default function BrandingPage({ onColorChange }) {
   const [logoImage, setLogoImage] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
   const [appearance, setAppearance] = useState("dark"); // Default to dark, will update from API
-  const [accentColor, setAccentColor] = useState("blue");
+  const [accentColor, setAccentColor] = useState(() => {
+    try {
+      const cached = localStorage.getItem("organization_branding");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const value = String(parsed?.accentColor || parsed?.theme?.accentColor || "").trim().toLowerCase();
+        if (value === "#ffffff" || value === "#fff" || value === "white") return "white";
+        if (value === "#3b82f6" || value === "blue") return "blue";
+        if (value === "#10b981" || value === "green") return "green";
+        if (value === "#ef4444" || value === "red") return "red";
+        if (value === "#f97316" || value === "orange") return "orange";
+        if (value === "#a855f7" || value === "purple") return "purple";
+        if (value.startsWith("#")) return "custom";
+      }
+    } catch {}
+    return "white";
+  });
   const [keepZohoBranding, setKeepZohoBranding] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
   const [customColor, setCustomColor] = useState("#9374F5");
@@ -21,6 +37,31 @@ export default function BrandingPage({ onColorChange }) {
   const fileInputRef = useRef(null);
   const colorPickerRef = useRef(null);
   const saveTimeoutRef = useRef(null);
+
+  const accentColors = [
+    { name: "white", value: "#ffffff", label: "White" },
+    { name: "blue", value: "#3b82f6", label: "Blue" },
+    { name: "green", value: "#10b981", label: "Green" },
+    { name: "red", value: "#ef4444", label: "Red" },
+    { name: "orange", value: "#f97316", label: "Orange" },
+    { name: "purple", value: "#a855f7", label: "Purple" }
+  ];
+
+  const normalizeAccentSelection = (value) => {
+    const raw = String(value || "").trim();
+    const normalized = raw.toLowerCase();
+    const preset = accentColors.find((color) => color.name === normalized || color.value.toLowerCase() === normalized);
+
+    if (preset) {
+      return { accentKey: preset.name, customValue: preset.value };
+    }
+
+    if (normalized.startsWith("#")) {
+      return { accentKey: "custom", customValue: raw };
+    }
+
+    return { accentKey: raw ? "custom" : "white", customValue: raw || "#9374F5" };
+  };
 
   // Load branding data on mount
   useEffect(() => {
@@ -47,7 +88,11 @@ export default function BrandingPage({ onColorChange }) {
             // Convert "system" to "dark" for backward compatibility
             const appearanceValue = branding.appearance === "system" ? "dark" : (branding.appearance || "dark");
             setAppearance(appearanceValue);
-            setAccentColor(branding.accentColor || "blue");
+            const normalizedAccent = normalizeAccentSelection(branding.accentColor || "white");
+            setAccentColor(normalizedAccent.accentKey);
+            if (normalizedAccent.accentKey === "custom") {
+              setCustomColor(normalizedAccent.customValue);
+            }
             setKeepZohoBranding(branding.keepZohoBranding || false);
 
             // Load logo from profile - check both branding.logo and fetch from profile if needed
@@ -92,14 +137,6 @@ export default function BrandingPage({ onColorChange }) {
 
     loadBranding();
   }, []);
-
-  const accentColors = [
-    { name: "blue", value: "#3b82f6", label: "Blue" },
-    { name: "green", value: "#10b981", label: "Green" },
-    { name: "red", value: "#ef4444", label: "Red" },
-    { name: "orange", value: "#f97316", label: "Orange" },
-    { name: "purple", value: "#a855f7", label: "Purple" }
-  ];
 
   const selectedColor = accentColor === "custom"
     ? customColor
@@ -200,7 +237,13 @@ export default function BrandingPage({ onColorChange }) {
     if (onColorChange) {
       onColorChange(colorValue);
     }
-    // Auto-save will be triggered by useEffect
+    autoSaveBranding({
+      immediate: true,
+      changeType: "accent",
+      accentColor: colorValue,
+      appearance,
+      skipLogo: true,
+    });
   };
 
   const handleCustomColorApply = () => {
@@ -209,7 +252,13 @@ export default function BrandingPage({ onColorChange }) {
       onColorChange(customColor);
     }
     setIsColorPickerOpen(false);
-    // Auto-save will be triggered by useEffect
+    autoSaveBranding({
+      immediate: true,
+      changeType: "accent",
+      accentColor: customColor,
+      appearance,
+      skipLogo: true,
+    });
   };
 
   const handleHexChange = (e) => {
@@ -268,7 +317,11 @@ export default function BrandingPage({ onColorChange }) {
         setLogoPreview(result);
         // Auto-save logo immediately after upload
         if (!isInitialLoad) {
-          await autoSaveBranding(false, null, false, null, "logo"); // Include logo, pass "logo" as changeType
+          await autoSaveBranding({
+            immediate: true,
+            changeType: "logo",
+            logo: typeof result === "string" ? result : "",
+          });
         }
       };
       reader.readAsDataURL(file);
@@ -288,12 +341,24 @@ export default function BrandingPage({ onColorChange }) {
     }
     // Auto-save empty logo
     if (!isInitialLoad) {
-      await autoSaveBranding(false, null, false, null, "logo"); // Include logo (empty), pass "logo" as changeType
+      await autoSaveBranding({
+        immediate: true,
+        changeType: "logo",
+        logo: "",
+      });
     }
   };
 
   // Auto-save branding function
-  const autoSaveBranding = async (skipLogo = false, newLogoFile = null, immediate = false, appearanceOverride = null, changeType = "branding") => {
+  const autoSaveBranding = async ({
+    skipLogo = true,
+    immediate = false,
+    appearance: appearanceOverride = appearance,
+    accentColor: accentOverride = undefined,
+    keepZohoBranding: keepZohoOverride = keepZohoBranding,
+    logo: logoOverride = undefined,
+    changeType = "branding",
+  } = {}) => {
     // Don't save during initial load
     if (isInitialLoad) return;
 
@@ -314,10 +379,15 @@ export default function BrandingPage({ onColorChange }) {
 
         // Use override appearance if provided, otherwise use state
         const currentAppearance = appearanceOverride || appearance;
+        const currentAccentColor =
+          typeof accentOverride === "string"
+            ? accentOverride
+            : (accentColor === "custom" ? customColor : (accentColors.find(c => c.name === accentColor)?.value || "#3b82f6"));
+        const currentKeepZohoBranding = typeof keepZohoOverride === "boolean" ? keepZohoOverride : keepZohoBranding;
 
         // Convert logo to base64 if image file is selected (only if not skipping)
-        let logoBase64 = logoPreview || "";
-        if (!skipLogo && logoImage) {
+        let logoBase64 = typeof logoOverride === "string" ? logoOverride : (logoPreview || "");
+        if (typeof logoOverride !== "string" && !skipLogo && logoImage) {
           try {
             const reader = new FileReader();
             logoBase64 = await new Promise((resolve, reject) => {
@@ -343,10 +413,6 @@ export default function BrandingPage({ onColorChange }) {
           }
         }
 
-        const selectedColorValue = accentColor === "custom"
-          ? customColor
-          : accentColors.find(c => c.name === accentColor)?.value || "#3b82f6";
-
         // Set sidebar colors based on appearance
         // Dark mode: Solid New button color
         const darkColor = "#156372"; // Solid New button color (same for from and to)
@@ -356,8 +422,8 @@ export default function BrandingPage({ onColorChange }) {
 
         const brandingData: any = {
           appearance: currentAppearance,
-          accentColor: selectedColorValue,
-          keepZohoBranding: keepZohoBranding,
+          accentColor: currentAccentColor,
+          keepZohoBranding: currentKeepZohoBranding,
           sidebarDarkFrom: darkColor,
           sidebarDarkTo: darkColor, // Same color for solid (no gradient)
           sidebarLightFrom: lightGreyFrom,
@@ -365,7 +431,7 @@ export default function BrandingPage({ onColorChange }) {
         };
 
         // Only include logo if we're not skipping it
-        if (!skipLogo) {
+        if (!skipLogo || typeof logoOverride === "string") {
           brandingData.logo = logoBase64;
         }
 
@@ -381,14 +447,15 @@ export default function BrandingPage({ onColorChange }) {
         if (response.ok) {
           const data = await response.json();
           if (data.success) {
+            const savedBranding = data.data || brandingData;
             // Update sidebar in real-time by dispatching event with appropriate colors
             const darkColor = "#156372"; // Solid New button color
             const lightGreyFrom = "#f9fafb"; // bg-gray-50
             const lightGreyTo = "#f3f4f6"; // bg-gray-100
             const eventData = {
-              appearance: currentAppearance,
-              accentColor: selectedColorValue,
-              logo: brandingData.logo, // Include logo in the event
+              appearance: savedBranding.appearance || currentAppearance,
+              accentColor: savedBranding.accentColor || currentAccentColor,
+              logo: savedBranding.logo ?? brandingData.logo ?? "",
               sidebarDarkFrom: darkColor,
               sidebarDarkTo: darkColor,
               sidebarLightFrom: lightGreyFrom,
@@ -426,54 +493,19 @@ export default function BrandingPage({ onColorChange }) {
     }
   };
 
-  // Auto-save when appearance changes - but skip if triggered by button click (already handled with immediate save)
-  // Note: Button clicks already handle the save immediately, this is a backup for programmatic changes
   useEffect(() => {
-    if (!isInitialLoad && appearance) {
-      // Use very short delay for appearance changes to save faster
-      // The button click handler already saves immediately, so this is just a backup
-      const timeoutId = setTimeout(() => {
-        autoSaveBranding(true, null, false, appearance, "appearance"); // Pass appearance and changeType
-      }, 50); // Slightly longer delay to let button click save first
-      return () => clearTimeout(timeoutId);
-    }
+    if (!isInitialLoad || accentColor !== "custom") return;
+    autoSaveBranding({
+      immediate: true,
+      changeType: "accent",
+      accentColor: customColor,
+      appearance,
+      skipLogo: true,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appearance]);
+  }, [customColor]);
 
-  // Auto-save and update UI when accent color changes
-  useEffect(() => {
-    if (!isInitialLoad) {
-      // Immediate UI update for custom color changes (e.g. while dragging color picker)
-      const selectedColorValue = accentColor === "custom"
-        ? customColor
-        : accentColors.find(c => c.name === accentColor)?.value || "#3b82f6";
-
-      const darkColor = "#0c4c59ff";
-      const lightGreyFrom = "#f9fafb";
-      const lightGreyTo = "#f3f4f6";
-
-      const eventData = {
-        appearance: appearance,
-        accentColor: selectedColorValue,
-        sidebarDarkFrom: darkColor,
-        sidebarDarkTo: darkColor,
-        sidebarLightFrom: lightGreyFrom,
-        sidebarLightTo: lightGreyTo
-      };
-      window.dispatchEvent(new CustomEvent('brandingUpdated', { detail: eventData }));
-
-      autoSaveBranding(true, null, false, null, "accent"); // Skip logo, pass "accent" as changeType
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accentColor, customColor]);
-
-  // Auto-save when keepZohoBranding changes
-  useEffect(() => {
-    if (!isInitialLoad) {
-      autoSaveBranding(true); // Skip logo for toggle changes
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [keepZohoBranding]);
+  // Autosave now happens directly inside the change handlers.
 
   return (
     <div className="p-6 max-w-4xl">
@@ -565,7 +597,13 @@ export default function BrandingPage({ onColorChange }) {
                 clearTimeout(saveTimeoutRef.current);
               }
               // Force immediate save without debounce, passing the appearance value
-              autoSaveBranding(true, null, true, newAppearance, "appearance");
+              autoSaveBranding({
+                immediate: true,
+                changeType: "appearance",
+                appearance: newAppearance,
+                accentColor: selectedColor,
+                skipLogo: true,
+              });
             }}
             className={`p-3 rounded-lg border-2 transition ${appearance === "dark"
               ? "border-blue-500 bg-blue-50"
@@ -608,7 +646,13 @@ export default function BrandingPage({ onColorChange }) {
                 clearTimeout(saveTimeoutRef.current);
               }
               // Force immediate save without debounce, passing the appearance value
-              autoSaveBranding(true, null, true, newAppearance, "appearance");
+              autoSaveBranding({
+                immediate: true,
+                changeType: "appearance",
+                appearance: newAppearance,
+                accentColor: selectedColor,
+                skipLogo: true,
+              });
             }}
             className={`p-3 rounded-lg border-2 transition ${appearance === "light"
               ? "border-blue-500 bg-blue-50"
@@ -641,24 +685,33 @@ export default function BrandingPage({ onColorChange }) {
           </button>
         </div>
         <div className="flex gap-3 mb-4">
-          {accentColors.map((color) => (
-            <button
-              key={color.name}
-              onClick={() => handleColorChange(color.name)}
-              className={`w-12 h-12 rounded-lg border-2 transition relative ${accentColor === color.name
-                ? "border-gray-800 ring-2 ring-offset-2 ring-gray-300"
-                : "border-gray-300 hover:border-gray-400"
-                }`}
-              style={{ backgroundColor: color.value }}
-              title={color.label}
-            >
-              {accentColor === color.name && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <Check size={20} className="text-white drop-shadow-lg" />
-                </div>
-              )}
-            </button>
-          ))}
+          {accentColors.map((color) => {
+            const isSelected = accentColor === color.name;
+            const isWhite = color.name === "white";
+
+            return (
+              <button
+                key={color.name}
+                onClick={() => handleColorChange(color.name)}
+                className={`h-12 rounded-lg border-2 transition relative flex items-center justify-center ${isSelected
+                  ? "px-3 min-w-[92px] gap-1 border-gray-800 ring-2 ring-offset-2 ring-gray-300"
+                  : "w-12 border-gray-300 hover:border-gray-400"
+                  }`}
+                style={{
+                  backgroundColor: color.value,
+                  color: isWhite ? "#1f2937" : "#ffffff",
+                }}
+                title={color.label}
+              >
+                {isSelected && (
+                  <span className={`inline-flex items-center gap-1 text-xs font-semibold ${isWhite ? "text-gray-800" : "text-white"}`}>
+                    <Check size={14} className={isWhite ? "text-gray-800" : "text-white"} />
+                    {color.label}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
         <p className="text-sm text-gray-600">
           Note: These preferences will be applied across Taban Finance apps, including the customer and vendor portals.

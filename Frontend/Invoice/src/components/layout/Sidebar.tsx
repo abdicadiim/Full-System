@@ -421,6 +421,10 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
 
   const sidebarColor = settings?.theme?.sidebarColor || "#1f2647";
   const isLightAppearance = settings?.branding?.appearance === "light";
+  const accentColor = String(settings?.theme?.accentColor || "#3b82f6").trim();
+  const isLightAccent = accentColor.toLowerCase() === "#ffffff" || accentColor.toLowerCase() === "#fff" || accentColor.toLowerCase() === "white";
+  const activeSidebarColor = accentColor;
+  const activeSidebarTextColor = isLightAccent ? "#1f2937" : "#ffffff";
 
   const linkClasses = (isActive, isSpecial = false, isDropdownOpen = false, hasSubMenu = false) =>
     [
@@ -431,7 +435,7 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
             ? "border border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
             : "border border-[#4f5d83] bg-[#303a5d] text-white hover:bg-[#36406a]")
         : isActive
-          ? (isLightAppearance ? "bg-slate-200 text-slate-900 hover:bg-slate-200" : "bg-[#3b82f6] text-white hover:bg-[#3b82f6]")
+          ? "font-semibold text-white"
           : (isLightAppearance ? "text-slate-700 hover:bg-slate-200/70" : "text-white hover:bg-white/10"),
     ].join(" ");
 
@@ -614,7 +618,7 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
                             className={() =>
                               linkClasses(isActive || isParentActive, isSpecial, isDropdownOpen, hasSubMenu)
                             }
-                            style={{ textDecoration: "none" }}
+                            style={(isActive || isParentActive) && !isSpecial ? { textDecoration: "none", backgroundColor: activeSidebarColor, color: activeSidebarTextColor, boxShadow: `0 0 0 1px ${activeSidebarColor} inset` } : { textDecoration: "none" }}
                           >
                             {!isSpecial && !isCollapsed && hasSubMenu && (
                               <span
