@@ -25,8 +25,18 @@ import NewVendorModal from "../bills/NewVendorModal";
 import { vendorsAPI, customersAPI, expensesAPI, chartOfAccountsAPI, journalEntriesAPI, projectsAPI, currenciesAPI as dbCurrenciesAPI, taxesAPI, reportingTagsAPI, locationsAPI } from "../../../services/api";
 import NewCurrencyModal from "../../settings/organization-settings/setup-configurations/currencies/NewCurrencyModal";
 import NewTaxModal from "../../../../components/modals/NewTaxModal";
-import { TAX_GROUP_MARKER, createTaxLocal, isTaxGroupRecord, readTaxesLocal } from "../../settings/organization-settings/taxes-compliance/TAX/storage";
+import { createTaxLocal, readTaxesLocal } from "../../settings/organization-settings/taxes-compliance/TAX/storage";
 import { useCurrency } from "../../../hooks/useCurrency";
+import {
+  getTaxId,
+  getTaxName,
+  getTaxRate,
+  isTaxActive,
+  normalizeCreatedTaxPayload,
+  taxLabel,
+  useTaxDropdownStyle,
+  useTaxQuickCreateState,
+} from "../../../hooks/Taxdropdownstyle";
 import { filterActiveRecords } from "../shared/activeFilters";
 import RecordMileage from "./RecordMileage";
 import { toast } from "react-toastify";
@@ -399,8 +409,12 @@ export default function RecordExpense() {
   const [bulkCategorySearch, setBulkCategorySearch] = useState("");
   const [bulkCurrencyOpenIndex, setBulkCurrencyOpenIndex] = useState<number | null>(null);
   const [bulkCurrencySearch, setBulkCurrencySearch] = useState("");
-  const [isNewTaxModalOpen, setIsNewTaxModalOpen] = useState(false);
-  const [newTaxTarget, setNewTaxTarget] = useState<{ type: "expense" } | { type: "itemized"; index: number } | null>(null);
+  const {
+    isNewTaxModalOpen,
+    newTaxTarget,
+    openNewTaxModal,
+    closeNewTaxModal,
+  } = useTaxQuickCreateState();
 
   const getFileExtension = (name: string) => {
     const parts = String(name || "").split(".");
@@ -2155,11 +2169,11 @@ export default function RecordExpense() {
   };
 
   const filteredPaidThrough = getFilteredPaidThrough();
-  const getTaxId = (tax: any) => String(tax?._id || tax?.id || tax?.tax_id || tax?.taxId || tax?.name || tax?.taxName || "");
-  const getTaxName = (tax: any) => String(tax?.name || tax?.taxName || tax?.tax_name || tax?.displayName || tax?.title || "").trim();
-  const getTaxRate = (tax: any) => Number(tax?.rate ?? tax?.taxPercentage ?? tax?.percentage ?? tax?.tax_rate ?? 0);
-  const isTaxActive = (tax: any) => tax?.isActive !== false && tax?.is_active !== false && String(tax?.status || "").toLowerCase() !== "inactive";
-  const taxLabel = (tax: any) => `${getTaxName(tax)} [${getTaxRate(tax)}%]`;
+  const { activeTaxes, filteredTaxGroups } = useTaxDropdownStyle({
+    taxes,
+    search: expenseTaxSearch,
+    selectedTaxId: formData.tax,
+  });
   const selectedExpenseTax = (Array.isArray(taxes) ? taxes : []).find(
     (tax: any) => getTaxId(tax) === String(formData.tax || "")
   );
@@ -2184,18 +2198,14 @@ export default function RecordExpense() {
   const filteredItemizedExpenseAccounts = ITEMIZED_EXPENSE_ACCOUNT_OPTIONS.filter((account) =>
     account.toLowerCase().includes(itemizedAccountSearch.toLowerCase())
   );
-  const activeTaxes = taxes.filter((tax: any) => isTaxActive(tax));
   const filteredItemizedTaxes = activeTaxes.filter((tax: any) => {
     const label = taxLabel(tax).toLowerCase();
     return label.includes(itemizedTaxSearch.toLowerCase());
   });
-  const filteredExpenseTaxes = activeTaxes.filter((tax: any) => {
-    const label = taxLabel(tax).toLowerCase();
-    return label.includes(expenseTaxSearch.toLowerCase());
-  });
-  const filteredExpenseNormalTaxes = filteredExpenseTaxes.filter((tax: any) => !isTaxGroupRecord(tax) && !tax?.isCompound);
-  const filteredExpenseCompoundTaxes = filteredExpenseTaxes.filter((tax: any) => !isTaxGroupRecord(tax) && !!tax?.isCompound);
-  const filteredExpenseTaxGroups = filteredExpenseTaxes.filter((tax: any) => isTaxGroupRecord(tax) || tax?.description === TAX_GROUP_MARKER);
+  const filteredExpenseNormalTaxes = filteredTaxGroups.find((group) => group.label === "Tax")?.options || [];
+  const filteredExpenseCompoundTaxes = filteredTaxGroups.find((group) => group.label === "Compound tax")?.options || [];
+  const filteredExpenseTaxGroups = filteredTaxGroups.find((group) => group.label === "Tax Group")?.options || [];
+  const filteredExpenseTaxes = filteredTaxGroups.flatMap((group) => group.options);
   const hasExpenseTaxes = filteredExpenseTaxes.length > 0;
   const filteredCustomerProjects = customerProjects.filter((project) =>
     String(project?.name || "").toLowerCase().includes(projectSearch.toLowerCase())
@@ -2498,19 +2508,18 @@ export default function RecordExpense() {
     setExpenseTaxSearch("");
     setOpenItemizedTaxIndex(null);
     setItemizedTaxSearch("");
-    setNewTaxTarget(target);
-    setIsNewTaxModalOpen(true);
+    openNewTaxModal(target);
   };
 
   const handleTaxCreatedFromModal = async (payload: any) => {
-    let createdTax = payload?.tax || payload?.data || payload;
-    const inputName = String(createdTax?.name || createdTax?.taxName || "").trim();
-    const inputRate = Number(createdTax?.rate ?? createdTax?.taxPercentage ?? createdTax?.percentage ?? 0);
-    const inputIsCompound = createdTax?.isCompound === true || createdTax?.is_compound === true;
+    const normalizedInput = normalizeCreatedTaxPayload(payload);
+    let createdTax = normalizedInput.raw;
+    const inputName = normalizedInput.name;
+    const inputRate = normalizedInput.rate;
+    const inputIsCompound = normalizedInput.isCompound;
 
     if (!inputName) {
-      setIsNewTaxModalOpen(false);
-      setNewTaxTarget(null);
+      closeNewTaxModal();
       return;
     }
 
@@ -2580,8 +2589,7 @@ export default function RecordExpense() {
       });
     }
 
-    setIsNewTaxModalOpen(false);
-    setNewTaxTarget(null);
+    closeNewTaxModal();
   };
 
 
@@ -5998,10 +6006,7 @@ export default function RecordExpense() {
 
         <NewTaxModal
           isOpen={isNewTaxModalOpen}
-          onClose={() => {
-            setIsNewTaxModalOpen(false);
-            setNewTaxTarget(null);
-          }}
+          onClose={closeNewTaxModal}
           onCreated={handleTaxCreatedFromModal}
         />
 

@@ -7,6 +7,7 @@ import { toast } from "react-toastify";
 import DatePicker from "../../../components/DatePicker";
 import { chartOfAccountsAPI, customersAPI, locationsAPI, projectsAPI, reportingTagsAPI, settingsAPI, taxesAPI } from "../../../services/api";
 import { useCurrency } from "../../../hooks/useCurrency";
+import { useTaxDropdownStyle } from "../../../hooks/Taxdropdownstyle";
 import { filterActiveRecords } from "../shared/activeFilters";
 
 const safeReadLocalArray = (keys: string[]) => {
@@ -300,15 +301,6 @@ export default function RecordMileage({ onClose }: RecordMileageProps) {
             location?.branchName ||
             location?.displayName
         );
-    const getTaxId = (tax: any) => normalizeText(tax?._id || tax?.id || tax?.tax_id || tax?.taxId);
-    const getTaxName = (tax: any) =>
-        normalizeText(tax?.name || tax?.taxName || tax?.tax_name || tax?.displayName || tax?.title);
-    const isTaxActive = (tax: any) => tax?.isActive !== false && tax?.is_active !== false && tax?.status !== "inactive";
-    const getTaxRate = (tax: any) => {
-        const raw = tax?.rate ?? tax?.taxRate ?? tax?.percentage ?? tax?.tax_percentage ?? 0;
-        const value = Number(raw);
-        return Number.isFinite(value) ? value : 0;
-    };
     const getCustomerId = (customer: any) => normalizeText(customer?._id || customer?.id);
     const getCustomerName = (customer: any) =>
         normalizeText(customer?.displayName || customer?.name || customer?.companyName);
@@ -329,57 +321,11 @@ export default function RecordMileage({ onClose }: RecordMileageProps) {
     const filteredLocationOptions = useMemo(() => {
         return locationOptions.filter((loc) => loc.toLowerCase().includes(locationSearch.toLowerCase()));
     }, [locationOptions, locationSearch]);
-    const taxOptions = useMemo(() => {
-        const rows = (Array.isArray(taxes) ? taxes : []).filter((tax: any) => isTaxActive(tax));
-        return rows
-            .map((tax: any) => ({
-                id: getTaxId(tax),
-                name: getTaxName(tax),
-                rate: getTaxRate(tax),
-                isGroup:
-                    tax?.isGroup === true ||
-                    String(tax?.kind || "").toLowerCase() === "group" ||
-                    String(tax?.type || "").toLowerCase() === "group" ||
-                    tax?.description === "__taban_tax_group__" ||
-                    (Array.isArray(tax?.groupTaxes) && tax.groupTaxes.length > 0),
-                isCompound: Boolean(tax?.isCompound),
-            }))
-            .filter((row) => row.id && row.name);
-    }, [taxes]);
-    const taxOptionGroups = useMemo(() => {
-        const taxRows: any[] = [];
-        const compoundRows: any[] = [];
-        const groupRows: any[] = [];
-
-        taxOptions.forEach((tax) => {
-            if (tax.isGroup) {
-                groupRows.push(tax);
-            } else if (tax.isCompound) {
-                compoundRows.push(tax);
-            } else {
-                taxRows.push(tax);
-            }
-        });
-
-        return [
-            { label: "Tax", options: taxRows },
-            { label: "Compound tax", options: compoundRows },
-            { label: "Tax Group", options: groupRows },
-        ].filter((group) => group.options.length > 0);
-    }, [taxOptions]);
-    const filteredTaxGroups = useMemo(() => {
-        const keyword = taxSearch.toLowerCase();
-        return taxOptionGroups
-            .map((group) => ({
-                ...group,
-                options: group.options.filter((tax: any) => `${tax.name} [${tax.rate}%]`.toLowerCase().includes(keyword)),
-            }))
-            .filter((group) => group.options.length > 0);
-    }, [taxOptionGroups, taxSearch]);
-    const selectedTaxOption = useMemo(
-        () => taxOptions.find((tax) => tax.id === String(formData.tax || "")),
-        [taxOptions, formData.tax]
-    );
+    const { filteredTaxGroups, selectedTaxOption } = useTaxDropdownStyle({
+        taxes,
+        search: taxSearch,
+        selectedTaxId: formData.tax,
+    });
     const customerOptions = useMemo(() => {
         return (Array.isArray(customers) ? customers : [])
             .map((customer: any) => ({
