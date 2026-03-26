@@ -1453,6 +1453,20 @@ const QuoteDetail = () => {
         quoteNumber: quote.quoteNumber || quote.id
       };
 
+      // Mark quote as invoiced on convert (keeps list/detail in sync)
+      const nextStatus = "invoiced";
+      try {
+        updateQuote(quoteId, { status: nextStatus });
+      } catch (error) {
+        console.warn("Failed to update quote status after convert:", error);
+      }
+      setQuote((prev: any) => (prev ? { ...prev, status: nextStatus } : prev));
+      setAllQuotes((prev: any[]) =>
+        Array.isArray(prev)
+          ? prev.map((row: any) => (String(row?._id || row?.id) === String(quoteId) ? { ...row, status: nextStatus } : row))
+          : prev
+      );
+
       // Navigate to new invoice page with quote data
       navigate('/sales/invoices/new', { state: { quoteData } });
     } catch (error) {

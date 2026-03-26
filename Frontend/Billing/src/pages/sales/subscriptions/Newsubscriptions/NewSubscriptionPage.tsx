@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import {
     Search,
@@ -2166,17 +2166,17 @@ const NewSubscriptionPage = () => {
                                                                 <button
                                                                     key={customer.id}
                                                                     onClick={() => handleCustomerSelect(customer)}
-                                                                    className="w-full text-left px-4 py-3 hover:bg-blue-600 hover:text-white group flex items-start gap-3 border-b border-gray-50 last:border-0 transition-colors"
+                                                                    className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-start gap-3 border-b border-gray-50 last:border-0 transition-colors"
                                                                 >
-                                                                    <div className="w-10 h-10 rounded-full bg-gray-100 group-hover:bg-blue-500/30 flex items-center justify-center text-[14px] font-bold text-gray-400 group-hover:text-white shrink-0">
+                                                                    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-[14px] font-bold text-gray-500 shrink-0">
                                                                         {customer.name?.charAt(0) || "C"}
                                                                     </div>
                                                                     <div className="min-w-0 flex-1">
                                                                         <div className="flex items-center justify-between">
-                                                                            <span className="font-bold text-[13px] truncate">{customer.name} | {customer.id}</span>
-                                                                            {formData.customerId === customer.id && <Check size={14} className="text-white shrink-0" />}
+                                                                            <span className="font-bold text-[13px] text-gray-800 truncate">{customer.name} | {customer.id}</span>
+                                                                            {formData.customerId === customer.id && <Check size={14} className="text-[#156372] shrink-0" />}
                                                                         </div>
-                                                                        <div className="text-[12px] opacity-70 truncate">
+                                                                        <div className="text-[12px] text-gray-500 truncate mt-0.5">
                                                                             {customer.email || "No email"} | {customer.companyName || "No Company"}
                                                                         </div>
                                                                     </div>

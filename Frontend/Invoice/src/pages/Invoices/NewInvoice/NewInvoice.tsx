@@ -40,7 +40,7 @@ import {
   AlertTriangle,
   Loader2
 } from "lucide-react";
-import { saveInvoice, getInvoiceById, updateInvoice, getTaxes, saveTax, deleteTax, Customer, Tax, Salesperson, Invoice, ContactPerson } from "../../salesModel";
+import { saveInvoice, getInvoiceById, updateInvoice, updateQuote, getTaxes, saveTax, deleteTax, Customer, Tax, Salesperson, Invoice, ContactPerson } from "../../salesModel";
 import { getAllDocuments } from "../../../utils/documentStorage";
 import { customersAPI, salespersonsAPI, projectsAPI, invoicesAPI, itemsAPI, bankAccountsAPI, currenciesAPI, transactionNumberSeriesAPI, chartOfAccountsAPI, accountantAPI, reportingTagsAPI, priceListsAPI } from "../../../services/api";
 import { useCurrency } from "../../../hooks/useCurrency";
@@ -158,6 +158,7 @@ const location = useLocation();
 const isEditMode = Boolean(id);
 const quoteDataFromState: any = (location as any)?.state?.quoteData || null;
 const hasAppliedQuotePrefillRef = useRef(false);
+const convertedFromQuoteIdRef = useRef<string | null>(null);
 const settingsDropdownRef = useRef<HTMLDivElement>(null);
 const [isSettingsDropdownOpen, setIsSettingsDropdownOpen] = useState(false);
 const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
@@ -1403,6 +1404,9 @@ useEffect(() => {
   if (hasAppliedQuotePrefillRef.current) return;
   hasAppliedQuotePrefillRef.current = true;
 
+  const convertedQuoteId = quoteDataFromState?.convertedFromQuote || quoteDataFromState?.quoteId || quoteDataFromState?.id;
+  convertedFromQuoteIdRef.current = convertedQuoteId ? String(convertedQuoteId) : null;
+
   setFormData((prev) => {
     const quoteItems = Array.isArray(quoteDataFromState?.items) ? quoteDataFromState.items : [];
     const mappedItems =
@@ -1963,6 +1967,9 @@ const buildInvoicePayload = (statusValue: string) => {
   const itemRows = (formData.items as any[]).filter((item) => item.itemType !== "header");
 
   const payload = {
+    convertedFromQuote: convertedFromQuoteIdRef.current || quoteDataFromState?.convertedFromQuote || undefined,
+    sourceQuoteId: convertedFromQuoteIdRef.current || quoteDataFromState?.convertedFromQuote || undefined,
+    sourceQuoteNumber: quoteDataFromState?.quoteNumber || quoteDataFromState?.quoteNo || quoteDataFromState?.quote?.quoteNumber || undefined,
     invoiceNumber: formData.invoiceNumber,
     customer: customer?.id || customer?._id || undefined,
     customerId: customer?.id || customer?._id || undefined,
@@ -2120,6 +2127,19 @@ const createInvoiceWithNumberRetry = async (invoiceData: any) => {
       const freshNumber = await fetchLatestInvoiceNumber();
       if (freshNumber) {
         const retryPayload = { ...invoiceData, invoiceNumber: freshNumber };
+const updateQuoteAfterConversion = async (quoteStatus: string, savedInvoice: any, invoiceData: any) => {
+  const sourceQuoteId = convertedFromQuoteIdRef.current;
+  if (!sourceQuoteId) return;
+  const payload: any = { status: quoteStatus };
+  const invoiceId = savedInvoice?.id || savedInvoice?._id;
+  if (invoiceId) payload.convertedToInvoiceId = invoiceId;
+  if (invoiceData?.invoiceNumber) payload.convertedToInvoiceNumber = invoiceData.invoiceNumber;
+  try {
+    await updateQuote(String(sourceQuoteId), payload);
+  } catch (error) {
+    console.warn("Failed to update quote after conversion:", error);
+  }
+};
         return await saveInvoice(retryPayload);
       }
     }
@@ -5815,7 +5835,7 @@ return (
                               <div className="flex-1">
                                 <div className="font-medium text-gray-900">{selectedItem.name}</div>
                                 <div className="text-xs text-gray-500 mt-1">
-                                  SKU: {selectedItem.sku} • {formData.currency}{Number(selectedItem.rate || 0).toFixed(2)}
+                                  SKU: {selectedItem.sku} ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ {formData.currency}{Number(selectedItem.rate || 0).toFixed(2)}
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
