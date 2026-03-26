@@ -657,6 +657,15 @@ export default function SendQuoteEmail() {
         attachments: outgoingAttachments
       });
 
+      try {
+        await quotesAPI.update(quoteId, {
+          status: "Sent",
+          sentAt: new Date().toISOString(),
+        });
+      } catch (statusError) {
+        console.error("Failed to update quote status to Sent:", statusError);
+      }
+
       toast.success("Email sent successfully!");
       // Redirect to the quote detail page
       navigate(`/sales/quotes/${quoteId}`, { replace: true });

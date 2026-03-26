@@ -753,6 +753,7 @@ const projectsLocal = localResource(LOCAL_PROJECTS_KEY, "prj", defaultProjects);
 const timeEntriesLocal = localResource(LOCAL_TIME_ENTRIES_KEY, "te");
 const salesReceiptsLocal = localResource(LOCAL_SALES_RECEIPTS_KEY, "sr");
 const salespersonsLocal = localResource(LOCAL_SALESPERSONS_KEY, "sp", defaultSalespersons);
+const salespersonsResource = resource("/salespersons");
 const contactPersonsLocal = localResource(LOCAL_CONTACT_PERSONS_KEY, "cp");
 const bankAccountsLocal = localResource(LOCAL_BANK_ACCOUNTS_KEY, "ba", defaultBankAccounts);
 const paymentModesLocal = localResource(LOCAL_PAYMENT_MODES_KEY, "pm", defaultPaymentModes);
@@ -1784,7 +1785,8 @@ export const salesReceiptsAPI = {
 };
 
 export const salespersonsAPI = {
-  ...salespersonsLocal,
+  ...salespersonsResource,
+  local: salespersonsLocal,
 };
 
 export const contactPersonsAPI = {

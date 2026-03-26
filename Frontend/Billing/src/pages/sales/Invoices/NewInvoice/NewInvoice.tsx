@@ -1106,7 +1106,14 @@ const getTaxBySelection = (selection: any) => {
   return undefined;
 };
 const getItemBaseAmount = (item: any) => Number(item?.quantity || 0) * Number(item?.rate || 0);
-const getTaxAmountFromBase = (base: number, rate: number, _isInclusive: boolean) => (base * rate) / 100;
+const getTaxAmountFromBase = (base: number, rate: number, isInclusive: boolean) => {
+  if (!rate) return 0;
+  if (isInclusive) {
+    const divisor = 1 + rate / 100;
+    return base - base / divisor;
+  }
+  return (base * rate) / 100;
+};
 const calculateInvoiceTotalsFromData = (data: InvoiceFormState) => {
   const rows = (data.items || []).filter((item: any) => item?.itemType !== "header");
   const subTotal = rows.reduce((sum, item) => sum + getItemBaseAmount(item), 0);
@@ -1134,7 +1141,9 @@ const calculateInvoiceTotalsFromData = (data: InvoiceFormState) => {
   const shippingTaxRate = shippingTaxOption ? parseTaxRate((shippingTaxOption as any).rate) : 0;
   const shippingBase = showShippingCharges ? Number(data.shippingCharges || 0) : 0;
   const shippingTaxAmount = shippingTaxRate > 0 ? getTaxAmountFromBase(shippingBase, shippingTaxRate, isInclusive) : 0;
-  const total = netSubTotal + shippingBase + Number(data.adjustment || 0) + taxAmount + shippingTaxAmount;
+  const total = isInclusive
+    ? (netSubTotal + shippingBase + Number(data.adjustment || 0))
+    : (netSubTotal + shippingBase + Number(data.adjustment || 0) + taxAmount + shippingTaxAmount);
   return {
     subTotal,
     taxAmount,
@@ -1208,6 +1217,21 @@ const liveTotals = useMemo(
   () => calculateInvoiceTotalsFromData(formData),
   [formData, showShippingCharges, showTransactionDiscount, taxOptions]
 );
+useEffect(() => {
+  setFormData((prev) => {
+    const nextSubTotal = Number(liveTotals.subTotal || 0);
+    const nextTotal = Number(liveTotals.total || 0);
+    const nextRoundOff = Number(liveTotals.roundOff || 0);
+    if (
+      Number(prev.subTotal || 0) === nextSubTotal &&
+      Number(prev.total || 0) === nextTotal &&
+      Number(prev.roundOff || 0) === nextRoundOff
+    ) {
+      return prev;
+    }
+    return { ...prev, subTotal: nextSubTotal, total: nextTotal, roundOff: nextRoundOff };
+  });
+}, [liveTotals.subTotal, liveTotals.total, liveTotals.roundOff]);
 useEffect(() => {
   setInvoiceDateCalendar(new Date(parseDisplayDate(formData.invoiceDate).getFullYear(), parseDisplayDate(formData.invoiceDate).getMonth(), 1));
 }, [formData.invoiceDate]);
@@ -3505,7 +3529,7 @@ return (
               </table>
             </div>
 
-            <div className="mt-4 flex items-center gap-3">
+            <div className="mt-4 flex items-center gap-3 w-full justify-start pl-3">
               <div className="relative">
                 <button
                   className="relative flex h-9 items-center rounded-md border border-[#d7deef] bg-[#eef3ff] pl-3 pr-8 text-[13px] font-medium text-[#1f3f79] transition hover:bg-[#e7eefb]"
@@ -5791,7 +5815,7 @@ return (
                               <div className="flex-1">
                                 <div className="font-medium text-gray-900">{selectedItem.name}</div>
                                 <div className="text-xs text-gray-500 mt-1">
-                                  SKU: {selectedItem.sku} • {formData.currency}{Number(selectedItem.rate || 0).toFixed(2)}
+                                  SKU: {selectedItem.sku} â€¢ {formData.currency}{Number(selectedItem.rate || 0).toFixed(2)}
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">

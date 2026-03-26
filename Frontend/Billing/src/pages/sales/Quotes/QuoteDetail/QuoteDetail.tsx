@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import {
@@ -54,9 +54,12 @@ import { toast } from "react-toastify";
 const QuoteDetail = () => {
   const { quoteId } = useParams();
   const navigate = useNavigate();
-  const [quote, setQuote] = useState(null);
-  const [allQuotes, setAllQuotes] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const location = useLocation();
+  const preloadedQuote = (location.state as any)?.preloadedQuote || null;
+  const preloadedQuotes = (location.state as any)?.preloadedQuotes || null;
+  const [quote, setQuote] = useState(preloadedQuote);
+  const [allQuotes, setAllQuotes] = useState(preloadedQuotes || []);
+  const [loading, setLoading] = useState(!preloadedQuote);
   const [baseCurrency, setBaseCurrency] = useState("USD");
   const [activeTab, setActiveTab] = useState("details");
   const [showPdfView, setShowPdfView] = useState(true);
@@ -392,10 +395,19 @@ const QuoteDetail = () => {
   };
 
   useEffect(() => {
+    if (preloadedQuote) {
+      setQuote(preloadedQuote);
+    }
+    if (preloadedQuotes && Array.isArray(preloadedQuotes)) {
+      setAllQuotes(preloadedQuotes);
+    }
+  }, [preloadedQuote, preloadedQuotes, quoteId]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const init = async () => {
-      setLoading(true);
+      setLoading(!preloadedQuote);
 
       // These can load independently of the main quote payload.
       fetchOrganizationProfile();
@@ -410,7 +422,19 @@ const QuoteDetail = () => {
       if (cancelled) return;
 
       if (quotesResult.status === "fulfilled") {
-        setAllQuotes(quotesResult.value || []);
+        const loadedQuotes = quotesResult.value || [];
+        setAllQuotes(loadedQuotes);
+
+        if (!quoteId) {
+          // no-op
+        } else if (!quoteResult || quoteResult.status !== "fulfilled" || !quoteResult.value) {
+          const fallback = loadedQuotes.find((q: any) =>
+            String(q?.id || q?._id || q?.quoteId || q?.quoteNumber || "") === String(quoteId)
+          );
+          if (fallback) {
+            setQuote(fallback);
+          }
+        }
       } else {
         console.error("Error loading quotes:", quotesResult.reason);
         setAllQuotes([]);
@@ -969,12 +993,17 @@ const QuoteDetail = () => {
     }, 0);
     const subTotal = toNumber(quoteData?.subTotal ?? quoteData?.subtotal ?? computedSubTotal);
 
-    const shippingCharges = toNumber(quoteData?.shippingCharges ?? 0);
+    const shippingCharges = toNumber(
+      quoteData?.shippingCharges ??
+      quoteData?.shipping ??
+      quoteData?.shippingCharge ??
+      0
+    );
     const shippingTaxAmount = toNumber(quoteData?.shippingTaxAmount ?? quoteData?.shippingTax ?? 0);
     const taxAmountFromQuote = toNumber(quoteData?.totalTax ?? quoteData?.taxAmount ?? quoteData?.tax ?? 0);
     const itemsTaxAmount = items.reduce((sum, item) => sum + toNumber(item?.taxAmount ?? 0), 0);
     const taxAmount = taxAmountFromQuote || (itemsTaxAmount + shippingTaxAmount);
-    const discount = toNumber(quoteData?.discount ?? 0);
+    const discount = toNumber(quoteData?.discount ?? quoteData?.discountAmount ?? 0);
     const adjustment = toNumber(quoteData?.adjustment ?? 0);
     const roundOff = toNumber(quoteData?.roundOff ?? 0);
     const taxExclusive = quoteData?.taxExclusive || "Tax Exclusive";
@@ -1160,11 +1189,19 @@ const QuoteDetail = () => {
         };
       });
 
-      const sourceDiscountType = String(quote.discountType || "percent").toLowerCase() === "amount" ? "amount" : "percent";
-      const rawDiscount = toNumber(quote.discount);
+      const inferredDiscountType =
+        quote.discountType ||
+        ((toNumber(quote.discountAmount) > 0 && toNumber(quote.discount) <= 0) ? "amount" : "percent");
+      const sourceDiscountType = String(inferredDiscountType || "percent").toLowerCase() === "amount" ? "amount" : "percent";
+      const rawDiscount = toNumber(quote.discount ?? quote.discountAmount);
       const discountBase = Math.max(0, toNumber(totalsMeta.discountBase ?? totalsMeta.subTotal));
       const taxAmount = toNumber(totalsMeta.taxAmount);
-      const shippingCharges = toNumber(quote.shippingCharges ?? totalsMeta.shippingCharges);
+      const shippingCharges = toNumber(
+        quote.shippingCharges ??
+        (quote as any).shipping ??
+        (quote as any).shippingCharge ??
+        totalsMeta.shippingCharges
+      );
       const adjustment = toNumber(quote.adjustment);
       const roundOff = toNumber(quote.roundOff);
       const quoteTotal = toNumber(quote.total ?? quote.amount);
@@ -2503,13 +2540,8 @@ const QuoteDetail = () => {
     return name ? name.charAt(0).toUpperCase() : "?";
   };
 
-  if (loading) {
-    return (
-      <div className="w-full h-screen flex items-center justify-center bg-gray-50">
-        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-        <p>Loading quote details...</p>
-      </div>
-    );
+  if (!quote && loading) {
+    return null;
   }
 
   if (!quote) {
@@ -2539,7 +2571,29 @@ const QuoteDetail = () => {
   const isDraftStatus = quoteStatus === "draft";
   const isSentStatus = quoteStatus === "sent";
   const isAcceptedStatus = quoteStatus === "accepted";
+  const isDeclinedStatus = quoteStatus === "declined" || quoteStatus === "rejected";
   const isSimplifiedActionStatus = quoteStatus === "accepted" || isInvoicedStatus;
+  const statusRibbonConfig = (() => {
+    if (isSentStatus) {
+      return { label: "SENT", color: "#2F80FF" };
+    }
+    if (isApprovedStatus) {
+      return { label: "APPROVED", color: "#4CB8D9" };
+    }
+    if (isAcceptedStatus) {
+      return { label: "ACCEPTED", color: "#10B981" };
+    }
+    if (isDeclinedStatus) {
+      return { label: "DECLINED", color: "#F59E0B" };
+    }
+    if (isInvoicedStatus) {
+      return { label: "INVOICED", color: "#0D4A52" };
+    }
+    if (isExpiredStatus) {
+      return { label: "EXPIRED", color: "#EF4444" };
+    }
+    return { label: "DRAFT", color: "#6B7280" };
+  })();
   const hasPlanItems = (quote?.items || []).some((item: any) => {
     const entityType = String(item?.itemEntityType || item?.entityType || item?.item?.entityType || "").toLowerCase();
     const itemId = String(item?.itemId || item?.item?.id || item?.item?._id || item?.item || "").toLowerCase();
@@ -3058,7 +3112,7 @@ const QuoteDetail = () => {
                             setShowConvertDropdown(false);
                             handleConvertToInvoice();
                           }}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-md text-white bg-[#2F80FF] shadow-sm"
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-md text-white bg-[#0D4A52] shadow-sm"
                         >
                           <FileText size={14} />
                           Convert to Invoice
@@ -3080,7 +3134,7 @@ const QuoteDetail = () => {
 
             <div className="relative quote-detail-dropdown-wrapper">
               <button
-                className="p-1.5 bg-transparent text-gray-700 rounded-md cursor-pointer hover:text-[#156372]"
+                className="p-1.5 bg-transparent text-gray-700 rounded-md cursor-pointer"
                 onClick={() => {
                   setShowMoreDropdown(!showMoreDropdown);
                   setShowMailDropdown(false);
@@ -3095,19 +3149,17 @@ const QuoteDetail = () => {
                   {!isSimplifiedActionStatus && !isApprovedStatus && (
                     <>
                       <div
-                        className={`flex items-center gap-2 px-4 py-2 text-sm transition-colors group ${
-                          isExpiredStatus
-                            ? "bg-[#2F80FF] text-white rounded-md shadow-sm cursor-pointer"
-                            : "text-gray-700 cursor-pointer hover:bg-[#156372] hover:text-white"
+                        className={`flex items-center gap-2 px-4 py-2 text-sm ${
+                          isExpiredStatus ? "text-gray-700 cursor-pointer" : "text-gray-700 cursor-pointer"
                         }`}
                         onClick={handleMarkAsAccepted}
                       >
-                        <CheckCircle size={14} className={isExpiredStatus ? "text-white" : "group-hover:text-white"} />
+                        <CheckCircle size={14} />
                         Mark as Accepted
                       </div>
                       <div className="h-px bg-gray-100" />
-                      <div className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer transition-colors hover:bg-[#156372] hover:text-white group" onClick={handleMarkAsDeclined}>
-                        <XCircle size={14} className="group-hover:text-white" />
+                      <div className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer" onClick={handleMarkAsDeclined}>
+                        <XCircle size={14} />
                         Mark as Declined
                       </div>
                       <div className="h-px bg-gray-100" />
@@ -3116,7 +3168,7 @@ const QuoteDetail = () => {
                   {isApprovedStatus && (
                     <>
                       <div
-                        className="flex items-center gap-2 px-4 py-2 text-sm cursor-pointer bg-[#2F80FF] text-white"
+                        className="flex items-center gap-2 px-4 py-2 text-sm cursor-pointer text-gray-700"
                         onClick={() => {
                           setShowMoreDropdown(false);
                           handleMarkCurrentAsSent();
@@ -3129,31 +3181,22 @@ const QuoteDetail = () => {
                     </>
                   )}
                   <div
-                    className={`flex items-center gap-2 px-4 py-2 text-sm transition-colors group ${
-                      isCloningQuote
-                        ? "text-gray-400 cursor-not-allowed"
-                        : isInvoicedStatus
-                          ? "bg-[#2F80FF] text-white rounded-md shadow-sm cursor-pointer"
-                          : "text-gray-700 cursor-pointer hover:bg-[#156372] hover:text-white"
+                    className={`flex items-center gap-2 px-4 py-2 text-sm ${
+                      isCloningQuote ? "text-gray-400 cursor-not-allowed" : "text-gray-700 cursor-pointer"
                     }`}
                     onClick={handleDuplicateQuote}
                   >
-                    <Copy
-                      size={14}
-                      className={`${isCloningQuote ? "" : isInvoicedStatus ? "text-white" : "group-hover:text-white"} ${
-                        isCloningQuote ? "animate-spin" : ""
-                      }`}
-                    />
+                    <Copy size={14} className={`${isCloningQuote ? "animate-spin" : ""}`} />
                     {isCloningQuote ? "Cloning..." : "Clone"}
                   </div>
                   <div className="h-px bg-gray-100" />
-                  <div className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 cursor-pointer transition-colors hover:bg-[#156372] hover:text-white group" onClick={handleDeleteQuote}>
-                    <Trash2 size={14} className="group-hover:text-white" />
+                  <div className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 cursor-pointer" onClick={handleDeleteQuote}>
+                    <Trash2 size={14} />
                     Delete
                   </div>
                   <div className="h-px bg-gray-100" />
-                  <div className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer transition-colors hover:bg-[#156372] hover:text-white group" onClick={handleQuotePreferences}>
-                    <Settings size={14} className="group-hover:text-white" />
+                  <div className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer" onClick={handleQuotePreferences}>
+                    <Settings size={14} />
                     Quote Preferences
                   </div>
                 </div>
@@ -3168,14 +3211,14 @@ const QuoteDetail = () => {
                 <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gradient-to-r from-[#156372] to-[#0D4A52] text-white text-xs font-semibold">A</span>
                 <span className="font-medium text-gray-900">{String((quote as any)?.approvedByName || (quote as any)?.approvedBy || "Admin")}</span>
                 <span className="text-gray-400">•</span>
-                <button type="button" className="text-[#2563eb] hover:underline">View Approval Details</button>
+                <button type="button" className="text-[#0D4A52] hover:underline">View Approval Details</button>
               </div>
               <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 mb-4">
                 <span className="text-sm font-semibold text-gray-900">WHAT'S NEXT?</span>
                 <span className="text-sm text-gray-600">This quote has been approved. You can now email it to your customer or simply mark it as sent.</span>
                 <button
                   type="button"
-                  className="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-md text-sm font-semibold"
+                  className="px-4 py-1.5 bg-[#0D4A52] hover:bg-[#0B3F46] text-white rounded-md text-sm font-semibold"
                   onClick={handleSendEmail}
                 >
                   Send Quote
@@ -3199,7 +3242,7 @@ const QuoteDetail = () => {
                 {hasPlanItems ? (
                   <button
                     type="button"
-                    className="px-4 py-1.5 bg-[#2F80FF] hover:bg-[#276AE6] text-white rounded-md text-sm font-semibold"
+                    className="px-4 py-1.5 bg-[#0D4A52] hover:bg-[#0B3F46] text-white rounded-md text-sm font-semibold"
                     onClick={handleCreateSubscription}
                   >
                     Create Subscription
@@ -3207,7 +3250,7 @@ const QuoteDetail = () => {
                 ) : (
                   <button
                     type="button"
-                    className="px-4 py-1.5 bg-[#2F80FF] hover:bg-[#276AE6] text-white rounded-md text-sm font-semibold"
+                    className="px-4 py-1.5 bg-[#0D4A52] hover:bg-[#0B3F46] text-white rounded-md text-sm font-semibold"
                     onClick={handleConvertToInvoice}
                   >
                     Convert to Invoice
@@ -3232,7 +3275,7 @@ const QuoteDetail = () => {
                 {hasPlanItems ? (
                   <button
                     type="button"
-                    className="px-4 py-1.5 bg-[#2F80FF] hover:bg-[#276AE6] text-white rounded-md text-sm font-semibold"
+                    className="px-4 py-1.5 bg-[#0D4A52] hover:bg-[#0B3F46] text-white rounded-md text-sm font-semibold"
                     onClick={handleCreateSubscription}
                   >
                     Create Subscription
@@ -3240,7 +3283,7 @@ const QuoteDetail = () => {
                 ) : (
                   <button
                     type="button"
-                    className="px-4 py-1.5 bg-[#2F80FF] hover:bg-[#276AE6] text-white rounded-md text-sm font-semibold"
+                    className="px-4 py-1.5 bg-[#0D4A52] hover:bg-[#0B3F46] text-white rounded-md text-sm font-semibold"
                     onClick={handleConvertToInvoice}
                   >
                     Convert to Invoice
@@ -3287,7 +3330,7 @@ const QuoteDetail = () => {
                 <span className="text-sm text-gray-600">Go ahead and email this quote to your customer or simply mark it as sent.</span>
                 <button
                   type="button"
-                  className="px-4 py-1.5 bg-[#2F80FF] hover:bg-[#276AE6] text-white rounded-md text-sm font-semibold"
+                  className="px-4 py-1.5 bg-[#0D4A52] hover:bg-[#0B3F46] text-white rounded-md text-sm font-semibold"
                   onClick={handleSendEmail}
                 >
                   Send Quote
@@ -3362,190 +3405,37 @@ const QuoteDetail = () => {
                 <div
                   className="w-full max-w-[920px] mx-auto bg-white border border-[#d1d5db] shadow-sm overflow-hidden print-content"
                   data-print-content
-                  style={{ width: "210mm", maxWidth: "210mm", minHeight: "297mm", padding: "46px 40px 24px 40px", position: "relative" }}
-                  onMouseEnter={() => setIsQuoteDocumentHovered(true)}
-                  onMouseLeave={() => {
-                    setIsQuoteDocumentHovered(false);
-                    setIsCustomizeDropdownOpen(false);
-                  }}
+                  style={{ width: "210mm", maxWidth: "210mm", minHeight: "297mm", padding: "64px 40px 24px 40px", position: "relative" }}
                 >
-                  {/* Sent Ribbon */}
-                  {String(quote.status || "").toLowerCase() === "sent" && (
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: "120px",
-                        left: "-18px",
-                        zIndex: 10,
-                        transform: "rotate(-45deg)",
-                      }}
-                    >
-                      <div
-                        style={{
-                          backgroundColor: "#2F80FF",
-                          color: "white",
-                          padding: "6px 28px",
-                          fontSize: "12px",
-                          fontWeight: 700,
-                          letterSpacing: "0.5px",
-                          borderRadius: "6px",
-                          boxShadow: "0 6px 12px rgba(15, 23, 42, 0.18)",
-                        }}
-                      >
-                        SENT
-                      </div>
-                    </div>
-                  )}
-                  {String(quote.status || "").toLowerCase() === 'approved' && (
+                  {/* Status Ribbon */}
+                  <div style={{
+                    position: "absolute",
+                    top: "0",
+                    left: "0",
+                    width: "200px",
+                    height: "200px",
+                    overflow: "hidden",
+                    zIndex: 10
+                  }}>
                     <div style={{
                       position: "absolute",
-                      top: "0",
-                      left: "0",
+                      top: "40px",
+                      left: "-60px",
                       width: "200px",
-                      height: "200px",
-                      overflow: "hidden",
-                      zIndex: 10
+                      height: "30px",
+                      backgroundColor: statusRibbonConfig.color,
+                      color: "white",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "14px",
+                      fontWeight: "600",
+                      transform: "rotate(-45deg)",
+                      boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
                     }}>
-                      <div style={{
-                        position: "absolute",
-                        top: "40px",
-                        left: "-60px",
-                        width: "200px",
-                        height: "30px",
-                        backgroundColor: "#4CB8D9",
-                        color: "white",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "14px",
-                        fontWeight: "600",
-                        transform: "rotate(-45deg)",
-                        boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
-                      }}>
-                        APPROVED
-                      </div>
+                      {statusRibbonConfig.label}
                     </div>
-                  )}
-                  {String(quote.status || "").toLowerCase() === "accepted" && (
-                    <div style={{
-                      position: "absolute",
-                      top: "0",
-                      left: "0",
-                      width: "200px",
-                      height: "200px",
-                      overflow: "hidden",
-                      zIndex: 10
-                    }}>
-                      <div style={{
-                        position: "absolute",
-                        top: "40px",
-                        left: "-60px",
-                        width: "200px",
-                        height: "30px",
-                        backgroundColor: "#10B981",
-                        color: "white",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "14px",
-                        fontWeight: "600",
-                        transform: "rotate(-45deg)",
-                        boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
-                      }}>
-                        ACCEPTED
-                      </div>
-                    </div>
-                  )}
-                  {String(quote.status || "").toLowerCase() === "draft" && (
-                    <div style={{
-                      position: "absolute",
-                      top: "0",
-                      left: "0",
-                      width: "200px",
-                      height: "200px",
-                      overflow: "hidden",
-                      zIndex: 10
-                    }}>
-                      <div style={{
-                        position: "absolute",
-                        top: "40px",
-                        left: "-60px",
-                        width: "200px",
-                        height: "30px",
-                        backgroundColor: "#6B7280",
-                        color: "white",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "14px",
-                        fontWeight: "600",
-                        transform: "rotate(-45deg)",
-                        boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
-                      }}>
-                        DRAFT
-                      </div>
-                    </div>
-                  )}
-                  {['declined', 'rejected'].includes(String(quote.status || "").toLowerCase()) && (
-                    <div style={{
-                      position: "absolute",
-                      top: "0",
-                      left: "0",
-                      width: "200px",
-                      height: "200px",
-                      overflow: "hidden",
-                      zIndex: 10
-                    }}>
-                      <div style={{
-                        position: "absolute",
-                        top: "40px",
-                        left: "-60px",
-                        width: "200px",
-                        height: "30px",
-                        backgroundColor: "#F59E0B",
-                        color: "white",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "14px",
-                        fontWeight: "600",
-                        transform: "rotate(-45deg)",
-                        boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
-                      }}>
-                        DECLINED
-                      </div>
-                    </div>
-                  )}
-                  {(String(quote.status || "").toLowerCase() === 'invoiced' || String(quote.status || "").toLowerCase() === 'converted') && (
-                    <div style={{
-                      position: "absolute",
-                      top: "0",
-                      left: "0",
-                      width: "200px",
-                      height: "200px",
-                      overflow: "hidden",
-                      zIndex: 10
-                    }}>
-                      <div style={{
-                        position: "absolute",
-                        top: "40px",
-                        left: "-60px",
-                        width: "200px",
-                        height: "30px",
-                        backgroundColor: "#0D4A52",
-                        color: "white",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "14px",
-                        fontWeight: "600",
-                        transform: "rotate(-45deg)",
-                        boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
-                      }}>
-                        INVOICED
-                      </div>
-                    </div>
-                  )}
+                  </div>
 
                   {/* Header with Company Info */}
                   <div className="flex items-start justify-between mb-6 pb-5" style={{ position: "relative", borderBottom: "1px solid #e5e7eb" }}>
@@ -3572,53 +3462,6 @@ const QuoteDetail = () => {
                         # {quote.quoteNumber || quote.id}
                       </div>
                     </div>
-                    {/* Customize Button - appears on hover */}
-                    {isQuoteDocumentHovered && (
-                      <div className="absolute top-0 right-0 z-10" ref={customizeDropdownRef}>
-                        <button
-                          className="flex items-center gap-2 px-4 py-2 text-white rounded-md text-sm font-medium cursor-pointer transition-colors shadow-md"
-                          style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                          onMouseEnter={(e: any) => e.target.style.opacity = "0.9"}
-                          onMouseLeave={(e: any) => e.target.style.opacity = "1"}
-                          onClick={() => setIsCustomizeDropdownOpen(!isCustomizeDropdownOpen)}
-                        >
-                          <Settings size={16} />
-                          Customize
-                          <ChevronDown size={14} />
-                        </button>
-                        {isCustomizeDropdownOpen && (
-                          <div className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 min-w-[220px]">
-                            <div
-                              className="px-4 py-2 text-sm text-gray-600 cursor-pointer hover:bg-gray-50"
-                              onClick={() => {
-                                setIsCustomizeDropdownOpen(false);
-                                setIsOrganizationAddressModalOpen(true);
-                              }}
-                            >
-                              Update Logo & Address
-                            </div>
-                            <div
-                              className="px-4 py-2 text-sm text-gray-600 cursor-pointer hover:bg-gray-50"
-                              onClick={() => {
-                                setIsCustomizeDropdownOpen(false);
-                                navigate("/settings/quotes/customfields");
-                              }}
-                            >
-                              Manage Custom Fields
-                            </div>
-                            <div
-                              className="px-4 py-2 text-sm text-gray-600 cursor-pointer hover:bg-gray-50"
-                              onClick={() => {
-                                setIsCustomizeDropdownOpen(false);
-                                setIsTermsAndConditionsModalOpen(true);
-                              }}
-                            >
-                              Terms & Conditions
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </div>
 
                   {/* Bill To and Date Row */}
@@ -4891,7 +4734,7 @@ const QuoteDetail = () => {
               <div className="flex items-center justify-between p-6 border-b border-gray-200">
                 <h2 className="text-xl font-semibold text-gray-900">Attachments</h2>
                 <button
-                  className="w-8 h-8 flex items-center justify-center bg-blue-600 rounded text-white hover:bg-blue-700 cursor-pointer"
+                  className="w-8 h-8 flex items-center justify-center bg-[#0D4A52] rounded text-white hover:bg-[#0B3F46] cursor-pointer"
                   onClick={() => setShowAttachmentsModal(false)}
                 >
                   <X size={18} />
@@ -5056,7 +4899,7 @@ const QuoteDetail = () => {
               <div className="flex items-center justify-between p-6 border-b border-gray-200">
                 <h2 className="text-2xl font-bold text-gray-900">Comments</h2>
                 <button
-                  className="w-8 h-8 flex items-center justify-center bg-blue-600 rounded text-white hover:bg-blue-700 cursor-pointer"
+                  className="w-8 h-8 flex items-center justify-center bg-[#0D4A52] rounded text-white hover:bg-[#0B3F46] cursor-pointer"
                   onClick={() => setShowCommentsSidebar(false)}
                 >
                   <X size={18} />

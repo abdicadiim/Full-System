@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import {
@@ -54,9 +54,12 @@ import { toast } from "react-toastify";
 const QuoteDetail = () => {
   const { quoteId } = useParams();
   const navigate = useNavigate();
-  const [quote, setQuote] = useState(null);
-  const [allQuotes, setAllQuotes] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const location = useLocation();
+  const preloadedQuote = (location.state as any)?.preloadedQuote || null;
+  const preloadedQuotes = (location.state as any)?.preloadedQuotes || null;
+  const [quote, setQuote] = useState(preloadedQuote);
+  const [allQuotes, setAllQuotes] = useState(preloadedQuotes || []);
+  const [loading, setLoading] = useState(!preloadedQuote);
   const [baseCurrency, setBaseCurrency] = useState("USD");
   const [activeTab, setActiveTab] = useState("details");
   const [showPdfView, setShowPdfView] = useState(true);
@@ -395,10 +398,19 @@ const QuoteDetail = () => {
   };
 
   useEffect(() => {
+    if (preloadedQuote) {
+      setQuote(preloadedQuote);
+    }
+    if (preloadedQuotes && Array.isArray(preloadedQuotes)) {
+      setAllQuotes(preloadedQuotes);
+    }
+  }, [preloadedQuote, preloadedQuotes, quoteId]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const init = async () => {
-      setLoading(true);
+      setLoading(!preloadedQuote);
 
       // These can load independently of the main quote payload.
       fetchOrganizationProfile();
@@ -996,7 +1008,14 @@ const QuoteDetail = () => {
 
   // Navigate to quote
   const handleQuoteClick = (id) => {
-    navigate(`/sales/quotes/${id}`);
+    const nextQuote = (allQuotes || []).find((q) => q?.id === id) || null;
+    if (nextQuote) {
+      setQuote(nextQuote);
+      setLoading(false);
+    }
+    navigate(`/sales/quotes/${id}`, {
+      state: { preloadedQuote: nextQuote, preloadedQuotes: allQuotes }
+    });
   };
 
   // Create new quote
@@ -1159,12 +1178,17 @@ const QuoteDetail = () => {
     }, 0);
     const subTotal = toNumber(quoteData?.subTotal ?? quoteData?.subtotal ?? computedSubTotal);
 
-    const shippingCharges = toNumber(quoteData?.shippingCharges ?? 0);
+    const shippingCharges = toNumber(
+      quoteData?.shippingCharges ??
+      quoteData?.shipping ??
+      quoteData?.shippingCharge ??
+      0
+    );
     const shippingTaxAmount = toNumber(quoteData?.shippingTaxAmount ?? quoteData?.shippingTax ?? 0);
     const taxAmountFromQuote = toNumber(quoteData?.totalTax ?? quoteData?.taxAmount ?? quoteData?.tax ?? 0);
     const itemsTaxAmount = items.reduce((sum, item) => sum + toNumber(item?.taxAmount ?? 0), 0);
     const taxAmount = taxAmountFromQuote || (itemsTaxAmount + shippingTaxAmount);
-    const discount = toNumber(quoteData?.discount ?? 0);
+    const discount = toNumber(quoteData?.discount ?? quoteData?.discountAmount ?? 0);
     const adjustment = toNumber(quoteData?.adjustment ?? 0);
     const roundOff = toNumber(quoteData?.roundOff ?? 0);
     const taxExclusive = quoteData?.taxExclusive || "Tax Exclusive";
@@ -1341,11 +1365,19 @@ const QuoteDetail = () => {
         };
       });
 
-      const sourceDiscountType = String(quote.discountType || "percent").toLowerCase() === "amount" ? "amount" : "percent";
-      const rawDiscount = toNumber(quote.discount);
+      const inferredDiscountType =
+        quote.discountType ||
+        ((toNumber(quote.discountAmount) > 0 && toNumber(quote.discount) <= 0) ? "amount" : "percent");
+      const sourceDiscountType = String(inferredDiscountType || "percent").toLowerCase() === "amount" ? "amount" : "percent";
+      const rawDiscount = toNumber(quote.discount ?? quote.discountAmount);
       const discountBase = Math.max(0, toNumber(totalsMeta.discountBase ?? totalsMeta.subTotal));
       const taxAmount = toNumber(totalsMeta.taxAmount);
-      const shippingCharges = toNumber(quote.shippingCharges);
+      const shippingCharges = toNumber(
+        quote.shippingCharges ??
+        (quote as any).shipping ??
+        (quote as any).shippingCharge ??
+        totalsMeta.shippingCharges
+      );
       const adjustment = toNumber(quote.adjustment);
       const roundOff = toNumber(quote.roundOff);
       const quoteTotal = toNumber(quote.total ?? quote.amount);
@@ -2679,13 +2711,8 @@ const QuoteDetail = () => {
     return name ? name.charAt(0).toUpperCase() : "?";
   };
 
-  if (loading) {
-    return (
-      <div className="w-full h-screen flex items-center justify-center bg-gray-50">
-        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-        <p>Loading quote details...</p>
-      </div>
-    );
+  if (!quote && loading) {
+    return null;
   }
 
   if (!quote) {
@@ -2864,7 +2891,7 @@ const QuoteDetail = () => {
               </div>
               <div className="flex items-center gap-2 ml-2">
                 <button
-                  className="p-2 rounded-md cursor-pointer bg-[#3b82f6] hover:bg-[#2563eb] text-white border border-[#2563eb] shadow-sm"
+                  className="p-2 rounded-md cursor-pointer bg-[#0D4A52] hover:bg-[#0B3F46] text-white border border-[#156372] shadow-sm"
                   onClick={handleCreateNewQuote}
                   title="New Quote"
                 >
@@ -3228,7 +3255,7 @@ const QuoteDetail = () => {
 
             <div className="relative quote-detail-dropdown-wrapper">
               <button
-                className="p-1.5 bg-transparent text-gray-700 rounded-md cursor-pointer hover:text-[#2F80FF]"
+                className="p-1.5 bg-transparent text-gray-700 rounded-md cursor-pointer"
                 onClick={() => {
                   setShowMoreDropdown(!showMoreDropdown);
                   setShowMailDropdown(false);
@@ -3243,7 +3270,7 @@ const QuoteDetail = () => {
                   {isDeclinedStatus && (
                     <>
                       <div
-                        className="flex items-center gap-2 px-4 py-2 text-sm cursor-pointer bg-[#2F80FF] text-white"
+                        className="flex items-center gap-2 px-4 py-2 text-sm cursor-pointer text-gray-700"
                         onClick={handleMarkAsAccepted}
                       >
                         <CheckCircle size={14} />
@@ -3255,7 +3282,7 @@ const QuoteDetail = () => {
                   {(isSentStatus || isAcceptedStatus) && (
                     <>
                       <div
-                        className="flex items-center gap-2 px-4 py-2 text-sm cursor-pointer bg-[#2F80FF] text-white"
+                        className="flex items-center gap-2 px-4 py-2 text-sm cursor-pointer text-gray-700"
                         onClick={handleCreateProject}
                       >
                         <FolderPlus size={14} />
@@ -3268,19 +3295,17 @@ const QuoteDetail = () => {
                   {!isSimplifiedActionStatus && !isApprovedStatus && isSentStatus && (
                     <>
                       <div
-                        className={`flex items-center gap-2 px-4 py-2 text-sm transition-colors group ${
-                          isExpiredStatus
-                            ? "bg-[#2F80FF] text-white rounded-md shadow-sm cursor-pointer"
-                            : "text-gray-700 cursor-pointer hover:bg-[#2F80FF] hover:text-white"
+                        className={`flex items-center gap-2 px-4 py-2 text-sm ${
+                          isExpiredStatus ? "text-gray-700 cursor-pointer" : "text-gray-700 cursor-pointer"
                         }`}
                         onClick={handleMarkAsAccepted}
                       >
-                        <CheckCircle size={14} className={isExpiredStatus ? "text-white" : "group-hover:text-white"} />
+                        <CheckCircle size={14} />
                         Mark as Accepted
                       </div>
                       <div className="h-px bg-gray-100" />
-                      <div className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer transition-colors hover:bg-[#2F80FF] hover:text-white group" onClick={handleMarkAsDeclined}>
-                        <XCircle size={14} className="group-hover:text-white" />
+                      <div className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer" onClick={handleMarkAsDeclined}>
+                        <XCircle size={14} />
                         Mark as Declined
                       </div>
                       <div className="h-px bg-gray-100" />
@@ -3289,7 +3314,7 @@ const QuoteDetail = () => {
                   {(isApprovedStatus || isDraftStatus) && (
                     <>
                       <div
-                        className="flex items-center gap-2 px-4 py-2 text-sm cursor-pointer bg-[#2F80FF] text-white"
+                        className="flex items-center gap-2 px-4 py-2 text-sm cursor-pointer text-gray-700"
                         onClick={() => {
                           setShowMoreDropdown(false);
                           handleMarkCurrentAsSent();
@@ -3302,31 +3327,22 @@ const QuoteDetail = () => {
                     </>
                   )}
                   <div
-                    className={`flex items-center gap-2 px-4 py-2 text-sm transition-colors group ${
-                      isCloningQuote
-                        ? "text-gray-400 cursor-not-allowed"
-                        : isInvoicedStatus
-                          ? "bg-[#2F80FF] text-white rounded-md shadow-sm cursor-pointer"
-                          : "text-gray-700 cursor-pointer hover:bg-[#2F80FF] hover:text-white"
-                      }`}
-                      onClick={handleDuplicateQuote}
-                    >
-                    <Copy
-                      size={14}
-                      className={`${isCloningQuote ? "" : isInvoicedStatus ? "text-white" : "group-hover:text-white"} ${
-                        isCloningQuote ? "animate-spin" : ""
-                      }`}
-                    />
+                    className={`flex items-center gap-2 px-4 py-2 text-sm ${
+                      isCloningQuote ? "text-gray-400 cursor-not-allowed" : "text-gray-700 cursor-pointer"
+                    }`}
+                    onClick={handleDuplicateQuote}
+                  >
+                    <Copy size={14} className={`${isCloningQuote ? "animate-spin" : ""}`} />
                     {isCloningQuote ? "Cloning..." : "Clone"}
                   </div>
                   <div className="h-px bg-gray-100" />
-                  <div className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 cursor-pointer transition-colors hover:bg-[#2F80FF] hover:text-white group" onClick={handleDeleteQuote}>
-                    <Trash2 size={14} className="group-hover:text-white" />
+                  <div className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 cursor-pointer" onClick={handleDeleteQuote}>
+                    <Trash2 size={14} />
                     Delete
                   </div>
                   <div className="h-px bg-gray-100" />
-                  <div className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer transition-colors hover:bg-[#2F80FF] hover:text-white group" onClick={handleQuotePreferences}>
-                    <Settings size={14} className="group-hover:text-white" />
+                  <div className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer" onClick={handleQuotePreferences}>
+                    <Settings size={14} />
                     Quote Preferences
                   </div>
                 </div>

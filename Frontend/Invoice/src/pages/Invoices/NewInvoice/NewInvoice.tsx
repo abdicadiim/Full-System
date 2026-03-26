@@ -30,6 +30,7 @@ import {
   File,
   FileText,
   Pencil,
+  CheckSquare,
   Printer,
   Lock,
   ClipboardList,
@@ -151,14 +152,12 @@ type CatalogPriceListOption = {
 };
 
 const NewInvoice: React.FC = () => {
- const navigate = useNavigate();
- const { id } = useParams();
- const location = useLocation();
- const isEditMode = Boolean(id);
- const quoteDataFromState: any = (location as any)?.state?.quoteData || null;
- const convertedFromQuoteId = String(quoteDataFromState?.convertedFromQuote || "").trim();
- const sourceQuoteNumber = String(quoteDataFromState?.quoteNumber || quoteDataFromState?.id || "").trim();
- const hasAppliedQuotePrefillRef = useRef(false);
+const navigate = useNavigate();
+const { id } = useParams();
+const location = useLocation();
+const isEditMode = Boolean(id);
+const quoteDataFromState: any = (location as any)?.state?.quoteData || null;
+const hasAppliedQuotePrefillRef = useRef(false);
 const settingsDropdownRef = useRef<HTMLDivElement>(null);
 const [isSettingsDropdownOpen, setIsSettingsDropdownOpen] = useState(false);
 const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
@@ -256,6 +255,7 @@ const [editingSalespersonId, setEditingSalespersonId] = useState<any>(null);
 const customerQuickActionFrameKey = 0;
 const isAutoSelectingCustomerFromQuickAction = false;
 const [isBulkAccountDropdownOpen, setIsBulkAccountDropdownOpen] = useState(false);
+const [isBulkActionsOpen, setIsBulkActionsOpen] = useState(false);
 const isBulkAddModalOpen = false;
 const [isBulkUpdateAccountModalOpen, setIsBulkUpdateAccountModalOpen] = useState(false);
 const [isBulkUpdateLineItemsActive, setIsBulkUpdateLineItemsActive] = useState(false);
@@ -310,30 +310,8 @@ const [isNewTaxQuickModalOpen, setIsNewTaxQuickModalOpen] = useState(false);
 const [newTaxTargetItemId, setNewTaxTargetItemId] = useState<string | number | null>(null);
 const [itemSearches, setItemSearches] = useState<Record<string, string>>({});
 const isCustomerActive = (customer: any) => {
-  const status = String(customer?.status ?? customer?.customerStatus ?? customer?.state ?? "")
-    .trim()
-    .toLowerCase();
-  if (status) return status === "active";
-
-  const rawIsActive = (customer as any)?.isActive ?? (customer as any)?.active ?? (customer as any)?.enabled;
-  if (typeof rawIsActive === "boolean") return rawIsActive;
-  if (typeof rawIsActive === "number") return rawIsActive === 1;
-  if (typeof rawIsActive === "string") {
-    const v = rawIsActive.trim().toLowerCase();
-    if (["true", "1", "yes", "active", "enabled"].includes(v)) return true;
-    if (["false", "0", "no", "inactive", "disabled"].includes(v)) return false;
-  }
-
-  const rawIsInactive = (customer as any)?.isInactive ?? (customer as any)?.inactive ?? (customer as any)?.disabled;
-  if (typeof rawIsInactive === "boolean") return !rawIsInactive;
-  if (typeof rawIsInactive === "number") return rawIsInactive === 0;
-  if (typeof rawIsInactive === "string") {
-    const v = rawIsInactive.trim().toLowerCase();
-    if (["true", "1", "yes"].includes(v)) return false;
-    if (["false", "0", "no"].includes(v)) return true;
-  }
-
-  return true;
+  const status = String(customer?.status || customer?.customerStatus || customer?.state || "active").toLowerCase();
+  return status !== "inactive";
 };
 const filteredCustomers = customers.filter((customer) => {
   if (!isCustomerActive(customer)) return false;
@@ -345,7 +323,34 @@ const filteredCustomers = customers.filter((customer) => {
 const getCustomerOptionId = (customer: any) => String(customer?.id || customer?._id || customer?.customerId || "");
 const getCustomerPrimaryName = (customer: any) => String(customer?.displayName || customer?.name || customer?.companyName || "Unnamed Customer");
 const getCustomerCode = (customer: any) => String(customer?.customerNumber || customer?.customerCode || customer?.contactNumber || customer?.code || "");
-const getCustomerEmail = (customer: any) => String(customer?.email || customer?.primaryEmail || "");
+const getCustomerEmail = (customer: any) => {
+  if (!customer) return "";
+  const direct =
+    customer?.email ||
+    customer?.primaryEmail ||
+    customer?.billingEmail ||
+    customer?.workEmail ||
+    customer?.contactEmail;
+  if (direct) return String(direct);
+
+  const contactPersons =
+    customer?.contactPersons ||
+    customer?.contacts ||
+    customer?.contactPersonsList ||
+    customer?.contactPerson;
+  if (Array.isArray(contactPersons)) {
+    const primary = contactPersons.find((c: any) => c?.isPrimary || c?.primary || c?.isDefault);
+    const primaryEmail = primary?.email || primary?.mail || "";
+    if (primaryEmail) return String(primaryEmail);
+    const firstWithEmail = contactPersons.find((c: any) => c?.email || c?.mail);
+    if (firstWithEmail?.email || firstWithEmail?.mail) return String(firstWithEmail?.email || firstWithEmail?.mail);
+  } else if (contactPersons && typeof contactPersons === "object") {
+    const email = (contactPersons as any)?.email || (contactPersons as any)?.mail;
+    if (email) return String(email);
+  }
+
+  return "";
+};
 const getCustomerCompany = (customer: any) => String(customer?.companyName || customer?.displayName || customer?.name || "");
 const getCustomerInitial = (customer: any) => getCustomerPrimaryName(customer).trim().charAt(0).toUpperCase() || "C";
 const filteredSalespersons = salespersons.filter((salesperson) =>
@@ -418,6 +423,7 @@ const [bulkSelectedItemIds, setBulkSelectedItemIds] = useState<any[]>([]);
 const accountsReceivableOptions = ["Accounts Receivable"];
 const depositToOptions = ["Petty Cash"];
 const paymentModeOptions = ["Cash", "Bank Transfer", "Check"];
+const taxExclusiveOptions = ["Tax Exclusive", "Tax Inclusive"];
 const [invoiceDateCalendar, setInvoiceDateCalendar] = useState(() => new Date());
 const [dueDateCalendar, setDueDateCalendar] = useState(() => new Date());
 const normalizeReportingTagOptions = (tag: any): string[] => {
@@ -464,6 +470,16 @@ const groupedAccountOptions = [
   { group: "Other Current Asset", options: ["Advance Tax", "Employee Advance", "Goods In Transit", "Prepaid Expenses"] },
   { group: "Fixed Asset", options: ["Furniture and Equipment", "Office Equipment", "Computer Hardware"] },
 ];
+const shouldPrefillFromProjects = Boolean((location.state as any)?.source === "timeTrackingProjects");
+const createEmptyInvoiceItem = () => ({
+  id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+  itemDetails: "",
+  quantity: 1,
+  rate: 0,
+  tax: "",
+  amount: 0
+});
+const initialInvoiceItems = [createEmptyInvoiceItem()];
 const [formData, setFormData] = useState<InvoiceFormState>({
   customerName: "",
   mobile: "",
@@ -480,7 +496,7 @@ const [formData, setFormData] = useState<InvoiceFormState>({
   subject: "",
   taxExclusive: "Tax Exclusive",
   selectedPriceList: "Select Price List",
-  items: [{ id: 1, itemDetails: "", quantity: 1, rate: 0, tax: "", amount: 0 }],
+  items: initialInvoiceItems,
   subTotal: 0,
   discount: 0,
   discountType: "percent",
@@ -496,7 +512,16 @@ const [formData, setFormData] = useState<InvoiceFormState>({
   attachedFiles: [],
   status: "draft"
 });
+const prefillAppliedRef = useRef(false);
 const [loadedInvoice, setLoadedInvoice] = useState<any>(null);
+const hasProjectItem = (item: any) =>
+  Boolean(
+    String(item?.projectId || item?.project || item?.projectName || "").trim()
+  );
+const standardLineItems = (formData.items || []).filter((item: any) => !hasProjectItem(item));
+const projectLineItems = (formData.items || []).filter((item: any) => hasProjectItem(item));
+const [projectEditTargetId, setProjectEditTargetId] = useState<string | number | null>(null);
+const [projectEditValue, setProjectEditValue] = useState("");
 const isCustomPaymentTerm = selectedPaymentTerm === "custom" || String(formData.receipt || "").toLowerCase() === "custom";
 const selectedPriceListOption = catalogPriceLists.find(
   (option) => option.name === ((formData as any).selectedPriceList || "")
@@ -610,7 +635,9 @@ const paymentTermsDropdownRef = useRef<HTMLDivElement | null>(null);
 const priceListDropdownRef = useRef<HTMLDivElement | null>(null);
 const salespersonDropdownRef = useRef<HTMLDivElement | null>(null);
 const shippingTaxDropdownRef = useRef<HTMLDivElement | null>(null);
+const taxExclusiveDropdownRef = useRef<HTMLDivElement | null>(null);
 const bulkAccountDropdownRef = useRef<HTMLDivElement | null>(null);
+const bulkActionsRef = useRef<HTMLDivElement | null>(null);
 const contactPersonImageRef = useRef<HTMLInputElement | null>(null);
 const newItemImageRef = useRef<HTMLInputElement | null>(null);
 const setCustomerSearchCriteria = noop;
@@ -660,6 +687,7 @@ useEffect(() => {
                 id: item?.id || item?._id || `item-${idx + 1}`,
                 itemId: item?.itemId || item?.productId,
                 itemDetails: String(item?.itemDetails || item?.name || item?.description || ""),
+                description: String(item?.description || item?.itemDetails || ""),
                 quantity,
                 rate,
                 tax: String(item?.tax || item?.taxId || item?.taxName || ""),
@@ -789,70 +817,6 @@ useEffect(() => {
     }));
   }
 }, [loadedInvoice, customers]);
-
-useEffect(() => {
-  if (isEditMode) return;
-  if (!quoteDataFromState) return;
-  if (hasAppliedQuotePrefillRef.current) return;
-  hasAppliedQuotePrefillRef.current = true;
-
-  setFormData((prev) => {
-    const quoteItems = Array.isArray(quoteDataFromState?.items) ? quoteDataFromState.items : [];
-    const mappedItems =
-      quoteItems.length > 0
-        ? quoteItems.map((item: any, index: number) => {
-          const quantity = Number(item?.quantity ?? 1) || 1;
-          const rate = Number(item?.rate ?? item?.unitPrice ?? item?.price ?? 0) || 0;
-          const amount = Number(item?.amount ?? item?.total ?? (quantity * rate) ?? 0) || 0;
-          return {
-            id: index + 1,
-            itemId: item?.itemId || item?.item?._id || item?.item?.id || item?.item || null,
-            itemDetails: item?.itemDetails || item?.name || item?.item?.name || "",
-            quantity,
-            rate,
-            tax: item?.taxId || item?.tax || "",
-            amount,
-          };
-        })
-        : prev.items;
-
-    return {
-      ...prev,
-      customerName: quoteDataFromState?.customerName || prev.customerName,
-      orderNumber: quoteDataFromState?.orderNumber || quoteDataFromState?.referenceNumber || prev.orderNumber,
-      invoiceDate: quoteDataFromState?.invoiceDate ? formatDate(quoteDataFromState.invoiceDate) : prev.invoiceDate,
-      dueDate: quoteDataFromState?.dueDate ? formatDate(quoteDataFromState.dueDate) : prev.dueDate,
-      salesperson: quoteDataFromState?.salesperson || prev.salesperson,
-      salespersonId: quoteDataFromState?.salespersonId || prev.salespersonId,
-      subject: quoteDataFromState?.subject || prev.subject,
-      taxExclusive: quoteDataFromState?.taxExclusive || prev.taxExclusive,
-      selectedPriceList: quoteDataFromState?.selectedPriceList || prev.selectedPriceList,
-      items: mappedItems as any,
-      subTotal: Number(quoteDataFromState?.subTotal ?? quoteDataFromState?.subtotal ?? prev.subTotal) || prev.subTotal,
-      discount: Number(quoteDataFromState?.discount ?? prev.discount) || prev.discount,
-      discountType: String(quoteDataFromState?.discountType || prev.discountType || "percent"),
-      shippingCharges: Number(quoteDataFromState?.shippingCharges ?? prev.shippingCharges) || prev.shippingCharges,
-      shippingChargeTax: String(quoteDataFromState?.shippingChargeTax || prev.shippingChargeTax || ""),
-      roundOff: Number(quoteDataFromState?.roundOff ?? prev.roundOff) || prev.roundOff,
-      adjustment: Number(quoteDataFromState?.adjustment ?? prev.adjustment) || prev.adjustment,
-      total: Number(quoteDataFromState?.total ?? prev.total) || prev.total,
-      currency: String(quoteDataFromState?.currency || prev.currency || "USD"),
-      customerNotes: String(quoteDataFromState?.customerNotes || prev.customerNotes || ""),
-      termsAndConditions: String(quoteDataFromState?.termsAndConditions || prev.termsAndConditions || ""),
-    };
-  });
-
-  const customerId = quoteDataFromState?.customerId || quoteDataFromState?.customer?._id || quoteDataFromState?.customer?.id || "";
-  if (customerId) {
-    setSelectedCustomer({
-      ...(quoteDataFromState?.customer || {}),
-      id: customerId,
-      _id: customerId,
-      displayName: quoteDataFromState?.customerName || quoteDataFromState?.customer?.displayName || "",
-      name: quoteDataFromState?.customerName || quoteDataFromState?.customer?.displayName || "",
-    });
-  }
-}, [isEditMode]);
 const setIsUploadDropdownOpen = noop;
 const setModalSelectedCustomerId = noop;
 const setNewHeaderText = noop;
@@ -1142,7 +1106,14 @@ const getTaxBySelection = (selection: any) => {
   return undefined;
 };
 const getItemBaseAmount = (item: any) => Number(item?.quantity || 0) * Number(item?.rate || 0);
-const getTaxAmountFromBase = (base: number, rate: number, _isInclusive: boolean) => (base * rate) / 100;
+const getTaxAmountFromBase = (base: number, rate: number, isInclusive: boolean) => {
+  if (!rate) return 0;
+  if (isInclusive) {
+    const divisor = 1 + rate / 100;
+    return base - base / divisor;
+  }
+  return (base * rate) / 100;
+};
 const calculateInvoiceTotalsFromData = (data: InvoiceFormState) => {
   const rows = (data.items || []).filter((item: any) => item?.itemType !== "header");
   const subTotal = rows.reduce((sum, item) => sum + getItemBaseAmount(item), 0);
@@ -1170,7 +1141,9 @@ const calculateInvoiceTotalsFromData = (data: InvoiceFormState) => {
   const shippingTaxRate = shippingTaxOption ? parseTaxRate((shippingTaxOption as any).rate) : 0;
   const shippingBase = showShippingCharges ? Number(data.shippingCharges || 0) : 0;
   const shippingTaxAmount = shippingTaxRate > 0 ? getTaxAmountFromBase(shippingBase, shippingTaxRate, isInclusive) : 0;
-  const total = netSubTotal + shippingBase + Number(data.adjustment || 0) + taxAmount + shippingTaxAmount;
+  const total = isInclusive
+    ? (netSubTotal + shippingBase + Number(data.adjustment || 0))
+    : (netSubTotal + shippingBase + Number(data.adjustment || 0) + taxAmount + shippingTaxAmount);
   return {
     subTotal,
     taxAmount,
@@ -1184,6 +1157,7 @@ const calculateInvoiceTotalsFromData = (data: InvoiceFormState) => {
 };
 
 useEffect(() => {
+  // Re-apply selected price list to invoice lines (keeps rates consistent)
   const list = selectedPriceList;
   setFormData((prev) => {
     const nextCurrency = list?.currency ? String(list.currency).trim() : prev.currency;
@@ -1243,6 +1217,21 @@ const liveTotals = useMemo(
   () => calculateInvoiceTotalsFromData(formData),
   [formData, showShippingCharges, showTransactionDiscount, taxOptions]
 );
+useEffect(() => {
+  setFormData((prev) => {
+    const nextSubTotal = Number(liveTotals.subTotal || 0);
+    const nextTotal = Number(liveTotals.total || 0);
+    const nextRoundOff = Number(liveTotals.roundOff || 0);
+    if (
+      Number(prev.subTotal || 0) === nextSubTotal &&
+      Number(prev.total || 0) === nextTotal &&
+      Number(prev.roundOff || 0) === nextRoundOff
+    ) {
+      return prev;
+    }
+    return { ...prev, subTotal: nextSubTotal, total: nextTotal, roundOff: nextRoundOff };
+  });
+}, [liveTotals.subTotal, liveTotals.total, liveTotals.roundOff]);
 useEffect(() => {
   setInvoiceDateCalendar(new Date(parseDisplayDate(formData.invoiceDate).getFullYear(), parseDisplayDate(formData.invoiceDate).getMonth(), 1));
 }, [formData.invoiceDate]);
@@ -1328,6 +1317,156 @@ useEffect(() => {
   };
   loadProjects();
 }, []);
+
+useEffect(() => {
+  if (prefillAppliedRef.current) return;
+  if (isEditMode) return;
+
+  const state = location.state as any;
+  if (!state || state.source !== "timeTrackingProjects") return;
+
+  const rawProjects = Array.isArray(state.projects) ? state.projects : [];
+  if (rawProjects.length === 0) return;
+
+  const customerId = String(state.customerId || rawProjects[0]?.customerId || "").trim();
+  const customerName = String(state.customerName || rawProjects[0]?.customerName || "").trim();
+
+  const matchedCustomer =
+    customers.find((c: any) => String(c?.id || c?._id || "") === customerId) ||
+    customers.find(
+      (c: any) =>
+        String(c?.name || c?.displayName || "").trim().toLowerCase() ===
+        String(customerName || "").trim().toLowerCase()
+    );
+
+  if (matchedCustomer) {
+    setSelectedCustomer(matchedCustomer);
+  } else if (customerName) {
+    setSelectedCustomer({ id: customerId || undefined, name: customerName, displayName: customerName });
+  }
+
+  const mappedItems = rawProjects.map((project: any, index: number) => {
+    const method = String(project?.billingMethod || "").toLowerCase();
+    const rateSource =
+      method === "fixed"
+        ? project?.totalProjectCost ?? project?.billingRate ?? project?.rate ?? 0
+        : project?.billingRate ?? project?.rate ?? 0;
+    const rate = Number(rateSource) || 0;
+    const quantity = 1;
+    const projectId = project?.id || project?.projectId || project?.project || "";
+    return {
+      id: Date.now() + index,
+      itemDetails: project?.projectName || project?.name || "Project",
+      quantity,
+      rate,
+      tax: "",
+      amount: rate * quantity,
+      description: project?.description || "",
+      projectId,
+      project: projectId,
+      projectName: project?.projectName || project?.name || "",
+    };
+  });
+
+  setFormData((prev) => {
+    const cleanedItems = mappedItems.filter((item) => {
+      const hasProject = String((item as any).projectId || (item as any).project || "").trim();
+      const hasDetails = String(item?.itemDetails || "").trim();
+      return hasProject || hasDetails;
+    });
+    const hasStandardItem = cleanedItems.some((item: any) => {
+      const hasProject = String((item as any).projectId || (item as any).project || (item as any).projectName || "").trim();
+      return !hasProject;
+    });
+    const mergedItems = hasStandardItem ? cleanedItems : [...cleanedItems, createEmptyInvoiceItem()];
+    const nextState = {
+      ...prev,
+      customerName: customerName || prev.customerName,
+      currency: String(rawProjects[0]?.currency || prev.currency || "USD"),
+      items: mergedItems.length > 0 ? mergedItems : prev.items,
+    } as InvoiceFormState;
+    const totals = calculateInvoiceTotalsFromData(nextState);
+    return {
+      ...nextState,
+      subTotal: totals.subTotal,
+      roundOff: totals.roundOff,
+      total: totals.total,
+    };
+  });
+
+  prefillAppliedRef.current = true;
+}, [location.state, customers, isEditMode]);
+
+useEffect(() => {
+  if (isEditMode) return;
+  if (!quoteDataFromState) return;
+  if (hasAppliedQuotePrefillRef.current) return;
+  hasAppliedQuotePrefillRef.current = true;
+
+  setFormData((prev) => {
+    const quoteItems = Array.isArray(quoteDataFromState?.items) ? quoteDataFromState.items : [];
+    const mappedItems =
+      quoteItems.length > 0
+        ? quoteItems.map((item: any, index: number) => {
+          const quantity = Number(item?.quantity ?? 1) || 1;
+          const rate = Number(item?.rate ?? item?.unitPrice ?? item?.price ?? 0) || 0;
+          const amount = Number(item?.amount ?? item?.total ?? (quantity * rate) ?? 0) || 0;
+          return {
+            id: index + 1,
+            itemId: item?.itemId || item?.item?._id || item?.item?.id || item?.item || null,
+            itemDetails: item?.itemDetails || item?.name || item?.item?.name || "",
+            description: item?.description || item?.itemDetails || "",
+            quantity,
+            rate,
+            tax: item?.taxId || item?.tax || "",
+            taxRate: Number(item?.taxRate || 0) || 0,
+            amount,
+            itemEntityType: item?.itemEntityType || item?.entityType || item?.item?.entityType || "item",
+            itemType: item?.itemType || "line",
+            catalogRate: Number(item?.catalogRate ?? item?.unitPrice ?? item?.rate ?? item?.price ?? rate) || rate,
+          };
+        })
+        : prev.items;
+
+    return {
+      ...prev,
+      customerName: quoteDataFromState?.customerName || prev.customerName,
+      orderNumber: quoteDataFromState?.orderNumber || quoteDataFromState?.referenceNumber || prev.orderNumber,
+      invoiceDate: quoteDataFromState?.invoiceDate ? formatDate(quoteDataFromState.invoiceDate) : prev.invoiceDate,
+      dueDate: quoteDataFromState?.dueDate ? formatDate(quoteDataFromState.dueDate) : prev.dueDate,
+      salesperson: quoteDataFromState?.salesperson || prev.salesperson,
+      salespersonId: quoteDataFromState?.salespersonId || prev.salespersonId,
+      subject: quoteDataFromState?.subject || prev.subject,
+      taxExclusive: quoteDataFromState?.taxExclusive || prev.taxExclusive,
+      selectedPriceList: quoteDataFromState?.selectedPriceList || (prev as any).selectedPriceList,
+      items: mappedItems as any,
+      subTotal: Number(quoteDataFromState?.subTotal ?? quoteDataFromState?.subtotal ?? prev.subTotal) || prev.subTotal,
+      discount: Number(quoteDataFromState?.discount ?? prev.discount) || prev.discount,
+      discountType: String(quoteDataFromState?.discountType || prev.discountType || "percent"),
+      discountAccount: quoteDataFromState?.discountAccount || prev.discountAccount,
+      shippingCharges: Number(quoteDataFromState?.shippingCharges ?? prev.shippingCharges) || prev.shippingCharges,
+      shippingChargeTax: String(quoteDataFromState?.shippingChargeTax || prev.shippingChargeTax || ""),
+      roundOff: Number(quoteDataFromState?.roundOff ?? prev.roundOff) || prev.roundOff,
+      adjustment: Number(quoteDataFromState?.adjustment ?? prev.adjustment) || prev.adjustment,
+      total: Number(quoteDataFromState?.total ?? prev.total) || prev.total,
+      currency: String(quoteDataFromState?.currency || prev.currency || "USD"),
+      customerNotes: String(quoteDataFromState?.customerNotes || prev.customerNotes || ""),
+      termsAndConditions: String(quoteDataFromState?.termsAndConditions || prev.termsAndConditions || ""),
+    } as InvoiceFormState;
+  });
+
+  const customerId = quoteDataFromState?.customerId || quoteDataFromState?.customer?._id || quoteDataFromState?.customer?.id || "";
+  if (customerId) {
+    setSelectedCustomer({
+      ...(quoteDataFromState?.customer || {}),
+      id: customerId,
+      _id: customerId,
+      displayName: quoteDataFromState?.customerName || quoteDataFromState?.customer?.displayName || "",
+      name: quoteDataFromState?.customerName || quoteDataFromState?.customer?.displayName || "",
+      email: quoteDataFromState?.customerEmail || (quoteDataFromState?.customer as any)?.email || (quoteDataFromState?.customer as any)?.primaryEmail || "",
+    });
+  }
+}, [isEditMode, quoteDataFromState]);
 
 useEffect(() => {
   const normalizeLocalTaxRow = (tax: any) => ({
@@ -1566,6 +1705,9 @@ useEffect(() => {
     if (priceListDropdownRef.current && !priceListDropdownRef.current.contains(event.target as Node)) {
       setIsPriceListDropdownOpen(false);
     }
+    if (bulkActionsRef.current && !bulkActionsRef.current.contains(event.target as Node)) {
+      setIsBulkActionsOpen(false);
+    }
     Object.keys(openItemDropdowns).forEach((itemId) => {
       if (openItemDropdowns[itemId]) {
         const ref = itemDropdownRefs.current[itemId];
@@ -1575,11 +1717,11 @@ useEffect(() => {
       }
     });
   };
-  if (isSalespersonDropdownOpen || isCustomerDropdownOpen || isPriceListDropdownOpen || Object.values(openItemDropdowns).some(Boolean)) {
+  if (isSalespersonDropdownOpen || isCustomerDropdownOpen || isPriceListDropdownOpen || isBulkActionsOpen || Object.values(openItemDropdowns).some(Boolean)) {
     document.addEventListener("mousedown", handleOutside);
   }
   return () => document.removeEventListener("mousedown", handleOutside);
-}, [isSalespersonDropdownOpen, isCustomerDropdownOpen, isPriceListDropdownOpen, openItemDropdowns]);
+}, [isSalespersonDropdownOpen, isCustomerDropdownOpen, isPriceListDropdownOpen, isBulkActionsOpen, openItemDropdowns]);
 
 const handleItemSelect = (itemId: number | string, selectedItem: any) => {
   setFormData((prev) => {
@@ -1713,7 +1855,7 @@ const handleRemoveItem = (id: number | string) => {
 };
 
 const handleSelectAllItems = () => {
-  setBulkSelectedItemIds(formData.items.map(item => item.id));
+  setBulkSelectedItemIds(standardLineItems.map(item => item.id));
 };
 
 const handleDeselectAllItems = () => {
@@ -1815,18 +1957,17 @@ const buildInvoicePayload = (statusValue: string) => {
     customer?.displayName ||
     customer?.companyName ||
     customer?.name ||
-    (formData as any).customerName ||
+    formData.customerName ||
     "";
+  const customerEmail = getCustomerEmail(customer);
   const itemRows = (formData.items as any[]).filter((item) => item.itemType !== "header");
 
   const payload = {
     invoiceNumber: formData.invoiceNumber,
-    convertedFromQuote: convertedFromQuoteId || undefined,
-    sourceQuoteId: convertedFromQuoteId || undefined,
-    sourceQuoteNumber: sourceQuoteNumber || undefined,
     customer: customer?.id || customer?._id || undefined,
     customerId: customer?.id || customer?._id || undefined,
     customerName: customerDisplayName,
+    customerEmail: customerEmail || undefined,
     priceListId: String(selectedPriceList?.id || selectedPriceList?._id || ""),
     priceListName: String(selectedPriceList?.name || ""),
     date: formData.invoiceDate || new Date().toISOString(),
@@ -1859,7 +2000,7 @@ const buildInvoicePayload = (statusValue: string) => {
         taxAmount: Number(taxAmount.toFixed(2)),
         total: Number(baseAmount.toFixed(2)),
         amount: Number(baseAmount.toFixed(2)),
-        description: item.itemDetails || ""
+        description: item.description || item.itemDetails || ""
       };
     }),
 
@@ -2137,9 +2278,9 @@ const handleCancel = () => {
 
 return (
   <>
-    <div className="w-full min-h-full bg-gray-50">
+    <div className="w-full min-h-full bg-white flex flex-col">
       {/* Header */}
-      <div className="flex-shrink-0 border-b border-gray-200 bg-white z-10">
+      <div className="sticky top-0 z-40 flex-shrink-0 border-b border-gray-200 bg-white">
         <div className="w-full px-6 py-4 flex justify-between items-center">
           <h1 className="text-lg font-normal text-gray-900 m-0 flex items-center gap-3">
             <FileText size={20} className="text-gray-500" />
@@ -2189,7 +2330,7 @@ return (
         </div>
       </div>
 
-      <div className="w-full pb-28 bg-white">
+      <div className="w-full bg-white pb-24">
         <div className="w-full px-6 py-6 space-y-6">
           {/* Scan Mode Interface */}
           {isScanModeOpen && (
@@ -2690,6 +2831,59 @@ return (
               </div>
             </div>
 
+
+            {normalizedReportingTags.map((tag) => {
+              const currentValue =
+                ((formData as any).reportingTags || []).find(
+                  (entry: any) => String(entry?.tagId || "") === String(tag.id || tag._id || tag.key)
+                    || String(entry?.name || "") === tag.label
+                )?.value || "";
+
+              return (
+                <div key={tag.key} className="flex items-center gap-6">
+                  <label className="text-[13px] font-medium text-gray-600 w-[140px] flex-shrink-0">
+                    {tag.label}
+                  </label>
+                  <div className="relative w-[280px]">
+                    <select
+                      value={currentValue}
+                      onChange={(e) =>
+                        setFormData((prev: any) => {
+                          const nextReportingTags = Array.isArray(prev.reportingTags)
+                            ? prev.reportingTags.filter(
+                                (entry: any) =>
+                                  String(entry?.tagId || "") !== String(tag.id || tag._id || tag.key)
+                                  && String(entry?.name || "") !== tag.label
+                              )
+                            : [];
+
+                          if (e.target.value) {
+                            nextReportingTags.push({
+                              tagId: tag.id || tag._id || tag.key,
+                              value: e.target.value,
+                              name: tag.label,
+                            });
+                          }
+
+                          return {
+                            ...prev,
+                            reportingTags: nextReportingTags,
+                          };
+                        })
+                      }
+                      className="w-full h-9 px-3 pr-8 border border-gray-300 rounded focus:outline-none focus:border-blue-400 text-sm appearance-none bg-white"
+                    >
+                      <option value="">None</option>
+                      {tag.options.map((option: string, index: number) => (
+                        <option key={`${tag.key}-option-${index}-${option}`} value={option}>{option}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
+                </div>
+              );
+            })}
+
             <div className="flex items-start gap-6">
               <div className="flex items-center gap-2 w-[140px] pt-2">
                 <label className="text-[13px] font-medium text-gray-600">
@@ -2710,10 +2904,9 @@ return (
 
           {/* Item Table Section */}
           <div className="border-t border-gray-200 pt-8">
-            <div className="max-w-[980px]">
-             <div className="mb-5 flex flex-wrap items-center gap-3 border-b border-gray-200 pb-5">
-               <div className="flex items-center gap-2 text-[12px] text-slate-500">
-                 <span>Warehouse Location</span>
+            <div className="mb-5 flex flex-wrap items-center gap-3 border-b border-gray-200 pb-5">
+              <div className="flex items-center gap-2 text-[12px] text-slate-500">
+                <span>Warehouse Location</span>
                 <div className="relative">
                   <select
                     value={(formData as any).selectedLocation || "Head Office"}
@@ -2728,6 +2921,23 @@ return (
                   </select>
                   <ChevronDown size={13} className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-slate-400" />
                 </div>
+              </div>
+
+              <div className="relative">
+                <select
+                  name="taxExclusive"
+                  value={formData.taxExclusive}
+                  onChange={handleChange}
+                  className="h-9 min-w-[152px] appearance-none rounded-md border border-transparent bg-white px-9 pr-8 text-[13px] text-slate-600 shadow-sm outline-none ring-1 ring-slate-200 transition focus:ring-2 focus:ring-blue-300"
+                >
+                  {taxExclusiveOptions.map((option, index) => (
+                    <option key={`tax-exclusive-${index}-${option}`} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+                <ClipboardList size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <ChevronDown size={13} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
               </div>
 
               <div className="relative" ref={priceListDropdownRef}>
@@ -2798,18 +3008,64 @@ return (
               </div>
             </div>
 
-            <div className="mt-3 bg-white border border-gray-200 rounded-md overflow-visible">
-              <div className="flex items-center justify-between px-3 py-3 border-b border-gray-200 bg-[#f8f9fb] rounded-t-md">
-                <h2 className="text-[13px] font-semibold text-gray-800">Item Table</h2>
-                <div className="flex items-center gap-4">
+            <div className="overflow-visible rounded-xl border border-slate-200 bg-white shadow-[0_14px_34px_rgba(15,23,42,0.06)]">
+              <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
+                <h2 className="text-[14px] font-semibold text-slate-800">Item Table</h2>
+                <div className="flex items-center gap-5">
                   <button
-                    type="button"
-                    className="inline-flex items-center gap-2 text-sm font-medium text-[#156372] hover:text-[#0D4A52]"
+                    className="flex items-center gap-1.5 text-[12px] font-medium text-[#2563eb] hover:text-[#1d4ed8]"
                     onClick={() => setIsScanModeOpen(true)}
                   >
                     <ScanLine size={14} />
-                    <span>Scan Item</span>
+                    Scan Item
                   </button>
+                  <div className="relative" ref={bulkActionsRef}>
+                    <button
+                      className="flex items-center gap-1.5 text-[12px] font-medium text-[#2563eb] hover:text-[#1d4ed8]"
+                      onClick={() => setIsBulkActionsOpen((prev) => !prev)}
+                    >
+                      <CheckSquare size={14} />
+                      Bulk Actions
+                    </button>
+                    {isBulkActionsOpen && (
+                      <div className="absolute right-0 top-full z-[140] mt-2 min-w-[210px] overflow-hidden rounded-md border border-slate-200 bg-white shadow-[0_12px_24px_rgba(15,23,42,0.16)]">
+                        <button
+                          type="button"
+                          className="mx-1 mt-1 flex w-[calc(100%-8px)] items-center justify-between rounded-md bg-[#4a89e8] px-3 py-2 text-left text-[13px] font-medium text-white"
+                          onClick={() => {
+                            setBulkSelectedItemIds(standardLineItems.map((item) => item.id));
+                            setIsBulkUpdateLineItemsActive(true);
+                            setActiveBulkUpdateAction("project");
+                            setIsBulkActionsOpen(false);
+                          }}
+                        >
+                          <span>Bulk Update Line Items</span>
+                          <Check size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          className="flex w-full items-center px-3 py-2 text-left text-[13px] text-slate-700 hover:bg-slate-50"
+                          onClick={() => {
+                            const allVisible =
+                              standardLineItems.length > 0 &&
+                              standardLineItems.every((item) => itemsWithAdditionalInfo.has(item.id));
+                            if (allVisible) {
+                              setItemsWithAdditionalInfo(new Set());
+                              setActiveAdditionalInfoMenu(null);
+                              setAdditionalInfoSearch("");
+                            } else {
+                              setItemsWithAdditionalInfo(new Set(standardLineItems.map((item) => item.id)));
+                            }
+                            setIsBulkActionsOpen(false);
+                          }}
+                        >
+                          {standardLineItems.length > 0 && standardLineItems.every((item) => itemsWithAdditionalInfo.has(item.id))
+                            ? "Hide All Additional Information"
+                            : "Show All Additional Information"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               {isBulkUpdateLineItemsActive && (
@@ -2820,9 +3076,9 @@ return (
                       className={`rounded-md bg-[#1fb374] px-3 py-1.5 text-[13px] font-medium text-white hover:bg-[#18a067] ${activeBulkUpdateAction === "project" ? "ring-2 ring-[#2f6fed] ring-offset-1" : ""}`}
                       onClick={() => {
                         setActiveBulkUpdateAction("project");
-                        const ids = bulkSelectedItemIds.length > 0 ? bulkSelectedItemIds : formData.items.map((item) => item.id);
+                        const ids = bulkSelectedItemIds.length > 0 ? bulkSelectedItemIds : standardLineItems.map((item) => item.id);
                         setBulkSelectedItemIds(ids);
-                        const firstSelected = formData.items.find((item: any) => ids.includes(item.id));
+                        const firstSelected = standardLineItems.find((item: any) => ids.includes(item.id));
                         setSelectedBulkProjectId(String((firstSelected as any)?.projectId || (firstSelected as any)?.project || ""));
                         setIsBulkUpdateProjectModalOpen(true);
                       }}
@@ -2834,9 +3090,9 @@ return (
                       className={`rounded-md bg-[#1fb374] px-3 py-1.5 text-[13px] font-medium text-white hover:bg-[#18a067] ${activeBulkUpdateAction === "reporting" ? "ring-2 ring-[#2f6fed] ring-offset-1" : ""}`}
                       onClick={() => {
                         setActiveBulkUpdateAction("reporting");
-                        const ids = bulkSelectedItemIds.length > 0 ? bulkSelectedItemIds : formData.items.map((item) => item.id);
+                        const ids = bulkSelectedItemIds.length > 0 ? bulkSelectedItemIds : standardLineItems.map((item) => item.id);
                         setBulkSelectedItemIds(ids);
-                        const firstSelected = formData.items.find((item: any) => ids.includes(item.id));
+                        const firstSelected = standardLineItems.find((item: any) => ids.includes(item.id));
                         const firstTags = Array.isArray((firstSelected as any)?.reportingTags) ? (firstSelected as any).reportingTags : [];
                         const initialValues: Record<string, string> = {};
                         normalizedReportingTags.forEach((tag: any) => {
@@ -2857,7 +3113,7 @@ return (
                       className={`rounded-md bg-[#1fb374] px-3 py-1.5 text-[13px] font-medium text-white hover:bg-[#18a067] ${activeBulkUpdateAction === "account" ? "ring-2 ring-[#2f6fed] ring-offset-1" : ""}`}
                       onClick={() => {
                         setActiveBulkUpdateAction("account");
-                        const ids = bulkSelectedItemIds.length > 0 ? bulkSelectedItemIds : formData.items.map((item) => item.id);
+                        const ids = bulkSelectedItemIds.length > 0 ? bulkSelectedItemIds : standardLineItems.map((item) => item.id);
                         setBulkSelectedItemIds(ids);
                         setIsBulkUpdateAccountModalOpen(true);
                       }}
@@ -2880,27 +3136,27 @@ return (
               )}
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="bg-white border-b border-gray-200">
+                  <tr className="border-b border-slate-200 bg-white">
                     <th className="w-10"></th>
-                    <th className="w-[300px] text-left py-2 px-3 text-[11px] font-semibold text-gray-500 uppercase">Item Details</th>
-                    <th className="w-24 text-center py-2 px-3 text-[11px] font-semibold text-gray-500 uppercase">Quantity</th>
-                    <th className="w-32 text-center py-2 px-3 text-[11px] font-semibold text-gray-500 uppercase">
-                      <div className="flex items-center justify-center gap-1">
-                        Rate <Grid3x3 size={12} className="text-gray-300" />
+                    <th className="w-[300px] px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600">ITEM DETAILS</th>
+                    <th className="w-24 px-3 py-2.5 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600">QUANTITY</th>
+                    <th className="w-32 px-3 py-2.5 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600">
+                      <div className="flex items-center justify-end gap-1">
+                        RATE <Grid3x3 size={12} className="text-slate-300" />
                       </div>
                     </th>
                     {showItemDiscount && (
-                      <th className="w-24 text-center py-2 px-3 text-[11px] font-semibold text-gray-500 uppercase">Discount</th>
+                      <th className="w-24 px-3 py-2.5 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600">DISCOUNT</th>
                     )}
-                    <th className="w-40 text-left py-2 px-3 text-[11px] font-semibold text-gray-500 uppercase">Tax</th>
-                    <th className="w-32 text-right py-2 px-3 text-[11px] font-semibold text-gray-500 uppercase">Amount</th>
+                    <th className="w-28 px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600">TAX</th>
+                    <th className="w-28 px-3 py-2.5 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600">AMOUNT</th>
                     <th className="w-10"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {formData.items.map((item, index) => (
+                  {standardLineItems.map((item, index) => (
                     <React.Fragment key={item.id || `item-${index}`}>
-                      <tr className="border-b border-gray-200 group">
+                      <tr className="group border-b border-slate-200">
                         <td className="pt-6 text-center align-top">
                           <MoreVertical size={14} className="inline-block cursor-move text-slate-300" />
                         </td>
@@ -3273,54 +3529,261 @@ return (
               </table>
             </div>
 
-            <div className="mt-4 flex items-center gap-3">
+            <div className="mt-4 flex items-center gap-3 w-full justify-start pl-3">
               <div className="relative">
                 <button
-                  className="flex items-center gap-2 px-4 py-2 bg-[#eef3ff] border border-[#d7deef] text-[#1f3f79] rounded-md text-sm font-medium hover:bg-[#e7eefb] transition-colors"
+                  className="relative flex h-9 items-center rounded-md border border-[#d7deef] bg-[#eef3ff] pl-3 pr-8 text-[13px] font-medium text-[#1f3f79] transition hover:bg-[#e7eefb]"
                   onClick={() => handleAddItem()}
                 >
-                  <Plus size={16} />
-                  Add New Row
-                  <ChevronDown size={14} />
+                  <Plus size={14} className="mr-1 inline" /> Add New Row
+                  <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2" />
                 </button>
               </div>
               <button
-                className="flex items-center gap-2 px-4 py-2 bg-[#eef3ff] border border-[#d7deef] text-[#1f3f79] rounded-md text-sm font-medium hover:bg-[#e7eefb] transition-colors"
+                className="flex h-9 items-center gap-1.5 rounded-md border border-[#d7deef] bg-[#eef3ff] px-4 text-[13px] font-medium text-[#1f3f79] transition hover:bg-[#e7eefb]"
                 onClick={() => setIsBulkAddModalOpen(true)}
               >
-                <Plus size={16} />
-                Add Items in Bulk
+                <Plus size={14} /> Add Items in Bulk
               </button>
             </div>
-             </div>
-           </div>
+          </div>
+
+          {projectLineItems.length > 0 && (
+            <div className="mt-6 overflow-visible rounded-xl border border-slate-200 bg-white shadow-[0_14px_34px_rgba(15,23,42,0.06)]">
+              <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
+                <h2 className="text-[14px] font-semibold text-slate-800">Project Details</h2>
+              </div>
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-white">
+                    <th className="w-10"></th>
+                    <th className="w-[300px] px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600">ITEM DETAILS</th>
+                    <th className="w-24 px-3 py-2.5 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600">QUANTITY</th>
+                    <th className="w-32 px-3 py-2.5 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600">
+                      <div className="flex items-center justify-end gap-1">
+                        RATE <Grid3x3 size={12} className="text-slate-300" />
+                      </div>
+                    </th>
+                    {showItemDiscount && (
+                      <th className="w-24 px-3 py-2.5 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600">DISCOUNT</th>
+                    )}
+                    <th className="w-28 px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600">TAX</th>
+                    <th className="w-28 px-3 py-2.5 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600">AMOUNT</th>
+                    <th className="w-10"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {projectLineItems.map((item, index) => (
+                    <tr key={item.id || `project-item-${index}`} className="group border-b border-slate-200">
+                      <td className="pt-6 text-center align-top">
+                        <MoreVertical size={14} className="inline-block cursor-move text-slate-300" />
+                      </td>
+                      <td className="w-[300px] max-w-[300px] px-3 py-4">
+                        <div className="relative flex items-center gap-3">
+                          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded border border-slate-200 bg-slate-100">
+                            <ImageIcon size={16} className="text-slate-300" />
+                          </div>
+                          <input
+                            type="text"
+                            className="w-full border-none bg-transparent py-1 text-sm text-slate-700 outline-none placeholder:text-slate-400"
+                            value={item.itemDetails || item.projectName || "Project"}
+                            onChange={(e) => handleItemChange(item.id, "itemDetails", e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            className="ml-auto text-slate-400 hover:text-slate-600"
+                            onClick={() => {
+                              setProjectEditTargetId(item.id);
+                              setProjectEditValue(String(item.itemDetails || item.projectName || ""));
+                            }}
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          {projectEditTargetId === item.id && (
+                            <div className="absolute right-0 top-full z-[150] mt-2 w-[260px] rounded-lg border border-slate-200 bg-white p-3 shadow-[0_12px_24px_rgba(15,23,42,0.18)]">
+                              <div className="text-[12px] font-semibold text-slate-700">Project Details</div>
+                              <input
+                                type="text"
+                                className="mt-2 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none focus:border-blue-400"
+                                value={projectEditValue}
+                                onChange={(e) => setProjectEditValue(e.target.value)}
+                              />
+                              <div className="mt-3 flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  className="rounded-md bg-[#2563eb] px-3 py-1.5 text-[12px] font-medium text-white hover:bg-[#1d4ed8]"
+                                  onClick={() => {
+                                    handleItemChange(item.id, "itemDetails", projectEditValue);
+                                    handleItemChange(item.id, "projectName", projectEditValue);
+                                    setProjectEditTargetId(null);
+                                  }}
+                                >
+                                  Apply
+                                </button>
+                                <button
+                                  type="button"
+                                  className="rounded-md border border-slate-200 px-3 py-1.5 text-[12px] font-medium text-slate-600 hover:bg-slate-50"
+                                  onClick={() => setProjectEditTargetId(null)}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <textarea
+                          id={`project-desc-${item.id}`}
+                          placeholder="Add a description to your item"
+                          className="mt-2 h-16 w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-[12px] text-slate-600 outline-none focus:border-blue-300"
+                          value={item.description || ""}
+                          onChange={(e) => handleItemChange(item.id, "description", e.target.value)}
+                        />
+                      </td>
+                      <td className="px-3 align-top pt-4">
+                        <input
+                          type="number"
+                          className="h-9 w-full rounded-md border border-transparent bg-transparent px-2 text-right text-sm text-slate-700 outline-none transition hover:border-slate-200 focus:border-blue-300"
+                          value={item.quantity}
+                          onChange={(e) => handleItemChange(item.id, "quantity", e.target.value)}
+                        />
+                      </td>
+                      <td className="px-3 align-top pt-4">
+                        <input
+                          type="number"
+                          className="h-9 w-full rounded-md border border-transparent bg-transparent px-2 text-right text-sm text-slate-700 outline-none transition hover:border-slate-200 focus:border-blue-300"
+                          value={item.rate}
+                          onChange={(e) => handleItemChange(item.id, "rate", e.target.value)}
+                        />
+                        <div className="border-t border-slate-100 pt-0.5 pr-2 text-right text-[11px] text-slate-300">0.00</div>
+                      </td>
+                      {showItemDiscount && (
+                        <td className="px-3 align-top pt-4">
+                          <div className="flex items-center justify-end overflow-hidden rounded-md border border-slate-200 bg-white">
+                            <input
+                              type="text"
+                              className="h-9 w-12 border-none px-1 text-right text-sm outline-none"
+                              value={item.discount || 0}
+                              onChange={(e) => handleItemChange(item.id, "discount", e.target.value)}
+                            />
+                            <div className="flex h-9 items-center border-l border-slate-200 bg-slate-50">
+                              <select
+                                className="h-full cursor-pointer appearance-none bg-transparent px-1 text-[11px] text-slate-600 outline-none"
+                                value={item.discountType || "percent"}
+                                onChange={(e) => handleItemChange(item.id, "discountType", e.target.value)}
+                              >
+                                <option value="percent">%</option>
+                                <option value="amount">{currencySymbol}</option>
+                              </select>
+                              <ChevronDown size={8} className="-ml-1 mr-1 pointer-events-none text-slate-400" />
+                            </div>
+                          </div>
+                          <div className="pt-0.5 pr-1 text-right text-[10px] text-slate-300">
+                            {item.discountType === "amount" ? Number(item.discount || 0).toFixed(2) : "0.00"}
+                          </div>
+                        </td>
+                      )}
+                      <td className="w-[120px] min-w-[120px] px-3 align-top pt-4">
+                        <div className="relative" ref={(el) => { taxDropdownRefs.current[item.id] = el; }}>
+                          <button
+                            type="button"
+                            className="flex h-9 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-2 text-left text-sm transition hover:border-blue-300"
+                            onClick={() => setOpenTaxDropdowns(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
+                          >
+                            <span className={`${item.tax ? "text-slate-700" : "text-slate-400"} truncate`}>
+                              {item.tax ? (getTaxDisplayLabel(getTaxBySelection(item.tax)) || "Select a Tax") : "Select a Tax"}
+                            </span>
+                            <ChevronDown size={14} className="text-slate-400" />
+                          </button>
+                          {openTaxDropdowns[item.id] && (
+                            <div className="absolute top-full left-0 mt-1 w-[220px] bg-white border border-gray-200 rounded-md shadow-xl z-[140]">
+                              <div className="p-2 border-b border-gray-100">
+                                <div className="relative">
+                                  <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+                                  <input
+                                    type="text"
+                                    placeholder="Search"
+                                    value={taxSearches[item.id] || ""}
+                                    onChange={(e) => setTaxSearches(prev => ({ ...prev, [item.id]: e.target.value }))}
+                                    className="w-full h-8 pl-7 pr-2 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                                  />
+                                </div>
+                              </div>
+                              <div className="max-h-48 overflow-y-auto py-1">
+                                <div className="px-3 pb-1 text-xs font-semibold text-gray-500">Taxes</div>
+                                {getFilteredTaxes(item.id).length > 0 ? (
+                                  getFilteredTaxes(item.id).map((tax, taxIndex) => (
+                                    <button
+                                      key={String((tax as any).id || (tax as any)._id || `tax-${taxIndex}`)}
+                                      type="button"
+                                      onClick={() => handleTaxSelect(item.id, String((tax as any).id || (tax as any)._id))}
+                                      className={`w-full px-3 py-1.5 text-sm text-left hover:bg-blue-50 ${String(item.tax || "") === String((tax as any).id || (tax as any)._id) ? "bg-blue-600 text-white hover:bg-blue-600" : "text-gray-700"}`}
+                                    >
+                                      {getTaxDisplayLabel(tax)}
+                                    </button>
+                                  ))
+                                ) : (
+                                  <div className="px-3 py-2 text-sm text-gray-500">No taxes found</div>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                className="w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 border-t border-gray-100 text-left flex items-center gap-2"
+                                onClick={() => {
+                                  setOpenTaxDropdowns(prev => ({ ...prev, [item.id]: false }));
+                                  setNewTaxTargetItemId(item.id);
+                                  setIsNewTaxQuickModalOpen(true);
+                                }}
+                              >
+                                <Plus size={13} />
+                                New Tax
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 pt-6 text-right align-top">
+                        <span className="text-sm font-semibold text-slate-800">
+                          {Number(item.amount || 0).toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="pt-6 text-center align-top opacity-0 transition-opacity group-hover:opacity-100">
+                        <button
+                          onClick={() => handleRemoveItem(item.id)}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <X size={14} strokeWidth={3} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
 
           {/* Bottom Form Layout: Notes & Summary */}
-          <div className="max-w-[980px]">
-          <div className="grid grid-cols-1 gap-8 border-t border-slate-200 pt-8 xl:grid-cols-[1fr_520px] items-start xl:items-end xl:min-h-[340px]">
+          <div className="grid grid-cols-1 gap-8 border-t border-slate-200 pt-8 lg:grid-cols-[1fr_420px]">
 
             {/* Left Column: Notes & Terms */}
-            <div className="w-full max-w-[520px]">
-              <label className="block text-sm text-gray-700 mb-2 font-medium">Customer Notes</label>
-              <textarea
-                name="customerNotes"
-                className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-700 focus:outline-none focus:border-[#156372] resize-none h-24"
-                placeholder="Will be displayed on the invoice"
-                value={formData.customerNotes}
-                onChange={handleChange}
-              />
-              <p className="mt-2 text-[11px] text-slate-400">Will be displayed on the invoice</p>
+            <div className="space-y-8">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-800">Customer Notes</label>
+                <textarea
+                  name="customerNotes"
+                  className="h-24 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm leading-relaxed text-slate-700 outline-none transition focus:border-blue-300"
+                  value={formData.customerNotes}
+                  onChange={handleChange}
+                />
+                <p className="mt-2 text-[11px] text-slate-400">Will be displayed on the invoice</p>
+              </div>
             </div>
 
             {/* Right Column: Detailed Summary */}
-            <div className="w-full max-w-[520px] space-y-4">
-              <div className="w-full bg-[#f3f5f8] rounded-lg p-5 space-y-5 border border-gray-200">
+            <div className="w-full space-y-4">
+              <div className="space-y-5 rounded-xl border border-slate-200 bg-slate-50 p-5">
                 <div className="flex justify-between items-center text-sm">
-                  <div className="flex flex-col leading-tight">
-                    <span className="font-semibold text-slate-800">Sub Total</span>
-                    <span className="text-[11px] text-slate-500">(Tax Inclusive)</span>
-                  </div>
+                  <span className="font-semibold text-slate-800">Sub Total</span>
                   <span className="font-semibold text-slate-900">{Number(formData.subTotal || 0).toFixed(2)}</span>
                 </div>
 
@@ -3504,8 +3967,18 @@ return (
                   <span className="text-[28px] font-bold leading-none text-slate-900">{Number(formData.total || 0).toFixed(2)}</span>
                 </div>
               </div>
+
+              <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-5">
+                <div className="flex items-center justify-between text-[16px] font-medium text-slate-700">
+                  <span>Early Payment Discount</span>
+                  <span>{Number(0).toFixed(2)}</span>
+                </div>
+                <div className="flex items-center justify-between text-[22px] font-semibold text-slate-900 leading-tight">
+                  <span className="text-[16px]">Total After Early Payment Discount</span>
+                  <span>{Number(formData.total || 0).toFixed(2)}</span>
+                </div>
+              </div>
             </div>
-          </div>
           </div>
 
           <div className="mt-7 grid grid-cols-1 gap-8 rounded-xl border border-slate-200 bg-slate-50 p-5 lg:grid-cols-[1fr_320px]">
@@ -3688,48 +4161,87 @@ return (
             </div>
           )}
 
+          {/* Email Communications */}
+          <div className="bg-white border border-gray-200 rounded-lg p-4 mt-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base font-semibold text-gray-900">Email Communications</h3>
+              {selectedContactPersons.length > 0 && (
+                <button
+                  onClick={() => setSelectedContactPersons([])}
+                  className="flex items-center gap-1 text-sm text-gray-700 hover:text-red-600 transition-colors"
+                >
+                  <X size={14} className="text-red-600" />
+                  <span>Clear Selection</span>
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => {
+                  // Set modal customer ID if a customer is already selected
+                  if (selectedCustomer && (selectedCustomer.id || selectedCustomer._id)) {
+                    setModalSelectedCustomerId(selectedCustomer.id || selectedCustomer._id || null);
+                  } else {
+                    setModalSelectedCustomerId(null);
+                  }
+                  setIsContactPersonModalOpen(true);
+                }}
+                className="flex items-center gap-2 px-4 py-2 border-2 border-dashed border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:border-gray-400  transition-colors"
+              >
+                <Plus size={16} className="text-gray-600" />
+                <span>Add New</span>
+              </button>
+              {selectedContactPersons.map((cp, index) => (
+                <div
+                  key={index}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-md border border-gray-200"
+                >
+                  <input
+                    type="checkbox"
+                    checked={true}
+                    readOnly
+                    className="w-4 h-4 text-[#156372] border-gray-300 rounded"
+                  />
+                  <div className="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center">
+                    <span className="text-xs text-gray-600">
+                      {cp.firstName?.[0] || cp.email?.[0] || 'U'}
+                    </span>
+                  </div>
+                  <span className="text-sm text-gray-700">
+                    {cp.firstName && cp.lastName
+                      ? `${cp.firstName} ${cp.lastName}`
+                      : cp.email || 'Contact Person'}
+                    {cp.email && <span className="text-gray-500"> &lt;{cp.email}&gt;</span>}
+                  </span>
+                  <button
+                    onClick={() => {
+                      setSelectedContactPersons(selectedContactPersons.filter((_, i) => i !== index));
+                    }}
+                    className="ml-1 text-gray-400 hover:text-red-600"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Payment Gateway Section - Bottom Left */}
           <div className="border-t border-gray-200 pt-6 mt-6">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <div className="flex items-center gap-4 mb-2">
               <span className="text-sm text-gray-700 font-medium">Want to get paid faster?</span>
-              <div className="flex items-center gap-2">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 262 162"
-                  className="h-5 w-auto"
-                  aria-hidden="true"
-                >
-                  <ellipse fill="#FF5F00" cx="130.4" cy="81.2" rx="30.1" ry="62.3"></ellipse>
-                  <path
-                    fill="#EB001B"
-                    d="M100.3 81.2c0-25.3 11.9-47.7 30.1-62.3C117 8.4 100 2 81.6 2 37.8 2 2.4 37.4 2.4 81.2c0 43.8 35.4 79.2 79.2 79.2 18.5 0 35.4-6.4 48.8-16.9-18.5-14.6-30.1-37.2-30.1-62.3z"
-                  ></path>
-                  <path
-                    fill="#F79E1B"
-                    d="M179.2 2c-18.5 0-35.4 6.4-48.8 16.9 18.3 14.5 30.1 37 30.1 62.3 0 25.3-11.7 47.7-30.1 62.3 13.4 10.6 30.4 16.9 48.8 16.9 43.8 0 79.2-35.4 79.2-79.2C258.4 37.4 223 2 179.2 2z"
-                  ></path>
-                </svg>
-
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 1920 620.07"
-                  className="h-5 w-auto"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M728.98 10.95L477.61 610.69h-164l-123.7-478.62c-7.51-29.48-14.04-40.28-36.88-52.7C115.76 59.14 54.18 40.17 0 28.39l3.68-17.44h263.99c33.65 0 63.9 22.4 71.54 61.15l65.33 347.04L566 10.95h162.98zm642.59 403.93c.66-158.29-218.88-167.01-217.37-237.72.47-21.52 20.96-44.4 65.81-50.24 22.23-2.91 83.48-5.13 152.95 26.84l27.25-127.18c-37.33-13.55-85.36-26.59-145.12-26.59-153.35 0-261.27 81.52-262.18 198.25-.99 86.34 77.03 134.52 135.81 163.21 60.47 29.38 80.76 48.26 80.53 74.54-.43 40.23-48.23 57.99-92.9 58.69-77.98 1.2-123.23-21.1-159.3-37.87L928.93 588.2c36.25 16.63 103.16 31.14 172.53 31.87 162.99 0 269.61-80.51 270.11-205.19m404.94 195.82H1920L1794.75 10.95h-132.44c-29.78 0-54.9 17.34-66.02 44l-232.81 555.74h162.91l32.35-89.59h199.05l18.73 89.59zM1603.4 398.19l81.66-225.18 47 225.18h-128.65zM950.66 10.95L822.37 610.69H667.23L795.57 10.95h155.09z"
-                    fill="#1434cb"
-                  ></path>
-                </svg>
+              <div className="flex gap-2 items-center">
+                <div className="w-8 h-5 bg-red-600 rounded"></div>
+                <div className="w-8 h-5 bg-[#1a1f71] rounded text-white flex items-center justify-center text-[10px] font-semibold">VISA</div>
+                <div className="w-8 h-5 bg-[#1a1f71] rounded text-white flex items-center justify-center text-[10px] font-semibold">MC</div>
               </div>
             </div>
-
-            <div className="mt-2 text-sm text-gray-600">
-              <span>Configure payment gateways and receive payments online.</span>{" "}
-              <button type="button" className="text-[#156372] hover:text-[#0D4A52] hover:underline font-medium">
-                Set up Payment Gateway
-              </button>
-            </div>
+            <p className="text-sm text-gray-600 mb-2">
+              Configure payment gateways and receive payments online.
+            </p>
+            <button className="text-[#156372] hover:text-[#0D4A52] text-sm font-medium">
+              Set up Payment Gateway
+            </button>
           </div>
 
           {/* Additional Fields */}
@@ -5303,7 +5815,7 @@ return (
                               <div className="flex-1">
                                 <div className="font-medium text-gray-900">{selectedItem.name}</div>
                                 <div className="text-xs text-gray-500 mt-1">
-                                  SKU: {selectedItem.sku} • {formData.currency}{Number(selectedItem.rate || 0).toFixed(2)}
+                                  SKU: {selectedItem.sku} â€¢ {formData.currency}{Number(selectedItem.rate || 0).toFixed(2)}
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
@@ -6706,6 +7218,7 @@ return (
           </div>,
           document.body
         )}
+      </div>
 
       {/* Floating Footer */}
       <div className="fixed bottom-0 left-[260px] right-0 bg-white border-t border-gray-200 px-8 py-3 flex items-center justify-between z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
@@ -6744,7 +7257,6 @@ return (
           </div>
         </div>
       </div>
-    </div>
 
       <NewTaxQuickModal
         open={isNewTaxQuickModalOpen}

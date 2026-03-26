@@ -19,6 +19,7 @@ import {
   CheckCircle,
   XCircle,
   Send,
+  Mail,
   FileCheck,
   Search,
   Filter,
@@ -2618,7 +2619,11 @@ export default function Quotes() {
                   <tr
                     key={quote.id}
                     className={`group transition-all hover:bg-[#f8fafc] cursor-pointer ${selectedQuotes.includes(quote.id) ? 'bg-[#156372]/5' : ''}`}
-                    onClick={() => navigate(`/sales/quotes/${quote.id}`)}
+                    onClick={() =>
+                      navigate(`/sales/quotes/${quote.id}`, {
+                        state: { preloadedQuote: quote, preloadedQuotes: sortedQuotes },
+                      })
+                    }
                   >
                     <td className="px-4 py-3 bg-inherit" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-2">
@@ -2653,8 +2658,11 @@ export default function Quotes() {
                         ) : colKey === 'location' ? (
                           <span className="text-[#156372]">{quote.selectedLocation || quote.location || "Head Office"}</span>
                         ) : colKey === 'quoteNumber' ? (
-                          <span className="font-semibold text-[#0f52d1] hover:underline">
+                          <span className="font-semibold text-[#0f52d1] inline-flex items-center gap-1">
                             {quote.quoteNumber || quote.id}
+                            {String(quote.status || "").toLowerCase() === "sent" && (
+                              <Mail size={14} className="text-gray-500" />
+                            )}
                           </span>
                         ) : colKey === 'status' ? (
                           <span

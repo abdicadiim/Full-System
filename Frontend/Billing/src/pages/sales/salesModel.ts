@@ -1481,8 +1481,8 @@ const mapQuoteFromApi = (quote: any): Quote => {
     project: quote?.project,
     projectId: quote?.project?._id || quote?.project,
     projectName: quote?.project?.name || quote?.projectName || '',
-    date: quote?.date,
-    quoteDate: quote?.date,
+    date: quote?.quoteDate || quote?.date || quote?.createdAt,
+    quoteDate: quote?.quoteDate || quote?.date || quote?.createdAt,
     expiryDate: quote?.expiryDate,
     items: quote?.items || [],
     subTotal: subtotalValue,
@@ -1518,8 +1518,21 @@ const mapQuoteFromApi = (quote: any): Quote => {
 export const getQuotes = async (): Promise<Quote[]> => {
   try {
     const response = await quotesAPI.getAll();
-    if (response && response.success && response.data) {
-      return response.data.map((quote: any) => mapQuoteFromApi(quote));
+    if (response && response.success) {
+      const payload: any = response.data;
+      const rows =
+        Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload?.data)
+            ? payload.data
+            : Array.isArray(payload?.quotes)
+              ? payload.quotes
+              : Array.isArray(payload?.items)
+                ? payload.items
+                : Array.isArray(payload?.data?.data)
+                  ? payload.data.data
+                  : [];
+      return rows.map((quote: any) => mapQuoteFromApi(quote));
     }
     return [];
   } catch (error) {
@@ -1532,8 +1545,10 @@ export const getQuotes = async (): Promise<Quote[]> => {
 export const getQuoteById = async (quoteId: string): Promise<Quote | null> => {
   try {
     const response = await quotesAPI.getById(quoteId);
-    if (response && response.success && response.data) {
-      return mapQuoteFromApi(response.data);
+    if (response && response.success) {
+      const payload: any = response.data;
+      const row = payload?.data || payload?.quote || payload || null;
+      if (row) return mapQuoteFromApi(row);
     }
     return null;
   } catch (error) {

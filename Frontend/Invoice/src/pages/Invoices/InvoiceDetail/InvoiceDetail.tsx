@@ -198,7 +198,7 @@ export default function InvoiceDetail() { // Start of component
     const isOverdueByDate = !!(dueDate && !Number.isNaN(dueDate.getTime()) && dueDate.getTime() < Date.now() && balance > 0);
 
     if (raw === "paid" || (total > 0 && balance <= 0)) {
-      return { text: "Paid", color: "bg-green-100 text-green-700" };
+      return { text: "Paid", color: "bg-[#0D4A52]/10 text-[#0D4A52]" };
     }
     if (raw.includes("partial") || (total > 0 && balance > 0 && balance < total)) {
       return { text: "Partially Paid", color: "bg-blue-100 text-blue-700" };
@@ -2428,7 +2428,7 @@ export default function InvoiceDetail() { // Start of component
 
   const getPaymentStatusClass = (payment: any) => {
     const status = getPaymentStatusLabel(payment).toLowerCase();
-    if (status === "paid") return "text-green-600";
+    if (status === "paid") return "text-[#0D4A52]";
     if (status === "draft") return "text-amber-600";
     if (status === "void") return "text-gray-500";
     return "text-gray-700";
@@ -3304,7 +3304,7 @@ export default function InvoiceDetail() { // Start of component
                         </span>
                       )}
                       {retainerAppliedAmount > 0 && (
-                        <span className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 text-[11px] font-medium">
+                        <span className="inline-flex items-center rounded-full bg-[#0D4A52]/10 text-[#0D4A52] px-2 py-0.5 text-[11px] font-medium">
                           Retainer Applied: {formatCurrency(retainerAppliedAmount, invoice.currency)}
                         </span>
                       )}
@@ -3483,7 +3483,7 @@ export default function InvoiceDetail() { // Start of component
               {/* Status Ribbon */}
               {(invoice.status === "draft" || invoice.status?.toLowerCase() === "paid" || invoice.status?.toLowerCase() === "sent" || invoice.status?.toLowerCase() === "unpaid") && (
                 <div className="absolute top-0 left-0 w-32 h-32 overflow-hidden">
-                  <div className={`absolute top-8 left-8 w-40 h-8 transform -rotate-45 origin-center flex items-center justify-center shadow-sm ${invoice.status?.toLowerCase() === "paid" ? "bg-green-500" :
+                  <div className={`absolute top-8 left-8 w-40 h-8 transform -rotate-45 origin-center flex items-center justify-center shadow-sm ${invoice.status?.toLowerCase() === "paid" ? "bg-[#0D4A52]" :
                     (invoice.status?.toLowerCase() === "sent" || invoice.status?.toLowerCase() === "unpaid") ? "bg-blue-500" :
                       "bg-yellow-500"
                     }`}>
@@ -3522,7 +3522,7 @@ export default function InvoiceDetail() { // Start of component
                           return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#f97316" strokeWidth="2" />;
                         })}
                         {/* Book - green covers */}
-                        <rect x="28" y="28" width="24" height="16" rx="2" fill="#16a34a" />
+                        <rect x="28" y="28" width="24" height="16" rx="2" fill="#0D4A52" />
                         <rect x="30" y="30" width="20" height="12" rx="1" fill="#15803d" />
                         {/* Book pages - blue */}
                         <rect x="30" y="30" width="18" height="12" rx="1" fill="#3b82f6" />

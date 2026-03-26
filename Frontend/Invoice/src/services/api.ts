@@ -461,7 +461,7 @@ const defaultChartAccounts = [
 
 const defaultTxSeries = [
   { id: "series-inv", _id: "series-inv", module: "invoices", prefix: "INV-", nextNumber: 1, status: "Active" },
-  { id: "series-quote", _id: "series-quote", module: "quotes", prefix: "QU-", nextNumber: 1, status: "Active" },
+  { id: "series-quote", _id: "series-quote", module: "quotes", prefix: "QT-", nextNumber: 1, status: "Active" },
   { id: "series-sr", _id: "series-sr", module: "sales-receipts", prefix: "SR-", nextNumber: 1, status: "Active" },
   { id: "series-cn", _id: "series-cn", module: "credit-notes", prefix: "CN-", nextNumber: 1, status: "Active" },
 ];
@@ -715,6 +715,7 @@ const projectsLocal = localResource(LOCAL_PROJECTS_KEY, "prj", defaultProjects);
 const timeEntriesLocal = localResource(LOCAL_TIME_ENTRIES_KEY, "te");
 const salesReceiptsLocal = localResource(LOCAL_SALES_RECEIPTS_KEY, "sr");
 const salespersonsLocal = localResource(LOCAL_SALESPERSONS_KEY, "sp", defaultSalespersons);
+const salespersonsResource = resource("/salespersons");
 const contactPersonsLocal = localResource(LOCAL_CONTACT_PERSONS_KEY, "cp");
 const bankAccountsLocal = localResource(LOCAL_BANK_ACCOUNTS_KEY, "ba", defaultBankAccounts);
 const paymentModesLocal = localResource(LOCAL_PAYMENT_MODES_KEY, "pm", defaultPaymentModes);
@@ -722,6 +723,7 @@ const chartAccountsLocal = localResource(LOCAL_CHART_ACCOUNTS_KEY, "coa", defaul
 const txSeriesLocal = localResource(LOCAL_TX_SERIES_KEY, "series", defaultTxSeries);
 const reportingTagsResource = resource("/reporting-tags");
 const currenciesResource = resource("/currencies");
+const txSeriesResource = resource("/transaction-number-series");
 const locationsResource = resource("/locations");
 const locationsLocal = localResource(LOCAL_LOCATIONS_KEY, "loc");
 
@@ -1648,7 +1650,8 @@ export const salesReceiptsAPI = {
 };
 
 export const salespersonsAPI = {
-  ...salespersonsLocal,
+  ...salespersonsResource,
+  local: salespersonsLocal,
 };
 
 export const contactPersonsAPI = {
@@ -1767,25 +1770,133 @@ export const approvalRulesAPI = {
 
 export const transactionNumberSeriesAPI = {
   ...txSeriesLocal,
+  getAll: async (params?: Record<string, any>) => {
+    try {
+      const res = await txSeriesResource.getAll(params);
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+    return txSeriesLocal.getAll(params);
+  },
+  getById: async (id: string) => {
+    try {
+      const res = await txSeriesResource.getById(id);
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+    return txSeriesLocal.getById(id);
+  },
+  delete: async (id: string) => {
+    try {
+      const res = await txSeriesResource.delete(id);
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+    return txSeriesLocal.delete(id);
+  },
   createMultiple: async (data: any) => {
-    const rows = Array.isArray(data) ? data : data?.series || data?.rows || [];
+    try {
+      const res = await request({ method: "POST", path: "/transaction-number-series/bulk", data });
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+
+    const seriesName = data?.seriesName || "Standard";
+    const locationIds = data?.locationIds || [];
+    const modules = data?.modules || (Array.isArray(data) ? data : data?.series || data?.rows || []);
+
     const created: any[] = [];
-    for (const row of rows) {
+    for (const mod of modules) {
+      const row = {
+        ...mod,
+        seriesName,
+        locationIds,
+        status: "Active"
+      };
+      const response = await txSeriesLocal.create(row);
+      if (response.success && response.data) created.push(response.data);
+    }
+    return { success: true, data: created };
+  },
+  updateMultiple: async (data: any) => {
+    try {
+      const res = await request({ method: "PUT", path: "/transaction-number-series/bulk", data });
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+
+    const seriesName = data?.seriesName || "Standard";
+    const locationIds = data?.locationIds || [];
+    const modules = data?.modules || [];
+    const originalName = data?.originalName || seriesName;
+
+    // Get all existing rows for this series
+    const all = await txSeriesLocal.getAll({ limit: 10000 });
+    const existingRows = (all.data || []).filter((row: any) =>
+      String(row.seriesName || "").toLowerCase() === originalName.toLowerCase()
+    );
+
+    // Delete existing rows
+    for (const row of existingRows) {
+      await txSeriesLocal.delete(getEntityId(row));
+    }
+
+    // Create new rows
+    const created: any[] = [];
+    for (const mod of modules) {
+      const row = {
+        ...mod,
+        seriesName,
+        locationIds,
+        status: "Active"
+      };
       const response = await txSeriesLocal.create(row);
       if (response.success && response.data) created.push(response.data);
     }
     return { success: true, data: created };
   },
   getNextNumber: async (seriesId?: string) => {
+    try {
+      const id = String(seriesId || "").trim();
+      const path = id
+        ? `/transaction-number-series/${encodeURIComponent(id)}/next-number`
+        : "/transaction-number-series/next-number";
+      const res = await request({ path });
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+
     const all = await txSeriesLocal.getAll({ limit: 10000 });
     const rows = all.data || [];
     const selected =
       rows.find((row: any) => String(getEntityId(row)) === String(seriesId || "")) ||
       rows[0] ||
       defaultTxSeries[0];
-    const nextValue = Number(selected?.nextNumber || 1);
-    const nextNumber = `${selected?.prefix || ""}${String(nextValue).padStart(5, "0")}`;
-    await txSeriesLocal.update(getEntityId(selected), { ...selected, nextNumber: nextValue + 1 });
+
+    const starting = String(selected?.startingNumber || selected?.nextNumber || "1");
+    const parsed = parseInt(starting, 10);
+    const current =
+      Number(selected?.nextNumber) > 0
+        ? Number(selected.nextNumber)
+        : Number.isFinite(parsed) && parsed > 0
+          ? parsed
+          : 1;
+    const width = /^\d+$/.test(starting) ? starting.length : 5;
+    const padded = width > 1 ? String(current).padStart(width, "0") : String(current);
+    const nextNumber = `${selected?.prefix || ""}${padded}`;
+    await txSeriesLocal.update(getEntityId(selected), { ...selected, nextNumber: current + 1 });
     return { success: true, data: { seriesId: getEntityId(selected), nextNumber } };
   },
 };

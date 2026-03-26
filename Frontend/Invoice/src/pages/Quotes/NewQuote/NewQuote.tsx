@@ -561,8 +561,9 @@ const NewQuote = () => {
   useEffect(() => {
     void loadCustomersForDropdown();
   }, []);
-  const [quotePrefix, setQuotePrefix] = useState("QT-");
-  const [quoteNextNumber, setQuoteNextNumber] = useState("000002");
+  const [quotePrefix, setQuotePrefix] = useState("");
+  const [quoteNextNumber, setQuoteNextNumber] = useState("");
+  const quoteSeriesSyncRef = useRef(false);
   const [quoteSeriesRow, setQuoteSeriesRow] = useState<any | null>(null);
   const [quoteSeriesRows, setQuoteSeriesRows] = useState<any[]>([]);
   const [isPriceListDropdownOpen, setIsPriceListDropdownOpen] = useState(false);
@@ -666,6 +667,8 @@ const NewQuote = () => {
     const nextValue = Number(row?.nextNumber) > 0 ? Number(row?.nextNumber) : Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
     return String(nextValue).padStart(width, "0");
   };
+
+  // NOTE: We only reserve (increment) the series when saving, not on load.
 
   const formatPriceListDisplayLabel = (row: any) => {
     const name = String(row?.name || "").trim();
@@ -1031,8 +1034,8 @@ const NewQuote = () => {
           projectsResult,
           salespersonsResult,
           itemsResult,
-          quoteNumberResult,
           txSeriesResult,
+          quoteListResult,
           currenciesResult,
           baseCurrencyResult,
           settingsResult,
@@ -1042,8 +1045,8 @@ const NewQuote = () => {
           getProjects(),
           getSalespersonsFromAPI(),
           getItemsFromAPI(),
-          quotesAPI.getNextNumber('QT-'),
           transactionNumberSeriesAPI.getAll({ limit: 10000 }),
+          quotesAPI.getAll({ limit: 1 }),
           currenciesAPI.getAll(),
           isEditMode ? Promise.resolve(null) : currenciesAPI.getBaseCurrency(),
           isEditMode ? Promise.resolve(null) : settingsAPI.getQuotesSettings(),
@@ -1128,7 +1131,7 @@ const NewQuote = () => {
           resolvedSeriesRow = resolveQuoteSeriesRow(rows);
           if (resolvedSeriesRow) {
             setQuoteSeriesRow(resolvedSeriesRow);
-            const resolvedPrefix = sanitizeQuotePrefix(resolvedSeriesRow?.prefix || quotePrefix);
+            const resolvedPrefix = sanitizeQuotePrefix(resolvedSeriesRow?.prefix || "QT-");
             const resolvedNextDigits = resolveSeriesNextDigits(resolvedSeriesRow);
             setQuotePrefix(resolvedPrefix);
             setQuoteNextNumber(resolvedNextDigits);
@@ -1139,21 +1142,34 @@ const NewQuote = () => {
         }
 
         if (!resolvedSeriesRow) {
-          if (quoteNumberResult.status === "fulfilled") {
-            const quoteNumberResponse: any = quoteNumberResult.value;
-            if (quoteNumberResponse && quoteNumberResponse.success && quoteNumberResponse.data) {
-              const quoteNumberData: any = quoteNumberResponse.data || {};
-              const serverQuoteNumber = String(quoteNumberData.quoteNumber || quoteNumberData.nextNumber || "").trim();
-              const nextFromServer = quoteNumberData.nextNumber;
-              const resolvedPrefix = deriveQuotePrefixFromNumber(serverQuoteNumber, quotePrefix);
-              const resolvedNextDigits = extractQuoteDigits(nextFromServer || serverQuoteNumber) || "000001";
+          const fallbackPrefix = "QT-";
+          const fallbackDigits = "000001";
+          setQuotePrefix(fallbackPrefix);
+          setQuoteNextNumber(fallbackDigits);
+          setFormData(prev => ({ ...prev, quoteNumber: buildQuoteNumber(fallbackPrefix, fallbackDigits) }));
+        }
 
-              setQuotePrefix(resolvedPrefix);
-              setQuoteNextNumber(String(resolvedNextDigits).padStart(6, "0"));
-              setFormData(prev => ({ ...prev, quoteNumber: buildQuoteNumber(resolvedPrefix, resolvedNextDigits) }));
+        if (!isEditMode && resolvedSeriesRow && !quoteSeriesSyncRef.current) {
+          const listResponse: any = quoteListResult.status === "fulfilled" ? quoteListResult.value : null;
+          const totalQuotes =
+            Number(listResponse?.pagination?.total ?? listResponse?.data?.pagination?.total ?? 0) ||
+            Number(listResponse?.data?.length ?? 0) ||
+            0;
+          const currentPrefix = String(resolvedSeriesRow?.prefix || "QT-");
+          const needsPrefixFix = !currentPrefix.startsWith("QT-");
+          const needsReset = totalQuotes === 0 && Number(resolvedSeriesRow?.nextNumber || 0) > 1;
+          if (needsPrefixFix || needsReset) {
+            quoteSeriesSyncRef.current = true;
+            const desiredPrefix = "QT-";
+            const desiredDigits = needsReset ? "000001" : resolveSeriesNextDigits(resolvedSeriesRow);
+            setQuotePrefix(desiredPrefix);
+            setQuoteNextNumber(desiredDigits);
+            setFormData(prev => ({ ...prev, quoteNumber: buildQuoteNumber(desiredPrefix, desiredDigits) }));
+            try {
+              await persistQuoteSeriesPreferences({ prefix: desiredPrefix, nextDigits: desiredDigits });
+            } catch (error) {
+              console.error("Failed to sync quote number series:", error);
             }
-          } else {
-            console.error("Error loading next quote number:", quoteNumberResult.reason);
           }
         }
 
@@ -1200,14 +1216,14 @@ const NewQuote = () => {
         // Load all vendors for contact persons (not blocking initial render)
         loadVendorContactPersons();
 
-        const defaultDate = "22/12/2025";
-
-        const dateParts = defaultDate.split('/');
-        if (dateParts.length === 3) {
-          const day = parseInt(dateParts[0], 10);
-          const month = parseInt(dateParts[1], 10) - 1; // Month is 0-indexed
-          const year = parseInt(dateParts[2], 10);
-          setQuoteDateCalendar(new Date(year, month, day));
+        if (!isEditMode) {
+          const today = new Date();
+          const todayStr = today.toLocaleDateString("en-GB");
+          setQuoteDateCalendar(today);
+          setFormData(prev => ({
+            ...prev,
+            quoteDate: prev.quoteDate || todayStr
+          }));
         }
 
       } catch (error) {
@@ -1243,15 +1259,15 @@ const NewQuote = () => {
   useEffect(() => {
     setFormData(prev => {
       const next = { ...prev };
-      if (!showTransactionDiscount) {
+      if (!showTransactionDiscount && !isEditMode) {
         next.discount = 0;
         next.discountType = "percent";
       }
-      if (!showShippingCharges) {
+      if (!showShippingCharges && !isEditMode) {
         next.shippingCharges = 0;
         next.shippingChargeTax = "";
       }
-      if (!showAdjustment) {
+      if (!showAdjustment && !isEditMode) {
         next.adjustment = 0;
       }
       if (taxMode === "inclusive") {
@@ -1261,7 +1277,7 @@ const NewQuote = () => {
       }
       return next;
     });
-  }, [showTransactionDiscount, showShippingCharges, showAdjustment, taxMode]);
+  }, [showTransactionDiscount, showShippingCharges, showAdjustment, taxMode, isEditMode]);
 
   // Load quote data when in edit mode (after salespersons are loaded)
   useEffect(() => {
@@ -1350,10 +1366,10 @@ const NewQuote = () => {
               const resolvedTaxRate = matchedTax ? (Number((matchedTax as any).rate) || derivedTaxRate) : derivedTaxRate;
 
               return {
-                id: item.item?._id || item.item || item._id || item.id || index + 1, // Map product ID if available
+                id: item.item?._id || item.item?.id || item.item || item._id || item.id || index + 1, // Map product ID if available
                 itemType: item.itemType || "item",
-                itemDetails: item.name || item.itemName || item.itemDetails || "",
-                name: item.name || item.itemName || "",
+                itemDetails: item.item?.name || item.item?.itemName || item.name || item.itemName || item.itemDetails || "",
+                name: item.item?.name || item.item?.itemName || item.name || item.itemName || "",
                 quantity,
                 rate,
                 tax: String(resolvedTaxId || normalizedRawTax || (resolvedTaxRate > 0 ? resolvedTaxRate : "")),
@@ -1365,7 +1381,7 @@ const NewQuote = () => {
             });
 
             const subTotalValue = resolveSubtotalFromQuoteLike(quote, mappedItems);
-            const totalTaxValue = toNumberSafe(quote.taxAmount ?? quote.tax);
+            const totalTaxValue = toNumberSafe(quote.totalTax ?? quote.taxAmount ?? quote.tax);
             const normalizedDiscount = normalizeDiscountForForm(quote, subTotalValue, totalTaxValue);
 
             // Get customer name - check both customer and customerName fields
@@ -2746,11 +2762,31 @@ const NewQuote = () => {
     return (lineAmount * taxRate) / 100;
   };
 
+  const computeDiscountAmount = (subTotal: number, discountValue: any, discountTypeValue: string) => {
+    if (!showTransactionDiscount) return 0;
+    const rawValue = parseFloat(String(discountValue)) || 0;
+    if (subTotal <= 0 || rawValue <= 0) return 0;
+    const calculated = discountTypeValue === "percent" ? (subTotal * rawValue) / 100 : rawValue;
+    return Math.min(calculated, subTotal);
+  };
+
+  const applyDiscountShare = (amount: number, subTotal: number, discountAmount: number) => {
+    if (subTotal <= 0 || discountAmount <= 0) return amount;
+    const share = (amount / subTotal) * discountAmount;
+    return Math.max(0, amount - share);
+  };
+
   const taxBreakdown = useMemo(() => {
     const breakdown: Record<string, { label: string; amount: number }> = {};
     const isInclusive = isTaxInclusiveMode(formData);
 
-    formData.items
+    const itemRows = formData.items.filter((i: any) => i.itemType !== "header");
+    const subTotal = itemRows.reduce((sum: number, item: any) => {
+      return sum + (parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0);
+    }, 0);
+    const discountAmount = computeDiscountAmount(subTotal, formData.discount, formData.discountType);
+
+    itemRows
       .filter((i: any) => i.itemType !== "header")
       .forEach((item: any) => {
         const taxMeta = getTaxMetaFromItem(item);
@@ -2758,7 +2794,8 @@ const NewQuote = () => {
         const quantity = parseFloat(item.quantity) || 0;
         const rate = parseFloat(item.rate) || 0;
         const lineAmount = quantity * rate;
-        const taxAmount = calculateLineTaxAmount(lineAmount, taxMeta.rate, isInclusive);
+        const discountedLineAmount = applyDiscountShare(lineAmount, subTotal, discountAmount);
+        const taxAmount = calculateLineTaxAmount(discountedLineAmount, taxMeta.rate, isInclusive);
         const key = taxMeta.id || `${taxMeta.name}-${taxMeta.rate}`;
         const label = `${taxMeta.name} [${taxMeta.rate}%]${isInclusive ? " (Included)" : ""}`;
         if (!breakdown[key]) breakdown[key] = { label, amount: 0 };
@@ -2836,19 +2873,17 @@ const NewQuote = () => {
       return sum + (parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0);
     }, 0);
 
+    const discountAmount = computeDiscountAmount(subTotal, currentFormData.discount, currentFormData.discountType);
+
     const itemsTax = itemRows.reduce((sum, item) => {
       const quantity = parseFloat(item.quantity) || 0;
       const rate = parseFloat(item.rate) || 0;
       const lineAmount = quantity * rate;
+      const discountedLineAmount = applyDiscountShare(lineAmount, subTotal, discountAmount);
       const taxMeta = getTaxMetaFromItem(item);
-      return sum + calculateLineTaxAmount(lineAmount, taxMeta.rate, isInclusive);
+      return sum + calculateLineTaxAmount(discountedLineAmount, taxMeta.rate, isInclusive);
     }, 0);
 
-    const discountAmount = showTransactionDiscount
-      ? (currentFormData.discountType === "percent"
-        ? (subTotal * (parseFloat(currentFormData.discount) || 0) / 100)
-        : (parseFloat(currentFormData.discount) || 0))
-      : 0;
     const shipping = showShippingCharges ? (parseFloat(currentFormData.shippingCharges) || 0) : 0;
     const shippingTaxObj = (showShippingCharges && shipping > 0 && currentFormData.shippingChargeTax)
       ? getTaxBySelection(currentFormData.shippingChargeTax)
@@ -2860,8 +2895,9 @@ const NewQuote = () => {
     const totalTax = itemsTax + shippingTaxAmount;
     const adjustment = showAdjustment ? (parseFloat(currentFormData.adjustment) || 0) : 0;
     const totalBeforeRound = subTotal + (isInclusive ? 0 : totalTax) - discountAmount + shipping + adjustment;
-    const roundOff = Math.round(totalBeforeRound) - totalBeforeRound;
-    const total = totalBeforeRound + roundOff;
+    const roundedTotal = Number(totalBeforeRound.toFixed(2));
+    const roundOff = Number((roundedTotal - totalBeforeRound).toFixed(2));
+    const total = roundedTotal;
 
     return {
       subTotal,
@@ -3638,7 +3674,6 @@ const NewQuote = () => {
         const lineSubtotal = quantity * rate;
         const taxMeta = getTaxMetaFromItem(item);
         const taxRate = taxMeta.rate;
-        const taxAmount = calculateLineTaxAmount(lineSubtotal, taxRate, isInclusive);
 
         return {
           id: item._id || item.id,
@@ -3653,19 +3688,24 @@ const NewQuote = () => {
           unitPrice: rate,
           tax: item.tax || "",
           taxRate,
-          taxAmount,
+          taxAmount: 0,
           amount: lineSubtotal,
-          total: lineSubtotal
+          total: lineSubtotal,
+          lineSubtotal
         };
       });
 
     const subTotal = validItems.reduce((sum, item) => sum + (item.total || 0), 0);
-    const itemsTax = validItems.reduce((sum, item) => sum + (item.taxAmount || 0), 0);
-    const discountAmount = showTransactionDiscount
-      ? (formData.discountType === "percent"
-        ? (subTotal * (parseFloat(formData.discount || 0) / 100))
-        : (parseFloat(formData.discount || 0)))
-      : 0;
+    const discountAmount = computeDiscountAmount(subTotal, formData.discount, formData.discountType);
+
+    const normalizedItems = validItems.map((item) => {
+      const lineAmount = Number(item.lineSubtotal || 0);
+      const discountedLineAmount = applyDiscountShare(lineAmount, subTotal, discountAmount);
+      const taxAmount = calculateLineTaxAmount(discountedLineAmount, Number(item.taxRate || 0), isInclusive);
+      return { ...item, taxAmount };
+    });
+
+    const itemsTax = normalizedItems.reduce((sum, item) => sum + (item.taxAmount || 0), 0);
     const shipping = showShippingCharges ? (parseFloat(formData.shippingCharges) || 0) : 0;
     const shippingTaxObj = (showShippingCharges && shipping > 0 && formData.shippingChargeTax)
       ? getTaxBySelection(formData.shippingChargeTax)
@@ -3676,14 +3716,15 @@ const NewQuote = () => {
       : 0;
     const totalTax = itemsTax + shippingTaxAmount;
     const adjustment = showAdjustment ? (parseFloat(formData.adjustment) || 0) : 0;
-    const roundOff = parseFloat(formData.roundOff) || 0;
     const totalBeforeRound = isInclusive
       ? (subTotal - discountAmount + shipping + adjustment)
       : (subTotal + totalTax - discountAmount + shipping + adjustment);
-    const finalTotal = totalBeforeRound + roundOff;
+    const roundedTotal = Number(totalBeforeRound.toFixed(2));
+    const roundOff = Number((roundedTotal - totalBeforeRound).toFixed(2));
+    const finalTotal = roundedTotal;
 
     return {
-      validItems,
+      validItems: normalizedItems,
       subTotal,
       totalTax,
       discountAmount,
@@ -3744,11 +3785,13 @@ const NewQuote = () => {
     return quoteNumber;
   };
 
-  const persistQuoteSeriesPreferences = async () => {
-    const rawDigits = extractQuoteDigits(quoteNextNumber) || "1";
+  const persistQuoteSeriesPreferences = async (options?: { prefix?: string; nextDigits?: string }) => {
+    const nextDigitsValue = options?.nextDigits ?? quoteNextNumber;
+    const prefixValue = options?.prefix ?? quotePrefix;
+    const rawDigits = extractQuoteDigits(nextDigitsValue) || "1";
     const width = rawDigits.length >= 2 ? rawDigits.length : 6;
     const normalizedNextDigits = rawDigits.padStart(width, "0");
-    const normalizedPrefix = sanitizeQuotePrefix(quotePrefix);
+    const normalizedPrefix = sanitizeQuotePrefix(prefixValue);
     const normalizedNextNumberValue = parseInt(normalizedNextDigits, 10) || 1;
 
     if (!quoteSeriesRow) {
@@ -4065,9 +4108,9 @@ const NewQuote = () => {
 
   return (
     <>
-      <div className="w-full min-h-full bg-gray-50">
+      <div className="w-full min-h-full bg-white">
         {/* Header */}
-        <div className="sticky top-0 z-40 border-b border-gray-200 bg-white">
+        <div className="sticky top-0 z-40 bg-white">
           <div className="w-full px-8 h-16 flex justify-between items-center">
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-9 h-9 rounded-md border border-gray-200 bg-gray-50 flex items-center justify-center text-gray-600 flex-shrink-0">
@@ -4204,27 +4247,21 @@ const NewQuote = () => {
                             const customerEmail = customer.email || "";
                             const customerCode = (customer as any).customerCode || (customer as any).code || (customer as any).customerNumber || "";
                             const customerCompany = customer.companyName || customerName;
-                            const isSelected = selectedCustomer && (
-                              (selectedCustomer.id && selectedCustomer.id === customerId) ||
-                              (selectedCustomer._id && selectedCustomer._id === customerId) ||
-                              (selectedCustomer.name === customerName)
-                            );
-
                             return (
                               <div
                                 key={customerId}
-                                className={`p-2 cursor-pointer rounded-md flex items-center gap-3 ${isSelected ? "bg-[#156372] text-white" : "hover:bg-[#f4f8f7]"}`}
+                                className="p-2 cursor-pointer rounded-md flex items-center gap-3 hover:bg-[#f4f8f7]"
                                 onClick={() => handleCustomerSelect(customer)}
                               >
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold ${isSelected ? "bg-white/20 text-white" : "bg-gray-100 text-gray-600"}`}>
+                                <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold bg-gray-100 text-gray-600">
                                   {(customerName || "C").charAt(0).toUpperCase()}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <div className={`text-sm font-semibold truncate ${isSelected ? "text-white" : "text-gray-900"}`}>
+                                  <div className="text-sm font-semibold truncate text-gray-900">
                                     {customerName}
-                                    {customerCode ? <span className={`ml-2 font-medium ${isSelected ? "text-white/90" : "text-gray-500"}`}>{customerCode}</span> : null}
+                                    {customerCode ? <span className="ml-2 font-medium text-gray-500">{customerCode}</span> : null}
                                   </div>
-                                  <div className={`mt-0.5 flex items-center gap-3 text-xs ${isSelected ? "text-white/90" : "text-gray-500"}`}>
+                                  <div className="mt-0.5 flex items-center gap-3 text-xs text-gray-500">
                                     <span className="inline-flex items-center gap-1 truncate">
                                       <Mail size={12} />
                                       {customerEmail || "-"}
@@ -5015,22 +5052,12 @@ const NewQuote = () => {
                                   type="button"
                                   className="w-full px-4 py-2.5 text-left text-sm text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
                                   onClick={() => {
-                                    const itemId = String(item.id);
-                                    const isGlobal = showAdditionalInformationEffective;
-                                    if (isGlobal) {
-                                      setShowAdditionalInformation(false);
-                                      setAdditionalInfoItemIds([itemId]);
-                                    } else {
-                                      setAdditionalInfoItemIds((prev) =>
-                                        prev.includes(itemId)
-                                          ? prev.filter((id) => id !== itemId)
-                                          : [...prev, itemId]
-                                      );
-                                    }
+                                    setShowAdditionalInformation((prev) => !prev);
+                                    setAdditionalInfoItemIds([]);
                                     setOpenItemMenuId(null);
                                   }}
                                 >
-                                  {(showAdditionalInformationEffective || additionalInfoItemIds.includes(String(item.id)))
+                                  {showAdditionalInformationEffective
                                     ? "Hide Additional Information"
                                     : "Show Additional Information"}
                                 </button>
@@ -5096,7 +5123,7 @@ const NewQuote = () => {
               </div>
 
               {/* Add Row Buttons */}
-              <div className="flex items-center gap-3 mt-4 ml-0 lg:ml-[240px]">
+              <div className="mt-4 flex items-center gap-3 w-full justify-start self-start">
                 <div className="relative">
                   <button
                     className="flex items-center gap-2 px-4 py-2 bg-[#eef3ff] border border-[#d7deef] text-[#1f3f79] rounded-md text-sm font-medium hover:bg-[#e7eefb] transition-colors"
@@ -5176,65 +5203,7 @@ const NewQuote = () => {
                       </div>
                     )}
 
-                    {showTransactionDiscount && (formData.discount > 0) && (
-                      <div className="flex flex-col gap-1 text-sm border-t border-gray-200 pt-3 pb-1">
-                        <span className="text-gray-600 text-[11px] uppercase font-semibold">Discount Account</span>
-                        <div className="relative" ref={discountAccountDropdownRef}>
-                          <div
-                            className="flex items-center justify-between border border-gray-300 rounded bg-white px-2 py-1.5 cursor-pointer hover:border-gray-400 transition-colors"
-                            onClick={() => setIsDiscountAccountOpen(!isDiscountAccountOpen)}
-                          >
-                            <span className="text-xs text-gray-700 truncate max-w-[180px]">
-                              {formData.discountAccount || "Select Account"}
-                            </span>
-                            <ChevronDown size={14} className="text-gray-400 flex-shrink-0" />
-                          </div>
 
-                          {isDiscountAccountOpen && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded shadow-xl z-[70] max-h-60 overflow-y-auto">
-                              <div className="sticky top-0 bg-white p-2 border-b border-gray-100 z-10">
-                                <div className="relative">
-                                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" size={12} />
-                                  <input
-                                    type="text"
-                                    className="w-full pl-7 pr-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:border-[#156372]"
-                                    placeholder="Search accounts..."
-                                    value={discountAccountSearch}
-                                    onChange={(e) => setDiscountAccountSearch(e.target.value)}
-                                    onClick={(e) => e.stopPropagation()}
-                                  />
-                                </div>
-                              </div>
-                              <div className="py-1">
-                                {Object.entries(groupedDiscountAccounts).length > 0 ? (
-                                  Object.entries(groupedDiscountAccounts).map(([type, accounts]) => (
-                                    <div key={type} className="mb-2">
-                                      <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-gray-50/50">{type}</div>
-                                      {accounts.map((account) => (
-                                        <div
-                                          key={account.id}
-                                          className="px-4 py-2 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer flex flex-col gap-0.5"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setFormData(prev => ({ ...prev, discountAccount: account.name }));
-                                            setIsDiscountAccountOpen(false);
-                                          }}
-                                        >
-                                          <div className="font-medium">{account.name}</div>
-                                          <div className="text-[10px] text-gray-400">{account.accountCode}</div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  ))
-                                ) : (
-                                  <div className="p-4 text-center text-xs text-gray-500 italic">No matching accounts found</div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
 
                     {showShippingCharges && (
                       <div className="grid grid-cols-[1fr_140px_72px] items-center gap-3 text-sm">
@@ -5324,52 +5293,61 @@ const NewQuote = () => {
 
                   <div>
                     <label className="block text-sm text-gray-700 mb-2 font-medium">Attach File(s) to Quote</label>
-                    <button
-                      type="button"
-                      className="h-10 px-4 border border-gray-300 rounded-md bg-white text-sm text-[#156372] hover:bg-[#f4f8f7] transition-colors inline-flex items-center gap-2"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <Upload size={15} />
-                      Upload File
-                      <ChevronDown size={14} className="text-gray-400" />
-                    </button>
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      onChange={handleFileUpload}
-                      multiple
-                      className="hidden"
-                      accept="*/*"
-                    />
-                    <p className="mt-2 text-xs text-gray-500">You can upload a maximum of 5 files, 10MB each</p>
-                    {formData.attachedFiles.length > 0 && (
-                      <div className="mt-3 space-y-2">
-                        {formData.attachedFiles.map((file: any) => (
-                          <div
-                            key={file.id}
-                            className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm"
-                          >
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-medium text-gray-800">{file.name}</p>
-                              <p className="text-xs text-gray-500">File Size: {(Number(file.size || 0) / 1024).toFixed(1)} KB</p>
-                            </div>
-                            <button
-                              type="button"
-                              className="shrink-0 rounded-md p-2 text-gray-400 hover:bg-red-50 hover:text-red-600"
-                              onClick={() => handleRemoveFile(file.id)}
-                            >
-                              <Trash2 size={15} />
-                            </button>
+                    <div className="relative flex items-center gap-2" ref={uploadDropdownRef}>
+                      <button
+                        type="button"
+                        className="h-10 px-4 border border-dashed border-gray-300 rounded-md bg-white text-sm text-[#156372] hover:bg-[#f4f8f7] transition-colors inline-flex items-center gap-2"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <Upload size={15} />
+                        Upload File
+                        <ChevronDown size={14} className="text-gray-400" />
+                      </button>
+                      {formData.attachedFiles.length > 0 && (
+                        <button
+                          type="button"
+                          className="h-10 min-w-[40px] px-3 rounded-md bg-[#156372] text-white text-sm font-semibold hover:bg-[#0f5661] transition-colors inline-flex items-center justify-center"
+                          onClick={() => setIsUploadDropdownOpen((prev) => !prev)}
+                        >
+                          <Paperclip size={14} className="mr-1" />
+                          {formData.attachedFiles.length}
+                        </button>
+                      )}
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileUpload}
+                        multiple
+                        className="hidden"
+                        accept="*/*"
+                      />
+                      {isUploadDropdownOpen && (
+                        <div className="absolute left-0 mt-2 translate-y-[44px] w-[320px] bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                          <div className="p-2 space-y-2">
+                            {formData.attachedFiles.length > 0 ? (
+                              formData.attachedFiles.map((file: any) => (
+                                <div key={file.id} className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-medium text-gray-800">{file.name}</p>
+                                    <p className="text-xs text-gray-500">File Size: {(Number(file.size || 0) / 1024).toFixed(1)} KB</p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="shrink-0 rounded-md p-2 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                                    onClick={() => handleRemoveFile(file.id)}
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="px-3 py-2 text-sm text-gray-500">No files uploaded</div>
+                            )}
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="border-t border-gray-200 pt-5">
-                  <div className="space-y-4">
-                    <div className="ml-6 text-sm text-gray-700" />
+                        </div>
+                      )}
+                    </div>
+                    <p className="mt-2 text-xs text-gray-500">You can upload a maximum of 5 files, 10MB each</p>
                   </div>
                 </div>
 
@@ -5587,8 +5565,8 @@ const NewQuote = () => {
       )}
 
       {/* Sticky Footer */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 py-4 z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-        <div className="flex items-center gap-3 pl-8 pr-8 lg:pl-[240px]">
+      <div className="fixed bottom-0 left-0 right-0 lg:left-[240px] bg-white py-4 z-50">
+        <div className="flex items-center gap-3 px-8">
           <button
             onClick={handleSaveDraft}
             disabled={saveLoading !== null}
@@ -6297,7 +6275,7 @@ const NewQuote = () => {
       {
         isQuoteNumberModalOpen && (
           <div
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center pt-16 z-50"
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center pt-4 z-50"
             onClick={() => setIsQuoteNumberModalOpen(false)}
           >
             <div
@@ -6421,28 +6399,29 @@ const NewQuote = () => {
               <div className="flex items-center gap-2 px-4 py-4 border-t border-gray-200">
                 <button
                   onClick={async () => {
-                    if (quoteNumberMode === "auto") {
-                      const nextDigits = extractQuoteDigits(quoteNextNumber) || "1";
-                      const width = nextDigits.length >= 2 ? nextDigits.length : 6;
-                      const normalizedDigits = nextDigits.padStart(width, "0");
-                      const normalizedPrefix = sanitizeQuotePrefix(quotePrefix);
-                      setQuoteNextNumber(normalizedDigits);
-                      setQuotePrefix(normalizedPrefix);
-                      setFormData(prev => ({
-                        ...prev,
-                        quoteNumber: buildQuoteNumber(normalizedPrefix, normalizedDigits)
-                      }));
-                      try {
-                        await persistQuoteSeriesPreferences();
-                        toast.success("Quote number series updated.");
-                      } catch (error) {
+                    const nextDigits = extractQuoteDigits(quoteNextNumber) || "1";
+                    const width = nextDigits.length >= 2 ? nextDigits.length : 6;
+                    const normalizedDigits = nextDigits.padStart(width, "0");
+                    const normalizedPrefix = sanitizeQuotePrefix(quotePrefix);
+                    setQuoteNextNumber(normalizedDigits);
+                    setQuotePrefix(normalizedPrefix);
+                    setFormData(prev => ({
+                      ...prev,
+                      quoteNumber:
+                        quoteNumberMode === "auto"
+                          ? buildQuoteNumber(normalizedPrefix, normalizedDigits)
+                          : prev.quoteNumber
+                    }));
+      try {
+        await persistQuoteSeriesPreferences();
+        toast.success("Quote number series updated.");
+      } catch (error) {
                         console.error("Error saving quote number series:", error);
                         toast.error("Failed to save quote number series.");
                       }
-                    }
                     setIsQuoteNumberModalOpen(false);
                   }}
-                  className="px-4 h-8 bg-[#22b573] text-white rounded-md text-[12px] font-semibold hover:bg-[#1ea465]"
+                  className="px-4 h-8 bg-[#156372] text-white rounded-md text-[12px] font-semibold hover:bg-[#0f5661]"
                 >
                   Save
                 </button>
