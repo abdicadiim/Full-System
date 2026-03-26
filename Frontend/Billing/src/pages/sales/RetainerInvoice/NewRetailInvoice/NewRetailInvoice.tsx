@@ -1,13 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { Search, X, Plus, ChevronDown, ChevronUp, Settings, Info, BriefcaseBusiness, Check } from "lucide-react";
+import { Search, X, Plus, ChevronDown, ChevronUp, Settings, Info, BriefcaseBusiness, Check, PlusCircle } from "lucide-react";
 import { toast } from "react-toastify";
 import { getCustomers, getInvoiceById, saveInvoice, updateInvoice } from "../../salesModel";
 import { customersAPI, invoicesAPI, projectsAPI, reportingTagsAPI, taxesAPI } from "../../../../services/api";
 import { useOrganizationBranding } from "../../../../hooks/useOrganizationBranding";
+import NewTaxModal from "../../../../../components/modals/NewTaxModal";
+import { buildTaxOptionGroups, taxLabel, isTaxActive, normalizeCreatedTaxPayload } from "../../../../hooks/Taxdropdownstyle";
+import { readTaxesLocal, createTaxLocal } from "../../../settings/organization-settings/taxes-compliance/TAX/storage";
 
-type TaxOption = { id: string; name: string; rate: number };
+type TaxOption = { id: string; name: string; rate: number; [key: string]: any };
 type ProjectOption = { id: string; name: string; customer?: string; status?: string };
 type ReportingTag = {
   id: string;
@@ -64,6 +67,10 @@ export default function NewRetailInvoice() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [taxes, setTaxes] = useState<TaxOption[]>([]);
+  const [openTaxDropdownId, setOpenTaxDropdownId] = useState<number | null>(null);
+  const [taxSearches, setTaxSearches] = useState<Record<string, string>>({});
+  const [isNewTaxModalOpen, setIsNewTaxModalOpen] = useState(false);
+  const [newTaxTargetRowId, setNewTaxTargetRowId] = useState<number | null>(null);
   const [availableReportingTags, setAvailableReportingTags] = useState<ReportingTag[]>([]);
   const [reportingTagOptionsById, setReportingTagOptionsById] = useState<Record<string, string[]>>({});
   const [loadingReportingTagId, setLoadingReportingTagId] = useState<string | null>(null);
@@ -79,6 +86,17 @@ export default function NewRetailInvoice() {
   const [isQuickCustomerMoreDetailsOpen, setIsQuickCustomerMoreDetailsOpen] = useState(false);
   const [quickCustomerFiles, setQuickCustomerFiles] = useState<File[]>([]);
   const [quickCustomerTab, setQuickCustomerTab] = useState<"otherDetails" | "address" | "customFields" | "reportingTags" | "remarks">("otherDetails");
+
+  useEffect(() => {
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && !target.closest("[data-retainer-tax-dropdown='true']")) {
+        setOpenTaxDropdownId(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
   const [quickCustomerForm, setQuickCustomerForm] = useState({
     customerType: "business",
     salutation: "",
@@ -195,15 +213,31 @@ export default function NewRetailInvoice() {
           : Array.isArray((fallbackTaxesResp as any)?.taxes)
           ? (fallbackTaxesResp as any).taxes
           : [];
-        const taxList = taxSource
+        const apiTaxes = taxSource
           .map((t: any) => ({
+            ...t,
             id: String(t._id || t.id || t.taxId || ""),
             name: String(t.name || t.taxName || t.displayName || "Tax"),
             rate: Number(t.rate ?? t.taxRate ?? t.percentage ?? t.taxPercentage ?? 0),
           }))
+          .filter((t: TaxOption) => t.id);
+
+        const cachedTaxes = readTaxesLocal().map((t: any) => ({
+          ...t,
+          id: String(t._id || t.id || t.taxId || ""),
+          name: String(t.name || t.taxName || t.displayName || "Tax"),
+          rate: Number(t.rate ?? t.taxRate ?? t.percentage ?? t.taxPercentage ?? 0),
+        }));
+
+        const combined = [...apiTaxes, ...cachedTaxes]
           .filter((t: TaxOption) => t.id)
-          .filter((t: TaxOption, index: number, list: TaxOption[]) => list.findIndex((row) => row.id === t.id) === index);
-        setTaxes(taxList);
+          .filter((t: TaxOption) => isTaxActive(t))
+          .filter(
+            (t: TaxOption, index: number, list: TaxOption[]) =>
+              list.findIndex((row) => row.id === t.id) === index
+          );
+
+        setTaxes(combined);
 
         const projectSource = Array.isArray((projectResp as any)?.data)
           ? (projectResp as any).data
@@ -323,6 +357,56 @@ export default function NewRetailInvoice() {
 
     loadData();
   }, [id, isEditMode]);
+
+  const handleTaxCreatedFromModal = (payload: any) => {
+    const normalizedInput = normalizeCreatedTaxPayload(payload);
+    let createdTax = normalizedInput.raw;
+    const inputName = normalizedInput.name;
+    const inputRate = normalizedInput.rate;
+    const inputIsCompound = normalizedInput.isCompound;
+
+    if (!inputName) {
+      setIsNewTaxModalOpen(false);
+      setNewTaxTargetRowId(null);
+      return;
+    }
+
+    try {
+      createdTax =
+        createTaxLocal({
+          name: inputName,
+          rate: Number.isFinite(inputRate) ? inputRate : 0,
+          isActive: true,
+          type: "both",
+          isCompound: inputIsCompound,
+        }) || createdTax;
+    } catch (error) {
+      console.error("Error creating tax in local settings storage:", error);
+    }
+
+    const option: any = {
+      ...createdTax,
+      id: createdTax?._id || createdTax?.id || inputName,
+      _id: createdTax?._id || createdTax?.id || inputName,
+      name: createdTax?.name || inputName,
+      rate: Number(createdTax?.rate ?? inputRate) || 0,
+      isActive: createdTax?.isActive !== false && createdTax?.is_active !== false,
+      isCompound: createdTax?.isCompound === true || createdTax?.is_compound === true,
+      type: createdTax?.type || "tax",
+    };
+
+    setTaxes((prev) => {
+      const exists = prev.some((tax) => String(tax.id || tax._id) === String(option.id || option._id));
+      return exists ? prev : [option, ...prev];
+    });
+
+    if (newTaxTargetRowId !== null && newTaxTargetRowId !== undefined) {
+      setRow(newTaxTargetRowId, { taxId: String(option.id || option._id || "") });
+    }
+
+    setIsNewTaxModalOpen(false);
+    setNewTaxTargetRowId(null);
+  };
 
   useEffect(() => {
     const loadLocationSettings = () => {
@@ -1255,7 +1339,7 @@ export default function NewRetailInvoice() {
                 )}
               </div>
 
-              <div className="border border-gray-200 rounded-md overflow-hidden">
+              <div className="border border-gray-200 rounded-md overflow-visible">
                 <table className="w-full text-sm">
                   <thead className="bg-white border-b border-gray-200">
                     <tr className="text-[12px] text-slate-700">
@@ -1277,18 +1361,116 @@ export default function NewRetailInvoice() {
                           />
                         </td>
                         <td className="px-3 py-2 border-r border-gray-200">
-                          <div className="relative">
-                            <select
-                              value={row.taxId}
-                              onChange={(e) => setRow(row.id, { taxId: e.target.value })}
-                              className="w-full h-[34px] appearance-none rounded border border-gray-200 px-2 pr-8 text-[13px] outline-none focus:border-blue-400"
-                            >
-                              <option value="">Select a Tax</option>
-                              {taxes.map((t) => (
-                                <option key={t.id} value={t.id}>{`${t.name} [${t.rate}%]`}</option>
-                              ))}
-                            </select>
-                            <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                          <div className="relative" data-retainer-tax-dropdown="true">
+                            {(() => {
+                              const selectedTax = taxes.find((t) => String(t.id) === String(row.taxId));
+                              const displayLabel = selectedTax ? taxLabel(selectedTax) : "Select a Tax";
+                              const searchValue = taxSearches[row.id] || "";
+                              const grouped = buildTaxOptionGroups(taxes);
+                              const filteredGroups = searchValue.trim()
+                                ? grouped
+                                    .map((group) => ({
+                                      ...group,
+                                      options: group.options.filter((tax) =>
+                                        `${tax.name} [${tax.rate}%]`.toLowerCase().includes(searchValue.trim().toLowerCase())
+                                      ),
+                                    }))
+                                    .filter((group) => group.options.length > 0)
+                                : grouped;
+                              const hasTaxes = filteredGroups.some((group) => group.options.length > 0);
+
+                              return (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="flex h-[34px] w-full items-center justify-between rounded border border-gray-200 px-2 text-left text-[13px] outline-none"
+                                    onClick={() =>
+                                      setOpenTaxDropdownId(openTaxDropdownId === row.id ? null : row.id)
+                                    }
+                                  >
+                                    <span className={displayLabel === "Select a Tax" ? "text-gray-500" : "text-gray-900"}>
+                                      {displayLabel}
+                                    </span>
+                                    <ChevronDown
+                                      size={14}
+                                      className={`transition-transform ${openTaxDropdownId === row.id ? "rotate-180" : ""}`}
+                                      style={{ color: "#156372" }}
+                                    />
+                                  </button>
+
+                                  {openTaxDropdownId === row.id && (
+                                    <div className="absolute left-0 top-full z-[9999] mt-1 w-72 rounded-xl border border-[#d6dbe8] bg-white p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+                                      <div className="p-2">
+                                        <div
+                                          className="flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-all focus-within:bg-white"
+                                          style={{ borderColor: "#156372" }}
+                                        >
+                                          <Search size={14} className="text-slate-400" />
+                                          <input
+                                            type="text"
+                                            value={searchValue}
+                                            onChange={(e) =>
+                                              setTaxSearches((prev) => ({ ...prev, [row.id]: e.target.value }))
+                                            }
+                                            placeholder="Search..."
+                                            className="w-full border-none bg-transparent text-[13px] text-slate-700 outline-none placeholder:text-slate-400"
+                                            autoFocus
+                                          />
+                                        </div>
+                                      </div>
+                                      <div className="max-h-64 overflow-y-auto py-1 custom-scrollbar">
+                                        {!hasTaxes ? (
+                                          <div className="px-4 py-3 text-center text-[13px] text-slate-400">No taxes found</div>
+                                        ) : (
+                                          filteredGroups.map((group) => (
+                                            <div key={group.label}>
+                                              <div className="px-4 py-1.5 text-[10px] font-extrabold uppercase tracking-widest text-slate-700">
+                                                {group.label}
+                                              </div>
+                                              {group.options.map((tax) => {
+                                                const taxId = tax.id;
+                                                const label = taxLabel(tax.raw ?? tax);
+                                                const selected = String(row.taxId || "") === taxId;
+                                                return (
+                                                  <button
+                                                    key={taxId}
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setRow(row.id, { taxId });
+                                                      setOpenTaxDropdownId(null);
+                                                      setTaxSearches((prev) => ({ ...prev, [row.id]: "" }));
+                                                    }}
+                                                    className={`w-full px-4 py-2 text-left text-[13px] ${
+                                                      selected
+                                                        ? "text-[#156372] font-medium hover:bg-gray-50 hover:text-gray-900"
+                                                        : "text-slate-700 hover:bg-gray-50 hover:text-gray-900"
+                                                    }`}
+                                                  >
+                                                    {label}
+                                                  </button>
+                                                );
+                                              })}
+                                            </div>
+                                          ))
+                                        )}
+                                      </div>
+                                      <button
+                                        type="button"
+                                        className="w-full border-t border-gray-200 px-4 py-2 text-left text-[#156372] text-[13px] font-medium flex items-center gap-2 hover:bg-gray-50"
+                                        onClick={() => {
+                                          setOpenTaxDropdownId(null);
+                                          setNewTaxTargetRowId(row.id);
+                                          setIsNewTaxModalOpen(true);
+                                        }}
+                                      >
+                                        <PlusCircle size={14} />
+                                        New Tax
+                                      </button>
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </div>
                         </td>
                         <td className="px-3 py-2 text-right font-medium">
@@ -1813,6 +1995,15 @@ export default function NewRetailInvoice() {
         </div>,
         document.body
       )}
+
+      <NewTaxModal
+        isOpen={isNewTaxModalOpen}
+        onClose={() => {
+          setIsNewTaxModalOpen(false);
+          setNewTaxTargetRowId(null);
+        }}
+        onCreated={handleTaxCreatedFromModal}
+      />
     </div>
   );
 }

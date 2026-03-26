@@ -17,7 +17,9 @@ import { useCurrency } from "../../../hooks/useCurrency";
 import { API_BASE_URL, getToken } from "../../../services/auth";
 import toast from "react-hot-toast";
 import { Country, State } from "country-state-city";
-import NewTaxQuickModal from "../../../components/tax/NewTaxQuickModal";
+import NewTaxModal from "../../../../components/modals/NewTaxModal";
+import { buildTaxOptionGroups, taxLabel, normalizeCreatedTaxPayload, isTaxActive } from "../../../hooks/Taxdropdownstyle";
+import { readTaxesLocal, createTaxLocal, isTaxGroupRecord } from "../../settings/organization-settings/taxes-compliance/TAX/storage";
 
 // taxOptions REMOVED: Now fetching from backend API
 
@@ -386,6 +388,19 @@ const NewQuote = () => {
   const [selectedItemIds, setSelectedItemIds] = useState<Record<string, string>>({});
   const itemDropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const taxDropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const taxOptionGroups = useMemo(() => buildTaxOptionGroups(taxes as any[]), [taxes]);
+  const getFilteredTaxGroups = (search: string) => {
+    const keyword = (search || "").trim().toLowerCase();
+    if (!keyword) return taxOptionGroups;
+    return taxOptionGroups
+      .map((group) => ({
+        ...group,
+        options: group.options.filter((tax) =>
+          taxLabel(tax.raw ?? tax).toLowerCase().includes(keyword)
+        ),
+      }))
+      .filter((group) => group.options.length > 0);
+  };
   const [openItemMenuId, setOpenItemMenuId] = useState<string | number | null>(null);
   const itemMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [isBulkAddModalOpen, setIsBulkAddModalOpen] = useState(false);
@@ -1111,7 +1126,25 @@ const NewQuote = () => {
             ...t,
             id: t._id || t.id
           }));
-          setTaxes(fetchedTaxes);
+          const cachedTaxes = readTaxesLocal();
+          const useFetched = fetchedTaxes.length > 0;
+          const combinedTaxes = useFetched ? fetchedTaxes : cachedTaxes;
+          const dedupedTaxes = Array.from(
+            new Map(
+              combinedTaxes
+                .map((tax: any): [string, any] => {
+                  const id = String(tax?._id || tax?.id || tax?.tax_id || tax?.taxId || tax?.name || tax?.taxName || tax?.tax_name || "").trim();
+                  return [id.toLowerCase(), tax];
+                })
+                .filter(([id]) => Boolean(id))
+            ).values()
+          );
+          const normalizedTaxes = dedupedTaxes.filter((tax: any) => {
+            const name = String(tax?.name || tax?.taxName || tax?.tax_name || tax?.displayName || tax?.title || "").trim();
+            return name.length > 0;
+          });
+          const activeTaxes = normalizedTaxes.filter((tax: any) => isTaxActive(tax));
+          setTaxes(activeTaxes);
         } else {
           console.error("Error loading taxes:", taxesResult.reason);
           setTaxes([]);
@@ -1669,9 +1702,6 @@ const NewQuote = () => {
   };
 
   const handleDateSelect = (date, type) => {
-    if (type === "expiryDate" && isPastDate(date)) {
-      return;
-    }
 
     const formatted = formatDate(date);
     setFormData(prev => ({
@@ -2964,6 +2994,55 @@ const NewQuote = () => {
         ...totals
       };
     });
+  };
+
+  const handleTaxCreatedFromModal = (payload: any) => {
+    const normalizedInput = normalizeCreatedTaxPayload(payload);
+    let createdTax = normalizedInput.raw;
+    const inputName = normalizedInput.name;
+    const inputRate = normalizedInput.rate;
+    const inputIsCompound = normalizedInput.isCompound;
+
+    if (!inputName) {
+      setIsNewTaxQuickModalOpen(false);
+      setNewTaxTargetItemId(null);
+      return;
+    }
+
+    try {
+      createdTax = createTaxLocal({
+        name: inputName,
+        rate: Number.isFinite(inputRate) ? inputRate : 0,
+        isActive: true,
+        type: "both",
+        isCompound: inputIsCompound,
+      }) || createdTax;
+    } catch (error) {
+      console.error("Error creating tax in local settings storage:", error);
+    }
+
+    const option: any = {
+      ...createdTax,
+      id: createdTax?._id || createdTax?.id || inputName,
+      _id: createdTax?._id || createdTax?.id || inputName,
+      name: createdTax?.name || inputName,
+      rate: Number(createdTax?.rate ?? inputRate) || 0,
+      isActive: createdTax?.isActive !== false && createdTax?.is_active !== false,
+      isCompound: createdTax?.isCompound === true || createdTax?.is_compound === true,
+      type: createdTax?.type || "tax",
+    };
+
+    setTaxes((prev: any) => {
+      const exists = prev.some((tax: any) => String(tax.id || tax._id) === String(option.id || option._id));
+      return exists ? prev : [option, ...prev];
+    });
+
+    if (newTaxTargetItemId !== null && newTaxTargetItemId !== undefined) {
+      handleItemChange(newTaxTargetItemId, "tax", String(option.id || option._id || ""));
+    }
+
+    setIsNewTaxQuickModalOpen(false);
+    setNewTaxTargetItemId(null);
   };
 
   const handleAddItem = (insertAfterIndex?: number) => {
@@ -4518,7 +4597,7 @@ const NewQuote = () => {
                             {getDaysInMonth(expiryDateCalendar).map((day, index) => {
                               const isSelected = formData.expiryDate && formatDate(day.fullDate) === formData.expiryDate;
                               const isCurrentMonth = day.month === "current";
-                              const isDisabled = isPastDate(day.fullDate);
+                              const isDisabled = false;
                               return (
                                 <button
                                   key={index}
@@ -4936,81 +5015,100 @@ const NewQuote = () => {
                         <td className="py-2 px-3 align-top">
                           {item.itemType !== "header" && (
                             <div className="relative" ref={(el) => { taxDropdownRefs.current[String(item.id)] = el; }}>
-                              <button
-                                type="button"
-                                className="w-full px-2 py-1.5 border border-transparent hover:border-gray-300 rounded outline-none text-sm bg-transparent text-gray-700 cursor-pointer flex items-center justify-between"
-                                onClick={() => setOpenTaxDropdowns(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
-                              >
-                                <span className={(item.tax || parseTaxRate(item.taxRate) > 0) ? "text-[#156372]" : "text-gray-500"}>
-                                  {(item.tax || parseTaxRate(item.taxRate) > 0)
-                                    ? (() => {
-                                      const taxObj: any = getTaxBySelection(item.tax);
-                                      if (!taxObj) {
-                                        const fallbackRate = parseTaxRate(item.taxRate);
-                                        return fallbackRate > 0 ? `Tax [${fallbackRate}%]` : "Select a Tax";
-                                      }
-                                      const nm = taxObj.name || taxObj.taxName || "Tax";
-                                      const rt = Number(taxObj.rate || 0);
-                                      return `${nm} [${rt}%]`;
-                                    })()
-                                    : "Select a Tax"}
-                                </span>
-                                {openTaxDropdowns[item.id] ? <ChevronUp size={14} className="text-[#156372]" /> : <ChevronDown size={14} className="text-gray-400" />}
-                              </button>
+                              {(() => {
+                                const selectedTaxObj: any = getTaxBySelection(item.tax);
+                                const fallbackRate = parseTaxRate(item.taxRate);
+                                const displayLabel = selectedTaxObj
+                                  ? taxLabel(selectedTaxObj)
+                                  : (fallbackRate > 0 ? `Tax [${fallbackRate}%]` : "Select a Tax");
+                                const searchValue = taxSearches[item.id] || "";
+                                const filteredGroups = getFilteredTaxGroups(searchValue);
+                                const hasTaxes = filteredGroups.length > 0;
 
-                              {openTaxDropdowns[item.id] && (
-                                <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg z-[90] overflow-hidden">
-                                  <div className="p-2 border-b border-gray-200 bg-white">
-                                    <div className="flex items-center gap-2 px-2 py-1.5 border border-gray-200 rounded">
-                                      <Search size={14} className="text-gray-400" />
-                                      <input
-                                        type="text"
-                                        placeholder="Search"
-                                        value={taxSearches[item.id] || ""}
-                                        onChange={(e) => setTaxSearches(prev => ({ ...prev, [item.id]: e.target.value }))}
-                                        className="flex-1 text-sm focus:outline-none"
+                                return (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="w-full px-2 py-1.5 border border-gray-300 bg-white rounded outline-none text-sm text-left flex items-center justify-between hover:border-gray-400 transition-colors"
+                                      onClick={() => setOpenTaxDropdowns(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
+                                    >
+                                      <span className={displayLabel === "Select a Tax" ? "text-gray-500" : "text-gray-900"}>
+                                        {displayLabel}
+                                      </span>
+                                      <ChevronDown
+                                        size={14}
+                                        className={`transition-transform ${openTaxDropdowns[item.id] ? "rotate-180" : ""}`}
+                                        style={{ color: "#156372" }}
                                       />
-                                    </div>
-                                  </div>
-                                  <div className="max-h-52 overflow-y-auto">
-                                    <div className="px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-100">Tax</div>
-                                    {getFilteredTaxes(item.id).map((tax: any) => {
-                                      const taxId = String(tax.id || tax._id);
-                                      const taxName = tax.name || tax.taxName || "Tax";
-                                      const rate = Number(tax.rate || 0);
-                                      const selected = String(item.tax || "") === taxId || Number(item.taxRate || 0) === rate;
-                                      return (
+                                    </button>
+
+                                    {openTaxDropdowns[item.id] && (
+                                      <div className="absolute left-0 top-full z-[9999] mt-1 w-72 rounded-xl border border-[#d6dbe8] bg-white p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+                                        <div className="p-2">
+                                          <div className="flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-all focus-within:bg-white" style={{ borderColor: "#156372" }}>
+                                            <Search size={14} className="text-slate-400" />
+                                            <input
+                                              type="text"
+                                              value={searchValue}
+                                              onChange={(e) => setTaxSearches(prev => ({ ...prev, [item.id]: e.target.value }))}
+                                              placeholder="Search..."
+                                              className="w-full border-none bg-transparent text-[13px] text-slate-700 outline-none placeholder:text-slate-400"
+                                              autoFocus
+                                            />
+                                          </div>
+                                        </div>
+                                        <div className="max-h-64 overflow-y-auto py-1 custom-scrollbar">
+                                          {!hasTaxes ? (
+                                            <div className="px-4 py-3 text-center text-[13px] text-slate-400">No taxes found</div>
+                                          ) : (
+                                            filteredGroups.map((group) => (
+                                              <div key={group.label}>
+                                                <div className="px-4 py-1.5 text-[10px] font-extrabold uppercase tracking-widest text-slate-700">
+                                                  {group.label}
+                                                </div>
+                                                {group.options.map((tax) => {
+                                                  const taxId = tax.id;
+                                                  const label = taxLabel(tax.raw ?? tax);
+                                                  const selected = String(item.tax || "") === taxId || Number(item.taxRate || 0) === tax.rate;
+                                                  return (
+                                                    <button
+                                                      key={taxId}
+                                                      type="button"
+                                                      onClick={() => {
+                                                        handleItemChange(item.id, "tax", taxId);
+                                                        setOpenTaxDropdowns(prev => ({ ...prev, [item.id]: false }));
+                                                        setTaxSearches(prev => ({ ...prev, [item.id]: "" }));
+                                                      }}
+                                                      className={`w-full px-4 py-2 text-left text-[13px] ${selected
+                                                        ? "text-[#156372] font-medium hover:bg-gray-50 hover:text-gray-900"
+                                                        : "text-slate-700 hover:bg-gray-50 hover:text-gray-900"
+                                                        }`}
+                                                    >
+                                                      {label}
+                                                    </button>
+                                                  );
+                                                })}
+                                              </div>
+                                            ))
+                                          )}
+                                        </div>
                                         <button
-                                          key={taxId}
                                           type="button"
-                                          className={`w-full px-3 py-2 text-left text-sm ${selected ? "bg-gray-100 text-gray-900" : "text-gray-700 hover:bg-gray-50"}`}
+                                          className="w-full border-t border-gray-200 px-4 py-2 text-left text-[#156372] text-[13px] font-medium flex items-center gap-2 hover:bg-gray-50"
                                           onClick={() => {
-                                            handleItemChange(item.id, "tax", taxId);
                                             setOpenTaxDropdowns(prev => ({ ...prev, [item.id]: false }));
+                                            setNewTaxTargetItemId(item.id);
+                                            setIsNewTaxQuickModalOpen(true);
                                           }}
                                         >
-                                          {taxName} [{rate}%]
+                                          <PlusCircle size={14} />
+                                          New Tax
                                         </button>
-                                      );
-                                    })}
-                                    {getFilteredTaxes(item.id).length === 0 && (
-                                      <div className="px-3 py-3 text-sm text-gray-500">No taxes found</div>
+                                      </div>
                                     )}
-                                  </div>
-                                  <button
-                                    type="button"
-                                    className="w-full border-t border-gray-200 px-3 py-2 text-left text-[#156372] text-sm font-medium flex items-center gap-2 hover:bg-gray-50"
-                                    onClick={() => {
-                                      setOpenTaxDropdowns(prev => ({ ...prev, [item.id]: false }));
-                                      setNewTaxTargetItemId(item.id);
-                                      setIsNewTaxQuickModalOpen(true);
-                                    }}
-                                  >
-                                    <PlusCircle size={14} />
-                                    New Tax
-                                  </button>
-                                </div>
-                              )}
+                                  </>
+                                );
+                              })()}
                             </div>
                           )}
                         </td>
@@ -8151,31 +8249,13 @@ const NewQuote = () => {
         )
       }
 
-      <NewTaxQuickModal
-        open={isNewTaxQuickModalOpen}
+      <NewTaxModal
+        isOpen={isNewTaxQuickModalOpen}
         onClose={() => {
           setIsNewTaxQuickModalOpen(false);
           setNewTaxTargetItemId(null);
         }}
-        onCreated={(createdTax) => {
-          const option: any = {
-            id: createdTax.id || createdTax._id,
-            _id: createdTax._id || createdTax.id,
-            name: createdTax.name,
-            rate: Number(createdTax.rate || 0),
-            type: "tax",
-            isActive: createdTax.isActive !== false,
-          };
-          setTaxes((prev: any) => {
-            const exists = prev.some((tax: any) => String(tax.id || tax._id) === String(option.id || option._id));
-            return exists ? prev : [option, ...prev];
-          });
-          if (newTaxTargetItemId !== null && newTaxTargetItemId !== undefined) {
-            handleItemChange(newTaxTargetItemId, "tax", String(option.id || option._id || ""));
-          }
-          setIsNewTaxQuickModalOpen(false);
-          setNewTaxTargetItemId(null);
-        }}
+        onCreated={handleTaxCreatedFromModal}
       />
     </>
   );

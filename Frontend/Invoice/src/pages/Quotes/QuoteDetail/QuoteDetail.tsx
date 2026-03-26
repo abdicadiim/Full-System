@@ -547,19 +547,28 @@ const QuoteDetail = () => {
     const loadLinkedInvoices = async () => {
       const status = String((quote as any)?.status || "").toLowerCase();
       const quoteIdValue = String(quoteId || "");
-      const shouldLoad = Boolean(quoteIdValue) && Boolean(quote) && linkedInvoicesLoadedForQuoteRef.current !== quoteIdValue;
+      const shouldLoad =
+        Boolean(quoteIdValue) &&
+        Boolean(quote) &&
+        (linkedInvoicesLoadedForQuoteRef.current !== quoteIdValue ||
+          (!linkedInvoicesLoading && Array.isArray(linkedInvoices) && linkedInvoices.length === 0));
       if (!shouldLoad) return;
 
       linkedInvoicesLoadedForQuoteRef.current = quoteIdValue;
       setLinkedInvoicesLoading(true);
       try {
         const quoteNumber = String((quote as any)?.quoteNumber || (quote as any)?.id || quoteId || "").trim();
+        const quoteInvoiceId = String((quote as any)?.convertedToInvoiceId || (quote as any)?.invoiceId || "").trim();
+        const quoteInvoiceNumber = String((quote as any)?.convertedToInvoiceNumber || (quote as any)?.invoiceNumber || "").trim();
         const invoices = await getInvoices({ limit: 1000 });
         if (cancelled) return;
 
         const matches = (Array.isArray(invoices) ? invoices : [])
           .map((inv: any) => ({ ...inv, id: inv?._id || inv?.id }))
           .filter((inv: any) => {
+            const invId = String(inv?.id || inv?._id || "").trim();
+            if (quoteInvoiceId && invId && invId === quoteInvoiceId) return true;
+
             const refCandidates = [
               inv?.convertedFromQuote,
               inv?.convertedFromQuoteId,
@@ -583,6 +592,7 @@ const QuoteDetail = () => {
               inv?.orderNumber ||
               ""
             ).trim();
+            if (quoteInvoiceNumber && invoiceQuoteNumber && invoiceQuoteNumber === quoteInvoiceNumber) return true;
             if (quoteNumber && invoiceQuoteNumber && invoiceQuoteNumber === quoteNumber) return true;
 
             return false;
@@ -1084,7 +1094,7 @@ const QuoteDetail = () => {
   const renderLinkedInvoicesTable = (opts?: { compact?: boolean }) => {
     const compact = Boolean(opts?.compact);
     return (
-      <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+      <div id="quote-linked-invoices" className="w-full bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <h3 className="text-base font-semibold text-gray-900">Invoices</h3>
@@ -1096,9 +1106,9 @@ const QuoteDetail = () => {
             <button
               type="button"
               className="text-sm font-medium text-[#2F80FF] hover:underline"
-              onClick={() => navigate("/sales/invoices")}
+              onClick={handleConvertToInvoice}
             >
-              View Invoices
+              Convert to Invoice
             </button>
           )}
         </div>
@@ -3226,6 +3236,15 @@ const QuoteDetail = () => {
                 <span>Convert to Invoice</span>
               </button>
             )}
+            {isInvoicedStatus && (
+              <button
+                className="flex items-center gap-1.5 px-2 py-1.5 bg-transparent text-gray-700 rounded-md text-sm font-medium cursor-pointer hover:text-[#2F80FF]"
+                onClick={handleConvertToInvoice}
+              >
+                <FileText size={16} />
+                <span>Convert to Invoice</span>
+              </button>
+            )}
 
             {isApprovedStatus && (
               <div className="relative quote-detail-dropdown-wrapper">
@@ -3417,6 +3436,29 @@ const QuoteDetail = () => {
             </div>
           )}
 
+          {isInvoicedStatus && (
+            <div className="px-4 md:px-6 pt-4 bg-gray-50 border-b border-gray-200">
+              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3">
+                <span className="text-sm font-semibold text-gray-900">WHAT'S NEXT?</span>
+                <span className="text-sm text-gray-600">This quote has been invoiced. You can review the invoice details or create a project.</span>
+                <button
+                  type="button"
+                  className="px-4 py-1.5 bg-[#0D4A52] hover:bg-[#0B3F46] text-white rounded-md text-sm font-semibold"
+                  onClick={handleConvertToInvoice}
+                >
+                  Convert to Invoice
+                </button>
+                <button
+                  type="button"
+                  className="px-4 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-md text-sm font-medium"
+                  onClick={handleCreateProject}
+                >
+                  Create Project
+                </button>
+              </div>
+            </div>
+          )}
+
           {(isSentStatus || isAcceptedStatus) && (
             <div className="px-4 md:px-6 pt-4 bg-gray-50 border-b border-gray-200">
               <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3">
@@ -3500,7 +3542,7 @@ const QuoteDetail = () => {
                   linkedInvoicesLoading ||
                   linkedInvoices.length > 0)
               ) && (
-                <div className="w-full max-w-[920px] mx-auto mb-3">
+                <div className="w-full mb-3">
                   {renderLinkedInvoicesTable({ compact: true })}
                 </div>
               )}
@@ -3690,53 +3732,6 @@ const QuoteDetail = () => {
                         # {quote.quoteNumber || quote.id}
                       </div>
                     </div>
-                    {/* Customize Button - appears on hover */}
-                    {isQuoteDocumentHovered && (
-                      <div className="absolute top-0 right-0 z-10" ref={customizeDropdownRef}>
-                        <button
-                          className="flex items-center gap-2 px-4 py-2 text-white rounded-md text-sm font-medium cursor-pointer transition-colors shadow-md"
-                          style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                          onMouseEnter={(e: any) => e.target.style.opacity = "0.9"}
-                          onMouseLeave={(e: any) => e.target.style.opacity = "1"}
-                          onClick={() => setIsCustomizeDropdownOpen(!isCustomizeDropdownOpen)}
-                        >
-                          <Settings size={16} />
-                          Customize
-                          <ChevronDown size={14} />
-                        </button>
-                        {isCustomizeDropdownOpen && (
-                          <div className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 min-w-[220px]">
-                            <div
-                              className="px-4 py-2 text-sm text-gray-600 cursor-pointer hover:bg-gray-50"
-                              onClick={() => {
-                                setIsCustomizeDropdownOpen(false);
-                                setIsOrganizationAddressModalOpen(true);
-                              }}
-                            >
-                              Update Logo & Address
-                            </div>
-                            <div
-                              className="px-4 py-2 text-sm text-gray-600 cursor-pointer hover:bg-gray-50"
-                              onClick={() => {
-                                setIsCustomizeDropdownOpen(false);
-                                navigate("/settings/quotes/customfields");
-                              }}
-                            >
-                              Manage Custom Fields
-                            </div>
-                            <div
-                              className="px-4 py-2 text-sm text-gray-600 cursor-pointer hover:bg-gray-50"
-                              onClick={() => {
-                                setIsCustomizeDropdownOpen(false);
-                                setIsTermsAndConditionsModalOpen(true);
-                              }}
-                            >
-                              Terms & Conditions
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </div>
 
                   {/* Bill To and Date Row */}
@@ -4192,7 +4187,7 @@ const QuoteDetail = () => {
 
           {activeTab === "invoices" && (
             <div className="flex-1 overflow-y-auto p-3 md:p-4 bg-gray-50">
-              <div className="w-full max-w-4xl mx-auto">
+              <div className="w-full">
                 {renderLinkedInvoicesTable()}
               </div>
             </div>

@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { useOrganizationBranding } from "../../../../hooks/useOrganizationBranding";
 import { Customer, Salesperson, getCustomers, getSalespersonsFromAPI, getPlansFromAPI, getBaseCurrency, getItemsFromAPI, getTaxesFromAPI, Tax, getReportingTagsFromAPI, ReportingTag } from "../../salesModel";
-import { customersAPI, subscriptionsAPI } from "../../../../services/api";
+import { customersAPI, subscriptionsAPI, productsAPI } from "../../../../services/api";
 import { toast } from "react-toastify";
 import { Country, State } from "country-state-city";
 
@@ -780,14 +780,15 @@ const NewSubscriptionPage = () => {
             setIsLoadingPlans(true);
             setIsLoadingItems(true);
             try {
-                const [customersData, salespersonsData, plansData, baseCurrency, itemsData, taxesData, reportingTagsData] = await Promise.all([
+                const [customersData, salespersonsData, plansData, baseCurrency, itemsData, taxesData, reportingTagsData, productsRes] = await Promise.all([
                     getCustomers({ status: 'active' }),
                     getSalespersonsFromAPI(),
                     getPlansFromAPI(),
                     getBaseCurrency(),
                     getItemsFromAPI(),
                     getTaxesFromAPI(),
-                    getReportingTagsFromAPI()
+                    getReportingTagsFromAPI(),
+                    productsAPI.getAll({ status: 'active' })
                 ]);
                 setCustomers(customersData);
                 setSalespersons(salespersonsData);
@@ -855,7 +856,7 @@ const NewSubscriptionPage = () => {
                     })
                     .filter((p) => p.name);
 
-                const productsRows = readRows("inv_products_v1");
+                const productsRows = productsRes?.data || readRows("inv_products_v1");
                 const mappedProducts: ProductOption[] = mapProductsRows(productsRows);
 
                 const addonsRows = readRows("inv_addons_v1");
@@ -1116,7 +1117,7 @@ const NewSubscriptionPage = () => {
     // Refresh products when user opens dropdown or returns to page after adding product.
     useEffect(() => {
         const refreshProducts = () => {
-            const productsRows = readRows("inv_products_v1");
+            const productsRows = productsRes?.data || readRows("inv_products_v1");
             setProducts(mapProductsRows(productsRows));
         };
 

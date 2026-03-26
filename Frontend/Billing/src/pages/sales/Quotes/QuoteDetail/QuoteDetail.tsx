@@ -47,7 +47,7 @@ import {
   Lock,
   Send
 } from "lucide-react";
-import { getQuoteById, getQuotes, updateQuote, deleteQuotes, getCustomers, getSalespersons, getProjects, saveInvoice, saveQuote } from "../../salesModel";
+import { getQuoteById, getQuotes, updateQuote, deleteQuotes, getCustomers, getSalespersons, getProjects, getInvoices, saveInvoice, saveQuote } from "../../salesModel";
 import { currenciesAPI, documentsAPI, quotesAPI } from "../../../../services/api";
 import { toast } from "react-toastify";
 
@@ -61,6 +61,9 @@ const QuoteDetail = () => {
   const [allQuotes, setAllQuotes] = useState(preloadedQuotes || []);
   const [loading, setLoading] = useState(!preloadedQuote);
   const [baseCurrency, setBaseCurrency] = useState("USD");
+  const [linkedInvoices, setLinkedInvoices] = useState<any[]>([]);
+  const [linkedInvoicesLoading, setLinkedInvoicesLoading] = useState(false);
+  const linkedInvoicesLoadedForQuoteRef = useRef<string>("");
   const [activeTab, setActiveTab] = useState("details");
   const [showPdfView, setShowPdfView] = useState(true);
   const [showMailDropdown, setShowMailDropdown] = useState(false);
@@ -550,6 +553,83 @@ const QuoteDetail = () => {
     };
   }, [quoteId]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadLinkedInvoices = async () => {
+      const quoteIdValue = String(quoteId || "");
+      const shouldLoad =
+        activeTab === "invoices" &&
+        Boolean(quoteIdValue) &&
+        Boolean(quote) &&
+        (linkedInvoicesLoadedForQuoteRef.current !== quoteIdValue ||
+          (!linkedInvoicesLoading && Array.isArray(linkedInvoices) && linkedInvoices.length === 0));
+      if (!shouldLoad) return;
+
+      linkedInvoicesLoadedForQuoteRef.current = quoteIdValue;
+      setLinkedInvoicesLoading(true);
+      try {
+        const quoteNumber = String((quote as any)?.quoteNumber || (quote as any)?.id || quoteId || "").trim();
+        const quoteInvoiceId = String((quote as any)?.convertedToInvoiceId || (quote as any)?.invoiceId || "").trim();
+        const quoteInvoiceNumber = String((quote as any)?.convertedToInvoiceNumber || (quote as any)?.invoiceNumber || "").trim();
+        const invoices = await getInvoices({ limit: 1000 });
+        if (cancelled) return;
+
+        const matches = (Array.isArray(invoices) ? invoices : [])
+          .map((inv: any) => ({ ...inv, id: inv?._id || inv?.id }))
+          .filter((inv: any) => {
+            const invId = String(inv?.id || inv?._id || "").trim();
+            if (quoteInvoiceId && invId && invId === quoteInvoiceId) return true;
+
+            const refCandidates = [
+              inv?.convertedFromQuote,
+              inv?.convertedFromQuoteId,
+              inv?.sourceQuoteId,
+              inv?.quoteId,
+              inv?.createdFromQuote,
+              inv?.convertedFrom,
+              inv?.quote?._id,
+              inv?.quote?.id,
+              inv?.quote,
+            ]
+              .filter(Boolean)
+              .map((value: any) => String(value));
+            if (quoteIdValue && refCandidates.some((value: string) => value === quoteIdValue)) return true;
+
+            const invoiceQuoteNumber = String(
+              inv?.sourceQuoteNumber ||
+              inv?.quoteNumber ||
+              inv?.convertedQuoteNumber ||
+              inv?.referenceNumber ||
+              inv?.orderNumber ||
+              ""
+            ).trim();
+            if (quoteInvoiceNumber && invoiceQuoteNumber && invoiceQuoteNumber === quoteInvoiceNumber) return true;
+            if (quoteNumber && invoiceQuoteNumber && invoiceQuoteNumber === quoteNumber) return true;
+
+            return false;
+          })
+          .sort((a: any, b: any) => {
+            const aTime = new Date(a?.invoiceDate || a?.date || a?.createdAt || 0).getTime();
+            const bTime = new Date(b?.invoiceDate || b?.date || b?.createdAt || 0).getTime();
+            return bTime - aTime;
+          });
+
+        setLinkedInvoices(matches);
+      } catch (error) {
+        console.error("Error loading linked invoices:", error);
+        setLinkedInvoices([]);
+      } finally {
+        if (!cancelled) setLinkedInvoicesLoading(false);
+      }
+    };
+
+    loadLinkedInvoices();
+    return () => {
+      cancelled = true;
+    };
+  }, [quoteId, quote, activeTab]);
+
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -980,6 +1060,125 @@ const QuoteDetail = () => {
   const toNumber = (value) => {
     const parsed = parseFloat(String(value ?? 0));
     return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const isSameDay = (a, b) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+
+  const getInvoiceDateValue = (invoice) =>
+    invoice?.invoiceDate || invoice?.date || invoice?.createdAt || "";
+
+  const getInvoiceDueDateValue = (invoice) =>
+    invoice?.dueDate || invoice?.expectedPaymentDate || "";
+
+  const getInvoiceBalanceDueValue = (invoice) => {
+    const total = toNumber(invoice?.total ?? invoice?.amount ?? 0);
+    const balanceDue = toNumber(invoice?.balanceDue ?? invoice?.balance ?? 0);
+    if (balanceDue > 0) return balanceDue;
+    const paid = toNumber(invoice?.amountPaid ?? invoice?.paidAmount ?? 0);
+    if (paid > 0) return Math.max(0, total - paid);
+    return balanceDue;
+  };
+
+  const getInvoiceStatusMeta = (invoice) => {
+    const rawStatus = String(invoice?.status || "").toLowerCase();
+    const dueRaw = getInvoiceDueDateValue(invoice);
+    const dueDate = dueRaw ? new Date(dueRaw) : null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (dueDate) dueDate.setHours(0, 0, 0, 0);
+
+    const balanceDue = getInvoiceBalanceDueValue(invoice);
+    if (rawStatus === "draft") return { label: "DRAFT", className: "text-yellow-700" };
+    if (balanceDue <= 0 && rawStatus) return { label: "PAID", className: "text-emerald-700" };
+    if (dueDate && isSameDay(dueDate, today) && balanceDue > 0) return { label: "DUE TODAY", className: "text-[#2F80FF]" };
+    if (dueDate && dueDate.getTime() < today.getTime() && balanceDue > 0) return { label: "OVERDUE", className: "text-red-600" };
+
+    if (rawStatus === "sent" || rawStatus === "open" || rawStatus === "unpaid") return { label: "UNPAID", className: "text-[#2F80FF]" };
+    if (rawStatus) return { label: rawStatus.toUpperCase(), className: "text-gray-700" };
+    return { label: "UNPAID", className: "text-[#2F80FF]" };
+  };
+
+  const renderLinkedInvoicesTable = (opts) => {
+    const compact = Boolean(opts?.compact);
+    return (
+      <div id="quote-linked-invoices" className="w-full bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-semibold text-gray-900">Invoices</h3>
+            <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-gray-100 text-[11px] font-semibold text-gray-700">
+              {linkedInvoicesLoading ? "…" : linkedInvoices.length}
+            </span>
+          </div>
+          {!compact && (
+            <button
+              type="button"
+              className="text-sm font-medium text-[#0D4A52] hover:underline"
+              onClick={handleConvertToInvoice}
+            >
+              Convert to Invoice
+            </button>
+          )}
+        </div>
+
+        {linkedInvoicesLoading ? (
+          <div className="px-5 py-6 flex items-center gap-3 text-sm text-gray-600">
+            <div className="w-5 h-5 border-2 border-gray-300 border-t-[#0D4A52] rounded-full animate-spin" />
+            Loading linked invoices...
+          </div>
+        ) : linkedInvoices.length === 0 ? (
+          <div className="px-5 py-6 text-sm text-gray-600">No linked invoices found for this quote.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead className="bg-[#f8fafc]">
+                <tr className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200">
+                  <th className="text-left py-2.5 px-4 min-w-[130px]">Date</th>
+                  <th className="text-left py-2.5 px-4 min-w-[150px]">Invoice#</th>
+                  <th className="text-left py-2.5 px-4 min-w-[130px]">Status</th>
+                  <th className="text-left py-2.5 px-4 min-w-[130px]">Due Date</th>
+                  <th className="text-right py-2.5 px-4 min-w-[130px]">Amount</th>
+                  <th className="text-right py-2.5 px-4 min-w-[140px]">Balance Due</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {linkedInvoices.map((invoice) => {
+                  const statusMeta = getInvoiceStatusMeta(invoice);
+                  const invoiceId = String(invoice?.id || invoice?._id || "").trim();
+                  const invoiceNumber = String(invoice?.invoiceNumber || invoice?.number || invoiceId || "-").trim();
+                  const invoiceDate = formatDate(getInvoiceDateValue(invoice));
+                  const dueDate = formatDate(getInvoiceDueDateValue(invoice));
+                  const amount = toNumber(invoice?.total ?? invoice?.amount ?? 0);
+                  const balanceDue = getInvoiceBalanceDueValue(invoice);
+                  return (
+                    <tr key={invoiceId || invoiceNumber} className="text-sm">
+                      <td className="py-3 px-4 text-gray-800">{invoiceDate}</td>
+                      <td className="py-3 px-4">
+                        <button
+                          type="button"
+                          className="text-[#0D4A52] hover:underline"
+                          onClick={() => invoiceId && navigate(`/sales/invoices/${invoiceId}`)}
+                        >
+                          {invoiceNumber}
+                        </button>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={`font-medium ${statusMeta.className}`}>{statusMeta.label}</span>
+                      </td>
+                      <td className="py-3 px-4 text-gray-800">{dueDate}</td>
+                      <td className="py-3 px-4 text-right text-gray-800">{formatCurrency(amount, quote?.currency || baseCurrency)}</td>
+                      <td className="py-3 px-4 text-right text-gray-800">{formatCurrency(balanceDue, quote?.currency || baseCurrency)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
   };
 
   const getQuoteTotalsMeta = (quoteData) => {
@@ -3086,6 +3285,16 @@ const QuoteDetail = () => {
               </>
             )}
 
+            {isInvoicedStatus && (
+              <button
+                className="flex items-center gap-1.5 px-2 py-1.5 bg-transparent text-gray-700 rounded-md text-sm font-medium cursor-pointer hover:text-[#156372]"
+                onClick={handleConvertToInvoice}
+              >
+                <FileText size={16} />
+                <span>Convert to Invoice</span>
+              </button>
+            )}
+
             {!isSimplifiedActionStatus && hasPlanItems && (
               <button
                 className="flex items-center gap-1.5 px-2 py-1.5 bg-transparent text-gray-700 rounded-md text-sm font-medium cursor-pointer hover:text-[#156372]"
@@ -3163,7 +3372,7 @@ const QuoteDetail = () => {
                   {!isSimplifiedActionStatus && !isApprovedStatus && (
                     <>
                       <div
-                        className={`flex items-center gap-2 px-4 py-2 text-sm ${
+                        className={`flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 ${
                           isExpiredStatus ? "text-gray-700 cursor-pointer" : "text-gray-700 cursor-pointer"
                         }`}
                         onClick={handleMarkAsAccepted}
@@ -3172,7 +3381,7 @@ const QuoteDetail = () => {
                         Mark as Accepted
                       </div>
                       <div className="h-px bg-gray-100" />
-                      <div className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer" onClick={handleMarkAsDeclined}>
+                      <div className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50" onClick={handleMarkAsDeclined}>
                         <XCircle size={14} />
                         Mark as Declined
                       </div>
@@ -3182,7 +3391,7 @@ const QuoteDetail = () => {
                   {isApprovedStatus && (
                     <>
                       <div
-                        className="flex items-center gap-2 px-4 py-2 text-sm cursor-pointer text-gray-700"
+                        className="flex items-center gap-2 px-4 py-2 text-sm cursor-pointer text-gray-700 hover:bg-gray-50"
                         onClick={() => {
                           setShowMoreDropdown(false);
                           handleMarkCurrentAsSent();
@@ -3195,7 +3404,7 @@ const QuoteDetail = () => {
                     </>
                   )}
                   <div
-                    className={`flex items-center gap-2 px-4 py-2 text-sm ${
+                    className={`flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 ${
                       isCloningQuote ? "text-gray-400 cursor-not-allowed" : "text-gray-700 cursor-pointer"
                     }`}
                     onClick={handleDuplicateQuote}
@@ -3204,12 +3413,12 @@ const QuoteDetail = () => {
                     {isCloningQuote ? "Cloning..." : "Clone"}
                   </div>
                   <div className="h-px bg-gray-100" />
-                  <div className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 cursor-pointer" onClick={handleDeleteQuote}>
+                  <div className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 cursor-pointer hover:bg-gray-50" onClick={handleDeleteQuote}>
                     <Trash2 size={14} />
                     Delete
                   </div>
                   <div className="h-px bg-gray-100" />
-                  <div className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer" onClick={handleQuotePreferences}>
+                  <div className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50" onClick={handleQuotePreferences}>
                     <Settings size={14} />
                     Quote Preferences
                   </div>
@@ -3322,9 +3531,9 @@ const QuoteDetail = () => {
                 <button
                   type="button"
                   className="px-4 py-1.5 bg-[#0D4A52] hover:bg-[#0B3B41] text-white rounded-md text-sm font-semibold"
-                  onClick={() => setActiveTab("invoices")}
+                  onClick={handleConvertToInvoice}
                 >
-                  View Invoices
+                  Convert to Invoice
                 </button>
                 <button
                   type="button"
@@ -3365,8 +3574,8 @@ const QuoteDetail = () => {
             <div className="flex gap-1 overflow-x-auto w-full md:w-auto">
               <button
                 className={`px-4 py-2 text-sm font-medium border-b-2 cursor-pointer transition-colors whitespace-nowrap ${activeTab === "details"
-                  ? "text-gray-900 border-[#3b82f6]"
-                  : "text-gray-600 border-transparent hover:text-gray-900"
+                  ? "text-[#0D4A52] border-[#0D4A52]"
+                  : "text-gray-600 border-transparent hover:text-[#0D4A52]"
                   }`}
                 onClick={() => setActiveTab("details")}
               >
@@ -3375,18 +3584,18 @@ const QuoteDetail = () => {
               {isInvoicedStatus && (
                 <button
                   className={`px-4 py-2 text-sm font-medium border-b-2 cursor-pointer transition-colors whitespace-nowrap ${activeTab === "invoices"
-                    ? "text-gray-900 border-[#3b82f6]"
-                    : "text-gray-600 border-transparent hover:text-gray-900"
+                    ? "text-[#0D4A52] border-[#0D4A52]"
+                    : "text-gray-600 border-transparent hover:text-[#0D4A52]"
                     }`}
                   onClick={() => setActiveTab("invoices")}
                 >
-                  Subscriptions
+                  Invoices
                 </button>
               )}
               <button
                 className={`px-4 py-2 text-sm font-medium border-b-2 cursor-pointer transition-colors whitespace-nowrap ${activeTab === "activity"
-                  ? "text-gray-900 border-[#3b82f6]"
-                  : "text-gray-600 border-transparent hover:text-gray-900"
+                  ? "text-[#0D4A52] border-[#0D4A52]"
+                  : "text-gray-600 border-transparent hover:text-[#0D4A52]"
                   }`}
                 onClick={() => setActiveTab("activity")}
               >
@@ -3910,9 +4119,8 @@ const QuoteDetail = () => {
 
           {activeTab === "invoices" && (
             <div className="flex-1 overflow-y-auto p-3 md:p-4 bg-gray-50">
-              <div className="w-full max-w-4xl mx-auto bg-white shadow-lg border border-gray-200 rounded-md p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Invoices</h3>
-                <p className="text-sm text-gray-600">No linked invoices found for this quote.</p>
+              <div className="w-full">
+                {renderLinkedInvoicesTable()}
               </div>
             </div>
           )}

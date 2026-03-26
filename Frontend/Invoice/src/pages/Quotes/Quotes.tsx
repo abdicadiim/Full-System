@@ -573,6 +573,23 @@ export default function Quotes() {
     }
   };
 
+  const getEffectiveStatus = (quote: any) => {
+    const statusRaw = String(quote?.status || "").toLowerCase();
+    const expiry = parseDateSafe(quote?.expiryDate);
+    if (expiry) {
+      const expiryDate = new Date(expiry);
+      const today = new Date();
+      expiryDate.setHours(0, 0, 0, 0);
+      today.setHours(0, 0, 0, 0);
+      const isPast = expiryDate < today;
+      const protectedStatuses = ["converted", "invoiced", "accepted", "approved", "declined", "rejected"];
+      if (isPast && !protectedStatuses.includes(statusRaw)) {
+        return "expired";
+      }
+    }
+    return statusRaw || "draft";
+  };
+
   // Filter quotes based on selected view
   const filteredQuotes = useMemo(() => {
     // Ensure quotes is always an array
@@ -594,16 +611,19 @@ export default function Quotes() {
 
     switch (selectedView) {
       case "All Quotes": return quotes;
-      case "Open Quotes": return quotes.filter(q => q.status === "open");
-      case "Sent": return quotes.filter(q => q.status === "sent");
-      case "Accepted": return quotes.filter(q => q.status === "accepted");
+      case "Open Quotes": return quotes.filter(q => getEffectiveStatus(q) === "open");
+      case "Sent": return quotes.filter(q => getEffectiveStatus(q) === "sent");
+      case "Accepted": return quotes.filter(q => getEffectiveStatus(q) === "accepted");
       case "Declined": return quotes.filter(q => {
-        const status = String(q.status || "").toLowerCase();
+        const status = getEffectiveStatus(q);
         return status === "declined" || status === "rejected";
       });
-      case "Expired": return quotes.filter(q => q.status === "expired");
-      case "Converted to Invoice": return quotes.filter(q => q.status === "converted");
-      case "Draft Quotes": return quotes.filter(q => q.status === "draft");
+      case "Expired": return quotes.filter(q => getEffectiveStatus(q) === "expired");
+      case "Converted to Invoice": return quotes.filter(q => {
+        const status = getEffectiveStatus(q);
+        return status === "converted" || status === "invoiced";
+      });
+      case "Draft Quotes": return quotes.filter(q => getEffectiveStatus(q) === "draft");
       default: return quotes;
     }
   }, [quotes, selectedView, customViews]);
@@ -2544,7 +2564,9 @@ export default function Quotes() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#eef1f6]">
-                {sortedQuotes.map((quote) => (
+                {sortedQuotes.map((quote) => {
+                  const effectiveStatus = getEffectiveStatus(quote);
+                  return (
                   <tr
                     key={quote.id}
                     className={`text-[13px] h-[50px] group transition-all hover:bg-[#f8fafc] border-b border-[#eef1f6] cursor-pointer ${selectedQuotes.includes(quote.id) ? 'bg-[#156372]/5' : ''}`}
@@ -2593,12 +2615,14 @@ export default function Quotes() {
                               <Mail size={14} className="text-gray-500" />
                             )}
                           </span>
+                        ) : colKey === 'expiryDate' ? (
+                          <span className="text-gray-700">{formatDate(quote.expiryDate)}</span>
                         ) : colKey === 'status' ? (
                           <span
                             className="font-medium uppercase tracking-wide"
-                            style={{ color: getStatusColor((quote.status || "").toLowerCase()) }}
+                            style={{ color: getStatusColor(effectiveStatus) }}
                           >
-                            {String(getStatusDisplay(quote.status || "") || "").toUpperCase()}
+                            {String(getStatusDisplay(effectiveStatus) || "").toUpperCase()}
                           </span>
                         ) : colKey === 'amount' ? (
                           <span className="font-medium text-[#156372]">
@@ -2615,7 +2639,8 @@ export default function Quotes() {
                     ))}
                     <td className="w-10 px-4 py-3 text-right border-l border-[#eef1f6] group-hover:bg-[#f8fafc]/95 transition-colors"></td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

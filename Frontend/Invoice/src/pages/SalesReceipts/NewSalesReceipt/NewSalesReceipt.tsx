@@ -41,6 +41,7 @@ import ZohoSelect from "../../../components/ZohoSelect";
 import PaymentModeDropdown from "../../../components/PaymentModeDropdown";
 import { API_BASE_URL, getToken } from "../../../services/auth";
 import NewTaxQuickModal from "../../../components/tax/NewTaxQuickModal";
+import { buildTaxOptionGroups, taxLabel } from "../../../hooks/Taxdropdownstyle";
 
 // Salespersons will be loaded from database
 
@@ -2811,56 +2812,86 @@ export default function NewSalesReceipt() {
                             </div>
                           </button>
                           {openTaxDropdowns[item.id] && (
-                            <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl z-[2500] py-2 w-[240px]">
-                              <div className="px-2 pb-2">
-                                <div className="relative">
-                                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                                  <input
-                                    type="text"
-                                    value={taxSearches[item.id] || ""}
-                                    onChange={(e) => setTaxSearches(prev => ({ ...prev, [item.id]: e.target.value }))}
-                                    placeholder="Search"
-                                    className="w-full pl-9 pr-3 py-2 border border-[#3b82f6] rounded-md text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#3b82f6] focus:border-[#3b82f6]"
-                                  />
-                                </div>
-                              </div>
-                              <div className="px-3 pb-1 text-xs font-semibold text-gray-500">Tax</div>
-                              <div className="max-h-44 overflow-y-auto">
-                                {getFilteredTaxes(item.id).length > 0 ? (
-                                  getFilteredTaxes(item.id).map(tax => {
-                                    const taxId = tax.id || tax._id;
-                                    const isSelected = String(item.tax || "") === String(taxId || "");
-                                    return (
-                                      <button
-                                        key={taxId}
-                                        type="button"
-                                        className={`w-full px-3 py-2 text-sm text-left flex items-center justify-between transition-colors ${isSelected ? "bg-[#3b82f6] text-white" : "text-gray-700 hover:bg-gray-50"}`}
-                                        onClick={() => {
-                                          handleItemChange(item.id, "tax", taxId);
-                                          setOpenTaxDropdowns(prev => ({ ...prev, [item.id]: false }));
-                                        }}
-                                      >
-                                        <span>{getTaxDisplayLabel(tax)}</span>
-                                        {isSelected && <Check size={14} />}
-                                      </button>
-                                    );
-                                  })
-                                ) : (
-                                  <div className="px-3 py-2 text-sm text-gray-500">No taxes found</div>
-                                )}
-                              </div>
-                              <button
-                                type="button"
-                                className="w-full mt-1 px-3 py-2 text-sm text-[#3b82f6] hover:bg-blue-50 flex items-center gap-2 border-t border-gray-100"
-                                onClick={() => {
-                                  setOpenTaxDropdowns(prev => ({ ...prev, [item.id]: false }));
-                                  setNewTaxTargetItemId(item.id);
-                                  setIsNewTaxQuickModalOpen(true);
-                                }}
-                              >
-                                <Plus size={14} />
-                                New Tax
-                              </button>
+                            <div className="absolute top-full left-0 z-[2500] mt-1 w-72 rounded-xl border border-[#d6dbe8] bg-white p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+                              {(() => {
+                                const searchValue = taxSearches[item.id] || "";
+                                const grouped = buildTaxOptionGroups(taxes);
+                                const filteredGroups = searchValue.trim()
+                                  ? grouped
+                                      .map((group) => ({
+                                        ...group,
+                                        options: group.options.filter((tax) =>
+                                          `${tax.name} [${tax.rate}%]`.toLowerCase().includes(searchValue.trim().toLowerCase())
+                                        ),
+                                      }))
+                                      .filter((group) => group.options.length > 0)
+                                  : grouped;
+                                const hasTaxes = filteredGroups.some((group) => group.options.length > 0);
+
+                                return (
+                                  <>
+                                    <div className="p-2">
+                                      <div className="flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-all focus-within:bg-white" style={{ borderColor: "#156372" }}>
+                                        <Search size={14} className="text-slate-400" />
+                                        <input
+                                          type="text"
+                                          value={searchValue}
+                                          onChange={(e) => setTaxSearches(prev => ({ ...prev, [item.id]: e.target.value }))}
+                                          placeholder="Search..."
+                                          className="w-full border-none bg-transparent text-[13px] text-slate-700 outline-none placeholder:text-slate-400"
+                                          autoFocus
+                                        />
+                                      </div>
+                                    </div>
+                                    <div className="max-h-64 overflow-y-auto py-1 custom-scrollbar">
+                                      {!hasTaxes ? (
+                                        <div className="px-4 py-3 text-center text-[13px] text-slate-400">No taxes found</div>
+                                      ) : (
+                                        filteredGroups.map((group) => (
+                                          <div key={group.label}>
+                                            <div className="px-4 py-1.5 text-[10px] font-extrabold uppercase tracking-widest text-slate-700">
+                                              {group.label}
+                                            </div>
+                                            {group.options.map((tax) => {
+                                              const taxId = tax.id;
+                                              const label = taxLabel(tax.raw ?? tax);
+                                              const selected = String(item.tax || "") === taxId;
+                                              return (
+                                                <button
+                                                  key={taxId}
+                                                  type="button"
+                                                  className={`w-full px-4 py-2 text-left text-[13px] ${selected
+                                                    ? "text-[#156372] font-medium hover:bg-gray-50 hover:text-gray-900"
+                                                    : "text-slate-700 hover:bg-gray-50 hover:text-gray-900"
+                                                  }`}
+                                                  onClick={() => {
+                                                    handleItemChange(item.id, "tax", taxId);
+                                                    setOpenTaxDropdowns(prev => ({ ...prev, [item.id]: false }));
+                                                  }}
+                                                >
+                                                  {label}
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        ))
+                                      )}
+                                    </div>
+                                    <button
+                                      type="button"
+                                      className="w-full border-t border-gray-200 px-4 py-2 text-left text-[#156372] text-[13px] font-medium flex items-center gap-2 hover:bg-gray-50"
+                                      onClick={() => {
+                                        setOpenTaxDropdowns(prev => ({ ...prev, [item.id]: false }));
+                                        setNewTaxTargetItemId(item.id);
+                                        setIsNewTaxQuickModalOpen(true);
+                                      }}
+                                    >
+                                      <Plus size={14} />
+                                      New Tax
+                                    </button>
+                                  </>
+                                );
+                              })()}
                             </div>
                           )}
                         </div>

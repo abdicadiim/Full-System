@@ -47,6 +47,7 @@ import {
 import { getAllDocuments } from "../../../../utils/documentStorage";
 import { customersAPI, salespersonsAPI, itemsAPI, taxesAPI, currenciesAPI, creditNotesAPI, reportingTagsAPI, locationsAPI } from "../../../../services/api";
 import { API_BASE_URL, getToken } from "../../../../services/auth";
+import { buildTaxOptionGroups, taxLabel } from "../../../../hooks/Taxdropdownstyle";
 
 const accountCategories = {
   "Other Current Asset": [
@@ -369,6 +370,7 @@ export default function NewCreditNote() {
   const [selectedItemIds, setSelectedItemIds] = useState<Record<string | number, string>>({});
   const [accountSearches, setAccountSearches] = useState<Record<string | number, string>>({});
   const [itemSearches, setItemSearches] = useState<Record<string | number, string>>({});
+  const [taxSearches, setTaxSearches] = useState<Record<string | number, string>>({});
 
   const [isUploadDropdownOpen, setIsUploadDropdownOpen] = useState(false);
   const [isCloudPickerOpen, setIsCloudPickerOpen] = useState(false);
@@ -890,6 +892,12 @@ export default function NewCreditNote() {
       Object.entries(accountDropdownRefs.current).forEach(([key, ref]) => {
         if (ref && !ref.contains(target)) {
           setOpenAccountDropdowns(prev => ({ ...prev, [key]: false }));
+        }
+      });
+      Object.entries(taxDropdownRefs.current).forEach(([key, ref]) => {
+        if (ref && !ref.contains(target)) {
+          setOpenTaxDropdowns(prev => ({ ...prev, [key]: false }));
+          setTaxSearches(prev => ({ ...prev, [key]: "" }));
         }
       });
 
@@ -1720,6 +1728,17 @@ export default function NewCreditNote() {
   const filteredSalespersons = salespersons.filter((salesperson: any) =>
     String(salesperson?.name || "").toLowerCase().includes(salespersonSearch.toLowerCase())
   );
+  const getFilteredTaxGroups = (searchValue: string) => {
+    const grouped = buildTaxOptionGroups(taxOptions);
+    const keyword = String(searchValue || "").trim().toLowerCase();
+    if (!keyword) return grouped;
+    return grouped
+      .map((group) => ({
+        ...group,
+        options: group.options.filter((tax) => taxLabel(tax).toLowerCase().includes(keyword)),
+      }))
+      .filter((group) => group.options.length > 0);
+  };
 
   return (
     <div className="w-full min-h-screen bg-white">
@@ -2402,16 +2421,96 @@ export default function NewCreditNote() {
                           />
                         </td>
                         <td className="py-3 px-3">
-                          <div className="relative">
-                            <select
-                              className="h-9 w-full px-3 border border-gray-300 rounded-md text-sm appearance-none bg-white focus:outline-none focus:ring-1 focus:ring-[#156372] focus:border-[#156372]"
-                              value={item.tax}
-                              onChange={(e) => handleItemChange(item.id, 'tax', e.target.value)}
-                            >
-                              <option key="select-tax" value="">Select a Tax</option>
-                              {taxOptions.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                            </select>
-                            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                          <div
+                            className="relative"
+                            ref={(el) => {
+                              taxDropdownRefs.current[item.id] = el;
+                            }}
+                          >
+                            {(() => {
+                              const selectedTax = taxOptions.find((tax) => String(tax.id) === String(item.tax));
+                              const displayLabel = selectedTax ? taxLabel(selectedTax) : "Select a Tax";
+                              const searchValue = taxSearches[item.id] || "";
+                              const filteredGroups = getFilteredTaxGroups(searchValue);
+                              const hasTaxes = filteredGroups.some((group) => group.options.length > 0);
+
+                              return (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="h-9 w-full px-3 border border-gray-300 rounded-md text-sm bg-white text-left flex items-center justify-between focus:outline-none focus:ring-1 focus:ring-[#156372] focus:border-[#156372]"
+                                    onClick={() =>
+                                      setOpenTaxDropdowns((prev) => ({
+                                        ...prev,
+                                        [item.id]: !prev[item.id],
+                                      }))
+                                    }
+                                  >
+                                    <span className={displayLabel === "Select a Tax" ? "text-gray-500" : "text-gray-900"}>
+                                      {displayLabel}
+                                    </span>
+                                    <ChevronDown
+                                      size={14}
+                                      className={`text-gray-400 transition-transform ${openTaxDropdowns[item.id] ? "rotate-180" : ""}`}
+                                    />
+                                  </button>
+
+                                  {openTaxDropdowns[item.id] && (
+                                    <div className="absolute left-0 top-full z-[9999] mt-1 w-72 rounded-xl border border-[#d6dbe8] bg-white p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+                                      <div className="p-2">
+                                        <div className="flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-all focus-within:bg-white" style={{ borderColor: "#156372" }}>
+                                          <Search size={14} className="text-slate-400" />
+                                          <input
+                                            value={searchValue}
+                                            onChange={(e) =>
+                                              setTaxSearches((prev) => ({ ...prev, [item.id]: e.target.value }))
+                                            }
+                                            placeholder="Search..."
+                                            className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+                                          />
+                                        </div>
+                                      </div>
+                                      <div className="max-h-64 overflow-y-auto px-2 pb-2">
+                                        {!hasTaxes ? (
+                                          <div className="px-2 py-3 text-sm text-slate-500">No taxes found.</div>
+                                        ) : (
+                                          filteredGroups.map((group) => (
+                                            <div key={group.label} className="mb-2">
+                                              <div className="px-2 py-1 text-[11px] font-semibold uppercase text-slate-500">
+                                                {group.label}
+                                              </div>
+                                              <div className="space-y-1">
+                                                {group.options.map((tax) => {
+                                                  const taxId = String(tax.id);
+                                                  const selected = String(item.tax) === taxId;
+                                                  return (
+                                                    <button
+                                                      key={taxId}
+                                                      type="button"
+                                                      className={`w-full rounded-lg px-2 py-1.5 text-left text-sm transition-colors ${selected ? "bg-slate-100 text-[#156372]" : "text-slate-700 hover:bg-slate-50"}`}
+                                                      onClick={() => {
+                                                        handleItemChange(item.id, "tax", taxId);
+                                                        setOpenTaxDropdowns((prev) => ({ ...prev, [item.id]: false }));
+                                                        setTaxSearches((prev) => ({ ...prev, [item.id]: "" }));
+                                                      }}
+                                                    >
+                                                      <div className="flex items-center justify-between gap-3">
+                                                        <span>{taxLabel(tax)}</span>
+                                                        {selected && <Check size={14} className="text-[#156372]" />}
+                                                      </div>
+                                                    </button>
+                                                  );
+                                                })}
+                                              </div>
+                                            </div>
+                                          ))
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </div>
                         </td>
                         <td className="py-3 px-3">

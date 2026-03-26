@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { db } from "../store/db";
+import { readTaxesLocal } from "../pages/settings/organization-settings/taxes-compliance/TAX/storage";
 
 export const API_BASE_URL =
   (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_API_URL) ||
@@ -748,8 +749,26 @@ const writeSettingsObject = (key: string, value: any) => {
 export const taxesAPI = {
   ...taxesLocal,
   getForTransactions: async () => {
-    const response = await taxesLocal.getAll({ limit: 10000 });
-    return { success: true, data: response.data };
+    try {
+      const res = await resource("/taxes").getAll({ limit: 10000 });
+      if (res?.success) {
+        const rows = Array.isArray(res.data) ? res.data : [];
+        const normalized = rows.map((row: any) => ({
+          ...row,
+          id: row?._id || row?.id,
+        }));
+        return { success: true, data: normalized };
+      }
+    } catch {
+      // fall back to local settings
+    }
+
+    const settingsRows = readTaxesLocal();
+    const normalized = settingsRows.map((row: any) => ({
+      ...row,
+      id: row?._id || row?.id,
+    }));
+    return { success: true, data: normalized };
   },
 };
 
