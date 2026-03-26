@@ -827,11 +827,11 @@ export default function RecordExpense() {
           mergedCount: normalizedTaxes.length,
           activeCount: activeTaxes.length,
         });
-        setTaxes(activeTaxes.length > 0 ? activeTaxes : normalizedTaxes);
+        setTaxes(activeTaxes);
       } catch (error) {
         console.error("Error loading taxes:", error);
         try {
-          setTaxes(readTaxesLocal());
+          setTaxes(readTaxesLocal().filter((tax: any) => isTaxActive(tax)));
         } catch {
           setTaxes([]);
         }
@@ -2158,6 +2158,7 @@ export default function RecordExpense() {
   const getTaxId = (tax: any) => String(tax?._id || tax?.id || tax?.tax_id || tax?.taxId || tax?.name || tax?.taxName || "");
   const getTaxName = (tax: any) => String(tax?.name || tax?.taxName || tax?.tax_name || tax?.displayName || tax?.title || "").trim();
   const getTaxRate = (tax: any) => Number(tax?.rate ?? tax?.taxPercentage ?? tax?.percentage ?? tax?.tax_rate ?? 0);
+  const isTaxActive = (tax: any) => tax?.isActive !== false && tax?.is_active !== false && String(tax?.status || "").toLowerCase() !== "inactive";
   const taxLabel = (tax: any) => `${getTaxName(tax)} [${getTaxRate(tax)}%]`;
   const selectedExpenseTax = (Array.isArray(taxes) ? taxes : []).find(
     (tax: any) => getTaxId(tax) === String(formData.tax || "")
@@ -2183,11 +2184,12 @@ export default function RecordExpense() {
   const filteredItemizedExpenseAccounts = ITEMIZED_EXPENSE_ACCOUNT_OPTIONS.filter((account) =>
     account.toLowerCase().includes(itemizedAccountSearch.toLowerCase())
   );
-  const filteredItemizedTaxes = taxes.filter((tax: any) => {
+  const activeTaxes = taxes.filter((tax: any) => isTaxActive(tax));
+  const filteredItemizedTaxes = activeTaxes.filter((tax: any) => {
     const label = taxLabel(tax).toLowerCase();
     return label.includes(itemizedTaxSearch.toLowerCase());
   });
-  const filteredExpenseTaxes = taxes.filter((tax: any) => {
+  const filteredExpenseTaxes = activeTaxes.filter((tax: any) => {
     const label = taxLabel(tax).toLowerCase();
     return label.includes(expenseTaxSearch.toLowerCase());
   });
@@ -4389,10 +4391,10 @@ export default function RecordExpense() {
                                               setExpenseTaxDropdownOpen(false);
                                               setExpenseTaxSearch("");
                                             }}
-                                            className={`flex w-full items-center justify-between rounded-lg py-2 text-[13px] transition-colors px-4 ${selected ? "font-medium text-white" : "text-slate-700 hover:bg-slate-50"}`}
-                                            style={selected ? { backgroundColor: "#156372" } : undefined}
+                                            className={`flex w-full items-center justify-between rounded-lg py-2 text-[13px] transition-colors px-4 ${selected ? "font-medium text-[#156372]" : "text-slate-700 hover:bg-slate-50"}`}
                                           >
                                             <span>{label}</span>
+                                            {selected && <Check size={14} className="text-[#156372]" />}
                                           </button>
                                         );
                                       })}
@@ -4420,10 +4422,10 @@ export default function RecordExpense() {
                                               setExpenseTaxDropdownOpen(false);
                                               setExpenseTaxSearch("");
                                             }}
-                                            className={`flex w-full items-center justify-between rounded-lg py-2 text-[13px] transition-colors px-4 ${selected ? "font-medium text-white" : "text-slate-700 hover:bg-slate-50"}`}
-                                            style={selected ? { backgroundColor: "#156372" } : undefined}
+                                            className={`flex w-full items-center justify-between rounded-lg py-2 text-[13px] transition-colors px-4 ${selected ? "font-medium text-[#156372]" : "text-slate-700 hover:bg-slate-50"}`}
                                           >
                                             <span>{label}</span>
+                                            {selected && <Check size={14} className="text-[#156372]" />}
                                           </button>
                                         );
                                       })}
@@ -4451,10 +4453,10 @@ export default function RecordExpense() {
                                               setExpenseTaxDropdownOpen(false);
                                               setExpenseTaxSearch("");
                                             }}
-                                            className={`flex w-full items-center justify-between rounded-lg py-2 text-[13px] transition-colors px-4 ${selected ? "font-medium text-white" : "text-slate-700 hover:bg-slate-50"}`}
-                                            style={selected ? { backgroundColor: "#156372" } : undefined}
+                                            className={`flex w-full items-center justify-between rounded-lg py-2 text-[13px] transition-colors px-4 ${selected ? "font-medium text-[#156372]" : "text-slate-700 hover:bg-slate-50"}`}
                                           >
                                             <span>{label}</span>
+                                            {selected && <Check size={14} className="text-[#156372]" />}
                                           </button>
                                         );
                                       })}

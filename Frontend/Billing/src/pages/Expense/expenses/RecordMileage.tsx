@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { createPortal } from "react-dom";
-import { ChevronDown, ChevronUp, Search, Upload as UploadIcon, Trash2, Image as ImageIcon, File, X, Plus, PlusCircle, Mail, Building2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Search, Upload as UploadIcon, Trash2, Image as ImageIcon, File, X, Plus, PlusCircle, Mail, Building2, Check } from "lucide-react";
 import { toast } from "react-toastify";
 
 import DatePicker from "../../../components/DatePicker";
@@ -475,7 +475,7 @@ export default function RecordMileage({ onClose }: RecordMileageProps) {
                         ? taxesResponse
                         : initialTaxesCache;
                 const activeTaxes = taxRows.filter((tax: any) => tax?.isActive !== false && tax?.is_active !== false);
-                setTaxes(activeTaxes.length > 0 ? activeTaxes : taxRows);
+                setTaxes(activeTaxes);
 
                 if (customersResponse?.success && Array.isArray(customersResponse?.data)) {
                     setCustomers(filterActiveRecords(customersResponse.data));
@@ -1393,12 +1393,13 @@ export default function RecordMileage({ onClose }: RecordMileageProps) {
                                                                 setTaxOpen(false);
                                                                 setTaxSearch("");
                                                             }}
-                                                            className={`w-full px-3 py-2 text-left text-sm ${selected
-                                                                ? "bg-[#156372] text-white font-medium"
+                                                            className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between ${selected
+                                                                ? "text-[#156372] font-medium"
                                                                 : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
                                                                 }`}
                                                         >
                                                             {tax.name} [{tax.rate}%]
+                                                            {selected && <Check size={14} className="text-[#156372]" />}
                                                         </button>
                                                     );
                                                 })}
