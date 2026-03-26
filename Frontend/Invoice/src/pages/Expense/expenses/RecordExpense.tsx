@@ -54,19 +54,14 @@ const EXPENSE_ACCOUNTS_STRUCTURE = {
   "Expense": [
     "Advertising And Marketing",
     "Automobile Expense",
-    "Bad Debt",
-    "Bank Fees and Charges",
     "Consultant Expense",
     "Credit Card Charges",
     "Depreciation Expense",
-    "Fuel/Mileage Expenses",
     "IT and Internet Expenses",
     "Janitorial Expense",
     "Lodging",
     "Meals and Entertainment",
     "Office Supplies",
-    "Other Expenses",
-    "Parking",
     "Postage",
     "Printing and Stationery",
     "Purchase Discounts",
@@ -74,7 +69,11 @@ const EXPENSE_ACCOUNTS_STRUCTURE = {
     "Repairs and Maintenance",
     "Salaries and Employee Wages",
     "Telephone Expense",
-    "Travel Expense"
+    "Travel Expense",
+    "TDS Payable",
+    "Goods In Transit",
+    "Prepaid Expenses",
+    "TDS Receivable"
   ],
   "Other Current Liability": [
     "Employee Reimbursements",
@@ -225,8 +224,10 @@ const ITEMIZED_EXPENSE_ACCOUNT_OPTIONS = [
   "Salaries and Employee Wages",
   "Telephone Expense",
   "Travel Expense",
+  "TDS Payable",
   "Goods In Transit",
   "Prepaid Expenses",
+  "TDS Receivable",
 ];
 
 const safeReadLocalArray = (keys: string[]) => {
@@ -371,6 +372,9 @@ export default function RecordExpense() {
   const [expenseTaxSearch, setExpenseTaxSearch] = useState("");
   const [amountCurrencyOpen, setAmountCurrencyOpen] = useState(false);
   const [currencyDropdownOpen, setCurrencyDropdownOpen] = useState(false);
+  const [topReportingTagOpenIndex, setTopReportingTagOpenIndex] = useState<number | null>(null);
+  const [topReportingTagMenuPosition, setTopReportingTagMenuPosition] = useState<{ top: number; left: number; width: number } | null>(null);
+  const topReportingTagRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const [bulkLocationOpenIndex, setBulkLocationOpenIndex] = useState<number | null>(null);
   const [bulkLocationSearch, setBulkLocationSearch] = useState("");
   const [bulkTaxOpenIndex, setBulkTaxOpenIndex] = useState<number | null>(null);
@@ -384,6 +388,12 @@ export default function RecordExpense() {
   const [itemRowMenuOpenIndex, setItemRowMenuOpenIndex] = useState<number | null>(null);
   const [itemRowMenuPosition, setItemRowMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [itemRowTagsOpenIndex, setItemRowTagsOpenIndex] = useState<number | null>(null);
+  const [itemRowTagDropdownOpen, setItemRowTagDropdownOpen] = useState<{ rowIndex: number; tagIndex: number } | null>(null);
+  const [itemizedAccountMenuPosition, setItemizedAccountMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const [itemizedTaxMenuPosition, setItemizedTaxMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const itemizedAccountButtonRefs = useRef<Record<number, HTMLButtonElement | null>>({});
+  const itemizedTaxButtonRefs = useRef<Record<number, HTMLButtonElement | null>>({});
+  const [taxOverrideMode, setTaxOverrideMode] = useState<"transaction" | "lineItem">("transaction");
   const [bulkCategoryOpenIndex, setBulkCategoryOpenIndex] = useState<number | null>(null);
   const [bulkCategorySearch, setBulkCategorySearch] = useState("");
   const [bulkCurrencyOpenIndex, setBulkCurrencyOpenIndex] = useState<number | null>(null);
@@ -450,6 +460,8 @@ export default function RecordExpense() {
     setExpenseTaxDropdownOpen(false);
     setExpenseTaxSearch("");
     setAmountCurrencyOpen(false);
+    setItemizedAccountMenuPosition(null);
+    setItemizedTaxMenuPosition(null);
   };
 
   // Load vendors and customers from API
@@ -459,7 +471,7 @@ export default function RecordExpense() {
   const [loadingCustomers, setLoadingCustomers] = useState(false);
 
   // Currencies from database
-  const [currencies, setCurrencies] = useState<any[]>(() => initialCurrenciesCache);
+  const [currencies, setCurrencies] = useState<any[]>([]);
   const [loadingCurrencies, setLoadingCurrencies] = useState(false);
   const [locations, setLocations] = useState<any[]>(() => initialLocationsCache);
 
@@ -493,17 +505,25 @@ export default function RecordExpense() {
     () => Array.from(new Set(locations.map((loc: any) => getLocationName(loc)).filter(Boolean))),
     [locations]
   );
-  const availableCurrencyCodes = React.useMemo(
-    () => Array.from(new Set(currencies.map((cur: any) => getCurrencyCode(cur)).filter(Boolean))),
-    [currencies]
-  );
   const locationOptions = locationNames.length > 0 ? locationNames : ["Head Office"];
   const currencyOptions = React.useMemo(() => {
-    const base = String(baseCurrencyCode || "").trim().toUpperCase();
-    const deduped = availableCurrencyCodes.length > 0 ? availableCurrencyCodes : [base || "USD"];
-    if (!base || !deduped.includes(base)) return deduped;
-    return [base, ...deduped.filter((code) => code !== base)];
-  }, [baseCurrencyCode, availableCurrencyCodes]);
+    const seen = new Set<string>();
+    const rows = currencies
+      .map((currency: any) => {
+        const code = String(currency?.code || currency?.currencyCode || currency?.currency || "").trim().toUpperCase();
+        const name = String(currency?.name || currency?.currencyName || "").trim();
+        if (!code || seen.has(code)) return null;
+        seen.add(code);
+        return { code, label: name ? `${code} - ${name}` : code, isBase: Boolean(currency?.isBase || currency?.isBaseCurrency || currency?.is_base_currency) };
+      })
+      .filter(Boolean) as Array<{ code: string; label: string; isBase: boolean }>;
+    rows.sort((a, b) => Number(b.isBase) - Number(a.isBase) || a.code.localeCompare(b.code));
+    return rows.length > 0
+      ? rows
+      : [{ code: String(baseCurrencyCode || initialCurrencyCode || "USD").trim().toUpperCase(), label: String(baseCurrencyCode || initialCurrencyCode || "USD").trim().toUpperCase(), isBase: true }];
+  }, [currencies, baseCurrencyCode, initialCurrencyCode]);
+  const currencyCodes = React.useMemo(() => currencyOptions.map((currency) => currency.code), [currencyOptions]);
+  const lockedCurrencyCode = String(currencyCodes[0] || baseCurrencyCode || initialCurrencyCode || "USD").trim().toUpperCase();
   const filteredLocationOptions = locationOptions.filter((loc) =>
     loc.toLowerCase().includes(locationSearch.toLowerCase())
   );
@@ -715,36 +735,21 @@ export default function RecordExpense() {
           : Array.isArray(currenciesResponse)
             ? currenciesResponse
             : [];
-        const settingsCurrenciesRaw = (() => {
-          try {
-            const raw = localStorage.getItem("taban_currencies");
-            const parsed = raw ? JSON.parse(raw) : [];
-            return Array.isArray(parsed) ? parsed : [];
-          } catch {
-            return [];
-          }
-        })();
-        const expenseCurrenciesRaw = (() => {
-          try {
-            const raw = localStorage.getItem("taban_books_currencies");
-            const parsed = raw ? JSON.parse(raw) : [];
-            return Array.isArray(parsed) ? parsed : [];
-          } catch {
-            return [];
-          }
-        })();
-
-        const mergedCurrencies = Array.from(
+        const finalCurrencies = Array.from(
           new Map(
-            [...settingsCurrenciesRaw, ...currencyRowsFromApi, ...expenseCurrenciesRaw]
+            currencyRowsFromApi
               .map((currency: any) => ({ currency, code: getCurrencyCode(currency) }))
               .filter((entry: any) => Boolean(entry.code))
               .map((entry: any) => [entry.code.toLowerCase(), entry.currency])
           ).values()
         ).filter((currency: any) => currency?.isActive !== false && currency?.active !== false);
 
-        const finalCurrencies = mergedCurrencies.length > 0 ? mergedCurrencies : currencyRowsFromApi;
         setCurrencies(finalCurrencies);
+        console.debug("[Invoice Expense] currencies loaded", {
+          count: finalCurrencies.length,
+          codes: finalCurrencies.map((currency: any) => getCurrencyCode(currency)),
+          sourceCount: currencyRowsFromApi.length,
+        });
         if (finalCurrencies.length > 0) {
           const baseCurrency = finalCurrencies.find((c: any) => c.isBaseCurrency || c.is_base_currency || c.isBase) || finalCurrencies[0];
           const baseCode = getCurrencyCode(baseCurrency) || getCurrencyCode(finalCurrencies[0]) || "";
@@ -753,7 +758,7 @@ export default function RecordExpense() {
         }
       } catch (error) {
         console.error("Error loading currencies:", error);
-        setCurrencies(getInitialCurrencies());
+        setCurrencies([]);
       } finally {
         setLoadingCurrencies(false);
       }
@@ -1009,7 +1014,7 @@ export default function RecordExpense() {
   });
   const [activeTab, setActiveTab] = useState("expense");
   const [isItemized, setIsItemized] = useState(false);
-  const [itemizedShowAdditionalInformation, setItemizedShowAdditionalInformation] = useState(true);
+  const [showMileageOverlay, setShowMileageOverlay] = useState(false);
   const [reportingTagDefinitions, setReportingTagDefinitions] = useState<any[]>([]);
   type ItemRow = {
     id: number;
@@ -1020,6 +1025,7 @@ export default function RecordExpense() {
     rate: number;
     amount: number;
     reportingTags?: any[];
+    showAdditionalInformation?: boolean;
   };
   const [itemRows, setItemRows] = useState<ItemRow[]>([
     {
@@ -1160,6 +1166,10 @@ export default function RecordExpense() {
     markupType: "%",
     reportingTags: [] as any[],
   });
+  const selectedCurrencyCode = String(formData.currency || lockedCurrencyCode).trim().toUpperCase();
+  const selectedCurrencyLabel = React.useMemo(() => {
+    return currencyOptions.find((currency) => currency.code === selectedCurrencyCode)?.label || selectedCurrencyCode;
+  }, [currencyOptions, selectedCurrencyCode]);
   const [taxAmountOverride, setTaxAmountOverride] = useState<string>("");
   const [taxAmountEditOpen, setTaxAmountEditOpen] = useState(false);
   const [taxAmountEditValue, setTaxAmountEditValue] = useState("");
@@ -1298,19 +1308,19 @@ export default function RecordExpense() {
   ]);
 
   useEffect(() => {
-    const fallbackCurrency = currencyOptions[0] || baseCurrencyCode || "USD";
+    const fallbackCurrency = currencyCodes[0] || baseCurrencyCode || "USD";
     setBulkExpenses((prev) => {
       let changed = false;
       const next = prev.map((e) => {
         const nextCurrency =
-          e.currency && currencyOptions.includes(e.currency) ? e.currency : fallbackCurrency;
+          e.currency && currencyCodes.includes(String(e.currency).trim().toUpperCase()) ? String(e.currency).trim().toUpperCase() : fallbackCurrency;
         if (e.currency === nextCurrency) return e;
         changed = true;
         return { ...e, currency: nextCurrency };
       });
       return changed ? next : prev;
     });
-  }, [currencyOptions, baseCurrencyCode]);
+  }, [currencyCodes, baseCurrencyCode]);
   useEffect(() => {
     void loadReportingTags();
   }, []);
@@ -1380,6 +1390,7 @@ export default function RecordExpense() {
             rate: line.rate || line.amount || 0,
             amount: line.amount || 0,
             reportingTags: normalizeRowReportingTags(line.reportingTags || line.reporting_tags || []),
+            showAdditionalInformation: line.showAdditionalInformation ?? line.show_additional_information ?? true,
           })));
         }
       } else if (clonedData) {
@@ -1433,6 +1444,7 @@ export default function RecordExpense() {
             rate: line.rate || line.amount || 0,
             amount: line.amount || 0,
             reportingTags: normalizeRowReportingTags(line.reportingTags || line.reporting_tags || []),
+            showAdditionalInformation: line.showAdditionalInformation ?? line.show_additional_information ?? true,
           })));
         }
       } else if (projectName || customerName) {
@@ -2005,6 +2017,7 @@ export default function RecordExpense() {
           rate: 0.00,
           amount: 0.00,
           reportingTags: [],
+          showAdditionalInformation: true,
         }]);
         setTaxAmountOverride("");
         setTaxAmountEditOpen(false);
@@ -2244,10 +2257,12 @@ export default function RecordExpense() {
       if (!target.closest(".itemized-account-dropdown")) {
         setOpenItemizedAccountIndex(null);
         setItemizedAccountSearch("");
+        setItemizedAccountMenuPosition(null);
       }
       if (!target.closest(".itemized-tax-dropdown")) {
         setOpenItemizedTaxIndex(null);
         setItemizedTaxSearch("");
+        setItemizedTaxMenuPosition(null);
       }
       if (!target.closest(".expense-tax-dropdown")) {
         setExpenseTaxDropdownOpen(false);
@@ -2255,6 +2270,13 @@ export default function RecordExpense() {
       }
       if (!target.closest(".amount-currency-dropdown")) {
         setAmountCurrencyOpen(false);
+      }
+      if (!target.closest(".expense-reporting-tag-dropdown") && !target.closest("[data-reporting-tag-dropdown='true']")) {
+        setTopReportingTagOpenIndex(null);
+        setTopReportingTagMenuPosition(null);
+      }
+      if (!target.closest(".item-row-tag-dropdown")) {
+        setItemRowTagDropdownOpen(null);
       }
 
       // Also close account type dropdown if clicking outside (would need a ref but for now simple check)
@@ -2273,7 +2295,10 @@ export default function RecordExpense() {
       openItemizedAccountIndex !== null ||
       openItemizedTaxIndex !== null ||
       expenseTaxDropdownOpen ||
-      amountCurrencyOpen
+      amountCurrencyOpen ||
+      currencyDropdownOpen ||
+      topReportingTagOpenIndex !== null ||
+      itemRowTagDropdownOpen !== null
     ) {
       document.addEventListener("mousedown", handleClickOutside);
     }
@@ -2281,7 +2306,53 @@ export default function RecordExpense() {
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [expenseAccountOpen, locationOpen, customerOpen, projectOpen, uploadDropdownOpen, paidThroughOpen, vendorSearchCriteriaOpen, customerSearchCriteriaOpen, openItemizedAccountIndex, openItemizedTaxIndex, expenseTaxDropdownOpen, amountCurrencyOpen]);
+  }, [expenseAccountOpen, locationOpen, customerOpen, projectOpen, uploadDropdownOpen, paidThroughOpen, vendorSearchCriteriaOpen, customerSearchCriteriaOpen, openItemizedAccountIndex, openItemizedTaxIndex, expenseTaxDropdownOpen, amountCurrencyOpen, currencyDropdownOpen, topReportingTagOpenIndex, itemRowTagDropdownOpen]);
+
+  useEffect(() => {
+    const updateItemizedDropdownPositions = () => {
+      if (topReportingTagOpenIndex !== null) {
+        const button = topReportingTagRefs.current[topReportingTagOpenIndex];
+        if (button) {
+          const rect = button.getBoundingClientRect();
+          setTopReportingTagMenuPosition({
+            top: rect.bottom + 4,
+            left: rect.left,
+            width: rect.width,
+          });
+        }
+      }
+
+      if (openItemizedAccountIndex !== null) {
+        const button = itemizedAccountButtonRefs.current[openItemizedAccountIndex];
+        if (button) {
+          const rect = button.getBoundingClientRect();
+          setItemizedAccountMenuPosition({
+            top: rect.bottom + 4,
+            left: rect.left,
+          });
+        }
+      }
+
+      if (openItemizedTaxIndex !== null) {
+        const button = itemizedTaxButtonRefs.current[openItemizedTaxIndex];
+        if (button) {
+          const rect = button.getBoundingClientRect();
+          setItemizedTaxMenuPosition({
+            top: rect.bottom + 4,
+            left: rect.left,
+          });
+        }
+      }
+    };
+
+    updateItemizedDropdownPositions();
+    window.addEventListener("scroll", updateItemizedDropdownPositions, true);
+    window.addEventListener("resize", updateItemizedDropdownPositions);
+    return () => {
+      window.removeEventListener("scroll", updateItemizedDropdownPositions, true);
+      window.removeEventListener("resize", updateItemizedDropdownPositions);
+    };
+  }, [openItemizedAccountIndex, openItemizedTaxIndex, topReportingTagOpenIndex, itemRows.length]);
 
   // Adding useEffect for account type dropdown close
   useEffect(() => {
@@ -2965,16 +3036,22 @@ export default function RecordExpense() {
                 ? "bg-white text-[#334155] border-[#d1d5db] border-t-[3px] border-t-[#156372]"
                 : "bg-[#f1f5f9] text-[#475569] border-[#d1d5db]"
                 }`}
-              onClick={() => setActiveTab("expense")}
+              onClick={() => {
+                setShowMileageOverlay(false);
+                setActiveTab("expense");
+              }}
             >
               Record Expense
             </button>
             <button
-              className={`px-5 py-3 text-sm font-medium rounded-t-md border border-b-0 transition-colors ${activeTab === "mileage"
+              className={`px-5 py-3 text-sm font-medium rounded-t-md border border-b-0 transition-colors ${activeTab === "mileage" || showMileageOverlay
                 ? "bg-white text-[#334155] border-[#d1d5db] border-t-[3px] border-t-[#156372]"
                 : "bg-[#f8fafc] text-[#156372] border-transparent"
                 }`}
-              onClick={() => setActiveTab("mileage")}
+              onClick={() => {
+                setShowMileageOverlay(false);
+                setActiveTab("mileage");
+              }}
             >
               Record Mileage
             </button>
@@ -2983,7 +3060,10 @@ export default function RecordExpense() {
                 ? "bg-white text-[#334155] border-[#d1d5db] border-t-[3px] border-t-[#156372]"
                 : "bg-[#f8fafc] text-[#156372] border-transparent"
                 }`}
-              onClick={() => setActiveTab("bulk")}
+              onClick={() => {
+                setShowMileageOverlay(false);
+                setActiveTab("bulk");
+              }}
             >
               Bulk Add Expenses
             </button>
@@ -3084,27 +3164,29 @@ export default function RecordExpense() {
                         }}
                         className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372] flex items-center justify-between"
                       >
-                        <span>{formData.currency || currencyOptions[0] || "USD"}</span>
+                        <span>{selectedCurrencyLabel}</span>
                         <ChevronDown size={14} className="text-gray-500" />
                       </button>
                       {currencyDropdownOpen && (
-                        <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-md border border-gray-200 bg-white shadow-lg">
-                          {currencyOptions.map((code) => {
-                            const selected = String(formData.currency || currencyOptions[0] || "").toUpperCase() === String(code).toUpperCase();
-                            return (
-                              <button
-                                key={code}
-                                type="button"
-                                onClick={() => {
-                                  setFormData((prev) => ({ ...prev, currency: code }));
-                                  setCurrencyDropdownOpen(false);
-                                }}
-                                className={`w-full px-3 py-2 text-left text-sm ${selected ? "font-medium text-[#156372]" : "text-gray-700"} hover:bg-gray-50 hover:text-gray-900`}
-                              >
-                                {code}
-                              </button>
-                            );
-                          })}
+                        <div className="absolute left-0 bottom-full z-50 mb-1 w-full overflow-hidden rounded-md border border-gray-200 bg-white shadow-lg">
+                          <div className="max-h-44 overflow-y-auto py-1">
+                            {currencyOptions.map((currency) => {
+                              const selected = String(lockedCurrencyCode).toUpperCase() === String(currency.code).toUpperCase();
+                              return (
+                                <button
+                                  key={currency.code}
+                                  type="button"
+                                  onClick={() => {
+                                    setFormData((prev) => ({ ...prev, currency: currency.code }));
+                                    setCurrencyDropdownOpen(false);
+                                  }}
+                                  className={`w-full px-3 py-2 text-left text-sm ${selected ? "font-medium text-[#156372]" : "text-gray-700"} hover:bg-gray-50 hover:text-gray-900`}
+                                >
+                                  {currency.label}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -3134,50 +3216,35 @@ export default function RecordExpense() {
                     </div>
                   </div>
 
-                  {Array.isArray(formData.reportingTags) && formData.reportingTags.length > 0 && (
-                    formData.reportingTags.map((tag: any, index: number) => {
-                      const tagKey = String(tag?.tagId || tag?.id || tag?.name || index);
-                      const options = Array.isArray(tag?.options) ? tag.options : [];
-                      return (
-                        <div key={`itemized-tag-${tagKey}-${index}`} className="grid grid-cols-[160px_1fr] items-center gap-4">
-                          <label className={`text-sm font-medium ${tag?.isMandatory ? "text-red-600" : "text-gray-900"}`}>
-                            {String(tag?.name || "Reporting Tag")}{tag?.isMandatory ? "*" : ""}
-                          </label>
-                          <div className="max-w-[460px]">
-                            <select
-                              value={String(tag?.value || "")}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                setFormData((prev) => {
-                                  const nextReportingTags = Array.isArray(prev.reportingTags) ? [...prev.reportingTags] : [];
-                                  nextReportingTags[index] = { ...nextReportingTags[index], value };
-                                  return { ...prev, reportingTags: nextReportingTags };
-                                });
-                              }}
-                              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
-                            >
-                              <option value="">None</option>
-                              {options.map((option: string) => (
-                                <option key={`${tagKey}-${option}`} value={option}>{option}</option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-
                   <button onClick={() => setIsItemized(false)} className="text-[#156372] text-sm mb-2 flex items-center gap-1 hover:underline">
                     &lt; Back to single expense view
                   </button>
 
                   <div className="flex items-center gap-4 text-sm">
                     <span className="text-gray-900">Apply Tax Override</span>
-                    <label className="flex items-center gap-2 text-gray-700"><input type="radio" checked className="accent-[#156372]" readOnly />At Transaction Level</label>
-                    <label className="flex items-center gap-2 text-gray-700"><input type="radio" className="accent-[#156372]" readOnly />At Line Item Level</label>
+                    <label className="flex items-center gap-2 text-gray-700">
+                      <input
+                        type="radio"
+                        name="taxOverrideMode"
+                        checked={taxOverrideMode === "transaction"}
+                        onChange={() => setTaxOverrideMode("transaction")}
+                        className="accent-[#156372]"
+                      />
+                      At Transaction Level
+                    </label>
+                    <label className="flex items-center gap-2 text-gray-700">
+                      <input
+                        type="radio"
+                        name="taxOverrideMode"
+                        checked={taxOverrideMode === "lineItem"}
+                        onChange={() => setTaxOverrideMode("lineItem")}
+                        className="accent-[#156372]"
+                      />
+                      At Line Item Level
+                    </label>
                   </div>
 
-                  <div className="border border-gray-200 bg-white overflow-hidden">
+                  <div className="border border-gray-200 bg-white overflow-visible">
                     <table className="w-full table-fixed text-sm">
                       <thead>
                         <tr className="bg-[#f8fafc] border-b border-gray-200">
@@ -3202,14 +3269,26 @@ export default function RecordExpense() {
                                 <td className="px-1 text-gray-400">
                                   <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor"><circle cx="2" cy="2" r="1.2" /><circle cx="2" cy="8" r="1.2" /><circle cx="2" cy="14" r="1.2" /><circle cx="8" cy="2" r="1.2" /><circle cx="8" cy="8" r="1.2" /><circle cx="8" cy="14" r="1.2" /></svg>
                                 </td>
-                                <td className="py-2 px-3 align-top">
-                                  <div className="relative itemized-account-dropdown">
+                                <td className="py-2 px-3 align-top overflow-visible">
+                                  <div className="relative z-[70] itemized-account-dropdown overflow-visible">
                                     <button
+                                      ref={(el) => { itemizedAccountButtonRefs.current[idx] = el; }}
                                       type="button"
-                                      onClick={() => {
+                                      onClick={(e) => {
                                         setOpenItemizedTaxIndex(null);
                                         setItemizedTaxSearch("");
-                                        setOpenItemizedAccountIndex(openItemizedAccountIndex === idx ? null : idx);
+                                        setItemizedTaxMenuPosition(null);
+                                        const nextIndex = openItemizedAccountIndex === idx ? null : idx;
+                                        if (nextIndex === idx) {
+                                          const rect = e.currentTarget.getBoundingClientRect();
+                                          setItemizedAccountMenuPosition({
+                                            top: rect.bottom + 4,
+                                            left: rect.left,
+                                          });
+                                        } else {
+                                          setItemizedAccountMenuPosition(null);
+                                        }
+                                        setOpenItemizedAccountIndex(nextIndex);
                                       }}
                                       className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-left flex items-center justify-between"
                                     >
@@ -3218,8 +3297,16 @@ export default function RecordExpense() {
                                       </span>
                                       <ChevronDown size={14} className="text-gray-500" />
                                     </button>
-                                    {openItemizedAccountIndex === idx && (
-                                      <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50">
+                                    {openItemizedAccountIndex === idx && itemizedAccountMenuPosition && (
+                                      <div
+                                        className="bg-white border border-gray-200 rounded-md shadow-lg z-[9999]"
+                                        style={{
+                                          position: "fixed",
+                                          top: `${itemizedAccountMenuPosition.top}px`,
+                                          left: `${itemizedAccountMenuPosition.left}px`,
+                                          width: "240px",
+                                        }}
+                                      >
                                         <div className="p-2 border-b border-gray-200 flex items-center gap-2">
                                           <Search size={14} className="text-gray-400" />
                                           <input
@@ -3231,7 +3318,7 @@ export default function RecordExpense() {
                                             autoFocus
                                           />
                                         </div>
-                                        <div className="max-h-[220px] overflow-y-auto py-1">
+                                        <div className="max-h-[180px] overflow-y-auto py-1">
                                           {filteredItemizedExpenseAccounts.map((acc) => {
                                             const selected = row.account === acc;
                                             return (
@@ -3246,8 +3333,8 @@ export default function RecordExpense() {
                                                   setItemizedAccountSearch("");
                                                 }}
                                                 className={`w-full px-3 py-2 text-left text-sm ${selected
-                                                  ? "text-[#156372] font-medium hover:bg-[#156372] hover:text-white"
-                                                  : "text-gray-700 hover:bg-[#156372] hover:text-white"
+                                                  ? "text-[#156372] font-medium hover:bg-gray-50 hover:text-gray-900"
+                                                  : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
                                                   }`}
                                               >
                                                 {acc}
@@ -3262,14 +3349,26 @@ export default function RecordExpense() {
                                 <td className="py-2 px-3 align-top">
                                   <textarea value={row.itemDetails} onChange={(e) => { const next = [...itemRows]; next[idx].itemDetails = e.target.value; setItemRows(next); }} placeholder="Max. 500 characters" style={{ width: "170px", minWidth: "170px", maxWidth: "170px", height: "36px", minHeight: "36px", padding: "4px 8px", boxSizing: "border-box" }} className="rounded-md border border-gray-300 text-[13px] leading-tight outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372] resize-y" rows={1} />
                                 </td>
-                                <td className="py-2 px-3 align-top">
-                                  <div className="relative itemized-tax-dropdown">
+                                <td className="py-2 px-3 align-top overflow-visible">
+                                  <div className="relative z-[70] itemized-tax-dropdown overflow-visible">
                                     <button
+                                      ref={(el) => { itemizedTaxButtonRefs.current[idx] = el; }}
                                       type="button"
-                                      onClick={() => {
+                                      onClick={(e) => {
                                         setOpenItemizedAccountIndex(null);
                                         setItemizedAccountSearch("");
-                                        setOpenItemizedTaxIndex(openItemizedTaxIndex === idx ? null : idx);
+                                        setItemizedAccountMenuPosition(null);
+                                        const nextIndex = openItemizedTaxIndex === idx ? null : idx;
+                                        if (nextIndex === idx) {
+                                          const rect = e.currentTarget.getBoundingClientRect();
+                                          setItemizedTaxMenuPosition({
+                                            top: rect.bottom + 4,
+                                            left: rect.left,
+                                          });
+                                        } else {
+                                          setItemizedTaxMenuPosition(null);
+                                        }
+                                        setOpenItemizedTaxIndex(nextIndex);
                                       }}
                                       className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-left flex items-center justify-between"
                                     >
@@ -3278,8 +3377,16 @@ export default function RecordExpense() {
                                       </span>
                                       <ChevronDown size={14} className="text-gray-500" />
                                     </button>
-                                    {openItemizedTaxIndex === idx && (
-                                      <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50">
+                                    {openItemizedTaxIndex === idx && itemizedTaxMenuPosition && (
+                                      <div
+                                        className="bg-white border border-gray-200 rounded-md shadow-lg z-[9999]"
+                                        style={{
+                                          position: "fixed",
+                                          top: `${itemizedTaxMenuPosition.top}px`,
+                                          left: `${itemizedTaxMenuPosition.left}px`,
+                                          width: "240px",
+                                        }}
+                                      >
                                         <div className="p-2 border-b border-gray-200 flex items-center gap-2">
                                           <Search size={14} className="text-gray-400" />
                                           <input
@@ -3308,8 +3415,8 @@ export default function RecordExpense() {
                                                   setItemizedTaxSearch("");
                                                 }}
                                                 className={`w-full px-3 py-2 text-left text-sm ${selected
-                                                  ? "text-[#156372] font-medium hover:bg-[#156372] hover:text-white"
-                                                  : "text-gray-700 hover:bg-[#156372] hover:text-white"
+                                                  ? "text-[#156372] font-medium hover:bg-gray-50 hover:text-gray-900"
+                                                  : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
                                                   }`}
                                               >
                                                 {label}
@@ -3362,55 +3469,104 @@ export default function RecordExpense() {
                               </tr>
                               <tr className="border-b border-gray-100">
                                 <td colSpan={6} className="px-0 py-0">
-                                  <button
-                                    type="button"
-                                    onClick={() => setItemRowTagsOpenIndex((prev) => (prev === idx ? null : idx))}
-                                    className="w-full border-0 border-t border-gray-100 bg-white px-3 py-3 text-left text-sm text-gray-700 flex items-center gap-2"
-                                  >
-                                    <Bookmark size={14} className={hasMandatoryTag ? "text-red-600" : "text-gray-500"} />
-                                    <span className={hasMandatoryTag ? "text-red-600" : "text-gray-700"}>Reporting Tags{hasMandatoryTag ? "*" : ""}</span>
-                                    {selectedCount > 0 && (
-                                      <span className="ml-auto text-xs text-gray-500">
-                                        {selectedCount} of {totalCount} selected
-                                      </span>
-                                    )}
-                                  </button>
-                                  {itemRowTagsOpenIndex === idx && itemizedShowAdditionalInformation && (
-                                    <div className="border-t border-gray-100 bg-[#fafafa] px-4 py-3">
+                                  {row.showAdditionalInformation !== false && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => setItemRowTagsOpenIndex((prev) => (prev === idx ? null : idx))}
+                                        className="w-full bg-white px-3 py-3 text-left text-sm text-gray-700 flex items-center gap-2"
+                                      >
+                                        <Bookmark size={14} className={hasMandatoryTag ? "text-red-600" : "text-gray-500"} />
+                                        <span className={hasMandatoryTag ? "text-red-600" : "text-gray-700"}>Reporting Tags{hasMandatoryTag ? "*" : ""}</span>
+                                        <ChevronDown size={14} className="ml-1 text-gray-500" />
+                                        {selectedCount > 0 && (
+                                          <span className="ml-auto text-xs text-gray-500">
+                                            {selectedCount} of {totalCount} selected
+                                          </span>
+                                        )}
+                                      </button>
+                                      {itemRowTagsOpenIndex === idx && (
+                                        <div className="bg-[#fafafa] px-4 py-3 overflow-visible">
                                       <div className="grid gap-4 md:grid-cols-3">
                                         {rowTags.slice(0, 3).map((tag: any, tagIndex: number) => {
                                           const options = Array.isArray(tag?.options) ? tag.options : [];
                                           const tagKey = String(tag?.tagId || tag?.id || tag?.name || tagIndex);
                                           return (
-                                            <div key={`item-row-tag-${row.id}-${tagKey}-${tagIndex}`} className="flex flex-col gap-2">
+                                            <div
+                                              key={`item-row-tag-${row.id}-${tagKey}-${tagIndex}`}
+                                              className="relative flex flex-col gap-2 item-row-tag-dropdown"
+                                            >
                                               <label className={`text-sm font-medium ${tag?.isMandatory ? "text-red-600" : "text-gray-900"}`}>
                                                 {String(tag?.name || "Reporting Tag")}{tag?.isMandatory ? "*" : ""}
                                               </label>
-                                              <select
-                                                value={String(tag?.value || "")}
-                                                onChange={(e) => {
-                                                  const value = e.target.value;
-                                                  setItemRows((prev) => {
-                                                    const next = [...prev];
-                                                    const current = (next[idx] || {}) as ItemRow;
-                                                    const currentTags = normalizeRowReportingTags(current.reportingTags);
-                                                    currentTags[tagIndex] = { ...currentTags[tagIndex], value };
-                                                    next[idx] = { ...current, reportingTags: currentTags };
-                                                    return next;
-                                                  });
-                                                }}
-                                                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  setItemRowTagDropdownOpen((current) =>
+                                                    current?.rowIndex === idx && current?.tagIndex === tagIndex
+                                                      ? null
+                                                      : { rowIndex: idx, tagIndex }
+                                                  )
+                                                }
+                                                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-left text-sm text-gray-900 flex items-center justify-between focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
                                               >
-                                                <option value="">None</option>
-                                                {options.map((option: string) => (
-                                                  <option key={`${tagKey}-${option}`} value={option}>{option}</option>
-                                                ))}
-                                              </select>
+                                                <span className={!String(tag?.value || "") ? "text-gray-400" : "text-gray-900"}>
+                                                  {String(tag?.value || "None")}
+                                                </span>
+                                                <ChevronDown size={14} className="text-gray-500" />
+                                              </button>
+                                              {itemRowTagDropdownOpen?.rowIndex === idx && itemRowTagDropdownOpen?.tagIndex === tagIndex && (
+                                                <div className="absolute left-0 top-full z-50 mt-1 w-full rounded-md border border-gray-200 bg-white shadow-lg">
+                                                  <div className="max-h-[220px] overflow-y-auto py-1">
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                        setItemRows((prev) => {
+                                                          const next = [...prev];
+                                                          const current = (next[idx] || {}) as ItemRow;
+                                                          const currentTags = normalizeRowReportingTags(current.reportingTags);
+                                                          currentTags[tagIndex] = { ...currentTags[tagIndex], value: "" };
+                                                          next[idx] = { ...current, reportingTags: currentTags };
+                                                          return next;
+                                                        });
+                                                        setItemRowTagDropdownOpen(null);
+                                                      }}
+                                                      className="w-full px-3 py-2 text-left text-sm text-gray-900 hover:bg-gray-50"
+                                                    >
+                                                      None
+                                                    </button>
+                                                    {options.map((option: string) => (
+                                                      <button
+                                                        key={`${tagKey}-${option}`}
+                                                        type="button"
+                                                        onClick={() => {
+                                                          setItemRows((prev) => {
+                                                            const next = [...prev];
+                                                            const current = (next[idx] || {}) as ItemRow;
+                                                            const currentTags = normalizeRowReportingTags(current.reportingTags);
+                                                            currentTags[tagIndex] = { ...currentTags[tagIndex], value: option };
+                                                            next[idx] = { ...current, reportingTags: currentTags };
+                                                            return next;
+                                                          });
+                                                          setItemRowTagDropdownOpen(null);
+                                                        }}
+                                                        className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 ${
+                                                          String(tag?.value || "") === option ? "text-[#156372] font-medium" : "text-gray-900"
+                                                        }`}
+                                                      >
+                                                        {option}
+                                                      </button>
+                                                    ))}
+                                                  </div>
+                                                </div>
+                                              )}
                                             </div>
                                           );
                                         })}
                                       </div>
-                                    </div>
+                                        </div>
+                                      )}
+                                    </>
                                   )}
                                 </td>
                               </tr>
@@ -3501,7 +3657,25 @@ export default function RecordExpense() {
                         <button
                           type="button"
                           onClick={() => {
-                            setItemizedShowAdditionalInformation((prev) => !prev);
+                            const rowIndex = itemRowMenuOpenIndex;
+                            if (rowIndex === null) return;
+                            setItemRows((prev) => {
+                              const next = [...prev];
+                              const current = next[rowIndex];
+                              if (!current) return prev;
+                              const nextVisibility = !(current.showAdditionalInformation !== false);
+                              next[rowIndex] = {
+                                ...current,
+                                showAdditionalInformation: nextVisibility,
+                              };
+                              if (!nextVisibility && itemRowTagsOpenIndex === rowIndex) {
+                                setItemRowTagsOpenIndex(null);
+                              }
+                              if (!nextVisibility && itemRowTagDropdownOpen?.rowIndex === rowIndex) {
+                                setItemRowTagDropdownOpen(null);
+                              }
+                              return next;
+                            });
                             setItemRowMenuOpenIndex(null);
                             setItemRowMenuPosition(null);
                           }}
@@ -3519,7 +3693,7 @@ export default function RecordExpense() {
                           onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = "#f3f4f6")}
                           onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.backgroundColor = "white")}
                         >
-                          {itemizedShowAdditionalInformation ? "Hide Additional Information" : "Show Additional Information"}
+                          {(itemRows[itemRowMenuOpenIndex ?? -1]?.showAdditionalInformation !== false) ? "Hide Additional Information" : "Show Additional Information"}
                         </button>
                         <button
                           type="button"
@@ -3583,7 +3757,7 @@ export default function RecordExpense() {
                           <ChevronDown size={14} className="text-gray-500" />
                         </button>
                         {customerOpen && (
-                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50">
+                          <div className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-gray-200 rounded-md shadow-lg z-50">
                             <div className="p-2 border-b border-gray-200 flex items-center gap-2 bg-white sticky top-0">
                               <Search size={14} className="text-gray-400" />
                               <input
@@ -3595,7 +3769,7 @@ export default function RecordExpense() {
                                 autoFocus
                               />
                             </div>
-                            <div className="max-h-[280px] overflow-y-auto p-2 space-y-1">
+                            <div className="max-h-[180px] overflow-y-auto p-2 space-y-1">
                               {allCustomers
                                 .filter((c) => {
                                   const display = String(c.displayName || c.name || "").toLowerCase();
@@ -3627,19 +3801,19 @@ export default function RecordExpense() {
                                         setCustomerOpen(false);
                                       }}
                                       className={`w-full rounded-md px-3 py-2 text-left ${selected
-                                        ? "bg-[#156372] text-white"
-                                        : "text-gray-900 hover:bg-[#156372] hover:text-white"
+                                        ? "bg-gray-50 text-gray-900"
+                                        : "text-gray-900 hover:bg-gray-50"
                                         }`}
                                     >
                                       <div className="flex items-center gap-3">
-                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${selected ? "bg-white/20 text-white" : "bg-[#e2e8f0] text-gray-700"}`}>
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${selected ? "bg-gray-200 text-gray-700" : "bg-[#e2e8f0] text-gray-700"}`}>
                                           {String(displayName || "C").charAt(0).toUpperCase()}
                                         </div>
                                         <div className="min-w-0">
                                           <div className="text-sm font-medium truncate">
                                             {displayName}{customerNo ? ` | ${customerNo}` : ""}
                                           </div>
-                                          <div className={`text-xs truncate ${selected ? "text-white/90" : "text-gray-500"}`}>
+                                          <div className="text-xs truncate text-gray-500">
                                             {email || company}
                                           </div>
                                         </div>
@@ -3979,7 +4153,7 @@ export default function RecordExpense() {
                           </table>
                           <div className="flex justify-between items-center mt-2">
                             <button
-                              onClick={() => setItemRows([...itemRows, { id: Date.now(), itemDetails: "", account: "", tax: "", quantity: 1, rate: 0, amount: 0, reportingTags: [] }])}
+                              onClick={() => setItemRows([...itemRows, { id: Date.now(), itemDetails: "", account: "", tax: "", quantity: 1, rate: 0, amount: 0, reportingTags: [], showAdditionalInformation: true }])}
                               className="text-xs text-[#156372] hover:underline"
                             >
                               + Add another line
@@ -4060,20 +4234,20 @@ export default function RecordExpense() {
                             }}
                             className="min-w-[78px] h-full px-3 py-2 text-sm font-medium text-gray-700 flex items-center justify-between gap-2"
                           >
-                            <span>{formData.currency || currencyOptions[0] || "USD"}</span>
+                            <span>{selectedCurrencyCode}</span>
                             <ChevronDown size={14} className="text-gray-500" />
                           </button>
                           {amountCurrencyOpen && (
-                            <div className="absolute left-0 top-full mt-1 w-[206px] bg-white border border-gray-200 rounded-md shadow-lg z-50">
-                              <div className="max-h-[220px] overflow-y-auto py-1">
-                                {currencyOptions.map((code) => {
-                                  const selected = code === String(formData.currency || currencyOptions[0] || "");
+                            <div className="absolute left-0 bottom-full mb-1 w-[206px] bg-white border border-gray-200 rounded-md shadow-lg z-50">
+                              <div className="max-h-[128px] overflow-y-auto py-1">
+                                {currencyOptions.map((currency) => {
+                                  const selected = String(lockedCurrencyCode).toUpperCase() === String(currency.code).toUpperCase();
                                   return (
                                     <button
-                                      key={code}
+                                      key={currency.code}
                                       type="button"
                                       onClick={() => {
-                                        setFormData((prev) => ({ ...prev, currency: code }));
+                                        setFormData((prev) => ({ ...prev, currency: currency.code }));
                                         setAmountCurrencyOpen(false);
                                       }}
                                       className={`w-full px-3 py-2 text-left text-sm ${selected
@@ -4081,22 +4255,11 @@ export default function RecordExpense() {
                                         : "text-gray-700 hover:bg-[#156372] hover:text-white"
                                         }`}
                                     >
-                                      {code}
+                                      {currency.code}
                                     </button>
                                   );
                                 })}
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setAmountCurrencyOpen(false);
-                                  setNewCurrencyModalOpen(true);
-                                }}
-                                className="w-full border-t border-gray-200 px-3 py-2 text-left text-sm text-[#156372] hover:bg-[#156372] hover:text-white flex items-center gap-2"
-                              >
-                                <Plus size={14} />
-                                New Currency
-                              </button>
                             </div>
                           )}
                         </div>
@@ -4412,7 +4575,7 @@ export default function RecordExpense() {
                           <ChevronDown size={14} className="text-gray-500" />
                         </div>
                         {customerOpen && (
-                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50">
+                          <div className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-gray-200 rounded-md shadow-lg z-50">
                             <div className="p-2 border-b border-gray-200 flex items-center gap-2 bg-white sticky top-0">
                               <Search size={14} className="text-gray-400" />
                               <input
@@ -4424,7 +4587,7 @@ export default function RecordExpense() {
                                 autoFocus
                               />
                             </div>
-                            <div className="max-h-[280px] overflow-y-auto p-2 space-y-1">
+                            <div className="max-h-[180px] overflow-y-auto p-2 space-y-1">
                               {loadingCustomers ? (
                                 <div className="p-3 text-sm text-gray-500 text-center">
                                   Loading customers...
@@ -4459,19 +4622,19 @@ export default function RecordExpense() {
                                           setCustomerOpen(false);
                                         }}
                                         className={`w-full rounded-md px-3 py-2 text-left ${selected
-                                          ? "bg-[#156372] text-white"
-                                          : "text-gray-900 hover:bg-[#156372] hover:text-white"
+                                          ? "bg-gray-50 text-gray-900"
+                                          : "text-gray-900 hover:bg-gray-50"
                                           }`}
                                       >
                                         <div className="flex items-center gap-3">
-                                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${selected ? "bg-white/20 text-white" : "bg-[#e2e8f0] text-gray-700"}`}>
+                                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${selected ? "bg-gray-200 text-gray-700" : "bg-[#e2e8f0] text-gray-700"}`}>
                                             {String(displayName || "C").charAt(0).toUpperCase()}
                                           </div>
                                           <div className="min-w-0">
                                             <div className="text-sm font-medium truncate">
                                               {displayName}{customerNo ? ` | ${customerNo}` : ""}
                                             </div>
-                                            <div className={`text-xs truncate ${selected ? "text-white/90" : "text-gray-500"}`}>
+                                            <div className="text-xs truncate text-gray-500">
                                               {email || company}
                                             </div>
                                           </div>
@@ -4502,6 +4665,168 @@ export default function RecordExpense() {
                       </button>
                     </div>
                   </div>
+
+                  {Array.isArray(formData.reportingTags) && formData.reportingTags.length > 0 && (
+                    <div className="grid grid-cols-2 gap-10 pb-4">
+                      {formData.reportingTags.map((tag: any, index: number) => {
+                        const tagKey = String(tag?.tagId || tag?.id || tag?.name || index);
+                        const options = Array.isArray(tag?.options) ? tag.options : [];
+                        const selectedValue = String(tag?.value || "");
+                        return (
+                          <div
+                            key={`expense-reporting-tag-${tagKey}-${index}`}
+                            ref={(el) => {
+                              topReportingTagRefs.current[index] = el;
+                            }}
+                            className="space-y-2 expense-reporting-tag-dropdown relative"
+                          >
+                            <label className={`block text-sm font-medium ${tag?.isMandatory ? "text-red-600" : "text-gray-900"}`}>
+                              {String(tag?.name || "Reporting Tag")}{tag?.isMandatory ? " *" : ""}
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setTopReportingTagOpenIndex((current) => (current === index ? null : index))
+                              }
+                              className="w-full max-w-[260px] rounded-md border border-gray-300 bg-white px-3 py-2 text-left text-sm text-gray-900 flex items-center justify-between focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
+                            >
+                              <span className={!selectedValue ? "text-gray-400" : "text-gray-900"}>
+                                {selectedValue || "None"}
+                              </span>
+                              <ChevronDown size={14} className="text-gray-500" />
+                            </button>
+                            {topReportingTagOpenIndex === index && (
+                              <div className="hidden absolute left-0 top-full z-50 mt-1 w-full max-w-[260px] rounded-md border border-gray-200 bg-white shadow-lg">
+                                <div className="max-h-[220px] overflow-y-auto py-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setFormData((prev) => {
+                                        const nextReportingTags = Array.isArray(prev.reportingTags) ? [...prev.reportingTags] : [];
+                                        nextReportingTags[index] = {
+                                          ...nextReportingTags[index],
+                                          value: "",
+                                          name: nextReportingTags[index]?.name || tag?.name,
+                                          tagId: nextReportingTags[index]?.tagId || nextReportingTags[index]?.id || tagKey,
+                                          id: nextReportingTags[index]?.id || nextReportingTags[index]?.tagId || tagKey,
+                                        };
+                                        return { ...prev, reportingTags: nextReportingTags };
+                                      });
+                                      setTopReportingTagOpenIndex(null);
+                                    }}
+                                    className="w-full px-3 py-2 text-left text-sm text-gray-900 hover:bg-gray-50"
+                                  >
+                                    None
+                                  </button>
+                                  {options.map((option: string) => (
+                                    <button
+                                      key={`${tagKey}-${option}`}
+                                      type="button"
+                                      onClick={() => {
+                                        setFormData((prev) => {
+                                          const nextReportingTags = Array.isArray(prev.reportingTags) ? [...prev.reportingTags] : [];
+                                          nextReportingTags[index] = {
+                                            ...nextReportingTags[index],
+                                            value: option,
+                                            name: nextReportingTags[index]?.name || tag?.name,
+                                            tagId: nextReportingTags[index]?.tagId || nextReportingTags[index]?.id || tagKey,
+                                            id: nextReportingTags[index]?.id || nextReportingTags[index]?.tagId || tagKey,
+                                          };
+                                          return { ...prev, reportingTags: nextReportingTags };
+                                        });
+                                        setTopReportingTagOpenIndex(null);
+                                      }}
+                                      className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 ${
+                                        selectedValue === option ? "text-[#156372] font-medium" : "text-gray-900"
+                                      }`}
+                                    >
+                                      {option}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {typeof document !== "undefined" && document.body && topReportingTagOpenIndex !== null && topReportingTagMenuPosition && (() => {
+                    const activeTag = formData.reportingTags?.[topReportingTagOpenIndex];
+                    const activeOptions = Array.isArray(activeTag?.options) ? activeTag.options : [];
+                    const activeKey = String(activeTag?.tagId || activeTag?.id || activeTag?.name || topReportingTagOpenIndex);
+                    return createPortal(
+                      <div
+                        data-reporting-tag-dropdown="true"
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          position: "fixed",
+                          top: `${topReportingTagMenuPosition.top}px`,
+                          left: `${topReportingTagMenuPosition.left}px`,
+                          width: `${topReportingTagMenuPosition.width}px`,
+                          minWidth: "260px",
+                          background: "white",
+                          border: "1px solid #d1d5db",
+                          borderRadius: "8px",
+                          boxShadow: "0 10px 18px rgba(0,0,0,0.12)",
+                          zIndex: 999999,
+                          overflow: "hidden",
+                        }}
+                      >
+                        <div className="max-h-[120px] overflow-y-auto py-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFormData((prev) => {
+                                const nextReportingTags = Array.isArray(prev.reportingTags) ? [...prev.reportingTags] : [];
+                                nextReportingTags[topReportingTagOpenIndex] = {
+                                  ...nextReportingTags[topReportingTagOpenIndex],
+                                  value: "",
+                                  name: nextReportingTags[topReportingTagOpenIndex]?.name || activeTag?.name,
+                                  tagId: nextReportingTags[topReportingTagOpenIndex]?.tagId || nextReportingTags[topReportingTagOpenIndex]?.id || activeKey,
+                                  id: nextReportingTags[topReportingTagOpenIndex]?.id || nextReportingTags[topReportingTagOpenIndex]?.tagId || activeKey,
+                                };
+                                return { ...prev, reportingTags: nextReportingTags };
+                              });
+                              setTopReportingTagOpenIndex(null);
+                              setTopReportingTagMenuPosition(null);
+                            }}
+                            className="w-full px-3 py-2 text-left text-sm text-gray-900 hover:bg-gray-50"
+                          >
+                            None
+                          </button>
+                          {activeOptions.map((option: string) => (
+                            <button
+                              key={`${activeKey}-${option}`}
+                              type="button"
+                              onClick={() => {
+                                setFormData((prev) => {
+                                  const nextReportingTags = Array.isArray(prev.reportingTags) ? [...prev.reportingTags] : [];
+                                  nextReportingTags[topReportingTagOpenIndex] = {
+                                    ...nextReportingTags[topReportingTagOpenIndex],
+                                    value: option,
+                                    name: nextReportingTags[topReportingTagOpenIndex]?.name || activeTag?.name,
+                                    tagId: nextReportingTags[topReportingTagOpenIndex]?.tagId || nextReportingTags[topReportingTagOpenIndex]?.id || activeKey,
+                                    id: nextReportingTags[topReportingTagOpenIndex]?.id || nextReportingTags[topReportingTagOpenIndex]?.tagId || activeKey,
+                                  };
+                                  return { ...prev, reportingTags: nextReportingTags };
+                                });
+                                setTopReportingTagOpenIndex(null);
+                                setTopReportingTagMenuPosition(null);
+                              }}
+                              className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 ${
+                                String(activeTag?.value || "") === option ? "text-[#156372] font-medium" : "text-gray-900"
+                              }`}
+                            >
+                              {option}
+                            </button>
+                          ))}
+                        </div>
+                      </div>,
+                      document.body
+                    );
+                  })()}
 
                   {formData.customer_id && (
                     <div className="grid grid-cols-[180px_1fr] items-center gap-4">
@@ -4593,48 +4918,6 @@ export default function RecordExpense() {
 
                   <div className="h-px bg-gray-200 my-8"></div>
 
-                  {/* Reporting Tags */}
-                  {Array.isArray(formData.reportingTags) && formData.reportingTags.length > 0 && (
-                    <div className="grid grid-cols-2 gap-10 pb-4">
-                      {formData.reportingTags.map((tag: any, index: number) => {
-                        const tagKey = String(tag?.tagId || tag?.id || tag?.name || index);
-                        const options = Array.isArray(tag?.options) ? tag.options : [];
-                        const selectedValue = String(tag?.value || "");
-                        return (
-                          <div key={`expense-reporting-tag-${tagKey}-${index}`} className="grid grid-cols-[180px_1fr] items-center gap-4">
-                            <label className={`text-sm font-medium ${tag?.isMandatory ? "text-red-600" : "text-gray-700"}`}>
-                              {String(tag?.name || "Reporting Tag")}{tag?.isMandatory ? " *" : ""}
-                            </label>
-                            <select
-                              value={selectedValue}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                setFormData((prev) => {
-                                  const nextReportingTags = Array.isArray(prev.reportingTags) ? [...prev.reportingTags] : [];
-                                  nextReportingTags[index] = {
-                                    ...nextReportingTags[index],
-                                    value,
-                                    name: nextReportingTags[index]?.name || tag?.name,
-                                    tagId: nextReportingTags[index]?.tagId || nextReportingTags[index]?.id || tagKey,
-                                    id: nextReportingTags[index]?.id || nextReportingTags[index]?.tagId || tagKey,
-                                  };
-                                  return { ...prev, reportingTags: nextReportingTags };
-                                });
-                              }}
-                              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
-                            >
-                              <option value="">None</option>
-                              {options.map((option: string) => (
-                                <option key={`${tagKey}-${option}`} value={option}>
-                                  {option}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
                 </div>
 
                 {/* Right Section - Receipts */}
@@ -4700,7 +4983,7 @@ export default function RecordExpense() {
                 </div>
               </div>
             )) : activeTab === "mileage" ? (
-              <RecordMileage />
+              <RecordMileage onClose={() => navigate("/expenses")} />
             ) : (
             <div className="p-4 max-w-full">
               <div style={{ backgroundColor: "white", borderRadius: "6px", overflow: "visible", border: "1px solid #e5e7eb" }}>
@@ -4870,77 +5153,41 @@ export default function RecordExpense() {
                                     justifyContent: "space-between",
                                   }}
                                 >
-                                  <span>{expense.currency || currencyOptions[0] || baseCurrencyCode || "USD"}</span>
+                                  <span>{selectedCurrencyCode}</span>
                                 </button>
                                 <ChevronDown size={14} style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#6b7280" }} />
                                 {bulkCurrencyOpenIndex === index && (
                                   <div style={{ position: "absolute", left: 0, top: "calc(100% + 4px)", width: "180px", background: "white", border: "1px solid #d1d5db", borderRadius: "6px", boxShadow: "0 8px 20px rgba(0,0,0,0.08)", zIndex: 94 }}>
-                                    <div style={{ padding: "8px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: "8px" }}>
-                                      <Search size={14} color="#9ca3af" />
-                                      <input
-                                        value={bulkCurrencySearch}
-                                        onChange={(e) => setBulkCurrencySearch(e.target.value)}
-                                        placeholder="Search"
-                                        autoFocus
-                                        style={{ width: "100%", border: "1px solid #d1d5db", borderRadius: "6px", padding: "6px 8px", fontSize: "13px", outline: "none" }}
-                                      />
-                                    </div>
                                     <div style={{ maxHeight: "220px", overflowY: "auto", padding: "4px" }}>
-                                      {(() => {
-                                        const rowCurrency = String(expense.currency || "").trim().toUpperCase();
-                                        const merged = Array.from(new Set([rowCurrency, ...currencyOptions].filter(Boolean)));
-                                        const filtered = merged.filter((code) =>
-                                          String(code).toLowerCase().includes(bulkCurrencySearch.toLowerCase())
+                                      {currencyOptions.map((currency) => {
+                                        const selected = String(selectedCurrencyCode).toUpperCase() === String(currency.code).toUpperCase();
+                                        return (
+                                          <button
+                                            key={`${expense.id}-cc-${currency.code}`}
+                                            type="button"
+                                            onClick={() => {
+                                              const next = [...bulkExpenses];
+                                              next[index].currency = String(currency.code);
+                                              setBulkExpenses(next);
+                                              setBulkCurrencyOpenIndex(null);
+                                              setBulkCurrencySearch("");
+                                            }}
+                                            style={{
+                                              width: "100%",
+                                              padding: "8px 10px",
+                                              border: "none",
+                                              borderRadius: "6px",
+                                              textAlign: "left",
+                                              background: selected ? "#156372" : "transparent",
+                                              color: selected ? "white" : "#374151",
+                                              cursor: "pointer",
+                                            }}
+                                          >
+                                            {currency.label}
+                                          </button>
                                         );
-                                        if (filtered.length === 0) {
-                                          return (
-                                            <div style={{ padding: "8px 10px", fontSize: "13px", color: "#6b7280" }}>
-                                              No currencies found
-                                            </div>
-                                          );
-                                        }
-                                        return filtered.map((code) => {
-                                          const selected = String(expense.currency || "").toUpperCase() === String(code).toUpperCase();
-                                          return (
-                                            <button
-                                              key={`${expense.id}-cc-${code}`}
-                                              type="button"
-                                              onClick={() => {
-                                                const next = [...bulkExpenses];
-                                                next[index].currency = String(code);
-                                                setBulkExpenses(next);
-                                                setBulkCurrencyOpenIndex(null);
-                                                setBulkCurrencySearch("");
-                                              }}
-                                              style={{
-                                                width: "100%",
-                                                padding: "8px 10px",
-                                                border: "none",
-                                                borderRadius: "6px",
-                                                textAlign: "left",
-                                                background: selected ? "#156372" : "transparent",
-                                                color: selected ? "white" : "#374151",
-                                                cursor: "pointer",
-                                              }}
-                                            >
-                                              {code}
-                                            </button>
-                                          );
-                                        });
-                                      })()}
+                                      })}
                                     </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setBulkCurrencyOpenIndex(null);
-                                        setBulkCurrencySearch("");
-                                        setNewCurrencyModalOpen(true);
-                                      }}
-                                      style={{ width: "100%", border: "none", borderTop: "1px solid #e5e7eb", background: "white", textAlign: "left", padding: "10px 12px", fontSize: "13px", color: "#156372", display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}
-                                    >
-                                      <Plus size={14} />
-                                      New Currency
-                                    </button>
                                   </div>
                                 )}
                               </div>
@@ -5191,7 +5438,7 @@ export default function RecordExpense() {
                                 {bulkCustomerOpenIndex === index ? <ChevronUp size={14} color="#6b7280" /> : <ChevronDown size={14} color="#6b7280" />}
                               </button>
                               {bulkCustomerOpenIndex === index && (
-                                <div style={{ position: "absolute", left: 0, right: 0, top: "calc(100% + 4px)", background: "white", border: "1px solid #d1d5db", borderRadius: "6px", boxShadow: "0 8px 20px rgba(0,0,0,0.08)", zIndex: 90 }}>
+                                <div style={{ position: "absolute", left: 0, right: 0, bottom: "calc(100% + 4px)", background: "white", border: "1px solid #d1d5db", borderRadius: "6px", boxShadow: "0 8px 20px rgba(0,0,0,0.08)", zIndex: 90 }}>
                                   <div style={{ padding: "8px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: "8px" }}>
                                     <Search size={14} color="#9ca3af" />
                                     <input
@@ -5223,20 +5470,20 @@ export default function RecordExpense() {
                                               setBulkCustomerOpenIndex(null);
                                               setBulkCustomerSearch("");
                                             }}
-                                            style={{
-                                              width: "100%",
-                                              padding: "8px 10px",
-                                              border: "none",
-                                              borderRadius: "6px",
-                                              textAlign: "left",
-                                              background: selected ? "#156372" : "transparent",
-                                              color: selected ? "white" : "#374151",
-                                              cursor: "pointer",
-                                            }}
-                                          >
-                                            {name}
-                                          </button>
-                                        );
+                                              style={{
+                                                width: "100%",
+                                                padding: "8px 10px",
+                                                border: "none",
+                                                borderRadius: "6px",
+                                                textAlign: "left",
+                                                background: selected ? "#f8fafc" : "transparent",
+                                                color: "#374151",
+                                                cursor: "pointer",
+                                              }}
+                                            >
+                                              {name}
+                                            </button>
+                                          );
                                       })}
                                   </div>
                                   <button

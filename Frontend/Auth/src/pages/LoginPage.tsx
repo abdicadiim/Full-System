@@ -4,6 +4,7 @@ import AuthShell from "../components/AuthShell";
 import { getAppDisplayName, getFallbackUrl } from "../lib/appBranding";
 import { goReturnTo } from "../lib/returnTo";
 import { authApi } from "../services/authApi";
+import { waitForBackendReady } from "../services/backendReady";
 
 const persistSession = (result: any) => {
   if (typeof window === "undefined") return;
@@ -32,6 +33,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     const checkLogin = async () => {
+      await waitForBackendReady();
       const token =
         localStorage.getItem("auth_token") ||
         localStorage.getItem("token") ||

@@ -14,6 +14,53 @@ const regionNameFromIso = (iso2: string) => {
   }
 };
 
+const normalizeMileagePreferences = (value: any) => {
+  const source = value && typeof value === "object" ? value : {};
+  const defaultMileageAccount =
+    typeof source.defaultMileageAccount === "string" ? source.defaultMileageAccount.trim().slice(0, 120) : "";
+  const defaultUnitRaw = typeof source.defaultUnit === "string" ? source.defaultUnit.trim() : "";
+  const defaultUnit = defaultUnitRaw === "Mile" || defaultUnitRaw === "Mile(s)" ? "Mile(s)" : "Km";
+  const mileageRates = Array.isArray(source.mileageRates)
+    ? source.mileageRates
+        .map((row: any) => ({
+          startDate: typeof row?.startDate === "string" ? row.startDate.trim().slice(0, 40) : "",
+          rate: typeof row?.rate === "string" ? row.rate.trim().slice(0, 40) : "",
+        }))
+        .filter((row: any) => row.startDate || row.rate)
+    : [];
+
+  return {
+    defaultMileageAccount,
+    defaultUnit,
+    mileageRates,
+  };
+};
+
+const buildOrganizationProfilePayload = (org: any) => ({
+  id: String(org._id),
+  name: org.name || "",
+  logoUrl: org.logoUrl || "",
+  logo: org.logoUrl || "",
+  businessType: org.businessType || "",
+  industry: org.industry || "",
+  email: org.primaryContactEmail || "",
+  website: org.websiteUrl || "",
+  baseCurrency: org.baseCurrency || "",
+  fiscalYear: org.fiscalYear || "",
+  orgLanguage: org.language || "",
+  timeZone: org.timeZone || "",
+  mileagePreferences: org.mileagePreferences ? normalizeMileagePreferences(org.mileagePreferences) : null,
+  address: {
+    country: regionNameFromIso(org.countryIso || ""),
+    state: org.state || "",
+    city: org.city || "",
+    street1: org.addressLine1 || "",
+    street2: org.addressLine2 || "",
+    zipCode: org.postalCode || "",
+    phone: org.phone || "",
+  },
+});
+
 export const getOrganizationProfile = async (req: express.Request, res: express.Response) => {
   if (AUTH_BYPASS) {
     return res.json({
@@ -44,29 +91,7 @@ export const getOrganizationProfile = async (req: express.Request, res: express.
 
   return res.json({
     success: true,
-    data: {
-      id: String(org._id),
-      name: org.name || "",
-      logoUrl: (org as any).logoUrl || "",
-      logo: (org as any).logoUrl || "",
-      businessType: (org as any).businessType || "",
-      industry: org.industry || "",
-      email: org.primaryContactEmail || "",
-      website: org.websiteUrl || "",
-      baseCurrency: org.baseCurrency || "",
-      fiscalYear: org.fiscalYear || "",
-      orgLanguage: org.language || "",
-      timeZone: org.timeZone || "",
-      address: {
-        country: regionNameFromIso(org.countryIso || ""),
-        state: org.state || "",
-        city: org.city || "",
-        street1: org.addressLine1 || "",
-        street2: org.addressLine2 || "",
-        zipCode: org.postalCode || "",
-        phone: org.phone || "",
-      },
-    },
+    data: buildOrganizationProfilePayload(org),
   });
 };
 
@@ -111,6 +136,10 @@ export const updateOrganizationProfile = async (req: express.Request, res: expre
   if (typeof addr.zipCode === "string" && addr.zipCode.trim()) patch.postalCode = addr.zipCode.trim().slice(0, 20);
   if (typeof addr.phone === "string" && addr.phone.trim()) patch.phone = addr.phone.trim().slice(0, 40);
 
+  if (body.mileagePreferences && typeof body.mileagePreferences === "object") {
+    patch.mileagePreferences = normalizeMileagePreferences(body.mileagePreferences);
+  }
+
   // Only update country if a 2-letter ISO code is provided explicitly.
   const countryIso = typeof body.countryIso === "string" ? body.countryIso.trim().toUpperCase() : "";
   if (countryIso && countryIso.length === 2) patch.countryIso = countryIso;
@@ -118,7 +147,7 @@ export const updateOrganizationProfile = async (req: express.Request, res: expre
   const updated = await Organization.findByIdAndUpdate(orgId, { $set: patch }, { new: true }).lean();
   if (!updated) return res.status(404).json({ success: false, message: "Organization not found", data: null });
 
-  return res.json({ success: true, data: { ok: true } });
+  return res.json({ success: true, data: buildOrganizationProfilePayload(updated) });
 };
 
 export const getOrganizationOwnerEmail = async (req: express.Request, res: express.Response) => {

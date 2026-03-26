@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Search, Upload as UploadIcon, Trash2, Image as ImageIcon, File, X, Plus, Mail, Building2 } from "lucide-react";
+import { useLocation } from "react-router-dom";
+import { createPortal } from "react-dom";
+import { ChevronDown, ChevronUp, Search, Upload as UploadIcon, Trash2, Image as ImageIcon, File, X, Plus, PlusCircle, Mail, Building2 } from "lucide-react";
 import { toast } from "react-toastify";
 
 import DatePicker from "../../../components/DatePicker";
-import { chartOfAccountsAPI, customersAPI, locationsAPI, projectsAPI, reportingTagsAPI, taxesAPI } from "../../../services/api";
+import { chartOfAccountsAPI, customersAPI, locationsAPI, projectsAPI, reportingTagsAPI, settingsAPI, taxesAPI } from "../../../services/api";
 import { useCurrency } from "../../../hooks/useCurrency";
 import { filterActiveRecords } from "../shared/activeFilters";
 
@@ -23,10 +25,88 @@ const safeReadLocalArray = (keys: string[]) => {
 const getInitialLocations = () => safeReadLocalArray(["taban_locations_cache"]);
 const getInitialTaxes = () => safeReadLocalArray(["taban_settings_taxes_v1", "taban_books_taxes"]);
 const getInitialCurrencies = () => safeReadLocalArray(["taban_currencies", "taban_books_currencies"]);
+const getStoredMileagePreferences = () => {
+    try {
+        const raw = localStorage.getItem("taban_mileage_preferences_v1");
+        return raw ? JSON.parse(raw) : null;
+    } catch {
+        return null;
+    }
+};
 
-export default function RecordMileage() {
+const initialStoredMileagePreferences = getStoredMileagePreferences();
+const initialStoredMileageUnit =
+    initialStoredMileagePreferences?.defaultUnit === "Mile" || initialStoredMileagePreferences?.defaultUnit === "Mile(s)"
+        ? "Mile(s)"
+        : "Km";
+
+const getInitialMileageRateValue = () => {
+    try {
+        const prefs = getStoredMileagePreferences();
+        const rows = Array.isArray(prefs?.mileageRates) ? prefs.mileageRates : [];
+        const defaultRateRow = rows.find((row: any) => !String(row?.startDate ?? "").trim() && Number.isFinite(parseFloat(String(row?.rate ?? "").trim())));
+        const parsed = defaultRateRow ? parseFloat(String(defaultRateRow.rate ?? "").trim()) : NaN;
+        return Number.isFinite(parsed) ? parsed : 0;
+    } catch {
+        return 0;
+    }
+};
+
+const createMileageRateRow = (startDate = "", rate = "", isDraft = false) => ({
+    startDate,
+    rate,
+    isDraft,
+});
+
+const formatMileageRateDateLabel = (value: string) => {
+    const text = String(value || "").trim();
+    if (!text) return "";
+
+    const direct = new Date(text);
+    if (!Number.isNaN(direct.getTime())) {
+        return new Intl.DateTimeFormat("en-GB", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+        }).format(direct);
+    }
+
+    const slashMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (slashMatch) {
+        const month = Number(slashMatch[1]) - 1;
+        const day = Number(slashMatch[2]);
+        const year = Number(slashMatch[3]);
+        const parsed = new Date(year, month, day);
+        if (!Number.isNaN(parsed.getTime())) {
+            return new Intl.DateTimeFormat("en-GB", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+            }).format(parsed);
+        }
+    }
+
+    return text;
+};
+
+type RecordMileageProps = {
+    onClose?: () => void;
+};
+
+export default function RecordMileage({ onClose }: RecordMileageProps) {
     const { code: baseCurrencyCode } = useCurrency();
+    const location = useLocation() as { state?: { receiptFiles?: any[] } };
+    const defaultMileageAccountRef = useRef<HTMLDivElement>(null);
+    const [defaultMileageAccountOpen, setDefaultMileageAccountOpen] = useState(false);
+    const handleClose = () => {
+        if (onClose) {
+            onClose();
+            return;
+        }
+        window.history.back();
+    };
     const initialLocationsCache = getInitialLocations();
+    const initialTaxesCache = getInitialTaxes();
     const initialCurrenciesCache = getInitialCurrencies();
     const initialLocationName = String(
         initialLocationsCache[0]?.name ||
@@ -48,14 +128,14 @@ export default function RecordMileage() {
             const d = String(today.getDate()).padStart(2, "0");
             const m = String(today.getMonth() + 1).padStart(2, "0");
             const y = today.getFullYear();
-            return `${d} ${today.toLocaleString('en-US', { month: 'short' })} ${y}`;
+            return `${d}/${m}/${y}`;
         })(),
         currency: initialCurrencyCode,
         calculateBy: "distance",
         startReading: "",
         endReading: "",
         distance: "",
-        distanceUnit: "Mile(s)",
+        distanceUnit: initialStoredMileageUnit,
         amount: "0.00",
         taxType: "Tax Exclusive",
         tax: "",
@@ -90,6 +170,98 @@ export default function RecordMileage() {
     const customerRef = useRef<HTMLDivElement>(null);
     const [customerOpen, setCustomerOpen] = useState(false);
     const [customerSearch, setCustomerSearch] = useState("");
+    const [newCustomerModalOpen, setNewCustomerModalOpen] = useState(false);
+    const [customerQuickActionFrameKey, setCustomerQuickActionFrameKey] = useState(0);
+    const reportingTagsRef = useRef<HTMLDivElement>(null);
+    const [reportingTagOpenKey, setReportingTagOpenKey] = useState<string | null>(null);
+    const [reportingTagErrors, setReportingTagErrors] = useState<Record<string, string>>({});
+    const [odometerError, setOdometerError] = useState("");
+
+    useEffect(() => {
+        const handleMouseDown = (event: MouseEvent) => {
+            if (defaultMileageAccountRef.current && !defaultMileageAccountRef.current.contains(event.target as Node)) {
+                setDefaultMileageAccountOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleMouseDown);
+        return () => document.removeEventListener("mousedown", handleMouseDown);
+    }, []);
+
+    useEffect(() => {
+        const handleMouseDown = (event: MouseEvent) => {
+            if (reportingTagsRef.current && !reportingTagsRef.current.contains(event.target as Node)) {
+                setReportingTagOpenKey(null);
+            }
+        };
+        document.addEventListener("mousedown", handleMouseDown);
+        return () => document.removeEventListener("mousedown", handleMouseDown);
+    }, []);
+
+    useEffect(() => {
+        let alive = true;
+
+        const applyPreferences = (prefs: any) => {
+            if (!prefs || typeof prefs !== "object") return false;
+
+            const normalizedAccount = String(prefs.defaultMileageAccount || "").trim() || "Automobile Expense";
+            const normalizedUnit = prefs.defaultUnit === "Mile" || prefs.defaultUnit === "Mile(s)" ? "Mile(s)" : "Km";
+            const normalizedRates = Array.isArray(prefs.mileageRates) && prefs.mileageRates.length > 0
+                ? prefs.mileageRates.map((row: any) => ({
+                    startDate: String(row?.startDate || ""),
+                    rate: String(row?.rate || ""),
+                }))
+                : [{ startDate: "", rate: "" }];
+
+            setFormData((prev) => ({ ...prev, defaultMileageAccount: normalizedAccount, distanceUnit: normalizedUnit }));
+            setDefaultUnit(normalizedUnit);
+            setMileageRates([
+                ...normalizedRates.map((row) => createMileageRateRow(row.startDate, row.rate, false)),
+                createMileageRateRow("", "", true),
+            ]);
+
+        const resolvedRate = getMileageRateForDateFromRows(normalizedRates, formData.date);
+        if (resolvedRate !== null) {
+            setMileageRate(resolvedRate);
+            setTempRate(String(resolvedRate));
+            setShowMileageRateLine(true);
+        } else {
+            setMileageRate(0);
+            setTempRate("0");
+            setShowMileageRateLine(false);
+        }
+
+            localStorage.setItem("mileage_preferences_set", "true");
+            localStorage.setItem(
+                "taban_mileage_preferences_v1",
+                JSON.stringify({
+                    defaultMileageAccount: normalizedAccount,
+                    defaultUnit: normalizedUnit,
+                    mileageRates: normalizedRates,
+                })
+            );
+            setShowPreferencesModal(false);
+            return true;
+        };
+
+        const loadPreferences = async () => {
+            try {
+                const response = await settingsAPI.getOrganizationProfile();
+                if (!alive) return;
+                if (applyPreferences(response?.data?.mileagePreferences)) return;
+            } catch {
+                // fall back below
+            }
+
+            if (!alive) return;
+            if (applyPreferences(getStoredMileagePreferences())) return;
+            setShowPreferencesModal(localStorage.getItem("mileage_preferences_set") !== "true");
+        };
+
+        void loadPreferences();
+        return () => {
+            alive = false;
+        };
+    }, []);
 
     const LIST_1_DEFAULT_ACCOUNTS = [
         "Office Supplies",
@@ -164,13 +336,46 @@ export default function RecordMileage() {
                 id: getTaxId(tax),
                 name: getTaxName(tax),
                 rate: getTaxRate(tax),
+                isGroup:
+                    tax?.isGroup === true ||
+                    String(tax?.kind || "").toLowerCase() === "group" ||
+                    String(tax?.type || "").toLowerCase() === "group" ||
+                    tax?.description === "__taban_tax_group__" ||
+                    (Array.isArray(tax?.groupTaxes) && tax.groupTaxes.length > 0),
+                isCompound: Boolean(tax?.isCompound),
             }))
             .filter((row) => row.id && row.name);
     }, [taxes]);
-    const filteredTaxOptions = useMemo(() => {
+    const taxOptionGroups = useMemo(() => {
+        const taxRows: any[] = [];
+        const compoundRows: any[] = [];
+        const groupRows: any[] = [];
+
+        taxOptions.forEach((tax) => {
+            if (tax.isGroup) {
+                groupRows.push(tax);
+            } else if (tax.isCompound) {
+                compoundRows.push(tax);
+            } else {
+                taxRows.push(tax);
+            }
+        });
+
+        return [
+            { label: "Tax", options: taxRows },
+            { label: "Compound tax", options: compoundRows },
+            { label: "Tax Group", options: groupRows },
+        ].filter((group) => group.options.length > 0);
+    }, [taxOptions]);
+    const filteredTaxGroups = useMemo(() => {
         const keyword = taxSearch.toLowerCase();
-        return taxOptions.filter((tax) => `${tax.name} [${tax.rate}%]`.toLowerCase().includes(keyword));
-    }, [taxOptions, taxSearch]);
+        return taxOptionGroups
+            .map((group) => ({
+                ...group,
+                options: group.options.filter((tax: any) => `${tax.name} [${tax.rate}%]`.toLowerCase().includes(keyword)),
+            }))
+            .filter((group) => group.options.length > 0);
+    }, [taxOptionGroups, taxSearch]);
     const selectedTaxOption = useMemo(
         () => taxOptions.find((tax) => tax.id === String(formData.tax || "")),
         [taxOptions, formData.tax]
@@ -249,7 +454,7 @@ export default function RecordMileage() {
             try {
                 const [locationsResponse, taxesResponse, customersResponse, projectsResponse, accountsResponse] = await Promise.all([
                     locationsAPI.getAll(),
-                    taxesAPI.getAll({ status: "active" }),
+                    taxesAPI.getAll({ limit: 1000 }),
                     customersAPI.getAll({ limit: 1000 }),
                     projectsAPI.getAll(),
                     chartOfAccountsAPI.getAccounts({ isActive: true }),
@@ -268,7 +473,7 @@ export default function RecordMileage() {
                     ? taxesResponse.data
                     : Array.isArray(taxesResponse)
                         ? taxesResponse
-                        : [];
+                        : initialTaxesCache;
                 const activeTaxes = taxRows.filter((tax: any) => tax?.isActive !== false && tax?.is_active !== false);
                 setTaxes(activeTaxes.length > 0 ? activeTaxes : taxRows);
 
@@ -297,6 +502,70 @@ export default function RecordMileage() {
         loadData();
         void loadReportingTags();
     }, []);
+
+    const reloadCustomersForMileage = async () => {
+        try {
+            const customersResponse = await customersAPI.getAll({ limit: 1000 });
+            if (customersResponse?.success && Array.isArray(customersResponse?.data)) {
+                setCustomers(filterActiveRecords(customersResponse.data));
+            } else {
+                setCustomers([]);
+            }
+        } catch (error) {
+            console.error("Error reloading customers:", error);
+        }
+    };
+
+    const validateMandatoryReportingTags = () => {
+        const nextErrors: Record<string, string> = {};
+
+        (Array.isArray(formData.reportingTags) ? formData.reportingTags : []).forEach((tag: any, index: number) => {
+            const key = String(tag?.tagId || tag?.id || tag?.name || index);
+            const isMandatory = Boolean(tag?.isMandatory || tag?.mandatory);
+            const value = String(tag?.value ?? "").trim();
+
+            if (isMandatory && !value) {
+                nextErrors[key] = "This field is required.";
+            }
+        });
+
+        setReportingTagErrors(nextErrors);
+        return Object.keys(nextErrors).length === 0;
+    };
+
+    const handleFooterSave = () => {
+        const tagsValid = validateMandatoryReportingTags();
+
+        let odometerValid = true;
+        if (formData.calculateBy === "odometer") {
+            const start = String(formData.startReading || "").trim();
+            const end = String(formData.endReading || "").trim();
+
+            if (!start || !end) {
+                setOdometerError("Both start and end readings are required.");
+                odometerValid = false;
+            } else if (Number(end) <= Number(start)) {
+                setOdometerError("End reading must be greater than start reading.");
+                odometerValid = false;
+            } else {
+                setOdometerError("");
+            }
+        } else {
+            setOdometerError("");
+        }
+
+        if (!tagsValid || !odometerValid) {
+            if (!tagsValid && !odometerValid) {
+                toast.error("Please fill all mandatory reporting tags and odometer readings.");
+            } else if (!tagsValid) {
+                toast.error("Please fill all mandatory reporting tags.");
+            } else {
+                toast.error("Please complete the odometer readings correctly.");
+            }
+            return;
+        }
+        toast.success("Reporting tags are valid.");
+    };
 
     useEffect(() => {
         setFormData((prev) => {
@@ -361,17 +630,25 @@ export default function RecordMileage() {
     }, [expenseAccountOptions]);
 
     const [showPreferencesModal, setShowPreferencesModal] = useState(() => {
-        return localStorage.getItem("mileage_preferences_set") !== "true";
+        return !getStoredMileagePreferences() && localStorage.getItem("mileage_preferences_set") !== "true";
     });
 
     const [mileageRates, setMileageRates] = useState([
-        { startDate: "", rate: "" }
+        createMileageRateRow("", "", true)
     ]);
-    const [defaultUnit, setDefaultUnit] = useState<"Km" | "Mile(s)">("Km");
+    const [defaultUnit, setDefaultUnit] = useState<"Km" | "Mile(s)">(initialStoredMileageUnit);
 
-    const [mileageRate, setMileageRate] = useState(11.00);
+    const [mileageRate, setMileageRate] = useState(getInitialMileageRateValue());
+
+    useEffect(() => {
+        const receiptFiles = location?.state?.receiptFiles;
+        if (Array.isArray(receiptFiles) && receiptFiles.length > 0) {
+            setUploadedFiles(receiptFiles);
+        }
+    }, [location?.state?.receiptFiles]);
     const [showRatePopover, setShowRatePopover] = useState(false);
-    const [tempRate, setTempRate] = useState("11");
+    const [tempRate, setTempRate] = useState(() => String(getInitialMileageRateValue()));
+    const [showMileageRateLine, setShowMileageRateLine] = useState(() => getInitialMileageRateValue() > 0);
 
     const getFileExtension = (name: string) => {
         const parts = String(name || "").split(".");
@@ -458,22 +735,24 @@ export default function RecordMileage() {
 
         const slashMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
         if (slashMatch) {
-            const month = Number(slashMatch[1]) - 1;
-            const day = Number(slashMatch[2]);
+            const first = Number(slashMatch[1]);
+            const second = Number(slashMatch[2]);
             const year = Number(slashMatch[3]);
-            const parsed = new Date(year, month, day);
+            const monthIndex = first > 12 ? second - 1 : first - 1;
+            const day = first > 12 ? first : second;
+            const parsed = new Date(year, monthIndex, day);
             return Number.isNaN(parsed.getTime()) ? null : parsed;
         }
 
         return null;
     };
 
-    const getMileageRateForDate = (dateText: string): number | null => {
+    const getMileageRateForDateFromRows = (rows: Array<{ startDate: string; rate: string }>, dateText: string): number | null => {
         const targetDate = parseDisplayDate(dateText);
         let defaultRate: number | null = null;
         const datedRates: Array<{ startDate: Date; rate: number }> = [];
 
-        mileageRates.forEach((row) => {
+        rows.forEach((row) => {
             const rateValue = parseFloat(String(row?.rate ?? "").trim());
             if (Number.isNaN(rateValue)) return;
 
@@ -506,8 +785,31 @@ export default function RecordMileage() {
         return null;
     };
 
-    const handleSavePreferences = () => {
+    const getMileageRateForDate = (dateText: string): number | null => getMileageRateForDateFromRows(mileageRates, dateText);
+
+    const handleSavePreferences = async () => {
+        const persistedRates = mileageRates
+            .map((row) => ({
+                startDate: String(row?.startDate || "").trim(),
+                rate: String(row?.rate || "").trim(),
+            }))
+            .filter((row) => row.startDate || row.rate);
+
+        const savedPreferences = {
+            defaultMileageAccount: String(formData.defaultMileageAccount || "").trim() || "Automobile Expense",
+            defaultUnit,
+            mileageRates: persistedRates,
+        };
+
         localStorage.setItem("mileage_preferences_set", "true");
+        localStorage.setItem("taban_mileage_preferences_v1", JSON.stringify(savedPreferences));
+
+        try {
+            await settingsAPI.updateOrganizationProfile({ mileagePreferences: savedPreferences });
+        } catch (error) {
+            console.error("Error saving mileage preferences:", error);
+        }
+
         const resolvedRate = getMileageRateForDate(formData.date);
         if (resolvedRate !== null) {
             setMileageRate(resolvedRate);
@@ -523,63 +825,97 @@ export default function RecordMileage() {
                 distanceUnit: defaultUnit,
             }));
         }
+        setMileageRates([
+            ...persistedRates.map((row) => createMileageRateRow(row.startDate, row.rate, false)),
+            createMileageRateRow("", "", true),
+        ]);
         setShowPreferencesModal(false);
     };
 
     if (showPreferencesModal) {
         return (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-                <div className="bg-white rounded-lg shadow-xl w-[700px] overflow-hidden">
-                    <div className="flex justify-between items-center p-6 pb-2">
+            <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 overflow-y-auto pt-4 pb-6">
+                <div className="bg-white rounded-lg shadow-xl w-[650px] max-w-[calc(100vw-24px)] overflow-hidden mt-1">
+                    <div className="flex justify-between items-center px-6 pt-5 pb-2">
                         <h2 className="text-xl text-red-500 font-normal">Set your mileage preferences</h2>
-                        <button className="text-gray-400 hover:text-gray-600" onClick={() => setShowPreferencesModal(false)}>✕</button>
+                        <button className="text-gray-400 hover:text-gray-600" onClick={handleClose}>✕</button>
                     </div>
 
-                    <div className="p-6">
-                        <div className="mb-6 flex items-center">
-                            <label className="w-48 text-gray-700 text-sm">Default Mileage Account</label>
-                            <div className="relative flex-1 max-w-[250px]">
-                                <select
-                                    className="w-full border border-gray-300 rounded px-3 py-2 appearance-none focus:outline-none focus:border-blue-500 text-sm"
-                                    value={formData.defaultMileageAccount}
-                                    onChange={(e) => setFormData({ ...formData, defaultMileageAccount: e.target.value })}
+                    <div className="px-6 pb-6 pt-3">
+                        <div className="mb-5 flex items-center">
+                            <label className="w-40 text-gray-700 text-sm leading-5">Default Mileage Account</label>
+                            <div ref={defaultMileageAccountRef} className="relative flex-1 max-w-[250px]">
+                                <button
+                                    type="button"
+                                    className="w-full border border-gray-300 rounded px-3 py-2 text-left text-sm flex items-center justify-between bg-white focus:outline-none focus:border-[#156372]"
+                                    onClick={() => setDefaultMileageAccountOpen((prev) => !prev)}
                                 >
-                                    {defaultAccountOptions.map(opt => (
-                                        <option key={opt} value={opt}>{opt}</option>
-                                    ))}
-                                </select>
-                                <ChevronDown className="absolute right-2 top-2.5 text-gray-400 pointer-events-none" size={16} />
+                                    <span className="truncate">{formData.defaultMileageAccount || "Select an account"}</span>
+                                    {defaultMileageAccountOpen ? (
+                                        <ChevronUp size={16} className="text-gray-400 shrink-0" />
+                                    ) : (
+                                        <ChevronDown size={16} className="text-gray-400 shrink-0" />
+                                    )}
+                                </button>
+                                {defaultMileageAccountOpen && (
+                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-[180px] overflow-y-auto custom-scrollbar">
+                                        {defaultAccountOptions.map((opt) => {
+                                            const isSelected = formData.defaultMileageAccount === opt;
+                                            return (
+                                                <button
+                                                    key={opt}
+                                                    type="button"
+                                                    className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 ${
+                                                        isSelected ? "bg-[#e8f4f3] text-[#156372] font-medium" : "text-gray-700"
+                                                    }`}
+                                                    onClick={() => {
+                                                        setFormData({ ...formData, defaultMileageAccount: opt });
+                                                        setDefaultMileageAccountOpen(false);
+                                                    }}
+                                                >
+                                                    {opt}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
                         </div>
 
-                        <div className="mb-8 flex items-center">
-                            <label className="w-48 text-gray-700 text-sm">Default Unit</label>
+                        <div className="mb-7 flex items-center">
+                            <label className="w-40 text-gray-700 text-sm">Default Unit</label>
                             <div className="flex gap-4">
                                 <label className="flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="radio"
-                                        name="unit"
-                                        className="text-blue-600 h-4 w-4"
-                                        checked={defaultUnit === "Km"}
-                                        onChange={() => setDefaultUnit("Km")}
-                                    />
+                                        <input
+                                            type="radio"
+                                            name="unit"
+                                            className="h-4 w-4 accent-[#156372]"
+                                            checked={defaultUnit === "Km"}
+                                            onChange={() => {
+                                                setDefaultUnit("Km");
+                                                setFormData((prev) => ({ ...prev, distanceUnit: "Km" }));
+                                            }}
+                                        />
                                     <span className="text-sm">Km</span>
                                 </label>
                                 <label className="flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="radio"
-                                        name="unit"
-                                        className="text-blue-600 h-4 w-4"
-                                        checked={defaultUnit === "Mile(s)"}
-                                        onChange={() => setDefaultUnit("Mile(s)")}
-                                    />
+                                        <input
+                                            type="radio"
+                                            name="unit"
+                                            className="h-4 w-4 accent-[#156372]"
+                                            checked={defaultUnit === "Mile(s)"}
+                                            onChange={() => {
+                                                setDefaultUnit("Mile(s)");
+                                                setFormData((prev) => ({ ...prev, distanceUnit: "Mile(s)" }));
+                                            }}
+                                        />
                                     <span className="text-sm">Mile</span>
                                 </label>
                             </div>
                         </div>
 
                         <div className="mb-2 uppercase text-gray-600 text-sm font-semibold tracking-wider">MILEAGE RATES</div>
-                        <p className="text-gray-500 text-sm mb-6 leading-relaxed">
+                        <p className="text-gray-500 text-sm mb-5 leading-relaxed max-w-[560px]">
                             Any mileage expense recorded on or after the start date will have the corresponding mileage rate. You can create a default rate (created without specifying a date), which will be applicable for mileage expenses recorded before the initial start date.
                         </p>
 
@@ -594,30 +930,54 @@ export default function RecordMileage() {
                                 {mileageRates.map((rateRow, idx) => (
                                     <tr key={idx}>
                                         <td className="py-3 px-2">
-                                            <DatePicker
-                                                value={rateRow.startDate}
-                                                onChange={(date) => {
-                                                    const next = [...mileageRates];
-                                                    next[idx].startDate = date;
-                                                    setMileageRates(next);
-                                                }}
-                                                placeholder="dd MMM yyyy"
-                                            />
-                                        </td>
-                                        <td className="py-3 px-2">
-                                                <div className="flex items-center border border-gray-300 rounded w-36 overflow-hidden focus-within:border-blue-500">
-                                                <span className="bg-white px-3 py-1.5 text-sm text-gray-600 border-r border-gray-300">{formData.currency || baseCurrencyCode || "USD"}</span>
-                                                <input
-                                                    type="text"
-                                                    className="w-full px-2 py-1.5 text-sm outline-none"
-                                                    value={rateRow.rate}
-                                                    onChange={(e) => {
+                                            {rateRow.isDraft ? (
+                                                <DatePicker
+                                                    value={rateRow.startDate}
+                                                    onChange={(date) => {
                                                         const next = [...mileageRates];
-                                                        next[idx].rate = e.target.value;
+                                                        next[idx].startDate = date;
                                                         setMileageRates(next);
                                                     }}
+                                                    placeholder="dd MMM yyyy"
                                                 />
-                                            </div>
+                                            ) : (
+                                                <span className="text-sm text-gray-900">{formatMileageRateDateLabel(rateRow.startDate)}</span>
+                                            )}
+                                        </td>
+                                        <td className="py-3 px-2">
+                                            {rateRow.isDraft ? (
+                                                <div className="flex items-center gap-2">
+                                                    <div className="flex items-center border border-gray-300 rounded w-36 overflow-hidden focus-within:border-[#156372]">
+                                                        <span className="bg-white px-3 py-1.5 text-sm text-gray-600 border-r border-gray-300">{formData.currency || baseCurrencyCode || "USD"}</span>
+                                                        <input
+                                                            type="text"
+                                                            className="w-full px-2 py-1.5 text-sm outline-none"
+                                                            value={rateRow.rate}
+                                                            onChange={(e) => {
+                                                                const next = [...mileageRates];
+                                                                next[idx].rate = e.target.value;
+                                                                setMileageRates(next);
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    {mileageRates.length > 1 && (
+                                                        <button
+                                                            type="button"
+                                                            aria-label="Remove mileage rate"
+                                                            onClick={() => {
+                                                                setMileageRates((prev) => prev.filter((_, i) => i !== idx));
+                                                            }}
+                                                            className="text-gray-400 hover:text-red-500 transition-colors"
+                                                        >
+                                                            <X size={16} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <span className="text-sm text-gray-900">
+                                                    {(formData.currency || baseCurrencyCode || "USD")}{rateRow.rate}
+                                                </span>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}
@@ -626,18 +986,19 @@ export default function RecordMileage() {
 
                         <button
                             type="button"
-                            className="text-blue-600 font-medium text-sm flex items-center gap-1 hover:text-blue-700"
-                            onClick={() => setMileageRates([...mileageRates, { startDate: "", rate: "" }])}
+                            className="text-[#156372] font-medium text-sm flex items-center gap-1 hover:text-[#0d4a52]"
+                            onClick={() => setMileageRates([...mileageRates, createMileageRateRow("", "", true)])}
                         >
-                            <span className="border border-current rounded-full w-4 h-4 inline-flex items-center justify-center text-xs leading-none mr-1">+</span> Add Mileage Rate
+                            <PlusCircle size={16} className="shrink-0" />
+                            <span>Add Mileage Rate</span>
                         </button>
                     </div>
 
-                    <div className="p-6 pt-0 border-t border-gray-100/0 mt-4 flex gap-3">
-                        <button className="bg-[#22a06b] hover:bg-[#1d8a5d] text-white px-4 py-2 rounded font-medium text-sm" onClick={handleSavePreferences}>
+                    <div className="px-6 pb-6 pt-0 border-t border-gray-100/0 mt-4 flex gap-3">
+                        <button className="bg-[#156372] hover:bg-[#0f4a56] text-white px-4 py-2 rounded font-medium text-sm" onClick={handleSavePreferences}>
                             Save
                         </button>
-                        <button className="bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 px-4 py-2 rounded font-medium text-sm" onClick={() => setShowPreferencesModal(false)}>
+                        <button className="bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 px-4 py-2 rounded font-medium text-sm" onClick={handleClose}>
                             Cancel
                         </button>
                     </div>
@@ -715,6 +1076,7 @@ export default function RecordMileage() {
                                         toast.error("The mileage rate has not been defined for the specified date. Please add a mileage rate in settings");
                                         setMileageRate(0);
                                         setTempRate("0");
+                                        setShowMileageRateLine(false);
                                         setFormData((prev) => ({
                                             ...prev,
                                             date,
@@ -723,6 +1085,7 @@ export default function RecordMileage() {
                                     } else {
                                         setMileageRate(resolvedRate);
                                         setTempRate(String(resolvedRate));
+                                        setShowMileageRateLine(true);
                                         setFormData((prev) => ({
                                             ...prev,
                                             date,
@@ -742,7 +1105,7 @@ export default function RecordMileage() {
                                     <input
                                         type="radio"
                                         name="calcMethod"
-                                        className="peer h-4 w-4 cursor-pointer appearance-none rounded-full border border-gray-300 checked:border-[#2196F3] checked:bg-[#2196F3] transition-all"
+                                        className="peer h-4 w-4 cursor-pointer appearance-none rounded-full border border-gray-300 checked:border-[#156372] checked:bg-[#156372] transition-all"
                                         checked={formData.calculateBy === "distance"}
                                         onChange={() => setFormData({ ...formData, calculateBy: "distance" })}
                                     />
@@ -755,7 +1118,7 @@ export default function RecordMileage() {
                                     <input
                                         type="radio"
                                         name="calcMethod"
-                                        className="peer h-4 w-4 cursor-pointer appearance-none rounded-full border border-gray-300 checked:border-[#2196F3] checked:bg-[#2196F3] transition-all"
+                                        className="peer h-4 w-4 cursor-pointer appearance-none rounded-full border border-gray-300 checked:border-[#156372] checked:bg-[#156372] transition-all"
                                         checked={formData.calculateBy === "odometer"}
                                         onChange={() => setFormData({ ...formData, calculateBy: "odometer" })}
                                     />
@@ -779,7 +1142,8 @@ export default function RecordMileage() {
                                         const start = e.target.value;
                                         const endVal = formData.endReading;
                                         const dist = endVal && start ? Number(endVal) - Number(start) : 0;
-                                        const finalDist = dist > 0 ? String(dist) : "";
+                                        const finalDist = dist > 0 ? dist.toFixed(1) : "";
+                                        setOdometerError("");
                                         setFormData({
                                             ...formData,
                                             startReading: start,
@@ -798,7 +1162,8 @@ export default function RecordMileage() {
                                         const end = e.target.value;
                                         const startVal = formData.startReading;
                                         const dist = end && startVal ? Number(end) - Number(startVal) : 0;
-                                        const finalDist = dist > 0 ? String(dist) : "";
+                                        const finalDist = dist > 0 ? dist.toFixed(1) : "";
+                                        setOdometerError("");
                                         setFormData({
                                             ...formData,
                                             endReading: end,
@@ -808,6 +1173,9 @@ export default function RecordMileage() {
                                     }}
                                 />
                             </div>
+                            {odometerError && (
+                                <div className="ml-[200px] mt-1 text-xs text-red-500">{odometerError}</div>
+                            )}
                         </div>
                     )}
 
@@ -830,78 +1198,81 @@ export default function RecordMileage() {
                                     }}
                                 />
                                 <div className="bg-[#f8fafc] border-l border-gray-300 px-4 py-2 text-sm text-gray-600 whitespace-nowrap">
-                                    {formData.distanceUnit}
+                                    {formData.distanceUnit === "Km" ? "Kilometer(s)" : "Mile(s)"}
                                 </div>
                             </div>
                         </div>
-                        <div className="ml-[200px] mt-1 flex items-center gap-1 text-xs text-gray-500 relative">
-                            Rate per {formData.distanceUnit === "Km" ? "km" : "mile"} = {formData.currency || baseCurrencyCode || "USD"}{mileageRate.toFixed(2)}
-                            <button
-                                type="button"
-                                className="text-blue-600 hover:underline"
-                                onClick={() => {
-                                    setTempRate(String(mileageRate));
-                                    setShowRatePopover(!showRatePopover);
-                                }}
-                            >
-                                Change
-                            </button>
+                        {showMileageRateLine && (
+                            <div className="ml-[200px] mt-1 flex items-center gap-1 text-xs text-gray-500 relative">
+                                Rate per {formData.distanceUnit === "Km" ? "km" : "mile"} = {formData.currency || baseCurrencyCode || "USD"}{mileageRate.toFixed(2)}
+                                <button
+                                    type="button"
+                                    className="text-[#156372] hover:underline"
+                                    onClick={() => {
+                                        setTempRate(String(mileageRate));
+                                        setShowRatePopover(!showRatePopover);
+                                    }}
+                                >
+                                    Change
+                                </button>
 
-                            {showRatePopover && (
-                                <div className="absolute top-full left-[160px] mt-2 z-50 bg-white rounded-lg shadow-[0_4px_25px_rgba(0,0,0,0.15)] border border-gray-200 w-[240px] p-5 text-left">
-                                    {/* Triangle tip */}
-                                    <div className="absolute -top-1.5 left-12 w-3 h-3 bg-white border-t border-l border-gray-200 transform rotate-45"></div>
+                                {showRatePopover && (
+                                    <div className="absolute top-full left-[160px] mt-2 z-50 bg-white rounded-lg shadow-[0_4px_25px_rgba(0,0,0,0.15)] border border-gray-200 w-[240px] p-5 text-left">
+                                        {/* Triangle tip */}
+                                        <div className="absolute -top-1.5 left-12 w-3 h-3 bg-white border-t border-l border-gray-200 transform rotate-45"></div>
 
-                                    <div className="flex justify-between items-center mb-5">
-                                        <h4 className="text-[15px] font-semibold text-gray-800">Edit Mileage Rate</h4>
+                                        <div className="flex justify-between items-center mb-5">
+                                            <h4 className="text-[15px] font-semibold text-gray-800">Edit Mileage Rate</h4>
+                                            <button
+                                                className="text-gray-400 hover:text-red-500 border border-gray-300 rounded p-0.5 flex items-center justify-center transition-colors"
+                                                type="button"
+                                                onClick={() => setShowRatePopover(false)}
+                                            >
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                            </button>
+                                        </div>
+
+                                        <div className="mb-5">
+                                            <label className="block text-sm text-[#ff4b4b] font-medium mb-2">Mileage rate (in {formData.currency || baseCurrencyCode || "USD"})*</label>
+                                            <input
+                                                type="number"
+                                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
+                                                value={tempRate}
+                                                min="0"
+                                                step="0.01"
+                                                inputMode="decimal"
+                                                onChange={(e) => {
+                                                    const value = e.target.value;
+                                                    if (value === "" || /^\d*\.?\d*$/.test(value)) {
+                                                        setTempRate(value);
+                                                    }
+                                                }}
+                                                autoFocus
+                                            />
+                                        </div>
+
                                         <button
-                                            className="text-gray-400 hover:text-red-500 border border-gray-300 rounded p-0.5 flex items-center justify-center transition-colors"
                                             type="button"
-                                            onClick={() => setShowRatePopover(false)}
+                                            className="bg-[#22a06b] hover:bg-[#1d8a5d] text-white px-5 py-2 rounded font-medium text-sm transition-colors shadow-sm"
+                                            onClick={() => {
+                                                const newRate = parseFloat(tempRate);
+                                                if (!isNaN(newRate)) {
+                                                    setMileageRate(newRate);
+                                                    setShowMileageRateLine(true);
+                                                    setFormData((prev) => ({
+                                                        ...prev,
+                                                        amount: calculateAmount(prev.distance, newRate),
+                                                    }));
+                                                }
+                                                setShowRatePopover(false);
+                                            }}
                                         >
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                            Save
                                         </button>
                                     </div>
-
-                                    <div className="mb-5">
-                                        <label className="block text-sm text-[#ff4b4b] font-medium mb-2">Mileage rate (in {formData.currency || baseCurrencyCode || "USD"})*</label>
-                                        <input
-                                            type="number"
-                                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
-                                            value={tempRate}
-                                            min="0"
-                                            step="0.01"
-                                            inputMode="decimal"
-                                            onChange={(e) => {
-                                                const value = e.target.value;
-                                                if (value === "" || /^\d*\.?\d*$/.test(value)) {
-                                                    setTempRate(value);
-                                                }
-                                            }}
-                                            autoFocus
-                                        />
-                                    </div>
-
-                                    <button
-                                        type="button"
-                                        className="bg-[#22a06b] hover:bg-[#1d8a5d] text-white px-5 py-2 rounded font-medium text-sm transition-colors shadow-sm"
-                                        onClick={() => {
-                                            const newRate = parseFloat(tempRate);
-                                            if (!isNaN(newRate)) {
-                                                setMileageRate(newRate);
-                                                setFormData(prev => ({
-                                                    ...prev,
-                                                    amount: calculateAmount(prev.distance, newRate)
-                                                }));
-                                            }
-                                            setShowRatePopover(false);
-                                        }}
-                                    >
-                                        Save
-                                    </button>
-                                </div>
-                            )}
-                        </div>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex">
@@ -929,7 +1300,7 @@ export default function RecordMileage() {
                                     <input
                                         type="radio"
                                         name="taxType"
-                                        className="peer h-4 w-4 cursor-pointer appearance-none rounded-full border border-gray-300 checked:border-[#2196F3] checked:bg-[#2196F3] transition-all"
+                                        className="peer h-4 w-4 cursor-pointer appearance-none rounded-full border border-gray-300 checked:border-[#156372] checked:bg-[#156372] transition-all"
                                         checked={formData.taxType === "Tax Inclusive"}
                                         onChange={() => setFormData({ ...formData, taxType: "Tax Inclusive" })}
                                     />
@@ -942,7 +1313,7 @@ export default function RecordMileage() {
                                     <input
                                         type="radio"
                                         name="taxType"
-                                        className="peer h-4 w-4 cursor-pointer appearance-none rounded-full border border-gray-300 checked:border-[#2196F3] checked:bg-[#2196F3] transition-all"
+                                        className="peer h-4 w-4 cursor-pointer appearance-none rounded-full border border-gray-300 checked:border-[#156372] checked:bg-[#156372] transition-all"
                                         checked={formData.taxType === "Tax Exclusive"}
                                         onChange={() => setFormData({ ...formData, taxType: "Tax Exclusive" })}
                                     />
@@ -1002,43 +1373,47 @@ export default function RecordMileage() {
                                             type="text"
                                             value={taxSearch}
                                             onChange={(e) => setTaxSearch(e.target.value)}
-                                            placeholder="Search"
+                                            placeholder="Search..."
                                             className="flex-1 rounded-md border border-[#3b82f6] px-2 py-1 text-sm outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6]"
                                             autoFocus
                                         />
                                     </div>
-                                    <div className="px-3 py-2 text-xs font-semibold text-gray-500">Compound tax</div>
                                     <div className="max-h-[220px] overflow-y-auto py-1">
-                                        {filteredTaxOptions.map((tax) => {
-                                            const selected = String(formData.tax || "") === tax.id;
-                                            return (
-                                                <button
-                                                    key={tax.id}
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setFormData((prev) => ({ ...prev, tax: tax.id }));
-                                                        setTaxOpen(false);
-                                                        setTaxSearch("");
-                                                    }}
-                                                    className={`w-full px-3 py-2 text-left text-sm ${selected
-                                                        ? "bg-[#3b82f6] text-white font-medium"
-                                                        : "text-gray-700 hover:bg-[#3b82f6] hover:text-white"
-                                                        }`}
-                                                >
-                                                    {tax.name} [{tax.rate}%]
-                                                </button>
-                                            );
-                                        })}
-                                        {filteredTaxOptions.length === 0 && (
+                                        {filteredTaxGroups.map((group) => (
+                                            <div key={group.label}>
+                                                <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase">{group.label}</div>
+                                                {group.options.map((tax: any) => {
+                                                    const selected = String(formData.tax || "") === tax.id;
+                                                    return (
+                                                        <button
+                                                            key={tax.id}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setFormData((prev) => ({ ...prev, tax: tax.id }));
+                                                                setTaxOpen(false);
+                                                                setTaxSearch("");
+                                                            }}
+                                                            className={`w-full px-3 py-2 text-left text-sm ${selected
+                                                                ? "bg-[#156372] text-white font-medium"
+                                                                : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                                                                }`}
+                                                        >
+                                                            {tax.name} [{tax.rate}%]
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        ))}
+                                        {filteredTaxGroups.length === 0 && (
                                             <div className="px-3 py-2 text-sm text-gray-500">No taxes found</div>
                                         )}
                                     </div>
                                     <button
                                         type="button"
-                                        className="w-full border-t border-gray-200 px-3 py-2 text-left text-sm text-[#156372] hover:bg-[#f8fafc] flex items-center gap-2"
+                                        className="w-full border-t border-gray-200 px-3 py-2 text-left text-sm text-[#156372] hover:bg-[#156372] hover:text-white flex items-center gap-2"
                                     >
                                         <Plus size={14} />
-                                        New Tax
+                                        Add New Tax
                                     </button>
                                 </div>
                             )}
@@ -1139,7 +1514,7 @@ export default function RecordMileage() {
                                                 autoFocus
                                             />
                                         </div>
-                                        <div className="max-h-[280px] overflow-y-auto p-2 space-y-1">
+                                        <div className="max-h-[210px] overflow-y-auto p-2 space-y-1">
                                             {filteredCustomerOptions.length === 0 ? (
                                                 <div className="p-3 text-sm text-gray-500 text-center">No customers found</div>
                                             ) : (
@@ -1161,17 +1536,17 @@ export default function RecordMileage() {
                                                                 setCustomerOpen(false);
                                                                 setCustomerSearch("");
                                                             }}
-                                                            className={`w-full rounded-md px-3 py-2 text-left ${selected ? "bg-[#3b82f6] text-white" : "text-gray-900 hover:bg-[#3b82f6] hover:text-white"}`}
+                                                            className={`w-full rounded-md px-3 py-2 text-left ${selected ? "bg-gray-100 text-gray-900" : "text-gray-900 hover:bg-gray-100 hover:text-gray-900"}`}
                                                         >
                                                             <div className="flex items-center gap-3">
-                                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm ${selected ? "bg-white/20 text-white" : "bg-[#e2e8f0] text-gray-700"}`}>
+                                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm ${selected ? "bg-gray-200 text-gray-700" : "bg-[#e2e8f0] text-gray-700"}`}>
                                                                     {String(customer.name || "C").charAt(0).toUpperCase()}
                                                                 </div>
                                                                 <div className="min-w-0">
                                                                     <div className="text-sm font-medium truncate">
                                                                         {customer.name}{customer.customerNo ? ` | ${customer.customerNo}` : ""}
                                                                     </div>
-                                                                    <div className={`text-xs truncate flex items-center gap-2 ${selected ? "text-white/90" : "text-gray-500"}`}>
+                                                                    <div className={`text-xs truncate flex items-center gap-2 ${selected ? "text-gray-500" : "text-gray-500"}`}>
                                                                         <span className="inline-flex items-center gap-1">
                                                                             <Mail size={12} />
                                                                             {customer.email || "-"}
@@ -1191,6 +1566,11 @@ export default function RecordMileage() {
                                         <button
                                             type="button"
                                             className="w-full border-t border-gray-200 px-3 py-2 text-left text-sm text-[#2563eb] hover:bg-[#f8fafc] flex items-center gap-2"
+                                            onClick={() => {
+                                                setCustomerQuickActionFrameKey((prev) => prev + 1);
+                                                setNewCustomerModalOpen(true);
+                                                setCustomerOpen(false);
+                                            }}
                                         >
                                             <Plus size={14} />
                                             New Customer
@@ -1265,48 +1645,97 @@ export default function RecordMileage() {
                         </div>
                     )}
 
-                    <div className="space-y-4 pt-4 pb-20">
-                        {(formData.reportingTags || []).map((tag: any, index: number) => (
-                            <div className="flex items-center gap-4" key={`${tag?.tagId || tag?.id || tag?.name || index}`}>
-                                <label className="w-[200px] text-sm text-gray-700 font-medium whitespace-nowrap overflow-hidden text-ellipsis">
-                                    {tag?.name || "Reporting Tag"}{tag?.isMandatory ? " *" : ""}
-                                </label>
-                                <div className="relative w-full">
-                                    <select
-                                        className="w-full rounded-md border border-gray-300 bg-[#f8fafc] px-3 py-2 text-sm outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372] appearance-none text-gray-700"
-                                        value={tag?.value || ""}
-                                        onChange={(e) => {
-                                            const value = e.target.value;
-                                            setFormData((prev) => {
-                                                const nextTags = Array.isArray(prev.reportingTags) ? [...prev.reportingTags] : [];
-                                                nextTags[index] = { ...nextTags[index], value };
-                                                return { ...prev, reportingTags: nextTags };
-                                            });
-                                        }}
-                                    >
-                                        <option value="">None</option>
-                                        {(Array.isArray(tag?.options) ? tag.options : []).map((option: string) => (
-                                            <option key={option} value={option}>{option}</option>
-                                        ))}
-                                    </select>
-                                    <ChevronDown className="absolute right-3 top-2.5 text-gray-400 pointer-events-none" size={16} />
+                    <div ref={reportingTagsRef} className="space-y-4 pt-4 pb-20">
+                        {(formData.reportingTags || []).map((tag: any, index: number) => {
+                            const tagKey = String(tag?.tagId || tag?.id || tag?.name || index);
+                            const hasError = Boolean(reportingTagErrors[tagKey]);
+                            const isMandatory = Boolean(tag?.isMandatory || tag?.mandatory);
+                            const value = String(tag?.value ?? "").trim();
+                            const options = Array.isArray(tag?.options) ? tag.options : [];
+                            const isOpen = reportingTagOpenKey === tagKey;
+
+                            return (
+                                <div className="flex items-start gap-4" key={tagKey}>
+                                    <label className={`w-[200px] text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis ${isMandatory ? "text-[#ff4b4b]" : "text-gray-700"}`}>
+                                        {tag?.name || "Reporting Tag"}{isMandatory ? "*" : ""}
+                                    </label>
+                                    <div className="relative w-full">
+                                        <button
+                                            type="button"
+                                            onClick={() => setReportingTagOpenKey((prev) => (prev === tagKey ? null : tagKey))}
+                                            className={`w-full rounded-md border bg-[#f8fafc] px-3 py-2 text-sm text-left flex items-center justify-between outline-none focus:ring-1 ${hasError ? "border-red-400 focus:border-red-400 focus:ring-red-400" : "border-gray-300 focus:border-[#156372] focus:ring-[#156372]"}`}
+                                        >
+                                            <span className="text-gray-700">{value || "None"}</span>
+                                            <ChevronDown className={`text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""}`} size={16} />
+                                        </button>
+                                        {isOpen && (
+                                            <div className="absolute left-0 right-0 z-20 mt-1 max-h-[210px] overflow-y-auto rounded-md border border-gray-300 bg-white shadow-lg">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setFormData((prev) => {
+                                                            const nextTags = Array.isArray(prev.reportingTags) ? [...prev.reportingTags] : [];
+                                                            nextTags[index] = { ...nextTags[index], value: "" };
+                                                            return { ...prev, reportingTags: nextTags };
+                                                        });
+                                                        setReportingTagErrors((prev) => {
+                                                            if (!prev[tagKey]) return prev;
+                                                            const next = { ...prev };
+                                                            delete next[tagKey];
+                                                            return next;
+                                                        });
+                                                        setReportingTagOpenKey(null);
+                                                    }}
+                                                    className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#f8fafc] transition-colors"
+                                                >
+                                                    None
+                                                </button>
+                                                {options.map((option: string) => (
+                                                    <button
+                                                        key={option}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setFormData((prev) => {
+                                                                const nextTags = Array.isArray(prev.reportingTags) ? [...prev.reportingTags] : [];
+                                                                nextTags[index] = { ...nextTags[index], value: option };
+                                                                return { ...prev, reportingTags: nextTags };
+                                                            });
+                                                            setReportingTagErrors((prev) => {
+                                                                if (!prev[tagKey]) return prev;
+                                                                const next = { ...prev };
+                                                                delete next[tagKey];
+                                                                return next;
+                                                            });
+                                                            setReportingTagOpenKey(null);
+                                                        }}
+                                                        className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-[#f8fafc] transition-colors"
+                                                    >
+                                                        {option}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {hasError && isMandatory && !value && (
+                                            <p className="mt-1 text-xs text-red-500">{reportingTagErrors[tagKey]}</p>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                         {(!Array.isArray(formData.reportingTags) || formData.reportingTags.length === 0) && reportingTagDefinitions.length === 0 && (
                             <div className="text-sm text-gray-500 ml-[200px]">No reporting tags found.</div>
                         )}
                     </div>
 
                     {/* Action Footer */}
-                    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 pl-[300px] flex gap-3 z-10 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
-                        <button type="button" className="bg-[#22a06b] hover:bg-[#1d8a5d] text-white px-4 py-2 rounded font-medium text-sm flex items-center shadow-sm">
+                    <div className="fixed bottom-0 left-0 right-0 bg-transparent p-4 pl-[300px] flex gap-3 z-10">
+                        <button type="button" onClick={handleFooterSave} className="bg-[#156372] hover:bg-[#0f4a56] text-white px-4 py-2 rounded font-medium text-sm flex items-center shadow-sm">
                             Save <span className="opacity-80 text-xs ml-1 font-normal">(Alt+S)</span>
                         </button>
-                        <button type="button" className="bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-300 px-4 py-2 rounded font-medium text-sm flex items-center shadow-sm">
+                        <button type="button" onClick={handleFooterSave} className="bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-300 px-4 py-2 rounded font-medium text-sm flex items-center shadow-sm">
                             Save and New <span className="opacity-60 text-xs ml-1 font-normal">(Alt+N)</span>
                         </button>
-                        <button type="button" className="bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-300 px-4 py-2 rounded font-medium text-sm shadow-sm" onClick={() => window.history.back()}>
+                        <button type="button" className="bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-300 px-4 py-2 rounded font-medium text-sm shadow-sm" onClick={() => (onClose ? onClose() : window.history.back())}>
                             Cancel
                         </button>
                     </div>
@@ -1314,62 +1743,55 @@ export default function RecordMileage() {
             </div>
 
             {/* Right File Upload Area */}
-            <div className="w-[350px] pt-12 pr-6">
+            <div className="w-[320px] pt-1 pr-6">
                 {uploadedFiles.length > 0 ? (
-                    <div className="bg-white border border-[#cbd5e1] rounded-xl min-h-[300px] flex flex-col overflow-hidden">
-                        <div className="px-4 py-3 border-b border-[#dbe1ea]">
-                            <button
-                                type="button"
-                                onClick={handleUploadClick}
-                                className="w-full bg-transparent text-[#334155] py-1.5 px-2 text-sm font-medium flex items-center justify-center gap-2"
-                            >
-                                <UploadIcon size={15} />
-                                Upload your Files
-                                <ChevronDown size={14} className="text-gray-400" />
-                            </button>
-                        </div>
-                        <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
-                            {isImageUpload(uploadedFiles[0]) && uploadedPreviewUrl ? (
-                                <img
-                                    src={uploadedPreviewUrl}
-                                    alt={String(uploadedFiles[0]?.name || "Uploaded image")}
-                                    className="max-h-[260px] w-auto rounded-md border border-gray-200 object-contain"
-                                />
-                            ) : (
-                                <>
-                                    <div className="w-24 h-24 rounded-xl bg-[#eff6ff] flex items-center justify-center">
-                                        <File size={38} className="text-[#2563eb]" />
-                                    </div>
-                                    <p className="mt-3 text-lg font-semibold text-[#334155]">{getDocumentTypeLabel(uploadedFiles[0])}</p>
-                                </>
-                            )}
-                            <p className="mt-3 text-[22px] text-[#475569] break-all">{uploadedFiles[0]?.name}</p>
-                        </div>
-                        <div className="px-4 py-3 border-t border-dashed border-[#dbe1ea] flex items-center justify-between">
-                            <span className="text-[24px] text-[#475569]">1 of {uploadedFiles.length} Files</span>
-                            <button onClick={() => handleRemoveFile(uploadedFiles[0].id)} className="text-[#ef4444] hover:text-[#dc2626]">
-                                <Trash2 size={15} />
-                            </button>
-                        </div>
+                    <div className="bg-white border border-[#cbd5e1] rounded-xl min-h-[360px] flex flex-col overflow-hidden">
+                      <div className="px-4 py-3 border-b border-[#dbe1ea]">
+                        <button
+                          type="button"
+                          onClick={handleUploadClick}
+                          className="w-full bg-transparent text-[#334155] py-1.5 px-2 text-sm font-medium flex items-center justify-center gap-2"
+                        >
+                          <UploadIcon size={15} />
+                          <ChevronDown size={14} className="text-gray-400" />
+                        </button>
+                      </div>
+                      <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
+                        {isImageUpload(uploadedFiles[0]) && uploadedPreviewUrl ? (
+                          <img
+                            src={uploadedPreviewUrl}
+                            alt={String(uploadedFiles[0]?.name || "Uploaded image")}
+                            className="max-h-[260px] w-auto rounded-md border border-gray-200 object-contain"
+                          />
+                        ) : (
+                          <>
+                            <div className="w-24 h-24 rounded-xl bg-[#eff6ff] flex items-center justify-center">
+                              <File size={38} className="text-[#2563eb]" />
+                            </div>
+                            <p className="mt-3 text-lg font-semibold text-[#334155]">{getDocumentTypeLabel(uploadedFiles[0])}</p>
+                          </>
+                        )}
+                        <p className="mt-3 text-[22px] text-[#475569] break-all">{uploadedFiles[0]?.name}</p>
+                      </div>
+                      <div className="px-4 py-3 border-t border-dashed border-[#dbe1ea] flex items-center justify-between">
+                        <span className="text-[24px] text-[#475569]">1 of {uploadedFiles.length} Files</span>
+                        <button onClick={() => handleRemoveFile(uploadedFiles[0].id)} className="text-[#ef4444] hover:text-[#dc2626]">
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
                     </div>
                 ) : (
-                    <div className="border border-dashed border-gray-300 rounded-[12px] p-8 flex flex-col items-center justify-center text-center bg-white shadow-sm min-h-[300px]">
-                        <div className="w-16 h-16 bg-[#f0f6ff] rounded-[16px] mb-6 flex justify-center items-center">
-                            <ImageIcon size={28} className="text-[#2563eb]" />
-                        </div>
-                        <h3 className="text-gray-900 font-semibold mb-1 text-base">Drag or Drop your Receipts</h3>
-                        <p className="text-gray-400 text-xs mb-6 font-medium">Maximum file size allowed is 10MB</p>
-                        <button
-                            type="button"
-                            onClick={handleUploadClick}
-                            className="bg-[#f1f5f9] text-[#475569] font-medium text-sm px-6 py-2 rounded shadow-sm border border-gray-200 flex items-center justify-between w-full hover:bg-gray-200 transition-colors"
-                        >
-                            <span className="flex items-center gap-2">
-                                <UploadIcon size={16} />
-                                Upload your Files
-                            </span>
-                            <ChevronDown size={14} className="opacity-70" />
-                        </button>
+                    <div
+                      className="bg-white border border-dashed border-[#cbd5e1] rounded-lg px-5 py-4 min-h-[300px] flex cursor-pointer flex-col items-center text-center"
+                      onClick={handleUploadClick}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      <div className="w-16 h-16 bg-teal-50 rounded-lg flex items-center justify-center mb-4">
+                        <ImageIcon size={32} className="text-blue-900" />
+                      </div>
+                      <h3 className="text-base font-semibold text-gray-900 mb-1">Drag or Drop your Receipts</h3>
+                      <p className="text-xs text-gray-500 mb-4">Maximum file size allowed is 10MB</p>
                     </div>
                 )}
                 <input
@@ -1381,6 +1803,45 @@ export default function RecordMileage() {
                     accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"
                 />
             </div>
+            {typeof document !== "undefined" && document.body && createPortal(
+                <div
+                    className={`fixed inset-0 z-[10000] flex items-center justify-center transition-opacity duration-150 ${newCustomerModalOpen ? "bg-black bg-opacity-50 opacity-100" : "bg-transparent opacity-0 pointer-events-none"}`}
+                    onClick={async () => {
+                        setNewCustomerModalOpen(false);
+                        await reloadCustomersForMileage();
+                    }}
+                >
+                    <div
+                        className="bg-white rounded-lg shadow-xl w-[96vw] h-[94vh] max-w-[1400px] flex flex-col"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between p-5 border-b border-gray-200">
+                            <h2 className="text-lg font-semibold text-gray-900">New Customer (Quick Action)</h2>
+                            <button
+                                type="button"
+                                className="w-8 h-8 bg-[#156372] text-white rounded flex items-center justify-center"
+                                onClick={async () => {
+                                    setNewCustomerModalOpen(false);
+                                    await reloadCustomersForMileage();
+                                }}
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+
+                        <div className="flex-1 p-2 bg-gray-100">
+                            <iframe
+                                key={customerQuickActionFrameKey}
+                                title="New Customer Quick Action"
+                                src="/sales/customers/new?embed=1"
+                                loading="eager"
+                                className="w-full h-full bg-white rounded border border-gray-200"
+                            />
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 }

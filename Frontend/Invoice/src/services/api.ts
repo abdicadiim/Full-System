@@ -810,7 +810,10 @@ export const currenciesAPI = {
   getBaseCurrency: async () => {
     const response = await currenciesAPI.getAll({ limit: 1000 });
     const list = Array.isArray(response.data) ? response.data : [];
-    const base = list.find((currency: any) => Boolean(currency?.isBaseCurrency)) || list[0] || defaultCurrencies[0];
+    const base =
+      list.find((currency: any) => Boolean(currency?.isBaseCurrency || currency?.is_base_currency || currency?.isBase)) ||
+      list[0] ||
+      defaultCurrencies[0];
     return { success: true, data: base };
   },
 };
@@ -1983,6 +1986,7 @@ export const settingsAPI = {
       baseCurrency: existing?.baseCurrency || "AMD",
       email: existing?.email || "owner@local.app",
       organizationName: existing?.organizationName || "Taban Billing",
+      mileagePreferences: existing?.mileagePreferences || null,
       ...existing,
     };
     writeSettingsObject("organization_profile", normalized);
@@ -1992,7 +1996,9 @@ export const settingsAPI = {
     try {
       const res = await request({ method: "PUT", path: "/settings/organization/profile", data });
       if (res?.success) {
-        const updated = res.data && typeof res.data === "object" ? res.data : data;
+        const responseData = res.data && typeof res.data === "object" ? res.data : {};
+        const responseKeys = Object.keys(responseData).filter((key) => key !== "ok");
+        const updated = responseKeys.length > 0 ? { ...readSettingsObject("organization_profile", {}), ...(data || {}), ...responseData } : { ...readSettingsObject("organization_profile", {}), ...(data || {}) };
         writeSettingsObject("organization_profile", updated);
         return { success: true, data: updated };
       }

@@ -36,20 +36,6 @@ export const useCurrency = () => {
 
     const loadBaseCurrency = async () => {
       try {
-        const stored = localStorage.getItem("taban_currencies");
-        if (stored) {
-          const currencies = JSON.parse(stored);
-          const base = currencies.find((c: any) => c.isBase);
-          if (base && isMounted) {
-            setBaseCurrency(normalizeCurrency(base));
-            return;
-          }
-        }
-      } catch {
-        // ignore and fall back to API
-      }
-
-      try {
         const res = await currenciesAPI.getBaseCurrency();
         const base = (res as any)?.data;
         if (base && isMounted) {
@@ -58,6 +44,20 @@ export const useCurrency = () => {
         }
       } catch {
         // ignore
+      }
+
+      try {
+        const stored = localStorage.getItem("taban_currencies");
+        if (stored) {
+          const currencies = JSON.parse(stored);
+          const base = currencies.find((c: any) => Boolean(c?.isBase || c?.isBaseCurrency || c?.is_base_currency));
+          if (base && isMounted) {
+            setBaseCurrency(normalizeCurrency(base));
+            return;
+          }
+        }
+      } catch {
+        // ignore and fall back to default
       }
 
       if (isMounted) {

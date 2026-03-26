@@ -35,7 +35,6 @@ export const useCurrency = () => {
     let isMounted = true;
 
     const loadBaseCurrency = async () => {
-      // Prefer DB-backed base currency first (source of truth).
       try {
         const res = await currenciesAPI.getBaseCurrency();
         const base = (res as any)?.data;
@@ -51,7 +50,7 @@ export const useCurrency = () => {
         const stored = localStorage.getItem("taban_currencies");
         if (stored) {
           const currencies = JSON.parse(stored);
-          const base = currencies.find((c: any) => Boolean(c?.isBase || c?.isBaseCurrency));
+          const base = currencies.find((c: any) => Boolean(c?.isBase || c?.isBaseCurrency || c?.is_base_currency));
           if (base && isMounted) {
             setBaseCurrency(normalizeCurrency(base));
             return;

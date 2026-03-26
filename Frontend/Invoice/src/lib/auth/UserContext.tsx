@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { AUTH_USER_UPDATED_EVENT } from "../../services/auth";
+import { waitForBackendReady } from "../../services/backendReady";
 
 type User =
   | {
@@ -40,6 +41,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     const ac = new AbortController();
     const timeout = setTimeout(() => ac.abort(), 8000);
     try {
+      await waitForBackendReady();
       const res = await fetch("/api/auth/me", {
         credentials: "include",
         signal: ac.signal,

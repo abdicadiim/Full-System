@@ -1,13 +1,173 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Lock, ChevronDown, X } from "lucide-react";
+import { Lock, ChevronDown, Pencil, Trash2, X } from "lucide-react";
+import { toast } from "react-toastify";
+
+import DatePicker from "../../components/DatePicker";
+import { chartOfAccountsAPI, currenciesAPI, settingsAPI } from "../../services/api";
+
+type MileageRateRow = {
+  id: string;
+  startDate: string;
+  rate: string;
+  isEditing?: boolean;
+  isNew?: boolean;
+  draftStartDate?: string;
+  draftRate?: string;
+};
+
+const createMileageRateId = () => `mileage-rate-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+const createMileageRateRow = (overrides: Partial<MileageRateRow> = {}): MileageRateRow => ({
+  id: overrides.id || createMileageRateId(),
+  startDate: String(overrides.startDate ?? ""),
+  rate: String(overrides.rate ?? ""),
+  isEditing: overrides.isEditing ?? false,
+  isNew: overrides.isNew ?? false,
+  draftStartDate: String(overrides.draftStartDate ?? overrides.startDate ?? ""),
+  draftRate: String(overrides.draftRate ?? overrides.rate ?? ""),
+});
+const createBlankMileageRateRow = (): MileageRateRow => createMileageRateRow({
+  isEditing: true,
+  isNew: true,
+  startDate: "",
+  rate: "",
+  draftStartDate: "",
+  draftRate: "",
+});
+const normalizeMileageRateRows = (rows: MileageRateRow[]) =>
+  rows
+    .map((row) => ({
+      startDate: String(row.isEditing ? row.draftStartDate ?? "" : row.startDate ?? "").trim(),
+      rate: String(row.isEditing ? row.draftRate ?? "" : row.rate ?? "").trim(),
+    }))
+    .filter((row) => row.startDate || row.rate);
+const hydrateMileageRateRows = (rows: any[]) => {
+  const mapped = rows
+    .map((row: any) =>
+      createMileageRateRow({
+        startDate: String(row?.startDate || ""),
+        rate: String(row?.rate || ""),
+        isEditing: false,
+        isNew: false,
+      })
+    )
+    .filter((row) => row.startDate || row.rate);
+
+  return mapped.length > 0 ? mapped : [createBlankMileageRateRow()];
+};
+const formatMileageRateDate = (value: string) => {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return "";
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+    const parsed = new Date(`${trimmed}T00:00:00`);
+    if (!Number.isNaN(parsed.getTime())) {
+      return new Intl.DateTimeFormat("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      }).format(parsed);
+    }
+  }
+  return trimmed;
+};
+const normalizeMileageRateDateKey = (value: string) => {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return "";
+
+  const direct = new Date(trimmed);
+  if (!Number.isNaN(direct.getTime())) {
+    const parsed = new Date(direct.getFullYear(), direct.getMonth(), direct.getDate());
+    return String(parsed.getTime());
+  }
+
+  const slashMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slashMatch) {
+    const month = Number(slashMatch[1]) - 1;
+    const day = Number(slashMatch[2]);
+    const year = Number(slashMatch[3]);
+    const parsed = new Date(year, month, day);
+    if (!Number.isNaN(parsed.getTime())) {
+      return String(new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()).getTime());
+    }
+  }
+
+  const labelMatch = trimmed.match(/^(\d{1,2})\s+([A-Za-z]{3,})\s+(\d{4})$/);
+  if (labelMatch) {
+    const months: Record<string, number> = {
+      jan: 0,
+      feb: 1,
+      mar: 2,
+      apr: 3,
+      may: 4,
+      jun: 5,
+      jul: 6,
+      aug: 7,
+      sep: 8,
+      sept: 8,
+      oct: 9,
+      nov: 10,
+      dec: 11,
+    };
+    const monthIndex = months[labelMatch[2].toLowerCase()];
+    if (monthIndex !== undefined) {
+      const parsed = new Date(Number(labelMatch[3]), monthIndex, Number(labelMatch[1]));
+      if (!Number.isNaN(parsed.getTime())) {
+        return String(new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()).getTime());
+      }
+    }
+  }
+
+  return trimmed.toLowerCase();
+};
+const hasDuplicateMileageRateDates = (rows: Array<{ startDate: string }>) => {
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const key = normalizeMileageRateDateKey(row.startDate);
+    if (!key) continue;
+    if (seen.has(key)) return true;
+    seen.add(key);
+  }
+  return false;
+};
+const FALLBACK_MILEAGE_ACCOUNTS = [
+  "Office Supplies",
+  "Advertising And Marketing",
+  "Bank Fees and Charges",
+  "Credit Card Charges",
+  "Travel Expense",
+  "Telephone Expense",
+  "Automobile Expense",
+  "IT and Internet Expenses",
+  "Rent Expense",
+  "Janitorial Expense",
+  "Postage",
+  "Bad Debt",
+  "Printing and Stationery",
+  "Salaries and Employee Wages",
+  "Meals and Entertainment",
+  "Depreciation Expense",
+  "Consultant Expense",
+  "Repairs and Maintenance",
+  "Other Expenses",
+  "Lodging",
+  "Purchase Discounts",
+  "Fuel/Mileage Expenses",
+];
 
 export default function ExpensesPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("preferences");
+  const mileageAccountMenuRef = useRef<HTMLDivElement | null>(null);
   
   // Preferences tab states
-  const [associateEmployees, setAssociateEmployees] = useState(false);
+  const [mileageAccountRows, setMileageAccountRows] = useState<string[]>([]);
+  const [mileageDefaultAccount, setMileageDefaultAccount] = useState("Automobile Expense");
+  const [mileageDefaultUnit, setMileageDefaultUnit] = useState<"Km" | "Mile(s)">("Km");
+  const [mileageRates, setMileageRates] = useState<MileageRateRow[]>([createBlankMileageRateRow()]);
+  const [baseCurrencyCode, setBaseCurrencyCode] = useState("USD");
+  const [isMileageAccountOpen, setIsMileageAccountOpen] = useState(false);
+  const [mileageValidationError, setMileageValidationError] = useState("");
+  const [deleteMileageRateId, setDeleteMileageRateId] = useState<string | null>(null);
   
   // Field Customization tab states
   const [customFields, setCustomFields] = useState([]);
@@ -23,6 +183,184 @@ export default function ExpensesPage() {
   
   // Related Lists tab states
   const [relatedLists, setRelatedLists] = useState([]);
+
+  useEffect(() => {
+    const loadMileageSettings = async () => {
+      try {
+        const [profileRes, accountsRes, baseCurrencyRes] = await Promise.all([
+          settingsAPI.getOrganizationProfile(),
+          chartOfAccountsAPI.getAccounts({ isActive: true }),
+          currenciesAPI.getBaseCurrency(),
+        ]);
+
+        const prefs = profileRes?.data?.mileagePreferences;
+        setBaseCurrencyCode(
+          String(
+            baseCurrencyRes?.data?.code ||
+              baseCurrencyRes?.data?.currency_code ||
+              profileRes?.data?.baseCurrency ||
+              "USD"
+          )
+            .trim()
+            .toUpperCase() || "USD"
+        );
+        if (prefs && typeof prefs === "object") {
+          setMileageDefaultAccount(String(prefs.defaultMileageAccount || "Automobile Expense"));
+          setMileageDefaultUnit(
+            prefs.defaultUnit === "Mile" || prefs.defaultUnit === "Mile(s)" ? "Mile(s)" : "Km"
+          );
+          const rows = Array.isArray(prefs.mileageRates) ? prefs.mileageRates : [];
+          setMileageRates(hydrateMileageRateRows(rows));
+        } else {
+          try {
+            const raw = localStorage.getItem("taban_mileage_preferences_v1");
+            const stored = raw ? JSON.parse(raw) : null;
+            if (stored && typeof stored === "object") {
+              setMileageDefaultAccount(String(stored.defaultMileageAccount || "Automobile Expense"));
+              setMileageDefaultUnit(
+                stored.defaultUnit === "Mile" || stored.defaultUnit === "Mile(s)" ? "Mile(s)" : "Km"
+              );
+              const rows = Array.isArray(stored.mileageRates) ? stored.mileageRates : [];
+              setMileageRates(hydrateMileageRateRows(rows));
+            }
+          } catch {
+            // ignore fallback parsing errors
+          }
+        }
+
+        if (accountsRes?.success && Array.isArray(accountsRes?.data)) {
+          const fromApi = accountsRes.data
+            .filter((account: any) => {
+              const type = String(account?.accountType || "").toLowerCase();
+              return account?.isActive !== false && (
+                type.includes("expense") ||
+                type === "cost_of_goods_sold" ||
+                type === "other_expense"
+              );
+            })
+            .map((account: any) => String(account?.accountName || "").trim())
+            .filter(Boolean);
+          setMileageAccountRows(fromApi);
+        }
+      } catch (error) {
+        console.error("Error loading mileage settings:", error);
+      }
+    };
+
+    loadMileageSettings();
+  }, []);
+
+  const mileageAccountOptions = useMemo(() => {
+    const unique = Array.from(new Set([...mileageAccountRows, ...FALLBACK_MILEAGE_ACCOUNTS]));
+    return unique.length > 0 ? unique : FALLBACK_MILEAGE_ACCOUNTS;
+  }, [mileageAccountRows]);
+
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (mileageAccountMenuRef.current && !mileageAccountMenuRef.current.contains(event.target as Node)) {
+        setIsMileageAccountOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
+
+  const updateMileageRateRow = (index: number, patch: Partial<MileageRateRow>) => {
+    setMileageValidationError("");
+    setMileageRates((prev) => prev.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)));
+  };
+
+  const handleEditMileageRate = (index: number) => {
+    setMileageValidationError("");
+    setMileageRates((prev) =>
+      prev.map((row, rowIndex) =>
+        rowIndex === index
+          ? {
+              ...row,
+              isEditing: true,
+              draftStartDate: row.startDate,
+              draftRate: row.rate,
+            }
+          : row
+      )
+    );
+  };
+
+  const handleCancelMileageRateEdit = (index: number) => {
+    setMileageValidationError("");
+    setMileageRates((prev) => {
+      const current = prev[index];
+      if (!current) return prev;
+      if (current.isNew) {
+        const next = prev.filter((_, rowIndex) => rowIndex !== index);
+        return next.length > 0 ? next : [createBlankMileageRateRow()];
+      }
+      return prev.map((row, rowIndex) =>
+        rowIndex === index
+          ? {
+              ...row,
+              isEditing: false,
+              isNew: false,
+              draftStartDate: "",
+              draftRate: "",
+            }
+          : row
+      );
+    });
+  };
+
+  const confirmDeleteMileageRate = () => {
+    if (!deleteMileageRateId) return;
+    const nextRates = mileageRates.filter((row) => row.id !== deleteMileageRateId);
+    setDeleteMileageRateId(null);
+    void persistMileagePreferences(
+      nextRates.length > 0 ? nextRates : [createBlankMileageRateRow()],
+      "Mileage rate deleted"
+    );
+  };
+
+  const persistMileagePreferences = async (rows: MileageRateRow[], successMessage: string) => {
+    const persistedRates = normalizeMileageRateRows(rows);
+    if (hasDuplicateMileageRateDates(persistedRates)) {
+      setMileageValidationError("Mileage rate already exists with this date");
+      return false;
+    }
+    const savedPreferences = {
+      defaultMileageAccount: mileageDefaultAccount,
+      defaultUnit: mileageDefaultUnit,
+      mileageRates: persistedRates,
+    };
+
+    try {
+      localStorage.setItem("mileage_preferences_set", "true");
+      localStorage.setItem("taban_mileage_preferences_v1", JSON.stringify(savedPreferences));
+      setMileageValidationError("");
+      await settingsAPI.updateOrganizationProfile({ mileagePreferences: savedPreferences });
+      setMileageRates(
+        persistedRates.length > 0
+          ? persistedRates.map((row) =>
+              createMileageRateRow({
+                startDate: row.startDate,
+                rate: row.rate,
+                isEditing: false,
+                isNew: false,
+              })
+            )
+          : [createBlankMileageRateRow()]
+      );
+      toast.success(successMessage);
+      return true;
+    } catch (error) {
+      console.error("Error saving mileage preferences:", error);
+      toast.error("Could not save mileage preferences");
+      return false;
+    }
+  };
+
+  const saveMileagePreferences = async () => {
+    await persistMileagePreferences(mileageRates, "Mileage preferences saved");
+  };
 
   return (
     <div className="p-6 max-w-4xl">
@@ -75,25 +413,235 @@ export default function ExpensesPage() {
       {/* Preferences Tab Content */}
       {activeTab === "preferences" && (
         <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
-          <div>
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={associateEmployees}
-                onChange={(e) => setAssociateEmployees(e.target.checked)}
-                className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              />
-              <div>
-                <span className="text-sm text-gray-700">Associate employees to expenses</span>
+          <div className="pt-4 border-t border-gray-200">
+            {mileageValidationError ? (
+              <div
+                role="alert"
+                className="mb-4 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start justify-between gap-3"
+              >
+                <span>{mileageValidationError}</span>
+                <button
+                  type="button"
+                  onClick={() => setMileageValidationError("")}
+                  className="text-red-500 hover:text-red-700"
+                  aria-label="Dismiss mileage validation error"
+                >
+                  <X size={16} />
+                </button>
               </div>
-            </label>
+            ) : null}
+            <h2 className="text-sm font-semibold text-gray-900 mb-4">Mileage Preferences</h2>
+
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <label className="w-48 text-sm text-gray-700">Default Mileage Account</label>
+                <div ref={mileageAccountMenuRef} className="relative flex-1 max-w-md">
+                  <button
+                    type="button"
+                    onClick={() => setIsMileageAccountOpen((prev) => !prev)}
+                    className="w-full h-10 px-3 pr-8 rounded-lg border border-gray-300 text-sm text-left focus:outline-none focus:ring-2 focus:ring-teal-600 bg-white flex items-center justify-between gap-3"
+                  >
+                    <span className="truncate">{mileageDefaultAccount || "Select mileage account"}</span>
+                    <ChevronDown
+                      size={16}
+                      className={`text-gray-400 transition-transform ${isMileageAccountOpen ? "rotate-180" : ""}`}
+                    />
+                  </button>
+                  {isMileageAccountOpen && (
+                    <div className="absolute left-0 top-full mt-1 w-full rounded-lg border border-gray-300 bg-white shadow-lg z-30 overflow-hidden">
+                      <div className="max-h-[180px] overflow-y-auto py-1">
+                        {mileageAccountOptions.map((opt) => (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => {
+                              setMileageDefaultAccount(opt);
+                              setIsMileageAccountOpen(false);
+                            }}
+                            className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 ${
+                              mileageDefaultAccount === opt ? "bg-gray-100 text-gray-900" : "text-gray-700"
+                            }`}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <label className="w-48 text-sm text-gray-700">Default Unit</label>
+                <div className="flex items-center gap-5">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={mileageDefaultUnit === "Km"}
+                      onChange={() => setMileageDefaultUnit("Km")}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm">Km</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={mileageDefaultUnit === "Mile(s)"}
+                      onChange={() => setMileageDefaultUnit("Mile(s)")}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm">Mile</span>
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <div className="text-sm font-semibold text-gray-900 mb-2">Mileage Rates</div>
+                <p className="text-sm text-gray-500 max-w-3xl mb-4">
+                  Any mileage expense recorded on or after the start date will use the corresponding mileage rate.
+                  Leave the start date blank to define a default rate.
+                </p>
+
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="grid grid-cols-[1fr_1fr_40px] gap-3 px-4 py-3 bg-gray-50 text-[11px] font-semibold text-gray-500 uppercase">
+                    <div>Start Date</div>
+                    <div>Mileage Rate</div>
+                    <div></div>
+                  </div>
+                  <div className="divide-y divide-gray-200">
+                    {mileageRates.map((row, index) => (
+                      <div
+                        key={row.id}
+                        className={`group grid grid-cols-[1fr_1fr_120px] gap-3 items-center px-4 py-3 transition ${
+                          row.isEditing ? "bg-gray-50" : "hover:bg-gray-50"
+                        }`}
+                      >
+                        {row.isEditing ? (
+                          <DatePicker
+                            value={row.draftStartDate ?? row.startDate}
+                            onChange={(e) =>
+                              updateMileageRateRow(index, {
+                                draftStartDate: e,
+                                isEditing: true,
+                              })
+                            }
+                            placeholder="dd/mm/yyyy"
+                            className="h-10 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
+                          />
+                        ) : (
+                          <div className="text-sm text-gray-900">{formatMileageRateDate(row.startDate)}</div>
+                        )}
+
+                        {row.isEditing ? (
+                          <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden h-10 focus-within:ring-2 focus-within:ring-teal-600">
+                            <span className="bg-gray-50 px-3 text-sm text-gray-600 border-r border-gray-300 h-full flex items-center">
+                              {baseCurrencyCode}
+                            </span>
+                            <input
+                              value={row.draftRate ?? row.rate}
+                              onChange={(e) =>
+                                updateMileageRateRow(index, {
+                                  draftRate: e.target.value,
+                                  isEditing: true,
+                                })
+                              }
+                              className="flex-1 px-3 text-sm outline-none h-full"
+                              placeholder="0.00"
+                            />
+                          </div>
+                        ) : (
+                          <div className="text-sm text-gray-900">
+                            {baseCurrencyCode} {row.rate}
+                          </div>
+                        )}
+
+                        {row.isEditing ? (
+                          <div className="flex items-center justify-end">
+                            <button
+                              type="button"
+                              onClick={() => handleCancelMileageRateEdit(index)}
+                              className="text-blue-600 text-sm font-medium hover:underline"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-end gap-3 opacity-0 transition-opacity group-hover:opacity-100">
+                            <button
+                              type="button"
+                              aria-label="Edit mileage rate"
+                              onClick={() => handleEditMileageRate(index)}
+                              className="text-gray-400 hover:text-teal-600"
+                            >
+                              <Pencil size={15} />
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Delete mileage rate"
+                              onClick={() => setDeleteMileageRateId(row.id)}
+                              className="text-gray-400 hover:text-red-500"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMileageValidationError("");
+                    setMileageRates((prev) => [...prev, createBlankMileageRateRow()]);
+                  }}
+                  className="mt-3 text-teal-700 text-sm font-medium hover:text-teal-800 flex items-center gap-1"
+                >
+                  <span className="text-base leading-none">+</span>
+                  Add Mileage Rate
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Save Button */}
           <div className="flex items-center justify-start pt-6 border-t border-gray-200">
-            <button className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">
+            <button
+              onClick={saveMileagePreferences}
+              className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700"
+            >
               Save
             </button>
+          </div>
+        </div>
+      )}
+
+      {deleteMileageRateId !== null && (
+        <div className="fixed inset-0 z-[60] flex items-start justify-center bg-black/40 px-4 pt-12">
+          <div className="w-full max-w-[460px] rounded-lg bg-white shadow-xl">
+            <div className="flex items-start gap-3 px-6 py-5">
+              <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-amber-50 text-amber-500">
+                <Lock size={18} />
+              </div>
+              <div className="pt-1 text-sm text-gray-700">Are you sure about deleting this mileage rate?</div>
+            </div>
+            <div className="border-t border-gray-200 px-6 py-4 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={confirmDeleteMileageRate}
+                className="rounded-md bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600"
+              >
+                Delete it
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteMileageRateId(null)}
+                className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

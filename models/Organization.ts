@@ -28,6 +28,8 @@ const OrganizationSchema = new mongoose.Schema(
     language: { type: String, default: "" },
     timeZone: { type: String, default: "" },
 
+    mileagePreferences: { type: mongoose.Schema.Types.Mixed, default: undefined },
+
     websiteUrl: { type: String, default: "" },
     phone: { type: String, default: "" },
 
