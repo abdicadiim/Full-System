@@ -10,6 +10,11 @@ const SenderEmailSchema = new mongoose.Schema(
     verificationToken: { type: String, default: "", index: true },
     verificationTokenExpiresAt: { type: Date, default: null },
     verificationSentAt: { type: Date, default: null },
+    verificationState: { type: String, default: "pending", index: true },
+    otpCodeHash: { type: String, default: "" },
+    otpExpiresAt: { type: Date, default: null },
+    otpSentAt: { type: Date, default: null },
+    invitationAcceptedAt: { type: Date, default: null },
 
     // Optional per-sender SMTP configuration
     smtpHost: { type: String, default: "" },

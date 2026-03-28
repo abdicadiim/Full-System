@@ -1891,6 +1891,17 @@ export const emailTemplatesAPI = {
 export const senderEmailsAPI = {
   ...resource("/settings/sender-emails"),
   getPrimary: () => request({ path: "/settings/sender-emails/primary" }),
+  resendVerification: (id: string) => request({ method: "POST", path: `/settings/sender-emails/${encodeURIComponent(id)}/resend-verification` }),
+  getInvitation: (senderId: string, token: string) =>
+    request({ path: `/public/sender-emails/invitations/${encodeURIComponent(senderId)}`, params: { token } }),
+  acceptInvitation: (senderId: string, token: string) =>
+    request({ method: "POST", path: `/public/sender-emails/invitations/${encodeURIComponent(senderId)}/accept`, data: { token } }),
+  rejectInvitation: (senderId: string, token: string) =>
+    request({ method: "POST", path: `/public/sender-emails/invitations/${encodeURIComponent(senderId)}/reject`, data: { token } }),
+  resendInvitationOtp: (senderId: string, token: string) =>
+    request({ method: "POST", path: `/public/sender-emails/invitations/${encodeURIComponent(senderId)}/resend-otp`, data: { token } }),
+  verifyInvitationOtp: (senderId: string, token: string, otp: string) =>
+    request({ method: "POST", path: `/public/sender-emails/invitations/${encodeURIComponent(senderId)}/verify-otp`, data: { token, otp } }),
 };
 
 export const emailNotificationPreferencesAPI = {

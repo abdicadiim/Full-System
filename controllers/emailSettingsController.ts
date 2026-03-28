@@ -1,6 +1,6 @@
 import express from "express";
 import mongoose from "mongoose";
-import crypto from "crypto";
+import crypto from "node:crypto";
 import { SenderEmail } from "../models/SenderEmail.js";
 import { EmailTemplate } from "../models/EmailTemplate.js";
 import { EmailRelayServer } from "../models/EmailRelayServer.js";
@@ -19,7 +19,18 @@ const normalizeNumber = (value: unknown) => {
 
 const sanitizeSender = (row: any) => {
   if (!row) return row;
-  const { smtpPassword: _smtpPassword, password: _password, verificationToken: _verificationToken, ...rest } = row;
+  const {
+    smtpPassword: _smtpPassword,
+    password: _password,
+    verificationToken: _verificationToken,
+    verificationTokenExpiresAt: _verificationTokenExpiresAt,
+    verificationSentAt: _verificationSentAt,
+    otpCodeHash: _otpCodeHash,
+    otpExpiresAt: _otpExpiresAt,
+    otpSentAt: _otpSentAt,
+    invitationAcceptedAt: _invitationAcceptedAt,
+    ...rest
+  } = row;
   return rest;
 };
 
@@ -82,6 +93,227 @@ const pickSmtpSender = async (organizationId: any) => {
   }
 
   return null;
+};
+
+const sha256 = (value: string) => crypto.createHash("sha256").update(String(value || ""), "utf8").digest("hex");
+
+const generateOtp = () => String(Math.floor(100000 + Math.random() * 900000));
+
+const getRequestOrigin = (req?: express.Request) => {
+  const origin = String(req?.get("origin") || req?.headers.origin || "").trim().replace(/\/+$/, "");
+  if (origin) return origin;
+  return String(FRONTEND_URL || "http://localhost:5173").replace(/\/+$/, "");
+};
+
+const buildInvitationEmailHtml = ({
+  senderName,
+  senderEmail,
+  orgName,
+  invitationUrl,
+}: {
+  senderName: string;
+  senderEmail: string;
+  orgName: string;
+  invitationUrl: string;
+}) =>
+  `<!doctype html><html><head><meta charset="utf-8" /></head>` +
+  `<body style="margin:0;padding:0;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#111827;">` +
+  `<div style="max-width:760px;margin:0 auto;padding:18px 18px 8px;">` +
+  `<h2 style="margin:0 0 20px;font-size:28px;font-weight:700;">Hi ${senderName},</h2>` +
+  `<p style="margin:0 0 22px;font-size:15px;line-height:1.7;color:#444;">` +
+  `You have been invited by the admin of <b>${orgName}</b> to join their email sender list. ` +
+  `Click below to either accept or reject the invitation.` +
+  `</p>` +
+  `<div style="margin:18px 0 6px;">` +
+  `<a href="${invitationUrl}" style="display:inline-block;background:#156372;color:#fff;text-decoration:none;padding:14px 24px;border-radius:8px;font-size:18px;font-weight:700;">View Invitation</a>` +
+  `</div>` +
+  `<div style="font-size:14px;color:#4b5563;font-style:italic;margin-bottom:22px;">This invitation will expire in 25 days.</div>` +
+  `<p style="margin:0;font-size:15px;line-height:1.7;color:#444;">` +
+  `If you have any trouble in accepting the invitation or if you think that you've received this email by mistake, please contact ` +
+  `<a href="mailto:${senderEmail}" style="color:#1d4ed8;text-decoration:none;">${senderEmail}</a>.` +
+  `</p>` +
+  `</div></body></html>`;
+
+const buildOtpEmailHtml = ({
+  senderName,
+  senderEmail,
+  orgName,
+  otp,
+  invitationUrl,
+  expiresSeconds,
+}: {
+  senderName: string;
+  senderEmail: string;
+  orgName: string;
+  otp: string;
+  invitationUrl: string;
+  expiresSeconds: number;
+}) =>
+  `<!doctype html><html><head><meta charset="utf-8" /></head>` +
+  `<body style="margin:0;padding:0;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#111827;">` +
+  `<div style="max-width:720px;margin:0 auto;padding:32px 24px;">` +
+  `<h2 style="margin:0 0 12px;font-size:28px;font-weight:700;">Verify Sender Email</h2>` +
+  `<p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#374151;">` +
+  `Hi ${senderName}, please verify <b>${senderEmail}</b> for <b>${orgName}</b>.` +
+  `</p>` +
+  `<div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:16px 18px;margin:18px 0;">` +
+  `<div style="font-size:12px;color:#6b7280;margin-bottom:6px;">OTP Code</div>` +
+  `<div style="font-size:34px;font-weight:800;letter-spacing:0.18em;">${otp}</div>` +
+  `</div>` +
+  `<div style="margin:16px 0 8px;">` +
+  `<a href="${invitationUrl}" style="display:inline-block;background:#156372;color:#fff;text-decoration:none;padding:14px 24px;border-radius:8px;font-size:16px;font-weight:700;">View Invitation</a>` +
+  `</div>` +
+  `<p style="margin:0;font-size:12px;color:#6b7280;font-style:italic;">This code expires in ${expiresSeconds} seconds.</p>` +
+  `</div></body></html>`;
+
+const saveInvitationToken = async (senderId: any, organizationId: any, token: string) => {
+  const tokenExpiresAt = new Date(Date.now() + 25 * 24 * 60 * 60 * 1000);
+  await SenderEmail.updateOne(
+    { _id: senderId, organizationId },
+    {
+      $set: {
+        verificationToken: token,
+        verificationTokenExpiresAt: tokenExpiresAt,
+        verificationSentAt: new Date(),
+        verificationState: "invited",
+      },
+      $unset: {
+        otpCodeHash: "",
+        otpExpiresAt: "",
+        otpSentAt: "",
+        invitationAcceptedAt: "",
+      },
+    }
+  );
+  return tokenExpiresAt;
+};
+
+const sendSenderInvitationMail = async ({
+  orgId,
+  sender,
+  req,
+}: {
+  orgId: any;
+  sender: any;
+  req: express.Request;
+}) => {
+  const smtpSender: any = await pickSmtpSender(orgId);
+  if (!smtpSender) {
+    return { ok: false as const, error: "SMTP sender is not configured. Go to Settings > Emails > New Sender and add SMTP Host/User/Password." };
+  }
+
+  const org: any = await Organization.findById(orgId).lean();
+  const orgName = String(org?.name || "Organization");
+  const senderName = String(sender.name || orgName || "Organization").trim() || orgName;
+  const senderEmail = String(smtpSender.email || smtpSender.smtpUser || "").trim();
+  const invitationToken = crypto.randomUUID().replace(/-/g, "");
+  const tokenExpiresAt = await saveInvitationToken(sender._id, orgId, invitationToken);
+  const invitationUrl = `${getRequestOrigin(req)}/sender-verification?senderId=${encodeURIComponent(String(sender._id))}&token=${encodeURIComponent(invitationToken)}`;
+
+  const subject = `Verify sender email for ${orgName}`;
+  const text =
+    `Hi ${senderName},\n\n` +
+    `You have been invited by the admin of ${orgName} to verify ${String(sender.email || "")}.\n` +
+    `View Invitation: ${invitationUrl}\n` +
+    `This invitation will expire in 25 days.\n\n` +
+    `If you have any trouble in accepting the invitation or if you think that you've received this email by mistake, please contact ${senderEmail}.\n`;
+
+  const html = buildInvitationEmailHtml({
+    senderName,
+    senderEmail,
+    orgName,
+    invitationUrl,
+  });
+
+  const result = await sendSmtpMail(
+    {
+      host: String(smtpSender.smtpHost || ""),
+      port: Number(smtpSender.smtpPort || 0),
+      secure: Boolean(smtpSender.smtpSecure),
+      user: String(smtpSender.smtpUser || ""),
+      pass: String(smtpSender.smtpPassword || ""),
+    },
+    {
+      from: `${String(smtpSender.name || orgName || "Organization")} <${String(smtpSender.email || smtpSender.smtpUser || "")}>`,
+      replyTo: String(smtpSender.email || smtpSender.smtpUser || "") || undefined,
+      to: String(sender.email || ""),
+      subject,
+      text,
+      html,
+    }
+  );
+
+  if (!result.ok) return { ok: false as const, error: result.error || "Failed to send invitation email" };
+  return { ok: true as const, tokenExpiresAt };
+};
+
+const sendOtpMail = async ({
+  orgId,
+  sender,
+  req,
+}: {
+  orgId: any;
+  sender: any;
+  req?: express.Request;
+}) => {
+  const smtpSender: any = await pickSmtpSender(orgId);
+  if (!smtpSender) {
+    return { ok: false as const, error: "SMTP sender is not configured. Go to Settings > Emails > New Sender and add SMTP Host/User/Password." };
+  }
+
+  const org: any = await Organization.findById(orgId).lean();
+  const orgName = String(org?.name || "Organization");
+  const senderName = String(sender.name || orgName || "Organization").trim() || orgName;
+  const invitationUrl = `${getRequestOrigin(req)}/sender-verification?senderId=${encodeURIComponent(String(sender._id))}&token=${encodeURIComponent(String(sender.verificationToken || ""))}`;
+  const otp = generateOtp();
+  const otpCodeHash = sha256(otp);
+  const otpExpiresAt = new Date(Date.now() + 90 * 1000);
+  await SenderEmail.updateOne(
+    { _id: sender._id, organizationId: orgId },
+    {
+      $set: {
+        otpCodeHash,
+        otpExpiresAt,
+        otpSentAt: new Date(),
+        verificationState: "accepted",
+      },
+    }
+  );
+
+  const subject = `OTP code for ${orgName}`;
+  const text =
+    `Hi ${senderName},\n\n` +
+    `Your verification OTP for ${orgName} is ${otp}.\n` +
+    `This code expires in 90 seconds.\n`;
+  const html = buildOtpEmailHtml({
+    senderName,
+    senderEmail: String(sender.email || ""),
+    orgName,
+    otp,
+    invitationUrl,
+    expiresSeconds: 90,
+  });
+
+  const result = await sendSmtpMail(
+    {
+      host: String(smtpSender.smtpHost || ""),
+      port: Number(smtpSender.smtpPort || 0),
+      secure: Boolean(smtpSender.smtpSecure),
+      user: String(smtpSender.smtpUser || ""),
+      pass: String(smtpSender.smtpPassword || ""),
+    },
+    {
+      from: `${String(smtpSender.name || orgName || "Organization")} <${String(smtpSender.email || smtpSender.smtpUser || "")}>`,
+      replyTo: String(smtpSender.email || smtpSender.smtpUser || "") || undefined,
+      to: String(sender.email || ""),
+      subject,
+      text,
+      html,
+    }
+  );
+
+  if (!result.ok) return { ok: false as const, error: result.error || "Failed to send OTP email" };
+  return { ok: true as const, otpExpiresAt };
 };
 
 export const listSenderEmails = async (req: express.Request, res: express.Response) => {
@@ -289,85 +521,14 @@ export const resendSenderVerificationEmail = async (req: express.Request, res: e
     return res.status(400).json({ success: false, message: "Sender email is missing", data: null });
   }
 
-  const smtpSender: any = await pickSmtpSender(orgId);
-  if (!smtpSender) {
-    return res.status(400).json({
-      success: false,
-      message: "SMTP sender is not configured. Go to Settings > Emails > New Sender and add SMTP Host/User/Password.",
-      data: null,
-    });
-  }
-
-  const org: any = await Organization.findById(orgId).lean();
-  const orgName = String(org?.name || "Organization");
-  const senderName = String(sender.name || orgName || "Organization").trim() || orgName;
-  const otp = String(Math.floor(100000 + Math.random() * 900000));
-  const verificationToken = crypto.randomUUID().replace(/-/g, "");
-  const verificationTokenExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
-  const viewInvitationUrl =
-    `${String(FRONTEND_URL || "http://localhost:5173").replace(/\/+$/, "")}` +
-    `/settings/customization/email-notifications?verifySender=${encodeURIComponent(id)}&token=${encodeURIComponent(verificationToken)}`;
-
-  await SenderEmail.updateOne(
-    { _id: id, organizationId: orgId },
-    {
-      $set: {
-        verificationToken,
-        verificationTokenExpiresAt,
-        verificationSentAt: new Date(),
-      },
-    }
-  );
-
-  const subject = `Verify sender email for ${orgName}`;
-  const text =
-    `Hi ${senderName},\n\n` +
-    `Please verify this sender email address for ${orgName}.\n` +
-    `OTP Code: ${otp}\n` +
-    `View Invitation: ${viewInvitationUrl}\n\n` +
-    `If you did not request this verification, you can ignore this email.\n`;
-
-  const html =
-    `<!doctype html><html><head><meta charset="utf-8" /></head>` +
-    `<body style="margin:0;padding:0;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#111827;">` +
-    `<div style="max-width:680px;margin:0 auto;padding:32px 24px;">` +
-    `<h2 style="margin:0 0 12px;font-size:26px;">Verify Sender Email</h2>` +
-    `<p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#374151;">Hi ${senderName}, please verify <b>${String(sender.email || "")}</b> for <b>${orgName}</b>.</p>` +
-    `<div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:16px 18px;margin:18px 0;">` +
-    `<div style="font-size:12px;color:#6b7280;margin-bottom:6px;">OTP Code</div>` +
-    `<div style="font-size:28px;font-weight:700;letter-spacing:0.18em;">${otp}</div>` +
-    `</div>` +
-    `<div style="margin:20px 0 10px;">` +
-    `<a href="${viewInvitationUrl}" style="display:inline-block;background:#156372;color:#fff;text-decoration:none;padding:12px 18px;border-radius:6px;font-weight:700;font-size:14px;">View Invitation</a>` +
-    `</div>` +
-    `<p style="margin:0;font-size:12px;color:#6b7280;">This code expires in 15 minutes.</p>` +
-    `</div></body></html>`;
-
-  const result = await sendSmtpMail(
-    {
-      host: String(smtpSender.smtpHost || ""),
-      port: Number(smtpSender.smtpPort || 0),
-      secure: Boolean(smtpSender.smtpSecure),
-      user: String(smtpSender.smtpUser || ""),
-      pass: String(smtpSender.smtpPassword || ""),
-    },
-    {
-      from: `${String(smtpSender.name || orgName || "Organization")} <${String(smtpSender.email || smtpSender.smtpUser || "")}>`,
-      replyTo: String(smtpSender.email || smtpSender.smtpUser || "") || undefined,
-      to: String(sender.email || ""),
-      subject,
-      text,
-      html,
-    }
-  );
-
+  const result = await sendSenderInvitationMail({ orgId, sender, req });
   if (!result.ok) {
-    return res.status(400).json({ success: false, message: result.error || "Failed to send verification email", data: null });
+    return res.status(400).json({ success: false, message: result.error, data: null });
   }
 
   return res.json({
     success: true,
-    message: "Verification email sent.",
+    message: "Invitation email sent.",
     data: {
       id,
       email: String(sender.email || ""),
@@ -376,31 +537,147 @@ export const resendSenderVerificationEmail = async (req: express.Request, res: e
   });
 };
 
-export const verifySenderEmailPublic = async (req: express.Request, res: express.Response) => {
-  const id = String(req.query?.senderId || req.params.id || "").trim();
+export const getSenderInvitationPublic = async (req: express.Request, res: express.Response) => {
+  const id = String(req.params.id || req.query?.senderId || "").trim();
   const token = String(req.query?.token || "").trim();
-  if (!id || !token) {
-    return res.status(400).send("Missing verification data.");
-  }
+  if (!id || !token) return res.status(400).json({ success: false, message: "Missing invitation data", data: null });
 
   const sender: any = await SenderEmail.findOne({ _id: id, verificationToken: token }).lean();
-  if (!sender) return res.status(404).send("Verification link is invalid or expired.");
+  if (!sender) return res.status(404).json({ success: false, message: "Invitation link is invalid or expired.", data: null });
 
   const expiresAt = sender.verificationTokenExpiresAt ? new Date(sender.verificationTokenExpiresAt) : null;
   if (expiresAt && expiresAt.getTime() < Date.now()) {
-    return res.status(400).send("Verification link has expired.");
+    return res.status(400).json({ success: false, message: "Invitation link has expired.", data: null });
+  }
+
+  const org: any = sender.organizationId ? await Organization.findById(sender.organizationId).lean() : null;
+  return res.json({
+    success: true,
+    data: {
+      id: String(sender._id),
+      name: sender.name || "",
+      email: sender.email || "",
+      organizationName: String(org?.name || "Organization"),
+      isVerified: Boolean(sender.isVerified),
+      verificationState: String(sender.verificationState || "pending"),
+      verificationSentAt: sender.verificationSentAt || null,
+      otpExpiresAt: sender.otpExpiresAt || null,
+      invitationAcceptedAt: sender.invitationAcceptedAt || null,
+    },
+  });
+};
+
+export const acceptSenderInvitationPublic = async (req: express.Request, res: express.Response) => {
+  const id = String(req.params.id || "").trim();
+  const token = String(req.body?.token || req.query?.token || "").trim();
+  if (!id || !token) return res.status(400).json({ success: false, message: "Missing invitation data", data: null });
+
+  const sender: any = await SenderEmail.findOne({ _id: id, verificationToken: token }).lean();
+  if (!sender) return res.status(404).json({ success: false, message: "Invitation link is invalid or expired.", data: null });
+
+  const expiresAt = sender.verificationTokenExpiresAt ? new Date(sender.verificationTokenExpiresAt) : null;
+  if (expiresAt && expiresAt.getTime() < Date.now()) {
+    return res.status(400).json({ success: false, message: "Invitation link has expired.", data: null });
+  }
+
+  const otpResult = await sendOtpMail({ orgId: sender.organizationId, sender, req });
+  if (!otpResult.ok) return res.status(400).json({ success: false, message: otpResult.error, data: null });
+
+  await SenderEmail.updateOne(
+    { _id: id },
+    { $set: { invitationAcceptedAt: new Date(), verificationState: "accepted" } }
+  );
+
+  return res.json({
+    success: true,
+    message: "OTP sent to the sender email.",
+    data: {
+      id,
+      otpExpiresAt: otpResult.otpExpiresAt,
+      expiresInSeconds: 90,
+    },
+  });
+};
+
+export const rejectSenderInvitationPublic = async (req: express.Request, res: express.Response) => {
+  const id = String(req.params.id || "").trim();
+  const token = String(req.body?.token || req.query?.token || "").trim();
+  if (!id || !token) return res.status(400).json({ success: false, message: "Missing invitation data", data: null });
+
+  const sender: any = await SenderEmail.findOne({ _id: id, verificationToken: token }).lean();
+  if (!sender) return res.status(404).json({ success: false, message: "Invitation link is invalid or expired.", data: null });
+
+  await SenderEmail.updateOne(
+    { _id: id },
+    { $set: { verificationState: "rejected" } }
+  );
+
+  return res.json({ success: true, message: "Invitation rejected.", data: { id } });
+};
+
+export const resendSenderOtpPublic = async (req: express.Request, res: express.Response) => {
+  const id = String(req.params.id || "").trim();
+  const token = String(req.body?.token || req.query?.token || "").trim();
+  if (!id || !token) return res.status(400).json({ success: false, message: "Missing invitation data", data: null });
+
+  const sender: any = await SenderEmail.findOne({ _id: id, verificationToken: token }).lean();
+  if (!sender) return res.status(404).json({ success: false, message: "Invitation link is invalid or expired.", data: null });
+
+  const otpResult = await sendOtpMail({ orgId: sender.organizationId, sender, req });
+  if (!otpResult.ok) return res.status(400).json({ success: false, message: otpResult.error, data: null });
+
+  return res.json({
+    success: true,
+    message: "OTP resent successfully.",
+    data: {
+      id,
+      otpExpiresAt: otpResult.otpExpiresAt,
+      expiresInSeconds: 90,
+    },
+  });
+};
+
+export const verifySenderOtpPublic = async (req: express.Request, res: express.Response) => {
+  const id = String(req.params.id || "").trim();
+  const token = String(req.body?.token || req.query?.token || "").trim();
+  const otp = String(req.body?.otp || req.query?.otp || "").trim();
+  if (!id || !token || !otp) {
+    return res.status(400).json({ success: false, message: "Missing OTP data", data: null });
+  }
+
+  const sender: any = await SenderEmail.findOne({ _id: id, verificationToken: token }).lean();
+  if (!sender) return res.status(404).json({ success: false, message: "Invitation link is invalid or expired.", data: null });
+
+  const otpExpiresAt = sender.otpExpiresAt ? new Date(sender.otpExpiresAt) : null;
+  if (!otpExpiresAt || otpExpiresAt.getTime() < Date.now()) {
+    return res.status(400).json({ success: false, message: "OTP expired. Please resend a new code.", data: null });
+  }
+
+  if (sha256(otp) !== String(sender.otpCodeHash || "")) {
+    return res.status(400).json({ success: false, message: "Invalid OTP.", data: null });
   }
 
   await SenderEmail.updateOne(
     { _id: id },
     {
-      $set: { isVerified: true },
-      $unset: { verificationToken: "", verificationTokenExpiresAt: "", verificationSentAt: "" },
+      $set: { isVerified: true, verificationState: "verified" },
+      $unset: {
+        verificationToken: "",
+        verificationTokenExpiresAt: "",
+        verificationSentAt: "",
+        otpCodeHash: "",
+        otpExpiresAt: "",
+        otpSentAt: "",
+        invitationAcceptedAt: "",
+      },
     }
   );
 
-  const redirectBase = String(FRONTEND_URL || "http://localhost:5173").replace(/\/+$/, "");
-  return res.redirect(`${redirectBase}/settings/customization/email-notifications?senderVerified=1`);
+  return res.json({
+    success: true,
+    message: "Sender verified successfully.",
+    data: { id, verified: true },
+  });
 };
 
 export const getEmailNotificationPreferences = async (req: express.Request, res: express.Response) => {

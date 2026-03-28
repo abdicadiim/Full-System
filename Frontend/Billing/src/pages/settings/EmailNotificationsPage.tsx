@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Edit, Trash2, Info, Check } from "lucide-react";
+import { Plus, Edit, Trash2, Info, Check, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import NewEmailTemplateModal from "./NewEmailTemplateModal";
 import SignatureSettingsModal from "./SignatureSettingsModal";
@@ -132,6 +132,19 @@ export default function EmailNotificationsPage() {
 
   useEffect(() => {
     fetchTemplates();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("senderVerified") === "1") {
+      showSuccess("Sender email verified successfully.");
+      params.delete("senderVerified");
+      const nextSearch = params.toString();
+      const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}`;
+      window.history.replaceState({}, "", nextUrl);
+      return;
+    }
   }, []);
 
   // Auto-hide success notification after 3 seconds
@@ -303,6 +316,21 @@ export default function EmailNotificationsPage() {
     }
   };
 
+  const resendVerificationEmail = async (sender: Sender) => {
+    try {
+      setErrorMessage(null);
+      const response = await senderEmailsAPI.resendVerification(sender._id || sender.id || "");
+      if (!response?.success) {
+        setErrorMessage(response?.message || "Failed to send verification email.");
+        return;
+      }
+      showSuccess("Verification email sent.");
+    } catch (error: any) {
+      console.error("Error sending verification email:", error);
+      setErrorMessage(error?.message || "Failed to send verification email.");
+    }
+  };
+
   // Verification emails are not used in this system. SMTP config is treated as ready-to-use.
 
   const toggleRelayServer = async (server: RelayServer, enabled: boolean) => {
@@ -385,9 +413,21 @@ export default function EmailNotificationsPage() {
     <div className="w-full">
       {/* Success Notification */}
       {showSuccessNotification && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[10001] bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-fade-in">
-          <Check size={20} />
-          <span>{successMessage}</span>
+        <div className="fixed top-4 right-4 z-[10001] min-w-[320px] max-w-[420px] rounded-xl border border-slate-100 bg-white px-4 py-3 shadow-[0_12px_30px_rgba(15,23,42,0.14)]">
+          <button
+            type="button"
+            onClick={() => setShowSuccessNotification(false)}
+            className="absolute right-2 top-2 text-slate-400 transition hover:text-slate-600"
+            aria-label="Dismiss notification"
+          >
+            <X size={16} />
+          </button>
+          <div className="flex items-center gap-3 pr-6">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-green-500 text-white">
+              <Check size={16} strokeWidth={3} />
+            </div>
+            <span className="text-sm font-medium text-slate-700">{successMessage}</span>
+          </div>
         </div>
       )}
       {errorMessage && (
@@ -587,13 +627,18 @@ export default function EmailNotificationsPage() {
                             {!sender.isPrimary && sender.isVerified && (
                               <button
                                 onClick={() => markPrimaryContact(sender)}
-                                className="text-xs text-blue-700 hover:underline"
+                                className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs text-blue-700 hover:border-slate-400 hover:bg-slate-50 hover:text-blue-800"
                               >
                                 Mark as Primary
                               </button>
                             )}
-                            {!sender.isPrimary && !sender.isVerified && (
-                              <span className="text-xs text-gray-500">Verify first</span>
+                            {!sender.isVerified && (
+                              <button
+                                onClick={() => resendVerificationEmail(sender)}
+                                className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs text-blue-700 hover:border-slate-400 hover:bg-slate-50 hover:text-blue-800"
+                              >
+                                Resend Email
+                              </button>
                             )}
                             <button
                               onClick={() => setEditingSender(sender)}
@@ -617,7 +662,7 @@ export default function EmailNotificationsPage() {
                                   }
                                 }
                               }}
-                              className="p-1.5 text-gray-600 hover:bg-gray-100 rounded transition"
+                              className="rounded p-1.5 text-rose-600 transition hover:bg-rose-50 hover:text-rose-700"
                             >
                               <Trash2 size={16} />
                             </button>

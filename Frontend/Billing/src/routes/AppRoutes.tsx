@@ -44,6 +44,7 @@ import SettingsRoutes from '../pages/settings/SettingsRoutes'
 import TimeTrackingPage from '../pages/timeTracking/TimeTrackingPage'
 import EventsPage from '../pages/events/EventsPage'
 import DocumentsPage from '../pages/documents/DocumentsPage'
+import SenderVerificationPage from '../pages/public/SenderVerificationPage'
 
 
 function ModulePlaceholder({ title }: { title: string }) {
@@ -107,6 +108,7 @@ function LegacyCustomersRedirect() {
 export default function AppRoutes() {
   return (
     <Routes>
+      <Route path="/sender-verification/*" element={<SenderVerificationPage />} />
       <Route index element={<Navigate to="/dashboard" replace />} />
 
       <Route path="/dashboard/*" element={<DashboardRoutes />} />
