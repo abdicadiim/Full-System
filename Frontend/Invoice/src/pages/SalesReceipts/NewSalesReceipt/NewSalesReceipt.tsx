@@ -2198,7 +2198,7 @@ export default function NewSalesReceipt() {
                             placeholder="Search"
                             value={customerSearch}
                             onChange={(e) => setCustomerSearch(e.target.value)}
-                            className="h-8 w-full rounded border border-[#3b82f6] pl-7 pr-2 text-sm focus:outline-none"
+                            className="h-8 w-full rounded border border-slate-200 pl-7 pr-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-1 focus:ring-slate-200"
                           />
                         </div>
                       </div>
@@ -2212,22 +2212,22 @@ export default function NewSalesReceipt() {
                               <button
                                 key={customer.id}
                                 type="button"
-                                className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm ${isSelected ? "bg-[#4a89e8] text-white" : "text-[#334155] hover:bg-[#f1f5f9]"}`}
+                                className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm ${isSelected ? "bg-slate-100 text-slate-900" : "text-[#334155] hover:bg-slate-50"}`}
                                 onClick={() => handleCustomerSelect(customer)}
                               >
-                                <div className={`flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-semibold ${isSelected ? "bg-white/20 text-white" : "bg-[#e2e8f0] text-[#64748b]"}`}>
+                                <div className={`flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-semibold ${isSelected ? "bg-slate-200 text-slate-700" : "bg-[#e2e8f0] text-[#64748b]"}`}>
                                   {customer.name.charAt(0).toUpperCase()}
                                 </div>
                                 <div className="min-w-0 flex-1">
                                   <div className="truncate">
                                     {customer.name}
                                     {(customer.customerCode || customer.customerNumber) ? (
-                                      <span className={`ml-1 ${isSelected ? "text-blue-100" : "text-[#64748b]"}`}>
+                                      <span className={`ml-1 ${isSelected ? "text-slate-600" : "text-[#64748b]"}`}>
                                         | {customer.customerCode || customer.customerNumber}
                                       </span>
                                     ) : null}
                                   </div>
-                                  <div className={`mt-0.5 truncate text-xs ${isSelected ? "text-blue-100" : "text-[#64748b]"}`}>
+                                  <div className={`mt-0.5 truncate text-xs ${isSelected ? "text-slate-600" : "text-[#64748b]"}`}>
                                     {customer.email || "-"} | {(customer.companyName || customer.contactName || "-")}
                                   </div>
                                 </div>
