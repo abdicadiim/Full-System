@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import { invoicesAPI } from "../../services/api";
 import { getPayments } from "../salesModel";
 import NewRetailInvoice from "./NewRetailInvoice/NewRetailInvoice";
+import ApplyRetainersToInvoiceModal from "./ApplyRetainersToInvoiceModal";
 
 const isRetainerRow = (row: any) => {
   const number = String(row?.invoiceNumber || row?.number || "").toUpperCase();
@@ -133,6 +134,8 @@ function RetainerInvoiceDetail() {
   const [payments, setPayments] = useState<any[]>([]);
   const [appliedInvoices, setAppliedInvoices] = useState<any[]>([]);
   const [infoTab, setInfoTab] = useState<"payments" | "retainer">("payments");
+  const [isApplyRetainerOpen, setIsApplyRetainerOpen] = useState(false);
+  const [activePayment, setActivePayment] = useState<any>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -220,6 +223,114 @@ function RetainerInvoiceDetail() {
 
     loadRelated();
   }, [id, row]);
+
+  const handleOpenApplyRetainer = (payment: any) => {
+    setActivePayment(payment || null);
+    setIsApplyRetainerOpen(true);
+  };
+
+  const handleApplyRetainerSave = async (allocations: { invoiceId: string; amount: number; date: string }[]) => {
+    if (!row) return;
+    const retainerId = String(row?.id || row?._id || id || "").trim();
+    const retainerNumber = String(row?.invoiceNumber || row?.retainerNumber || "").trim();
+    const totalApplied = allocations.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+
+    await Promise.all(
+      allocations.map(async (allocation) => {
+        const invoiceId = String(allocation.invoiceId || "").trim();
+        if (!invoiceId) return;
+        const res = await invoicesAPI.getById(invoiceId);
+        const invoice = (res as any)?.data || res;
+        if (!invoice) return;
+
+        const existingApps = Array.isArray(invoice?.retainerApplications)
+          ? invoice.retainerApplications
+          : [];
+
+        const nextApps = [
+          ...existingApps,
+          {
+            retainerId,
+            retainerNumber,
+            appliedAmount: Number(allocation.amount || 0),
+            amount: Number(allocation.amount || 0),
+            date: allocation.date,
+            paymentId: activePayment?.id || activePayment?._id || undefined,
+          },
+        ];
+
+        const currentApplied = Number(
+          invoice?.retainerAppliedAmount ?? invoice?.retainersApplied ?? invoice?.retainerAppliedTotal ?? 0
+        );
+        const nextApplied = currentApplied + Number(allocation.amount || 0);
+        const currentBalance = Number(
+          invoice?.balance ?? invoice?.balanceDue ?? (Number(invoice?.total || 0) - Number(invoice?.paidAmount ?? invoice?.amountPaid ?? 0))
+        );
+        const nextBalance = Math.max(0, currentBalance - Number(allocation.amount || 0));
+        const nextStatus = nextBalance <= 0 ? "paid" : invoice?.status;
+
+        await invoicesAPI.update(invoiceId, {
+          ...invoice,
+          retainerApplications: nextApps,
+          retainerAppliedAmount: nextApplied,
+          retainerAppliedTotal: nextApplied,
+          balance: nextBalance,
+          balanceDue: nextBalance,
+          status: nextStatus,
+        });
+      })
+    );
+
+    const currentRetainerBalance = Number(
+      row?.balance ?? row?.balanceDue ?? row?.retainerAvailableAmount ?? row?.total ?? row?.amount ?? 0
+    );
+    const nextRetainerBalance = Math.max(0, currentRetainerBalance - totalApplied);
+    const currentRetainerApplied = Number(
+      row?.retainerAppliedAmount ?? row?.retainersApplied ?? row?.retainerAppliedTotal ?? 0
+    );
+    const nextRetainerApplied = currentRetainerApplied + totalApplied;
+
+    if (retainerId) {
+      await invoicesAPI.update(retainerId, {
+        ...row,
+        retainerAppliedAmount: nextRetainerApplied,
+        retainerAppliedTotal: nextRetainerApplied,
+        balance: nextRetainerBalance,
+        balanceDue: nextRetainerBalance,
+      });
+    }
+
+    try {
+      const refreshed = await invoicesAPI.getById(String(id || retainerId));
+      if (refreshed?.success && refreshed?.data) setRow(refreshed.data);
+    } catch {
+      // ignore refresh errors
+    }
+
+    const invRes = await invoicesAPI.getAll({ limit: 10000 });
+    const allInvoices = Array.isArray(invRes?.data) ? invRes.data : [];
+    const appliedRows: any[] = [];
+    allInvoices.forEach((invoice: any) => {
+      const apps = Array.isArray(invoice?.retainerApplications) ? invoice.retainerApplications : [];
+      apps.forEach((app: any) => {
+        const appRetainerId = String(app?.retainerId || app?.retainer?._id || app?.retainer?.id || "").trim();
+        const appRetainerNumber = String(app?.retainerNumber || app?.retainerInvoiceNumber || "").trim();
+        if (
+          (retainerId && appRetainerId && retainerId === appRetainerId) ||
+          (retainerNumber && appRetainerNumber && retainerNumber === appRetainerNumber)
+        ) {
+          appliedRows.push({
+            id: String(invoice?.id || invoice?._id || app?.id || appRetainerId),
+            date: app?.date || app?.appliedDate || invoice?.invoiceDate || invoice?.date || "",
+            invoiceId: String(invoice?.id || invoice?._id || ""),
+            invoiceNumber: String(invoice?.invoiceNumber || invoice?.number || "-"),
+            amountApplied: Number(app?.applied ?? app?.amount ?? app?.appliedAmount ?? 0),
+          });
+        }
+      });
+    });
+    setAppliedInvoices(appliedRows);
+  };
 
   useEffect(() => {
     const prevHtmlOverflow = document.documentElement.style.overflow;
@@ -474,6 +585,7 @@ function RetainerInvoiceDetail() {
                         <th className="px-4 py-2 font-medium">Reference#</th>
                         <th className="px-4 py-2 font-medium">Payment Mode</th>
                         <th className="px-4 py-2 font-medium">Amount</th>
+                        <th className="px-4 py-2 font-medium text-right">Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -484,10 +596,19 @@ function RetainerInvoiceDetail() {
                           <td className="px-4 py-3 text-[12px] text-gray-700">{payment.referenceNumber || payment.paymentReference || payment.reference || "-"}</td>
                           <td className="px-4 py-3 text-[12px] text-gray-700">{payment.paymentMode || payment.paymentMethod || "-"}</td>
                           <td className="px-4 py-3 text-[12px] text-gray-900">{Number(payment.amountReceived ?? payment.amount ?? 0).toLocaleString()}</td>
+                          <td className="px-4 py-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenApplyRetainer(payment)}
+                              className="px-2 py-1 text-[11px] rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
+                            >
+                              Apply to Invoices
+                            </button>
+                          </td>
                         </tr>
                       )) : (
                         <tr>
-                          <td colSpan={5} className="px-4 py-6 text-[12px] text-gray-500 text-center">No payments received.</td>
+                          <td colSpan={6} className="px-4 py-6 text-[12px] text-gray-500 text-center">No payments received.</td>
                         </tr>
                       )}
                     </tbody>
@@ -562,6 +683,14 @@ function RetainerInvoiceDetail() {
               </div>
             </div>
           </div>
+
+          <ApplyRetainersToInvoiceModal
+            isOpen={isApplyRetainerOpen}
+            onClose={() => setIsApplyRetainerOpen(false)}
+            retainerInvoice={row}
+            payment={activePayment}
+            onSave={handleApplyRetainerSave}
+          />
         </div>
       </section>
     </div>
