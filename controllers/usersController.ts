@@ -14,6 +14,8 @@ const isInactiveStatus = (value: unknown) => {
   const normalized = String(value ?? "").trim().toLowerCase();
   return normalized === "inactive" || normalized === "invited";
 };
+const isDuplicateEmailError = (error: any) =>
+  error?.code === 11000 && String(error?.keyPattern?.email || error?.keyValue?.email || error?.message || "").toLowerCase().includes("email");
 
 const pickSmtpSender = async (organizationId: any) => {
   const primary: any = await SenderEmail.findOne({
@@ -170,31 +172,38 @@ export const createUser = async (req: express.Request, res: express.Response) =>
   const passwordHash = await bcrypt.hash(password, 10);
   const accessibleLocations = Array.isArray(req.body?.accessibleLocations) ? req.body.accessibleLocations.map(String) : [];
 
-  const created: any = await User.create({
-    name,
-    email,
-    passwordHash,
-    organizationId: orgId,
-    role,
-    status: req.body?.skipEmail ? "Invited" : "Active",
-    accessibleLocations,
-    defaultBusinessLocation: String(req.body?.defaultBusinessLocation || ""),
-    defaultWarehouseLocation: String(req.body?.defaultWarehouseLocation || ""),
-  });
+  try {
+    const created: any = await User.create({
+      name,
+      email,
+      passwordHash,
+      organizationId: orgId,
+      role,
+      status: req.body?.skipEmail ? "Invited" : "Active",
+      accessibleLocations,
+      defaultBusinessLocation: String(req.body?.defaultBusinessLocation || ""),
+      defaultWarehouseLocation: String(req.body?.defaultWarehouseLocation || ""),
+    });
 
-  return res.status(201).json({
-    success: true,
-    data: {
-      id: String(created._id),
-      _id: String(created._id),
-      name: created.name,
-      email: created.email,
-      role: created.role,
-    status: created.status || "Active",
-    inviteSentAt: created.inviteSentAt || null,
-    inviteAcceptedAt: created.inviteAcceptedAt || null,
-  },
-  });
+    return res.status(201).json({
+      success: true,
+      data: {
+        id: String(created._id),
+        _id: String(created._id),
+        name: created.name,
+        email: created.email,
+        role: created.role,
+        status: created.status || "Active",
+        inviteSentAt: created.inviteSentAt || null,
+        inviteAcceptedAt: created.inviteAcceptedAt || null,
+      },
+    });
+  } catch (error: any) {
+    if (isDuplicateEmailError(error)) {
+      return res.status(409).json({ success: false, message: "Email already exists", data: null });
+    }
+    return res.status(500).json({ success: false, message: String(error?.message || "Failed to create user"), data: null });
+  }
 };
 
 export const updateUser = async (req: express.Request, res: express.Response) => {
@@ -221,27 +230,34 @@ export const updateUser = async (req: express.Request, res: express.Response) =>
   if (typeof req.body?.defaultBusinessLocation === "string") patch.defaultBusinessLocation = String(req.body.defaultBusinessLocation || "");
   if (typeof req.body?.defaultWarehouseLocation === "string") patch.defaultWarehouseLocation = String(req.body.defaultWarehouseLocation || "");
 
-  const updated: any = await User.findOneAndUpdate({ _id: id, organizationId: orgId }, { $set: patch }, { new: true })
-    .select({ passwordHash: 0 })
-    .lean();
+  try {
+    const updated: any = await User.findOneAndUpdate({ _id: id, organizationId: orgId }, { $set: patch }, { new: true })
+      .select({ passwordHash: 0 })
+      .lean();
 
-  if (!updated) return res.status(404).json({ success: false, message: "User not found", data: null });
-  return res.json({
-    success: true,
-    data: {
-      id: String(updated._id),
-      _id: String(updated._id),
-      name: updated.name || "",
-      email: updated.email || "",
-      role: updated.role || "member",
-      status: updated.status || "Active",
-      accessibleLocations: updated.accessibleLocations || [],
-      defaultBusinessLocation: updated.defaultBusinessLocation || "",
-      defaultWarehouseLocation: updated.defaultWarehouseLocation || "",
-      inviteSentAt: updated.inviteSentAt || null,
-      inviteAcceptedAt: updated.inviteAcceptedAt || null,
-    },
-  });
+    if (!updated) return res.status(404).json({ success: false, message: "User not found", data: null });
+    return res.json({
+      success: true,
+      data: {
+        id: String(updated._id),
+        _id: String(updated._id),
+        name: updated.name || "",
+        email: updated.email || "",
+        role: updated.role || "member",
+        status: updated.status || "Active",
+        accessibleLocations: updated.accessibleLocations || [],
+        defaultBusinessLocation: updated.defaultBusinessLocation || "",
+        defaultWarehouseLocation: updated.defaultWarehouseLocation || "",
+        inviteSentAt: updated.inviteSentAt || null,
+        inviteAcceptedAt: updated.inviteAcceptedAt || null,
+      },
+    });
+  } catch (error: any) {
+    if (isDuplicateEmailError(error)) {
+      return res.status(409).json({ success: false, message: "Email already exists", data: null });
+    }
+    return res.status(500).json({ success: false, message: String(error?.message || "Failed to update user"), data: null });
+  }
 };
 
 export const deleteUser = async (req: express.Request, res: express.Response) => {

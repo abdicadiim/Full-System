@@ -122,16 +122,15 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      const bootstrapReady = localStorage.getItem("auth_bootstrap_ready") === "1";
-      if (bootstrapReady) {
-        await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
-      }
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
     } finally {
       setUser(null);
       localStorage.removeItem("user");
       localStorage.removeItem("timerState");
       localStorage.removeItem("auth_token");
       localStorage.removeItem("token");
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("auth_bootstrap_ready");
     }
   }, []);
 
