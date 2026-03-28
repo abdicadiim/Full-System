@@ -2060,7 +2060,6 @@ export default function UsersPage() {
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <LocationDropdown
                   label="User's Default Business Location"
-                  required
                   value={defaultBusinessLocation}
                   options={businessLocations.map((location) => ({
                     value: location._id || location.id,
@@ -2074,7 +2073,7 @@ export default function UsersPage() {
                       setDefaultWarehouseLocation("");
                     }
                   }}
-                  labelClassName="text-red-600"
+                  labelClassName="text-gray-700"
                 />
 
                 <LocationDropdown
@@ -2113,7 +2112,7 @@ export default function UsersPage() {
                   </button>
                   <button
                     onClick={handleSendInvite}
-                    disabled={isSaving || !defaultBusinessLocation}
+                    disabled={isSaving}
                     className="px-4 py-2 rounded-lg bg-[#156372] text-white text-sm font-medium hover:bg-[#0f4e5a] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isSaving ? "Sending..." : "Send Invite"}
@@ -2260,7 +2259,6 @@ export default function UsersPage() {
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <LocationDropdown
                   label="User's Default Business Location"
-                  required
                   value={defaultBusinessLocation}
                   options={businessLocations.map((location) => ({
                     value: location._id || location.id,
@@ -2274,11 +2272,10 @@ export default function UsersPage() {
                       setDefaultWarehouseLocation("");
                     }
                   }}
-                  labelClassName="text-red-600"
+                  labelClassName="text-gray-700"
                 />
                 <LocationDropdown
                   label="User's Default Warehouse Location"
-                  required
                   value={defaultWarehouseLocation}
                   options={warehouseLocations.map((location) => ({
                     value: location._id || location.id,
@@ -2321,7 +2318,7 @@ export default function UsersPage() {
                   </button>
                   <button
                     onClick={handleUpdateUserLocationAccess}
-                    disabled={isSaving || !defaultBusinessLocation}
+                    disabled={isSaving}
                     className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isSaving ? "Saving..." : "Save & Send Email"}
