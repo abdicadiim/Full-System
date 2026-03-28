@@ -29,6 +29,16 @@ const getRoleHelpText = (roleValue: string) => {
   return "Access is based on selected role permissions.";
 };
 
+const formatActivityTimestamp = (value: string | number | Date | null | undefined) => {
+  if (!value) return { date: "", time: "" };
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return { date: "", time: "" };
+  return {
+    date: date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+    time: date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+  };
+};
+
 type LocationOption = {
   value: string;
   label: string;
@@ -184,6 +194,9 @@ export default function UsersPage() {
   const [activeTab, setActiveTab] = useState("more-details");
   const [userDetails, setUserDetails] = useState(null);
   const [userLocations, setUserLocations] = useState([]);
+  const [userActivities, setUserActivities] = useState([]);
+  const [activitiesLoading, setActivitiesLoading] = useState(false);
+  const [activitiesError, setActivitiesError] = useState("");
   const [exportData, setExportData] = useState({
     module: "Users",
     template: "",
@@ -324,12 +337,22 @@ export default function UsersPage() {
       if (!selectedUser) {
         setUserDetails(null);
         setUserLocations([]);
+        setUserActivities([]);
+        setActivitiesError("");
+        setActivitiesLoading(false);
         return;
       }
 
       try {
         const userId = selectedUser.id || selectedUser._id;
-        const response = await usersAPI.getById(userId);
+        setActivitiesLoading(true);
+        setActivitiesError("");
+
+        const [response, activitiesResponse] = await Promise.all([
+          usersAPI.getById(userId),
+          usersAPI.getActivityLogs(userId, { limit: 1000 }),
+        ]);
+
         if (response && response.success) {
           setUserDetails(response.data);
           // Fetch accessible locations
@@ -347,8 +370,18 @@ export default function UsersPage() {
             setUserLocations([]);
           }
         }
+
+        if (activitiesResponse && activitiesResponse.success) {
+          setUserActivities(Array.isArray(activitiesResponse.data) ? activitiesResponse.data : []);
+        } else {
+          setUserActivities([]);
+        }
       } catch (err) {
         console.error("Error fetching user details:", err);
+        setActivitiesError("Unable to load recent activities.");
+        setUserActivities([]);
+      } finally {
+        setActivitiesLoading(false);
       }
     };
 
@@ -1406,8 +1439,47 @@ export default function UsersPage() {
             )}
 
             {activeTab === "recent-activities" && (
-              <div>
-                <p className="text-sm text-gray-600">No recent activities to display.</p>
+              <div className="space-y-4">
+                {activitiesLoading ? (
+                  <p className="text-sm text-gray-600">Loading recent activities...</p>
+                ) : activitiesError ? (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <p className="text-sm text-red-700">{activitiesError}</p>
+                  </div>
+                ) : userActivities.length === 0 ? (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <p className="text-sm text-gray-600">No recent activities to display.</p>
+                  </div>
+                ) : (
+                  <div className="relative pl-24">
+                    <div className="absolute left-11 top-0 bottom-0 w-px bg-blue-200" />
+                    <div className="space-y-6">
+                      {userActivities.map((activity: any, index: number) => {
+                        const { date, time } = formatActivityTimestamp(activity.occurredAt);
+                        const activityLabel = activity.summary || activity.action || "Activity recorded";
+                        const detailBits = [activity.resource, activity.entityName].filter(Boolean);
+
+                        return (
+                          <div key={activity.id || `${activity.occurredAt || "activity"}-${index}`} className="relative flex items-start gap-4">
+                            <div className="absolute left-[-18px] top-2.5 h-3 w-3 rounded-full bg-blue-600 ring-4 ring-blue-100" />
+                            <div className="w-20 shrink-0 text-right">
+                              <p className="text-xs text-gray-600">{date || "—"}</p>
+                              <p className="text-xs text-gray-500 mt-1">{time || ""}</p>
+                            </div>
+                            <div className="flex-1 rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm">
+                              <p className="text-sm text-gray-900">{activityLabel}</p>
+                              {detailBits.length > 0 && (
+                                <p className="mt-1 text-xs text-gray-500">
+                                  {detailBits.join(" · ")}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

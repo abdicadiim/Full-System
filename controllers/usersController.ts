@@ -122,8 +122,8 @@ export const getUserActivities = async (req: express.Request, res: express.Respo
   const actorId = String(req.params.id || "").trim();
   if (!actorId) return res.status(400).json({ success: false, message: "Missing user id", data: null });
 
-  const limitRaw = Number(req.query?.limit || 50);
-  const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(limitRaw, 200)) : 50;
+  const limitRaw = Number(req.query?.limit || 1000);
+  const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(limitRaw, 1000)) : 1000;
 
   const rows: any[] = await ActivityLog.find({ organizationId: orgId, actorId })
     .sort({ occurredAt: -1, createdAt: -1 })
