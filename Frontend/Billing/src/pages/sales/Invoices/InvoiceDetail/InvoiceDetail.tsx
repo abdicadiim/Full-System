@@ -4002,12 +4002,12 @@ export default function InvoiceDetail() { // Start of component
             >
               {/* Status Ribbon */}
               {(invoice.status === "draft" || invoice.status?.toLowerCase() === "paid" || invoice.status?.toLowerCase() === "sent" || invoice.status?.toLowerCase() === "unpaid") && (
-                <div className="absolute top-0 left-0 w-32 h-32 overflow-hidden">
-                  <div className={`absolute top-8 left-8 w-40 h-8 transform -rotate-45 origin-center flex items-center justify-center shadow-sm ${invoice.status?.toLowerCase() === "paid" ? "bg-green-500" :
+                <div className="absolute top-0 left-0 w-36 h-36 overflow-hidden">
+                  <div className={`absolute top-6 -left-8 w-48 h-9 transform -rotate-45 origin-center flex items-center justify-center shadow-sm ${invoice.status?.toLowerCase() === "paid" ? "bg-green-500" :
                     (invoice.status?.toLowerCase() === "sent" || invoice.status?.toLowerCase() === "unpaid") ? "bg-blue-500" :
                       "bg-yellow-500"
                     }`}>
-                    <span className="text-white font-bold text-sm uppercase tracking-wider">
+                    <span className="text-white font-bold text-[13px] uppercase tracking-wider">
                       {invoice.status?.toLowerCase() === "sent" ? "UNPAID" : invoice.status}
                     </span>
                   </div>

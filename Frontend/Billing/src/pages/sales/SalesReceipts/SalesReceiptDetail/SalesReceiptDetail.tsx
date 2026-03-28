@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 import { getSalesReceiptById, getSalesReceipts, deleteSalesReceipt, updateSalesReceipt, saveSalesReceipt, SalesReceipt } from "../../salesModel";
 import { currenciesAPI, salesReceiptsAPI, senderEmailsAPI } from "../../../../services/api";
 import { resolveVerifiedPrimarySender } from "../../../../utils/emailSenderDisplay";
@@ -73,6 +74,14 @@ interface ReceiptComment {
   timestamp?: string;
 }
 
+const normalizeSalesReceiptStatus = (value: any) => {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "void" ? "void" : "paid";
+};
+
+const getSalesReceiptStatusLabel = (value: any) =>
+  normalizeSalesReceiptStatus(value) === "void" ? "VOID" : "PAID";
+
 export default function SalesReceiptDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -93,6 +102,7 @@ export default function SalesReceiptDetail() {
   const [showCommentsSidebar, setShowCommentsSidebar] = useState(false);
   const [isVoidModalOpen, setIsVoidModalOpen] = useState(false);
   const [voidReason, setVoidReason] = useState("");
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [emailData, setEmailData] = useState({
     to: "",
     subject: "",
@@ -441,7 +451,7 @@ ${sellerInfo.name}`
       setReceipt((prev) => prev ? ({ ...prev, attachments, comments } as any) : prev);
     } catch (error) {
       console.error("Error saving sales receipt comments/attachments:", error);
-      alert("Failed to save changes. Please try again.");
+      toast.error("Failed to save changes. Please try again.");
     }
   };
 
@@ -456,14 +466,14 @@ ${sellerInfo.name}`
   const handleReceiptFileUpload = async (files: File[]) => {
     const validFiles = Array.from(files).filter(file => {
       if (file.size > 10 * 1024 * 1024) {
-        alert(`File ${file.name} is too large. Maximum size is 10MB.`);
+        toast.error(`File ${file.name} is too large. Maximum size is 10MB.`);
         return false;
       }
       return true;
     });
 
     if (receiptAttachments.length + validFiles.length > 10) {
-      alert("Maximum 10 files allowed. Please remove some files first.");
+      toast.error("Maximum 10 files allowed. Please remove some files first.");
       return;
     }
 
@@ -487,7 +497,7 @@ ${sellerInfo.name}`
       await persistReceiptMeta(updated, receiptComments);
     } catch (error) {
       console.error("Error uploading receipt attachments:", error);
-      alert("Failed to upload files. Please try again.");
+      toast.error("Failed to upload files. Please try again.");
     }
   };
 
@@ -506,6 +516,7 @@ ${sellerInfo.name}`
     const updated = receiptAttachments.filter(att => String(att.id) !== String(attachmentId));
     setReceiptAttachments(updated);
     await persistReceiptMeta(updated, receiptComments);
+    toast.success("Attachment removed successfully.");
   };
 
   const handleAddComment = async () => {
@@ -520,6 +531,7 @@ ${sellerInfo.name}`
     setReceiptComments(updated);
     await persistReceiptMeta(receiptAttachments, updated);
     setNewComment("");
+    toast.success("Comment added successfully.");
   };
 
   const toFiniteNumber = (value: any, fallback = 0) => {
@@ -553,10 +565,10 @@ ${sellerInfo.name}`
       setReceipt((prev) => (prev ? { ...prev, status: "void", voidReason: voidReason.trim() } : prev));
       setIsVoidModalOpen(false);
       setVoidReason("");
-      alert("Sales receipt status updated to void.");
+      toast.success("Sales receipt status updated to void.");
     } catch (error) {
       console.error("Error voiding sales receipt:", error);
-      alert("Failed to void sales receipt. Please try again.");
+      toast.error("Failed to void sales receipt. Please try again.");
     }
   };
 
@@ -609,13 +621,14 @@ ${sellerInfo.name}`
       const clonedReceipt = await saveSalesReceipt(clonedPayload as any);
       const clonedReceiptId = clonedReceipt?.id || clonedReceipt?._id;
       if (clonedReceiptId) {
+        toast.success("Sales receipt cloned successfully.");
         navigate(`/sales/sales-receipts/${clonedReceiptId}`);
         return;
       }
-      alert("Receipt cloned, but could not open it automatically.");
+      toast.success("Receipt cloned, but could not open it automatically.");
     } catch (error) {
       console.error("Error cloning sales receipt:", error);
-      alert("Failed to clone sales receipt. Please try again.");
+      toast.error("Failed to clone sales receipt. Please try again.");
     }
   };
 
@@ -623,36 +636,34 @@ ${sellerInfo.name}`
     setIsMoreMenuOpen(false);
 
     if (!receipt) return;
+    setIsDeleteModalOpen(true);
+  };
 
-    // Confirm deletion
-    const confirmDelete = window.confirm(
-      `Are you sure you want to delete receipt ${receipt.receiptNumber || receipt.id}? This action cannot be undone.`
-    );
-
-    if (!confirmDelete) return;
+  const confirmDeleteReceipt = async () => {
+    if (!receipt) return;
 
     try {
       await deleteSalesReceipt((receipt?.id || receipt?._id)!);
-      // Navigate back to sales receipts list
+      setIsDeleteModalOpen(false);
       navigate("/sales/sales-receipts");
-      alert("Receipt deleted successfully!");
+      toast.success("Receipt deleted successfully!");
     } catch (error) {
       console.error("Error deleting receipt:", error);
-      alert("Failed to delete receipt. Please try again.");
+      toast.error("Failed to delete receipt. Please try again.");
     }
   };
 
   const handleLogoUpload = (file: File) => {
     // Check file size (1MB max)
     if (file.size > 1024 * 1024) {
-      alert("File size exceeds 1MB. Please choose a smaller file.");
+      toast.error("File size exceeds 1MB. Please choose a smaller file.");
       return;
     }
 
     // Check file type
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/bmp'];
     if (!validTypes.includes(file.type)) {
-      alert("Invalid file type. Please upload jpg, jpeg, png, gif, or bmp files.");
+      toast.error("Invalid file type. Please upload jpg, jpeg, png, gif, or bmp files.");
       return;
     }
 
@@ -664,7 +675,7 @@ ${sellerInfo.name}`
       setLogoFile(file);
       // Save logo to localStorage
       localStorage.setItem('organization_logo', logoDataUrl);
-      alert("Logo uploaded successfully!");
+      toast.success("Logo uploaded successfully!");
     };
     reader.readAsDataURL(file);
   };
@@ -750,12 +761,12 @@ ${sellerInfo.name}`
                   {r.receiptNumber || r.id} - {formatDate(r.date || r.receiptDate)}
                 </div>
                 <div
-                  className={`mt-1 text-[10px] font-bold uppercase ${String(r.status || "").toLowerCase() === "void"
-                    ? "text-gray-400"
+                  className={`mt-1 text-[10px] font-bold uppercase ${normalizeSalesReceiptStatus(r.status) === "void"
+                    ? "text-rose-600"
                     : "text-emerald-600"
                     }`}
                 >
-                  {String(r.status || "PAID")}
+                  {getSalesReceiptStatusLabel(r.status)}
                 </div>
               </div>
             );
@@ -770,9 +781,9 @@ ${sellerInfo.name}`
             <div className="text-sm text-gray-600">Location: {sellerInfo.location || "Head Office"}</div>
             <div className="flex items-center gap-2">
               <div className="text-[24px] leading-tight font-semibold text-gray-900">{receipt.receiptNumber || receipt.id}</div>
-              {String(receipt.status || "").toLowerCase() !== "void" && String(receipt.status || "").trim() ? (
+              {String(receipt.status || "").trim() ? (
                 <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded border border-gray-200 text-gray-500 bg-gray-50">
-                  {receipt.status}
+                  {getSalesReceiptStatusLabel(receipt.status)}
                 </span>
               ) : null}
             </div>
