@@ -6,6 +6,7 @@ import { MoreHorizontal, MessageSquare, X, Edit, Mail, FileText, Banknote, Chevr
 import { deleteInvoice, getCustomers, getInvoiceById, getInvoicesPaginated, Invoice, updateInvoice, saveInvoice } from "../salesModel";
 import { useOrganizationBranding } from "../../../hooks/useOrganizationBranding";
 import { toast } from "react-hot-toast";
+import ApplyRetainersToInvoiceModal from "./ApplyRetainersToInvoiceModal";
 
 type RetainerListRow = {
   id: string;
@@ -47,7 +48,10 @@ const RETAINER_FLASH_SUCCESS_KEY = "taban_retainer_flash_success_v1";
 const RETAINER_DRAFT_RECORD_PAYMENT_WARNING_KEY = "taban_retainer_draft_record_payment_warning_v1";
 
 const toFiniteNumber = (value: any, fallback = 0) => {
-  const parsed = Number(value);
+  const parsed =
+    typeof value === "string"
+      ? Number(value.replace(/,/g, "").replace(/[^0-9.-]/g, ""))
+      : Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
@@ -206,6 +210,9 @@ export default function Retailinvoicedetail() {
   const [isVoidModalOpen, setIsVoidModalOpen] = useState(false);
   const [isDraftRecordPaymentModalOpen, setIsDraftRecordPaymentModalOpen] = useState(false);
   const [isPaymentsReceivedOpen, setIsPaymentsReceivedOpen] = useState(false);
+  const [isApplyRetainersModalOpen, setIsApplyRetainersModalOpen] = useState(false);
+  const [selectedPaymentRow, setSelectedPaymentRow] = useState<any | null>(null);
+  const [isApplyingRetainers, setIsApplyingRetainers] = useState(false);
   const [disableDraftRecordPaymentWarning, setDisableDraftRecordPaymentWarning] = useState(false);
   const [dontShowDraftRecordPaymentAgain, setDontShowDraftRecordPaymentAgain] = useState(false);
   const [draftRecordPaymentLoading, setDraftRecordPaymentLoading] = useState(false);
@@ -656,14 +663,17 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
         const paymentMode = String(resolveField(record, ["paymentMode", "mode", "paymentMethod"]) || "-");
         const paymentNumberValue = resolveField(record, ["paymentNumber", "number", "id", "_id"]);
         const referenceValue = resolveField(record, ["referenceNumber", "reference", "ref", "transactionId"]);
+        const recordId = String(resolveField(record, ["id", "_id"]) || `payment-${index + 1}`);
         return {
-          id: String(resolveField(record, ["id", "_id"]) || `payment-${index + 1}`),
+          id: recordId,
+          paymentId: recordId,
           date: formatDate(resolveField(record, ["date", "paymentDate", "createdAt", "updatedAt"])),
           paymentNumber: paymentNumberValue ? String(paymentNumberValue) : "-",
           reference: referenceValue ? String(referenceValue) : "-",
           paymentMode,
           amount: amountValue,
           balance: balanceValue,
+          raw: record,
         };
       });
     }
@@ -672,12 +682,14 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
       return [
         {
           id: "payment-fallback",
+          paymentId: "payment-fallback",
           date: invoiceDate,
           paymentNumber: "-",
           reference: "-",
           paymentMode: "Cash",
           amount: paymentMadeAmount,
           balance: balanceDue,
+          raw: null,
         },
       ];
     }
@@ -726,6 +738,249 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
   useEffect(() => {
     if (showPaymentsSummary) setIsPaymentsReceivedOpen(true);
   }, [showPaymentsSummary]);
+
+  const roundMoney = (value: any) =>
+    Math.round((toFiniteNumber(value, 0) + Number.EPSILON) * 100) / 100;
+
+  const getInvoiceBalanceForApply = (targetInvoice: any) => {
+    const directBalance = toFiniteNumber(
+      targetInvoice?.balance ?? targetInvoice?.balanceDue ?? targetInvoice?.amountDue,
+      Number.NaN
+    );
+    if (Number.isFinite(directBalance)) return Math.max(0, directBalance);
+
+    const totalAmount = toFiniteNumber(targetInvoice?.total ?? targetInvoice?.amount, 0);
+    const paidAmount = toFiniteNumber(targetInvoice?.paidAmount ?? targetInvoice?.amountPaid, 0);
+    const creditsApplied = toFiniteNumber(targetInvoice?.creditsApplied, 0);
+    const retainersApplied = toFiniteNumber(
+      targetInvoice?.retainerAppliedAmount ??
+        targetInvoice?.retainersApplied ??
+        targetInvoice?.retainerAmountApplied ??
+        targetInvoice?.retainerAppliedTotal,
+      0
+    );
+    return Math.max(0, totalAmount - paidAmount - creditsApplied - retainersApplied);
+  };
+
+  const getNextInvoiceStatusForApply = (targetInvoice: any, nextBalance: number, nextRetainersApplied: number) => {
+    const currentStatusKey = toStatusKey(targetInvoice?.status || "sent");
+    if (["void", "cancelled", "closed"].includes(currentStatusKey)) return targetInvoice?.status || "void";
+    if (nextBalance <= 0) return "paid";
+
+    const paidAmount = toFiniteNumber(targetInvoice?.paidAmount ?? targetInvoice?.amountPaid, 0);
+    const creditsApplied = toFiniteNumber(targetInvoice?.creditsApplied, 0);
+    if (paidAmount > 0 || creditsApplied > 0 || nextRetainersApplied > 0) return "partially_paid";
+    if (currentStatusKey === "draft") return "draft";
+    return "sent";
+  };
+
+  const handleOpenApplyRetainersModal = (paymentRow: any) => {
+    const available = roundMoney(toFiniteNumber(paymentRow?.balance, 0));
+    if (available <= 0) {
+      toast("No remaining payment balance to apply.");
+      return;
+    }
+    setSelectedPaymentRow(paymentRow);
+    setIsApplyRetainersModalOpen(true);
+  };
+
+  const handleApplyRetainersSave = async (allocations: { invoiceId: string; amount: number; date: string }[]) => {
+    if (!invoice || !selectedPaymentRow) return;
+
+    const validAllocations = allocations
+      .map((allocation) => ({
+        invoiceId: String(allocation.invoiceId || "").trim(),
+        amount: roundMoney(allocation.amount),
+        date: String(allocation.date || new Date().toISOString().split("T")[0]),
+      }))
+      .filter((allocation) => allocation.invoiceId && allocation.amount > 0);
+
+    if (!validAllocations.length) {
+      toast("Please enter an amount to apply.");
+      return;
+    }
+
+    const availableFromPayment = roundMoney(toFiniteNumber(selectedPaymentRow?.balance, 0));
+    const totalApplied = roundMoney(validAllocations.reduce((sum, allocation) => sum + allocation.amount, 0));
+    if (totalApplied > availableFromPayment) {
+      toast("Applied amount cannot exceed selected payment balance.");
+      return;
+    }
+
+    const currentInvoiceId = String((invoice as any)?.id || (invoice as any)?._id || id || "").trim();
+    if (!currentInvoiceId) {
+      toast("Retainer invoice id is missing.");
+      return;
+    }
+
+    const paymentId = String(
+      selectedPaymentRow?.paymentId || selectedPaymentRow?.id || selectedPaymentRow?.raw?.id || selectedPaymentRow?.raw?._id || ""
+    ).trim();
+    const paymentNumber = String(
+      selectedPaymentRow?.paymentNumber || selectedPaymentRow?.raw?.paymentNumber || selectedPaymentRow?.raw?.number || "-"
+    );
+
+    setIsApplyingRetainers(true);
+    try {
+      const newRetainerApplications: any[] = [];
+      const newAppliedInvoiceRows: any[] = [];
+
+      for (const allocation of validAllocations) {
+        const targetInvoice = await getInvoiceById(allocation.invoiceId);
+        if (!targetInvoice) continue;
+
+        const targetInvoiceId = String((targetInvoice as any)?.id || (targetInvoice as any)?._id || allocation.invoiceId).trim();
+        if (!targetInvoiceId || targetInvoiceId === currentInvoiceId) continue;
+
+        const currentBalance = roundMoney(getInvoiceBalanceForApply(targetInvoice));
+        if (currentBalance <= 0) continue;
+
+        const applyAmount = roundMoney(Math.min(allocation.amount, currentBalance));
+        if (applyAmount <= 0) continue;
+
+        const currentRetainersApplied = roundMoney(
+          toFiniteNumber(
+            (targetInvoice as any)?.retainerAppliedAmount ??
+              (targetInvoice as any)?.retainersApplied ??
+              (targetInvoice as any)?.retainerAmountApplied ??
+              (targetInvoice as any)?.retainerAppliedTotal,
+            0
+          )
+        );
+        const nextRetainersApplied = roundMoney(currentRetainersApplied + applyAmount);
+        const nextBalance = roundMoney(Math.max(0, currentBalance - applyAmount));
+        const nextStatus = getNextInvoiceStatusForApply(targetInvoice, nextBalance, nextRetainersApplied);
+
+        const existingTargetApplications = Array.isArray((targetInvoice as any)?.retainerApplications)
+          ? [...(targetInvoice as any).retainerApplications]
+          : [];
+
+        const applicationEntry = {
+          retainerId: currentInvoiceId,
+          retainerNumber: String((invoice as any)?.invoiceNumber || ""),
+          paymentId,
+          paymentNumber,
+          amount: applyAmount,
+          appliedAt: allocation.date,
+        };
+
+        await updateInvoice(targetInvoiceId, {
+          retainerAppliedAmount: nextRetainersApplied,
+          retainersApplied: nextRetainersApplied,
+          retainerAmountApplied: nextRetainersApplied,
+          retainerAppliedTotal: nextRetainersApplied,
+          balance: nextBalance,
+          balanceDue: nextBalance,
+          amountDue: nextBalance,
+          status: nextStatus,
+          retainerApplications: [...existingTargetApplications, applicationEntry],
+        } as any);
+
+        newRetainerApplications.push({
+          invoiceId: targetInvoiceId,
+          invoiceNumber: String((targetInvoice as any)?.invoiceNumber || targetInvoiceId),
+          amount: applyAmount,
+          appliedAt: allocation.date,
+          paymentId,
+          paymentNumber,
+        });
+        newAppliedInvoiceRows.push({
+          invoiceId: targetInvoiceId,
+          invoiceNumber: String((targetInvoice as any)?.invoiceNumber || targetInvoiceId),
+          amountApplied: applyAmount,
+          date: allocation.date,
+          paymentId,
+          paymentNumber,
+        });
+      }
+
+      if (!newRetainerApplications.length) {
+        toast("No eligible invoices found for this payment.");
+        return;
+      }
+
+      const existingApplications = Array.isArray((invoice as any)?.retainerApplications)
+        ? [...(invoice as any).retainerApplications]
+        : [];
+      const existingAppliedInvoices = Array.isArray((invoice as any)?.retainerAppliedInvoices)
+        ? [...(invoice as any).retainerAppliedInvoices]
+        : [];
+
+      const paymentRecordsSource = Array.isArray((invoice as any)?.paymentsReceived)
+        ? [...(invoice as any).paymentsReceived]
+        : Array.isArray((invoice as any)?.payments)
+        ? [...(invoice as any).payments]
+        : [];
+
+      const nextPaymentRecords =
+        paymentRecordsSource.length > 0
+          ? paymentRecordsSource.map((record: any) => {
+              const recordId = String(record?.id || record?._id || "").trim();
+              const recordNumber = String(record?.paymentNumber || record?.number || "");
+              const isMatch =
+                (paymentId && recordId && paymentId === recordId) ||
+                (!!paymentNumber && paymentNumber !== "-" && paymentNumber === recordNumber);
+
+              if (!isMatch) return record;
+              const currentRecordBalance = roundMoney(
+                toFiniteNumber(record?.balance ?? record?.balanceAmount ?? record?.remainingBalance, selectedPaymentRow?.balance)
+              );
+              const nextRecordBalance = roundMoney(Math.max(0, currentRecordBalance - totalApplied));
+              return {
+                ...record,
+                balance: nextRecordBalance,
+                balanceAmount: nextRecordBalance,
+                remainingBalance: nextRecordBalance,
+                appliedInvoices: [...(Array.isArray(record?.appliedInvoices) ? record.appliedInvoices : []), ...newAppliedInvoiceRows],
+              };
+            })
+          : paymentRecordsSource;
+
+      const currentRetainerAvailable = roundMoney(
+        toFiniteNumber(
+          (invoice as any)?.retainerAvailableAmount ??
+            (invoice as any)?.availableAmount ??
+            (invoice as any)?.unusedAmount ??
+            (invoice as any)?.unusedBalance ??
+            selectedPaymentRow?.balance,
+          0
+        )
+      );
+      const nextRetainerAvailable = roundMoney(Math.max(0, currentRetainerAvailable - totalApplied));
+      const nextDrawStatus = nextRetainerAvailable <= 0 ? "drawn" : "partially_drawn";
+
+      const patchPayload: any = {
+        retainerAvailableAmount: nextRetainerAvailable,
+        availableAmount: nextRetainerAvailable,
+        unusedAmount: nextRetainerAvailable,
+        unusedBalance: nextRetainerAvailable,
+        retainerDrawStatus: nextDrawStatus,
+        drawStatus: nextDrawStatus,
+        retainerApplications: [...existingApplications, ...newRetainerApplications],
+        retainerAppliedInvoices: [...existingAppliedInvoices, ...newAppliedInvoiceRows],
+      };
+      if (Array.isArray((invoice as any)?.paymentsReceived)) {
+        patchPayload.paymentsReceived = nextPaymentRecords;
+      } else if (Array.isArray((invoice as any)?.payments)) {
+        patchPayload.payments = nextPaymentRecords;
+      }
+
+      const updatedRetainer = await updateInvoice(currentInvoiceId, patchPayload as Partial<Invoice>);
+      setInvoice((prev) => (prev ? ({ ...prev, ...updatedRetainer, ...patchPayload } as Invoice) : prev));
+      setSelectedPaymentRow((prev: any) =>
+        prev ? { ...prev, balance: Math.max(0, roundMoney(toFiniteNumber(prev.balance, 0) - totalApplied)) } : prev
+      );
+      setIsApplyRetainersModalOpen(false);
+      setReloadTick((prev) => prev + 1);
+      toast.success("Retainer amount applied successfully.");
+    } catch (error: any) {
+      console.error("Failed to apply retainer amount:", error);
+      toast.error(error?.message || "Failed to apply retainer amount.");
+    } finally {
+      setIsApplyingRetainers(false);
+    }
+  };
+
   const emailRecipient = String(
     (invoice as any)?.customerEmail ||
       (invoice as any)?.customer?.email ||
@@ -1814,9 +2069,9 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
                     <button
                       type="button"
                       onClick={() => setIsPaymentsReceivedOpen((prev) => !prev)}
-                      className="w-full px-4 py-3 inline-flex items-center justify-between text-left"
+                      className="w-full px-4 py-2.5 inline-flex items-center justify-between text-left"
                     >
-                      <div className="inline-flex items-center gap-1 text-[30px] text-[#1f2937]">
+                      <div className="inline-flex items-center gap-1 text-[15px] text-[#1f2937]">
                         <span className="font-semibold">Payments Received</span>
                         <span className="text-[#3b82f6]">{paymentsReceivedCount}</span>
                       </div>
@@ -1828,43 +2083,47 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
                     {isPaymentsReceivedOpen && (
                       <div className="px-4 pb-4">
                         <div className="overflow-x-auto rounded border border-[#e5e7eb]">
-                          <table className="w-full text-[14px] text-[#334155]">
+                          <table className="w-full text-[12px] text-[#334155]">
                             <thead>
                               <tr className="bg-white border-b border-[#e5e7eb] text-[#4b5563]">
-                                <th className="text-left font-semibold px-3 py-2.5">Date</th>
-                                <th className="text-left font-semibold px-3 py-2.5">Payment #</th>
-                                <th className="text-left font-semibold px-3 py-2.5">Reference#</th>
-                                <th className="text-left font-semibold px-3 py-2.5">Payment Mode</th>
-                                <th className="text-left font-semibold px-3 py-2.5">Amount</th>
-                                <th className="text-left font-semibold px-3 py-2.5">Balance</th>
-                                <th className="text-right font-semibold px-3 py-2.5"></th>
+                                <th className="text-left font-semibold px-3 py-2">Date</th>
+                                <th className="text-left font-semibold px-3 py-2">Payment #</th>
+                                <th className="text-left font-semibold px-3 py-2">Reference#</th>
+                                <th className="text-left font-semibold px-3 py-2">Payment Mode</th>
+                                <th className="text-left font-semibold px-3 py-2">Amount</th>
+                                <th className="text-left font-semibold px-3 py-2">Balance</th>
+                                <th className="text-right font-semibold px-3 py-2"></th>
                               </tr>
                             </thead>
                             <tbody>
                               {paymentTableRows.length === 0 ? (
                                 <tr>
-                                  <td colSpan={7} className="px-3 py-3 text-slate-500">No payment records found.</td>
+                                  <td colSpan={7} className="px-3 py-3 text-slate-500 text-[12px]">No payment records found.</td>
                                 </tr>
                               ) : (
                                 paymentTableRows.map((row) => (
                                   <tr key={row.id} className="border-b border-[#eef2f7] last:border-b-0">
-                                    <td className="px-3 py-2.5">{row.date}</td>
-                                    <td className="px-3 py-2.5 text-[#2563eb]">{row.paymentNumber}</td>
-                                    <td className="px-3 py-2.5">{row.reference}</td>
-                                    <td className="px-3 py-2.5">{row.paymentMode}</td>
-                                    <td className="px-3 py-2.5">{currencyPrefix}{formatMoney(row.amount)}</td>
-                                    <td className="px-3 py-2.5">{currencyPrefix}{formatMoney(row.balance)}</td>
-                                    <td className="px-3 py-2.5 text-right">
+                                    <td className="px-3 py-2">{row.date}</td>
+                                    <td className="px-3 py-2 text-[#2563eb]">{row.paymentNumber}</td>
+                                    <td className="px-3 py-2">{row.reference}</td>
+                                    <td className="px-3 py-2">{row.paymentMode}</td>
+                                    <td className="px-3 py-2">{currencyPrefix}{formatMoney(row.amount)}</td>
+                                    <td className="px-3 py-2">{currencyPrefix}{formatMoney(row.balance)}</td>
+                                    <td className="px-3 py-2 text-right">
                                       <div className="inline-flex items-center gap-2">
                                         <button
                                           type="button"
-                                          className="px-3 py-1.5 rounded border border-[#d1d5db] text-[13px] text-[#374151] hover:bg-[#f8fafc]"
+                                          onClick={() => {
+                                            handleOpenApplyRetainersModal(row);
+                                          }}
+                                          disabled={isApplyingRetainers || toFiniteNumber(row.balance, 0) <= 0}
+                                          className="px-2.5 py-1 rounded border border-[#d1d5db] text-[12px] text-[#374151] hover:bg-[#f8fafc] disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                           Apply to Invoices
                                         </button>
                                         <button
                                           type="button"
-                                          className="h-7 w-7 inline-flex items-center justify-center rounded border border-[#d1d5db] text-[#374151] hover:bg-[#f8fafc]"
+                                          className="h-6 w-6 inline-flex items-center justify-center rounded border border-[#d1d5db] text-[#374151] hover:bg-[#f8fafc]"
                                         >
                                           <MoreHorizontal size={14} />
                                         </button>
@@ -2025,6 +2284,21 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
           )}
         </div>
       </div>
+
+      <ApplyRetainersToInvoiceModal
+        isOpen={isApplyRetainersModalOpen}
+        onClose={() => {
+          if (isApplyingRetainers) return;
+          setIsApplyRetainersModalOpen(false);
+          setSelectedPaymentRow(null);
+        }}
+        retainerInvoice={{
+          ...(invoice as any),
+          retainerAvailableAmount: Math.max(0, roundMoney(toFiniteNumber(selectedPaymentRow?.balance, 0))),
+        }}
+        payment={selectedPaymentRow?.raw || selectedPaymentRow}
+        onSave={handleApplyRetainersSave}
+      />
 
       {isVoidModalOpen && (
         <div
