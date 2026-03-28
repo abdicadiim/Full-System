@@ -48,8 +48,9 @@ import {
   Send
 } from "lucide-react";
 import { getQuoteById, getQuotes, updateQuote, deleteQuotes, getCustomers, getSalespersons, getProjects, getInvoices, saveInvoice, saveQuote } from "../../salesModel";
-import { currenciesAPI, documentsAPI, quotesAPI } from "../../../services/api";
+import { currenciesAPI, documentsAPI, quotesAPI, senderEmailsAPI } from "../../../services/api";
 import { toast } from "react-toastify";
+import { resolveVerifiedPrimarySender } from "../../../utils/emailSenderDisplay";
 
 const QuoteDetail = () => {
   const { quoteId } = useParams();
@@ -125,7 +126,7 @@ const QuoteDetail = () => {
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [showEmailDetails, setShowEmailDetails] = useState(false); // Toggle for simple/detailed view
   const [emailData, setEmailData] = useState({
-    from: "JIRDE HUSSEIN KHALIF <jirdehusseinkhalif@gmail.com>",
+    from: "",
     sendTo: "",
     cc: "",
     bcc: "",
@@ -266,26 +267,23 @@ const QuoteDetail = () => {
   // Fetch owner email data
   const fetchOwnerEmail = async () => {
     try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) return;
-
-      const response = await fetch('/api/settings/organization/owner-email', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.data) {
-          setOwnerEmail(data.data);
-        }
-      }
+      const primarySenderRes = await senderEmailsAPI.getPrimary();
+      const fallbackName = String(organizationProfile?.name || "Taban Enterprise").trim() || "Taban Enterprise";
+      const fallbackEmail = String(organizationProfile?.email || "").trim();
+      setOwnerEmail(resolveVerifiedPrimarySender(primarySenderRes, fallbackName, fallbackEmail));
     } catch (error) {
       console.error('Error fetching owner email:', error);
     }
   };
+
+  useEffect(() => {
+    const senderName = ownerEmail?.name || organizationProfile?.name || "Team";
+    const senderEmail = ownerEmail?.email || organizationProfile?.email || "";
+    setEmailData((prev) => ({
+      ...prev,
+      from: senderEmail ? `${senderName} <${senderEmail}>` : senderName,
+    }));
+  }, [ownerEmail, organizationProfile?.name, organizationProfile?.email]);
 
   // Update organization profile data
   const updateOrganizationProfile = async (profileData) => {
@@ -4762,7 +4760,12 @@ const QuoteDetail = () => {
                   {/* Signature */}
                   <div style={{ marginTop: "24px" }}>
                     <p>Regards,</p>
-                    <p style={{ fontWeight: "600" }}>JIRDE HUSSEIN KHALIF</p>
+                    <p style={{ fontWeight: "600" }}>{ownerEmail?.name || organizationProfile?.name || "Team"}</p>
+                    {(ownerEmail?.email || organizationProfile?.email) && (
+                      <p style={{ margin: "2px 0 0 0", color: "#9ca3af", fontSize: "12px" }}>
+                        {ownerEmail?.email || organizationProfile?.email}
+                      </p>
+                    )}
                   </div>
                 </div>
 

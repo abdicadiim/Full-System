@@ -24,8 +24,9 @@ export default function SendCreditNoteEmail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [creditNote, setCreditNote] = useState(null);
+  const [senderName, setSenderName] = useState("Team");
   const [emailData, setEmailData] = useState({
-    from: "JIRDE HUSSEIN KHALIF <jirdehusseinkhalif@gmail.com>",
+    from: "",
     sendTo: "",
     cc: "",
     bcc: "",
@@ -79,23 +80,23 @@ export default function SendCreditNoteEmail() {
 
   useEffect(() => {
     const fetchCreditNote = async () => {
-      if (id) {
-        const creditNoteData = await getCreditNoteById(id);
-        if (creditNoteData) {
-          const userProfile = getCurrentUserProfile();
+        if (id) {
+          const creditNoteData = await getCreditNoteById(id);
+          if (creditNoteData) {
           const organizationName = getOrganizationName();
-          let resolvedSenderName = userProfile.name || "Team";
-          let resolvedSenderEmail = userProfile.email || "";
+          let resolvedSenderName = organizationName || "Team";
+          let resolvedSenderEmail = "";
 
           try {
             const primarySenderRes = await senderEmailsAPI.getPrimary();
-            if (primarySenderRes?.success && primarySenderRes.data) {
+            if (primarySenderRes?.success && primarySenderRes.data?.isVerified) {
               resolvedSenderName = primarySenderRes.data.name || resolvedSenderName;
               resolvedSenderEmail = primarySenderRes.data.email || resolvedSenderEmail;
             }
           } catch (error) {
             console.error("Error fetching primary sender:", error);
           }
+          setSenderName(resolvedSenderName);
 
           let resolvedCustomerEmail = String(
             creditNoteData.customerEmail ||
@@ -533,7 +534,7 @@ ${organizationName}`,
             {/* Signature */}
             <div style={{ marginTop: "24px" }}>
               <p>Regards,</p>
-              <p style={{ fontWeight: "600" }}>JIRDE HUSSEIN KHALIF</p>
+              <p style={{ fontWeight: "600" }}>{senderName}</p>
             </div>
           </div>
 

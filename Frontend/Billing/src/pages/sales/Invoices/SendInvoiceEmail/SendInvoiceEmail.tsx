@@ -20,7 +20,7 @@ import {
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import { getInvoiceById, getInvoices } from "../../salesModel";
-import { invoicesAPI } from "../../../../services/api";
+import { invoicesAPI, senderEmailsAPI } from "../../../../services/api";
 import { applyEmailTemplate } from "../../../settings/emailTemplateUtils";
 
 const normalizeInvoiceItems = (sourceInvoice: any) => {
@@ -98,9 +98,9 @@ export default function SendInvoiceEmail() {
   const [invoice, setInvoice] = useState(null);
   const [loading, setLoading] = useState(false);
   const [sendingStage, setSendingStage] = useState("");
-  const [senderName, setSenderName] = useState("JIRDE HUSSEIN KHALIF");
+  const [senderName, setSenderName] = useState("Team");
   const [emailData, setEmailData] = useState({
-    from: "\"JIRDE HUSSEIN KHALIF\" <jirdehusseinkhalif@gmail.com>",
+    from: "",
     sendTo: "",
     cc: "",
     bcc: "",
@@ -134,39 +134,10 @@ export default function SendInvoiceEmail() {
       return null;
     }
   };
-  const getLocalPrimarySender = () => {
-    const senderKeys = [
-      "taban_books_sender_emails",
-      "taban_sender_emails",
-      "sender_emails",
-      "taban_books_settings_sender_emails",
-    ];
-    for (const key of senderKeys) {
-      const parsed = readLocalJson(key);
-      const rows = Array.isArray(parsed)
-        ? parsed
-        : Array.isArray(parsed?.data)
-          ? parsed.data
-          : [];
-      if (!rows.length) continue;
-      const primary = rows.find((row: any) => row?.isPrimary) || rows[0];
-      const name = String(primary?.name || "").trim();
-      const email = String(primary?.email || "").trim();
-      if (name || email) {
-        return { name, email };
-      }
-    }
-
-    const orgProfile = readLocalJson("organization_profile") || readLocalJson("org_profile") || {};
-    const user = readLocalJson("user") || {};
-    return {
-      name: String(orgProfile?.organizationName || user?.name || "").trim(),
-      email: String(orgProfile?.email || user?.email || "").trim(),
-    };
-  };
   const getOrganizationName = () => {
     const orgProfile = readLocalJson("organization_profile") || readLocalJson("org_profile") || {};
-    return String(orgProfile?.organizationName || getLocalPrimarySender().name || "Taban Enterprise").trim() || "Taban Enterprise";
+    const user = readLocalJson("user") || {};
+    return String(orgProfile?.organizationName || user?.name || "Taban Enterprise").trim() || "Taban Enterprise";
   };
   const getLocalEmailTemplateByKey = (templateKey: string) => {
     const templateKeys = [
@@ -252,12 +223,18 @@ export default function SendInvoiceEmail() {
             const customerEmail = getCustomerEmail(invoiceData);
 
             // Fetch primary sender
-            let sName = import.meta.env.VITE_EMAIL_SENDER_NAME || "JIRDE HUSSEIN KHALIF";
-            let sEmail = import.meta.env.VITE_EMAIL_FROM || "jirdehusseinkhalif@gmail.com";
+            let sName = import.meta.env.VITE_EMAIL_SENDER_NAME || getOrganizationName() || "Team";
+            let sEmail = import.meta.env.VITE_EMAIL_FROM || "";
 
-            const localPrimary = getLocalPrimarySender();
-            sName = localPrimary.name || sName;
-            sEmail = localPrimary.email || sEmail;
+            try {
+              const primarySenderRes = await senderEmailsAPI.getPrimary();
+              if (primarySenderRes?.success && primarySenderRes.data?.isVerified) {
+                sName = primarySenderRes.data.name || sName;
+                sEmail = primarySenderRes.data.email || sEmail;
+              }
+            } catch (error) {
+              console.error("Error fetching primary sender:", error);
+            }
 
             setSenderName(sName);
 

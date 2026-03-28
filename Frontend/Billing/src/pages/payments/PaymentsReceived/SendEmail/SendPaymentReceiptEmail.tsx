@@ -3,10 +3,11 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import { getPaymentById, updatePayment } from "../../../sales/salesModel";
-import { settingsAPI, paymentsReceivedAPI } from "../../../../services/api";
+import { settingsAPI, paymentsReceivedAPI, senderEmailsAPI } from "../../../../services/api";
 import { useCurrency } from "../../../../hooks/useCurrency";
 import { X, Bold, Italic, Underline, Strikethrough, Link as LinkIcon, Image as ImageIcon, Paperclip } from "lucide-react";
 import { API_BASE_URL, getToken } from "../../../../services/auth";
+import { formatSenderDisplay, resolveVerifiedPrimarySender } from "../../../../utils/emailSenderDisplay";
 
 const parseNumericAmount = (value: number | string | undefined) => {
   const parsed = Number(value || 0);
@@ -31,6 +32,8 @@ export default function SendPaymentReceiptEmail() {
   const { baseCurrency, symbol } = useCurrency();
 
   const [paymentData, setPaymentData] = useState<any>(location.state?.paymentData || {});
+  const [senderName, setSenderName] = useState(String(location.state?.paymentData?.senderName || location.state?.paymentData?.organizationName || "System").trim() || "System");
+  const [senderEmail, setSenderEmail] = useState(String(location.state?.paymentData?.senderEmail || "").trim());
   const [showCc, setShowCc] = useState(false);
   const [showBcc, setShowBcc] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -41,8 +44,6 @@ export default function SendPaymentReceiptEmail() {
     [id, paymentData]
   );
 
-  const senderName = paymentData?.senderName || paymentData?.organizationName || "System";
-  const senderEmail = paymentData?.senderEmail || "nasram172@gmail.com";
   const customerName = paymentData?.customerName || paymentData?.customer?.displayName || paymentData?.customer?.name || "Customer";
 
   const formatCurrency = (amount: number | string, currencyCode?: string) => {
@@ -83,7 +84,7 @@ export default function SendPaymentReceiptEmail() {
   };
 
   const [emailData, setEmailData] = useState({
-    from: `${senderName} <${senderEmail}>`,
+    from: formatSenderDisplay(senderName, senderEmail, "System"),
     to: paymentData?.customerEmail || paymentData?.contactEmail || paymentData?.customer?.email || "",
     cc: "",
     bcc: "",
@@ -114,10 +115,42 @@ export default function SendPaymentReceiptEmail() {
   }, [paymentId]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const loadSender = async () => {
+      const fallbackName = String(paymentData?.senderName || paymentData?.organizationName || "System").trim() || "System";
+      const fallbackEmail = String(paymentData?.senderEmail || "").trim();
+
+      try {
+        const primarySenderRes = await senderEmailsAPI.getPrimary();
+        const sender = resolveVerifiedPrimarySender(primarySenderRes, fallbackName, fallbackEmail);
+        if (!cancelled) {
+          setSenderName(sender.name);
+          setSenderEmail(sender.email || fallbackEmail);
+        }
+      } catch (error) {
+        console.error("Failed to load verified sender for payment receipt email:", error);
+        if (!cancelled) {
+          setSenderName(fallbackName);
+          setSenderEmail(fallbackEmail);
+        }
+      }
+    };
+
+    if (paymentData && Object.keys(paymentData).length > 0) {
+      void loadSender();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [paymentData]);
+
+  useEffect(() => {
     if (!isBodyInitialized) {
       setEmailData((prev) => ({
         ...prev,
-        from: `${senderName} <${senderEmail}>`,
+        from: formatSenderDisplay(senderName, senderEmail, paymentData?.senderName || paymentData?.organizationName || "System"),
         to: prev.to || paymentData?.customerEmail || paymentData?.contactEmail || paymentData?.customer?.email || "",
         subject: prev.subject || `Payment Received - ${paymentData?.paymentNumber || ""}`,
         body: generateEmailBody(paymentData)
@@ -126,12 +159,12 @@ export default function SendPaymentReceiptEmail() {
       return;
     }
 
-    setEmailData((prev) => ({
-      ...prev,
-      from: `${senderName} <${senderEmail}>`,
-      to: prev.to || paymentData?.customerEmail || paymentData?.contactEmail || paymentData?.customer?.email || "",
-      subject: prev.subject || `Payment Received - ${paymentData?.paymentNumber || ""}`
-    }));
+      setEmailData((prev) => ({
+        ...prev,
+        from: formatSenderDisplay(senderName, senderEmail, paymentData?.senderName || paymentData?.organizationName || "System"),
+        to: prev.to || paymentData?.customerEmail || paymentData?.contactEmail || paymentData?.customer?.email || "",
+        subject: prev.subject || `Payment Received - ${paymentData?.paymentNumber || ""}`
+      }));
   }, [paymentData, senderName, senderEmail, isBodyInitialized]);
 
   useEffect(() => {

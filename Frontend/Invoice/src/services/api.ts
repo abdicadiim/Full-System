@@ -1773,6 +1773,7 @@ export const emailTemplatesAPI = {
 export const senderEmailsAPI = {
   ...resource("/settings/sender-emails"),
   getPrimary: () => request({ path: "/settings/sender-emails/primary" }),
+  resendVerification: (id: string) => request({ method: "POST", path: `/settings/sender-emails/${encodeURIComponent(id)}/resend-verification` }),
 };
 
 export const emailNotificationPreferencesAPI = {

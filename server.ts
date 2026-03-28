@@ -9,6 +9,7 @@ import { AUTH_BYPASS, FRONTEND_URL, JWT_SECRET, MONGO_URI, PORT } from "./config
 import { authRoutes } from "./routes/authRoutes.js";
 import { organizationRoutes } from "./routes/organizationRoutes.js";
 import { settingsRoutes } from "./routes/settingsRoutes.js";
+import { publicVerificationRoutes } from "./routes/publicVerificationRoutes.js";
 import { reportingTagsRoutes } from "./routes/reportingTagsRoutes.js";
 import { rolesRoutes } from "./routes/rolesRoutes.js";
 import { usersRoutes } from "./routes/usersRoutes.js";
@@ -80,6 +81,7 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/public", publicVerificationRoutes);
 app.use("/api/organizations", organizationRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/reporting-tags", reportingTagsRoutes);

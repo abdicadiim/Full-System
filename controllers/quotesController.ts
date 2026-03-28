@@ -37,23 +37,13 @@ const pickSmtpSender = async (organizationId: any) => {
   const primary: any = await SenderEmail.findOne({
     organizationId,
     isPrimary: true,
+    isVerified: true,
     smtpHost: { $ne: "" },
     smtpUser: { $ne: "" },
     smtpPassword: { $ne: "" },
     smtpPort: { $gt: 0 },
   }).lean();
   if (primary) return primary;
-
-  const fallback: any = await SenderEmail.findOne({
-    organizationId,
-    smtpHost: { $ne: "" },
-    smtpUser: { $ne: "" },
-    smtpPassword: { $ne: "" },
-    smtpPort: { $gt: 0 },
-  })
-    .sort({ isPrimary: -1, createdAt: -1 })
-    .lean();
-  if (fallback) return fallback;
 
   const host = String(process.env.SMTP_HOST || "").trim();
   const port = Number(process.env.SMTP_PORT || 0);
@@ -276,14 +266,14 @@ export const sendQuoteEmail: express.RequestHandler = async (req, res) => {
 
   const org: any = await Organization.findById(orgId).lean();
   const orgName = String(org?.name || "Organization");
-  const senderEmail = String(sender.email || sender.smtpUser || "").trim();
+  const senderEmail = String(sender.email || "").trim();
+  const senderName = String(sender.name || orgName || "Organization").trim() || orgName;
   const fromHeaderRaw = String(req.body?.from || "").trim();
-  const fromHeader =
-    fromHeaderRaw && fromHeaderRaw.includes("@")
+  const fromHeader = senderEmail
+    ? `${senderName} <${senderEmail}>`
+    : fromHeaderRaw && fromHeaderRaw.includes("@")
       ? fromHeaderRaw
-      : senderEmail
-        ? `${orgName} <${senderEmail}>`
-        : fromHeaderRaw;
+      : fromHeaderRaw;
 
   const subject = String(req.body?.subject || `Quote ${quote.quoteNumber || ""}`).trim();
   const htmlBody = String(req.body?.body || "").trim();
@@ -318,6 +308,7 @@ export const sendQuoteEmail: express.RequestHandler = async (req, res) => {
     },
     {
       from: fromHeader || senderEmail,
+      replyTo: senderEmail || undefined,
       to,
       subject,
       text: textBody,

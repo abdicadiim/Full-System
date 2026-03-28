@@ -13,6 +13,7 @@ const pickSmtpSender = async (organizationId: any) => {
   const primary: any = await SenderEmail.findOne({
     organizationId,
     isPrimary: true,
+    isVerified: true,
     smtpHost: { $ne: "" },
     smtpUser: { $ne: "" },
     smtpPassword: { $ne: "" },
@@ -22,6 +23,7 @@ const pickSmtpSender = async (organizationId: any) => {
 
   const fallback: any = await SenderEmail.findOne({
     organizationId,
+    isVerified: true,
     smtpHost: { $ne: "" },
     smtpUser: { $ne: "" },
     smtpPassword: { $ne: "" },
@@ -69,7 +71,12 @@ export const listUsersForSettings = async (req: express.Request, res: express.Re
   if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
   if (mongoose.connection.readyState !== 1) return res.status(500).json({ success: false, message: "DB not connected", data: null });
 
-  const rows = await User.find({ organizationId: orgId }).sort({ createdAt: -1 }).select({ name: 1, email: 1 }).lean();
+  const status = String(req.query?.status || "").toLowerCase();
+  const filter: any = { organizationId: orgId };
+  if (status === "active") filter.status = "Active";
+  if (status === "inactive") filter.status = { $in: ["Inactive", "Invited"] };
+
+  const rows = await User.find(filter).sort({ createdAt: -1 }).select({ name: 1, email: 1 }).lean();
   const data = rows.map((u: any) => ({ id: String(u._id), name: u.name || "", email: u.email || "" }));
   return res.json({ success: true, data });
 };
@@ -227,6 +234,7 @@ export const sendUserInvitation = async (req: express.Request, res: express.Resp
 
   const org: any = await Organization.findById(orgId).lean();
   const orgName = String(org?.name || "Organization");
+  const senderName = String(sender.name || orgName || "Organization").trim() || orgName;
 
   const sender: any = await pickSmtpSender(orgId);
   if (!sender) {
@@ -332,7 +340,8 @@ export const sendUserInvitation = async (req: express.Request, res: express.Resp
       pass: String(sender.smtpPassword || ""),
     },
     {
-      from: `${orgName} <${String(sender.smtpUser || "")}>`,
+      from: `${senderName} <${String(sender.email || sender.smtpUser || "")}>`,
+      replyTo: String(sender.email || sender.smtpUser || "") || undefined,
       to: String(user.email || ""),
       subject,
       text,
@@ -350,10 +359,10 @@ export const sendUserInvitation = async (req: express.Request, res: express.Resp
   return res.json({
     success: true,
     message: `Invitation email sent to ${String(user.email || "")}`,
-    data: {
+      data: {
       ok: true,
       to: String(user.email || ""),
-      from: `${orgName} <${String(sender.smtpUser || "")}>`,
+      from: `${senderName} <${String(sender.email || sender.smtpUser || "")}>`,
       senderId: String(sender._id || sender.id || ""),
       smtpHost: String(sender.smtpHost || ""),
       smtpPort: Number(sender.smtpPort || 0),

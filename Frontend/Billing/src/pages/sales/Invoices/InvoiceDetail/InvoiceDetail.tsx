@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { toast } from "react-toastify";
+import { senderEmailsAPI } from "../../../../services/api";
+import { resolveVerifiedPrimarySender } from "../../../../utils/emailSenderDisplay";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { getInvoiceById, getInvoices, updateInvoice, getPayments, getTaxes, getCreditNotesByInvoiceId, deletePayment, Tax, Invoice, AttachedFile, saveInvoice } from "../../salesModel";
 import { currenciesAPI, invoicesAPI, debitNotesAPI, creditNotesAPI, paymentsReceivedAPI, bankAccountsAPI, refundsAPI } from "../../../../services/api";
@@ -510,22 +512,11 @@ export default function InvoiceDetail() { // Start of component
   // Fetch owner email data
   const fetchOwnerEmail = async () => {
     try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) return;
-
-      const response = await fetch('/api/settings/organization/owner-email', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.data) {
-          setOwnerEmail(data.data);
-        }
-      }
+      const primarySenderRes = await senderEmailsAPI.getPrimary();
+      const fallbackName = String(organizationProfile?.name || "Team").trim() || "Team";
+      const fallbackEmail = String(organizationProfile?.email || "").trim();
+      const sender = resolveVerifiedPrimarySender(primarySenderRes, fallbackName, fallbackEmail);
+      setOwnerEmail(sender);
     } catch (error) {
       console.error('Error fetching owner email:', error);
     }
@@ -1694,7 +1685,7 @@ export default function InvoiceDetail() { // Start of component
         'mogadishu Nairobi 22223'
       }</p>
               <p>${organizationProfile?.address?.country || 'Somalia'}</p>
-              <p>${ownerEmail?.email || organizationProfile?.email || 'nasram172@gmail.com'}</p>
+              <p>${ownerEmail?.email || organizationProfile?.email || ""}</p>
             </div>
             <div class="invoice-info">
               <h2>INVOICE</h2>
@@ -4024,7 +4015,7 @@ export default function InvoiceDetail() { // Start of component
                         }
                       </p>
                       <p>{organizationProfile?.address?.country || 'Somalia'}</p>
-                      <p className="mt-1">{ownerEmail?.email || organizationProfile?.email || 'nasram172@gmail.com'}</p>
+                      <p className="mt-1">{ownerEmail?.email || organizationProfile?.email || ""}</p>
                     </div>
                   </div>
                 </div>
@@ -4474,7 +4465,7 @@ export default function InvoiceDetail() { // Start of component
                   </div>
                   <div className="flex-1">
                     <div className="text-sm text-gray-700 py-2">
-                      {ownerEmail?.name || "JIRDE HUSSEIN KHALIF"} &lt;{ownerEmail?.email || "jirdehusseinkhalif@gmail.com"}&gt;
+                      {ownerEmail?.name || organizationProfile?.name || "Team"} &lt;{ownerEmail?.email || organizationProfile?.email || ""}&gt;
                     </div>
                   </div>
                 </div>

@@ -169,76 +169,78 @@ export default function EmailNotificationsPage() {
 
   const preferences = [
     "Sender Email Preferences",
-    "Email Relay",
     "Email Insights"
   ];
 
   const emailCategories = [
     {
-      category: "GENERAL",
+      category: "General",
       emails: [
         "Customer Review Notification",
-        "Item Notification"
+        "Item Notification",
+        "Task Notification"
       ]
     },
     {
-      category: "SALES",
+      category: "Sales",
       emails: [
         "Customer Notification",
         "Customer Statement",
         "Quote Notification",
+        "Retainer Invoice Notification",
         "Invoice Notification",
-        "Recurring Invoice Notification",
+        "Sales Receipt Notification",
         "Credit Note Notification",
         "Customer Portal Invitation",
         "Customer Portal Link"
       ]
     },
     {
-      category: "PURCHASES",
+      category: "Purchases",
       emails: [
-        "Vendor Statement",
-        "Vendor Credit Notification",
-        "Vendor Portal Invitation",
         "Expense Notification",
-        "Recurring Expense",
-        "Recurring Expense Notification",
-        "Expense Refund Notification",
-        "Purchase Order Notification",
-        "Bill Notification",
-        "Recurring Bill Notification"
+        "Recurring Expense Notification"
       ]
     },
     {
-      category: "TIME TRACKING",
-      emails: ["Project Notification", "Timesheet Notification"]
+      category: "Time Tracking",
+      emails: ["Project Notification", "Timesheet Notification", "Timesheet Customer Approval"]
     },
     {
-      category: "ACCOUNTING",
-      emails: [
-        "Chart of Accounts Notification",
-        "Budget Notification",
-        "Transfer Fund Notification",
-        "Deposit Notification",
-        "Owner Drawings Notification",
-        "Owner Contribution Notification",
-        "Other Income Notification",
-        "Interest Income Notification"
-      ]
-    },
-    {
-      category: "CUSTOMER PAYMENTS",
+      category: "Customer Payments",
       emails: [
         "Payment Thank-you",
+        "Retainer Payment Thank you",
         "Payment Initiated",
         "Payment Refund",
-        "Card Payment Notification",
-        "Refund/Credit Notification"
+        "Offline Payment Failure"
       ]
     },
     {
-      category: "VENDOR PAYMENTS",
-      emails: ["Payment Made Notification"]
+      category: "Subscriptions",
+      emails: [
+        "New Subscription",
+        "Update Subscription",
+        "One-time Addon Purchase",
+        "Subscription Renewal",
+        "Reactivate Subscription",
+        "Subscription Reactivation Scheduled",
+        "Cancel Subscription",
+        "Change Subscription Status",
+        "Subscription Renewal Ahead"
+      ]
+    },
+    {
+      category: "Expiry & Cancellation",
+      emails: [
+        "Trial About to Expire",
+        "Subscription About to Cancel",
+        "Subscription about to Expire",
+        "Card about to Expire",
+        "Card Expired",
+        "Subscription Expired",
+        "Trial Expired"
+      ]
     }
   ];
 
@@ -306,7 +308,7 @@ export default function EmailNotificationsPage() {
   const toggleRelayServer = async (server: RelayServer, enabled: boolean) => {
     try {
       setErrorMessage(null);
-      const response = await emailRelayAPI.toggle(server.id, enabled);
+      const response = await emailRelayAPI.toggle(server.id);
       if (!response?.success) {
         setErrorMessage(response?.message || "Failed to update relay server.");
         return;
@@ -380,7 +382,7 @@ export default function EmailNotificationsPage() {
   };
 
   return (
-    <div className="p-6 max-w-7xl">
+    <div className="w-full">
       {/* Success Notification */}
       {showSuccessNotification && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[10001] bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-fade-in">
@@ -394,12 +396,14 @@ export default function EmailNotificationsPage() {
         </div>
       )}
 
-      <h1 className="text-2xl font-semibold text-gray-900 mb-6">Emails</h1>
-
-      <div className="flex gap-6">
+      <div className="flex items-stretch gap-4">
         {/* Left Sidebar - Email List */}
-        <div className="w-80 bg-white rounded-lg border border-gray-200 p-4 max-h-[600px] overflow-y-auto">
-          <div className="space-y-4">
+        <div className="w-80 bg-white rounded-lg border border-gray-200 h-[calc(100vh-2rem)] flex flex-col">
+          <div className="shrink-0 border-b border-gray-200 px-4 py-3">
+            <h2 className="text-xl font-semibold text-gray-900">Emails</h2>
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 pt-4 pb-0">
+            <div className="space-y-4">
             {/* PREFERENCES Section */}
             <div>
               <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">PREFERENCES</h3>
@@ -453,60 +457,24 @@ export default function EmailNotificationsPage() {
                 ))}
               </div>
             </div>
+            </div>
           </div>
         </div>
 
         {/* Right Content - Email Details */}
-        <div className="flex-1 bg-white rounded-lg border border-gray-200 p-6 max-h-[600px] overflow-y-auto">
+        <div className="flex-1 rounded-lg p-6 h-[calc(100vh-2rem)] overflow-y-auto">
           {selectedPreference === "Sender Email Preferences" ? (
             <div>
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-lg font-semibold text-gray-900">Sender Email Preferences</h2>
                 <div className="flex items-center gap-3">
-                  <button className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
-                    Page Tips
-                  </button>
                   <button
                     onClick={() => setShowAddContactModal(true)}
-                    className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 flex items-center gap-2"
+                    className="px-4 py-2 text-sm font-medium text-white bg-[#156372] rounded-lg hover:bg-[#0f4e5a] flex items-center gap-2"
                   >
                     <Plus size={16} />
                     New Sender
                   </button>
-                </div>
-              </div>
-
-              {/* Domain Classification */}
-              <div className="mb-6">
-                <div className="flex items-center gap-2 mb-2">
-                  <h3 className="text-sm font-semibold text-gray-900">Domain Classification</h3>
-                  <Info size={14} className="text-gray-400" />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <div className="text-xs font-semibold text-red-700 uppercase mb-2">Unauthenticated Domains</div>
-                    {unauthenticatedDomains.length === 0 ? (
-                      <p className="text-sm text-gray-600">No unauthenticated domains.</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {unauthenticatedDomains.map((domain) => (
-                          <div key={domain} className="text-sm text-gray-800">{domain}</div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                    <div className="text-xs font-semibold text-green-700 uppercase mb-2">Authenticated Domains</div>
-                    {authenticatedDomains.length === 0 ? (
-                      <p className="text-sm text-gray-600">No authenticated domains yet.</p>
-                    ) : (
-                      <div className="space-y-1">
-                        {authenticatedDomains.map((domain) => (
-                          <div key={domain} className="text-sm text-gray-800">{domain}</div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
                 </div>
               </div>
 
@@ -598,6 +566,15 @@ export default function EmailNotificationsPage() {
                                 PRIMARY
                               </span>
                             )}
+                            <span
+                              className={`px-2 py-0.5 text-xs font-medium rounded ${
+                                sender.isVerified
+                                  ? "text-green-700 bg-green-50"
+                                  : "text-amber-700 bg-amber-50"
+                              }`}
+                            >
+                              {sender.isVerified ? "Verified" : "Unverified"}
+                            </span>
                           </div>
                         </td>
                         <td className="px-4 py-3">
@@ -607,13 +584,16 @@ export default function EmailNotificationsPage() {
                           <div className="flex items-center justify-end gap-2">
                             {sender.id === "user-primary-email" ? null : (
                               <>
-                            {!sender.isPrimary && (
+                            {!sender.isPrimary && sender.isVerified && (
                               <button
                                 onClick={() => markPrimaryContact(sender)}
                                 className="text-xs text-blue-700 hover:underline"
                               >
                                 Mark as Primary
                               </button>
+                            )}
+                            {!sender.isPrimary && !sender.isVerified && (
+                              <span className="text-xs text-gray-500">Verify first</span>
                             )}
                             <button
                               onClick={() => setEditingSender(sender)}

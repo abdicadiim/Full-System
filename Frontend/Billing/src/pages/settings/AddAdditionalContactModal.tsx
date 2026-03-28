@@ -94,11 +94,10 @@ export default function AddAdditionalContactModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10000]"
-      onClick={onClose}
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center pt-10 z-[10000] overflow-y-auto"
     >
       <div
-        className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4"
+        className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 max-h-[calc(100vh-3rem)] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
@@ -106,8 +105,9 @@ export default function AddAdditionalContactModal({
             {editData ? "Edit Contact" : "Add Additional Contact"}
           </h3>
           <button
-            onClick={onClose}
-            className="p-1 hover:bg-gray-100 rounded transition"
+            type="button"
+            className="p-1 rounded transition cursor-default opacity-70"
+            aria-disabled="true"
           >
             <X size={20} className="text-red-500" />
           </button>
@@ -116,7 +116,7 @@ export default function AddAdditionalContactModal({
         <div className="p-6 space-y-4">
           {/* Name Field */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-red-600 mb-2">
               Name<span className="text-red-500">*</span>
             </label>
             <input
@@ -130,7 +130,7 @@ export default function AddAdditionalContactModal({
 
           {/* Email Field */}
           <div className="relative">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-red-600 mb-2">
               Email<span className="text-red-500">*</span>
             </label>
             <div className="relative">
@@ -248,7 +248,7 @@ export default function AddAdditionalContactModal({
           </button>
           <button
             onClick={handleSave}
-            className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700"
+            className="px-4 py-2 text-sm font-medium text-white bg-[#156372] rounded-lg hover:bg-[#0f4e5a]"
           >
             Save
           </button>

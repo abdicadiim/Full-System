@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { getSalesReceiptById, getSalesReceipts, deleteSalesReceipt, updateSalesReceipt, saveSalesReceipt, SalesReceipt } from "../../salesModel";
-import { currenciesAPI, salesReceiptsAPI } from "../../../../services/api";
+import { currenciesAPI, salesReceiptsAPI, senderEmailsAPI } from "../../../../services/api";
+import { resolveVerifiedPrimarySender } from "../../../../utils/emailSenderDisplay";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import {
@@ -244,13 +245,13 @@ export default function SalesReceiptDetail() {
 
   // Default seller info (should come from settings/profile)
   const sellerInfo = receipt?.organizationProfile ? {
-    name: receipt.organizationProfile.name || "taban",
+    name: receipt.organizationProfile.name || "Team",
     location: receipt.organizationProfile.country || "Somalia",
-    email: receipt.organizationProfile.email || "maxamed9885m@gmail.com"
+    email: receipt.organizationProfile.email || ""
   } : {
-    name: "taban",
+    name: "Team",
     location: "Somalia",
-    email: "maxamed9885m@gmail.com"
+    email: ""
   };
 
   // Journal entries (should come from accounting system)
@@ -325,11 +326,23 @@ ${sellerInfo.name}`
     }
   }, [receipt]);
 
-  const handleSendEmail = () => {
+  const handleSendEmail = async () => {
     // Robustly find customer email
     let customerEmail = receipt?.customerEmail || "";
     if (!customerEmail && typeof receipt?.customer === 'object' && receipt?.customer) {
       customerEmail = receipt.customer.email || receipt.customer.contactEmail || "";
+    }
+
+    let senderName = sellerInfo.name || "System";
+    let senderEmail = sellerInfo.email || "";
+
+    try {
+      const primarySenderRes = await senderEmailsAPI.getPrimary();
+      const resolvedSender = resolveVerifiedPrimarySender(primarySenderRes, senderName, senderEmail);
+      senderName = resolvedSender.name || senderName;
+      senderEmail = resolvedSender.email || senderEmail;
+    } catch (error) {
+      console.error("Failed to resolve primary sender for sales receipt email:", error);
     }
 
     navigate(`/sales/sales-receipts/${id}/send-email`, {
@@ -337,7 +350,8 @@ ${sellerInfo.name}`
         receiptData: {
           ...receipt,
           customerEmail: customerEmail,
-          senderEmail: sellerInfo.email || "maxamed9885m@gmail.com", // Pass system/sender email
+          senderName,
+          senderEmail,
           receiptNumber: receipt?.receiptNumber || receipt?.id,
           receiptDate: formatDate(receipt?.date || receipt?.receiptDate),
           total: formatCurrency(receipt?.total || receipt?.amount || 0, receipt?.currency),

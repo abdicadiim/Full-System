@@ -12,6 +12,7 @@ export type SearchableDropdownProps = {
     options: Array<DropdownOption>;
     onChange: (value: string) => void;
     placeholder: string;
+    disabled?: boolean;
     accentColor?: string;
     addNewLabel?: string;
     onAddNew?: () => void;
@@ -28,6 +29,7 @@ const SearchableDropdown = ({
     options,
     onChange,
     placeholder,
+    disabled = false,
     accentColor = '#3b82f6',
     addNewLabel,
     onAddNew,
@@ -79,6 +81,7 @@ const SearchableDropdown = ({
                 <button
                     type="button"
                     onClick={() => {
+                        if (disabled) return;
                         const nextOpen = !open;
                         setOpen(nextOpen);
                         onOpenChange?.(nextOpen);
@@ -86,7 +89,8 @@ const SearchableDropdown = ({
                             window.dispatchEvent(new CustomEvent("searchableDropdownOpened", { detail: { id: instanceId } }));
                         }
                     }}
-                    className={`flex h-[38px] w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 text-left text-[14px] outline-none transition-all hover:border-gray-400 focus:border-blue-400 ${inputClassName}`}
+                    disabled={disabled}
+                    className={`flex h-[38px] w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 text-left text-[14px] outline-none transition-all hover:border-gray-400 focus:border-blue-400 disabled:cursor-not-allowed disabled:opacity-60 ${inputClassName}`}
                     style={open ? { borderColor: accentColor, boxShadow: `0 0 0 1px ${accentColor}` } : {}}
                 >
                     <span className={`truncate mr-6 ${selected ? "text-gray-900" : "text-gray-500"}`}>
@@ -126,7 +130,7 @@ const SearchableDropdown = ({
                         />
                     </div>
 
-                    <div className="max-h-56 overflow-y-auto space-y-0.5 custom-scrollbar">
+                    <div className="max-h-[112px] overflow-y-auto space-y-0.5 custom-scrollbar">
                         {filtered.length === 0 ? (
                             <div className="px-3 py-2 text-[13px] text-gray-500 italic">No options found</div>
                         ) : (
@@ -142,7 +146,7 @@ const SearchableDropdown = ({
                                              setSearchTerm("");
                                              onOpenChange?.(false);
                                          }}
-                                        className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-[13px] transition-colors hover:bg-gray-50 ${isSelected ? 'font-medium text-gray-900' : 'text-gray-700'}`}
+                                        className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-[13px] transition-colors hover:bg-blue-50 ${isSelected ? 'font-medium text-gray-900' : 'text-gray-700'}`}
                                     >
                                         <div className="flex-1 flex items-center justify-between min-w-0">
                                             <span className="truncate">{opt.label}</span>

@@ -33,10 +33,11 @@ import {
 } from "lucide-react";
 import { getCustomers, savePayment, getPaymentById, updatePayment, getInvoices, getInvoiceById, getNextPaymentNumber, updateInvoice, Invoice } from "../../../salesModel";
 import { getAllDocuments } from "../../../../utils/documentStorage";
-import { customersAPI, bankAccountsAPI, paymentsReceivedAPI, chartOfAccountsAPI, reportingTagsAPI } from "../../../../services/api";
+import { customersAPI, bankAccountsAPI, paymentsReceivedAPI, chartOfAccountsAPI, reportingTagsAPI, senderEmailsAPI } from "../../../../services/api";
 import ZohoSelect from "../../../../components/ZohoSelect";
 import PaymentModeDropdown from "../../../../components/PaymentModeDropdown";
 import { toast } from "react-toastify";
+import { formatSenderDisplay, resolveVerifiedPrimarySender } from "../../../../utils/emailSenderDisplay";
 
 const paymentModeOptions = ["Cash", "Check", "Credit Card", "Debit Card", "Bank Transfer", "PayPal", "Other"];
 const LS_LOCATIONS_CACHE_KEY = "taban_locations_cache";
@@ -1368,10 +1369,21 @@ export default function RecordPayment() {
       return;
     }
 
+    let primarySenderRes: any = null;
+    try {
+      primarySenderRes = await senderEmailsAPI.getPrimary();
+    } catch (error) {
+      console.warn("Could not load primary sender for payment receipt email.", error);
+    }
+
+    const sender = resolveVerifiedPrimarySender(primarySenderRes, "System", "billing@example.com");
+    const fromDisplay = formatSenderDisplay(sender.name, sender.email, "System");
+
     const payload = {
+      from: fromDisplay,
       to,
       subject: `Payment Receipt ${formData.paymentNumber || ""}`.trim(),
-      body: `Dear ${formData.customerName || "Customer"},\n\nThank you for your payment. Please find your payment receipt details attached.\n\nRegards,`,
+      body: `Dear ${formData.customerName || "Customer"},\n\nThank you for your payment. Please find your payment receipt details attached.\n\nRegards,\n${sender.name}`,
       attachPDF: true,
       paymentId,
     };

@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { toast } from "react-toastify";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
-import { customersAPI, vendorsAPI, currenciesAPI, invoicesAPI, paymentsReceivedAPI, creditNotesAPI, quotesAPI, recurringInvoicesAPI, expensesAPI, recurringExpensesAPI, projectsAPI, billsAPI, salesReceiptsAPI, journalEntriesAPI, paymentsMadeAPI, purchaseOrdersAPI, vendorCreditsAPI, documentsAPI, reportingTagsAPI } from "../../../services/api";
+import { customersAPI, vendorsAPI, currenciesAPI, invoicesAPI, paymentsReceivedAPI, creditNotesAPI, quotesAPI, recurringInvoicesAPI, expensesAPI, recurringExpensesAPI, projectsAPI, billsAPI, salesReceiptsAPI, journalEntriesAPI, paymentsMadeAPI, purchaseOrdersAPI, vendorCreditsAPI, documentsAPI, reportingTagsAPI, senderEmailsAPI } from "../../../services/api";
 import SearchableDropdown from "../../../components/ui/SearchableDropdown";
 import {
     X, Edit, Paperclip, ChevronDown, Plus, MoreVertical,
@@ -14,6 +14,7 @@ import {
     Filter, ArrowUpDown, Search, ChevronLeft, Link2, FileText, Monitor, Check, Upload, Trash2, Loader2, Download, RefreshCw, AlertTriangle, Smartphone
 } from "lucide-react";
 import { Customer, Invoice, CreditNote, AttachedFile, Quote, RecurringInvoice, Expense, RecurringExpense, Project, Bill, SalesReceipt } from "../../salesModel";
+import { resolveVerifiedPrimarySender } from "../../../utils/emailSenderDisplay";
 
 interface ExtendedCustomer extends Customer {
     billingAttention: string;
@@ -915,22 +916,10 @@ export default function CustomerDetail() {
     // Fetch owner email data
     const fetchOwnerEmail = async () => {
         try {
-            const token = localStorage.getItem('auth_token');
-            if (!token) return;
-
-            const response = await fetch('/api/settings/organization/owner-email', {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                if (data.success && data.data) {
-                    setOwnerEmail(data.data);
-                }
-            }
+            const primarySenderRes = await senderEmailsAPI.getPrimary();
+            const fallbackName = String(organizationProfile?.name || "Taban Enterprise").trim() || "Taban Enterprise";
+            const fallbackEmail = String(organizationProfile?.email || "").trim();
+            setOwnerEmail(resolveVerifiedPrimarySender(primarySenderRes, fallbackName, fallbackEmail));
         } catch (error) {
         }
     };

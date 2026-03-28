@@ -1,27 +1,18 @@
-export type EmailTemplateKey =
-  | "invoice_notification"
-  | "quote_notification"
-  | "customer_statement"
-  | "vendor_statement"
-  | "purchase_order_notification"
-  | "payment_made_notification"
-  | "bill_notification"
-  | "customer_notification";
+export type EmailTemplateKey = string;
 
-const TEMPLATE_KEY_BY_LABEL: Record<string, EmailTemplateKey> = {
-  "Invoice Notification": "invoice_notification",
-  "Quote Notification": "quote_notification",
-  "Customer Statement": "customer_statement",
-  "Vendor Statement": "vendor_statement",
-  "Purchase Order Notification": "purchase_order_notification",
-  "Payment Made Notification": "payment_made_notification",
-  "Bill Notification": "bill_notification",
-  "Customer Notification": "customer_notification",
-};
+const DEFAULT_TEMPLATE_KEY: EmailTemplateKey = "customer_notification";
+
+const toTemplateKey = (label: string): EmailTemplateKey =>
+  label
+    .trim()
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 
 export const getTemplateKeyFromLabel = (label?: string | null): EmailTemplateKey => {
-  if (!label) return "customer_notification";
-  return TEMPLATE_KEY_BY_LABEL[label] || "customer_notification";
+  if (!label) return DEFAULT_TEMPLATE_KEY;
+  return toTemplateKey(label);
 };
 
 export const applyEmailTemplate = (

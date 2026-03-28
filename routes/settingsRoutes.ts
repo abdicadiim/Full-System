@@ -21,6 +21,7 @@ import {
   listEmailRelayServers,
   listEmailTemplates,
   listSenderEmails,
+  resendSenderVerificationEmail,
   toggleEmailRelayServer,
   updateEmailNotificationPreferences,
   updateEmailRelayServer,
@@ -55,6 +56,7 @@ settingsRoutes.get("/sender-emails/:id", requireAuth, getSenderEmailById);
 settingsRoutes.post("/sender-emails", requireAuth, requireOrgAdmin, createSenderEmail);
 settingsRoutes.put("/sender-emails/:id", requireAuth, requireOrgAdmin, updateSenderEmail);
 settingsRoutes.delete("/sender-emails/:id", requireAuth, requireOrgAdmin, deleteSenderEmail);
+settingsRoutes.post("/sender-emails/:id/resend-verification", requireAuth, requireOrgAdmin, resendSenderVerificationEmail);
 
 // Email notification preferences
 settingsRoutes.get("/email-notification-preferences", requireAuth, getEmailNotificationPreferences);

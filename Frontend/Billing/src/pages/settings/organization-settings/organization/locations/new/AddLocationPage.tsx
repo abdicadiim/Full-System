@@ -21,6 +21,7 @@ import { getToken, API_BASE_URL } from "../../../../../../services/auth";
 import { locationsAPI, settingsAPI, transactionNumberSeriesAPI } from "../../../../../../services/api";
 import { toast } from "react-toastify";
 import { COUNTRIES } from "../../../../../../constants/countries";
+import SearchableDropdown from "../../../../../../components/ui/SearchableDropdown";
 import {
   readLocations,
   writeLocations,
@@ -416,12 +417,24 @@ export default function AddLocationPage() {
     navigate('/settings/locations');
   };
 
-  const filteredUsers = allUsers.filter(user => 
+  const filteredUsers = allUsers.filter(user =>
     (user.name || `${user.firstName} ${user.lastName}` || '').toLowerCase().includes(userSearch.toLowerCase()) ||
     (user.email || '').toLowerCase().includes(userSearch.toLowerCase())
   );
   const selectedUserIds = new Set(formData.locationAccess.map(a => String(a.userId)));
   const availableUsers = filteredUsers.filter(u => !selectedUserIds.has(String(u._id || u.id)));
+  const primaryContactOptions = allUsers
+    .map((u: any) => {
+      const value = String(u._id || u.id || "");
+      const name = u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim();
+      return {
+        value,
+        label: u.email ? `${name || value} (${u.email})` : (name || value),
+      };
+    })
+    .filter((opt: any) => opt.value);
+  const transactionSeriesOptions = txSeriesNames.map((name) => ({ value: name, label: name }));
+  const countryOptions = COUNTRIES.map((country) => ({ value: country, label: country }));
   const parentOptions = readLocations().filter((loc: any) => loc?.name);
   const filteredParentOptions = parentOptions.filter((loc: any) =>
     String(loc.name || "")
@@ -520,7 +533,7 @@ export default function AddLocationPage() {
                           <button
                             type="button"
                             onClick={() => handleLogoOptionSelect("Same as Organization Logo")}
-                            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between"
+                            className="w-full px-4 py-2 text-left text-sm hover:bg-blue-50 flex items-center justify-between"
                           >
                             <span>Same as Organization Logo</span>
                             {formData.logo === "Same as Organization Logo" && <Check size={14} className="text-blue-600" />}
@@ -531,7 +544,7 @@ export default function AddLocationPage() {
                                 handleLogoOptionSelect("Upload a New Logo");
                                 handleLogoClick();
                             }}
-                            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between"
+                            className="w-full px-4 py-2 text-left text-sm hover:bg-blue-50 flex items-center justify-between"
                           >
                             <span>Upload a New Logo</span>
                             {formData.logo !== "Same as Organization Logo" && formData.logo !== "" && <Check size={14} className="text-blue-600" />}
@@ -653,7 +666,7 @@ export default function AddLocationPage() {
                             {parentOptions.length === 0 && (
                               <button 
                                 type="button" 
-                                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between"
+                                className="w-full px-4 py-2 text-left text-sm hover:bg-blue-50 flex items-center justify-between"
                                 onClick={() => { setFormData(prev => ({ ...prev, parentLocation: "None" })); setIsParentDropdownOpen(false); }}
                               >
                                   <span>None</span>
@@ -664,7 +677,7 @@ export default function AddLocationPage() {
                               <button
                                 key={String(loc._id || loc.id || loc.name)}
                                 type="button"
-                                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between"
+                                className="w-full px-4 py-2 text-left text-sm hover:bg-blue-50 flex items-center justify-between"
                                 onClick={() => {
                                   setFormData(prev => ({ ...prev, parentLocation: loc.name }));
                                   setIsParentDropdownOpen(false);
@@ -706,19 +719,18 @@ export default function AddLocationPage() {
                     </div>
                 </div>
                 <div className="grid grid-cols-3 gap-4 items-center">
-                    <select
-                      name="address.country"
-                      value={formData.address.country}
-                      onChange={handleChange}
-                      disabled={formData.type === "Business"}
-                      className={`col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm ${formData.type === "Business" ? "bg-gray-50 text-gray-500 cursor-not-allowed" : "bg-transparent"}`}
-                    >
-                        {COUNTRIES.map((country) => (
-                          <option key={country} value={country}>
-                            {country}
-                          </option>
-                        ))}
-                    </select>
+                    <div className="col-span-2">
+                      <SearchableDropdown
+                        value={formData.address.country}
+                        options={countryOptions}
+                        onChange={(value) => setFormData((prev) => ({
+                          ...prev,
+                          address: { ...prev.address, country: value },
+                        }))}
+                        placeholder="Select Country"
+                        disabled={formData.type === "Business"}
+                      />
+                    </div>
                 </div>
                 <div className="grid grid-cols-3 gap-4 items-center">
                     <div className="col-span-2 grid grid-cols-2 gap-2">
@@ -752,17 +764,14 @@ export default function AddLocationPage() {
               <label className={`text-sm font-medium ${formData.type === "Business" ? "text-red-500" : "text-gray-700"}`}>
                 Primary Contact{formData.type === "Business" && "*"}
               </label>
-              <select
-                name="primaryContact"
-                value={formData.primaryContact}
-                onChange={handleChange}
-                  className="col-span-2 px-3 py-1.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm bg-transparent"
-              >
-                <option value="">Select Primary Contact</option>
-                {allUsers.map(u => (
-                  <option key={u._id || u.id} value={u._id || u.id}>{u.name || `${u.firstName} ${u.lastName}`} ({u.email})</option>
-                ))}
-              </select>
+              <div className="col-span-2">
+                <SearchableDropdown
+                  value={formData.primaryContact}
+                  options={primaryContactOptions}
+                  onChange={(value) => setFormData(prev => ({ ...prev, primaryContact: value }))}
+                  placeholder="Select Primary Contact"
+                />
+              </div>
             </div>
           </div>
 
@@ -771,35 +780,31 @@ export default function AddLocationPage() {
                 <div className="px-6 py-4 border-b border-gray-200">
                     <div className="grid grid-cols-3 gap-4 items-center">
                         <label className="text-sm font-medium text-red-500">Transaction Number Series*</label>
-                        <select
-                          name="transactionNumberSeriesId"
-                          value={formData.transactionNumberSeriesId}
-                          onChange={handleChange}
-                          disabled={loadingTxSeries}
-                          className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm bg-transparent"
-                        >
-                            <option value="">{loadingTxSeries ? "Loading..." : "Select Transaction Series"}</option>
-                            {txSeriesNames.map((name) => (
-                              <option key={name} value={name}>{name}</option>
-                            ))}
-                        </select>
+                        <div className="col-span-2">
+                          <SearchableDropdown
+                            value={formData.transactionNumberSeriesId}
+                            options={transactionSeriesOptions}
+                            onChange={(value) => setFormData(prev => ({ ...prev, transactionNumberSeriesId: value }))}
+                            placeholder={loadingTxSeries ? "Loading..." : "Select Transaction Series"}
+                            disabled={loadingTxSeries}
+                            openDirection="up"
+                          />
+                        </div>
                     </div>
                 </div>
                 <div className="px-6 py-4 border-b border-gray-200">
                     <div className="grid grid-cols-3 gap-4 items-center">
                         <label className="text-sm font-medium text-red-500">Default Transaction Number Series*</label>
-                        <select
-                          name="defaultTransactionNumberSeriesId"
-                          value={formData.defaultTransactionNumberSeriesId}
-                          onChange={handleChange}
-                          disabled={loadingTxSeries}
-                          className="col-span-2 px-3 py-1.5 border border-gray-300 rounded text-sm bg-transparent"
-                        >
-                            <option value="">{loadingTxSeries ? "Loading..." : "Select Default Series"}</option>
-                            {txSeriesNames.map((name) => (
-                              <option key={name} value={name}>{name}</option>
-                            ))}
-                        </select>
+                        <div className="col-span-2">
+                          <SearchableDropdown
+                            value={formData.defaultTransactionNumberSeriesId}
+                            options={transactionSeriesOptions}
+                            onChange={(value) => setFormData(prev => ({ ...prev, defaultTransactionNumberSeriesId: value }))}
+                            placeholder={loadingTxSeries ? "Loading..." : "Select Default Series"}
+                            disabled={loadingTxSeries}
+                            openDirection="up"
+                          />
+                        </div>
                     </div>
                 </div>
             </>
@@ -909,7 +914,7 @@ export default function AddLocationPage() {
                                           <button 
                                             key={u._id || u.id} 
                                             type="button" 
-                                            className="w-full px-4 py-2 text-left text-xs hover:bg-gray-50 flex items-center gap-3"
+                                            className="w-full px-4 py-2 text-left text-xs hover:bg-blue-50 flex items-center gap-3"
                                             onClick={() => handleAddUser(u)}
                                           >
                                             <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden border border-gray-200">

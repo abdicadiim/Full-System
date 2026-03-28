@@ -1323,11 +1323,13 @@ export const quotesAPI = {
   delete: (id: string) => quotesBase.delete(id),
   getNextNumber: (prefix?: string) => request({ path: "/quotes/next-number", params: { prefix } }),
   bulkDelete: (ids: string[]) => request({ method: "POST", path: "/quotes/bulk-delete", data: { ids } }),
-  sendEmail: async (id: string, data: any) => ({
-    success: true,
-    data: { id, queued: true, type: "quote", ...data },
-    message: "Email queued locally",
-  }),
+  sendEmail: async (id: string, data: any) => {
+    const res: any = await request({ method: "POST", path: `/quotes/${encodeURIComponent(id)}/send-email`, data });
+    if (!res?.success) {
+      throw new Error(res?.message || "Failed to send email");
+    }
+    return res;
+  },
 };
 
 const recurringInvoicesBase = resource("/recurring-invoices");

@@ -3,7 +3,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Bold, Italic, Underline, Image as ImageIcon, Link as LinkIcon, Paperclip, HelpCircle, X } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { getCustomers, getInvoiceById, updateInvoice } from "../../salesModel";
-import { invoicesAPI } from "../../../../services/api";
+import { invoicesAPI, senderEmailsAPI } from "../../../../services/api";
+import { resolveVerifiedPrimarySender } from "../../../../utils/emailSenderDisplay";
 
 const formatDate = (value: any) => {
   if (!value) return "";
@@ -141,6 +142,44 @@ Amount : ${currency}${amount.toFixed(2)}
       body: defaultBody,
     }));
   }, [invoice, defaultBody]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSender = async () => {
+      const fallbackName = String(invoice?.organizationName || "Taban Enterprise").trim() || "Taban Enterprise";
+      const fallbackEmail = String(invoice?.organizationEmail || "billing@example.com").trim() || "billing@example.com";
+
+      try {
+        const primarySenderRes = await senderEmailsAPI.getPrimary();
+        const sender = resolveVerifiedPrimarySender(primarySenderRes, fallbackName, fallbackEmail);
+        if (!cancelled) {
+          setEmailData((prev) => ({
+            ...prev,
+            fromName: sender.name,
+            fromEmail: sender.email || fallbackEmail,
+          }));
+        }
+      } catch (error) {
+        console.error("Failed to load verified sender for retainer email:", error);
+        if (!cancelled) {
+          setEmailData((prev) => ({
+            ...prev,
+            fromName: fallbackName,
+            fromEmail: fallbackEmail,
+          }));
+        }
+      }
+    };
+
+    if (invoice) {
+      void loadSender();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [invoice]);
 
   useEffect(() => {
     if (!bodyEditorRef.current) return;

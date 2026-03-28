@@ -15,6 +15,7 @@ export type MailMessage = {
   subject: string;
   text: string;
   html?: string;
+  replyTo?: string;
   attachments?: Array<{
     cid: string;
     filename: string;
@@ -203,6 +204,7 @@ export const sendSmtpMail = async (cfg: SmtpConfig, msg: MailMessage) => {
 
     const from = String(msg.from || "").trim();
     const to = String(msg.to || "").trim();
+    const replyTo = String(msg.replyTo || "").trim();
     if (!from || !to) return { ok: false as const, error: "Missing from/to" };
 
     const envelopeFrom = parseEnvelopeEmail(from);
@@ -275,6 +277,7 @@ export const sendSmtpMail = async (cfg: SmtpConfig, msg: MailMessage) => {
     const body =
       `Subject: ${msg.subject}\r\n` +
       `From: ${from}\r\n` +
+      (replyTo ? `Reply-To: ${replyTo}\r\n` : "") +
       `To: ${to}\r\n` +
       renderBody();
 

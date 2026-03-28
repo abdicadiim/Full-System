@@ -2,8 +2,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { getSalesReceiptById } from "../../salesModel";
-import { salesReceiptsAPI } from "../../../services/api";
+import { salesReceiptsAPI, senderEmailsAPI } from "../../../services/api";
 import { X, Bold, Italic, Underline, Strikethrough, Link as LinkIcon, Image as ImageIcon, Paperclip, Loader2 } from "lucide-react";
+import { formatSenderDisplay, resolveVerifiedPrimarySender } from "../../../utils/emailSenderDisplay";
 
 const formatDisplayDate = (value: any) => {
   if (!value) return "";
@@ -67,6 +68,8 @@ export default function SendSalesReceiptEmail() {
 
   const stateReceiptData = location.state?.receiptData || null;
   const [receiptData, setReceiptData] = useState(stateReceiptData || {});
+  const [senderName, setSenderName] = useState(String(stateReceiptData?.senderName || stateReceiptData?.organizationName || "System").trim() || "System");
+  const [senderEmail, setSenderEmail] = useState(String(stateReceiptData?.senderEmail || "").trim());
   const [showCc, setShowCc] = useState(false);
   const [showBcc, setShowBcc] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -97,10 +100,42 @@ export default function SendSalesReceiptEmail() {
     };
   }, [id, stateReceiptData]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSender = async () => {
+      const fallbackName = String(receiptData?.senderName || receiptData?.organizationName || "System").trim() || "System";
+      const fallbackEmail = String(receiptData?.senderEmail || "").trim();
+
+      try {
+        const primarySenderRes = await senderEmailsAPI.getPrimary();
+        const sender = resolveVerifiedPrimarySender(primarySenderRes, fallbackName, fallbackEmail);
+        if (!cancelled) {
+          setSenderName(sender.name);
+          setSenderEmail(sender.email || fallbackEmail);
+        }
+      } catch (error) {
+        console.error("Failed to load verified sender for sales receipt email:", error);
+        if (!cancelled) {
+          setSenderName(fallbackName);
+          setSenderEmail(fallbackEmail);
+        }
+      }
+    };
+
+    if (receiptData && Object.keys(receiptData).length > 0) {
+      void loadSender();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [receiptData]);
+
   const defaultEmailBody = useMemo(() => buildSalesReceiptEmailTemplate(receiptData), [receiptData]);
 
   const [emailData, setEmailData] = useState({
-    from: "System <maxamuudm189@gmail.com>",
+    from: formatSenderDisplay(senderName, senderEmail, "System"),
     to: "",
     cc: "",
     bcc: "",
@@ -110,16 +145,15 @@ export default function SendSalesReceiptEmail() {
   });
 
   useEffect(() => {
-    const senderEmail = receiptData?.senderEmail || "maxamuudm189@gmail.com";
     const customerEmail = receiptData?.customerEmail || receiptData?.customer?.email || "";
     setEmailData((prev) => ({
       ...prev,
-      from: `System <${senderEmail}>`,
+      from: formatSenderDisplay(senderName, senderEmail, receiptData?.senderName || receiptData?.organizationName || "System"),
       to: prev.to || customerEmail,
       subject: prev.subject || "Receipt for your recent purchase from Taban Enterprise",
       body: defaultEmailBody
     }));
-  }, [receiptData, defaultEmailBody]);
+  }, [receiptData, defaultEmailBody, senderName, senderEmail]);
 
   const splitEmailList = (value: string) =>
     String(value || "")

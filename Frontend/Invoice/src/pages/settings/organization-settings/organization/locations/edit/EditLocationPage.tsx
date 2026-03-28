@@ -5,6 +5,7 @@ import { Upload, X, ChevronDown, ChevronUp, Search, Check, Plus } from "lucide-r
 import { toast } from "react-toastify";
 import { locationsAPI } from "../../../../../../services/api";
 import { COUNTRIES } from "../../../../../../constants/countries";
+import SearchableDropdown from "../../../../../../components/ui/SearchableDropdown";
 import {
   getDemoUsers,
   getLocationById,
@@ -383,6 +384,24 @@ export default function EditLocationPage() {
     (user.name?.toLowerCase().includes(userSearch.toLowerCase()) ||
      user.email?.toLowerCase().includes(userSearch.toLowerCase()))
   );
+  const primaryContactOptions = allUsers
+    .map((user: any) => {
+      const value = String(user._id || user.id || "");
+      const name = user.name || `${user.firstName || ""} ${user.lastName || ""}`.trim();
+      return {
+        value,
+        label: user.email ? `${name || value} (${user.email})` : (name || value),
+      };
+    })
+    .filter((opt: any) => opt.value);
+  const countryOptions = COUNTRIES.map((country) => ({ value: country, label: country }));
+  const roleOptions = Array.from(
+    new Set(
+      allUsers
+        .map((user: any) => String(user.role || "").trim())
+        .filter(Boolean)
+    )
+  ).map((role) => ({ value: role, label: role }));
 
   const selectedParentLocation = parentLocations.find(loc => loc._id === formData.parentLocation);
 
@@ -470,7 +489,7 @@ export default function EditLocationPage() {
   }
 
   return (
-    <div className="w-full h-full p-6">
+    <div className="w-full h-full p-6 pb-28">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-gray-900">Update Location</h1>
       </div>
@@ -570,7 +589,7 @@ export default function EditLocationPage() {
                       <button
                         type="button"
                         onClick={() => handleLogoOptionSelect("Same as Organization Logo")}
-                        className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between ${
+                        className={`w-full px-3 py-2 text-left text-sm hover:bg-blue-50 flex items-center justify-between ${
                           formData.logo === "Same as Organization Logo" ? "bg-blue-50" : ""
                         }`}
                       >
@@ -582,7 +601,7 @@ export default function EditLocationPage() {
                       <button
                         type="button"
                         onClick={() => handleLogoOptionSelect("Upload a New Logo")}
-                        className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between ${
+                        className={`w-full px-3 py-2 text-left text-sm hover:bg-blue-50 flex items-center justify-between ${
                           formData.logo === "Upload a New Logo" ? "bg-blue-50" : ""
                         }`}
                       >
@@ -728,7 +747,7 @@ export default function EditLocationPage() {
                             key={location._id}
                             type="button"
                             onClick={() => handleParentLocationSelect(location._id)}
-                            className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between ${
+                            className={`w-full px-3 py-2 text-left text-sm hover:bg-blue-50 flex items-center justify-between ${
                               formData.parentLocation === location._id ? "bg-blue-50" : ""
                             }`}
                           >
@@ -811,18 +830,17 @@ export default function EditLocationPage() {
 
             <div className="grid grid-cols-3 gap-4">
               <label className="text-sm font-medium text-gray-700">Country</label>
-              <select
-                name="address.country"
-                value={formData.address.country}
-                onChange={handleChange}
-                className="col-span-2 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              >
-                {COUNTRIES.map((country) => (
-                  <option key={country} value={country}>
-                    {country}
-                  </option>
-                ))}
-              </select>
+              <div className="col-span-2">
+                <SearchableDropdown
+                  value={formData.address.country}
+                  options={countryOptions}
+                  onChange={(value) => setFormData((prev) => ({
+                    ...prev,
+                    address: { ...prev.address, country: value },
+                  }))}
+                  placeholder="Select Country"
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
@@ -882,19 +900,14 @@ export default function EditLocationPage() {
             <label className="text-sm font-medium text-gray-700 flex items-center">
               Primary Contact
             </label>
-            <select
-              name="primaryContact"
-              value={formData.primaryContact}
-              onChange={handleChange}
-              className="col-span-2 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-            >
-              <option value="">Select Primary Contact</option>
-              {users.map((user) => (
-                <option key={user._id || user.id} value={user._id || user.id}>
-                  {user.name || `${user.firstName} ${user.lastName}`} &lt;{user.email}&gt;
-                </option>
-              ))}
-            </select>
+            <div className="col-span-2">
+              <SearchableDropdown
+                value={formData.primaryContact}
+                options={primaryContactOptions}
+                onChange={(value) => setFormData(prev => ({ ...prev, primaryContact: value }))}
+                placeholder="Select Primary Contact"
+              />
+            </div>
           </div>
         </div>
 
@@ -947,7 +960,7 @@ export default function EditLocationPage() {
                               key={index}
                               type="button"
                               onClick={() => handleTransactionSeriesSelect(series)}
-                              className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between ${
+                              className={`w-full px-3 py-2 text-left text-sm hover:bg-blue-50 flex items-center justify-between ${
                                 formData.transactionSeries === series ? "bg-blue-50" : ""
                               }`}
                             >
@@ -961,7 +974,7 @@ export default function EditLocationPage() {
                         <button
                           type="button"
                           onClick={handleAddTransactionSeries}
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-blue-600 border-t border-gray-200 mt-1 pt-2"
+                            className="w-full px-3 py-2 text-left text-sm hover:bg-blue-50 flex items-center gap-2 text-blue-600 border-t border-gray-200 mt-1 pt-2"
                         >
                           <Plus size={16} className="text-blue-600" />
                           <span>Add Transaction Series</span>
@@ -1022,7 +1035,7 @@ export default function EditLocationPage() {
                               className={`w-full px-3 py-2 text-left text-sm rounded-lg transition ${
                                 formData.defaultTransactionSeries === series 
                                   ? "bg-blue-500 text-white font-medium" 
-                                  : "hover:bg-gray-50"
+                                  : "hover:bg-blue-50"
                               } flex items-center justify-between`}
                             >
                               <span>{series}</span>
@@ -1035,7 +1048,7 @@ export default function EditLocationPage() {
                         <button
                           type="button"
                           onClick={handleAddTransactionSeries}
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-blue-600 border-t border-gray-200 mt-1 pt-2"
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-blue-50 flex items-center gap-2 text-blue-600 border-t border-gray-200 mt-1 pt-2"
                         >
                           <Plus size={16} className="text-blue-600" />
                           <span>Add Transaction Series</span>
@@ -1116,7 +1129,7 @@ export default function EditLocationPage() {
                                           key={user._id || user.id}
                                           type="button"
                                           onClick={() => handleUserSelect(user._id || user.id)}
-                                          className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                                          className="w-full px-3 py-2 text-left text-sm hover:bg-blue-50"
                                         >
                                           <div className="flex items-center gap-2">
                                             <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-semibold">
@@ -1136,9 +1149,19 @@ export default function EditLocationPage() {
                             </div>
                           </td>
                           <td className="py-2 px-3">
-                            <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-transparent">
-                              <option>User's Role</option>
-                            </select>
+                            <SearchableDropdown
+                              value={access.role || ""}
+                              options={roleOptions}
+                              onChange={(role) =>
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  locationAccess: prev.locationAccess.map((item, idx) =>
+                                    idx === index ? { ...item, role } : item
+                                  ),
+                                }))
+                              }
+                              placeholder="User's Role"
+                            />
                           </td>
                         </tr>
                       </tbody>
@@ -1200,7 +1223,7 @@ export default function EditLocationPage() {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-4 pt-4">
+        <div className="fixed bottom-0 left-64 right-0 z-30 border-t border-gray-200 bg-gray-50/95 px-6 py-4 backdrop-blur flex items-center gap-4">
           <button
             type="submit"
             disabled={isSaving}

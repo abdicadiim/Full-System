@@ -23,6 +23,7 @@ import {
 import { toast } from "react-toastify";
 import { emailTemplatesAPI, senderEmailsAPI, customersAPI, vendorsAPI } from "../../../../services/api";
 import { applyEmailTemplate } from "../../../../settings/emailTemplateUtils";
+import { formatSenderDisplay } from "../../../../utils/emailSenderDisplay";
 
 export default function SendEmailStatement() {
   const { id } = useParams();
@@ -93,17 +94,18 @@ export default function SendEmailStatement() {
         if (entityData) {
           setCustomer(entityData); // Still using 'customer' state for 'entity' to minimize changes
 
-          let fromAddress = "No Sender Configured";
-          if (senderResponse?.success && senderResponse.data) {
-            fromAddress = `"${senderResponse.data.name}" <${senderResponse.data.email}>`;
-          }
+          const fromAddress = formatSenderDisplay(
+            senderResponse?.data?.name || "The Team",
+            senderResponse?.data?.email || "billing@example.com",
+            "The Team"
+          );
 
           const initialBody = `Dear ${entityData.displayName || entityData.name || (entityType === "vendor" ? "Vendor" : "Customer")},<br/><br/>
             It's been a great experience working with you.<br/>
             Attached with this email is a list of all transactions for the period between ${formatDate(startDate)} to ${formatDate(endDate)}.<br/>
             If you have any questions, just drop us an email or call us.<br/><br/>
             Regards,<br/>
-            ${senderResponse?.data?.name || "The Team"}`;
+            ${senderResponse?.data?.isVerified ? senderResponse.data.name : "The Team"}`;
           let templateSubject = `Account Statement from ${formatDate(startDate)} to ${formatDate(endDate)}`;
           let templateBody = initialBody;
           const templateKey = entityType === "vendor" ? "vendor_statement" : "customer_statement";

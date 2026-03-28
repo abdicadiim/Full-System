@@ -40,6 +40,7 @@ const pickSmtpSender = async (organizationId: any) => {
   const primary: any = await SenderEmail.findOne({
     organizationId,
     isPrimary: true,
+    isVerified: true,
     smtpHost: { $ne: "" },
     smtpUser: { $ne: "" },
     smtpPassword: { $ne: "" },
@@ -49,6 +50,7 @@ const pickSmtpSender = async (organizationId: any) => {
 
   const fallback: any = await SenderEmail.findOne({
     organizationId,
+    isVerified: true,
     smtpHost: { $ne: "" },
     smtpUser: { $ne: "" },
     smtpPassword: { $ne: "" },
@@ -278,13 +280,13 @@ export const sendInvoiceEmail: express.RequestHandler = async (req, res) => {
     const org: any = await Organization.findById(orgId).lean();
     const orgName = String(org?.name || "Organization");
     const senderEmail = String(sender.email || sender.smtpUser || "").trim();
+    const senderName = String(sender.name || orgName || "Organization").trim() || orgName;
     const fromHeaderRaw = String(req.body?.from || "").trim();
-    const fromHeader =
-      fromHeaderRaw && fromHeaderRaw.includes("@")
+    const fromHeader = senderEmail
+      ? `${senderName} <${senderEmail}>`
+      : fromHeaderRaw && fromHeaderRaw.includes("@")
         ? fromHeaderRaw
-        : senderEmail
-          ? `${orgName} <${senderEmail}>`
-          : fromHeaderRaw;
+        : fromHeaderRaw;
 
     const subject = String(req.body?.subject || `Invoice ${invoice.invoiceNumber || ""}`).trim();
     const htmlBody = String(req.body?.body || "").trim();
@@ -319,6 +321,7 @@ export const sendInvoiceEmail: express.RequestHandler = async (req, res) => {
       },
       {
         from: fromHeader || senderEmail,
+        replyTo: senderEmail || undefined,
         to,
         subject,
         text: textBody,
