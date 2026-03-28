@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { getInvoiceById, saveInvoice, updateInvoice } from "../../salesModel";
 import { customersAPI, invoicesAPI } from "../../../services/api";
@@ -9,6 +9,7 @@ const todayISO = () => new Date().toISOString().slice(0, 10);
 export default function NewRetailInvoice() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const location = useLocation();
   const isEditMode = Boolean(id);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -22,6 +23,19 @@ export default function NewRetailInvoice() {
     amount: "0",
     status: "draft",
   });
+
+  const applyRowToForm = (row: any) => {
+    if (!row) return;
+    setForm({
+      invoiceNumber: String(row?.invoiceNumber || "RET-00001"),
+      customerId: String(row?.customerId || row?.customer?._id || row?.customer?.id || ""),
+      customerName: String(row?.customerName || row?.customer?.displayName || row?.customer?.name || ""),
+      invoiceDate: String(row?.invoiceDate || row?.date || todayISO()).slice(0, 10),
+      referenceNumber: String(row?.referenceNumber || ""),
+      amount: String(row?.total || row?.amount || 0),
+      status: String(row?.status || "draft"),
+    });
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -40,18 +54,14 @@ export default function NewRetailInvoice() {
         }
 
         if (isEditMode && id) {
-          const row = await getInvoiceById(id);
-          if (row) {
-            setForm({
-              invoiceNumber: String((row as any).invoiceNumber || "RET-00001"),
-              customerId: String((row as any).customerId || (row as any).customer?._id || (row as any).customer?.id || ""),
-              customerName: String((row as any).customerName || (row as any).customer?.displayName || (row as any).customer?.name || ""),
-              invoiceDate: String((row as any).invoiceDate || (row as any).date || todayISO()).slice(0, 10),
-              referenceNumber: String((row as any).referenceNumber || ""),
-              amount: String((row as any).total || (row as any).amount || 0),
-              status: String((row as any).status || "draft"),
-            });
+          const cachedRow = (location.state as any)?.row;
+          if (cachedRow) {
+            applyRowToForm(cachedRow);
           }
+
+          const apiRes = await invoicesAPI.getById(String(id));
+          const row = apiRes?.data || (await getInvoiceById(id));
+          if (row) applyRowToForm(row);
         }
       } catch (error) {
         console.error("Error loading retainer invoice form:", error);
@@ -62,7 +72,7 @@ export default function NewRetailInvoice() {
     };
 
     load();
-  }, [id, isEditMode]);
+  }, [id, isEditMode, location.state]);
 
   const handleCustomerChange = (customerId: string) => {
     const customer = customers.find((c: any) => String(c?.id || c?._id) === customerId);

@@ -2,12 +2,27 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { invoicesAPI } from "../../services/api";
+import { getPayments } from "../salesModel";
 import NewRetailInvoice from "./NewRetailInvoice/NewRetailInvoice";
 
 const isRetainerRow = (row: any) => {
   const number = String(row?.invoiceNumber || row?.number || "").toUpperCase();
   const type = String(row?.invoiceType || row?.type || "").toLowerCase();
   return type.includes("retainer") || number.startsWith("RET-");
+};
+
+const getStatusBadgeClass = (status: string) => {
+  const s = String(status || "").toLowerCase();
+  const statusClasses: Record<string, string> = {
+    paid: "bg-emerald-50 text-emerald-600 border-emerald-100",
+    draft: "bg-slate-100 text-slate-600 border-slate-200",
+    sent: "bg-blue-50 text-blue-600 border-blue-100",
+    overdue: "bg-amber-50 text-amber-600 border-amber-100",
+    partially_paid: "bg-orange-50 text-orange-600 border-orange-100",
+    unpaid: "bg-slate-100 text-slate-600 border-slate-200",
+    void: "bg-red-50 text-red-600 border-red-100",
+  };
+  return statusClasses[s] || "bg-slate-100 text-slate-600 border-slate-200";
 };
 
 function RetainerInvoicesHome() {
@@ -94,7 +109,11 @@ function RetainerInvoicesHome() {
                     <td className="px-4 py-3">
                       {Number(row?.total || row?.amount || 0).toLocaleString()}
                     </td>
-                    <td className="px-4 py-3">{row?.status || "draft"}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] border ${getStatusBadgeClass(row?.status || "draft")}`}>
+                        {String(row?.status || "draft").toUpperCase()}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -111,6 +130,9 @@ function RetainerInvoiceDetail() {
   const { id } = useParams();
   const location = useLocation();
   const [row, setRow] = useState<any>(() => (location.state as any)?.row || null);
+  const [payments, setPayments] = useState<any[]>([]);
+  const [appliedInvoices, setAppliedInvoices] = useState<any[]>([]);
+  const [infoTab, setInfoTab] = useState<"payments" | "retainer">("payments");
 
   useEffect(() => {
     const load = async () => {
@@ -123,6 +145,81 @@ function RetainerInvoiceDetail() {
     };
     load();
   }, [id]);
+
+  useEffect(() => {
+    const loadRelated = async () => {
+      try {
+        const current = row || {};
+        const retainerId = String(current?.id || current?._id || id || "").trim();
+        const retainerNumber = String(current?.invoiceNumber || current?.retainerNumber || "").trim();
+
+        const allPayments = await getPayments();
+        const linkedPayments = (Array.isArray(allPayments) ? allPayments : []).filter((payment) =>
+          isPaymentLinkedToRetainer(payment, current, id)
+        );
+        setPayments(linkedPayments);
+
+        const invRes = await invoicesAPI.getAll({ limit: 10000 });
+        const allInvoices = Array.isArray(invRes?.data) ? invRes.data : [];
+        const appliedRows: any[] = [];
+
+        allInvoices.forEach((invoice: any) => {
+          const apps = Array.isArray(invoice?.retainerApplications)
+            ? invoice.retainerApplications
+            : [];
+          apps.forEach((app: any) => {
+            const appRetainerId = String(app?.retainerId || app?.retainer?._id || app?.retainer?.id || "").trim();
+            const appRetainerNumber = String(app?.retainerNumber || app?.retainerInvoiceNumber || "").trim();
+            if (
+              (retainerId && appRetainerId && retainerId === appRetainerId) ||
+              (retainerNumber && appRetainerNumber && retainerNumber === appRetainerNumber)
+            ) {
+              appliedRows.push({
+                id: String(invoice?.id || invoice?._id || app?.id || appRetainerId),
+                date: app?.date || app?.appliedDate || invoice?.invoiceDate || invoice?.date || "",
+                invoiceId: String(invoice?.id || invoice?._id || ""),
+                invoiceNumber: String(invoice?.invoiceNumber || invoice?.number || "-"),
+                amountApplied: Number(app?.applied ?? app?.amount ?? app?.appliedAmount ?? 0),
+              });
+            }
+          });
+
+          if (!apps.length) {
+            const invoiceRetainerId = String(invoice?.retainerId || invoice?.retainerInvoiceId || "").trim();
+            const retainerAppliedAmount = Number(
+              invoice?.retainerAppliedAmount ??
+              invoice?.retainersApplied ??
+              invoice?.retainerAmountApplied ??
+              invoice?.retainerAppliedTotal ??
+              0
+            );
+            if (
+              retainerAppliedAmount > 0 &&
+              ((retainerId && invoiceRetainerId && retainerId === invoiceRetainerId) ||
+                (retainerNumber && String(invoice?.retainerNumber || "").trim() === retainerNumber))
+            ) {
+              appliedRows.push({
+                id: String(invoice?.id || invoice?._id || retainerId),
+                date: invoice?.invoiceDate || invoice?.date || "",
+                invoiceId: String(invoice?.id || invoice?._id || ""),
+                invoiceNumber: String(invoice?.invoiceNumber || invoice?.number || "-"),
+                amountApplied: retainerAppliedAmount,
+              });
+            }
+          }
+        });
+
+        setAppliedInvoices(appliedRows);
+        if (appliedRows.length > 0 && linkedPayments.length === 0) {
+          setInfoTab("retainer");
+        }
+      } catch (error) {
+        console.error("Failed to load retainer invoice related data:", error);
+      }
+    };
+
+    loadRelated();
+  }, [id, row]);
 
   useEffect(() => {
     const prevHtmlOverflow = document.documentElement.style.overflow;
@@ -154,6 +251,90 @@ function RetainerInvoiceDetail() {
   }, []);
 
   const safeRow = row || {};
+  const retainerDrawStatus = String(
+    safeRow?.retainerDrawStatus || safeRow?.drawStatus || ""
+  ).trim();
+
+  const formatDate = (value: any) => {
+    if (!value) return "-";
+    try {
+      return new Date(value).toISOString().slice(0, 10);
+    } catch {
+      return String(value).slice(0, 10);
+    }
+  };
+
+  const getAppliedAmountsByInvoice = (paymentRow: any): Record<string, number> => {
+    const map: Record<string, number> = {};
+    if (!paymentRow || typeof paymentRow !== "object") return map;
+
+    if (paymentRow.invoicePayments && typeof paymentRow.invoicePayments === "object") {
+      Object.entries(paymentRow.invoicePayments).forEach(([invoiceId, amount]) => {
+        const key = String(invoiceId || "").trim();
+        const val = Number(amount || 0);
+        if (key && val > 0) map[key] = val;
+      });
+      if (Object.keys(map).length > 0) return map;
+    }
+
+    if (Array.isArray(paymentRow.allocations)) {
+      paymentRow.allocations.forEach((allocation: any) => {
+        const invoiceId = String(allocation?.invoice?._id || allocation?.invoice?.id || allocation?.invoice || "").trim();
+        const amount = Number(allocation?.amount || 0);
+        if (!invoiceId || amount <= 0) return;
+        map[invoiceId] = (map[invoiceId] || 0) + amount;
+      });
+      if (Object.keys(map).length > 0) return map;
+    }
+
+    const fallbackInvoiceId = String(paymentRow.invoiceId || "").trim();
+    const fallbackAmount = Number(paymentRow.amount || paymentRow.amountReceived || 0);
+    if (fallbackInvoiceId && fallbackAmount > 0) map[fallbackInvoiceId] = fallbackAmount;
+    return map;
+  };
+
+  const isPaymentLinkedToRetainer = (paymentRow: any, currentInvoice: any, routeInvoiceId: any) => {
+    const targetIds = new Set(
+      [routeInvoiceId, currentInvoice?.id, currentInvoice?._id]
+        .map((v) => String(v || "").trim())
+        .filter(Boolean)
+    );
+    const targetNumber = String(currentInvoice?.invoiceNumber || "").trim().toLowerCase();
+
+    const directInvoiceId = String(paymentRow?.invoiceId || "").trim();
+    const directInvoiceNumber = String(paymentRow?.invoiceNumber || "").trim().toLowerCase();
+    if ((directInvoiceId && targetIds.has(directInvoiceId)) || (targetNumber && directInvoiceNumber === targetNumber)) {
+      return true;
+    }
+
+    const byMap = getAppliedAmountsByInvoice(paymentRow);
+    if (Object.keys(byMap).some((invoiceId) => targetIds.has(String(invoiceId || "").trim()))) {
+      return true;
+    }
+
+    if (Array.isArray(paymentRow?.allocations)) {
+      return paymentRow.allocations.some((allocation: any) => {
+        const allocationInvoiceId = String(
+          allocation?.invoiceId ||
+          allocation?.invoice?._id ||
+          allocation?.invoice?.id ||
+          allocation?.invoice ||
+          ""
+        ).trim();
+        const allocationInvoiceNumber = String(
+          allocation?.invoiceNumber ||
+          allocation?.invoice?.invoiceNumber ||
+          ""
+        ).trim().toLowerCase();
+        return (
+          (allocationInvoiceId && targetIds.has(allocationInvoiceId)) ||
+          (targetNumber && allocationInvoiceNumber === targetNumber)
+        );
+      });
+    }
+
+    return false;
+  };
 
   const invoiceId = String(safeRow?.id || safeRow?._id || id || "");
   const customerName = String(
@@ -238,7 +419,11 @@ function RetainerInvoiceDetail() {
 
         <div className="flex flex-wrap items-center gap-1.5 p-2 md:p-3 border-b border-gray-200 bg-[#f8fafc]">
           <button
-            onClick={() => navigate(`/sales/retainer-invoices/${id}/edit`)}
+            onClick={() =>
+              navigate(`/sales/retainer-invoices/${id}/edit`, {
+                state: { row: safeRow },
+              })
+            }
             className="flex items-center gap-1.5 px-2 py-1.5 bg-transparent text-gray-700 rounded-md text-sm font-medium hover:text-[#2F80FF]"
           >
             Edit
@@ -252,6 +437,100 @@ function RetainerInvoiceDetail() {
         </div>
 
         <div className="flex-1 overflow-hidden bg-[#f8fafc]">
+          {(payments.length > 0 || appliedInvoices.length > 0) && (
+            <div className="mx-6 mt-4 rounded border border-gray-200 bg-white">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-4 py-2 text-left"
+              >
+                <div className="flex items-center gap-4 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setInfoTab("payments")}
+                    className={`flex items-center gap-2 pb-1 border-b-2 text-[12px] ${infoTab === "payments" ? "border-[#2563eb]" : "border-transparent"}`}
+                  >
+                    <span className="text-[12px] font-medium text-gray-800">Payments Received</span>
+                    <span className="text-[12px] text-[#2563eb]">{payments.length}</span>
+                  </button>
+                  <div className="h-4 w-px bg-gray-300" />
+                  <button
+                    type="button"
+                    onClick={() => setInfoTab("retainer")}
+                    className={`flex items-center gap-2 pb-1 border-b-2 text-[12px] ${infoTab === "retainer" ? "border-[#2563eb]" : "border-transparent"}`}
+                  >
+                    <span className="text-[12px] font-medium text-gray-800">Retainer Applied Invoices</span>
+                    <span className="text-[12px] text-[#2563eb]">{appliedInvoices.length}</span>
+                  </button>
+                </div>
+                <span className="text-gray-400 text-[12px]">▼</span>
+              </button>
+              <div className="border-t border-gray-200 overflow-x-auto">
+                {infoTab === "payments" ? (
+                  <table className="w-full text-left">
+                    <thead className="bg-[#f6f7fb]">
+                      <tr className="text-[12px] text-[#6b7280] uppercase">
+                        <th className="px-4 py-2 font-medium">Date</th>
+                        <th className="px-4 py-2 font-medium">Payment #</th>
+                        <th className="px-4 py-2 font-medium">Reference#</th>
+                        <th className="px-4 py-2 font-medium">Payment Mode</th>
+                        <th className="px-4 py-2 font-medium">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {payments.length > 0 ? payments.map((payment: any, index: number) => (
+                        <tr key={String(payment?.id || payment?._id || index)} className="border-t border-gray-100">
+                          <td className="px-4 py-3 text-[12px] text-gray-800">{formatDate(payment.paymentDate || payment.date)}</td>
+                          <td className="px-4 py-3 text-[12px] text-[#2563eb]">{payment.paymentNumber || "-"}</td>
+                          <td className="px-4 py-3 text-[12px] text-gray-700">{payment.referenceNumber || payment.paymentReference || payment.reference || "-"}</td>
+                          <td className="px-4 py-3 text-[12px] text-gray-700">{payment.paymentMode || payment.paymentMethod || "-"}</td>
+                          <td className="px-4 py-3 text-[12px] text-gray-900">{Number(payment.amountReceived ?? payment.amount ?? 0).toLocaleString()}</td>
+                        </tr>
+                      )) : (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-6 text-[12px] text-gray-500 text-center">No payments received.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                ) : (
+                  <table className="w-full text-left">
+                    <thead className="bg-[#f6f7fb]">
+                      <tr className="text-[12px] text-[#6b7280] uppercase">
+                        <th className="px-4 py-2 font-medium">Date</th>
+                        <th className="px-4 py-2 font-medium">Invoice Number</th>
+                        <th className="px-4 py-2 font-medium">Amount Applied</th>
+                        <th className="px-4 py-2 font-medium w-24"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {appliedInvoices.length > 0 ? appliedInvoices.map((item: any, index: number) => (
+                        <tr key={String(item?.id || index)} className="border-t border-gray-100">
+                          <td className="px-4 py-3 text-[12px] text-gray-800">{formatDate(item.date)}</td>
+                          <td className="px-4 py-3 text-[12px] text-[#2563eb]">{item.invoiceNumber || "-"}</td>
+                          <td className="px-4 py-3 text-[12px] text-gray-900">{Number(item.amountApplied || 0).toLocaleString()}</td>
+                          <td className="px-4 py-3 text-right">
+                            {item.invoiceId && (
+                              <button
+                                type="button"
+                                className="px-2 py-1 text-[11px] rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
+                                onClick={() => navigate(`/sales/invoices/${item.invoiceId}`)}
+                              >
+                                Show Details
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      )) : (
+                        <tr>
+                          <td colSpan={4} className="px-4 py-6 text-[12px] text-gray-500 text-center">No applied invoices.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          )}
           <div className="h-full max-w-[980px] mx-auto px-4 py-4 overflow-hidden">
             <div className="w-full max-w-[920px] mx-auto bg-white border border-[#d1d5db] shadow-sm overflow-hidden">
               <div className="px-10 py-10">

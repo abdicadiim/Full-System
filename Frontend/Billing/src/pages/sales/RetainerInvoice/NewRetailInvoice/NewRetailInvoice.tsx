@@ -296,6 +296,7 @@ export default function NewRetailInvoice() {
 
         if (isEditMode && editInvoiceResp) {
           const existing: any = editInvoiceResp;
+          const taxList = combined;
           const selectedCustomerId = String(
             existing?.customer?._id || existing?.customer?.id || existing?.customerId || existing?.customer || ""
           );
@@ -309,16 +310,48 @@ export default function NewRetailInvoice() {
           setInvoiceDate(
             String(existing?.invoiceDate || existing?.date || "").slice(0, 10) || todayISO()
           );
-          setProjectId(String(existing?.project?._id || existing?.project?.id || existing?.projectId || existing?.project || ""));
+          const existingProjectId = String(
+            existing?.project?._id || existing?.project?.id || existing?.projectId || existing?.project || ""
+          );
+          const existingProjectName = String(
+            existing?.project?.projectName ||
+              existing?.project?.name ||
+              existing?.projectName ||
+              existing?.project ||
+              ""
+          ).trim();
+          const resolvedProjectId =
+            existingProjectId ||
+            (existingProjectName
+              ? String(
+                  projectList.find(
+                    (p) => String(p.name).trim().toLowerCase() === existingProjectName.toLowerCase()
+                  )?.id || ""
+                )
+              : "");
+          setProjectId(resolvedProjectId);
           setCustomerNotes(String(existing?.notes || existing?.customerNotes || ""));
           setTerms(String(existing?.terms || existing?.termsAndConditions || ""));
           setTaxPreference(existing?.taxExclusive === "Tax Inclusive" ? "Tax Inclusive" : "Tax Exclusive");
 
           const itemRows = Array.isArray(existing?.items) ? existing.items : [];
+          const resolveTaxId = (item: any) => {
+            const directId = String(
+              item?.taxId || item?.tax_id || item?.tax?._id || item?.tax?.id || item?.tax || ""
+            ).trim();
+            if (directId) return directId;
+
+            const name = String(item?.taxName || item?.tax_name || item?.tax?.name || item?.tax?.taxName || "").trim();
+            const rate = Number(item?.taxRate ?? item?.rate ?? item?.taxPercentage ?? item?.percentage ?? 0);
+            const byName = name ? taxList.find((t: TaxOption) => String(t.name).trim() === name) : undefined;
+            if (byName) return byName.id;
+            const byRate = Number.isFinite(rate)
+              ? taxList.find((t: TaxOption) => Number(t.rate) === rate)
+              : undefined;
+            return byRate?.id || "";
+          };
           const mappedRows: LineRow[] = itemRows.length
             ? itemRows.map((item: any, index: number) => {
-                const rate = Number(item?.taxRate ?? item?.rate ?? 0);
-                const matchedTax = taxList.find((t: TaxOption) => Number(t.rate) === rate);
                 const amountFromPayload =
                   Number(item?.unitPrice ?? item?.amount ?? 0) ||
                   Number(item?.total ?? 0) ||
@@ -326,14 +359,20 @@ export default function NewRetailInvoice() {
                 return {
                   id: Date.now() + index,
                   description: String(item?.description || item?.name || ""),
-                  taxId: matchedTax?.id || "",
+                  taxId: resolveTaxId(item),
                   amount: amountFromPayload,
                 };
               })
             : [{ id: Date.now(), description: "", taxId: "", amount: 0 }];
           setRows(mappedRows);
 
-          const existingReportingTags = Array.isArray(existing?.reportingTags) ? existing.reportingTags : [];
+          const existingReportingTags = Array.isArray(existing?.reportingTags)
+            ? existing.reportingTags
+            : Array.isArray(existing?.reportingTag)
+            ? existing.reportingTag
+            : Array.isArray(existing?.tags)
+            ? existing.tags
+            : [];
           if (existingReportingTags.length > 0) {
             setReportingTagSelections((prev) => {
               const next = { ...prev };
@@ -348,6 +387,15 @@ export default function NewRetailInvoice() {
 
           if (selectedCustomerId) {
             await loadProjectsForCustomer(selectedCustomerId);
+          }
+          if (existingProjectId && !projectList.some((p) => p.id === existingProjectId)) {
+            const projectName = String(
+              existing?.project?.projectName || existing?.project?.name || existing?.projectName || existing?.project || "Project"
+            );
+            setProjects((prev) => [
+              { id: existingProjectId, name: projectName, customer: selectedCustomerId, status: "active" },
+              ...prev,
+            ]);
           }
         }
       } catch (error) {
@@ -538,6 +586,33 @@ export default function NewRetailInvoice() {
     () => (taxPreference === "Tax Inclusive" ? subtotal : subtotal + totalTax),
     [subtotal, totalTax, taxPreference]
   );
+
+  const taxBreakdown = useMemo(() => {
+    const map = new Map<string, { id: string; label: string; amount: number }>();
+    rows.forEach((r) => {
+      const taxId = String(r.taxId || "");
+      if (!taxId) return;
+      const tax = taxById.get(taxId);
+      if (!tax) return;
+      const amount = Number(r.amount) || 0;
+      if (amount <= 0) return;
+      const rate = Number(tax.rate || 0);
+      if (!rate) return;
+      const taxAmount =
+        taxPreference === "Tax Inclusive"
+          ? amount * (rate / (100 + rate))
+          : amount * (rate / 100);
+      if (!taxAmount) return;
+      const existing = map.get(taxId);
+      const label = taxLabel(tax);
+      map.set(taxId, {
+        id: taxId,
+        label,
+        amount: (existing?.amount || 0) + taxAmount,
+      });
+    });
+    return Array.from(map.values());
+  }, [rows, taxById, taxPreference]);
   const reportingTagsForForm = useMemo(() => {
     const tags = Array.isArray(availableReportingTags) ? [...availableReportingTags] : [];
     return tags.sort((a, b) => {
@@ -1388,8 +1463,22 @@ export default function NewRetailInvoice() {
                                       setOpenTaxDropdownId(openTaxDropdownId === row.id ? null : row.id)
                                     }
                                   >
-                                    <span className={displayLabel === "Select a Tax" ? "text-gray-500" : "text-gray-900"}>
-                                      {displayLabel}
+                                    <span className="flex items-center gap-2 min-w-0">
+                                      <span className={displayLabel === "Select a Tax" ? "text-gray-500" : "text-gray-900 truncate"}>
+                                        {displayLabel}
+                                      </span>
+                                      {selectedTax && (
+                                        <button
+                                          type="button"
+                                          className="text-red-500 hover:text-red-600"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setRow(row.id, { taxId: "" });
+                                          }}
+                                        >
+                                          ×
+                                        </button>
+                                      )}
                                     </span>
                                     <ChevronDown
                                       size={14}
@@ -1509,6 +1598,14 @@ export default function NewRetailInvoice() {
                     <span className="font-medium">Sub Total</span>
                     <span className="font-medium">{subtotal.toFixed(2)}</span>
                   </div>
+                  {taxBreakdown.map((line) => (
+                    <div key={line.id} className="flex items-center justify-between py-2 text-[13px] text-slate-700">
+                      <span>
+                        {line.label} {taxPreference === "Tax Inclusive" ? "(Included)" : ""}
+                      </span>
+                      <span>{line.amount.toFixed(2)}</span>
+                    </div>
+                  ))}
                   <div className="border-t border-gray-200 my-2" />
                   <div className="flex items-center justify-between py-2 text-xl font-semibold">
                     <span>Total</span>
