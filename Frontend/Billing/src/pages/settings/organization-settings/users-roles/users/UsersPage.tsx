@@ -28,6 +28,136 @@ const getRoleHelpText = (roleValue: string) => {
   if (normalized === "staff_assigned") return "Can access transactions and data related to assigned customers only.";
   return "Access is based on selected role permissions.";
 };
+
+type LocationOption = {
+  value: string;
+  label: string;
+};
+
+type LocationDropdownProps = {
+  label: string;
+  value: string;
+  options: LocationOption[];
+  onChange: (value: string) => void;
+  required?: boolean;
+  placeholder?: string;
+  labelClassName?: string;
+};
+
+const LocationDropdown = ({
+  label,
+  value,
+  options,
+  onChange,
+  required = false,
+  placeholder = "Select Location",
+  labelClassName = "text-gray-700",
+}: LocationDropdownProps) => {
+  const [open, setOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  const selectedOption = options.find((option) => option.value === value) || null;
+
+  const openMenu = useCallback(() => {
+    const button = buttonRef.current;
+    if (!button) return;
+
+    const rect = button.getBoundingClientRect();
+    const estimatedHeight = Math.min(options.length, 5) * 40 + 12;
+    const openUp = window.innerHeight - rect.bottom < estimatedHeight + 24;
+    const top = openUp ? Math.max(16, rect.top - estimatedHeight - 8) : rect.bottom + 8;
+    const left = Math.max(16, Math.min(rect.left, window.innerWidth - rect.width - 16));
+
+    setMenuPos({ top, left, width: rect.width });
+    setOpen(true);
+  }, [options.length]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (buttonRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    const handleScrollOrResize = () => setOpen(false);
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", handleScrollOrResize);
+    window.addEventListener("scroll", handleScrollOrResize, true);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", handleScrollOrResize);
+      window.removeEventListener("scroll", handleScrollOrResize, true);
+    };
+  }, [open]);
+
+  return (
+    <div>
+      <label className={`flex items-center gap-2 text-sm font-medium mb-2 ${labelClassName}`}>
+        {label}
+        {required && <span className="text-red-500">*</span>}
+        <Info size={14} className="text-gray-400" />
+      </label>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() => (open ? setOpen(false) : openMenu())}
+        className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm flex items-center justify-between gap-3"
+      >
+        <span className={selectedOption ? "text-gray-900" : "text-gray-400"}>
+          {selectedOption?.label || placeholder}
+        </span>
+        <ChevronDown
+          size={16}
+          className={`text-gray-500 transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && menuPos && createPortal(
+        <div
+          ref={menuRef}
+          className="fixed z-[10020] rounded-lg border border-gray-200 bg-white shadow-lg overflow-hidden"
+          style={{ top: menuPos.top, left: menuPos.left, width: menuPos.width }}
+        >
+          <div className="max-h-44 overflow-y-auto py-1">
+            {options.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-gray-500">No locations found</div>
+            ) : (
+              options.map((option) => {
+                const selected = option.value === value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      onChange(option.value);
+                      setOpen(false);
+                    }}
+                    className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between transition-colors ${
+                      selected ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-blue-50"
+                    }`}
+                  >
+                    <span>{option.label}</span>
+                    {selected && <Check size={14} className="text-blue-600" />}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>,
+        document.body,
+      )}
+    </div>
+  );
+};
 export default function UsersPage() {
   const currentUser = getCurrentUser();
   const canManageUsers = ["owner", "admin"].includes(String(currentUser?.role || "").toLowerCase());
@@ -48,6 +178,8 @@ export default function UsersPage() {
   const [accessibleLocations, setAccessibleLocations] = useState([]);
   const [defaultBusinessLocation, setDefaultBusinessLocation] = useState("");
   const [defaultWarehouseLocation, setDefaultWarehouseLocation] = useState("");
+  const [locationDropdownOpen, setLocationDropdownOpen] = useState<"business" | "warehouse" | null>(null);
+  const [locationDropdownPos, setLocationDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const [locationSearch, setLocationSearch] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
@@ -89,6 +221,9 @@ export default function UsersPage() {
   const menuButtonRef = useRef(null);
   const detailMenuRef = useRef(null);
   const detailMenuButtonRef = useRef(null);
+  const businessLocationButtonRef = useRef<HTMLButtonElement | null>(null);
+  const warehouseLocationButtonRef = useRef<HTMLButtonElement | null>(null);
+  const locationDropdownMenuRef = useRef<HTMLDivElement | null>(null);
   const inviteRoleButtonRef = useRef<HTMLButtonElement | null>(null);
   const inviteRoleMenuRef = useRef<HTMLDivElement | null>(null);
   const editRoleButtonRef = useRef<HTMLButtonElement | null>(null);
