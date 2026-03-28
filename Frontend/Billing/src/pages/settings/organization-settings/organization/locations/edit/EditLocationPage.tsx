@@ -1071,7 +1071,7 @@ export default function EditLocationPage() {
             </div>
           </div>
 
-          <div className="fixed bottom-0 left-64 right-0 z-30 border-t border-gray-200 bg-gray-50/95 px-6 py-4 backdrop-blur flex items-center gap-3">
+          <div className="fixed bottom-0 left-64 right-0 z-30 bg-transparent px-6 py-4 flex items-center gap-3">
             <button
               type="submit"
               disabled={isSaving}

@@ -451,7 +451,7 @@ export default function EmailNotificationsPage() {
 
       <div className="flex items-stretch gap-4">
         {/* Left Sidebar - Email List */}
-        <div className="w-80 bg-white rounded-lg border border-gray-200 h-[calc(100vh-2rem)] flex flex-col">
+        <div className="hidden w-80 bg-white rounded-lg border border-gray-200 h-[calc(100vh-2rem)] flex flex-col">
           <div className="shrink-0 border-b border-gray-200 px-4 py-3">
             <h2 className="text-xl font-semibold text-gray-900">Emails</h2>
           </div>
