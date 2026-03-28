@@ -1,6 +1,7 @@
 import express from "express";
 import mongoose from "mongoose";
 import { User } from "../models/User.js";
+import { ActivityLog } from "../models/ActivityLog.js";
 import bcrypt from "bcryptjs";
 import { Organization } from "../models/Organization.js";
 import { SenderEmail } from "../models/SenderEmail.js";
@@ -111,6 +112,42 @@ export const getUserById = async (req: express.Request, res: express.Response) =
       inviteAcceptedAt: row.inviteAcceptedAt || null,
     },
   });
+};
+
+export const getUserActivities = async (req: express.Request, res: express.Response) => {
+  const orgId = req.user?.organizationId;
+  if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
+  if (mongoose.connection.readyState !== 1) return res.status(500).json({ success: false, message: "DB not connected", data: null });
+
+  const actorId = String(req.params.id || "").trim();
+  if (!actorId) return res.status(400).json({ success: false, message: "Missing user id", data: null });
+
+  const limitRaw = Number(req.query?.limit || 50);
+  const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(limitRaw, 200)) : 50;
+
+  const rows: any[] = await ActivityLog.find({ organizationId: orgId, actorId })
+    .sort({ occurredAt: -1, createdAt: -1 })
+    .limit(limit)
+    .lean();
+
+  const data = rows.map((row: any) => ({
+    id: String(row._id),
+    actorId: row.actorId || "",
+    actorName: row.actorName || "",
+    actorEmail: row.actorEmail || "",
+    actorRole: row.actorRole || "",
+    action: row.action || "",
+    resource: row.resource || "",
+    entityType: row.entityType || "",
+    entityId: row.entityId || "",
+    entityName: row.entityName || "",
+    method: row.method || "",
+    path: row.path || "",
+    summary: row.summary || "",
+    occurredAt: row.occurredAt || row.createdAt || null,
+  }));
+
+  return res.json({ success: true, data });
 };
 
 export const createUser = async (req: express.Request, res: express.Response) => {

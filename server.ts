@@ -37,6 +37,7 @@ import recurringInvoicesRoutes from "./routes/recurringInvoicesRoutes.js";
 import salesReceiptsRoutes from "./routes/salesReceiptsRoutes.js";
 import debitNotesRoutes from "./routes/debitNotesRoutes.js";
 import subscriptionsRoutes from "./routes/subscriptionsRoutes.js";
+import { activityLogger } from "./midelwares/activityLogger.js";
 
 if (!MONGO_URI) {
   // eslint-disable-next-line no-console
@@ -63,6 +64,7 @@ app.use(
     credentials: true,
   })
 );
+app.use(activityLogger);
 
 app.get("/api/health", (_req, res) => {
   const readyState = mongoose.connection.readyState;
