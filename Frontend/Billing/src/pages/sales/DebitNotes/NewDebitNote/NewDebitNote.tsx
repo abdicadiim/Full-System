@@ -813,9 +813,9 @@ export default function NewDebitNote() {
         </div>
       </div>
 
-      <div className="space-y-6 px-6 py-5">
-        <section className="rounded-md bg-slate-50 p-4">
-          <div className="grid grid-cols-1 gap-3 lg:max-w-[920px]">
+      <div className="space-y-6 px-6 py-5 pr-20 xl:pr-28">
+        <section className="max-w-[980px] rounded-md bg-slate-50 p-4">
+          <div className="grid grid-cols-1 gap-3">
             <div className="grid grid-cols-[160px_1fr] items-start gap-3">
               <label className="pt-2 text-sm text-[#ef4444]">Customer Name*</label>
               <div>
@@ -824,7 +824,7 @@ export default function NewDebitNote() {
                     <div className="flex">
                       <button
                         type="button"
-                        className="h-9 flex-1 rounded-l-md border border-slate-300 bg-white px-3 text-left text-sm text-slate-700 focus:border-blue-400"
+                        className="h-9 flex-1 rounded-l-md border border-slate-300 bg-white px-3 text-left text-[14px] text-slate-700 focus:border-blue-400"
                         onClick={() => setIsCustomerDropdownOpen((prev) => !prev)}
                       >
                         {formData.customerName || "Select or add a customer"}
@@ -836,12 +836,12 @@ export default function NewDebitNote() {
                       >
                         {isCustomerDropdownOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                       </button>
-                      <button type="button" className="h-9 w-9 rounded-r-md bg-[#17a86b] text-white">
+                      <button type="button" className="h-9 w-9 rounded-r-md bg-[#156372] text-white hover:bg-[#0D4A52]">
                         <Search size={14} />
                       </button>
                     </div>
                     {isCustomerDropdownOpen && (
-                      <div className="absolute top-full left-0 right-0 z-50 mt-1 overflow-hidden rounded-md border border-slate-200 bg-white shadow-xl">
+                    <div className="absolute top-full left-0 right-0 z-50 mt-1 overflow-hidden rounded-md border border-slate-200 bg-white shadow-xl">
                         <div className="border-b border-slate-100 p-2">
                           <div className="relative">
                             <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -850,7 +850,7 @@ export default function NewDebitNote() {
                               placeholder="Search"
                               value={customerSearch}
                               onChange={(e) => setCustomerSearch(e.target.value)}
-                              className="h-9 w-full rounded-md border border-[#3b82f6] pl-7 pr-2 text-sm focus:outline-none"
+                              className="h-8 w-full rounded-md border border-slate-300 pl-7 pr-2 text-[13px] focus:outline-none"
                             />
                           </div>
                         </div>
@@ -908,7 +908,7 @@ export default function NewDebitNote() {
                         </div>
                         <button
                           type="button"
-                          className="w-full border-t border-slate-100 px-3 py-2 text-left text-sm font-medium text-[#3b82f6] hover:bg-slate-50"
+                          className="w-full border-t border-slate-100 px-3 py-2 text-left text-[13px] font-medium text-[#3b82f6] hover:bg-slate-50"
                         >
                           + New Customer
                         </button>
@@ -916,7 +916,7 @@ export default function NewDebitNote() {
                     )}
                   </div>
                   {customerDetails ? (
-                    <div className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700">
+                    <div className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-[13px] text-slate-700">
                       <MapPin size={13} className="text-[#1fa971]" />
                       {getCustomerCurrency(customerDetails) || formData.currency || "AMD"}
                     </div>
@@ -982,7 +982,7 @@ export default function NewDebitNote() {
                 <label className="text-sm text-slate-700">Invoice#</label>
                 <div className="relative">
                   <select
-                    className="h-9 w-full appearance-none rounded-md border border-slate-300 bg-white px-3 pr-8 text-[14px]"
+                    className="h-8 w-full appearance-none rounded-md border border-slate-300 bg-white px-3 pr-8 text-[13px]"
                     value={selectedInvoice}
                     onChange={(e) => handleInvoiceSelect(e.target.value)}
                   >
@@ -1017,7 +1017,7 @@ export default function NewDebitNote() {
               <div className="relative" ref={reasonDropdownRef}>
                 <button
                   type="button"
-                  className="flex h-9 w-full items-center justify-between rounded-md border border-slate-300 bg-white px-3 text-left text-[14px] text-slate-700 focus:border-blue-400"
+                  className="flex h-8 w-full items-center justify-between rounded-md border border-slate-300 bg-white px-3 text-left text-[13px] text-slate-700 focus:border-blue-400"
                   onClick={() => setIsReasonDropdownOpen((prev) => !prev)}
                 >
                   <span>{formData.reason || ""}</span>
@@ -1033,7 +1033,7 @@ export default function NewDebitNote() {
                           placeholder="Search"
                           value={reasonSearch}
                           onChange={(e) => setReasonSearch(e.target.value)}
-                          className="h-8 w-full rounded border border-[#3b82f6] pl-7 pr-2 text-sm focus:outline-none"
+                          className="h-8 w-full rounded border border-slate-300 pl-7 pr-2 text-[13px] focus:outline-none"
                         />
                       </div>
                     </div>
@@ -1065,7 +1065,7 @@ export default function NewDebitNote() {
               <label className="text-sm text-slate-700">Location</label>
               <div className="relative">
                 <select
-                  className="h-9 w-full appearance-none rounded-md border border-slate-300 bg-white px-3 pr-8 text-[14px] focus:border-blue-400"
+                  className="h-8 w-full appearance-none rounded-md border border-slate-300 bg-white px-3 pr-8 text-[13px] focus:border-blue-400"
                   value={formData.location}
                   onChange={(e) => setField("location", e.target.value)}
                 >
@@ -1081,23 +1081,23 @@ export default function NewDebitNote() {
           </div>
         </section>
 
-        <section className="space-y-4 lg:max-w-[980px]">
+        <section className="space-y-4 max-w-[980px] pr-20 xl:pr-28">
           <div className="grid grid-cols-[160px_1fr] items-center gap-3">
             <label className="text-sm text-[#ef4444]">Debit Note Number*</label>
             <div className="relative">
-              <input className="h-9 w-full rounded-md border border-slate-300 px-3 text-[14px]" value={formData.debitNoteNumber} onChange={(e) => setField("debitNoteNumber", e.target.value)} />
+              <input className="h-8 w-full rounded-md border border-slate-300 px-3 text-[13px]" value={formData.debitNoteNumber} onChange={(e) => setField("debitNoteNumber", e.target.value)} />
               <Settings size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#3b82f6]" />
             </div>
           </div>
           <div className="grid grid-cols-[160px_1fr] items-center gap-3">
             <label className="text-sm text-slate-700">Order Number</label>
-            <input className="h-9 rounded-md border border-slate-300 px-3 text-[14px]" value={formData.orderNumber} onChange={(e) => setField("orderNumber", e.target.value)} />
+            <input className="h-8 rounded-md border border-slate-300 px-3 text-[13px]" value={formData.orderNumber} onChange={(e) => setField("orderNumber", e.target.value)} />
           </div>
           <div className="grid grid-cols-[160px_1fr_70px_170px_70px_170px] items-center gap-3">
             <label className="text-sm text-[#ef4444]">Debit Note Date*</label>
             <div className="relative" ref={debitNoteDatePickerRef}>
               <input
-                className="h-9 w-full rounded-md border border-slate-300 px-3 text-[14px] cursor-pointer"
+                className="h-8 w-full rounded-md border border-slate-300 px-3 text-[13px] cursor-pointer"
                 value={formData.debitNoteDate}
                 readOnly
                 onClick={() => setIsDebitNoteDatePickerOpen(!isDebitNoteDatePickerOpen)}
@@ -1160,7 +1160,7 @@ export default function NewDebitNote() {
             <span className="text-sm text-slate-700">Due Date</span>
             <div className="relative" ref={dueDatePickerRef}>
               <input
-                className="h-9 w-full rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 text-[14px] cursor-pointer"
+                className="h-8 w-full rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 text-[13px] cursor-pointer"
                 value={formData.dueDate}
                 readOnly
                 onClick={() => setIsDueDatePickerOpen(!isDueDatePickerOpen)}
@@ -1213,19 +1213,19 @@ export default function NewDebitNote() {
           </div>
           <div className="grid grid-cols-[160px_1fr] items-center gap-3">
             <label className="flex items-center gap-1 text-sm text-slate-700">Early Payment Discount <Info size={13} className="text-slate-400" /></label>
-            <div className="grid grid-cols-[140px_60px_140px_40px] gap-2">
-              <input className="h-9 rounded-md border border-slate-300 px-3 text-[14px]" value={formData.earlyPaymentDays} onChange={(e) => setField("earlyPaymentDays", e.target.value)} />
-              <div className="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-slate-50 text-sm">Days</div>
-              <input type="number" className="h-9 rounded-md border border-slate-300 px-3 text-right text-[14px]" value={formData.earlyPaymentPercent} onChange={(e) => setField("earlyPaymentPercent", Number(e.target.value || 0))} />
-              <div className="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 bg-slate-50 text-sm">%</div>
+            <div className="grid grid-cols-[120px_52px_120px_34px] gap-2">
+              <input className="h-8 rounded-md border border-slate-300 px-3 text-[13px]" value={formData.earlyPaymentDays} onChange={(e) => setField("earlyPaymentDays", e.target.value)} />
+              <div className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-slate-50 text-[13px]">Days</div>
+              <input type="number" className="h-8 rounded-md border border-slate-300 px-3 text-right text-[13px]" value={formData.earlyPaymentPercent} onChange={(e) => setField("earlyPaymentPercent", Number(e.target.value || 0))} />
+              <div className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-slate-50 text-[13px]">%</div>
             </div>
           </div>
           <div className="grid grid-cols-[160px_1fr] items-center gap-3 border-t border-slate-200 pt-4">
             <label className="text-sm text-slate-700">Salesperson</label>
-            <div className="relative max-w-xs" ref={salespersonDropdownRef}>
+            <div className="relative max-w-[320px]" ref={salespersonDropdownRef}>
               <button
                 type="button"
-                className="flex h-9 w-full items-center justify-between rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-700"
+                className="flex h-8 w-full items-center justify-between rounded-md border border-slate-300 bg-white px-3 text-[13px] text-slate-700"
                 onClick={() => setIsSalespersonDropdownOpen((prev) => !prev)}
               >
                 <span className={formData.salesperson ? "text-slate-900" : "text-slate-400"}>
@@ -1292,17 +1292,17 @@ export default function NewDebitNote() {
           ))}
           <div className="grid grid-cols-[160px_1fr] items-start gap-3 border-t border-slate-200 pt-4">
             <label className="text-sm text-slate-700">Subject</label>
-            <textarea className="h-20 rounded-md border border-slate-300 px-3 py-2 text-[14px]" placeholder="Let your customer know what this Debit Note is for" value={formData.subject} onChange={(e) => setField("subject", e.target.value)} />
+            <textarea className="h-16 rounded-md border border-slate-300 px-3 py-2 text-[13px]" placeholder="Let your customer know what this Debit Note is for" value={formData.subject} onChange={(e) => setField("subject", e.target.value)} />
           </div>
         </section>
 
         <section className="space-y-4 border-t border-slate-200 pt-4">
           <div className="flex items-center gap-4 text-sm text-slate-600">
-            <select className="h-9 rounded-md border border-slate-300 px-2 text-[14px]" value={formData.taxMode} onChange={(e) => setField("taxMode", e.target.value)}>
+            <select className="h-9 w-[118px] rounded-md border border-slate-300 px-2 text-[14px]" value={formData.taxMode} onChange={(e) => setField("taxMode", e.target.value)}>
               <option>Tax Exclusive</option>
               <option>Tax Inclusive</option>
             </select>
-            <select className="h-9 rounded-md border border-slate-300 px-2 text-[14px]" value={formData.priceList} onChange={(e) => setField("priceList", e.target.value)}>
+            <select className="h-9 w-[128px] rounded-md border border-slate-300 px-2 text-[14px]" value={formData.priceList} onChange={(e) => setField("priceList", e.target.value)}>
               <option value="Select Price List">Select Price List</option>
               {catalogPriceLists.map((priceList) => (
                 <option key={priceList.id} value={priceList.name}>
@@ -1311,7 +1311,7 @@ export default function NewDebitNote() {
               ))}
             </select>
           </div>
-          <div className="overflow-visible rounded-xl border border-slate-200 bg-white relative z-20">
+          <div className="max-w-[1040px] overflow-visible rounded-xl border border-slate-200 bg-white relative z-20">
             <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
               <h2 className="text-[14px] font-semibold text-slate-800">Item Table</h2>
               <div className="flex items-center gap-4 text-sm text-[#2563eb]">
@@ -1393,14 +1393,14 @@ export default function NewDebitNote() {
                 </button>
               </div>
             )}
-            <table className="w-full border-collapse">
+            <table className="w-full table-fixed border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-white">
                   <th className="w-8" />
                   <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600">DESCRIPTION</th>
-                  <th className="w-36 px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600">RATE</th>
-                  <th className="w-36 px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600">TAX</th>
-                  <th className="w-36 px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600">AMOUNT</th>
+                  <th className="w-28 px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600">RATE</th>
+                  <th className="w-32 px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600">TAX</th>
+                  <th className="w-28 px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600">AMOUNT</th>
                   <th className="w-10" />
                 </tr>
               </thead>
@@ -1413,12 +1413,12 @@ export default function NewDebitNote() {
                         <textarea className="h-11 w-full resize-none border-none text-[14px] outline-none" value={item.description} onChange={(e) => updateItem(item.id, { description: e.target.value })} />
                       </td>
                       <td className="px-3 py-3">
-                        <input type="number" className="h-9 w-full rounded-md border border-slate-300 px-2 text-right text-[14px]" value={item.rate} onChange={(e) => updateItem(item.id, { rate: Number(e.target.value || 0) })} />
+                        <input type="number" className="ml-auto h-9 w-[88px] rounded-md border border-slate-300 px-2 text-right text-[14px]" value={item.rate} onChange={(e) => updateItem(item.id, { rate: Number(e.target.value || 0) })} />
                       </td>
                       <td className="px-3 py-3">
                         <div className="relative" ref={(el) => { taxDropdownRefs.current[item.id] = el; }}>
                           <button
-                            className="flex h-9 w-full items-center justify-between rounded-md border border-slate-300 px-2 text-[14px]"
+                            className="flex h-9 w-[130px] items-center justify-between rounded-md border border-slate-300 px-2 text-[14px]"
                             onClick={() => setOpenTaxDropdowns((prev) => ({ ...prev, [item.id]: !prev[item.id] }))}
                             type="button"
                           >
@@ -1598,7 +1598,7 @@ export default function NewDebitNote() {
                                   <div className="flex items-center gap-3 border-t border-slate-200 px-4 py-3">
                                     <button
                                       type="button"
-                                      className="rounded-md bg-[#17a86b] px-4 py-1.5 text-sm font-medium text-white"
+                                      className="rounded-md bg-[#156372] px-4 py-1.5 text-sm font-medium text-white hover:bg-[#0D4A52]"
                                       onClick={() => {
                                         setItemReportingTagSelections((prev) => ({ ...prev, [item.id]: reportingTagDraft }));
                                         setActiveAdditionalInfoMenu(null);
@@ -1631,7 +1631,7 @@ export default function NewDebitNote() {
           </button>
         </section>
 
-        <section className="grid grid-cols-1 gap-8 pt-3 lg:grid-cols-[1fr_420px]">
+        <section className="grid max-w-[1040px] grid-cols-1 gap-8 pt-3 pr-16 xl:pr-24 lg:grid-cols-[1fr_380px]">
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-800">Customer Notes</label>
             <textarea className="h-24 w-full rounded-md border border-slate-300 px-3 py-2 text-[14px]" value={formData.customerNotes} onChange={(e) => setField("customerNotes", e.target.value)} />
@@ -1695,10 +1695,10 @@ export default function NewDebitNote() {
           </div>
         </section>
 
-        <section className="grid grid-cols-1 gap-8 border-t border-slate-200 pt-5 lg:grid-cols-[1fr_360px]">
+        <section className="grid max-w-[1040px] grid-cols-1 gap-8 border-t border-slate-200 pt-5 pr-16 xl:pr-24 lg:grid-cols-[1fr_340px]">
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-800">Terms & Conditions</label>
-            <textarea className="h-24 w-full rounded-md border border-slate-300 px-3 py-2 text-[14px]" placeholder="Enter the terms and conditions of your business to be displayed in your transaction" value={formData.termsAndConditions} onChange={(e) => setField("termsAndConditions", e.target.value)} />
+            <textarea className="h-24 w-full max-w-[720px] rounded-md border border-slate-300 px-3 py-2 text-[14px]" placeholder="Enter the terms and conditions of your business to be displayed in your transaction" value={formData.termsAndConditions} onChange={(e) => setField("termsAndConditions", e.target.value)} />
           </div>
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-800">Attach File(s) to Debit Note</label>
@@ -1719,8 +1719,8 @@ export default function NewDebitNote() {
           >
             {saveLoading === "draft" ? "Saving..." : "Save as Draft"}
           </button>
-          <button
-            className="inline-flex h-10 items-center gap-2 rounded-md bg-[#17a86b] px-4 text-[14px] font-semibold text-white disabled:opacity-50"
+            <button
+            className="inline-flex h-10 items-center gap-2 rounded-md bg-[#156372] px-4 text-[14px] font-semibold text-white hover:bg-[#0D4A52] disabled:opacity-50"
             onClick={() => handleSave("open")}
             disabled={!!saveLoading}
           >

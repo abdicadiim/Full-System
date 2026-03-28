@@ -2299,31 +2299,12 @@ const QuoteDetail = () => {
     }
   };
 
-  const handleDeleteQuote = async () => {
+  const handleDeleteQuote = () => {
     setShowMoreDropdown(false);
     if (!quote) return;
 
-    if (window.confirm(`Are you sure you want to delete quote ${quote.quoteNumber || quote.id}? This action cannot be undone.`)) {
-      try {
-        await deleteQuotes([quoteId]);
-        toast.success("Quote deleted.");
-        // Navigate to quotes list or first available quote
-        try {
-          const remainingQuotes = await getQuotes();
-          if (remainingQuotes.length > 0) {
-            navigate(`/sales/quotes/${remainingQuotes[0].id}`);
-          } else {
-            navigate('/sales/quotes');
-          }
-        } catch (error) {
-          console.error("Error getting remaining quotes:", error);
-          navigate('/sales/quotes');
-        }
-      } catch (error) {
-        console.error("Error deleting quote:", error);
-        toast.error("Failed to delete quote. Please try again.");
-      }
-    }
+    setSelectedQuotes([quoteId]);
+    setIsDeleteModalOpen(true);
   };
 
   const handleCopyQuoteLink = () => {
@@ -4345,32 +4326,40 @@ const QuoteDetail = () => {
 
         {/* Delete Confirmation Modal */}
         {isDeleteModalOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center" onClick={() => setIsDeleteModalOpen(false)}>
-            <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-              <div className="p-6 text-center">
-                <div className="flex justify-center mb-4">
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="12" r="10" fill="#EF4444" />
-                    <path d="M15 9l-6 6M9 9l6 6" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
-                  </svg>
+          <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16" onClick={() => setIsDeleteModalOpen(false)}>
+            <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+                <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
+                  !
                 </div>
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete {selectedQuotes.length} Quote(s)?</h3>
-                  <p className="text-sm text-gray-600">Are you sure you want to delete the selected quotes? This action cannot be undone.</p>
-                </div>
-              </div>
-              <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50">
+                <h3 className="text-[15px] font-semibold text-slate-800 flex-1">
+                  Delete {selectedQuotes.length} quote{selectedQuotes.length === 1 ? "" : "s"}?
+                </h3>
                 <button
-                  className="px-4 py-2 text-white border-none rounded-md text-sm font-medium cursor-pointer transition-all flex items-center gap-2"
-                  style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                  onMouseEnter={(e: any) => e.target.style.opacity = "0.9"}
-                  onMouseLeave={(e: any) => e.target.style.opacity = "1"}
+                  type="button"
+                  className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  aria-label="Close"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="px-5 py-3 text-[13px] text-slate-600">
+                You cannot retrieve this quote once it has been deleted.
+              </div>
+              <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+                <button
+                  type="button"
+                  className="px-4 py-1.5 rounded-md bg-[#156372] text-white text-[12px] hover:bg-[#0D4A52]"
                   onClick={handleConfirmDelete}
                 >
-                  <Trash2 size={16} />
                   Delete
                 </button>
-                <button className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md text-sm font-medium cursor-pointer hover:bg-gray-50" onClick={() => setIsDeleteModalOpen(false)}>
+                <button
+                  type="button"
+                  className="px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50"
+                  onClick={() => setIsDeleteModalOpen(false)}
+                >
                   Cancel
                 </button>
               </div>

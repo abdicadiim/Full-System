@@ -2754,33 +2754,41 @@ export default function Quotes() {
       {/* Delete Confirmation Modal */}
       {
         isDeleteConfirmModalOpen && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50 flex items-start justify-center pt-[10vh] overflow-y-auto px-4 py-6" onClick={handleCancelBulkDelete}>
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-auto" onClick={(e) => e.stopPropagation()}>
-              <div className="p-6 sm:p-8">
-                <div className="flex items-center justify-center mb-4">
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 bg-red-100 rounded-full flex items-center justify-center shadow-lg">
-                    <Trash2 size={32} className="text-red-600" />
-                  </div>
+          <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16" onClick={handleCancelBulkDelete}>
+            <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+                <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
+                  !
                 </div>
-                <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 text-center">Delete Quotes</h3>
-                <p className="text-sm sm:text-base text-gray-600 text-center mb-6">
-                  Are you sure you want to delete {selectedQuotes.length} quote(s)? This action cannot be undone.
-                </p>
-              </div>
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 p-4 sm:p-6 border-t border-gray-200 bg-gray-50">
+                <h3 className="text-[15px] font-semibold text-slate-800 flex-1">
+                  Delete {selectedQuotes.length} quote{selectedQuotes.length === 1 ? "" : "s"}?
+                </h3>
                 <button
+                  type="button"
+                  className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
                   onClick={handleCancelBulkDelete}
-                  disabled={isDeletingQuotes}
-                  className="w-full sm:w-auto px-6 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  aria-label="Close"
                 >
-                  Cancel
+                  <X size={14} />
                 </button>
+              </div>
+              <div className="px-5 py-3 text-[13px] text-slate-600">
+                You cannot retrieve these quotes once they have been deleted.
+              </div>
+              <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
                 <button
                   onClick={handleConfirmBulkDelete}
                   disabled={isDeletingQuotes}
-                  className="w-full sm:w-auto px-6 py-2.5 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  className={`px-4 py-1.5 rounded-md bg-[#156372] text-white text-[12px] hover:bg-[#0D4A52] ${isDeletingQuotes ? "opacity-70 cursor-not-allowed" : ""}`}
                 >
                   {isDeletingQuotes ? "Deleting..." : "Delete"}
+                </button>
+                <button
+                  onClick={handleCancelBulkDelete}
+                  disabled={isDeletingQuotes}
+                  className={`px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50 ${isDeletingQuotes ? "opacity-70 cursor-not-allowed" : ""}`}
+                >
+                  Cancel
                 </button>
               </div>
             </div>

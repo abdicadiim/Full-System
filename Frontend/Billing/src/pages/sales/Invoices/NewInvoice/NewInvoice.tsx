@@ -185,6 +185,27 @@ const noop = (..._args: any[]) => {};
 const asyncNoop = async (..._args: any[]) => {};
 const { baseCurrency, baseCurrencyCode } = useCurrency();
 const currencySymbol = baseCurrency?.symbol || baseCurrencyCode || "$";
+const resolveInvoiceCurrency = (candidate?: string | null) => {
+  const normalized = String(candidate || "").trim().toUpperCase();
+  if (!normalized || normalized === "USD" || normalized === "AMD") {
+    return baseCurrencyCode || normalized || "USD";
+  }
+  return normalized;
+};
+const extractTransactionSeriesRows = (response: any) => {
+  const candidates = [
+    response?.data,
+    response?.data?.data,
+    response?.data?.rows,
+    response?.data?.series,
+    response?.rows,
+    response?.series,
+  ];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) return candidate;
+  }
+  return [];
+};
 const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
 const [customers, setCustomers] = useState<any[]>([]);
 const [availableProjects, setAvailableProjects] = useState<any[]>([]);
@@ -520,15 +541,18 @@ const [formData, setFormData] = useState<InvoiceFormState>({
 });
 const prefillAppliedRef = useRef(false);
 const [loadedInvoice, setLoadedInvoice] = useState<any>(null);
+const invoiceSeriesRef = useRef<{ id: string; name?: string; prefix?: string } | null>(null);
 useEffect(() => {
   if (isEditMode || !baseCurrencyCode || hasAppliedBaseCurrencyRef.current) return;
   setFormData((prev) => {
-    if (prev.currency && prev.currency !== "USD") {
+    const currentCurrency = String(prev.currency || "").trim().toUpperCase();
+    const isFallbackCurrency = !currentCurrency || currentCurrency === "USD" || currentCurrency === "AMD";
+    if (!isFallbackCurrency) {
       hasAppliedBaseCurrencyRef.current = true;
       return prev;
     }
     hasAppliedBaseCurrencyRef.current = true;
-    return { ...prev, currency: baseCurrencyCode };
+    return { ...prev, currency: resolveInvoiceCurrency(baseCurrencyCode) };
   });
 }, [baseCurrencyCode, isEditMode]);
 const hasProjectItem = (item: any) =>
@@ -903,7 +927,9 @@ const handleCustomerSelect = (customer: any) => {
       null;
 
     const nextPriceListName = resolvedPriceList ? String(resolvedPriceList.name || "").trim() : (customerPriceListNameRaw || (prev as any).selectedPriceList);
-    const nextCurrency = resolvedPriceList?.currency ? String(resolvedPriceList.currency).trim() : customerCurrency;
+    const nextCurrency = resolveInvoiceCurrency(
+      resolvedPriceList?.currency ? String(resolvedPriceList.currency).trim() : customerCurrency
+    );
 
     return {
       ...prev,
@@ -1178,7 +1204,7 @@ useEffect(() => {
   // Re-apply selected price list to invoice lines (keeps rates consistent)
   const list = selectedPriceList;
   setFormData((prev) => {
-    const nextCurrency = list?.currency ? String(list.currency).trim() : prev.currency;
+    const nextCurrency = resolveInvoiceCurrency(list?.currency ? String(list.currency).trim() : prev.currency);
     const updatedItems = (prev.items || []).map((row: any) => {
       if (row?.itemType === "header") return row;
       if (!row?.itemId && !row?.name && !row?.itemDetails) return row;
@@ -1400,7 +1426,7 @@ useEffect(() => {
     const nextState = {
       ...prev,
       customerName: customerName || prev.customerName,
-      currency: String(rawProjects[0]?.currency || prev.currency || "USD"),
+      currency: resolveInvoiceCurrency(rawProjects[0]?.currency || prev.currency || "USD"),
       items: mergedItems.length > 0 ? mergedItems : prev.items,
     } as InvoiceFormState;
     const totals = calculateInvoiceTotalsFromData(nextState);
@@ -1470,7 +1496,7 @@ useEffect(() => {
       roundOff: Number(quoteDataFromState?.roundOff ?? prev.roundOff) || prev.roundOff,
       adjustment: Number(quoteDataFromState?.adjustment ?? prev.adjustment) || prev.adjustment,
       total: Number(quoteDataFromState?.total ?? prev.total) || prev.total,
-      currency: String(quoteDataFromState?.currency || prev.currency || "USD"),
+      currency: resolveInvoiceCurrency(quoteDataFromState?.currency || prev.currency || "USD"),
       customerNotes: String(quoteDataFromState?.customerNotes || prev.customerNotes || ""),
       termsAndConditions: String(quoteDataFromState?.termsAndConditions || prev.termsAndConditions || ""),
     } as InvoiceFormState;
@@ -2076,6 +2102,9 @@ const buildInvoicePayload = (statusValue: string) => {
     customerEmail: customerEmail || undefined,
     priceListId: String(selectedPriceList?.id || selectedPriceList?._id || ""),
     priceListName: String(selectedPriceList?.name || ""),
+    transactionNumberSeriesId: invoiceSeriesRef.current?.id || undefined,
+    transactionNumberSeriesName: invoiceSeriesRef.current?.name || undefined,
+    transactionNumberSeriesPrefix: invoiceSeriesRef.current?.prefix || undefined,
     date: formData.invoiceDate || new Date().toISOString(),
     dueDate: formData.dueDate,
     orderNumber: formData.orderNumber,
@@ -2180,7 +2209,7 @@ const isDuplicateInvoiceNumberError = (error: any) => {
 const fetchLatestInvoiceNumber = async () => {
   try {
     const allSeries: any = await transactionNumberSeriesAPI.getAll({ limit: 1000 });
-    const rows = Array.isArray(allSeries?.data) ? allSeries.data : [];
+    const rows = extractTransactionSeriesRows(allSeries);
     const invoiceSeries =
       rows.find((row: any) => {
         const moduleName = String(row?.module || row?.moduleName || "").toLowerCase().trim();
@@ -2190,6 +2219,11 @@ const fetchLatestInvoiceNumber = async () => {
 
     if (invoiceSeries) {
       const seriesId = String(invoiceSeries?.id || invoiceSeries?._id || "").trim();
+      invoiceSeriesRef.current = {
+        id: seriesId,
+        name: String(invoiceSeries?.seriesName || invoiceSeries?.name || invoiceSeries?.module || "Invoice").trim(),
+        prefix: String(invoiceSeries?.prefix || "INV-").trim(),
+      };
       if (seriesId) {
         const nextRes: any = await transactionNumberSeriesAPI.getNextNumber(seriesId);
         const fromSeries = nextRes?.data?.nextNumber || nextRes?.data?.next_number;
@@ -2206,12 +2240,17 @@ const fetchLatestInvoiceNumber = async () => {
     console.warn("Failed to read transaction series for invoice number:", error);
   }
 
-  const response = await invoicesAPI.getNextNumber(invoicePrefix || "INV-");
-  const nextNumber = response?.data?.invoiceNumber || response?.data?.nextNumber;
+  const response = await transactionNumberSeriesAPI.getNextNumber();
+  const nextNumber = response?.data?.nextNumber || response?.data?.next_number;
   if (response && response.success && nextNumber) {
     const latestNumber = String(nextNumber);
     setFormData(prev => ({ ...prev, invoiceNumber: latestNumber }));
-    if (response.data.nextNumber !== undefined && response.data.nextNumber !== null) {
+    invoiceSeriesRef.current = {
+      id: String(response?.data?.seriesId || invoiceSeriesRef.current?.id || "").trim(),
+      name: invoiceSeriesRef.current?.name || "Invoice",
+      prefix: invoiceSeriesRef.current?.prefix || invoicePrefix,
+    };
+    if (response?.data?.nextNumber !== undefined && response?.data?.nextNumber !== null) {
       setInvoiceNextNumber(String(response.data.nextNumber).padStart(6, "0"));
     }
     return latestNumber;
@@ -3133,7 +3172,7 @@ return (
                 <h2 className="text-[14px] font-semibold text-slate-800">Item Table</h2>
                 <div className="flex items-center gap-5">
                   <button
-                    className="flex items-center gap-1.5 text-[12px] font-medium text-[#2563eb] hover:text-[#1d4ed8]"
+                    className="flex items-center gap-1.5 text-[12px] font-medium text-[#156372] hover:text-[#0D4A52]"
                     onClick={() => setIsScanModeOpen(true)}
                   >
                     <ScanLine size={14} />
@@ -3141,7 +3180,7 @@ return (
                   </button>
                   <div className="relative" ref={bulkActionsRef}>
                     <button
-                      className="flex items-center gap-1.5 text-[12px] font-medium text-[#2563eb] hover:text-[#1d4ed8]"
+                      className="flex items-center gap-1.5 text-[12px] font-medium text-[#156372] hover:text-[#0D4A52]"
                       onClick={() => setIsBulkActionsOpen((prev) => !prev)}
                     >
                       <CheckSquare size={14} />
@@ -3151,7 +3190,7 @@ return (
                       <div className="absolute right-0 top-full z-[140] mt-2 min-w-[210px] overflow-hidden rounded-md border border-slate-200 bg-white shadow-[0_12px_24px_rgba(15,23,42,0.16)]">
                         <button
                           type="button"
-                          className="mx-1 mt-1 flex w-[calc(100%-8px)] items-center justify-between rounded-md bg-[#4a89e8] px-3 py-2 text-left text-[13px] font-medium text-white"
+                          className="mx-1 mt-1 flex w-[calc(100%-8px)] items-center justify-between rounded-md bg-[#156372] px-3 py-2 text-left text-[13px] font-medium text-white hover:bg-[#0D4A52]"
                           onClick={() => {
                             setBulkSelectedItemIds(standardLineItems.map((item) => item.id));
                             setIsBulkUpdateLineItemsActive(true);

@@ -381,6 +381,8 @@ export default function Invoices() {
   });
   const [isMarkAsSentModalOpen, setIsMarkAsSentModalOpen] = useState(false);
   const [isDissociateModalOpen, setIsDissociateModalOpen] = useState(false);
+  const [isDeleteConfirmModalOpen, setIsDeleteConfirmModalOpen] = useState(false);
+  const [isDeletingInvoices, setIsDeletingInvoices] = useState(false);
   const [activeSortField, setActiveSortField] = useState("Invoice#");
   const [sortConfig, setSortConfig] = useState({ key: "Date", direction: "desc" });
   const [isExportCurrentViewModalOpen, setIsExportCurrentViewModalOpen] = useState(false);
@@ -2079,22 +2081,28 @@ export default function Invoices() {
       toast("Please select at least one invoice.");
       return;
     }
+    setIsDeleteConfirmModalOpen(true);
+  };
 
-    const confirmMessage = `Are you sure you want to delete ${selectedInvoices.size} invoice(s)? This action cannot be undone.`;
+  const confirmDeleteInvoices = async () => {
+    if (selectedInvoices.size === 0) {
+      setIsDeleteConfirmModalOpen(false);
+      return;
+    }
 
-    if (window.confirm(confirmMessage)) {
-      const invoiceIds = Array.from(selectedInvoices);
-
-      // Delete each invoice
-      await Promise.all(invoiceIds.map(invoiceId => deleteInvoice(invoiceId)));
-
-      // Reapply filters to update the table with the current view
+    const invoiceIds = Array.from(selectedInvoices);
+    setIsDeletingInvoices(true);
+    try {
+      await Promise.all(invoiceIds.map((invoiceId) => deleteInvoice(invoiceId)));
       await applyFilters(selectedView, selectedStatus);
-
-      // Clear selection
       setSelectedInvoices(new Set());
-
+      setIsDeleteConfirmModalOpen(false);
       toast(`${invoiceIds.length} invoice(s) deleted successfully.`);
+    } catch (error) {
+      console.error("Failed to delete invoices:", error);
+      toast.error("Failed to delete invoices. Please try again.");
+    } finally {
+      setIsDeletingInvoices(false);
     }
   };
 
@@ -2754,14 +2762,14 @@ export default function Invoices() {
                       <td className="px-4 py-3 relative overflow-visible w-10">
                         <div className="flex items-center justify-center relative">
                           <button
-                            className={`hidden group-hover:flex items-center justify-center w-7 h-7 rounded-full bg-gradient-to-r from-[#156372] to-[#0D4A52] cursor-pointer transition-all shadow-md ${activeActionInvoiceId === invoice.id ? '!flex' : ''}`}
+                            className={`hidden group-hover:flex items-center justify-center w-7 h-7 rounded-full bg-white border border-gray-200 cursor-pointer transition-all shadow-sm hover:bg-gray-50 ${activeActionInvoiceId === invoice.id ? '!flex' : ''}`}
                             onClick={(e) => {
                               e.stopPropagation();
                               setActiveActionInvoiceId(activeActionInvoiceId === invoice.id ? null : invoice.id);
                             }}
                             title="Actions"
                           >
-                            <ChevronDown size={15} className="text-white" />
+                            <ChevronDown size={15} className="text-slate-500" />
                           </button>
 
                           {activeActionInvoiceId === invoice.id && (
@@ -2772,18 +2780,18 @@ export default function Invoices() {
                             >
                               <div className="flex flex-col py-1">
                                 <button
-                                  className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-[#156372] to-[#0D4A52] text-white hover:opacity-90 text-sm font-medium text-left"
+                                  className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-700 text-left transition-colors hover:bg-slate-50"
                                   onClick={() => {
                                     setActiveActionInvoiceId(null);
                                     navigate(`/sales/invoices/${invoice.id}/edit`);
                                   }}
                                 >
-                                  <Pencil size={16} />
+                                  <Pencil size={16} className="text-slate-500" />
                                   Edit
                                 </button>
 
                                 <button
-                                  className={`flex items-center gap-3 px-4 py-2.5 text-sm text-left ${isGeneratingPdf ? "text-gray-400 cursor-not-allowed" : "text-gray-700 hover:bg-gray-50"}`}
+                                  className={`flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors ${isGeneratingPdf ? "text-gray-400 cursor-not-allowed" : "text-slate-700 hover:bg-slate-50"}`}
                                   onClick={() => {
                                     if (isGeneratingPdf) return;
                                     setActiveActionInvoiceId(null);
@@ -2794,41 +2802,41 @@ export default function Invoices() {
                                   {isGeneratingPdf ? (
                                     <RefreshCw size={16} className="animate-spin" />
                                   ) : (
-                                    <FileText size={16} className="text-[#156372]" />
+                                    <FileText size={16} className="text-slate-500" />
                                   )}
                                   {isGeneratingPdf ? "Generating PDF..." : "Download PDF"}
                                 </button>
 
                                 <button
-                                  className="flex items-center gap-3 px-4 py-2.5 text-gray-700 hover:bg-gray-50 text-sm text-left"
+                                  className="flex items-center gap-3 px-4 py-2.5 text-sm text-left text-slate-700 transition-colors hover:bg-slate-50"
                                   onClick={() => {
                                     setActiveActionInvoiceId(null);
                                     navigate(`/sales/invoices/${invoice.id}/email`);
                                   }}
                                 >
-                                  <Mail size={16} className="text-[#156372]" />
+                                  <Mail size={16} className="text-slate-500" />
                                   Send Email
                                 </button>
 
                                 <button
-                                  className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-[#156372] to-[#0D4A52] text-white hover:opacity-90 text-sm font-medium text-left my-1 mx-2 rounded shadow-sm"
+                                  className="flex items-center gap-3 px-4 py-2.5 my-1 mx-2 rounded border border-slate-200 bg-white text-sm font-medium text-slate-700 text-left transition-colors hover:bg-slate-50"
                                   onClick={() => {
                                     setActiveActionInvoiceId(null);
                                     navigate(`/payments/payments-received/new`, { state: { invoiceId: invoice.id } });
                                   }}
                                 >
-                                  <CreditCard size={16} />
+                                  <CreditCard size={16} className="text-slate-500" />
                                   Record Payment
                                 </button>
 
                                 <button
-                                  className="flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-[#156372] to-[#0D4A52] text-white hover:opacity-90 text-sm font-medium text-left my-1 mx-2 rounded shadow-sm"
+                                  className="flex items-center gap-3 px-4 py-2.5 my-1 mx-2 rounded border border-slate-200 bg-white text-sm font-medium text-slate-700 text-left transition-colors hover:bg-slate-50"
                                   onClick={() => {
                                     setActiveActionInvoiceId(null);
                                     handleShare(invoice);
                                   }}
                                 >
-                                  <Link size={16} />
+                                  <Link size={16} className="text-slate-500" />
                                   Share Invoice Link
                                 </button>
                               </div>
@@ -2852,7 +2860,7 @@ export default function Invoices() {
       {sortedInvoices.length > 0 && (
         <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-white">
           <div className="flex items-center text-sm text-gray-500">
-            Showing {((currentPage - 1) * itemsPerPage) + 1} through {Math.min(currentPage * itemsPerPage, totalItems)} of {totalItems} invoices
+            Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalItems)} of {totalItems} invoices
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -2889,15 +2897,15 @@ export default function Invoices() {
       {/* Bulk Update Modal */}
       {isBulkUpdateModalOpen && (
         <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-[300] flex items-start justify-center pt-[10vh] overflow-y-auto px-4 py-6"
+          className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-[300] flex items-start justify-center pt-6 overflow-y-auto px-4 py-6"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setIsBulkUpdateModalOpen(false);
             }
           }}
         >
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <div className="bg-white rounded-lg shadow-xl max-w-xl w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5 border-b border-gray-200">
               <h2>Bulk Update Invoices</h2>
               <button
                 className="p-1 text-gray-500 hover:text-gray-700 cursor-pointer"
@@ -2906,12 +2914,12 @@ export default function Invoices() {
                 <X size={20} />
               </button>
             </div>
-            <div className="p-6">
-              <p className="text-sm text-gray-600 mb-6">
+            <div className="p-5">
+              <p className="text-sm text-gray-600 mb-5">
                 Choose a field from the dropdown and update with new information.
               </p>
 
-              <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="grid grid-cols-2 gap-4 mb-5">
                 <div className="flex flex-col relative" ref={bulkUpdateFieldDropdownRef}>
                   <label className="text-sm font-medium text-gray-700 mb-2">Field</label>
                   <div
@@ -2926,7 +2934,7 @@ export default function Invoices() {
                       {bulkUpdateFieldOptions.map((field) => (
                         <div
                           key={field}
-                          className="px-4 py-2.5 text-sm text-gray-700 cursor-pointer hover:bg-blue-600 hover:text-white transition-colors"
+                          className="px-4 py-2.5 text-sm text-gray-700 cursor-pointer hover:bg-[#156372] hover:text-white transition-colors"
                           onClick={() => {
                             setBulkUpdateField(field);
                             setBulkUpdateValue("");
@@ -2946,7 +2954,7 @@ export default function Invoices() {
                 </div>
               </div>
 
-              <div className="mb-6">
+              <div className="mb-5">
                 <label className="text-sm font-medium text-gray-700 mb-2 block">
                   Reason for bulk updating invoices<span className="text-red-500">*</span>
                 </label>
@@ -2962,9 +2970,9 @@ export default function Invoices() {
                 <strong>Note:</strong> All the selected invoices will be updated with the new information and you cannot undo this action.
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50">
+            <div className="flex items-center justify-end gap-3 p-5 border-t border-gray-200 bg-gray-50">
               <button
-                className={`px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium cursor-pointer hover:bg-red-700 shadow-sm ${isBulkUpdating ? "opacity-60 cursor-not-allowed" : ""}`}
+                className={`px-4 py-2 bg-[#156372] text-white rounded-md text-sm font-medium cursor-pointer hover:bg-[#0D4A52] shadow-sm ${isBulkUpdating ? "opacity-60 cursor-not-allowed" : ""}`}
                 onClick={handleBulkUpdateSubmit}
                 disabled={isBulkUpdating}
               >
@@ -2979,6 +2987,50 @@ export default function Invoices() {
                   setBulkUpdateReason("");
                 }}
                 disabled={isBulkUpdating}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isDeleteConfirmModalOpen && (
+        <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16">
+          <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 text-amber-600 text-[12px] font-bold">
+                !
+              </div>
+              <h3 className="flex-1 text-[15px] font-semibold text-slate-800">
+                Delete {selectedInvoices.size} invoice{selectedInvoices.size === 1 ? "" : "s"}?
+              </h3>
+              <button
+                type="button"
+                className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                onClick={() => setIsDeleteConfirmModalOpen(false)}
+                aria-label="Close"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="px-5 py-3 text-[13px] text-slate-600">
+              You cannot retrieve the selected invoice{selectedInvoices.size === 1 ? "" : "s"} once they have been deleted. This action cannot be undone.
+            </div>
+            <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+              <button
+                type="button"
+                className={`rounded-md bg-[#156372] px-4 py-1.5 text-[12px] text-white hover:bg-[#0D4A52] ${isDeletingInvoices ? "cursor-not-allowed opacity-70" : ""}`}
+                onClick={confirmDeleteInvoices}
+                disabled={isDeletingInvoices}
+              >
+                {isDeletingInvoices ? "Deleting..." : "Delete"}
+              </button>
+              <button
+                type="button"
+                className={`rounded-md border border-slate-300 px-4 py-1.5 text-[12px] text-slate-700 hover:bg-slate-50 ${isDeletingInvoices ? "cursor-not-allowed opacity-70" : ""}`}
+                onClick={() => setIsDeleteConfirmModalOpen(false)}
+                disabled={isDeletingInvoices}
               >
                 Cancel
               </button>
@@ -4285,7 +4337,7 @@ export default function Invoices() {
       )}
       {/* Customize Columns Modal */}
       {isCustomizeColumnsModalOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] flex items-start justify-center z-[3000] overflow-y-auto pt-[10vh] pb-6 px-4">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] flex items-start justify-center z-[3000] overflow-y-auto pt-6 pb-6 px-4">
           <div className="bg-white rounded-lg shadow-2xl w-full max-w-[500px] overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-[#f9fafb]">
               <div className="flex items-center gap-3">
@@ -4386,7 +4438,7 @@ export default function Invoices() {
                   localStorage.setItem("taban_invoices_column_order_v1", JSON.stringify(normalizedOrder));
                   setIsCustomizeColumnsModalOpen(false);
                 }}
-                className="px-6 py-2 bg-[#22a06b] text-white rounded text-[13px] font-medium hover:bg-[#1c8b5d] transition-colors shadow-sm"
+                className="px-6 py-2 bg-[#156372] text-white rounded text-[13px] font-medium hover:bg-[#0D4A52] transition-colors shadow-sm"
               >
                 Save
               </button>

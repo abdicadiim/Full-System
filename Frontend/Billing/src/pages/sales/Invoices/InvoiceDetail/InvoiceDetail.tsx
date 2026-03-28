@@ -99,6 +99,7 @@ export default function InvoiceDetail() { // Start of component
   const [payments, setPayments] = useState<any[]>([]);
   const [selectedItems, setSelectedItems] = useState<Set<any>>(new Set());
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [isDeleteInvoiceModalOpen, setIsDeleteInvoiceModalOpen] = useState(false);
   const [isSendDropdownOpen, setIsSendDropdownOpen] = useState(false);
   const [isRemindersDropdownOpen, setIsRemindersDropdownOpen] = useState(false);
   const [isPdfDropdownOpen, setIsPdfDropdownOpen] = useState(false);
@@ -2926,11 +2927,12 @@ export default function InvoiceDetail() { // Start of component
 
       const clonedInvoiceId = clonedInvoice?.id || clonedInvoice?._id;
       if (clonedInvoiceId) {
+        toast.success("Invoice cloned successfully.");
         navigate(`/sales/invoices/${clonedInvoiceId}`);
         return;
       }
 
-      toast("Invoice cloned successfully, but it could not be opened automatically.");
+      toast.success("Invoice cloned successfully, but it could not be opened automatically.");
     } catch (error: any) {
       console.error("Error cloning invoice:", error);
       toast(error?.message || "Failed to clone invoice. Please try again.");
@@ -2955,13 +2957,18 @@ export default function InvoiceDetail() { // Start of component
 
   const handleDeleteInvoice = () => {
     setIsMoreMenuOpen(false);
-    if (window.confirm(`Are you sure you want to delete invoice ${invoice?.invoiceNumber || invoice?.id}?`)) {
-      // TODO: Implement actual deletion logic
-      const updatedInvoices = invoices.filter(inv => inv.id !== invoice.id);
-      setInvoices(updatedInvoices);
-      toast("Invoice deleted successfully.");
-      navigate("/sales/invoices");
-    }
+    if (!invoice) return;
+    setIsDeleteInvoiceModalOpen(true);
+  };
+
+  const handleConfirmDeleteInvoice = () => {
+    if (!invoice) return;
+    // TODO: Implement actual deletion logic
+    const updatedInvoices = invoices.filter(inv => inv.id !== invoice.id);
+    setInvoices(updatedInvoices);
+    toast.success("Invoice deleted successfully.");
+    setIsDeleteInvoiceModalOpen(false);
+    navigate("/sales/invoices");
   };
 
   const handleInvoicePreferences = () => {
@@ -3030,19 +3037,23 @@ export default function InvoiceDetail() { // Start of component
         const updated = [...prev, ...newAttachments];
         // Save to backend
         if (id) {
-          const attachmentsToStore = updated.map(att => ({
-            id: att.id,
-            name: att.name,
-            size: att.size,
-            type: att.type,
-            preview: att.preview
-          }));
-          // updateInvoice is async but we don't await it inside setState callback
-          updateInvoice(id, { attachments: attachmentsToStore })
-            .catch(err => console.error("Error saving attachments to backend:", err));
-        }
-        return updated;
-      });
+        const attachmentsToStore = updated.map(att => ({
+          id: att.id,
+          name: att.name,
+          size: att.size,
+          type: att.type,
+          preview: att.preview
+        }));
+        // updateInvoice is async but we don't await it inside setState callback
+        updateInvoice(id, { attachments: attachmentsToStore })
+          .then(() => toast.success("Attachment uploaded successfully."))
+          .catch(err => {
+            console.error("Error saving attachments to backend:", err);
+            toast.error("Failed to save attachment.");
+          });
+      }
+      return updated;
+    });
     };
 
     processFiles();
@@ -3079,7 +3090,11 @@ export default function InvoiceDetail() { // Start of component
           preview: att.preview
         }));
         updateInvoice(id, { attachments: attachmentsToStore })
-          .catch(err => console.error("Error saving attachments to backend:", err));
+          .then(() => toast.success("Attachment removed successfully."))
+          .catch(err => {
+            console.error("Error saving attachments to backend:", err);
+            toast.error("Failed to remove attachment.");
+          });
       }
       return updated;
     });
@@ -3124,7 +3139,11 @@ export default function InvoiceDetail() { // Start of component
       if (id) {
         // updateInvoice is async
         updateInvoice(id, { comments: updated })
-          .catch(err => console.error("Error saving comments to backend:", err));
+          .then(() => toast.success("Comment added successfully."))
+          .catch(err => {
+            console.error("Error saving comments to backend:", err);
+            toast.error("Failed to save comment.");
+          });
       }
       return updated;
     });
@@ -4459,6 +4478,48 @@ export default function InvoiceDetail() { // Start of component
                   disabled={isSavingRefund}
                   onClick={handleCloseRefundModal}
                   className="px-5 py-2 border border-gray-300 text-gray-700 rounded-md text-[14px] font-medium hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isDeleteInvoiceModalOpen && (
+          <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16" onClick={() => setIsDeleteInvoiceModalOpen(false)}>
+            <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+                <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
+                  !
+                </div>
+                <h3 className="text-[15px] font-semibold text-slate-800 flex-1">
+                  Delete invoice?
+                </h3>
+                <button
+                  type="button"
+                  className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  onClick={() => setIsDeleteInvoiceModalOpen(false)}
+                  aria-label="Close"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="px-5 py-3 text-[13px] text-slate-600">
+                You cannot retrieve this invoice once it has been deleted.
+              </div>
+              <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+                <button
+                  type="button"
+                  className="px-4 py-1.5 rounded-md bg-red-600 text-white text-[12px] hover:bg-red-700"
+                  onClick={handleConfirmDeleteInvoice}
+                >
+                  Delete
+                </button>
+                <button
+                  type="button"
+                  className="px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50"
+                  onClick={() => setIsDeleteInvoiceModalOpen(false)}
                 >
                   Cancel
                 </button>
