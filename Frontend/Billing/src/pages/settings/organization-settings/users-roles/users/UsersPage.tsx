@@ -41,7 +41,6 @@ export default function UsersPage() {
   const [locationAccessModalOpen, setLocationAccessModalOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [detailMenuOpen, setDetailMenuOpen] = useState(false);
-  const [inviteDropdownOpen, setInviteDropdownOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
@@ -69,6 +68,8 @@ export default function UsersPage() {
     role: "",
     password: "",
   });
+  const [inviteRoleDropdownOpen, setInviteRoleDropdownOpen] = useState(false);
+  const [inviteRoleDropdownPos, setInviteRoleDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editLocationAccessModalOpen, setEditLocationAccessModalOpen] = useState(false);
   const [editData, setEditData] = useState({
@@ -76,6 +77,8 @@ export default function UsersPage() {
     email: "",
     role: "",
   });
+  const [editRoleDropdownOpen, setEditRoleDropdownOpen] = useState(false);
+  const [editRoleDropdownPos, setEditRoleDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
   const statusRef = useRef(null);
   const statusDropdownRef = useRef(null);
@@ -84,8 +87,10 @@ export default function UsersPage() {
   const menuButtonRef = useRef(null);
   const detailMenuRef = useRef(null);
   const detailMenuButtonRef = useRef(null);
-  const inviteDropdownRef = useRef(null);
-  const inviteDropdownButtonRef = useRef(null);
+  const inviteRoleButtonRef = useRef<HTMLButtonElement | null>(null);
+  const inviteRoleMenuRef = useRef<HTMLDivElement | null>(null);
+  const editRoleButtonRef = useRef<HTMLButtonElement | null>(null);
+  const editRoleMenuRef = useRef<HTMLDivElement | null>(null);
 
   const statusOptions = ["All", "Inactive", "Active"];
 
@@ -231,16 +236,20 @@ export default function UsersPage() {
         detailMenuRef.current && !detailMenuRef.current.contains(event.target)) {
         setDetailMenuOpen(false);
       }
-      if (inviteDropdownButtonRef.current && !inviteDropdownButtonRef.current.contains(event.target) &&
-        inviteDropdownRef.current && !inviteDropdownRef.current.contains(event.target)) {
-        setInviteDropdownOpen(false);
+      if (inviteRoleButtonRef.current && !inviteRoleButtonRef.current.contains(event.target) &&
+        inviteRoleMenuRef.current && !inviteRoleMenuRef.current.contains(event.target)) {
+        setInviteRoleDropdownOpen(false);
+      }
+      if (editRoleButtonRef.current && !editRoleButtonRef.current.contains(event.target) &&
+        editRoleMenuRef.current && !editRoleMenuRef.current.contains(event.target)) {
+        setEditRoleDropdownOpen(false);
       }
     };
-    if (statusDropdownOpen || menuOpen || detailMenuOpen || inviteDropdownOpen) {
+    if (statusDropdownOpen || menuOpen || detailMenuOpen || inviteRoleDropdownOpen || editRoleDropdownOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [statusDropdownOpen, menuOpen, detailMenuOpen, inviteDropdownOpen]);
+  }, [statusDropdownOpen, menuOpen, detailMenuOpen, inviteRoleDropdownOpen, editRoleDropdownOpen]);
 
   // Handle edit user
   const handleEditUser = async () => {
@@ -278,6 +287,7 @@ export default function UsersPage() {
 
       if (response.success) {
         setEditModalOpen(false);
+        closeEditRoleDropdown();
         setError(null);
 
         const updatedUser = {
@@ -474,6 +484,25 @@ export default function UsersPage() {
     label: role.name,
   }));
   const roleOptions = [...STANDARD_ROLE_OPTIONS, ...customRoleOptions];
+
+  const openRoleDropdown = (
+    buttonRef: React.RefObject<HTMLButtonElement | null>,
+    setPos: React.Dispatch<React.SetStateAction<{ top: number; left: number; width: number } | null>>,
+    setOpen: React.Dispatch<React.SetStateAction<boolean>>,
+  ) => {
+    const button = buttonRef.current;
+    if (!button) return;
+    const rect = button.getBoundingClientRect();
+    const estimatedHeight = Math.min(roleOptions.length + 1, 6) * 40 + 12;
+    const openUp = window.innerHeight - rect.bottom < estimatedHeight + 24;
+    const top = openUp ? Math.max(16, rect.top - estimatedHeight - 8) : rect.bottom + 8;
+    const left = Math.max(16, Math.min(rect.left, window.innerWidth - rect.width - 16));
+    setPos({ top, left, width: rect.width });
+    setOpen(true);
+  };
+
+  const closeInviteRoleDropdown = () => setInviteRoleDropdownOpen(false);
+  const closeEditRoleDropdown = () => setEditRoleDropdownOpen(false);
 
   // Handle invite again
   const handleInviteAgain = async () => {
@@ -687,6 +716,7 @@ export default function UsersPage() {
           // Close modals and reset
           setLocationAccessModalOpen(false);
           setInviteModalOpen(false);
+          closeInviteRoleDropdown();
           setInviteData({ name: "", email: "", role: "", password: "" });
           setAccessibleLocations([]);
           setDefaultBusinessLocation("");
@@ -1263,6 +1293,7 @@ export default function UsersPage() {
                 <button
                   onClick={() => {
                     setInviteModalOpen(false);
+                    closeInviteRoleDropdown();
                     setInviteData({ name: "", email: "", role: "", password: "" });
                     setError(null);
                   }}
@@ -1309,18 +1340,28 @@ export default function UsersPage() {
                   <label className="block text-sm font-medium text-red-500 mb-2">
                     Role <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    value={inviteData.role}
-                    onChange={(e) => setInviteData({ ...inviteData, role: e.target.value })}
-                    className="w-full h-10 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Select a role</option>
-                    {roleOptions.map((role) => (
-                      <option key={role.value} value={role.value}>
-                        {role.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <button
+                      ref={inviteRoleButtonRef}
+                      type="button"
+                      onClick={() => {
+                        if (inviteRoleDropdownOpen) {
+                          closeInviteRoleDropdown();
+                          return;
+                        }
+                        openRoleDropdown(inviteRoleButtonRef, setInviteRoleDropdownPos, setInviteRoleDropdownOpen);
+                      }}
+                      className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-white text-left focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center justify-between"
+                    >
+                      <span className={inviteData.role ? "text-gray-900" : "text-gray-400"}>
+                        {inviteData.role ? (roleOptions.find((role) => role.value === inviteData.role)?.label || "Select a role") : "Select a role"}
+                      </span>
+                      <ChevronDown
+                        size={16}
+                        className={`text-gray-400 transition-transform ${inviteRoleDropdownOpen ? "rotate-180" : ""}`}
+                      />
+                    </button>
+                  </div>
                 </div>
 
 
@@ -1349,6 +1390,50 @@ export default function UsersPage() {
         </div>
       )}
 
+      {inviteRoleDropdownOpen && inviteRoleDropdownPos && createPortal(
+        <div
+          ref={inviteRoleMenuRef}
+          className="fixed z-[10002] overflow-hidden rounded-lg border border-gray-200 bg-gray-50 shadow-lg"
+          style={{
+            top: inviteRoleDropdownPos.top,
+            left: inviteRoleDropdownPos.left,
+            width: inviteRoleDropdownPos.width,
+          }}
+        >
+          <div className="py-1">
+            <button
+              type="button"
+              onClick={() => {
+                setInviteData({ ...inviteData, role: "" });
+                closeInviteRoleDropdown();
+              }}
+              className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-blue-50 ${!inviteData.role ? "bg-blue-50" : ""}`}
+            >
+              <span>Select a role</span>
+              {!inviteData.role && <Check size={16} className="text-blue-600" />}
+            </button>
+            {roleOptions.map((role) => {
+              const selected = inviteData.role === role.value;
+              return (
+                <button
+                  key={role.value}
+                  type="button"
+                  onClick={() => {
+                    setInviteData({ ...inviteData, role: role.value });
+                    closeInviteRoleDropdown();
+                  }}
+                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-blue-50 ${selected ? "bg-blue-50" : ""}`}
+                >
+                  <span>{role.label}</span>
+                  {selected && <Check size={16} className="text-blue-600" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* Edit User Modal */}
       {editModalOpen && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center pt-10 z-[10001] overflow-y-auto">
@@ -1359,6 +1444,7 @@ export default function UsersPage() {
                 <button
                   onClick={() => {
                     setEditModalOpen(false);
+                    closeEditRoleDropdown();
                     setEditData({ name: "", email: "", role: "" });
                     setError(null);
                   }}
@@ -1409,19 +1495,26 @@ export default function UsersPage() {
                     Role*
                   </label>
                   <div className="relative">
-                    <select
-                      value={editData.role}
-                      onChange={(e) => setEditData({ ...editData, role: e.target.value })}
-                      className="w-full h-10 px-3 pr-10 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
+                    <button
+                      ref={editRoleButtonRef}
+                      type="button"
+                      onClick={() => {
+                        if (editRoleDropdownOpen) {
+                          closeEditRoleDropdown();
+                          return;
+                        }
+                        openRoleDropdown(editRoleButtonRef, setEditRoleDropdownPos, setEditRoleDropdownOpen);
+                      }}
+                      className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-white text-left focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center justify-between"
                     >
-                      <option value="">Select a role</option>
-                      {roleOptions.map((role) => (
-                        <option key={role.value} value={role.value}>
-                          {role.label}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                      <span className={editData.role ? "text-gray-900" : "text-gray-400"}>
+                        {editData.role ? (roleOptions.find((role) => role.value === editData.role)?.label || "Select a role") : "Select a role"}
+                      </span>
+                      <ChevronDown
+                        size={16}
+                        className={`text-gray-400 transition-transform ${editRoleDropdownOpen ? "rotate-180" : ""}`}
+                      />
+                    </button>
                   </div>
                   {editData.role && (
                     <p className="mt-1 text-sm text-gray-500">
@@ -1453,6 +1546,50 @@ export default function UsersPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {editRoleDropdownOpen && editRoleDropdownPos && createPortal(
+        <div
+          ref={editRoleMenuRef}
+          className="fixed z-[10002] overflow-hidden rounded-lg border border-gray-200 bg-gray-50 shadow-lg"
+          style={{
+            top: editRoleDropdownPos.top,
+            left: editRoleDropdownPos.left,
+            width: editRoleDropdownPos.width,
+          }}
+        >
+          <div className="py-1">
+            <button
+              type="button"
+              onClick={() => {
+                setEditData({ ...editData, role: "" });
+                closeEditRoleDropdown();
+              }}
+              className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-blue-50 ${!editData.role ? "bg-blue-50" : ""}`}
+            >
+              <span>Select a role</span>
+              {!editData.role && <Check size={16} className="text-blue-600" />}
+            </button>
+            {roleOptions.map((role) => {
+              const selected = editData.role === role.value;
+              return (
+                <button
+                  key={role.value}
+                  type="button"
+                  onClick={() => {
+                    setEditData({ ...editData, role: role.value });
+                    closeEditRoleDropdown();
+                  }}
+                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-blue-50 ${selected ? "bg-blue-50" : ""}`}
+                >
+                  <span>{role.label}</span>
+                  {selected && <Check size={16} className="text-blue-600" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* Export Modal */}

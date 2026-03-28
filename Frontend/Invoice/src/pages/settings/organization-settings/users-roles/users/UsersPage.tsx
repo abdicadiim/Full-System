@@ -41,7 +41,6 @@ export default function UsersPage() {
   const [locationAccessModalOpen, setLocationAccessModalOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [detailMenuOpen, setDetailMenuOpen] = useState(false);
-  const [inviteDropdownOpen, setInviteDropdownOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
@@ -84,8 +83,6 @@ export default function UsersPage() {
   const menuButtonRef = useRef(null);
   const detailMenuRef = useRef(null);
   const detailMenuButtonRef = useRef(null);
-  const inviteDropdownRef = useRef(null);
-  const inviteDropdownButtonRef = useRef(null);
 
   const statusOptions = ["All", "Inactive", "Active"];
 
@@ -235,16 +232,12 @@ export default function UsersPage() {
         detailMenuRef.current && !detailMenuRef.current.contains(event.target)) {
         setDetailMenuOpen(false);
       }
-      if (inviteDropdownButtonRef.current && !inviteDropdownButtonRef.current.contains(event.target) &&
-        inviteDropdownRef.current && !inviteDropdownRef.current.contains(event.target)) {
-        setInviteDropdownOpen(false);
-      }
     };
-    if (statusDropdownOpen || menuOpen || detailMenuOpen || inviteDropdownOpen) {
+    if (statusDropdownOpen || menuOpen || detailMenuOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [statusDropdownOpen, menuOpen, detailMenuOpen, inviteDropdownOpen]);
+  }, [statusDropdownOpen, menuOpen, detailMenuOpen]);
 
   // Handle edit user
   const handleEditUser = async () => {
@@ -282,6 +275,7 @@ export default function UsersPage() {
 
       if (response.success) {
         setEditModalOpen(false);
+        setEditRoleDropdownOpen(false);
         setError(null);
 
         // Update selected user immediately with new data
@@ -682,6 +676,7 @@ export default function UsersPage() {
           // Close modals and reset
           setLocationAccessModalOpen(false);
           setInviteModalOpen(false);
+          setInviteDropdownOpen(false);
           setInviteData({ name: "", email: "", role: "", password: "" });
           setAccessibleLocations([]);
           setDefaultBusinessLocation("");
@@ -1254,6 +1249,7 @@ export default function UsersPage() {
                 <button
                   onClick={() => {
                     setInviteModalOpen(false);
+                    setInviteDropdownOpen(false);
                     setInviteData({ name: "", email: "", role: "", password: "" });
                     setError(null);
                   }}
@@ -1300,18 +1296,21 @@ export default function UsersPage() {
                   <label className="block text-sm font-medium text-red-500 mb-2">
                     Role <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    value={inviteData.role}
-                    onChange={(e) => setInviteData({ ...inviteData, role: e.target.value })}
-                    className="w-full h-10 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Select a role</option>
-                    {roleOptions.map((role) => (
-                      <option key={role.value} value={role.value}>
-                        {role.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={inviteData.role}
+                      onChange={(e) => setInviteData({ ...inviteData, role: e.target.value })}
+                      className="w-full h-10 px-3 pr-10 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
+                    >
+                      <option value="">Select a role</option>
+                      {roleOptions.map((role) => (
+                        <option key={role.value} value={role.value}>
+                          {role.label}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
                 </div>
 
 
@@ -1350,6 +1349,7 @@ export default function UsersPage() {
                 <button
                   onClick={() => {
                     setEditModalOpen(false);
+                    setEditRoleDropdownOpen(false);
                     setEditData({ name: "", email: "", role: "" });
                     setError(null);
                   }}
@@ -1403,7 +1403,7 @@ export default function UsersPage() {
                     <select
                       value={editData.role}
                       onChange={(e) => setEditData({ ...editData, role: e.target.value })}
-                      className="w-full h-10 px-3 pr-10 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
+                      className="w-full h-10 px-3 pr-10 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
                     >
                       <option value="">Select a role</option>
                       {roleOptions.map((role) => (
