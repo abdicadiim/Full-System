@@ -20,6 +20,7 @@ function Header({ onToggleSidebar }) {
   const { settings } = useSettings();
   const navigate = useNavigate();
   const location = useLocation();
+  const AUTH_URL = (import.meta as any).env?.VITE_AUTH_URL || "http://localhost:5172";
 
   const [openMenu, setOpenMenu] = useState(false);
   const [openQuickCreate, setOpenQuickCreate] = useState(false);
@@ -195,9 +196,9 @@ function Header({ onToggleSidebar }) {
     };
   }, []);
 
-  function handleLogout() {
-    logout();
-    navigate("/login", { replace: true });
+  async function handleLogout() {
+    await logout();
+    window.location.replace(`${AUTH_URL}/login?app=billing&logout=1`);
   }
 
   const headerBg = settings?.theme?.sidebarColor || "#156372";

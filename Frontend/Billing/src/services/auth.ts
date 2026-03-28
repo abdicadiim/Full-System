@@ -6,6 +6,7 @@ export const API_BASE_URL =
 
 const TOKEN_KEYS = ["token", "auth_token", "accessToken"];
 const USER_KEYS = ["user", "current_user", "auth_user"];
+const LOGOUT_KEYS = ["fs_logout_requested"];
 export const AUTH_USER_UPDATED_EVENT = "auth:user-updated";
 
 const broadcastUserUpdate = () => {
@@ -61,9 +62,43 @@ export const clearCurrentUser = () => {
   broadcastUserUpdate();
 };
 
-export const logout = () => {
+export const setLogoutRequested = () => {
+  if (typeof localStorage === "undefined") return;
+  LOGOUT_KEYS.forEach((key) => localStorage.setItem(key, "1"));
+  if (typeof sessionStorage !== "undefined") {
+    LOGOUT_KEYS.forEach((key) => sessionStorage.setItem(key, "1"));
+  }
+};
+
+export const clearLogoutRequested = () => {
+  if (typeof localStorage === "undefined") return;
+  LOGOUT_KEYS.forEach((key) => localStorage.removeItem(key));
+  if (typeof sessionStorage !== "undefined") {
+    LOGOUT_KEYS.forEach((key) => sessionStorage.removeItem(key));
+  }
+};
+
+export const isLogoutRequested = () => {
+  if (typeof localStorage === "undefined") return false;
+  return LOGOUT_KEYS.some((key) => localStorage.getItem(key) === "1" || sessionStorage.getItem(key) === "1");
+};
+
+export const logout = async () => {
+  try {
+    await fetch(`${API_BASE_URL}/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+    });
+  } catch {
+    // Fall through and clear local state anyway.
+  }
   clearToken();
   clearCurrentUser();
+  setLogoutRequested();
+  if (typeof localStorage !== "undefined") {
+    localStorage.removeItem("timerState");
+    localStorage.removeItem("auth_bootstrap_ready");
+  }
 };
 
 export const getMe = async () => {

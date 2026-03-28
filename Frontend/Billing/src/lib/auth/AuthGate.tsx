@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useUser } from "./UserContext";
+import { isLogoutRequested } from "../../services/auth";
 
 const AUTH_URL = (import.meta as any).env?.VITE_AUTH_URL || "http://localhost:5172";
 
@@ -14,7 +15,11 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     if (user) return;
     const returnTo = window.location.href;
     setRedirecting(true);
-    window.location.href = `${AUTH_URL}/login?app=billing&return=${encodeURIComponent(returnTo)}`;
+    const loginUrl = new URL(`${AUTH_URL}/login`);
+    loginUrl.searchParams.set("app", "billing");
+    loginUrl.searchParams.set("return", returnTo);
+    if (isLogoutRequested()) loginUrl.searchParams.set("logout", "1");
+    window.location.replace(loginUrl.toString());
   }, [loading, hasChecked, user, location]);
 
   if (loading || !hasChecked || redirecting || !user) {

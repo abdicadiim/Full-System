@@ -8,9 +8,11 @@ import { AUTH_BYPASS, FRONTEND_URL, JWT_SECRET, MONGO_URI, PORT } from "./config
 import { authRoutes } from "./routes/authRoutes.js";
 import { organizationRoutes } from "./routes/organizationRoutes.js";
 import { settingsRoutes } from "./routes/settingsRoutes.js";
+import { publicVerificationRoutes } from "./routes/publicVerificationRoutes.js";
 import { reportingTagsRoutes } from "./routes/reportingTagsRoutes.js";
 import { rolesRoutes } from "./routes/rolesRoutes.js";
 import { usersRoutes } from "./routes/usersRoutes.js";
+import { salespersonsRoutes } from "./routes/salespersonsRoutes.js";
 import { taxesRoutes } from "./routes/taxesRoutes.js";
 import { currenciesRoutes } from "./routes/currenciesRoutes.js";
 import { transactionNumberSeriesRoutes } from "./routes/transactionNumberSeriesRoutes.js";
@@ -34,6 +36,7 @@ import recurringInvoicesRoutes from "./routes/recurringInvoicesRoutes.js";
 import salesReceiptsRoutes from "./routes/salesReceiptsRoutes.js";
 import debitNotesRoutes from "./routes/debitNotesRoutes.js";
 import subscriptionsRoutes from "./routes/subscriptionsRoutes.js";
+import { activityLogger } from "./midelwares/activityLogger.js";
 if (!MONGO_URI) {
     // eslint-disable-next-line no-console
     console.warn("Missing MONGO_URI/MONGODB_URI. Server will start, but DB features will fail.");
@@ -54,6 +57,7 @@ app.use(cors({
     origin: FRONTEND_URL || true,
     credentials: true,
 }));
+app.use(activityLogger);
 app.get("/api/health", (_req, res) => {
     const readyState = mongoose.connection.readyState;
     res.json({
@@ -70,6 +74,7 @@ app.get("/api/health", (_req, res) => {
     });
 });
 app.use("/api/auth", authRoutes);
+app.use("/api/public", publicVerificationRoutes);
 app.use("/api/organizations", organizationRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/reporting-tags", reportingTagsRoutes);
@@ -80,6 +85,7 @@ app.use("/api/currencies", currenciesRoutes);
 app.use("/api/transaction-number-series", transactionNumberSeriesRoutes);
 app.use("/api/locations", locationsRoutes);
 app.use("/api/customers", customersRoutes);
+app.use("/api/salespersons", salespersonsRoutes);
 app.use("/api/items", itemsRoutes);
 app.use("/api/products", productsRoutes);
 app.use("/api/plans", plansRoutes);

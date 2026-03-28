@@ -26,6 +26,7 @@ const defaultCustomerViews = [
 export default function Customers() {
   const navigate = useNavigate();
   const location = useLocation();
+  const AUTH_URL = (import.meta as any).env?.VITE_AUTH_URL || "http://localhost:5172";
   const LOCAL_COLUMNS_LAYOUT_KEY = "taban_customers_columns";
   const [customers, setCustomers] = useState<any[]>([]);
   const [selectedCustomers, setSelectedCustomers] = useState(new Set<string>());
@@ -1413,7 +1414,7 @@ export default function Customers() {
         localStorage.removeItem('auth_token');
         localStorage.removeItem('user');
         localStorage.removeItem('organization');
-        window.location.href = '/login';
+        window.location.replace(`${AUTH_URL}/login?app=invoice`);
         return;
       }
 

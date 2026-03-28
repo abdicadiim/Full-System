@@ -5,6 +5,19 @@ export const getReturnTo = () => {
 
 export const goReturnTo = (fallbackUrl: string) => {
   const returnTo = getReturnTo();
-  window.location.href = returnTo || fallbackUrl;
+  const target = returnTo || fallbackUrl;
+  const url = (() => {
+    try {
+      return new URL(target);
+    } catch {
+      return new URL(target, window.location.href);
+    }
+  })();
+
+  if (new URL(window.location.href).searchParams.get("logout") === "1") {
+    url.searchParams.set("auth_return", "1");
+  }
+
+  window.location.replace(url.toString());
 };
 

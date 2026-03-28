@@ -375,7 +375,7 @@ export const sendUserInvitation = async (req: express.Request, res: express.Resp
     `You have been invited by the admin of <b>${orgName}</b> to join their organization. Click below to view the invitation.` +
     `</p>` +
     `<div style="margin:20px 0 10px;">` +
-    `<a href="${viewInvitationUrl}" style="display:inline-block; background:#2f8f5b; color:#ffffff; text-decoration:none; padding:12px 18px; border-radius:4px; font-weight:700; font-size:14px;">View Invitation</a>` +
+    `<a href="${viewInvitationUrl}" style="display:inline-block; background:#156372; color:#ffffff; text-decoration:none; padding:12px 18px; border-radius:4px; font-weight:700; font-size:14px;">View Invitation</a>` +
     `</div>` +
     `<div style="font-size:12px; color:#6b7280; margin-bottom:18px;">This invitation will expire in ${expiresDays} days.</div>` +
     (tempPassword

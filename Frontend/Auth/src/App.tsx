@@ -1,6 +1,8 @@
 import React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import LoginPage from "./pages/LoginPage";
+import EmailOtpLoginPage from "./pages/EmailOtpLoginPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import SignupPage from "./pages/SignupPage";
 import OrgSetupPage from "./pages/OrgSetupPage";
 import OptimizePage from "./pages/OptimizePage";
@@ -12,6 +14,8 @@ export default function App() {
     <Routes>
       <Route index element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/login/email-otp" element={<EmailOtpLoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/org-setup" element={<OrgSetupPage />} />
       <Route path="/optimize" element={<OptimizePage />} />

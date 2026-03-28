@@ -17,6 +17,15 @@ const UserSchema = new mongoose.Schema(
     inviteSentAt: { type: Date, default: null, index: true },
     inviteAcceptedAt: { type: Date, default: null, index: true },
 
+    // Temporary auth codes for email OTP sign-in and password resets.
+    loginOtpHash: { type: String, default: "" },
+    loginOtpExpiresAt: { type: Date, default: null, index: true },
+    loginOtpSentAt: { type: Date, default: null, index: true },
+    passwordResetHash: { type: String, default: "" },
+    passwordResetExpiresAt: { type: Date, default: null, index: true },
+    passwordResetSentAt: { type: Date, default: null, index: true },
+    sessionVersion: { type: Number, default: 0, index: true },
+
     // Optional avatar (can be a URL or a data: URI)
     photoUrl: { type: String, default: "" },
 

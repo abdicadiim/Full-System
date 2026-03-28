@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { AUTH_USER_UPDATED_EVENT } from "../../services/auth";
+import { AUTH_USER_UPDATED_EVENT, clearLogoutRequested, isLogoutRequested, logout as serviceLogout } from "../../services/auth";
 import { waitForBackendReady } from "../../services/backendReady";
 
 type User =
@@ -36,6 +36,19 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [pollingEnabled, setPollingEnabled] = useState(false);
 
   const refresh = useCallback(async () => {
+    const url = new URL(window.location.href);
+    const isAuthReturn = url.searchParams.get("auth_return") === "1";
+    if (isAuthReturn) {
+      clearLogoutRequested();
+      url.searchParams.delete("auth_return");
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+    if (isLogoutRequested()) {
+      setUser(null);
+      setLoading(false);
+      setHasChecked(true);
+      return;
+    }
     const token = localStorage.getItem("auth_token") || localStorage.getItem("token") || "";
 
     const ac = new AbortController();
@@ -54,6 +67,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           localStorage.setItem("auth_token", nextToken);
           localStorage.setItem("token", nextToken);
         }
+        clearLogoutRequested();
         setUser(payload.data);
         try {
           localStorage.setItem("user", JSON.stringify(payload.data));
@@ -99,6 +113,14 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const syncFromStorage = () => {
       if (typeof localStorage === "undefined") return;
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("auth_return") === "1") {
+        clearLogoutRequested();
+      }
+      if (isLogoutRequested()) {
+        setUser(null);
+        return;
+      }
       for (const key of ["user", "current_user", "auth_user"]) {
         const raw = localStorage.getItem(key);
         if (!raw) continue;
@@ -120,17 +142,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    try {
-      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
-    } finally {
-      setUser(null);
-      localStorage.removeItem("user");
-      localStorage.removeItem("timerState");
-      localStorage.removeItem("auth_token");
-      localStorage.removeItem("token");
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("auth_bootstrap_ready");
-    }
+    await serviceLogout();
+    setUser(null);
   }, []);
 
   const hasPermission = (_module: string, _action = "view") => Boolean(user);

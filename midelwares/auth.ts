@@ -9,19 +9,20 @@ export type AuthedUser = {
   email: string;
   organizationId: string;
   role: "admin" | "member";
+  sessionVersion: number;
   photoUrl?: string | null;
   activeTimer?: any | null;
 };
-type SessionClaims = { sub: string };
+type SessionClaims = { sub: string; ver: number };
 
-export const issueSessionToken = (userId: string) => {
+export const issueSessionToken = (userId: string, sessionVersion = 0) => {
   if (!JWT_SECRET) return "";
-  return jwt.sign({ sub: userId } satisfies SessionClaims, JWT_SECRET, { expiresIn: "7d" });
+  return jwt.sign({ sub: userId, ver: Number(sessionVersion) || 0 } satisfies SessionClaims, JWT_SECRET, { expiresIn: "7d" });
 };
 
-export const setSessionCookie = (res: express.Response, userId: string) => {
+export const setSessionCookie = (res: express.Response, userId: string, sessionVersion = 0) => {
   if (!JWT_SECRET) return;
-  const token = issueSessionToken(userId);
+  const token = issueSessionToken(userId, sessionVersion);
   res.cookie(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: "lax",
@@ -37,7 +38,16 @@ export const clearSessionCookie = (res: express.Response) => {
 
 export const getAuthedUser = async (req: express.Request): Promise<AuthedUser | null> => {
   if (AUTH_BYPASS) {
-    return { id: "000000000000000000000001", name: "Dev User", email: "dev@example.com", organizationId: "00000000000000000000000a", role: "admin", photoUrl: "", activeTimer: null };
+    return {
+      id: "000000000000000000000001",
+      name: "Dev User",
+      email: "dev@example.com",
+      organizationId: "00000000000000000000000a",
+      role: "admin",
+      sessionVersion: 0,
+      photoUrl: "",
+      activeTimer: null,
+    };
   }
 
   const header = req.headers.authorization;
@@ -50,12 +60,15 @@ export const getAuthedUser = async (req: express.Request): Promise<AuthedUser | 
     const decoded = jwt.verify(token, JWT_SECRET) as SessionClaims;
     const user = await User.findById(decoded.sub).lean();
     if (!user) return null;
+    const sessionVersion = Number((user as any).sessionVersion || 0);
+    if (Number(decoded.ver || 0) !== sessionVersion) return null;
     return {
       id: String(user._id),
       name: user.name,
       email: user.email,
       organizationId: String(user.organizationId),
       role: (user.role === "admin" ? "admin" : "member") as "admin" | "member",
+      sessionVersion,
       photoUrl: (user as any).photoUrl || (user as any).avatar || (user as any).image || (user as any).photo || "",
       activeTimer: (user as any).activeTimer || null,
     };

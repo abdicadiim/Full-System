@@ -83,7 +83,7 @@ export default function SignupPage() {
           <label className="mb-2 block text-sm font-semibold text-slate-700">Password</label>
           <input
             className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-primary"
-            placeholder="••••••••"
+            placeholder="Enter your password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -111,4 +111,3 @@ export default function SignupPage() {
     </AuthShell>
   );
 }
-

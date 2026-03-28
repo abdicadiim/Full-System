@@ -198,8 +198,7 @@ export const deleteQuote: express.RequestHandler = async (req, res) => {
 
   const id = String(req.params.id || "").trim();
   const deleted = await Quote.findOneAndDelete({ _id: id, organizationId: orgId }).lean();
-    if (deleted) await recordEvent('quote_deleted', { quote: deleted }, 'user');
-    if (updated) await recordEvent('quote_updated', { quote: updated }, 'user');
+  if (deleted) await recordEvent("quote_deleted", { quote: deleted }, "user");
   if (!deleted) return res.status(404).json({ success: false, message: "Quote not found", data: null });
   return res.json({ success: true, data: { id } });
 };
