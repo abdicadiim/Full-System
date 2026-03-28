@@ -19,6 +19,7 @@ export default function Layout({ children }) {
     location.pathname === "/expenses" ||
     location.pathname === "/expenses/receipts" ||
     location.pathname === "/expenses/recurring-expenses" ||
+    location.pathname.startsWith("/sales/sales-receipts") ||
     location.pathname.startsWith("/sales/customers") ||
     location.pathname.startsWith("/sales/quotes") ||
     location.pathname.startsWith("/sales/retainer-invoices") ||

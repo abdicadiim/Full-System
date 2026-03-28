@@ -1569,7 +1569,7 @@ export default function SalesReceipts() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-72px)] w-full bg-white font-sans text-gray-800 antialiased relative overflow-hidden -m-4 md:-m-6">
+    <div className="flex flex-col h-[calc(100vh-72px)] w-full bg-white font-sans text-gray-800 antialiased relative overflow-hidden">
       {/* Header - Show Bulk Actions Bar when items are selected, otherwise show normal header */}
       {selectedReceipts.length > 0 ? (
         <div className="flex-none flex items-center justify-between px-6 py-6 bg-white border-b border-gray-100 relative overflow-visible z-[100]">

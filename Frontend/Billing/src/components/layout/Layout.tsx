@@ -25,6 +25,7 @@ export default function Layout({ children }) {
     location.pathname.startsWith("/sales/subscriptions") ||
     location.pathname.startsWith("/sales/customers") ||
     location.pathname.startsWith("/sales/quotes") ||
+    location.pathname.startsWith("/sales/sales-receipts") ||
     location.pathname.startsWith("/sales/retainer-invoices") ||
     location.pathname.startsWith("/sales/invoices") ||
     location.pathname.startsWith("/products/plans") ||

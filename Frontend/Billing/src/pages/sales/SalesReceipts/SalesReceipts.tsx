@@ -1451,7 +1451,7 @@ export default function SalesReceipts() {
   };
 
   return (
-    <div className="w-full h-[calc(100vh-4rem)] min-h-0 flex flex-col bg-white overflow-hidden -m-4 md:-m-6">
+    <div className="w-full h-full min-h-0 flex flex-col bg-white overflow-hidden">
       {/* Header - Show Bulk Actions Bar when items are selected, otherwise show normal header */}
       {selectedReceipts.length > 0 ? (
         /* Bulk Actions Header */

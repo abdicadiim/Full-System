@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { toast } from "react-toastify";
 import {
   X,
   Search,
@@ -34,7 +35,7 @@ import {
   ClipboardList
 } from "lucide-react";
 import { saveSalesReceipt, getSalesReceiptById, updateSalesReceipt, getCustomers, getCustomersFromAPI } from "../../salesModel";
-import { salesReceiptsAPI, currenciesAPI, salespersonsAPI, itemsAPI, transactionNumberSeriesAPI, chartOfAccountsAPI, taxesAPI, paymentModesAPI, reportingTagsAPI } from "../../../services/api";
+import { salesReceiptsAPI, currenciesAPI, salespersonsAPI, itemsAPI, plansAPI, transactionNumberSeriesAPI, chartOfAccountsAPI, taxesAPI, paymentModesAPI, reportingTagsAPI } from "../../../services/api";
 import { getAllDocuments } from "../../../utils/documentStorage";
 import { useCurrency } from "../../../hooks/useCurrency";
 import ZohoSelect from "../../../components/ZohoSelect";
@@ -138,6 +139,63 @@ const normalizeReportingTagAppliesTo = (tag) => {
     .filter(Boolean);
 };
 
+const isReportingTagMandatory = (tag) =>
+  Boolean(
+    tag?.isMandatory ||
+    tag?.mandatory ||
+    tag?.required ||
+    tag?.isRequired ||
+    tag?.is_required
+  );
+
+const getCatalogEntityType = (row, fallbackType = "item") => {
+  const rawType = String(row?.entityType || row?.itemEntityType || row?.sourceType || row?.type || fallbackType || "item").toLowerCase();
+  if (rawType.includes("addon")) return "addon";
+  if (rawType.includes("plan")) return "plan";
+  return "item";
+};
+
+const normalizeCatalogEntry = (row, fallbackType = "item", index = 0) => {
+  const entityType = getCatalogEntityType(row, fallbackType);
+  const sourceId = String(
+    row?.sourceId ||
+    row?.id ||
+    row?._id ||
+    row?.itemId ||
+    row?.planId ||
+    row?.addonId ||
+    `${entityType}-${index}`
+  ).trim();
+  const name = String(row?.name || row?.itemName || row?.planName || row?.addonName || row?.title || "").trim();
+  if (!name) return null;
+  const sku = String(row?.sku || row?.itemCode || row?.planCode || row?.addonCode || row?.code || "").trim();
+  const rate = Number(row?.sellingPrice ?? row?.costPrice ?? row?.price ?? row?.rate ?? 0) || 0;
+
+  return {
+    ...row,
+    entityType,
+    itemEntityType: entityType,
+    sourceType: entityType,
+    sourceId,
+    id: entityType === "item" ? sourceId : `${entityType}:${sourceId}`,
+    name,
+    sku,
+    code: sku,
+    rate,
+    stockOnHand: entityType === "item" ? Number(row?.stockOnHand ?? row?.quantityOnHand ?? row?.stockQuantity ?? 0) || 0 : 0,
+    unit: String(row?.unit || row?.unitOfMeasure || row?.billingFrequencyUnit || row?.billingFrequency || (entityType === "plan" ? "plan" : "pcs")),
+    description: String(row?.salesDescription || row?.description || row?.planDescription || row?.addonDescription || ""),
+    status: row?.status || "active",
+  };
+};
+
+const extractApiRows = (response) => {
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response?.data)) return response.data;
+  if (Array.isArray(response?.data?.data)) return response.data.data;
+  return [];
+};
+
 const formatDate = (date) => {
   if (!date) return "";
   const d = new Date(date);
@@ -181,6 +239,7 @@ export default function NewSalesReceipt() {
     discount: 0,
     discountType: "percent",
     shippingCharges: 0,
+    shippingChargeTax: "",
     adjustment: 0,
     roundOff: 0,
     total: 0,
@@ -200,6 +259,7 @@ export default function NewSalesReceipt() {
         key: String(tag?.id || tag?._id || tag?.name || tag?.title || `reporting-tag-${index}`),
         label: String(tag?.name || tag?.title || tag?.label || `Reporting Tag ${index + 1}`),
         options: normalizeReportingTagOptions(tag),
+        isMandatory: isReportingTagMandatory(tag),
       })),
     [availableReportingTags]
   );
@@ -384,6 +444,8 @@ export default function NewSalesReceipt() {
   const [taxSearches, setTaxSearches] = useState({});
   const [isPaymentModeDropdownOpen, setIsPaymentModeDropdownOpen] = useState(false);
   const [isDepositToDropdownOpen, setIsDepositToDropdownOpen] = useState(false);
+  const [isShippingChargeTaxDropdownOpen, setIsShippingChargeTaxDropdownOpen] = useState(false);
+  const [shippingChargeTaxSearch, setShippingChargeTaxSearch] = useState("");
   const [isReceiptDatePickerOpen, setIsReceiptDatePickerOpen] = useState(false);
   const [receiptDateCalendar, setReceiptDateCalendar] = useState(new Date());
   const [isManageSalespersonsModalOpen, setIsManageSalespersonsModalOpen] = useState(false);
@@ -418,6 +480,7 @@ export default function NewSalesReceipt() {
   const taxInclusiveDropdownRef = useRef(null);
   const paymentModeDropdownRef = useRef(null);
   const depositToDropdownRef = useRef(null);
+  const shippingChargeTaxDropdownRef = useRef(null);
   const receiptDatePickerRef = useRef(null);
   const itemDropdownRefs = useRef({});
   const taxDropdownRefs = useRef({});
@@ -637,11 +700,68 @@ export default function NewSalesReceipt() {
 
         setTaxes(loadedTaxes);
 
-        // Load items
-        const itemsResponse = await itemsAPI.getAll();
-        if (itemsResponse && itemsResponse.data) {
-          setItems(itemsResponse.data);
+        // Load items and plans into one catalog
+        const catalogRows: any[] = [];
+
+        try {
+          const itemsResponse = await itemsAPI.getAll();
+          const itemRows = extractApiRows(itemsResponse);
+          catalogRows.push(
+            ...itemRows
+              .map((row: any, index: number) => normalizeCatalogEntry(row, "item", index))
+              .filter(Boolean)
+          );
+        } catch (error) {
+          console.error("Error loading items for sales receipt:", error);
         }
+
+        try {
+          const plansResponse = await plansAPI.getAll({ limit: 10000 });
+          let planRows = extractApiRows(plansResponse);
+          if (!Array.isArray(planRows) || planRows.length === 0) {
+            try {
+              const rawPlans = localStorage.getItem("inv_plans_v1");
+              const parsedPlans = rawPlans ? JSON.parse(rawPlans) : [];
+              planRows = Array.isArray(parsedPlans) ? parsedPlans : [];
+            } catch {
+              planRows = [];
+            }
+          }
+          const normalizedPlans = planRows
+            .map((row: any, index: number) => normalizeCatalogEntry(row, "plan", index))
+            .filter((row: any) => row && String(row.status || "active").toLowerCase() !== "inactive");
+          catalogRows.push(...normalizedPlans);
+
+          normalizedPlans.forEach((plan: any, planIndex: number) => {
+            const addonRows = Array.isArray(plan?.addons) ? plan.addons : [];
+            addonRows.forEach((addon: any, addonIndex: number) => {
+              const normalizedAddon = normalizeCatalogEntry(
+                {
+                  ...addon,
+                  entityType: "addon",
+                  sourceType: "addon",
+                  parentPlanId: plan.sourceId,
+                  parentPlanName: plan.name,
+                  unit: addon?.unit || addon?.billingFrequencyUnit || "addon",
+                },
+                "addon",
+                `${planIndex}-${addonIndex}`
+              );
+              if (normalizedAddon) catalogRows.push(normalizedAddon);
+            });
+          });
+        } catch (error) {
+          console.error("Error loading plans for sales receipt:", error);
+        }
+
+        const uniqueCatalog = new Map<string, any>();
+        catalogRows.forEach((entry) => {
+          const key = `${String(entry?.entityType || "item")}:${String(entry?.sourceId || entry?.id || entry?.name || "")}`;
+          if (key && !key.endsWith(":")) {
+            uniqueCatalog.set(key, entry);
+          }
+        });
+        setItems(Array.from(uniqueCatalog.values()));
 
         // Load deposit accounts (Cash and Bank accounts)
         const accountsResponse = await chartOfAccountsAPI.getAccounts({ limit: 1000 });
@@ -919,6 +1039,9 @@ export default function NewSalesReceipt() {
       if (depositToDropdownRef.current && !depositToDropdownRef.current.contains(event.target)) {
         setIsDepositToDropdownOpen(false);
       }
+      if (shippingChargeTaxDropdownRef.current && !shippingChargeTaxDropdownRef.current.contains(event.target)) {
+        setIsShippingChargeTaxDropdownOpen(false);
+      }
         if (receiptDatePickerRef.current && !receiptDatePickerRef.current.contains(event.target)) {
           setIsReceiptDatePickerOpen(false);
         }
@@ -979,7 +1102,7 @@ export default function NewSalesReceipt() {
     };
 
       const hasOpenDropdown = isCustomerDropdownOpen || isSalespersonDropdownOpen ||
-        isTaxInclusiveDropdownOpen || isPaymentModeDropdownOpen || isDepositToDropdownOpen || isPriceListDropdownOpen ||
+        isTaxInclusiveDropdownOpen || isPaymentModeDropdownOpen || isDepositToDropdownOpen || isShippingChargeTaxDropdownOpen || isPriceListDropdownOpen ||
         isReceiptDatePickerOpen || Object.values(openItemDropdowns).some(Boolean) || Object.values(openTaxDropdowns).some(Boolean) ||
       isDiscountTypeDropdownOpen || activeAccountDropdownItemId !== null || activeReportingDropdownItemId !== null;
 
@@ -990,7 +1113,7 @@ export default function NewSalesReceipt() {
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-    }, [isCustomerDropdownOpen, isSalespersonDropdownOpen, isTaxInclusiveDropdownOpen, isPaymentModeDropdownOpen, isDepositToDropdownOpen, isPriceListDropdownOpen, isReceiptDatePickerOpen, openItemDropdowns, openTaxDropdowns, activeAccountDropdownItemId, activeReportingDropdownItemId]);
+    }, [isCustomerDropdownOpen, isSalespersonDropdownOpen, isTaxInclusiveDropdownOpen, isPaymentModeDropdownOpen, isDepositToDropdownOpen, isShippingChargeTaxDropdownOpen, isPriceListDropdownOpen, isReceiptDatePickerOpen, openItemDropdowns, openTaxDropdowns, activeAccountDropdownItemId, activeReportingDropdownItemId]);
 
   // Set item from navigation state (when coming from item detail page)
   useEffect(() => {
@@ -1322,7 +1445,7 @@ export default function NewSalesReceipt() {
 
   const handleSaveAndSelectSalesperson = async () => {
     if (!newSalespersonData.name.trim()) {
-      alert("Please enter a name for the salesperson.");
+      toast.error("Please enter a name for the salesperson.");
       return;
     }
 
@@ -1343,11 +1466,11 @@ export default function NewSalesReceipt() {
         setIsManageSalespersonsModalOpen(false);
         setIsSalespersonDropdownOpen(false);
       } else {
-        alert("Failed to save salesperson. Please try again.");
+        toast.error("Failed to save salesperson. Please try again.");
       }
     } catch (error) {
       console.error("Error saving salesperson:", error);
-      alert("Error saving salesperson. Please try again.");
+      toast.error("Error saving salesperson. Please try again.");
     }
   };
 
@@ -1367,11 +1490,11 @@ export default function NewSalesReceipt() {
         await reloadSalespersonsForSalesReceipt();
         setSelectedSalespersonsForManage((prev) => prev.filter((id) => id !== salespersonId));
       } else {
-        alert("Failed to delete salesperson.");
+        toast.error("Failed to delete salesperson.");
       }
     } catch (error) {
       console.error("Error deleting salesperson:", error);
-      alert("Error deleting salesperson. Please try again.");
+      toast.error("Error deleting salesperson. Please try again.");
     }
   };
 
@@ -1440,16 +1563,19 @@ export default function NewSalesReceipt() {
     setFormData(prev => {
       const updatedItems = prev.items.map(item => {
         if (item.id === itemId) {
+          const entityType = String(product.entityType || product.itemEntityType || "item").toLowerCase();
           const updatedItem = {
             ...item,
-            itemId: product.id || product._id,
+            itemId: product.sourceId || product.id || product._id,
             itemDetails: product.name,
             rate: product.sellingPrice || product.rate || 0,
             sku: product.sku,
             stockOnHand: product.stockQuantity ?? product.stock_on_hand ?? product.stockOnHand ?? 0,
             unit: product.unit || "",
             description: item.description || "",
-            warehouseLocation: item.warehouseLocation || formData.selectedLocation || "Head Office"
+            warehouseLocation: item.warehouseLocation || formData.selectedLocation || "Head Office",
+            entityType,
+            itemEntityType: entityType,
           };
           updatedItem.amount = calculateItemAmount(updatedItem, prev.taxInclusive);
           return updatedItem;
@@ -1632,7 +1758,7 @@ export default function NewSalesReceipt() {
         const amount = subAmt + (subAmt * taxRate / 100);
         return {
           id: Date.now() + index + Math.floor(Math.random() * 1000),
-          itemId: selectedItem.id || selectedItem._id,
+          itemId: selectedItem.sourceId || selectedItem.id || selectedItem._id,
           itemDetails: selectedItem.name,
           quantity: quantity,
           rate: rate,
@@ -1712,8 +1838,10 @@ export default function NewSalesReceipt() {
     const normalizedItems = (formData.items || []).map((item) => {
       const matchedItem = items.find((itemRow) => {
         const rowId = String(itemRow.id || itemRow._id || "");
+        const rowSourceId = String(itemRow.sourceId || itemRow.source_id || "");
         const rowName = String(itemRow.name || "").trim().toLowerCase();
-        return rowId === String(item.itemId || "") || rowName === String(item.itemDetails || "").trim().toLowerCase();
+        const currentId = String(item.itemId || "");
+        return rowId === currentId || rowSourceId === currentId || rowName === String(item.itemDetails || "").trim().toLowerCase();
       });
 
       const taxOption = taxes.find((tax) => String(tax.id || tax._id || "") === String(item.tax || ""));
@@ -1737,7 +1865,8 @@ export default function NewSalesReceipt() {
       }
 
       return {
-        item: item.itemId || matchedItem?.id || matchedItem?._id,
+        item: item.itemId || matchedItem?.sourceId || matchedItem?.id || matchedItem?._id,
+        itemEntityType: matchedItem?.entityType || matchedItem?.itemEntityType || item.entityType || item.itemEntityType || "item",
         name: item.itemDetails,
         description: item.description || "",
         quantity,
@@ -1792,10 +1921,11 @@ export default function NewSalesReceipt() {
         ? await updateSalesReceipt(id, receiptData)
         : await saveSalesReceipt(receiptData);
       const receiptId = savedReceipt?.id || savedReceipt?._id || id;
+      toast.success("Sales receipt saved successfully.");
       navigate(`/sales/sales-receipts/${receiptId}`);
     } catch (error) {
       console.error("Error saving sales receipt:", error);
-      alert("Failed to save sales receipt. Please try again.");
+      toast.error("Failed to save sales receipt. Please try again.");
     } finally {
       setSaveLoading(null);
     }
@@ -1824,9 +1954,10 @@ export default function NewSalesReceipt() {
           receiptData: emailReceipt
         }
       });
+      toast.success("Sales receipt saved and ready to send.");
     } catch (error) {
       console.error("Error saving/sending sales receipt:", error);
-      alert("Failed to save and send sales receipt. Please try again.");
+      toast.error("Failed to save and send sales receipt. Please try again.");
     } finally {
       setSaveLoading(null);
     }
@@ -1835,12 +1966,12 @@ export default function NewSalesReceipt() {
   const handleFileUpload = (e) => {
     const files = Array.from(e.target.files);
     if (formData.documents.length + files.length > 10) {
-      alert("You can upload a maximum of 10 files");
+      toast.error("You can upload a maximum of 10 files");
       return;
     }
     const invalidFiles = files.filter(file => file.size > 10 * 1024 * 1024);
     if (invalidFiles.length > 0) {
-      alert(`Some files exceed 10MB limit. Maximum file size is 10MB.`);
+      toast.error(`Some files exceed 10MB limit. Maximum file size is 10MB.`);
       return;
     }
     const newFiles = files.map(file => ({
@@ -1890,10 +2021,10 @@ export default function NewSalesReceipt() {
   const handleAttachFromCloud = (service) => {
     if (service) {
       // Handle specific cloud service
-      alert(`${service.charAt(0).toUpperCase() + service.slice(1)} integration - Coming soon! This will allow you to connect and select files from ${service}.`);
+      toast.info(`${service.charAt(0).toUpperCase() + service.slice(1)} integration - Coming soon! This will allow you to connect and select files from ${service}.`);
     } else {
       // Generic cloud option
-      alert("Cloud storage integration - Coming soon! This will allow you to connect and select files from cloud storage services.");
+      toast.info("Cloud storage integration - Coming soon! This will allow you to connect and select files from cloud storage services.");
     }
     setIsUploadDropdownOpen(false);
   };
@@ -2364,7 +2495,7 @@ export default function NewSalesReceipt() {
               </div>
             </div>
 
-            <div className="mt-8">
+            <div className="mt-4 w-full max-w-[1120px] pr-12">
             {/* Item Table Header */}
             <div className="mb-0 flex items-center justify-between rounded-t-md border border-b-0 border-[#e5e7eb] bg-[#f8fafc] px-4 py-3">
               <h3 className="text-sm font-semibold text-gray-900">Item Table</h3>
@@ -2486,7 +2617,7 @@ export default function NewSalesReceipt() {
                     onMouseEnter={(e) => e.target.style.opacity = "0.9"}
                     onMouseLeave={(e) => e.target.style.opacity = "1"}
                     onClick={() => {
-                      alert("Update Reporting Tags functionality");
+                      toast.info("Update Reporting Tags functionality");
                     }}
                   >
                     Update Reporting Tags
@@ -2497,7 +2628,7 @@ export default function NewSalesReceipt() {
                     onMouseEnter={(e) => e.target.style.opacity = "0.9"}
                     onMouseLeave={(e) => e.target.style.opacity = "1"}
                     onClick={() => {
-                      alert("Update Account functionality");
+                      toast.info("Update Account functionality");
                     }}
                   >
                     Update Account
@@ -2655,9 +2786,19 @@ export default function NewSalesReceipt() {
                                         handleProductSelect(item.id, productItem);
                                         setOpenItemDropdowns(prev => ({ ...prev, [item.id]: false }));
                                       }}
-                                    >
-                                      <div className="text-[14px] leading-5 font-semibold truncate">
-                                        {productItem.name}
+                                      >
+                                      <div className="flex items-center gap-2 text-[14px] leading-5 font-semibold truncate">
+                                        <span className="truncate">{productItem.name}</span>
+                                        {String(productItem.entityType || productItem.itemEntityType || "").toLowerCase() === "plan" && (
+                                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${isHighlighted ? "bg-white/20 text-white" : "bg-[#156372] text-white"}`}>
+                                            Plan
+                                          </span>
+                                        )}
+                                        {String(productItem.entityType || productItem.itemEntityType || "").toLowerCase() === "addon" && (
+                                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${isHighlighted ? "bg-white/20 text-white" : "bg-amber-50 text-amber-700"}`}>
+                                            Addon
+                                          </span>
+                                        )}
                                       </div>
                                       <div className={`text-xs mt-0.5 truncate ${isHighlighted ? "text-blue-50" : "text-slate-500"}`}>
                                         SKU: {productItem.sku || "-"} Rate: {formData.currency}{(productItem.rate || productItem.sellingPrice || 0).toFixed(2)}
@@ -3105,7 +3246,7 @@ export default function NewSalesReceipt() {
                                       normalizedReportingTags.map((tag) => (
                                         <div key={String(tag.key)} className="space-y-2">
                                           <label className="block text-sm text-[#ef4444]">
-                                            {tag.label} *
+                                            {tag.label}{tag.isMandatory ? " *" : ""}
                                           </label>
                                           <select
                                             className="h-10 w-full rounded-md border border-[#3b82f6] bg-white px-3 text-sm"
@@ -3130,6 +3271,15 @@ export default function NewSalesReceipt() {
                                       type="button"
                                       className="rounded-md bg-[#17a86b] px-4 py-1.5 text-sm font-medium text-white"
                                       onClick={() => {
+                                        const missingMandatory = normalizedReportingTags.some((tag) => {
+                                          if (!tag.isMandatory) return false;
+                                          const value = String(itemReportingTagDraftValues[String(tag.key)] || "").trim();
+                                          return !value;
+                                        });
+                                        if (missingMandatory) {
+                                          toast.error("Please select all mandatory reporting tags.");
+                                          return;
+                                        }
                                         const mapped = normalizedReportingTags
                                           .map((tag) => {
                                             const value = String(itemReportingTagDraftValues[String(tag.key)] || "").trim();
@@ -3244,7 +3394,7 @@ export default function NewSalesReceipt() {
           </div>
 
           {/* Summary and Notes Section */}
-          <div className="mt-10 grid grid-cols-1 lg:grid-cols-[1fr_520px] gap-10">
+          <div className="mt-10 w-full max-w-[1120px] pr-12 grid grid-cols-1 lg:grid-cols-[1fr_520px] gap-10">
             <div>
               <label className="block text-sm font-medium text-gray-900 mb-2">Notes</label>
               <textarea
@@ -3380,7 +3530,7 @@ export default function NewSalesReceipt() {
             </div>
           </div>
 
-          <div className="mt-8 grid grid-cols-1 lg:grid-cols-[1fr_520px] gap-10">
+          <div className="mt-8 w-full max-w-[1120px] pr-12 grid grid-cols-1 lg:grid-cols-[1fr_520px] gap-10">
             {/* Terms & Conditions */}
             <div>
               <div className="text-sm font-medium text-gray-900 mb-2">Terms & Conditions</div>
@@ -3562,7 +3712,7 @@ export default function NewSalesReceipt() {
             </button>
             <button
               disabled={saveLoading !== null}
-              className={`px-4 py-2 bg-[#22c55e] border border-[#22c55e] text-white rounded text-[13px] font-semibold hover:bg-[#16a34a] transition-colors shadow-sm cursor-pointer flex items-center gap-2 ${saveLoading ? "opacity-70 cursor-not-allowed" : ""}`}
+              className={`px-4 py-2 bg-[#156372] border border-[#156372] text-white rounded text-[13px] font-semibold hover:bg-[#0D4A52] transition-colors shadow-sm cursor-pointer flex items-center gap-2 ${saveLoading ? "opacity-70 cursor-not-allowed" : ""}`}
               onClick={handleSaveAndSend}
             >
               {saveLoading === "send" ? <Loader2 size={14} className="animate-spin" /> : null}

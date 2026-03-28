@@ -10,7 +10,7 @@ import {
   X, Edit, Send, FileText, MoreVertical,
   ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Plus, Filter,
   ArrowUpDown, CheckSquare, Square, Search, Star, Link2, Mail, Printer, Settings,
-  User, Calendar, Paperclip, MessageSquare, Upload, Pencil
+  User, Calendar, Paperclip, MessageSquare, Upload, Pencil, Trash2
 } from "lucide-react";
 import { getStatesByCountry } from "../../../../constants/locationData";
 
@@ -374,7 +374,7 @@ ${sellerInfo.name}`
 
   const handleEmailSend = () => {
     if (!emailData.to) {
-      alert("Please enter a recipient email address");
+      toast.error("Please enter a recipient email address");
       return;
     }
 
@@ -389,7 +389,7 @@ ${sellerInfo.name}`
     // Close modal after a short delay
     setTimeout(() => {
       setIsEmailModalOpen(false);
-      alert("Email client opened. Please send the email from your email application.");
+      toast.success("Email client opened. Please send the email from your email application.");
     }, 100);
   };
 
@@ -398,7 +398,7 @@ ${sellerInfo.name}`
     if (!receipt) return;
 
     if (!receiptDocumentRef.current) {
-      alert("Receipt document is not ready yet. Please try again.");
+      toast.error("Receipt document is not ready yet. Please try again.");
       return;
     }
 
@@ -435,7 +435,7 @@ ${sellerInfo.name}`
       pdf.save(`SalesReceipt-${receipt.receiptNumber || receipt.id}.pdf`);
     } catch (error) {
       console.error("Error downloading sales receipt PDF:", error);
-      alert("Failed to generate PDF. Please try again.");
+      toast.error("Failed to generate PDF. Please try again.");
     }
   };
 
@@ -1308,6 +1308,51 @@ ${sellerInfo.name}`
           </div>
         </div>
       )}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-[2000] flex items-start justify-center pt-6 bg-black/40">
+          <div className="relative w-full max-w-[520px] rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden mx-4">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                  <Trash2 size={20} />
+                </div>
+                <div>
+                  <h3 className="text-[15px] font-semibold text-slate-900">Delete receipt?</h3>
+                  <p className="text-sm text-slate-500">
+                    Receipt {receipt?.receiptNumber || receipt?.id || ""} will be deleted permanently.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="h-8 w-8 rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
+                onClick={() => setIsDeleteModalOpen(false)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="px-6 py-4 text-sm text-slate-600">
+              This action cannot be undone.
+            </div>
+            <div className="flex items-center justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+              <button
+                type="button"
+                className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                onClick={() => setIsDeleteModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-md bg-[#b91c1c] px-4 py-2 text-sm font-semibold text-white hover:bg-[#991b1b]"
+                onClick={confirmDeleteReceipt}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {isChooseTemplateModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-end">
           <div
@@ -1342,7 +1387,7 @@ ${sellerInfo.name}`
                   onClick={() => {
                     setSelectedTemplate("Standard Template");
                     setIsChooseTemplateModalOpen(false);
-                    alert("Template changed to Standard Template");
+                    toast.success("Template changed to Standard Template");
                   }}
                 >
                   <div className="bg-gray-50 rounded border border-gray-200 p-4 mb-3" style={{ minHeight: "200px" }}>
@@ -1654,7 +1699,7 @@ ${sellerInfo.name}`
                   // Handle save action
                   localStorage.setItem('organization_address', JSON.stringify(organizationData));
                   // Logo is already saved in handleLogoUpload
-                  alert("Organization address and logo updated successfully!");
+                  toast.success("Organization address and logo updated successfully!");
                   setIsOrganizationAddressModalOpen(false);
                 }}
               >
@@ -1741,7 +1786,7 @@ ${sellerInfo.name}`
                 onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.opacity = "0.9"}
                 onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.opacity = "1"}
                 onClick={() => {
-                  alert("Terms & Conditions saved successfully!");
+                  toast.success("Terms & Conditions saved successfully!");
                   setIsTermsAndConditionsModalOpen(false);
                 }}
               >
