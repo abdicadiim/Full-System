@@ -1779,7 +1779,7 @@ export default function UsersPage() {
 
       {/* Configure Location Access Modal */}
       {locationAccessModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10002]">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center pt-10 z-[10002] overflow-y-auto">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               {/* Header */}
@@ -1992,7 +1992,7 @@ export default function UsersPage() {
 
       {/* Edit Location Access Modal */}
       {editLocationAccessModalOpen && selectedUser && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10002]">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center pt-10 z-[10002] overflow-y-auto">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               {/* Header */}
