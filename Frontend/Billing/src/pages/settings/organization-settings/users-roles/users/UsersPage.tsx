@@ -68,6 +68,7 @@ export default function UsersPage() {
     role: "",
     password: "",
   });
+  const [inviteRoleSearch, setInviteRoleSearch] = useState("");
   const [inviteRoleDropdownOpen, setInviteRoleDropdownOpen] = useState(false);
   const [inviteRoleDropdownPos, setInviteRoleDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -77,6 +78,7 @@ export default function UsersPage() {
     email: "",
     role: "",
   });
+  const [editRoleSearch, setEditRoleSearch] = useState("");
   const [editRoleDropdownOpen, setEditRoleDropdownOpen] = useState(false);
   const [editRoleDropdownPos, setEditRoleDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
@@ -484,6 +486,16 @@ export default function UsersPage() {
     label: role.name,
   }));
   const roleOptions = [...STANDARD_ROLE_OPTIONS, ...customRoleOptions];
+  const inviteRoleOptions = roleOptions.filter((role) => {
+    const query = inviteRoleSearch.trim().toLowerCase();
+    if (!query) return true;
+    return `${role.label} ${role.value}`.toLowerCase().includes(query);
+  });
+  const editRoleOptions = roleOptions.filter((role) => {
+    const query = editRoleSearch.trim().toLowerCase();
+    if (!query) return true;
+    return `${role.label} ${role.value}`.toLowerCase().includes(query);
+  });
 
   const openRoleDropdown = (
     buttonRef: React.RefObject<HTMLButtonElement | null>,
@@ -493,7 +505,7 @@ export default function UsersPage() {
     const button = buttonRef.current;
     if (!button) return;
     const rect = button.getBoundingClientRect();
-    const estimatedHeight = Math.min(roleOptions.length + 1, 6) * 40 + 12;
+    const estimatedHeight = 48 + Math.min(roleOptions.length, 4) * 40 + 12;
     const openUp = window.innerHeight - rect.bottom < estimatedHeight + 24;
     const top = openUp ? Math.max(16, rect.top - estimatedHeight - 8) : rect.bottom + 8;
     const left = Math.max(16, Math.min(rect.left, window.innerWidth - rect.width - 16));
@@ -501,8 +513,14 @@ export default function UsersPage() {
     setOpen(true);
   };
 
-  const closeInviteRoleDropdown = () => setInviteRoleDropdownOpen(false);
-  const closeEditRoleDropdown = () => setEditRoleDropdownOpen(false);
+  const closeInviteRoleDropdown = () => {
+    setInviteRoleDropdownOpen(false);
+    setInviteRoleSearch("");
+  };
+  const closeEditRoleDropdown = () => {
+    setEditRoleDropdownOpen(false);
+    setEditRoleSearch("");
+  };
 
   // Handle invite again
   const handleInviteAgain = async () => {
@@ -1371,6 +1389,7 @@ export default function UsersPage() {
                 <button
                   onClick={() => {
                     setInviteModalOpen(false);
+                    closeInviteRoleDropdown();
                     setInviteData({ name: "", email: "", role: "", password: "" });
                     setError(null);
                   }}
@@ -1393,26 +1412,30 @@ export default function UsersPage() {
       {inviteRoleDropdownOpen && inviteRoleDropdownPos && createPortal(
         <div
           ref={inviteRoleMenuRef}
-          className="fixed z-[10002] max-h-44 overflow-y-auto overflow-x-hidden rounded-lg border border-gray-200 bg-gray-50 shadow-lg"
+          className="fixed z-[10002] max-h-56 overflow-hidden rounded-lg border border-gray-200 bg-gray-50 shadow-lg"
           style={{
             top: inviteRoleDropdownPos.top,
             left: inviteRoleDropdownPos.left,
             width: inviteRoleDropdownPos.width,
           }}
         >
-          <div className="py-1">
-            <button
-              type="button"
-              onClick={() => {
-                setInviteData({ ...inviteData, role: "" });
-                closeInviteRoleDropdown();
-              }}
-              className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-blue-50 ${!inviteData.role ? "bg-blue-50" : ""}`}
-            >
-              <span>Select a role</span>
-              {!inviteData.role && <Check size={16} className="text-blue-600" />}
-            </button>
-            {roleOptions.map((role) => {
+          <div className="border-b border-gray-200 bg-white px-2 py-2">
+            <div className="relative">
+              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                autoFocus
+                type="text"
+                value={inviteRoleSearch}
+                onChange={(e) => setInviteRoleSearch(e.target.value)}
+                placeholder="Search..."
+                className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+          <div className="max-h-40 overflow-y-auto overflow-x-hidden py-1">
+            {inviteRoleOptions.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-gray-500">No roles found</div>
+            ) : inviteRoleOptions.map((role) => {
               const selected = inviteData.role === role.value;
               return (
                 <button
@@ -1528,6 +1551,7 @@ export default function UsersPage() {
                 <button
                   onClick={() => {
                     setEditModalOpen(false);
+                    closeEditRoleDropdown();
                     setEditData({ name: "", email: "", role: "" });
                     setError(null);
                   }}
@@ -1551,26 +1575,30 @@ export default function UsersPage() {
       {editRoleDropdownOpen && editRoleDropdownPos && createPortal(
         <div
           ref={editRoleMenuRef}
-          className="fixed z-[10002] max-h-44 overflow-y-auto overflow-x-hidden rounded-lg border border-gray-200 bg-gray-50 shadow-lg"
+          className="fixed z-[10002] max-h-56 overflow-hidden rounded-lg border border-gray-200 bg-gray-50 shadow-lg"
           style={{
             top: editRoleDropdownPos.top,
             left: editRoleDropdownPos.left,
             width: editRoleDropdownPos.width,
           }}
         >
-          <div className="py-1">
-            <button
-              type="button"
-              onClick={() => {
-                setEditData({ ...editData, role: "" });
-                closeEditRoleDropdown();
-              }}
-              className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-blue-50 ${!editData.role ? "bg-blue-50" : ""}`}
-            >
-              <span>Select a role</span>
-              {!editData.role && <Check size={16} className="text-blue-600" />}
-            </button>
-            {roleOptions.map((role) => {
+          <div className="border-b border-gray-200 bg-white px-2 py-2">
+            <div className="relative">
+              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                autoFocus
+                type="text"
+                value={editRoleSearch}
+                onChange={(e) => setEditRoleSearch(e.target.value)}
+                placeholder="Search..."
+                className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+          <div className="max-h-40 overflow-y-auto overflow-x-hidden py-1">
+            {editRoleOptions.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-gray-500">No roles found</div>
+            ) : editRoleOptions.map((role) => {
               const selected = editData.role === role.value;
               return (
                 <button
