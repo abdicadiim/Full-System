@@ -2058,52 +2058,35 @@ export default function UsersPage() {
 
               {/* Default Location Settings */}
               <div className="grid grid-cols-2 gap-4 mb-6">
-                <div>
-                  <label className="flex items-center gap-2 text-sm font-medium text-red-600 mb-2">
-                    User's Default Business Location <span className="text-red-500">*</span>
-                    <Info size={14} className="text-gray-400" />
-                  </label>
-                  <select
-                    value={defaultBusinessLocation}
-                    onChange={(e) => {
-                      const selectedLocation = e.target.value;
-                      setDefaultBusinessLocation(selectedLocation);
-                      // Automatically set warehouse location to the same as business location
-                      if (selectedLocation && accessibleLocations.includes(selectedLocation)) {
-                        setDefaultWarehouseLocation(selectedLocation);
-                      } else {
-                        setDefaultWarehouseLocation("");
-                      }
-                    }}
-                    className="w-full h-10 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  >
-                    <option value="">Select Location</option>
-                    {businessLocations.map((location) => (
-                      <option key={location._id || location.id} value={location._id || location.id}>
-                        {location.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <LocationDropdown
+                  label="User's Default Business Location"
+                  required
+                  value={defaultBusinessLocation}
+                  options={businessLocations.map((location) => ({
+                    value: location._id || location.id,
+                    label: location.name,
+                  }))}
+                  onChange={(selectedLocation) => {
+                    setDefaultBusinessLocation(selectedLocation);
+                    if (selectedLocation && accessibleLocations.includes(selectedLocation)) {
+                      setDefaultWarehouseLocation(selectedLocation);
+                    } else {
+                      setDefaultWarehouseLocation("");
+                    }
+                  }}
+                  labelClassName="text-red-600"
+                />
 
-                <div>
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                    User's Default Warehouse Location
-                    <Info size={14} className="text-gray-400" />
-                  </label>
-                  <select
-                    value={defaultWarehouseLocation}
-                    onChange={(e) => setDefaultWarehouseLocation(e.target.value)}
-                    className="w-full h-10 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  >
-                    <option value="">Select Location</option>
-                    {warehouseLocations.map((location) => (
-                      <option key={location._id || location.id} value={location._id || location.id}>
-                        {location.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <LocationDropdown
+                  label="User's Default Warehouse Location"
+                  value={defaultWarehouseLocation}
+                  options={warehouseLocations.map((location) => ({
+                    value: location._id || location.id,
+                    label: location.name,
+                  }))}
+                  onChange={setDefaultWarehouseLocation}
+                  labelClassName="text-gray-700"
+                />
               </div>
 
               {/* Action Buttons */}
@@ -2275,51 +2258,35 @@ export default function UsersPage() {
 
               {/* Default Location Settings */}
               <div className="grid grid-cols-2 gap-4 mb-6">
-                <div>
-                  <label className="flex items-center gap-2 text-sm font-medium text-red-600 mb-2">
-                    User's Default Business Location <span className="text-red-500">*</span>
-                    <Info size={14} className="text-gray-400" />
-                  </label>
-                  <select
-                    value={defaultBusinessLocation}
-                    onChange={(e) => {
-                      const selectedLocation = e.target.value;
-                      setDefaultBusinessLocation(selectedLocation);
-                      // Automatically set warehouse location to the same as business location
-                      if (selectedLocation && accessibleLocations.includes(selectedLocation)) {
-                        setDefaultWarehouseLocation(selectedLocation);
-                      } else {
-                        setDefaultWarehouseLocation("");
-                      }
-                    }}
-                    className="w-full h-10 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  >
-                    <option value="">Select Location</option>
-                    {businessLocations.map((location) => (
-                      <option key={location._id || location.id} value={location._id || location.id}>
-                        {location.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                    User's Default Warehouse Location <span className="text-red-500">*</span>
-                    <Info size={14} className="text-gray-400" />
-                  </label>
-                  <select
-                    value={defaultWarehouseLocation}
-                    onChange={(e) => setDefaultWarehouseLocation(e.target.value)}
-                    className="w-full h-10 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  >
-                    <option value="">Select Location</option>
-                    {warehouseLocations.map((location) => (
-                      <option key={location._id || location.id} value={location._id || location.id}>
-                        {location.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <LocationDropdown
+                  label="User's Default Business Location"
+                  required
+                  value={defaultBusinessLocation}
+                  options={businessLocations.map((location) => ({
+                    value: location._id || location.id,
+                    label: location.name,
+                  }))}
+                  onChange={(selectedLocation) => {
+                    setDefaultBusinessLocation(selectedLocation);
+                    if (selectedLocation && accessibleLocations.includes(selectedLocation)) {
+                      setDefaultWarehouseLocation(selectedLocation);
+                    } else {
+                      setDefaultWarehouseLocation("");
+                    }
+                  }}
+                  labelClassName="text-red-600"
+                />
+                <LocationDropdown
+                  label="User's Default Warehouse Location"
+                  required
+                  value={defaultWarehouseLocation}
+                  options={warehouseLocations.map((location) => ({
+                    value: location._id || location.id,
+                    label: location.name,
+                  }))}
+                  onChange={setDefaultWarehouseLocation}
+                  labelClassName="text-gray-700"
+                />
               </div>
 
               {/* Action Buttons */}
