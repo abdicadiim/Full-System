@@ -894,6 +894,23 @@ export default function InvoiceDetail() { // Start of component
     return "";
   };
 
+  const getNextInvoiceNumberFromExistingInvoices = (rows: any[], prefix: string, currentInvoiceNumber?: string) => {
+    const normalizedPrefix = String(prefix || "INV-").trim() || "INV-";
+    const digitsLength = String(currentInvoiceNumber || "").match(/(\d+)$/)?.[1]?.length || 6;
+
+    const nextSuffix = (Array.isArray(rows) ? rows : [])
+      .map((row: any) => String(row?.invoiceNumber || row?.number || "").trim())
+      .filter((number) => number.startsWith(normalizedPrefix))
+      .map((number) => {
+        const suffix = number.slice(normalizedPrefix.length);
+        return Number.parseInt(suffix, 10);
+      })
+      .filter((value) => Number.isFinite(value))
+      .reduce((max, value) => Math.max(max, value), 0) + 1;
+
+    return `${normalizedPrefix}${String(nextSuffix).padStart(digitsLength, "0")}`;
+  };
+
   const isDuplicateInvoiceNumberError = (error: any) => {
     const message = String(error?.message || "").toLowerCase();
     const status = Number(error?.status || 0);
@@ -2527,10 +2544,22 @@ export default function InvoiceDetail() { // Start of component
 
     try {
       const prefix = getInvoiceNumberPrefix(invoice?.invoiceNumber);
-      const numberResponse = await invoicesAPI.getNextNumber(prefix);
-      const nextInvoiceNumber = extractNextInvoiceNumber(numberResponse, prefix);
+      let nextInvoiceNumber = "";
+
+      try {
+        const numberResponse = await invoicesAPI.getNextNumber(prefix);
+        nextInvoiceNumber = extractNextInvoiceNumber(numberResponse, prefix);
+      } catch (error) {
+        console.warn("Failed to fetch next invoice number from API, falling back to local sequence:", error);
+      }
+
       if (!nextInvoiceNumber) {
-        throw new Error("Unable to generate invoice number for clone.");
+        nextInvoiceNumber = getNextInvoiceNumberFromExistingInvoices(invoices, prefix, invoice?.invoiceNumber);
+      }
+
+      if (!nextInvoiceNumber) {
+        const freshInvoices = await getInvoices();
+        nextInvoiceNumber = getNextInvoiceNumberFromExistingInvoices(freshInvoices as any[], prefix, invoice?.invoiceNumber);
       }
 
       const clonePayload = buildClonedInvoicePayload(invoice, nextInvoiceNumber);
@@ -2543,10 +2572,21 @@ export default function InvoiceDetail() { // Start of component
           throw error;
         }
 
-        const retryNumberResponse = await invoicesAPI.getNextNumber(prefix);
-        const retryInvoiceNumber = extractNextInvoiceNumber(retryNumberResponse, prefix);
+        let retryInvoiceNumber = "";
+        try {
+          const retryNumberResponse = await invoicesAPI.getNextNumber(prefix);
+          retryInvoiceNumber = extractNextInvoiceNumber(retryNumberResponse, prefix);
+        } catch (retryError) {
+          console.warn("Retry number fetch failed, using local fallback:", retryError);
+        }
+
         if (!retryInvoiceNumber) {
-          throw error;
+          const freshInvoices = await getInvoices();
+          retryInvoiceNumber = getNextInvoiceNumberFromExistingInvoices(
+            [...(freshInvoices as any[]), clonePayload],
+            prefix,
+            nextInvoiceNumber
+          );
         }
 
         clonedInvoice = await saveInvoice({ ...clonePayload, invoiceNumber: retryInvoiceNumber } as any);

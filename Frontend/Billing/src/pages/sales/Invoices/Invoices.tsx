@@ -2468,8 +2468,8 @@ export default function Invoices() {
       </div>
 
       {/* Content Area */}
-      <div className="relative min-h-0 flex-1 overflow-auto bg-white">
-        <div className="px-6 pt-0 pb-4">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
+        <div className="flex-none px-6 pt-0 pb-4">
           {!showInvoiceInsights ? (
             <div className="rounded-md border border-[#e6e9f2] bg-[#f1f4fa] px-4 py-3">
               <div className="flex items-center justify-between gap-3">
@@ -2571,8 +2571,9 @@ export default function Invoices() {
           )}
         </div>
 
+        <div className="flex-1 min-h-0 overflow-hidden">
         {sortedInvoices.length === 0 && !isRefreshing ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="flex h-full flex-col items-center justify-center overflow-auto py-16 text-center">
             {/* Video Thumbnail */}
             <div className="relative w-full max-w-md mb-8">
               <div className="relative w-full aspect-video bg-gradient-to-br from-[#156372] to-purple-600 rounded-lg overflow-hidden">
@@ -2628,8 +2629,9 @@ export default function Invoices() {
             </div>
           </div>
         ) : (
-          <div className="bg-white">
-            <table className="w-full text-left border-collapse">
+          <div className="flex h-full min-h-0 flex-col bg-white">
+            <div className="flex-1 min-h-0 overflow-auto">
+              <table className="w-full text-left border-collapse">
               <thead className="bg-[#f6f7fb] sticky top-0 z-[110] border-b border-[#e6e9f2]">
                 <tr className="text-[10px] font-semibold text-[#7b8494] uppercase tracking-wider">
                   <th className="px-4 py-3 w-16 min-w-[64px] bg-[#f6f7fb]">
@@ -2839,16 +2841,18 @@ export default function Invoices() {
                 })
             )}
               </tbody>
-            </table>
+              </table>
+            </div>
           </div>
         )}
+        </div>
       </div>
 
       {/* Pagination Controls */}
       {sortedInvoices.length > 0 && (
         <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-white">
           <div className="flex items-center text-sm text-gray-500">
-            Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalItems)} of {totalItems} invoices
+            Showing {((currentPage - 1) * itemsPerPage) + 1} through {Math.min(currentPage * itemsPerPage, totalItems)} of {totalItems} invoices
           </div>
           <div className="flex items-center gap-2">
             <button

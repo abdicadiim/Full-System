@@ -2422,7 +2422,7 @@ return (
             </div>
           )}
 
-          <div className="space-y-6">
+          <div className="w-full max-w-[1120px] space-y-6 pr-12 xl:pr-20">
             {/* Row 1: Customer Name */}
             {/* Customer Selection Row */}
             <div className="flex items-center gap-6">
@@ -2906,7 +2906,7 @@ return (
           </div>
 
           {/* Item Table Section */}
-          <div className="border-t border-gray-200 pt-8">
+          <div className="border-t border-gray-200 pt-8 pr-12 xl:pr-20 max-w-[1120px]">
             <div className="mb-5 flex flex-wrap items-center gap-3 border-b border-gray-200 pb-5">
               <div className="flex items-center gap-2 text-[12px] text-slate-500">
                 <span>Warehouse Location</span>
@@ -3836,15 +3836,15 @@ return (
 
 
           {/* Bottom Form Layout: Notes & Summary */}
-          <div className="grid grid-cols-1 gap-8 border-t border-slate-200 pt-8 lg:grid-cols-[1fr_420px]">
+          <div className="grid w-full max-w-[1120px] grid-cols-1 gap-6 border-t border-slate-200 pt-8 pr-12 xl:pr-20 lg:grid-cols-[minmax(0,1fr)_360px]">
 
             {/* Left Column: Notes & Terms */}
-            <div className="space-y-8">
-              <div>
+            <div className="space-y-6">
+              <div className="max-w-[760px]">
                 <label className="mb-2 block text-sm font-medium text-slate-800">Customer Notes</label>
                 <textarea
                   name="customerNotes"
-                  className="h-24 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm leading-relaxed text-slate-700 outline-none transition focus:border-blue-300"
+                  className="h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm leading-relaxed text-slate-700 outline-none transition focus:border-blue-300"
                   value={formData.customerNotes}
                   onChange={handleChange}
                 />
@@ -3853,8 +3853,8 @@ return (
             </div>
 
             {/* Right Column: Detailed Summary */}
-            <div className="w-full space-y-4">
-              <div className="space-y-5 rounded-xl border border-slate-200 bg-slate-50 p-5">
+            <div className="w-full space-y-3">
+              <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex justify-between items-center text-sm">
                   <span className="font-semibold text-slate-800">Sub Total</span>
                   <span className="font-semibold text-slate-900">{Number(formData.subTotal || 0).toFixed(2)}</span>
@@ -3883,7 +3883,7 @@ return (
                             <option value="amount">{formData.currency || 'USD'}</option>
                           </select>
                         </div>
-                        <span className="min-w-[60px] text-right font-semibold text-slate-800">
+                        <span className="min-w-[56px] text-right font-semibold text-slate-800">
                           {Number(liveTotals.discountAmount || 0).toFixed(2)}
                         </span>
                       </div>
@@ -3911,12 +3911,12 @@ return (
                           onChange={handleChange}
                         />
                         <Info size={14} className="text-slate-300" />
-                        <span className="min-w-[60px] text-right font-semibold text-slate-800">{Number(formData.shippingCharges || 0).toFixed(2)}</span>
+                        <span className="min-w-[56px] text-right font-semibold text-slate-800">{Number(formData.shippingCharges || 0).toFixed(2)}</span>
                       </div>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-[13px] text-slate-600">Shipping Charge Tax</span>
-                      <div className="relative min-w-[220px]" ref={shippingTaxDropdownRef}>
+                      <div className="relative min-w-[200px]" ref={shippingTaxDropdownRef}>
                         <button
                           type="button"
                           className="flex h-8 w-full items-center justify-between rounded border border-slate-200 bg-white px-2 text-left text-sm transition"
@@ -4059,7 +4059,7 @@ return (
                         onChange={handleChange}
                       />
                       <Info size={14} className="text-slate-300" />
-                      <span className="min-w-[60px] text-right font-semibold text-slate-800">{Number(formData.adjustment || 0).toFixed(2)}</span>
+                        <span className="min-w-[56px] text-right font-semibold text-slate-800">{Number(formData.adjustment || 0).toFixed(2)}</span>
                     </div>
                   </div>
                 )}
@@ -4067,13 +4067,13 @@ return (
 
 
                 <div className="flex items-center justify-between border-t border-slate-200 pt-4">
-                  <span className="text-[28px] font-semibold leading-none text-slate-900">Total ({formData.currency || currencySymbol})</span>
-                  <span className="text-[28px] font-bold leading-none text-slate-900">{Number(formData.total || 0).toFixed(2)}</span>
+                  <span className="text-[22px] font-semibold leading-none text-slate-900">Total ({formData.currency || currencySymbol})</span>
+                  <span className="text-[22px] font-bold leading-none text-slate-900">{Number(formData.total || 0).toFixed(2)}</span>
                 </div>
               </div>
 
-              <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-5">
-                <div className="flex items-center justify-between text-[16px] font-medium text-slate-700">
+              <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between text-[14px] font-medium text-slate-700">
                   <span>Early Payment Discount</span>
                   <span>{Number(0).toFixed(2)}</span>
                 </div>
@@ -4085,12 +4085,12 @@ return (
             </div>
           </div>
 
-          <div className="mt-7 grid grid-cols-1 gap-8 rounded-xl border border-slate-200 bg-slate-50 p-5 lg:grid-cols-[1fr_320px]">
+          <div className="mt-4 grid grid-cols-1 gap-6 rounded-xl border border-slate-200 bg-slate-50 p-4 lg:grid-cols-[minmax(0,1fr)_280px]">
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-800">Terms & Conditions</label>
+              <label className="mb-2 block text-[13px] font-medium text-slate-800">Terms & Conditions</label>
               <textarea
                 name="termsAndConditions"
-                className="h-24 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm leading-relaxed text-slate-700 outline-none transition focus:border-blue-300"
+                className="h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm leading-relaxed text-slate-700 outline-none transition focus:border-blue-300"
                 placeholder="Enter the terms and conditions of your business to be displayed in your transaction"
                 value={formData.termsAndConditions}
                 onChange={handleChange}
@@ -4098,34 +4098,34 @@ return (
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-800">Attach File(s) to Invoice</label>
+              <label className="mb-2 block text-[13px] font-medium text-slate-800">Attach File(s) to Invoice</label>
               <button
                 type="button"
-                className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-[#1f3f79] transition hover:bg-slate-50"
+                className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-[#1f3f79] transition hover:bg-slate-50"
                 onClick={() => setIsUploadDropdownOpen(!isUploadDropdownOpen)}
               >
                 <Upload size={15} className="text-slate-500" />
                 Upload File
                 <ChevronDown size={14} className="text-slate-400" />
               </button>
-              <p className="mt-2 text-xs text-slate-500">You can upload a maximum of 10 files, 10MB each</p>
+              <p className="mt-2 text-[11px] text-slate-500">You can upload a maximum of 10 files, 10MB each</p>
               {formData.attachedFiles.length > 0 && (
-                <p className="mt-1 text-xs font-medium text-[#2563eb]">{formData.attachedFiles.length} file(s) attached</p>
+                <p className="mt-1 text-[11px] font-medium text-[#2563eb]">{formData.attachedFiles.length} file(s) attached</p>
               )}
             </div>
           </div>
 
           {/* Payment Fields - Show when checkbox is checked */}
           {isPaymentReceived && (
-            <div className="bg-white border border-gray-200 rounded-lg p-4 mt-4 space-y-4">
-              <h3 className="text-base font-semibold text-gray-900 mb-4">Payment Details</h3>
+            <div className="mt-3 rounded-lg border border-gray-200 bg-white p-4 space-y-3">
+              <h3 className="mb-3 text-sm font-semibold text-gray-900">Payment Details</h3>
 
               {/* Payment Mode */}
-              <div className="grid grid-cols-[150px_1fr] gap-4 items-center">
+              <div className="grid grid-cols-[140px_1fr] gap-3 items-center">
                 <label className="text-sm font-medium text-gray-700">
                   Payment Mode
                 </label>
-                <div className="max-w-[400px] relative" ref={paymentModeDropdownRef}>
+                <div className="max-w-[360px] relative" ref={paymentModeDropdownRef}>
                   <div
                     className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-[#156372] focus:ring-2 focus:ring-[rgba(21,99,114,0.1)] bg-white cursor-pointer flex items-center justify-between min-h-[36px]"
                     onClick={() => setIsPaymentModeDropdownOpen(!isPaymentModeDropdownOpen)}
@@ -4155,11 +4155,11 @@ return (
               </div>
 
               {/* Deposit To */}
-              <div className="grid grid-cols-[150px_1fr] gap-4 items-center">
+              <div className="grid grid-cols-[140px_1fr] gap-3 items-center">
                 <label className="text-sm font-medium text-red-500">
                   Deposit To*
                 </label>
-                <div className="max-w-[400px] relative" ref={depositToDropdownRef}>
+                <div className="max-w-[360px] relative" ref={depositToDropdownRef}>
                   <div
                     className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-[#156372] focus:ring-2 focus:ring-[rgba(21,99,114,0.1)] bg-white cursor-pointer flex items-center justify-between min-h-[36px]"
                     onClick={() => setIsDepositToDropdownOpen(!isDepositToDropdownOpen)}
@@ -4194,11 +4194,11 @@ return (
               </div>
 
               {/* Amount Received */}
-              <div className="grid grid-cols-[150px_1fr] gap-4 items-start">
+              <div className="grid grid-cols-[140px_1fr] gap-3 items-start">
                 <label className="text-sm font-medium text-red-500 pt-2">
                   Amount Received*
                 </label>
-                <div className="max-w-[400px]">
+                <div className="max-w-[360px]">
                   <div className="flex border border-gray-300 rounded overflow-hidden focus-within:border-[#156372] focus-within:ring-2 focus-within:ring-[rgba(21,99,114,0.1)]">
                     <div className="bg-gray-50 border-r border-gray-300 px-3 py-1.5 text-sm text-gray-600 flex items-center">
                       {currencySymbol}
@@ -4217,11 +4217,11 @@ return (
               </div>
 
               {/* Reference Number */}
-              <div className="grid grid-cols-[150px_1fr] gap-4 items-center">
+              <div className="grid grid-cols-[140px_1fr] gap-3 items-center">
                 <label className="text-sm font-medium text-gray-700">
                   Reference#
                 </label>
-                <div className="max-w-[400px]">
+                <div className="max-w-[360px]">
                   <input
                     type="text"
                     className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-[#156372] focus:ring-2 focus:ring-[rgba(21,99,114,0.1)]"
@@ -4233,7 +4233,7 @@ return (
               </div>
 
               {/* Tax deducted? */}
-              <div className="grid grid-cols-[150px_1fr] gap-4 items-center">
+              <div className="grid grid-cols-[140px_1fr] gap-3 items-center">
                 <label className="text-sm font-medium text-gray-700">
                   Tax deducted?
                 </label>
