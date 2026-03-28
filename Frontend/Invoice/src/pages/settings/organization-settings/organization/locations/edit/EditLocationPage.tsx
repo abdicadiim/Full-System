@@ -3,11 +3,10 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { getCurrentUser } from "../../../../../../services/auth";
 import { Upload, X, ChevronDown, ChevronUp, Search, Check, Plus } from "lucide-react";
 import { toast } from "react-toastify";
-import { locationsAPI } from "../../../../../../services/api";
+import { locationsAPI, usersAPI } from "../../../../../../services/api";
 import { COUNTRIES } from "../../../../../../constants/countries";
 import SearchableDropdown from "../../../../../../components/ui/SearchableDropdown";
 import {
-  getDemoUsers,
   getLocationById,
   readLocations,
   writeLocations,
@@ -68,6 +67,22 @@ export default function EditLocationPage() {
   const transactionSeriesDropdownRef = useRef(null);
   const defaultTransactionSeriesDropdownRef = useRef(null);
 
+  const normalizeActiveUser = (user: any) => {
+    const id = String(user?._id || user?.id || "").trim();
+    if (!id) return null;
+    const name = String(user?.name || `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || id).trim();
+    return {
+      ...user,
+      _id: id,
+      id,
+      name,
+      email: String(user?.email || "").trim(),
+      role: user?.role || "User",
+      image: user?.image || user?.photoUrl || "",
+      photoUrl: user?.photoUrl || user?.image || "",
+    };
+  };
+
   // Load location data when component mounts
   useEffect(() => {
     setIsLoading(true);
@@ -91,7 +106,11 @@ export default function EditLocationPage() {
           }
 
           const currentUser = getCurrentUser();
-          const demoUsers = getDemoUsers(currentUser);
+          const usersRes = await usersAPI.getAll({ limit: 10000, status: "active" });
+          const activeUsers = (Array.isArray(usersRes?.data) ? usersRes.data : [])
+            .map(normalizeActiveUser)
+            .filter((user): user is NonNullable<ReturnType<typeof normalizeActiveUser>> => Boolean(user))
+            .filter((user: any) => String(user?.status || "").trim().toLowerCase() === "active" || !user?.status);
           let website = "";
           if (localLocation.notes && String(localLocation.notes).includes("Website: ")) {
             website = String(localLocation.notes).split("Website: ")[1].split("\n")[0].trim();
@@ -106,10 +125,13 @@ export default function EditLocationPage() {
           }
 
           const matchedPrimaryContact =
-            demoUsers.find((u: any) => u.email === localLocation.contactPerson?.email)?.id || demoUsers[0]?.id || "";
+            activeUsers.find((u: any) => String(u.email || "").toLowerCase() === String(localLocation.contactPerson?.email || "").toLowerCase())?.id ||
+            activeUsers.find((u: any) => String(u.name || "").toLowerCase() === String(localLocation.contactPerson?.name || "").toLowerCase())?.id ||
+            activeUsers.find((u: any) => String(u.id || u._id) === String(localLocation.primaryContact || ""))?.id ||
+            "";
 
-          setUsers(demoUsers);
-          setAllUsers(demoUsers);
+          setUsers(activeUsers as any);
+          setAllUsers(activeUsers as any);
           setLogoPreview(preview);
           setFormData({
             type: localLocation.type || "Business",
@@ -129,7 +151,7 @@ export default function EditLocationPage() {
               fax: localLocation.address?.fax || "",
             },
             website,
-            primaryContact: matchedPrimaryContact,
+            primaryContact: matchedPrimaryContact || String(localLocation.primaryContact || ""),
             transactionSeries: localLocation.defaultTransactionSeries || "",
             defaultTransactionSeries: localLocation.defaultTransactionSeries || "Default Transaction Series",
             locationAccess: Array.isArray(localLocation.locationAccess) ? localLocation.locationAccess : [],
@@ -385,16 +407,17 @@ export default function EditLocationPage() {
      user.email?.toLowerCase().includes(userSearch.toLowerCase()))
   );
     const primaryContactOptions = allUsers
-      .filter((user: any) => Boolean(user.isPrimary))
       .map((user: any) => {
-        const value = String(user._id || user.id || "");
-        const name = user.name || `${user.firstName || ""} ${user.lastName || ""}`.trim();
+        const value = String(user._id || user.id || "").trim();
+        if (!value) return null;
+        const name = String(user.name || `${user.firstName || ""} ${user.lastName || ""}`.trim() || value).trim();
+        const email = String(user.email || "").trim();
         return {
           value,
-          label: `${user.email ? `${name || value} (${user.email})` : (name || value)} - Primary`,
+          label: email ? `${name} (${email})` : name,
         };
       })
-      .filter((opt: any) => opt.value);
+      .filter((opt: any): opt is { value: string; label: string } => Boolean(opt));
   const countryOptions = COUNTRIES.map((country) => ({ value: country, label: country }));
   const roleOptions = Array.from(
     new Set(
@@ -1150,19 +1173,9 @@ export default function EditLocationPage() {
                             </div>
                           </td>
                           <td className="py-2 px-3">
-                            <SearchableDropdown
-                              value={access.role || ""}
-                              options={roleOptions}
-                              onChange={(role) =>
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  locationAccess: prev.locationAccess.map((item, idx) =>
-                                    idx === index ? { ...item, role } : item
-                                  ),
-                                }))
-                              }
-                              placeholder="User's Role"
-                            />
+                            <div className="w-full h-10 flex items-center px-3 border border-gray-300 rounded-lg text-sm text-gray-500 bg-gray-50/50 italic">
+                              User's Role
+                            </div>
                           </td>
                         </tr>
                       </tbody>

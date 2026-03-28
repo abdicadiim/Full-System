@@ -8,6 +8,11 @@ import { sendSmtpMail } from "../services/smtpMailer.js";
 
 const normalizeEmail = (value: unknown) => String(typeof value === "string" ? value : "").trim().toLowerCase();
 const normalizeName = (value: unknown) => String(typeof value === "string" ? value : "").trim();
+const isActiveStatus = (value: unknown) => String(value ?? "").trim().toLowerCase() === "active";
+const isInactiveStatus = (value: unknown) => {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return normalized === "inactive" || normalized === "invited";
+};
 
 const pickSmtpSender = async (organizationId: any) => {
   const primary: any = await SenderEmail.findOne({
@@ -41,8 +46,8 @@ export const listUsers = async (req: express.Request, res: express.Response) => 
 
   const status = String(req.query?.status || "").toLowerCase();
   const filter: any = { organizationId: orgId };
-  if (status === "active") filter.status = "Active";
-  if (status === "inactive") filter.status = { $in: ["Inactive", "Invited"] };
+  if (status === "active") filter.status = { $regex: /^active$/i };
+  if (status === "inactive") filter.status = { $regex: /^(inactive|invited)$/i };
 
   const rows = await User.find(filter)
     .sort({ createdAt: -1 })
@@ -55,7 +60,7 @@ export const listUsers = async (req: express.Request, res: express.Response) => 
     name: u.name || "",
     email: u.email || "",
     role: u.role || "member",
-    status: u.status || "Active",
+    status: isActiveStatus(u.status) ? "Active" : isInactiveStatus(u.status) ? "Inactive" : (u.status || "Active"),
     photoUrl: u.photoUrl || "",
     inviteSentAt: u.inviteSentAt || null,
     inviteAcceptedAt: u.inviteAcceptedAt || null,
@@ -73,8 +78,8 @@ export const listUsersForSettings = async (req: express.Request, res: express.Re
 
   const status = String(req.query?.status || "").toLowerCase();
   const filter: any = { organizationId: orgId };
-  if (status === "active") filter.status = "Active";
-  if (status === "inactive") filter.status = { $in: ["Inactive", "Invited"] };
+  if (status === "active") filter.status = { $regex: /^active$/i };
+  if (status === "inactive") filter.status = { $regex: /^(inactive|invited)$/i };
 
   const rows = await User.find(filter).sort({ createdAt: -1 }).select({ name: 1, email: 1 }).lean();
   const data = rows.map((u: any) => ({ id: String(u._id), name: u.name || "", email: u.email || "" }));

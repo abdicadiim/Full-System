@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
+import { getCurrentUser } from "../../../../../../services/auth";
 import { 
   Building2, 
   MapPin, 
@@ -17,16 +18,14 @@ import {
   Package,
   ArrowLeft
 } from "lucide-react";
-import { getToken, API_BASE_URL } from "../../../../../../services/auth";
-import { locationsAPI, settingsAPI, transactionNumberSeriesAPI } from "../../../../../../services/api";
+import { locationsAPI, settingsAPI, transactionNumberSeriesAPI, usersAPI } from "../../../../../../services/api";
 import { toast } from "react-toastify";
 import { COUNTRIES } from "../../../../../../constants/countries";
 import SearchableDropdown from "../../../../../../components/ui/SearchableDropdown";
 import {
   readLocations,
   writeLocations,
-  writeLocationsEnabled,
-  getDemoUsers
+  writeLocationsEnabled
 } from "../storage";
 
 interface User {
@@ -37,7 +36,9 @@ interface User {
   lastName?: string;
   email: string;
   role: any;
+  status?: string;
   image?: string;
+  photoUrl?: string;
 }
 
 interface LocationData {
@@ -171,6 +172,21 @@ export default function EditLocationPage() {
       .filter((access) => access.userId);
     setFormData((prev) => ({ ...prev, locationAccess: accessList }));
   };
+  const normalizeActiveUser = (user: any): User | null => {
+    const id = String(user?._id || user?.id || "").trim();
+    if (!id) return null;
+    const name = String(user?.name || `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || id).trim();
+    return {
+      ...user,
+      _id: id,
+      id,
+      name,
+      email: String(user?.email || "").trim(),
+      role: user?.role || "User",
+      image: user?.image || user?.photoUrl || "",
+      photoUrl: user?.photoUrl || user?.image || "",
+    };
+  };
   const parentOptions = readLocations().filter((loc: any) => {
     const locId = String(loc?._id || loc?.id || "");
     const currentId = String(effectiveId || "");
@@ -202,26 +218,12 @@ export default function EditLocationPage() {
     const fetchData = async () => {
       try {
         setIsLoading(true);
-        const token = getToken();
-        
-        let fetchedUsers: User[] = [];
-        try {
-            if (token) {
-                const userResponse = await fetch(`${API_BASE_URL}/users`, {
-                    headers: { 'Authorization': `Bearer ${token}` },
-                });
-                if (userResponse.ok) {
-                    const data = await userResponse.json();
-                    if (data.success) fetchedUsers = data.data || [];
-                }
-            }
-        } catch (e) {
-            console.warn("API User fetch failed, using demo data");
-        }
-        
-        if (fetchedUsers.length === 0) {
-            fetchedUsers = getDemoUsers() as any;
-        }
+        const currentUser = getCurrentUser();
+        const usersRes = await usersAPI.getAll({ limit: 10000, status: "active" });
+        const fetchedUsers = (Array.isArray(usersRes?.data) ? usersRes.data : [])
+          .map(normalizeActiveUser)
+          .filter((user: User | null): user is User => Boolean(user))
+          .filter((user: User) => String(user.status || "").trim().toLowerCase() === "active" || !user.status);
         setAllUsers(fetchedUsers);
 
         if (!effectiveId) {
@@ -244,6 +246,10 @@ export default function EditLocationPage() {
 
         if (locationToEdit) {
           setError(null);
+          const matchedPrimaryContact =
+            fetchedUsers.find((u) => String(u.email || "").toLowerCase() === String(locationToEdit.contactPerson?.email || "").toLowerCase()) ||
+            fetchedUsers.find((u) => String(u.name || "").toLowerCase() === String(locationToEdit.contactPerson?.name || "").toLowerCase()) ||
+            fetchedUsers.find((u) => String(u.id || u._id) === String(locationToEdit.primaryContact || ""));
           const normalized = {
             ...defaultFormData,
             ...locationToEdit,
@@ -256,6 +262,7 @@ export default function EditLocationPage() {
             locationAccess: Array.isArray(locationToEdit.locationAccess)
               ? locationToEdit.locationAccess
               : [],
+            primaryContact: locationToEdit.primaryContact || (matchedPrimaryContact ? String(matchedPrimaryContact.id || matchedPrimaryContact._id || "") : ""),
           } as any;
           setFormData(normalized);
           if (locationToEdit.logo && locationToEdit.logo !== "Same as Organization Logo" && locationToEdit.logo !== "Upload a New Logo") {
@@ -274,6 +281,10 @@ export default function EditLocationPage() {
             : null;
           if (fallbackMatch) {
             setError(null);
+            const matchedPrimaryContact =
+              fetchedUsers.find((u) => String(u.email || "").toLowerCase() === String(fallbackMatch.contactPerson?.email || "").toLowerCase()) ||
+              fetchedUsers.find((u) => String(u.name || "").toLowerCase() === String(fallbackMatch.contactPerson?.name || "").toLowerCase()) ||
+              fetchedUsers.find((u) => String(u.id || u._id) === String(fallbackMatch.primaryContact || ""));
             const normalized = {
               ...defaultFormData,
               ...fallbackMatch,
@@ -286,6 +297,7 @@ export default function EditLocationPage() {
               locationAccess: Array.isArray(fallbackMatch.locationAccess)
                 ? fallbackMatch.locationAccess
                 : [],
+              primaryContact: fallbackMatch.primaryContact || (matchedPrimaryContact ? String(matchedPrimaryContact.id || matchedPrimaryContact._id || "") : ""),
             } as any;
             setFormData(normalized);
             if (fallbackMatch.logo && fallbackMatch.logo !== "Same as Organization Logo" && fallbackMatch.logo !== "Upload a New Logo") {
@@ -536,16 +548,17 @@ export default function EditLocationPage() {
   const selectedUserIds = new Set((formData.locationAccess || []).map(a => String(a.userId)));
   const availableUsers = filteredUsers.filter(u => !selectedUserIds.has(String(u._id || u.id)));
     const primaryContactOptions = allUsers
-      .filter((u: any) => Boolean(u.isPrimary))
       .map((u: any) => {
-        const value = String(u._id || u.id || "");
-        const name = u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim();
+        const value = String(u._id || u.id || "").trim();
+        if (!value) return null;
+        const name = String(u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim() || value).trim();
+        const email = String(u.email || "").trim();
         return {
           value,
-          label: `${u.email ? `${name || value} (${u.email})` : (name || value)} - Primary`,
+          label: email ? `${name} (${email})` : name,
         };
       })
-      .filter((opt: any) => opt.value);
+      .filter((opt: any): opt is { value: string; label: string } => Boolean(opt));
   const transactionSeriesOptions = txSeriesNames.map((name) => ({ value: name, label: name }));
   const countryOptions = COUNTRIES.map((country) => ({ value: country, label: country }));
 
@@ -968,8 +981,8 @@ export default function EditLocationPage() {
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden border border-gray-200">
-                                {allUsers.find(u => (u._id || u.id) === access.userId)?.image ? (
-                                    <img src={allUsers.find(u => (u._id || u.id) === access.userId)?.image} alt="" className="w-full h-full object-cover" />
+                                {allUsers.find(u => (u._id || u.id) === access.userId)?.image || allUsers.find(u => (u._id || u.id) === access.userId)?.photoUrl ? (
+                                    <img src={allUsers.find(u => (u._id || u.id) === access.userId)?.image || allUsers.find(u => (u._id || u.id) === access.userId)?.photoUrl} alt="" className="w-full h-full object-cover" />
                                 ) : (
                                     <User size={16} className="text-gray-400" />
                                 )}
@@ -1026,7 +1039,7 @@ export default function EditLocationPage() {
                                             onClick={() => handleAddUser(u)}
                                           >
                                             <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden border border-gray-200">
-                                              {u.image ? <img src={u.image} alt="" className="w-full h-full object-cover" /> : <User size={12} className="text-gray-400" />}
+                                              {u.image || u.photoUrl ? <img src={u.image || u.photoUrl} alt="" className="w-full h-full object-cover" /> : <User size={12} className="text-gray-400" />}
                                             </div>
                                             <div>
                                               <div className="font-medium text-gray-900">{u.name || `${u.firstName} ${u.lastName}`}</div>

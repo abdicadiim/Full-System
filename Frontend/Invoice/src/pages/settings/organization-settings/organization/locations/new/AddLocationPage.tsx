@@ -3,11 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { getCurrentUser } from "../../../../../../services/auth";
 import { Upload, X, ChevronDown, ChevronUp, Search, Check, Plus } from "lucide-react";
 import { toast } from "react-toastify";
-import { locationsAPI, settingsAPI } from "../../../../../../services/api";
+import { locationsAPI, settingsAPI, usersAPI } from "../../../../../../services/api";
 import { COUNTRIES } from "../../../../../../constants/countries";
 import SearchableDropdown from "../../../../../../components/ui/SearchableDropdown";
 import {
-  getDemoUsers,
   readLocations,
   writeLocations,
   writeLocationsEnabled,
@@ -66,26 +65,56 @@ export default function AddLocationPage() {
 
   // Load users for primary contact dropdown
   useEffect(() => {
-    const currentUser = getCurrentUser();
-    const demoUsers = getDemoUsers(currentUser);
-    const preferredUser =
-      demoUsers.find((u: any) => String(u.id) === String(currentUser?.id)) || demoUsers[0];
+    const loadUsers = async () => {
+      const currentUser = getCurrentUser();
 
-    setUsers(demoUsers);
-    setAllUsers(demoUsers);
-    setFormData(prev => ({
-      ...prev,
-      primaryContact: preferredUser?.id || "",
-      locationAccess:
-        prev.locationAccess.length > 0
-          ? prev.locationAccess
-          : [{
-              userId: preferredUser?.id || "",
-              userName: preferredUser?.name || "",
-              userEmail: preferredUser?.email || "",
-              role: preferredUser?.role || "Admin",
-            }],
-    }));
+      try {
+        const res = await usersAPI.getAll({ limit: 10000, status: "active" });
+        const rows = Array.isArray(res?.data) ? res.data : [];
+        const backendUsers = rows
+          .map((user: any) => {
+            const id = String(user?._id || user?.id || "").trim();
+            if (!id) return null;
+            const name = String(user?.name || `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || id).trim();
+            return {
+              ...user,
+              _id: id,
+              id,
+              name,
+              email: String(user?.email || "").trim(),
+              role: user?.role || "User",
+            };
+          })
+          .filter(Boolean)
+          .filter((user: any) => String(user?.status || "").trim().toLowerCase() === "active");
+
+        const preferredUser =
+          backendUsers.find((u: any) => String(u.id || u._id) === String(currentUser?.id)) || backendUsers[0];
+
+        setUsers(backendUsers);
+        setAllUsers(backendUsers);
+        if (preferredUser) {
+          setFormData(prev => ({
+            ...prev,
+            primaryContact: String(preferredUser?.id || preferredUser?._id || ""),
+            locationAccess:
+              prev.locationAccess.length > 0
+                ? prev.locationAccess
+                : [{
+                    userId: String(preferredUser?.id || preferredUser?._id || ""),
+                    userName: preferredUser?.name || "",
+                    userEmail: preferredUser?.email || "",
+                    role: preferredUser?.role || "Admin",
+                  }],
+          }));
+        }
+      } catch {
+        setUsers([]);
+        setAllUsers([]);
+      }
+    };
+
+    void loadUsers();
   }, []);
 
 
@@ -316,16 +345,17 @@ export default function AddLocationPage() {
     series.toLowerCase().includes(defaultTransactionSeriesSearch.toLowerCase())
   );
     const primaryContactOptions = users
-      .filter((user: any) => Boolean(user.isPrimary))
       .map((user: any) => {
-        const value = String(user._id || user.id || "");
-        const name = user.name || `${user.firstName || ""} ${user.lastName || ""}`.trim();
+        const value = String(user._id || user.id || "").trim();
+        if (!value) return null;
+        const name = String(user.name || `${user.firstName || ""} ${user.lastName || ""}`.trim() || value).trim();
+        const email = String(user.email || "").trim();
         return {
           value,
-          label: `${user.email ? `${name || value} (${user.email})` : (name || value)} - Primary`,
+          label: email ? `${name} (${email})` : name,
         };
       })
-      .filter((opt: any) => opt.value);
+      .filter((opt: any): opt is { value: string; label: string } => Boolean(opt));
   const countryOptions = COUNTRIES.map((country) => ({ value: country, label: country }));
   const roleOptions = Array.from(
     new Set(
@@ -1056,77 +1086,109 @@ export default function AddLocationPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        <tr>
-                          <td className="py-2 px-3">
-                            <div className="relative" ref={userDropdownRef}>
-                              <button
-                                type="button"
-                                onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-transparent"
-                              >
-                                <span className="text-gray-500">Select users</span>
-                                <ChevronDown size={16} className="text-gray-500" />
-                              </button>
+                        {formData.locationAccess.map((access, index) => {
+                          const user = allUsers.find(u => (u._id || u.id) === access.userId) || users.find(u => (u._id || u.id) === access.userId);
+                          return (
+                            <tr key={index} className="border-b border-gray-200 group hover:bg-gray-50">
+                              <td className="py-2 px-3">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-semibold">
+                                    {(user?.name || user?.firstName || access.userName || "").charAt(0).toUpperCase()}
+                                  </div>
+                                  <div className="flex-1">
+                                    <div className="font-medium text-gray-900">{access.userName || user?.name || `${user?.firstName || ""} ${user?.lastName || ""}`.trim()}</div>
+                                    <div className="text-xs text-gray-500">{access.userEmail || user?.email}</div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveUser(access.userId)}
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity w-6 h-6 rounded-full bg-red-500 flex items-center justify-center hover:bg-red-600"
+                                  >
+                                    <X size={14} className="text-white" />
+                                  </button>
+                                </div>
+                              </td>
+                              <td className="py-2 px-3">
+                                <SearchableDropdown
+                                  value={access.role || ""}
+                                  options={roleOptions}
+                                  onChange={(role) =>
+                                    setFormData((prev) => ({
+                                      ...prev,
+                                      locationAccess: prev.locationAccess.map((item, idx) =>
+                                        idx === index ? { ...item, role } : item
+                                      ),
+                                    }))
+                                  }
+                                  placeholder="User's Role"
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {!provideAccessToAll && (
+                          <tr>
+                            <td className="py-2 px-3">
+                              <div className="relative" ref={userDropdownRef}>
+                                <button
+                                  type="button"
+                                  onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-left flex items-center justify-between bg-transparent"
+                                >
+                                  <span className="text-gray-500">Select users</span>
+                                  <ChevronDown size={16} className="text-gray-500" />
+                                </button>
 
-                              {isUserDropdownOpen && (
-                                <div className="absolute z-50 w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                                  <div className="p-2 border-b border-gray-200 sticky top-0 bg-transparent">
-                                    <div className="relative">
-                                      <Search size={16} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                                      <input
-                                        type="text"
-                                        placeholder="Search"
-                                        value={userSearch}
-                                        onChange={(e) => setUserSearch(e.target.value)}
-                                        className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                                        onClick={(e) => e.stopPropagation()}
-                                      />
+                                {isUserDropdownOpen && (
+                                  <div className="absolute z-50 w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                    <div className="p-2 border-b border-gray-200 sticky top-0 bg-transparent">
+                                      <div className="relative">
+                                        <Search size={16} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                                        <input
+                                          type="text"
+                                          placeholder="Search"
+                                          value={userSearch}
+                                          onChange={(e) => setUserSearch(e.target.value)}
+                                          className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                          onClick={(e) => e.stopPropagation()}
+                                        />
+                                      </div>
+                                    </div>
+                                    <div className="py-1">
+                                      {filteredUsers.length === 0 ? (
+                                        <div className="px-3 py-2 text-sm text-gray-500 text-center">NO RESULTS FOUND</div>
+                                      ) : (
+                                        filteredUsers.map((user) => (
+                                          <button
+                                            key={user._id || user.id}
+                                            type="button"
+                                            onClick={() => handleUserSelect(user._id || user.id)}
+                                            className="w-full px-3 py-2 text-left text-sm hover:bg-blue-50"
+                                          >
+                                            <div className="flex items-center gap-2">
+                                              <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-semibold">
+                                                {(user.name || "").charAt(0).toUpperCase()}
+                                              </div>
+                                              <div>
+                                                <div className="font-medium text-gray-900">{user.name}</div>
+                                                <div className="text-xs text-gray-500">{user.email}</div>
+                                              </div>
+                                            </div>
+                                          </button>
+                                        ))
+                                      )}
                                     </div>
                                   </div>
-                                  <div className="py-1">
-                                    {filteredUsers.length === 0 ? (
-                                      <div className="px-3 py-2 text-sm text-gray-500 text-center">NO RESULTS FOUND</div>
-                                    ) : (
-                                      filteredUsers.map((user) => (
-                                        <button
-                                          key={user._id || user.id}
-                                          type="button"
-                                          onClick={() => handleUserSelect(user._id || user.id)}
-                                          className="w-full px-3 py-2 text-left text-sm hover:bg-blue-50"
-                                        >
-                                          <div className="flex items-center gap-2">
-                                            <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-semibold">
-                                              {(user.name || '').charAt(0).toUpperCase()}
-                                            </div>
-                                            <div>
-                                              <div className="font-medium text-gray-900">{user.name}</div>
-                                              <div className="text-xs text-gray-500">{user.email}</div>
-                                            </div>
-                                          </div>
-                                        </button>
-                                      ))
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-2 px-3">
-                            <SearchableDropdown
-                              value={access.role || ""}
-                              options={roleOptions}
-                              onChange={(role) =>
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  locationAccess: prev.locationAccess.map((item, idx) =>
-                                    idx === index ? { ...item, role } : item
-                                  ),
-                                }))
-                              }
-                              placeholder="User's Role"
-                            />
-                          </td>
-                        </tr>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-2 px-3">
+                              <div className="w-full h-10 flex items-center px-3 border border-gray-300 rounded-lg text-sm text-gray-500 bg-gray-50/50 italic">
+                                User's Role
+                              </div>
+                            </td>
+                          </tr>
+                        )}
                       </tbody>
                     </table>
                   </>
