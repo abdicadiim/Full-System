@@ -871,6 +871,7 @@ export default function NewSalesReceipt() {
       }
       if (!showShippingCharges && Number(next.shippingCharges || 0) !== 0) {
         next.shippingCharges = 0;
+        next.shippingChargeTax = "";
         changed = true;
       }
       if (!showAdjustment && Number(next.adjustment || 0) !== 0) {

@@ -390,6 +390,7 @@ export default function NewSalesReceipt() {
       discount: Number(cloned.discount ?? prev.discount) || 0,
       discountType: cloned.discountType || prev.discountType,
       shippingCharges: Number(cloned.shippingCharges ?? prev.shippingCharges) || 0,
+      shippingChargeTax: cloned.shippingChargeTax || cloned.shippingTax || prev.shippingChargeTax,
       adjustment: Number(cloned.adjustment ?? prev.adjustment) || 0,
       roundOff: Number(cloned.roundOff ?? prev.roundOff) || 0,
       total: Number(cloned.total ?? prev.total) || 0,
@@ -530,6 +531,18 @@ export default function NewSalesReceipt() {
     const normalized = String(taxId);
     return taxes.find((t) => String(t.id || t._id || "") === normalized);
   };
+
+  const shippingChargeTaxOption = useMemo(
+    () => findTaxById(formData.shippingChargeTax),
+    [formData.shippingChargeTax, taxes]
+  );
+
+  const shippingChargeTaxAmount = useMemo(() => {
+    const shippingAmount = showShippingCharges ? (parseFloat(formData.shippingCharges) || 0) : 0;
+    const taxRate = Number(shippingChargeTaxOption?.rate || 0);
+    if (shippingAmount <= 0 || taxRate <= 0) return 0;
+    return Number((shippingAmount * taxRate / 100).toFixed(2));
+  }, [formData.shippingCharges, shippingChargeTaxOption, showShippingCharges]);
 
   const getItemComputation = (item, taxInclusiveMode = formData.taxInclusive) => {
     const quantity = parseFloat(item.quantity) || 0;
@@ -907,6 +920,7 @@ export default function NewSalesReceipt() {
       }
       if (!showShippingCharges && Number(next.shippingCharges || 0) !== 0) {
         next.shippingCharges = 0;
+        next.shippingChargeTax = "";
         changed = true;
       }
       if (!showAdjustment && Number(next.adjustment || 0) !== 0) {
@@ -1005,7 +1019,7 @@ export default function NewSalesReceipt() {
     const shipping = showShippingCharges ? (parseFloat(formData.shippingCharges) || 0) : 0;
     const adjustment = showAdjustment ? (parseFloat(formData.adjustment) || 0) : 0;
 
-    const totalBeforeRound = grossItemsTotal - discountAmount + shipping + adjustment;
+    const totalBeforeRound = grossItemsTotal - discountAmount + shipping + shippingChargeTaxAmount + adjustment;
     const roundOff = 0;
     const total = parseFloat((totalBeforeRound + roundOff).toFixed(2));
 
@@ -1019,7 +1033,7 @@ export default function NewSalesReceipt() {
 
   useEffect(() => {
     calculateTotals();
-  }, [formData.items, formData.discount, formData.discountType, formData.shippingCharges, formData.adjustment, formData.taxInclusive, showItemDiscount, showTransactionDiscount, showShippingCharges, showAdjustment, taxes]);
+  }, [formData.items, formData.discount, formData.discountType, formData.shippingCharges, formData.shippingChargeTax, formData.adjustment, formData.taxInclusive, showItemDiscount, showTransactionDiscount, showShippingCharges, showAdjustment, shippingChargeTaxAmount, taxes]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -1280,6 +1294,7 @@ export default function NewSalesReceipt() {
             discount: toFiniteNumber(receipt.discount, prev.discount),
             discountType: String(receipt.discountType || prev.discountType || "percent").toLowerCase().includes("amount") ? "amount" : "percent",
             shippingCharges: toFiniteNumber(receipt.shippingCharges, prev.shippingCharges),
+            shippingChargeTax: receipt.shippingChargeTax || receipt.shippingTax || prev.shippingChargeTax,
             adjustment: toFiniteNumber(receipt.adjustment, prev.adjustment),
             roundOff: toFiniteNumber(receipt.roundOff, prev.roundOff),
             total: toFiniteNumber(receipt.total ?? receipt.amount, prev.total),
@@ -1350,7 +1365,7 @@ export default function NewSalesReceipt() {
 
     const shippingAmount = showShippingCharges ? (parseFloat(shipping) || 0) : 0;
     const adjustmentAmount = showAdjustment ? (parseFloat(adjustment) || 0) : 0;
-    const totalBeforeRound = grossItemsTotal - discountAmount + shippingAmount + adjustmentAmount;
+    const totalBeforeRound = grossItemsTotal - discountAmount + shippingAmount + shippingChargeTaxAmount + adjustmentAmount;
     const roundOff = 0;
     const total = totalBeforeRound + roundOff;
 
@@ -1904,6 +1919,7 @@ export default function NewSalesReceipt() {
       discount: showTransactionDiscount ? Number(formData.discount || 0) : 0,
       discountType: showTransactionDiscount ? formData.discountType : "percent",
       shippingCharges: showShippingCharges ? Number(formData.shippingCharges || 0) : 0,
+      shippingChargeTax: showShippingCharges ? (formData.shippingChargeTax || "") : "",
       adjustment: showAdjustment ? Number(formData.adjustment || 0) : 0,
       depositTo: formData.depositTo,
       depositToAccount: formData.depositToAccountId || matchedDepositAccount?.id || matchedDepositAccount?._id,
@@ -3468,21 +3484,132 @@ export default function NewSalesReceipt() {
                 )}
 
                 {showShippingCharges && (
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm text-gray-600">Shipping Charge</span>
-                    <input
-                      type="number"
-                      className="w-20 px-2 py-0.5 border border-gray-300 rounded text-sm text-right focus:outline-none focus:ring-1 focus:ring-[#2563eb] focus:border-[#2563eb]"
-                      value={formData.shippingCharges}
-                      onChange={(e) => handleSummaryChange("shippingCharges", parseFloat(e.target.value) || 0)}
-                    />
-                    <div className="border border-gray-400 rounded-full p-0.5">
-                      <Info size={10} className="text-gray-500" />
+                  <>
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm text-gray-600">Shipping Charge</span>
+                        <input
+                          type="number"
+                          className="w-20 px-2 py-0.5 border border-gray-300 rounded text-sm text-right focus:outline-none focus:ring-1 focus:ring-[#2563eb] focus:border-[#2563eb]"
+                          value={formData.shippingCharges}
+                          onChange={(e) => handleSummaryChange("shippingCharges", parseFloat(e.target.value) || 0)}
+                        />
+                        <div className="border border-gray-400 rounded-full p-0.5">
+                          <Info size={10} className="text-gray-500" />
+                        </div>
+                      </div>
+                      <span className="text-sm text-gray-900">{parseFloat(formData.shippingCharges).toFixed(2)}</span>
                     </div>
-                  </div>
-                  <span className="text-sm text-gray-900">{parseFloat(formData.shippingCharges).toFixed(2)}</span>
-                </div>
+
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm text-gray-600">Shipping Charge Tax</span>
+                        <div className="relative" ref={shippingChargeTaxDropdownRef}>
+                          <button
+                            type="button"
+                            className={`flex h-9 w-36 items-center justify-between rounded-md border bg-white px-3 text-sm transition-colors focus:outline-none ${isShippingChargeTaxDropdownOpen
+                              ? "border-[#156372] shadow-[0_0_0_1px_rgba(21,99,114,0.18)]"
+                              : "border-[#d6dbe8] hover:border-[#156372]"
+                              }`}
+                            onClick={() => {
+                              setIsShippingChargeTaxDropdownOpen((prev) => !prev);
+                              setShippingChargeTaxSearch("");
+                            }}
+                          >
+                            <span className="truncate text-left text-slate-700">
+                              {formData.shippingChargeTax ? getTaxDisplayLabel(findTaxById(formData.shippingChargeTax)) : "Select a Tax"}
+                            </span>
+                            <ChevronDown size={14} className={`text-slate-400 transition-transform ${isShippingChargeTaxDropdownOpen ? "rotate-180" : ""}`} />
+                          </button>
+
+                          {isShippingChargeTaxDropdownOpen && (
+                            <div className="absolute left-0 top-full z-[2500] mt-1 w-72 rounded-xl border border-[#d6dbe8] bg-white p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+                              {(() => {
+                                const searchValue = shippingChargeTaxSearch || "";
+                                const grouped = buildTaxOptionGroups(taxes);
+                                const filteredGroups = searchValue.trim()
+                                  ? grouped
+                                      .map((group) => ({
+                                        ...group,
+                                        options: group.options.filter((tax) =>
+                                          `${tax.name} [${tax.rate}%]`.toLowerCase().includes(searchValue.trim().toLowerCase())
+                                        ),
+                                      }))
+                                      .filter((group) => group.options.length > 0)
+                                  : grouped;
+                                const hasTaxes = filteredGroups.some((group) => group.options.length > 0);
+
+                                return (
+                                  <>
+                                    <div className="p-2">
+                                      <div className="flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-all focus-within:bg-white" style={{ borderColor: "#156372" }}>
+                                        <Search size={14} className="text-slate-400" />
+                                        <input
+                                          type="text"
+                                          value={searchValue}
+                                          onChange={(e) => setShippingChargeTaxSearch(e.target.value)}
+                                          placeholder="Search..."
+                                          className="w-full border-none bg-transparent text-[13px] text-slate-700 outline-none placeholder:text-slate-400"
+                                          autoFocus
+                                        />
+                                      </div>
+                                    </div>
+                                    <div className="max-h-64 overflow-y-auto py-1 custom-scrollbar">
+                                      {!hasTaxes ? (
+                                        <div className="px-4 py-3 text-center text-[13px] text-slate-400">No taxes found</div>
+                                      ) : (
+                                        filteredGroups.map((group) => (
+                                          <div key={group.label}>
+                                            <div className="px-4 py-1.5 text-[10px] font-extrabold uppercase tracking-widest text-slate-700">
+                                              {group.label}
+                                            </div>
+                                            {group.options.map((tax) => {
+                                              const taxId = tax.id;
+                                              const label = taxLabel(tax.raw ?? tax);
+                                              const selected = String(formData.shippingChargeTax || "") === taxId;
+                                              return (
+                                                <button
+                                                  key={taxId}
+                                                  type="button"
+                                                  className={`w-full px-4 py-2 text-left text-[13px] ${selected
+                                                    ? "text-[#156372] font-medium hover:bg-gray-50 hover:text-gray-900"
+                                                    : "text-slate-700 hover:bg-gray-50 hover:text-gray-900"
+                                                  }`}
+                                                  onClick={() => {
+                                                    setFormData((prev) => ({ ...prev, shippingChargeTax: taxId }));
+                                                    setIsShippingChargeTaxDropdownOpen(false);
+                                                  }}
+                                                >
+                                                  {label}
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        ))
+                                      )}
+                                    </div>
+                                    <button
+                                      type="button"
+                                      className="w-full border-t border-gray-200 px-4 py-2 text-left text-[#156372] text-[13px] font-medium flex items-center gap-2 hover:bg-gray-50"
+                                      onClick={() => {
+                                        setIsShippingChargeTaxDropdownOpen(false);
+                                        setIsNewTaxQuickModalOpen(true);
+                                        setNewTaxTargetItemId(null);
+                                      }}
+                                    >
+                                      <Plus size={14} />
+                                      New Tax
+                                    </button>
+                                  </>
+                                );
+                              })()}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <span className="ml-auto text-sm text-gray-900">{shippingChargeTaxAmount.toFixed(2)}</span>
+                    </div>
+                  </>
                 )}
 
                 {showAdjustment && (
