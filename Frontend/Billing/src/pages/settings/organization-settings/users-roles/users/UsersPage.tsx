@@ -351,12 +351,13 @@ export default function UsersPage() {
         setActivitiesLoading(true);
         setActivitiesError("");
 
-        const [response, activitiesResponse] = await Promise.all([
+        const [userResult, activitiesResult] = await Promise.allSettled([
           usersAPI.getById(userId),
           usersAPI.getActivityLogs(userId, { limit: 1000 }),
         ]);
 
-        if (response && response.success) {
+        if (userResult.status === "fulfilled" && userResult.value && userResult.value.success) {
+          const response = userResult.value;
           setUserDetails(response.data);
           // Fetch accessible locations
           if (response.data.accessibleLocations && response.data.accessibleLocations.length > 0) {
@@ -374,8 +375,8 @@ export default function UsersPage() {
           }
         }
 
-        if (activitiesResponse && activitiesResponse.success) {
-          setUserActivities(Array.isArray(activitiesResponse.data) ? activitiesResponse.data : []);
+        if (activitiesResult.status === "fulfilled" && activitiesResult.value && activitiesResult.value.success) {
+          setUserActivities(Array.isArray(activitiesResult.value.data) ? activitiesResult.value.data : []);
         } else {
           setUserActivities([]);
         }
@@ -1485,14 +1486,14 @@ export default function UsersPage() {
                           <div key={activity.id || `${activity.occurredAt || "activity"}-${index}`} className="relative flex items-start gap-4">
                             <div className="absolute left-[-18px] top-2.5 h-3 w-3 rounded-full bg-blue-600 ring-4 ring-blue-100" />
                             <div className="w-20 shrink-0 text-right">
-                              <p className="text-xs text-gray-600">{date || "—"}</p>
+                              <p className="text-xs text-gray-600">{date || "-"}</p>
                               <p className="text-xs text-gray-500 mt-1">{time || ""}</p>
                             </div>
                             <div className="flex-1 rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm">
                               <p className="text-sm text-gray-900">{activityLabel}</p>
                               {detailBits.length > 0 && (
                                 <p className="mt-1 text-xs text-gray-500">
-                                  {detailBits.join(" · ")}
+                                  {detailBits.join(" | ")}
                                 </p>
                               )}
                             </div>
