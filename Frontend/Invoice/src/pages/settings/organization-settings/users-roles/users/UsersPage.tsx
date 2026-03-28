@@ -1752,7 +1752,7 @@ export default function UsersPage() {
                 <button
                   onClick={handleEditUser}
                   disabled={isSaving}
-                className="px-4 py-2 rounded-lg bg-[#ea4335] text-white text-sm font-medium hover:bg-[#d93025] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 rounded-lg bg-[#156372] text-white text-sm font-medium hover:bg-[#0f4e5a] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Save & Continue
                 </button>
