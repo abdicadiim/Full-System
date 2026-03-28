@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { invoicesAPI } from "../../services/api";
 import NewRetailInvoice from "./NewRetailInvoice/NewRetailInvoice";
@@ -43,9 +43,9 @@ function RetainerInvoicesHome() {
   );
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-semibold text-slate-900">Retainer Invoices</h1>
+    <div className="flex flex-col h-full min-h-0 w-full bg-white font-sans text-gray-800 antialiased relative overflow-hidden">
+      <div className="flex-none flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white">
+        <h1 className="text-[18px] font-semibold text-slate-900">Retainer Invoices</h1>
         <button
           onClick={() => navigate("/sales/retainer-invoices/new")}
           className="px-4 py-2 rounded-md text-white bg-gradient-to-r from-[#156372] to-[#0D4A52] hover:opacity-90"
@@ -54,40 +54,54 @@ function RetainerInvoicesHome() {
         </button>
       </div>
 
-      {loading ? (
-        <div className="text-sm text-slate-600">Loading...</div>
-      ) : list.length === 0 ? (
-        <div className="text-sm text-slate-600">No retainer invoices yet.</div>
-      ) : (
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
-          <table className="w-full text-left">
-            <thead className="bg-[#f6f7fb]">
-              <tr className="text-xs text-slate-500 uppercase">
-                <th className="px-4 py-3">Date</th>
-                <th className="px-4 py-3">Retainer #</th>
-                <th className="px-4 py-3">Customer</th>
-                <th className="px-4 py-3">Amount</th>
-                <th className="px-4 py-3">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((row) => (
-                <tr
-                  key={String(row?._id || row?.id || row?.invoiceNumber)}
-                  onClick={() => navigate(`/sales/retainer-invoices/${row?._id || row?.id}`)}
-                  className="border-t border-gray-100 text-sm hover:bg-slate-50 cursor-pointer"
-                >
-                  <td className="px-4 py-3">{String(row?.invoiceDate || row?.date || "").slice(0, 10)}</td>
-                  <td className="px-4 py-3 text-[#156372] font-medium">{row?.invoiceNumber || "-"}</td>
-                  <td className="px-4 py-3">{row?.customerName || row?.customer?.displayName || row?.customer?.name || "-"}</td>
-                  <td className="px-4 py-3">{Number(row?.total || row?.amount || 0).toLocaleString()}</td>
-                  <td className="px-4 py-3">{row?.status || "draft"}</td>
+      <div className="flex-1 min-h-0 overflow-auto px-6 py-4">
+        {loading ? (
+          <div className="text-sm text-slate-600">Loading...</div>
+        ) : list.length === 0 ? (
+          <div className="text-sm text-slate-600">No retainer invoices yet.</div>
+        ) : (
+          <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+            <table className="w-full text-left">
+              <thead className="bg-[#f6f7fb]">
+                <tr className="text-[11px] text-slate-500 uppercase tracking-wider">
+                  <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3">Retainer #</th>
+                  <th className="px-4 py-3">Customer</th>
+                  <th className="px-4 py-3">Amount</th>
+                  <th className="px-4 py-3">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              </thead>
+              <tbody>
+                {list.map((row) => (
+                  <tr
+                    key={String(row?._id || row?.id || row?.invoiceNumber)}
+                    onClick={() =>
+                      navigate(`/sales/retainer-invoices/${row?._id || row?.id}`, {
+                        state: { row },
+                      })
+                    }
+                    className="border-t border-gray-100 text-sm hover:bg-slate-50 cursor-pointer"
+                  >
+                    <td className="px-4 py-3">
+                      {String(row?.invoiceDate || row?.date || "").slice(0, 10)}
+                    </td>
+                    <td className="px-4 py-3 text-[#156372] font-medium">
+                      {row?.invoiceNumber || "-"}
+                    </td>
+                    <td className="px-4 py-3">
+                      {row?.customerName || row?.customer?.displayName || row?.customer?.name || "-"}
+                    </td>
+                    <td className="px-4 py-3">
+                      {Number(row?.total || row?.amount || 0).toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3">{row?.status || "draft"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -95,7 +109,8 @@ function RetainerInvoicesHome() {
 function RetainerInvoiceDetail() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const [row, setRow] = useState<any>(null);
+  const location = useLocation();
+  const [row, setRow] = useState<any>(() => (location.state as any)?.row || null);
 
   useEffect(() => {
     const load = async () => {
@@ -112,29 +127,40 @@ function RetainerInvoiceDetail() {
   useEffect(() => {
     const prevHtmlOverflow = document.documentElement.style.overflow;
     const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlHeight = document.documentElement.style.height;
+    const prevBodyHeight = document.body.style.height;
+    const mainEl = document.querySelector("main") as HTMLElement | null;
+    const prevMainOverflow = mainEl?.style.overflow;
+    const prevMainHeight = mainEl?.style.height;
     document.documentElement.style.overflow = "hidden";
     document.body.style.overflow = "hidden";
+    document.documentElement.style.height = "100%";
+    document.body.style.height = "100%";
+    if (mainEl) {
+      mainEl.style.overflow = "hidden";
+      mainEl.style.height = "100%";
+    }
 
     return () => {
       document.documentElement.style.overflow = prevHtmlOverflow;
       document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.height = prevHtmlHeight;
+      document.body.style.height = prevBodyHeight;
+      if (mainEl) {
+        mainEl.style.overflow = prevMainOverflow || "";
+        mainEl.style.height = prevMainHeight || "";
+      }
     };
   }, []);
 
-  if (!row) {
-    return (
-      <div className="w-full h-[calc(100vh-4rem)] min-h-0 flex items-center justify-center bg-[#f8fafc]">
-        <div className="text-sm text-slate-600">Loading...</div>
-      </div>
-    );
-  }
+  const safeRow = row || {};
 
-  const invoiceId = String(row?.id || row?._id || id || "");
+  const invoiceId = String(safeRow?.id || safeRow?._id || id || "");
   const customerName = String(
-    row?.customerName ||
-    (typeof row?.customer === "string"
-      ? row?.customer
-      : row?.customer?.displayName || row?.customer?.companyName || row?.customer?.name || "") ||
+    safeRow?.customerName ||
+    (typeof safeRow?.customer === "string"
+      ? safeRow?.customer
+      : safeRow?.customer?.displayName || safeRow?.customer?.companyName || safeRow?.customer?.name || "") ||
     ""
   );
 
@@ -143,21 +169,21 @@ function RetainerInvoiceDetail() {
       state: {
         source: "retainer-invoice",
         invoiceId,
-        invoiceNumber: String(row?.invoiceNumber || invoiceId),
+        invoiceNumber: String(safeRow?.invoiceNumber || invoiceId),
         customerId: String(
-          row?.customerId ||
-          row?.customer?._id ||
-          row?.customer?.id ||
-          (typeof row?.customer === "string" ? row.customer : "") ||
+          safeRow?.customerId ||
+          safeRow?.customer?._id ||
+          safeRow?.customer?.id ||
+          (typeof safeRow?.customer === "string" ? safeRow.customer : "") ||
           ""
         ),
         customerName,
-        amountDue: Number(row?.balance ?? row?.balanceDue ?? row?.total ?? row?.amount ?? 0) || 0,
-        totalAmount: Number(row?.total ?? row?.amount ?? 0) || 0,
-        amount: Number(row?.balance ?? row?.balanceDue ?? row?.total ?? row?.amount ?? 0) || 0,
-        currency: String(row?.currency || "USD"),
-        location: String(row?.location || row?.selectedLocation || row?.branch || "Head Office"),
-        invoice: row,
+        amountDue: Number(safeRow?.balance ?? safeRow?.balanceDue ?? safeRow?.total ?? safeRow?.amount ?? 0) || 0,
+        totalAmount: Number(safeRow?.total ?? safeRow?.amount ?? 0) || 0,
+        amount: Number(safeRow?.balance ?? safeRow?.balanceDue ?? safeRow?.total ?? safeRow?.amount ?? 0) || 0,
+        currency: String(safeRow?.currency || "USD"),
+        location: String(safeRow?.location || safeRow?.selectedLocation || safeRow?.branch || "Head Office"),
+        invoice: safeRow,
         showOnlyInvoice: true,
         returnInvoiceId: invoiceId
       }
@@ -195,10 +221,10 @@ function RetainerInvoiceDetail() {
       <section className="flex-1 flex flex-col overflow-hidden">
         <div className="bg-white border-b border-gray-200 px-4 h-[74px] flex items-center justify-between">
           <div className="min-w-0">
-            <div className="text-sm text-gray-600">
-              Location: <span className="text-[#2F80FF]">{String(row?.location || row?.selectedLocation || "Head Office")}</span>
+            <div className="text-sm text-gray-600 truncate">
+              Location: <span className="text-[#3b5ba9]">{String(row?.location || row?.selectedLocation || "Head Office")}</span>
             </div>
-            <h1 className="text-[24px] leading-tight font-semibold text-gray-900 truncate">
+            <h1 className="text-lg md:text-[24px] leading-tight font-semibold text-gray-900 truncate">
               {row?.invoiceNumber || "Retainer Invoice"}
             </h1>
           </div>
@@ -225,8 +251,8 @@ function RetainerInvoiceDetail() {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto bg-[#f8fafc]">
-          <div className="max-w-7xl mx-auto py-4 px-4">
+        <div className="flex-1 overflow-hidden bg-[#f8fafc]">
+          <div className="h-full max-w-[980px] mx-auto px-4 py-4 overflow-hidden">
             <div className="w-full max-w-[920px] mx-auto bg-white border border-[#d1d5db] shadow-sm overflow-hidden">
               <div className="px-10 py-10">
                 <div className="flex items-start justify-between mb-8">

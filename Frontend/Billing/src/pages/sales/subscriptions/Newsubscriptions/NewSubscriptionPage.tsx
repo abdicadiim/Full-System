@@ -1116,9 +1116,9 @@ const NewSubscriptionPage = () => {
 
     // Refresh products when user opens dropdown or returns to page after adding product.
     useEffect(() => {
-        const refreshProducts = () => {
-            const productsRows = productsRes?.data || readRows("inv_products_v1");
-            setProducts(mapProductsRows(productsRows));
+        const refreshProducts = async () => {
+            const res = await productsAPI.getAll({ status: 'active' });
+            setProducts(mapProductsRows(res.data || []));
         };
 
         if (isProductDropdownOpen) {

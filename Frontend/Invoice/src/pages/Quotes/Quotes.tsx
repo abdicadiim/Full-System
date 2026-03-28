@@ -2143,7 +2143,7 @@ export default function Quotes() {
   }, [selectedQuotes.length, selectedView]);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)] w-full bg-white font-sans text-gray-800 antialiased relative overflow-hidden">
+    <div className="flex flex-col h-full min-h-0 w-full bg-white font-sans text-gray-800 antialiased relative overflow-hidden">
       {/* Header Section */}
       {selectedQuotes.length > 0 ? (
         <div

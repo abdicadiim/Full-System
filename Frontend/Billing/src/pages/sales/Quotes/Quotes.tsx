@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useLayoutEffect } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import { getQuotes, deleteQuotes, updateQuote, getCustomers, getProjects, getSalespersons, getCustomViews, deleteCustomView } from "../salesModel";
@@ -2134,21 +2134,14 @@ export default function Quotes() {
     return `${day}/${month}/${year}`;
   };
 
-  const headerRowRef = useRef<HTMLDivElement | null>(null);
-  const [headerRowHeight, setHeaderRowHeight] = useState(56);
-
-  useLayoutEffect(() => {
-    const height = headerRowRef.current?.offsetHeight || 0;
-    setHeaderRowHeight(height || 56);
-  }, [selectedQuotes.length, selectedView]);
+  // Header height is fixed by layout; no runtime measurement needed.
 
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)] w-full bg-white font-sans text-gray-800 antialiased relative overflow-hidden">
+    <div className="flex flex-col h-full min-h-0 w-full bg-white font-sans text-gray-800 antialiased relative overflow-hidden">
       {/* Header Section */}
       {selectedQuotes.length > 0 ? (
         <div
-          ref={headerRowRef}
-          className="sticky top-0 z-30 flex items-center justify-between border-b border-gray-100 bg-white relative overflow-visible px-4"
+          className="flex-none flex items-center justify-between px-6 py-6 border-b border-gray-100 bg-white relative overflow-visible"
         >
           <div className="flex items-center gap-2 py-2.5">
             <button
@@ -2204,8 +2197,7 @@ export default function Quotes() {
         </div>
       ) : (
         <div
-          ref={headerRowRef}
-          className="sticky top-0 z-30 flex items-center justify-between px-4 border-b border-gray-100 bg-white"
+          className="flex-none flex items-center justify-between px-6 py-6 border-b border-gray-100 bg-white relative overflow-visible"
         >
           <div className="flex items-center gap-8 pl-4">
             <div className="relative" ref={dropdownRef}>
@@ -2472,7 +2464,6 @@ export default function Quotes() {
         {quotesLoading ? (
           <div
             className="flex-1 overflow-auto bg-white min-h-0"
-            style={{ height: `calc(100% - ${headerRowHeight}px)` }}
           >
             <table className="w-full text-left border-collapse" style={{ minWidth: `${tableMinWidth}px` }}>
               <thead className="bg-[#f6f7fb] sticky top-0 z-20 border-b border-[#e6e9f2]">
@@ -2568,7 +2559,6 @@ export default function Quotes() {
         ) : (
           <div
             className="flex-1 overflow-auto bg-white min-h-0"
-            style={{ height: `calc(100% - ${headerRowHeight}px)` }}
           >
             <table className="w-full text-left border-collapse" style={{ minWidth: `${tableMinWidth}px` }}>
               <thead className="bg-[#f6f7fb] sticky top-0 z-20 border-b border-[#e6e9f2]">

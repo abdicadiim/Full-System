@@ -339,6 +339,18 @@ export default function Retailinvoicedetail() {
   }, []);
 
   useEffect(() => {
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevBodyOverflow = document.body.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.overflow = prevBodyOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem(RETAINER_SELECTED_VIEW_STORAGE_KEY, selectedView);
   }, [selectedView]);
 
@@ -1551,22 +1563,32 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
 
       <div className="flex-1 flex flex-col min-w-0 h-full min-h-0 bg-[#f3f4f8]">
         <div className="sticky top-0 z-20">
-          <div className="h-[50px] border-b border-[#d6d9e3] bg-white px-4 flex items-center justify-between">
-          <div>
-            <div className="text-[12px] text-[#64748b] leading-tight">Location: {locationText}</div>
-            <div className="text-[24px] leading-[1] text-[#0f172a] font-semibold">{String((invoice as any)?.invoiceNumber || "-")}</div>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="relative" ref={attachmentsDropdownRef}>
-            <button
-              type="button"
-              onClick={() => setIsAttachmentsDropdownOpen((prev) => !prev)}
-              className="h-8 min-w-8 px-2 rounded-[6px] border border-[#cfd5e2] bg-[#f8fafc] text-[12px] text-[#516174] inline-flex items-center justify-center gap-1 hover:bg-white"
-              title="Attachments"
-            >
-              <AttachmentIcon />
-              <span>{attachments.length}</span>
-            </button>
+          <div className="flex items-center justify-between px-4 h-[74px] border-b border-gray-200 bg-white">
+            <div className="min-w-0">
+              <div className="text-sm text-gray-600 truncate">
+                Location: <span className="text-[#3b5ba9]">{locationText}</span>
+              </div>
+              <h1 className="text-lg md:text-[24px] leading-tight font-semibold text-gray-900 truncate">
+                {String((invoice as any)?.invoiceNumber || "-")}
+              </h1>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative" ref={attachmentsDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsAttachmentsDropdownOpen((prev) => !prev)}
+                  className="p-2 text-gray-600 hover:bg-gray-100 rounded-md cursor-pointer"
+                  title="Attachments"
+                >
+                  <span className="inline-flex items-center gap-1">
+                    <AttachmentIcon />
+                    {attachments.length > 0 && (
+                      <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded border border-gray-300 bg-white text-[11px] font-semibold text-gray-700 leading-none">
+                        {attachments.length}
+                      </span>
+                    )}
+                  </span>
+                </button>
               {isAttachmentsDropdownOpen && (
                 <div className="absolute top-full right-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
                   <div className="flex items-center justify-between p-4 border-b border-gray-200">
@@ -1628,26 +1650,26 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
                   <p className="px-4 pb-4 text-xs text-gray-500">You can upload a maximum of 10 files, 10MB each</p>
                 </div>
               )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCommentsPanelOpen(true)}
+                className="p-2 text-gray-600 hover:bg-gray-100 rounded-md cursor-pointer"
+                title="Comments"
+              >
+                <MessageSquare size={18} />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  ensureRetainerListAllView();
+                  navigate("/sales/retainer-invoices");
+                }}
+                className="p-2 text-gray-600 hover:bg-gray-100 rounded-md cursor-pointer"
+              >
+                <X size={18} />
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsCommentsPanelOpen(true)}
-              className="h-8 w-8 rounded-[6px] border border-[#cfd5e2] bg-[#f8fafc] text-[#516174] inline-flex items-center justify-center hover:bg-white"
-              title="Comments"
-            >
-              <MessageSquare size={14} />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                ensureRetainerListAllView();
-                navigate("/sales/retainer-invoices");
-              }}
-              className="h-8 w-8 rounded-[6px] border border-[#cfd5e2] bg-white text-[#ef4444] inline-flex items-center justify-center hover:bg-[#fff5f5]"
-            >
-              <X size={15} />
-            </button>
-          </div>
           </div>
 
           <div className="h-8 border-b border-[#d6d9e3] bg-[#f7f8fc] px-4 flex items-center gap-2 text-[12px] text-[#475569]">
@@ -1779,7 +1801,7 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
         </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 min-h-0">
+        <div className="flex-1 overflow-y-auto p-2 md:p-3 bg-gray-50 min-h-0">
           {loading ? (
             <div className="text-slate-500">Loading...</div>
           ) : !invoice ? (
@@ -1865,7 +1887,8 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
 
               <div
                 ref={invoicePaperRef}
-                className="relative bg-white border border-[#d6d9e3] rounded-sm shadow-[0_2px_8px_rgba(15,23,42,0.06)] w-full max-w-[860px] min-h-[1123px] mx-auto px-14 pt-10 pb-12 text-black"
+                className="relative bg-white border border-[#d1d5db] shadow-sm w-full max-w-[920px] mx-auto overflow-hidden text-black"
+                style={{ width: "210mm", maxWidth: "210mm", minHeight: "297mm", padding: "64px 40px 24px 40px" }}
               >
                 <div className="absolute left-0 top-0 w-[84px] h-[84px] overflow-hidden pointer-events-none">
                   <div className={`absolute left-[-34px] top-[14px] w-[120px] h-[36px] ${ribbonBgClass} -rotate-45 shadow-sm`} />
@@ -1950,7 +1973,7 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
                 )}
               </div>
 
-              <div className="max-w-[794px] mx-auto mt-7 text-[14px] text-slate-700 bg-white border border-[#d6d9e3] px-4 py-4">
+              <div className="max-w-[920px] mx-auto mt-4 text-[14px] text-slate-700 bg-white border border-[#d1d5db] px-4 py-4">
                 <div className="px-1">
                   <h3 className="text-[16px] font-normal text-slate-900 mb-5">More Information</h3>
                   <div className="grid grid-cols-[220px_1fr] gap-4 mb-10">

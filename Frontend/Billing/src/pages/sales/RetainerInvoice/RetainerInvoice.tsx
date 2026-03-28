@@ -892,11 +892,11 @@ export default function RetainerInvoice() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)] min-h-0 bg-white overflow-hidden">
+    <div className="flex flex-col h-full min-h-0 w-full bg-white font-sans text-gray-800 antialiased relative overflow-hidden">
       <div className="border-b border-gray-100 bg-white shrink-0 z-[100]">
         {hasVisibleSelection ? (
           /* Bulk Action Header */
-          <div className="flex items-center justify-between px-4 h-[60px]">
+          <div className="flex items-center justify-between px-6 py-6">
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -942,8 +942,8 @@ export default function RetainerInvoice() {
           </div>
         ) : (
           /* Normal Header */
-          <div className="flex items-center justify-between px-4 h-[60px]">
-            <div className="flex items-center gap-8 pl-4">
+          <div className="flex items-center justify-between px-6 py-6">
+            <div className="flex items-center gap-8">
               <div className="relative" ref={viewDropdownRef}>
                 <button
                   type="button"
@@ -1002,7 +1002,7 @@ export default function RetainerInvoice() {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 sm:gap-2 mr-4">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-2">
               <button
                 onClick={() => navigate("/sales/retainer-invoices/new")}
                 className="h-9 px-4 rounded-md text-white text-sm font-medium inline-flex items-center gap-1.5 shadow-sm transition-all bg-gradient-to-r from-[#176a79] to-[#1b5e6a] hover:from-[#1b5e6a] hover:to-[#176a79]"
@@ -1187,7 +1187,7 @@ export default function RetainerInvoice() {
               <tr className="text-[10px] font-semibold text-[#7b8494] uppercase tracking-wider">
                 <th
                   ref={columnToolsRef}
-                  className="w-16 px-4 py-3 text-left sticky left-0 z-20 bg-[#f6f7fb]"
+                  className="w-16 px-4 py-3 text-left bg-[#f6f7fb]"
                 >
                   <div className="flex items-center gap-2">
                     <button
@@ -1252,7 +1252,7 @@ export default function RetainerInvoice() {
                         }`}
                       onClick={() => navigate(`/sales/retainer-invoices/${row.id}`)}
                     >
-                      <td className="px-4 py-3 sticky left-0 z-20 bg-inherit" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-2">
                           <div className="w-6 h-6 shrink-0" />
                           <div className="h-5 w-px bg-transparent shrink-0" />
@@ -1395,7 +1395,7 @@ export default function RetainerInvoice() {
                 <span className="text-[13px] text-slate-600">{selectedColumnCount} of {RETAINER_COLUMNS.length} Selected</span>
                 <button
                   type="button"
-                  className="w-7 h-7 flex items-center justify-center border border-blue-200 rounded shadow-sm hover:bg-gray-50 transition-colors group"
+                  className="w-7 h-7 flex items-center justify-center rounded transition-colors group hover:bg-gray-50"
                   onClick={() => {
                     setIsCustomizeColumnsOpen(false);
                     setColumnSearchTerm("");
@@ -1460,7 +1460,7 @@ export default function RetainerInvoice() {
                   setIsCustomizeColumnsOpen(false);
                   setColumnSearchTerm("");
                 }}
-                className="bg-[#22a06b] text-white px-5 py-2 rounded-md text-sm font-medium"
+                className="bg-[#0D4A52] text-white px-5 py-2 rounded-md text-sm font-medium hover:brightness-110"
               >
                 Save
               </button>
