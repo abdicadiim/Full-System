@@ -1091,13 +1091,19 @@ const QuoteDetail = () => {
 
   const renderLinkedInvoicesTable = (opts?: { compact?: boolean }) => {
     const compact = Boolean(opts?.compact);
+    const visibleLinkedInvoices = linkedInvoices.filter((invoice: any) => {
+      const status = String(invoice?.status || "").toLowerCase().replace(/[\s-]+/g, "_").trim();
+      return status === "paid" || status === "partially_paid";
+    });
+
+    if (linkedInvoicesLoading || visibleLinkedInvoices.length === 0) return null;
     return (
       <div id="quote-linked-invoices" className="w-full bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <h3 className="text-base font-semibold text-gray-900">Invoices</h3>
             <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-gray-100 text-[11px] font-semibold text-gray-700">
-              {linkedInvoicesLoading ? "…" : linkedInvoices.length}
+              {visibleLinkedInvoices.length}
             </span>
           </div>
           {!compact && (
@@ -1111,12 +1117,7 @@ const QuoteDetail = () => {
           )}
         </div>
 
-        {linkedInvoicesLoading ? (
-          <div className="px-5 py-6 flex items-center gap-3 text-sm text-gray-600">
-            <div className="w-5 h-5 border-2 border-gray-300 border-t-[#2F80FF] rounded-full animate-spin" />
-            Loading linked invoices...
-          </div>
-        ) : linkedInvoices.length === 0 ? (
+        {visibleLinkedInvoices.length === 0 ? (
           <div className="px-5 py-6 text-sm text-gray-600">No linked invoices found for this quote.</div>
         ) : (
           <div className="overflow-x-auto">
@@ -1132,7 +1133,7 @@ const QuoteDetail = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {linkedInvoices.map((invoice: any) => {
+                {visibleLinkedInvoices.map((invoice: any) => {
                   const statusMeta = getInvoiceStatusMeta(invoice);
                   const invoiceId = String(invoice?.id || invoice?._id || "").trim();
                   const invoiceNumber = String(invoice?.invoiceNumber || invoice?.number || invoiceId || "-").trim();
@@ -3538,29 +3539,63 @@ const QuoteDetail = () => {
                     setIsCustomizeDropdownOpen(false);
                   }}
                 >
-                  {/* Sent Ribbon */}
-                  {String(quote.status || "").toLowerCase() === "sent" && (
-                    <div
-                      style={{
+                  {/* Status Ribbon */}
+                  {String(quote.status || "").toLowerCase() === "draft" && (
+                    <div style={{
+                      position: "absolute",
+                      top: "0",
+                      left: "0",
+                      width: "200px",
+                      height: "200px",
+                      overflow: "hidden",
+                      zIndex: 10
+                    }}>
+                      <div style={{
                         position: "absolute",
-                        top: "120px",
-                        left: "-18px",
-                        zIndex: 10,
+                        top: "40px",
+                        left: "-60px",
+                        width: "200px",
+                        height: "30px",
+                        backgroundColor: "#6B7280",
+                        color: "white",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "14px",
+                        fontWeight: "600",
                         transform: "rotate(-45deg)",
-                      }}
-                    >
-                      <div
-                        style={{
-                          backgroundColor: "#2F80FF",
-                          color: "white",
-                          padding: "6px 28px",
-                          fontSize: "12px",
-                          fontWeight: 700,
-                          letterSpacing: "0.5px",
-                          borderRadius: "6px",
-                          boxShadow: "0 6px 12px rgba(15, 23, 42, 0.18)",
-                        }}
-                      >
+                        boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
+                      }}>
+                        DRAFT
+                      </div>
+                    </div>
+                  )}
+                  {String(quote.status || "").toLowerCase() === "sent" && (
+                    <div style={{
+                      position: "absolute",
+                      top: "0",
+                      left: "0",
+                      width: "200px",
+                      height: "200px",
+                      overflow: "hidden",
+                      zIndex: 10
+                    }}>
+                      <div style={{
+                        position: "absolute",
+                        top: "40px",
+                        left: "-60px",
+                        width: "200px",
+                        height: "30px",
+                        backgroundColor: "#2F80FF",
+                        color: "white",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "14px",
+                        fontWeight: "600",
+                        transform: "rotate(-45deg)",
+                        boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
+                      }}>
                         SENT
                       </div>
                     </div>
@@ -3688,7 +3723,7 @@ const QuoteDetail = () => {
 
                   {/* Header with Company Info */}
                   <div className="flex items-start justify-between mb-6 pb-5" style={{ position: "relative", borderBottom: "1px solid #e5e7eb" }}>
-                    <div style={{ maxWidth: "46%" }}>
+                    <div style={{ maxWidth: "46%", paddingLeft: "26px", paddingTop: "4px" }}>
                       <div style={{ fontSize: "16px", fontWeight: "700", color: "#111827", marginBottom: "3px" }}>
                         {organizationProfile?.name || ""}
                       </div>

@@ -21,12 +21,14 @@ import {
   X,
   ChevronLeft,
 } from "lucide-react";
-import { customersAPI, invoicesAPI, salespersonsAPI } from "../../../../services/api";
+import { customersAPI, invoicesAPI, salespersonsAPI, reportingTagsAPI } from "../../../../services/api";
 import { getTaxes, saveInvoice } from "../../salesModel";
 import { usePaymentTermsDropdown, defaultPaymentTerms, PaymentTerm } from "../../../../hooks/usePaymentTermsDropdown";
 import PaymentTermsDropdown from "../../../../components/PaymentTermsDropdown";
 import { ConfigurePaymentTermsModal } from "../../../../components/ConfigurePaymentTermsModal";
 import { computeDueDateFromTerm } from "../../../shared/termPaymetn";
+import { buildTaxOptionGroups, isTaxActive, taxLabel } from "../../../../hooks/Taxdropdownstyle";
+import { readTaxesLocal, TAXES_STORAGE_EVENT } from "../../../settings/organization-settings/taxes-compliance/TAX/storage";
 
 type DebitNoteItem = {
   id: number;
@@ -40,8 +42,50 @@ type ReportingTagDef = {
   key: string;
   label: string;
   options: string[];
+  isMandatory?: boolean;
+  appliesTo?: string[];
 };
 type CustomerOption = Record<string, any>;
+
+const normalizeReportingTagOptions = (tag: any): string[] => {
+  const rawOptions = Array.isArray(tag?.options)
+    ? tag.options
+    : Array.isArray(tag?.values)
+      ? tag.values
+      : Array.isArray(tag?.tagValues)
+        ? tag.tagValues
+        : Array.isArray(tag?.choices)
+          ? tag.choices
+          : [];
+  return Array.from(
+    new Set(
+      rawOptions
+        .map((option: any) => {
+          if (typeof option === "string") return option.trim();
+          if (option && typeof option === "object") {
+            return String(option.value ?? option.name ?? option.option ?? option.title ?? "").trim();
+          }
+          return "";
+        })
+        .filter(Boolean)
+    )
+  );
+};
+
+const normalizeReportingTagAppliesTo = (tag: any): string[] => {
+  const rawAppliesTo = Array.isArray(tag?.appliesTo)
+    ? tag.appliesTo
+    : Array.isArray(tag?.modules)
+      ? tag.modules
+      : Array.isArray(tag?.moduleNames)
+        ? tag.moduleNames
+        : Array.isArray(tag?.entities)
+          ? tag.entities
+          : [];
+  return rawAppliesTo
+    .map((value: any) => String(value || "").toLowerCase().trim())
+    .filter(Boolean);
+};
 
 const getCustomerPrimaryName = (customer: CustomerOption) =>
   String(
@@ -149,7 +193,6 @@ const reasons = [
   "Finalization of Provisional assessment",
   "Others",
 ];
-const taxChoices = ["Select a Tax", "VAT [5%]", "GST [10%]", "Sales Tax [11%]"];
 const PRICE_LISTS_STORAGE_KEY = "inv_price_lists_v1";
 
 const formatDate = (date: Date) =>
@@ -218,6 +261,7 @@ export default function NewDebitNote() {
   const [salespersons, setSalespersons] = useState<any[]>([]);
   const [salespersonSearch, setSalespersonSearch] = useState("");
   const [isSalespersonDropdownOpen, setIsSalespersonDropdownOpen] = useState(false);
+  const [taxes, setTaxes] = useState<any[]>([]);
   const [catalogPriceLists, setCatalogPriceLists] = useState<
     Array<{ id: string; name: string; status?: string; markup?: number; markupType?: string }>
   >([]);
@@ -516,10 +560,6 @@ export default function NewDebitNote() {
       { id: Date.now() + prev.length, description: "", rate: 0, baseRate: 0, tax: "", amount: 0 },
     ]);
   const removeRow = (id: number) => setItems((prev) => (prev.length > 1 ? prev.filter((item) => item.id !== id) : prev));
-  const getFilteredTaxes = (itemId: number) => {
-    const query = String(taxSearches[itemId] || "").toLowerCase().trim();
-    return taxChoices.filter((tax) => tax !== "Select a Tax" && (!query || tax.toLowerCase().includes(query)));
-  };
   const groupedAccountOptions = [
     { group: "Other Current Asset", options: ["Advance Tax", "Employee Advance", "Goods In Transit", "Prepaid Expenses"] },
     { group: "Fixed Asset", options: ["Furniture and Equipment", "Office Equipment", "Computer Hardware"] },
@@ -559,6 +599,20 @@ export default function NewDebitNote() {
       String(salesperson?.name || "").toLowerCase().includes(query)
     );
   }, [salespersonSearch, salespersons]);
+  const taxOptionGroups = useMemo(() => buildTaxOptionGroups(taxes), [taxes]);
+  const getFilteredTaxGroups = (itemId: number) => {
+    const query = String(taxSearches[itemId] || "").toLowerCase().trim();
+    if (!query) return taxOptionGroups;
+
+    return taxOptionGroups
+      .map((group) => ({
+        ...group,
+        options: group.options.filter((tax) =>
+          taxLabel(tax.raw).toLowerCase().includes(query)
+        ),
+      }))
+      .filter((group) => group.options.length > 0);
+  };
   const customerDetails =
     selectedCustomer ||
     customers.find((customer) => {
@@ -625,6 +679,35 @@ export default function NewDebitNote() {
     };
     loadCustomers();
     loadSalespersons();
+    const loadTaxes = async () => {
+      try {
+        const rows = await getTaxes();
+        const apiRows = Array.isArray(rows?.data)
+          ? rows.data
+          : Array.isArray(rows)
+            ? rows
+            : [];
+        const localRows = readTaxesLocal();
+        const merged: any[] = [];
+        const seen = new Set<string>();
+        [...apiRows, ...localRows].forEach((row: any) => {
+          if (!row) return;
+          const id = String(row?._id || row?.id || "").trim();
+          const name = String(row?.name || row?.taxName || "").trim().toLowerCase();
+          const key = id ? `id:${id}` : name ? `name:${name}` : "";
+          if (!key || seen.has(key)) return;
+          seen.add(key);
+          merged.push(row);
+        });
+        setTaxes(merged.filter(isTaxActive));
+      } catch {
+        setTaxes([]);
+      }
+    };
+    loadTaxes();
+    const onTaxesUpdated = () => loadTaxes();
+    window.addEventListener(TAXES_STORAGE_EVENT, onTaxesUpdated as EventListener);
+    window.addEventListener("focus", onTaxesUpdated);
     try {
       const raw = localStorage.getItem("taban_locations_cache");
       const parsed = raw ? JSON.parse(raw) : [];
@@ -637,6 +720,10 @@ export default function NewDebitNote() {
     } catch {
       setLocationOptions(["Head Office"]);
     }
+    return () => {
+      window.removeEventListener(TAXES_STORAGE_EVENT, onTaxesUpdated as EventListener);
+      window.removeEventListener("focus", onTaxesUpdated);
+    };
   }, []);
 
   useEffect(() => {
@@ -682,20 +769,40 @@ export default function NewDebitNote() {
   }, [selectedPriceListOption]);
 
   useEffect(() => {
-    const loadReportingTags = () => {
+    const loadReportingTags = async () => {
       try {
-        const raw = localStorage.getItem("taban_books_reporting_tags");
-        const parsed = raw ? JSON.parse(raw) : [];
-        const normalized = (Array.isArray(parsed) ? parsed : [])
+        const response = await reportingTagsAPI.getAll();
+        const apiRows = Array.isArray(response)
+          ? response
+          : Array.isArray((response as any)?.data)
+            ? (response as any).data
+            : [];
+        const fallbackRows = (() => {
+          try {
+            const raw = localStorage.getItem("taban_books_reporting_tags");
+            const parsed = raw ? JSON.parse(raw) : [];
+            return Array.isArray(parsed) ? parsed : [];
+          } catch {
+            return [];
+          }
+        })();
+        const sourceRows = Array.isArray(apiRows) && apiRows.length > 0 ? apiRows : fallbackRows;
+        const activeRows = sourceRows.filter((tag: any) => String(tag?.status || "active").toLowerCase() !== "inactive");
+        const salesScoped = activeRows.filter((tag: any) => {
+          const appliesTo = normalizeReportingTagAppliesTo(tag);
+          return appliesTo.some((entry) => entry.includes("sales") || entry.includes("invoice") || entry.includes("debit"));
+        });
+
+        const normalized = (salesScoped.length > 0 ? salesScoped : activeRows)
           .map((tag: any, index: number) => ({
             key: String(tag?.id || tag?._id || tag?.name || tag?.title || `reporting-tag-${index}`),
             label: String(tag?.name || tag?.title || tag?.label || `Reporting Tag ${index + 1}`),
-            options: (() => {
-              const options = normalizeReportingTagOptions(tag);
-              return options.length > 0 ? options : ["None"];
-            })(),
+            options: normalizeReportingTagOptions(tag),
+            isMandatory: Boolean(tag?.isMandatory || tag?.mandatory),
+            appliesTo: normalizeReportingTagAppliesTo(tag),
           }))
           .filter((tag: ReportingTagDef) => Boolean(tag.key));
+
         setAvailableReportingTags(normalized);
         setHeaderReportingTagSelections((prev) => {
           const next = { ...prev };
@@ -1418,45 +1525,84 @@ export default function NewDebitNote() {
                       <td className="px-3 py-3">
                         <div className="relative" ref={(el) => { taxDropdownRefs.current[item.id] = el; }}>
                           <button
-                            className="flex h-9 w-[130px] items-center justify-between rounded-md border border-slate-300 px-2 text-[14px]"
-                            onClick={() => setOpenTaxDropdowns((prev) => ({ ...prev, [item.id]: !prev[item.id] }))}
                             type="button"
+                            className="flex h-9 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-2 text-left text-sm transition"
+                            onClick={() => setOpenTaxDropdowns((prev) => ({ ...prev, [item.id]: !prev[item.id] }))}
                           >
-                            <span className={item.tax ? "text-slate-700" : "text-slate-500"}>{item.tax || "Select a Tax"}</span>
-                            <ChevronDown size={14} />
+                            <span className={`${item.tax ? "text-slate-700" : "text-slate-400"} truncate`}>
+                              {item.tax || "Select a Tax"}
+                            </span>
+                            <ChevronDown
+                              size={14}
+                              className={`text-slate-400 transition-transform ${openTaxDropdowns[item.id] ? "rotate-180" : ""}`}
+                              style={{ color: "#156372" }}
+                            />
                           </button>
                           {openTaxDropdowns[item.id] && (
-                            <div className="absolute top-full left-0 z-[160] mt-1 w-[220px] rounded-md border border-gray-200 bg-white shadow-xl">
-                              <div className="border-b border-gray-100 p-2">
-                                <div className="relative">
-                                  <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <div className="absolute left-0 top-full z-[140] mt-1 w-72 rounded-xl border border-[#d6dbe8] bg-white p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+                              <div className="p-2">
+                                <div className="flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-all focus-within:bg-white" style={{ borderColor: "#156372" }}>
+                                  <Search size={14} className="text-slate-400" />
                                   <input
                                     type="text"
-                                    placeholder="Search"
+                                    placeholder="Search..."
                                     value={taxSearches[item.id] || ""}
                                     onChange={(e) => setTaxSearches((prev) => ({ ...prev, [item.id]: e.target.value }))}
-                                    className="h-8 w-full rounded border border-gray-300 pl-7 pr-2 text-sm focus:border-blue-500 focus:outline-none"
+                                    className="w-full border-none bg-transparent text-[13px] text-slate-700 outline-none placeholder:text-slate-400"
+                                    autoFocus
                                   />
                                 </div>
                               </div>
-                              <div className="max-h-48 overflow-y-auto py-1">
-                                {getFilteredTaxes(item.id).map((tax) => (
-                                  <button
-                                    key={`${item.id}-${tax}`}
-                                    type="button"
-                                    className={`w-full px-3 py-1.5 text-left text-sm hover:bg-blue-50 ${item.tax === tax ? "bg-blue-600 text-white hover:bg-blue-600" : "text-gray-700"}`}
-                                    onClick={() => {
-                                      updateItem(item.id, { tax });
-                                      setOpenTaxDropdowns((prev) => ({ ...prev, [item.id]: false }));
-                                      setTaxSearches((prev) => ({ ...prev, [item.id]: "" }));
-                                    }}
-                                  >
-                                    {tax}
-                                  </button>
-                                ))}
-                                {getFilteredTaxes(item.id).length === 0 && (
-                                  <div className="px-3 py-2 text-sm text-gray-500">No taxes found</div>
-                                )}
+                              <div className="max-h-64 overflow-y-auto py-1 custom-scrollbar">
+                                {(() => {
+                                  const searchValue = String(taxSearches[item.id] || "").trim().toLowerCase();
+                                  const grouped = getFilteredTaxGroups(item.id);
+                                  const filteredGroups = searchValue
+                                    ? grouped
+                                        .map((group) => ({
+                                          ...group,
+                                          options: group.options.filter((tax) =>
+                                            `${taxLabel(tax.raw)} [${tax.rate}%]`.toLowerCase().includes(searchValue)
+                                          ),
+                                        }))
+                                        .filter((group) => group.options.length > 0)
+                                    : grouped;
+                                  const hasTaxes = filteredGroups.some((group) => group.options.length > 0);
+
+                                  return !hasTaxes ? (
+                                    <div className="px-4 py-3 text-center text-[13px] text-slate-400">No taxes found</div>
+                                  ) : (
+                                    filteredGroups.map((group) => (
+                                      <div key={group.label}>
+                                        <div className="px-4 py-1.5 text-[10px] font-extrabold uppercase tracking-widest text-slate-700">
+                                          {group.label}
+                                        </div>
+                                        {group.options.map((tax) => {
+                                          const label = taxLabel(tax.raw);
+                                          const selected = item.tax === label;
+                                          return (
+                                            <button
+                                              key={`${item.id}-${tax.id}`}
+                                              type="button"
+                                              onClick={() => {
+                                                updateItem(item.id, { tax: label });
+                                                setOpenTaxDropdowns((prev) => ({ ...prev, [item.id]: false }));
+                                                setTaxSearches((prev) => ({ ...prev, [item.id]: "" }));
+                                              }}
+                                              className={`w-full px-4 py-2 text-left text-[13px] ${
+                                                selected
+                                                  ? "text-[#156372] font-medium hover:bg-gray-50 hover:text-gray-900"
+                                                  : "text-slate-700 hover:bg-gray-50 hover:text-gray-900"
+                                              }`}
+                                            >
+                                              {label}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    ))
+                                  );
+                                })()}
                               </div>
                             </div>
                           )}
@@ -1575,8 +1721,8 @@ export default function NewDebitNote() {
                                     ) : (
                                       availableReportingTags.map((tag) => (
                                         <div key={tag.key} className="space-y-2">
-                                          <label className="block text-sm text-[#ef4444]">
-                                            {tag.label} *
+                                          <label className="block text-sm text-slate-700">
+                                            {tag.label}{tag.isMandatory ? " *" : ""}
                                           </label>
                                           <select
                                             className="h-10 w-[260px] rounded-md border border-[#3b82f6] bg-white px-3 text-sm"
@@ -1585,11 +1731,16 @@ export default function NewDebitNote() {
                                               setReportingTagDraft((prev) => ({ ...prev, [tag.key]: e.target.value }))
                                             }
                                           >
-                                            {tag.options.map((option) => (
-                                              <option key={`${tag.key}-${option}`} value={option}>
-                                                {option}
-                                              </option>
-                                            ))}
+                                            {!tag.isMandatory && <option value="">None</option>}
+                                            {tag.options.length > 0 ? (
+                                              tag.options.map((option) => (
+                                                <option key={`${tag.key}-${option}`} value={option}>
+                                                  {option}
+                                                </option>
+                                              ))
+                                            ) : (
+                                              <option value="" disabled>No options available</option>
+                                            )}
                                           </select>
                                         </div>
                                       ))
@@ -1600,6 +1751,15 @@ export default function NewDebitNote() {
                                       type="button"
                                       className="rounded-md bg-[#156372] px-4 py-1.5 text-sm font-medium text-white hover:bg-[#0D4A52]"
                                       onClick={() => {
+                                        const mandatoryMissing = availableReportingTags.find((tag) => {
+                                          if (!tag.isMandatory) return false;
+                                          const value = String(reportingTagDraft[tag.key] || "").trim();
+                                          return !value;
+                                        });
+                                        if (mandatoryMissing) {
+                                          alert(`${mandatoryMissing.label} is required`);
+                                          return;
+                                        }
                                         setItemReportingTagSelections((prev) => ({ ...prev, [item.id]: reportingTagDraft }));
                                         setActiveAdditionalInfoMenu(null);
                                       }}

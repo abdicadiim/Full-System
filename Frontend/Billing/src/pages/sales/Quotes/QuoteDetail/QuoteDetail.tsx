@@ -1101,13 +1101,20 @@ const QuoteDetail = () => {
 
   const renderLinkedInvoicesTable = (opts) => {
     const compact = Boolean(opts?.compact);
+    const visibleLinkedInvoices = linkedInvoices.filter((invoice: any) => {
+      const status = String(invoice?.status || "").toLowerCase().replace(/[\s-]+/g, "_").trim();
+      return status === "paid" || status === "partially_paid";
+    });
+
+    if (linkedInvoicesLoading || visibleLinkedInvoices.length === 0) return null;
+
     return (
       <div id="quote-linked-invoices" className="w-full bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <h3 className="text-base font-semibold text-gray-900">Invoices</h3>
             <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-gray-100 text-[11px] font-semibold text-gray-700">
-              {linkedInvoicesLoading ? "…" : linkedInvoices.length}
+              {visibleLinkedInvoices.length}
             </span>
           </div>
           {!compact && (
@@ -1121,12 +1128,7 @@ const QuoteDetail = () => {
           )}
         </div>
 
-        {linkedInvoicesLoading ? (
-          <div className="px-5 py-6 flex items-center gap-3 text-sm text-gray-600">
-            <div className="w-5 h-5 border-2 border-gray-300 border-t-[#0D4A52] rounded-full animate-spin" />
-            Loading linked invoices...
-          </div>
-        ) : linkedInvoices.length === 0 ? (
+        {visibleLinkedInvoices.length === 0 ? (
           <div className="px-5 py-6 text-sm text-gray-600">No linked invoices found for this quote.</div>
         ) : (
           <div className="overflow-x-auto">
@@ -1142,7 +1144,7 @@ const QuoteDetail = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {linkedInvoices.map((invoice) => {
+                {visibleLinkedInvoices.map((invoice) => {
                   const statusMeta = getInvoiceStatusMeta(invoice);
                   const invoiceId = String(invoice?.id || invoice?._id || "").trim();
                   const invoiceNumber = String(invoice?.invoiceNumber || invoice?.number || invoiceId || "-").trim();

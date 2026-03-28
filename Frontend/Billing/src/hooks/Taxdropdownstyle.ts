@@ -47,11 +47,19 @@ const toTaxOption = (tax: any): TaxDropdownOption | null => {
   const typeValue = String(tax?.type || "").toLowerCase();
   const kindValue = String(tax?.kind || "").toLowerCase();
   const taxTypeValue = String(tax?.taxType || tax?.tax_type || "").toLowerCase();
+  const normalizedGroupFlags =
+    tax?.taxGroup === true ||
+    tax?.isTaxGroup === true ||
+    tax?.is_tax_group === true ||
+    typeValue === "tax-group" ||
+    kindValue === "tax-group" ||
+    taxTypeValue === "tax-group";
   const isGroup =
     isTaxGroupRecord(tax) ||
     String(tax?.description || "") === "__taban_tax_group__" ||
     tax?.isGroup === true ||
     tax?.is_group === true ||
+    normalizedGroupFlags ||
     kindValue === "group" ||
     typeValue === "group" ||
     taxTypeValue === "group" ||
@@ -59,9 +67,13 @@ const toTaxOption = (tax: any): TaxDropdownOption | null => {
     typeValue.includes("group") ||
     taxTypeValue.includes("group") ||
     (Array.isArray(tax?.groupTaxes) && tax.groupTaxes.length > 0) ||
+    (Array.isArray(tax?.groupTaxIds) && tax.groupTaxIds.length > 0) ||
     (Array.isArray(tax?.group_taxes) && tax.group_taxes.length > 0) ||
     (Array.isArray(tax?.group_tax_ids) && tax.group_tax_ids.length > 0) ||
-    (Array.isArray(tax?.groupTaxesIds) && tax.groupTaxesIds.length > 0);
+    (Array.isArray(tax?.groupTaxesIds) && tax.groupTaxesIds.length > 0) ||
+    (Array.isArray(tax?.children) && tax.children.length > 0) ||
+    (Array.isArray(tax?.associatedTaxes) && tax.associatedTaxes.length > 0) ||
+    (Array.isArray(tax?.associated_taxes) && tax.associated_taxes.length > 0);
 
   return {
     id,

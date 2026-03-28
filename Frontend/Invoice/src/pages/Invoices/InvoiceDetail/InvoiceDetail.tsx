@@ -3531,14 +3531,11 @@ export default function InvoiceDetail() { // Start of component
               style={{ width: "210mm", minHeight: "297mm", padding: "20mm" }}
             >
               {/* Status Ribbon */}
-              {(invoice.status === "draft" || invoice.status?.toLowerCase() === "paid" || invoice.status?.toLowerCase() === "sent" || invoice.status?.toLowerCase() === "unpaid") && (
-                <div className="absolute top-0 left-0 w-32 h-32 overflow-hidden">
-                  <div className={`absolute top-8 left-8 w-40 h-8 transform -rotate-45 origin-center flex items-center justify-center shadow-sm ${invoice.status?.toLowerCase() === "paid" ? "bg-green-500" :
-                    (invoice.status?.toLowerCase() === "sent" || invoice.status?.toLowerCase() === "unpaid") ? "bg-blue-500" :
-                      "bg-yellow-500"
-                    }`}>
-                    <span className="text-white font-bold text-sm uppercase tracking-wider">
-                      {invoice.status?.toLowerCase() === "sent" ? "UNPAID" : invoice.status}
+              {invoice.status?.toLowerCase() === "paid" && (
+                <div className="absolute top-0 left-0 w-[200px] h-[200px] overflow-hidden z-10">
+                  <div className="absolute top-[40px] left-[-60px] w-[200px] h-[30px] transform -rotate-45 origin-center flex items-center justify-center shadow-sm bg-green-500">
+                    <span className="text-white font-semibold text-[14px] uppercase tracking-wider">
+                      PAID
                     </span>
                   </div>
                 </div>

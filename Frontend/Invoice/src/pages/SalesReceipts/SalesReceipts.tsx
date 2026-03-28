@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import { getSalesReceipts, getSalesReceiptsPaginated, deleteSalesReceipt, updateSalesReceipt, getSalesReceiptById, getCustomers, getSalespersons, getTaxes, getProjects, getItemsFromAPI, getCustomViews, deleteCustomView } from "../salesModel";
 // import { sampleItems } from "../items/itemsModel";
+import { toast } from "react-toastify";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import {
@@ -47,9 +48,16 @@ const salesReceiptViews = [
 
 const viewStatusMap = {
   All: "All",
-  Paid: "completed",
+  Paid: "paid",
   Void: "void"
 };
+
+const normalizeSalesReceiptStatus = (value: any) => {
+  const status = String(value || "").trim().toLowerCase();
+  return status === "void" ? "void" : "paid";
+};
+
+const getSalesReceiptStatusLabel = (value: any) => (normalizeSalesReceiptStatus(value) === "void" ? "VOID" : "PAID");
 
 export default function SalesReceipts() {
   const navigate = useNavigate();
@@ -194,7 +202,7 @@ export default function SalesReceipts() {
       case "payment_mode":
         return receipt.paymentMode || "—";
       case "status":
-        return receipt.status || "Paid";
+        return normalizeSalesReceiptStatus(receipt.status);
       case "amount":
         return formatCurrency(receipt.total || receipt.amount, receipt.currency);
       case "created_by":
@@ -265,6 +273,8 @@ export default function SalesReceipts() {
   const [bulkUpdateField, setBulkUpdateField] = useState("");
   const [bulkUpdateValue, setBulkUpdateValue] = useState("");
   const [isBulkUpdateFieldDropdownOpen, setIsBulkUpdateFieldDropdownOpen] = useState(false);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+  const [pendingBulkDeleteIds, setPendingBulkDeleteIds] = useState<string[]>([]);
   const [isFieldCustomizationOpen, setIsFieldCustomizationOpen] = useState(false);
 
   const [salesReceipts, setSalesReceipts] = useState([]);
@@ -408,9 +418,9 @@ export default function SalesReceipts() {
   }, [salesReceipts]);
 
   const statusBulkOptions = useMemo(() => {
-    const defaults = ["completed", "draft", "void", "paid"];
+    const defaults = ["paid", "void"];
     const dynamicValues = (salesReceipts || [])
-      .map((receipt) => String(receipt?.status || "").trim().toLowerCase())
+      .map((receipt) => normalizeSalesReceiptStatus(receipt?.status))
       .filter(Boolean);
     const values = Array.from(new Set([...defaults, ...dynamicValues]));
     return values
@@ -464,7 +474,7 @@ export default function SalesReceipts() {
       label: "Status",
       type: "select",
       options: statusBulkOptions,
-      buildPayload: (value) => ({ status: String(value || "").trim().toLowerCase() })
+      buildPayload: (value) => ({ status: normalizeSalesReceiptStatus(value) })
     },
     {
       label: "Currency",
@@ -700,8 +710,9 @@ export default function SalesReceipts() {
       });
     } else if (status !== "All") {
       filtered = filtered.filter(receipt => {
-        const receiptStatus = (receipt.status || "completed").toLowerCase();
-        return receiptStatus === status.toLowerCase();
+        const receiptStatus = normalizeSalesReceiptStatus(receipt.status);
+        const requestedStatus = normalizeSalesReceiptStatus(status);
+        return receiptStatus === requestedStatus;
       });
     }
 
@@ -1374,26 +1385,35 @@ export default function SalesReceipts() {
       alert("Please select at least one sales receipt.");
       return;
     }
+    setPendingBulkDeleteIds([...selectedReceipts]);
+    setIsBulkDeleteModalOpen(true);
+  };
 
-    const count = selectedReceipts.length;
-    const confirmMessage = `Are you sure you want to delete ${count} sales receipt(s)? This action cannot be undone.`;
+  const handleConfirmBulkDelete = async () => {
+    const idsToDelete = [...pendingBulkDeleteIds];
+    if (idsToDelete.length === 0) return;
 
-    if (window.confirm(confirmMessage)) {
-      try {
-        for (const receiptId of selectedReceipts) {
-          await deleteSalesReceipt(receiptId);
-        }
-
-        const allReceipts = await getSalesReceipts();
-        setSalesReceipts(allReceipts);
-        applyFilters(allReceipts, selectedStatus);
-        setSelectedReceipts([]);
-        alert(`${count} sales receipt(s) deleted successfully.`);
-      } catch (error) {
-        console.error("Error deleting sales receipts:", error);
-        alert("An error occurred while deleting sales receipts.");
+    try {
+      for (const receiptId of idsToDelete) {
+        await deleteSalesReceipt(receiptId);
       }
+
+      const allReceipts = await getSalesReceipts();
+      setSalesReceipts(allReceipts);
+      applyFilters(allReceipts, selectedStatus);
+      setSelectedReceipts([]);
+      setIsBulkDeleteModalOpen(false);
+      setPendingBulkDeleteIds([]);
+      toast.success(`${idsToDelete.length} sales receipt(s) deleted successfully.`);
+    } catch (error: any) {
+      console.error("Error deleting sales receipts:", error);
+      toast.error(error?.message || "An error occurred while deleting sales receipts.");
     }
+  };
+
+  const handleCancelBulkDelete = () => {
+    setIsBulkDeleteModalOpen(false);
+    setPendingBulkDeleteIds([]);
   };
 
   const handleBulkUpdate = () => {
@@ -2072,12 +2092,10 @@ export default function SalesReceipts() {
                         {isColumnVisible("payment_mode") && <td className="p-4 text-gray-900">{receipt.paymentMode || "-"}</td>}
                         {isColumnVisible("status") && (
                           <td className="p-4">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                              String(receipt.status || "paid").toLowerCase() === 'paid' ? 'bg-emerald-50 text-emerald-700' :
-                              String(receipt.status || "void").toLowerCase() === 'void' ? 'bg-rose-50 text-rose-700' :
-                              'bg-slate-100 text-slate-700'
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                              normalizeSalesReceiptStatus(receipt.status) === 'void' ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'
                             }`}>
-                              {String(receipt.status || "PAID").toUpperCase()}
+                              {getSalesReceiptStatusLabel(receipt.status)}
                             </span>
                           </td>
                         )}
@@ -2093,6 +2111,50 @@ export default function SalesReceipts() {
           </div>
         )}
       </div>
+
+      {isBulkDeleteModalOpen && (
+        <div className="fixed inset-0 z-[2000] flex items-start justify-center pt-6 bg-black/40">
+          <div className="relative w-full max-w-[520px] rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden mx-4">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                  <Trash2 size={20} />
+                </div>
+                <div>
+                  <h3 className="text-[15px] font-semibold text-slate-900">Delete sales receipt(s)?</h3>
+                  <p className="text-sm text-slate-500">{pendingBulkDeleteIds.length} selected receipt(s) will be deleted permanently.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="h-8 w-8 rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
+                onClick={handleCancelBulkDelete}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="px-6 py-4 text-sm text-slate-600">
+              This action cannot be undone.
+            </div>
+            <div className="flex items-center justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+              <button
+                type="button"
+                className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                onClick={handleCancelBulkDelete}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-md bg-[#b91c1c] px-4 py-2 text-sm font-semibold text-white hover:bg-[#991b1b]"
+                onClick={handleConfirmBulkDelete}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Advanced Search Modal */}
       {isAdvancedSearchOpen && (
