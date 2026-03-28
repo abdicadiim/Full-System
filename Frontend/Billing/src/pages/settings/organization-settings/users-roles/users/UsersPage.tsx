@@ -1622,7 +1622,7 @@ export default function UsersPage() {
       {inviteRoleDropdownOpen && inviteRoleDropdownPos && createPortal(
         <div
           ref={inviteRoleMenuRef}
-          className="fixed z-[10002] max-h-56 overflow-hidden rounded-lg border border-gray-200 bg-gray-50 shadow-lg"
+          className="fixed z-[10002] max-h-56 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg"
           style={{
             top: inviteRoleDropdownPos.top,
             left: inviteRoleDropdownPos.left,
@@ -1638,7 +1638,7 @@ export default function UsersPage() {
                 value={inviteRoleSearch}
                 onChange={(e) => setInviteRoleSearch(e.target.value)}
                 placeholder="Search..."
-                className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-400"
+                className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#d9ecee] focus:border-[#7fb0b5]"
               />
             </div>
           </div>
@@ -1655,7 +1655,7 @@ export default function UsersPage() {
                     setInviteData({ ...inviteData, role: role.value });
                     closeInviteRoleDropdown();
                   }}
-                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-red-50 ${selected ? "bg-red-50" : ""}`}
+                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-gray-50 ${selected ? "bg-gray-50" : ""}`}
                 >
                   <span>{role.label}</span>
                   {selected && <Check size={16} className="text-[#ea4335]" />}
@@ -1785,7 +1785,7 @@ export default function UsersPage() {
       {editRoleDropdownOpen && editRoleDropdownPos && createPortal(
         <div
           ref={editRoleMenuRef}
-          className="fixed z-[10002] max-h-56 overflow-hidden rounded-lg border border-gray-200 bg-gray-50 shadow-lg"
+          className="fixed z-[10002] max-h-56 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg"
           style={{
             top: editRoleDropdownPos.top,
             left: editRoleDropdownPos.left,
@@ -1801,7 +1801,7 @@ export default function UsersPage() {
                 value={editRoleSearch}
                 onChange={(e) => setEditRoleSearch(e.target.value)}
                 placeholder="Search..."
-                className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-400"
+                className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#d9ecee] focus:border-[#7fb0b5]"
               />
             </div>
           </div>
@@ -1818,7 +1818,7 @@ export default function UsersPage() {
                     setEditData({ ...editData, role: role.value });
                     closeEditRoleDropdown();
                   }}
-                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-red-50 ${selected ? "bg-red-50" : ""}`}
+                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-gray-50 ${selected ? "bg-gray-50" : ""}`}
                 >
                   <span>{role.label}</span>
                   {selected && <Check size={16} className="text-[#ea4335]" />}
