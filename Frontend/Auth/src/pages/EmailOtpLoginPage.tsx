@@ -23,6 +23,20 @@ const persistSession = (result: any) => {
   }
 };
 
+const getAutoSendKey = (app: string, email: string) => `auth:otp:auto-send:${app.trim().toLowerCase()}:${email.trim().toLowerCase()}`;
+
+const shouldAutoSendOtp = (app: string, email: string) => {
+  if (typeof window === "undefined") return true;
+  const key = getAutoSendKey(app, email);
+  const lastSentAt = Number(window.sessionStorage.getItem(key) || "0");
+  const now = Date.now();
+  if (lastSentAt && now - lastSentAt < 5000) {
+    return false;
+  }
+  window.sessionStorage.setItem(key, String(now));
+  return true;
+};
+
 export default function EmailOtpLoginPage() {
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
@@ -68,10 +82,11 @@ export default function EmailOtpLoginPage() {
     if (isLogoutRedirect) return;
     if (!initialEmail) return;
     if (autoSendAttemptedRef.current) return;
+    if (!shouldAutoSendOtp(app, initialEmail)) return;
     autoSendAttemptedRef.current = true;
     setEmail(initialEmail);
     void requestCode(initialEmail);
-  }, [isLogoutRedirect, initialEmail]);
+  }, [app, isLogoutRedirect, initialEmail]);
 
   const requestCode = async (emailOverride?: string) => {
     const nextEmail = String(emailOverride ?? email).trim();
