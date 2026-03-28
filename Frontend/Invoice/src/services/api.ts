@@ -2091,6 +2091,8 @@ export const usersAPI = {
   ...resource("/users"),
   sendInvitation: (id: string, data?: any) =>
     request({ method: "POST", path: `/users/${encodeURIComponent(String(id || ""))}/send-invitation`, data }),
+  getActivityLogs: (id: string, params?: Record<string, any>) =>
+    request({ path: `/users/${encodeURIComponent(String(id || ""))}/activities`, params }),
 };
 
 export const rolesAPI = {
