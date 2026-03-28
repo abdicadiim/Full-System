@@ -63,12 +63,12 @@ export const PaymentTermsDropdown = ({
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="flex h-9 w-full items-center justify-between rounded-md border border-[#3f83f8] bg-white px-3 text-sm text-gray-700 shadow-[0_0_0_1px_rgba(63,131,248,0.05)] outline-none"
+        className="flex h-9 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 text-sm text-gray-700 shadow-none outline-none transition-colors hover:border-slate-300 focus:border-slate-300"
       >
         <span className="truncate text-left">{selected?.label || placeholder}</span>
         <ChevronDown
           size={16}
-          className={`ml-2 shrink-0 text-[#3f83f8] transition-transform ${isOpen ? "rotate-180" : ""}`}
+          className={`ml-2 shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
         />
       </button>
 
@@ -77,13 +77,13 @@ export const PaymentTermsDropdown = ({
           className={`absolute left-0 top-full z-50 mt-2 w-full min-w-[200px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.14)] ${menuClassName}`}
         >
           <div className="border-b border-gray-100 p-2">
-            <div className="flex items-center gap-2 rounded-md border border-[#3f83f8] px-3 py-2">
+            <div className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2">
               <Search size={15} className="text-gray-400" />
               <input
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Search"
-                className="w-full border-0 p-0 text-sm text-gray-700 outline-none placeholder:text-gray-400"
+                className="w-full border-0 p-0 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:ring-0"
                 autoFocus
               />
             </div>

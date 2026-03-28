@@ -15,6 +15,30 @@ const DEFAULT_CURRENCY: BaseCurrency = {
   name: "US Dollar",
 };
 
+const CURRENCY_STORAGE_KEYS = ["taban_currencies", "taban_books_currencies"];
+
+const isBaseCurrencyRecord = (currency: any) =>
+  Boolean(currency?.isBase || currency?.isBaseCurrency || currency?.is_base_currency);
+
+const extractCurrencyRows = (response: any) => {
+  const candidates = [
+    response?.data,
+    response?.data?.data,
+    response?.data?.currencies,
+    response?.data?.items,
+    response?.currencies,
+    response?.items,
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return candidate;
+    }
+  }
+
+  return [];
+};
+
 const normalizeCurrency = (raw: any): BaseCurrency => {
   if (!raw || typeof raw !== "object") {
     return DEFAULT_CURRENCY;
@@ -28,13 +52,52 @@ const normalizeCurrency = (raw: any): BaseCurrency => {
   return { id, code, symbol, name };
 };
 
+const readStoredBaseCurrency = (): BaseCurrency | null => {
+  for (const storageKey of CURRENCY_STORAGE_KEYS) {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      if (!stored) continue;
+
+      const parsed = JSON.parse(stored);
+      const currencies = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.data)
+          ? parsed.data
+          : Array.isArray(parsed?.currencies)
+            ? parsed.currencies
+            : [];
+
+      const base = currencies.find(isBaseCurrencyRecord) || currencies[0];
+      if (base) {
+        return normalizeCurrency(base);
+      }
+    } catch {
+      // ignore malformed cache entries and try the next key
+    }
+  }
+
+  return null;
+};
+
 export const useCurrency = () => {
-  const [baseCurrency, setBaseCurrency] = useState<BaseCurrency>(DEFAULT_CURRENCY);
+  const [baseCurrency, setBaseCurrency] = useState<BaseCurrency>(() => readStoredBaseCurrency() || DEFAULT_CURRENCY);
 
   useEffect(() => {
     let isMounted = true;
 
     const loadBaseCurrency = async () => {
+      try {
+        const res = await currenciesAPI.getAll({ limit: 2000 });
+        const rows = extractCurrencyRows(res);
+        const base = rows.find(isBaseCurrencyRecord) || rows[0];
+        if (base && isMounted) {
+          setBaseCurrency(normalizeCurrency(base));
+          return;
+        }
+      } catch {
+        // ignore
+      }
+
       try {
         const res = await currenciesAPI.getBaseCurrency();
         const base = (res as any)?.data;
@@ -47,14 +110,10 @@ export const useCurrency = () => {
       }
 
       try {
-        const stored = localStorage.getItem("taban_currencies");
-        if (stored) {
-          const currencies = JSON.parse(stored);
-          const base = currencies.find((c: any) => Boolean(c?.isBase || c?.isBaseCurrency || c?.is_base_currency));
-          if (base && isMounted) {
-            setBaseCurrency(normalizeCurrency(base));
-            return;
-          }
+        const storedBase = readStoredBaseCurrency();
+        if (storedBase && isMounted) {
+          setBaseCurrency(storedBase);
+          return;
         }
       } catch {
         // ignore and fall back to default

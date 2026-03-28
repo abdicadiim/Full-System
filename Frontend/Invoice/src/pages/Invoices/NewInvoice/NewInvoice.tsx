@@ -138,6 +138,7 @@ interface InvoiceFormState {
   customerNotes: string;
   termsAndConditions: string;
   attachedFiles: AttachedFile[];
+  displayAttachmentsInPortalEmails: boolean;
   status: string;
 }
 
@@ -182,7 +183,15 @@ const [preferences, setPreferences] = useState({
 });
 const noop = (..._args: any[]) => {};
 const asyncNoop = async (..._args: any[]) => {};
-const currencySymbol = "$";
+const { baseCurrency, baseCurrencyCode } = useCurrency();
+const currencySymbol = baseCurrency?.symbol || baseCurrencyCode || "$";
+const resolveInvoiceCurrency = (candidate?: string | null) => {
+  const normalized = String(candidate || "").trim().toUpperCase();
+  if (!normalized || normalized === "USD" || normalized === "AMD") {
+    return baseCurrencyCode || normalized || "USD";
+  }
+  return normalized;
+};
 const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
 const [customers, setCustomers] = useState<any[]>([]);
 const [availableProjects, setAvailableProjects] = useState<any[]>([]);
@@ -292,8 +301,9 @@ const [isSalespersonDropdownOpen, setIsSalespersonDropdownOpen] = useState(false
 const [isScanModeOpen, setIsScanModeOpen] = useState(false);
 const [isShippingTaxDropdownOpen, setIsShippingTaxDropdownOpen] = useState(false);
 const isTaxExclusiveDropdownOpen = false;
-const isUploadDropdownOpen = false;
+const [isAttachmentCountOpen, setIsAttachmentCountOpen] = useState(false);
 const showNewHeaderInput = false;
+const hasAppliedBaseCurrencyRef = useRef(false);
 const [itemsWithAdditionalInfo, setItemsWithAdditionalInfo] = useState<Set<any>>(new Set());
 const additionalInfoMenuRef = useRef<HTMLDivElement | null>(null);
 const newHeaderItemId = null as any;
@@ -512,10 +522,24 @@ const [formData, setFormData] = useState<InvoiceFormState>({
   customerNotes: "",
   termsAndConditions: "",
   attachedFiles: [],
+  displayAttachmentsInPortalEmails: true,
   status: "draft"
 });
 const prefillAppliedRef = useRef(false);
 const [loadedInvoice, setLoadedInvoice] = useState<any>(null);
+useEffect(() => {
+  if (isEditMode || !baseCurrencyCode || hasAppliedBaseCurrencyRef.current) return;
+  setFormData((prev) => {
+    const currentCurrency = String(prev.currency || "").trim().toUpperCase();
+    const isFallbackCurrency = !currentCurrency || currentCurrency === "USD" || currentCurrency === "AMD";
+    if (!isFallbackCurrency) {
+      hasAppliedBaseCurrencyRef.current = true;
+      return prev;
+    }
+    hasAppliedBaseCurrencyRef.current = true;
+    return { ...prev, currency: resolveInvoiceCurrency(baseCurrencyCode) };
+  });
+}, [baseCurrencyCode, isEditMode]);
 const hasProjectItem = (item: any) =>
   Boolean(
     String(item?.projectId || item?.project || item?.projectName || "").trim()
@@ -642,6 +666,7 @@ const bulkAccountDropdownRef = useRef<HTMLDivElement | null>(null);
 const bulkActionsRef = useRef<HTMLDivElement | null>(null);
 const contactPersonImageRef = useRef<HTMLInputElement | null>(null);
 const newItemImageRef = useRef<HTMLInputElement | null>(null);
+const attachmentCountDropdownRef = useRef<HTMLDivElement | null>(null);
 const setCustomerSearchCriteria = noop;
 const setCustomerSearchCriteriaOpen = noop;
  
@@ -887,7 +912,9 @@ const handleCustomerSelect = (customer: any) => {
       null;
 
     const nextPriceListName = resolvedPriceList ? String(resolvedPriceList.name || "").trim() : (customerPriceListNameRaw || (prev as any).selectedPriceList);
-    const nextCurrency = resolvedPriceList?.currency ? String(resolvedPriceList.currency).trim() : customerCurrency;
+    const nextCurrency = resolveInvoiceCurrency(
+      resolvedPriceList?.currency ? String(resolvedPriceList.currency).trim() : customerCurrency
+    );
 
     return {
       ...prev,
@@ -1162,7 +1189,7 @@ useEffect(() => {
   // Re-apply selected price list to invoice lines (keeps rates consistent)
   const list = selectedPriceList;
   setFormData((prev) => {
-    const nextCurrency = list?.currency ? String(list.currency).trim() : prev.currency;
+    const nextCurrency = resolveInvoiceCurrency(list?.currency ? String(list.currency).trim() : prev.currency);
     const updatedItems = (prev.items || []).map((row: any) => {
       if (row?.itemType === "header") return row;
       if (!row?.itemId && !row?.name && !row?.itemDetails) return row;
@@ -1384,7 +1411,7 @@ useEffect(() => {
     const nextState = {
       ...prev,
       customerName: customerName || prev.customerName,
-      currency: String(rawProjects[0]?.currency || prev.currency || "USD"),
+      currency: resolveInvoiceCurrency(rawProjects[0]?.currency || prev.currency || "USD"),
       items: mergedItems.length > 0 ? mergedItems : prev.items,
     } as InvoiceFormState;
     const totals = calculateInvoiceTotalsFromData(nextState);
@@ -1454,7 +1481,7 @@ useEffect(() => {
       roundOff: Number(quoteDataFromState?.roundOff ?? prev.roundOff) || prev.roundOff,
       adjustment: Number(quoteDataFromState?.adjustment ?? prev.adjustment) || prev.adjustment,
       total: Number(quoteDataFromState?.total ?? prev.total) || prev.total,
-      currency: String(quoteDataFromState?.currency || prev.currency || "USD"),
+      currency: resolveInvoiceCurrency(quoteDataFromState?.currency || prev.currency || "USD"),
       customerNotes: String(quoteDataFromState?.customerNotes || prev.customerNotes || ""),
       termsAndConditions: String(quoteDataFromState?.termsAndConditions || prev.termsAndConditions || ""),
     } as InvoiceFormState;
@@ -1695,6 +1722,9 @@ useEffect(() => {
     if (bulkActionsRef.current && !bulkActionsRef.current.contains(event.target as Node)) {
       setIsBulkActionsOpen(false);
     }
+    if (attachmentCountDropdownRef.current && !attachmentCountDropdownRef.current.contains(event.target as Node)) {
+      setIsAttachmentCountOpen(false);
+    }
     Object.keys(openItemDropdowns).forEach((itemId) => {
       if (openItemDropdowns[itemId]) {
         const ref = itemDropdownRefs.current[itemId];
@@ -1704,11 +1734,11 @@ useEffect(() => {
       }
     });
   };
-  if (isSalespersonDropdownOpen || isCustomerDropdownOpen || isPriceListDropdownOpen || isBulkActionsOpen || Object.values(openItemDropdowns).some(Boolean)) {
+  if (isSalespersonDropdownOpen || isCustomerDropdownOpen || isPriceListDropdownOpen || isBulkActionsOpen || isAttachmentCountOpen || Object.values(openItemDropdowns).some(Boolean)) {
     document.addEventListener("mousedown", handleOutside);
   }
   return () => document.removeEventListener("mousedown", handleOutside);
-}, [isSalespersonDropdownOpen, isCustomerDropdownOpen, isPriceListDropdownOpen, isBulkActionsOpen, openItemDropdowns]);
+}, [isSalespersonDropdownOpen, isCustomerDropdownOpen, isPriceListDropdownOpen, isBulkActionsOpen, isAttachmentCountOpen, openItemDropdowns]);
 
 const handleItemSelect = (itemId: number | string, selectedItem: any) => {
   setFormData((prev) => {
@@ -1915,6 +1945,12 @@ const handleRemoveFile = (fileId: string | number) => {
   }));
 };
 
+const formatFileSize = (size: number) => {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+};
+
 const handleUploadClick = () => {
   fileInputRef.current?.click();
 };
@@ -2021,6 +2057,7 @@ const buildInvoicePayload = (statusValue: string) => {
     customerNotes: formData.customerNotes,
     termsAndConditions: formData.termsAndConditions,
     attachedFiles: formData.attachedFiles || [],
+    displayAttachmentsInPortalEmails: Boolean((formData as any).displayAttachmentsInPortalEmails),
     reportingTags: (formData as any).reportingTags || [],
 
     paymentReceived: isPaymentReceived,
@@ -3184,7 +3221,7 @@ return (
                               />
                             </div>
                             {openItemDropdowns[item.id] && (
-                              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-xl z-[140] max-h-72 overflow-y-auto">
+                              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-none z-[140] max-h-72 overflow-y-auto">
                                 {getFilteredItemOptions(item.id).length === 0 ? (
                                   <div className="px-3 py-3 text-sm text-gray-500">No items found.</div>
                                 ) : (
@@ -3194,11 +3231,18 @@ return (
                                         key={p.id || `prod-${pidx}`}
                                         type="button"
                                         onClick={() => handleItemSelect(item.id, p)}
-                                        className="w-full px-3 py-2 text-left border-b border-gray-100 last:border-b-0 hover:bg-[#3b82f6] hover:text-white group/item transition-colors"
+                                        className="w-full px-3 py-2 text-left border-b border-gray-100 last:border-b-0 hover:bg-slate-50 hover:text-slate-900 group/item transition-colors"
                                       >
                                         <div className="min-w-0">
-                                          <div className="font-medium text-sm truncate">{p.name}</div>
-                                          <div className="mt-1 text-xs text-gray-500 group-hover/item:text-blue-100">
+                                          <div className="flex items-center gap-2">
+                                            <div className="font-medium text-sm truncate">{p.name}</div>
+                                            {String(p.entityType || "").toLowerCase() === "plan" && (
+                                              <span className="inline-flex shrink-0 items-center rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                                                Plan
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div className="mt-1 text-xs text-gray-500 group-hover/item:text-slate-500">
                                             Code: {p.code || p.sku || "-"}
                                           </div>
                                         </div>
@@ -3208,7 +3252,7 @@ return (
                                 )}
                                 <button
                                   type="button"
-                                  className="w-full px-3 py-2.5 text-sm text-[#156372] hover:bg-blue-50 text-left border-t border-gray-100 font-medium flex items-center gap-2"
+                                  className="w-full px-3 py-2.5 text-sm text-[#156372] hover:bg-slate-50 text-left border-t border-gray-100 font-medium flex items-center gap-2"
                                   onClick={() => { setIsNewItemModalOpen(true); setCurrentItemRowId(item.id); }}
                                 >
                                   <Plus size={14} />
@@ -4085,12 +4129,12 @@ return (
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-6 rounded-xl border border-slate-200 bg-slate-50 p-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+          <div className="mt-2 grid w-full max-w-[1120px] grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-slate-50 p-3 pr-12 lg:grid-cols-[minmax(0,1fr)_280px]">
             <div>
-              <label className="mb-2 block text-[13px] font-medium text-slate-800">Terms & Conditions</label>
+              <label className="mb-1.5 block text-[12px] font-medium text-slate-800">Terms & Conditions</label>
               <textarea
                 name="termsAndConditions"
-                className="h-20 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm leading-relaxed text-slate-700 outline-none transition focus:border-blue-300"
+                className="h-[72px] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-[13px] leading-relaxed text-slate-700 outline-none transition focus:border-blue-300"
                 placeholder="Enter the terms and conditions of your business to be displayed in your transaction"
                 value={formData.termsAndConditions}
                 onChange={handleChange}
@@ -4098,49 +4142,107 @@ return (
             </div>
 
             <div>
-              <label className="mb-2 block text-[13px] font-medium text-slate-800">Attach File(s) to Invoice</label>
-              <button
-                type="button"
-                className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-[#1f3f79] transition hover:bg-slate-50"
-                onClick={() => setIsUploadDropdownOpen(!isUploadDropdownOpen)}
-              >
-                <Upload size={15} className="text-slate-500" />
-                Upload File
-                <ChevronDown size={14} className="text-slate-400" />
-              </button>
-              <p className="mt-2 text-[11px] text-slate-500">You can upload a maximum of 10 files, 10MB each</p>
-              {formData.attachedFiles.length > 0 && (
-                <p className="mt-1 text-[11px] font-medium text-[#2563eb]">{formData.attachedFiles.length} file(s) attached</p>
-              )}
+              <label className="mb-1.5 block text-[12px] font-medium text-slate-800">Attach File(s) to Invoice</label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+                className="hidden"
+                onChange={handleFileUpload}
+              />
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-[13px] font-medium text-[#1f3f79] transition hover:bg-slate-50"
+                    onClick={handleUploadClick}
+                  >
+                    <Upload size={15} className="text-slate-500" />
+                    Upload File
+                    <ChevronDown size={13} className="text-slate-400" />
+                  </button>
+                  {formData.attachedFiles.length > 0 && (
+                    <div className="relative" ref={attachmentCountDropdownRef}>
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#3b82f6] px-3 text-[12px] font-semibold text-white shadow-sm transition hover:bg-[#2563eb]"
+                        onClick={() => setIsAttachmentCountOpen((prev) => !prev)}
+                      >
+                        <Paperclip size={12} />
+                        {formData.attachedFiles.length}
+                      </button>
+                      {isAttachmentCountOpen && (
+                        <div className="absolute left-0 top-full z-50 mt-2 w-80 rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
+                          {formData.attachedFiles.map((file) => (
+                            <div
+                              key={file.id}
+                              className="flex items-start justify-between gap-3 rounded-md px-2 py-2 hover:bg-slate-50"
+                            >
+                              <div className="flex min-w-0 items-start gap-2">
+                                <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded bg-emerald-50 text-emerald-600">
+                                  <FileText size={13} />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="truncate text-[13px] font-medium text-slate-700">{file.name}</div>
+                                  <div className="text-[12px] text-slate-500">File Size: {formatFileSize(Number(file.size || 0))}</div>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveFile(file.id)}
+                                className="mt-0.5 rounded p-1 text-slate-400 transition hover:bg-rose-50 hover:text-rose-500"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <label className="flex items-center gap-2 text-[12px] text-slate-600">
+                  <input
+                    type="checkbox"
+                    name="displayAttachmentsInPortalEmails"
+                    checked={Boolean((formData as any).displayAttachmentsInPortalEmails)}
+                    onChange={handleChange}
+                    className="h-4 w-4 rounded border-slate-300 text-[#156372] focus:ring-[#156372]"
+                  />
+                  <span>Display attachments in Customer Portal and emails</span>
+                </label>
+                <p className="text-[11px] text-slate-500">You can upload a maximum of 10 files, 10MB each</p>
+              </div>
             </div>
           </div>
 
           {/* Payment Fields - Show when checkbox is checked */}
           {isPaymentReceived && (
-            <div className="mt-3 rounded-lg border border-gray-200 bg-white p-4 space-y-3">
-              <h3 className="mb-3 text-sm font-semibold text-gray-900">Payment Details</h3>
+            <div className="mt-2 rounded-lg border border-gray-200 bg-white p-3 space-y-2.5">
+              <h3 className="mb-2 text-[13px] font-semibold text-gray-900">Payment Details</h3>
 
               {/* Payment Mode */}
-              <div className="grid grid-cols-[140px_1fr] gap-3 items-center">
-                <label className="text-sm font-medium text-gray-700">
+              <div className="grid grid-cols-[132px_1fr] gap-2 items-center">
+                <label className="text-[13px] font-medium text-gray-700">
                   Payment Mode
                 </label>
-                <div className="max-w-[360px] relative" ref={paymentModeDropdownRef}>
+                <div className="max-w-[340px] relative" ref={paymentModeDropdownRef}>
                   <div
-                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-[#156372] focus:ring-2 focus:ring-[rgba(21,99,114,0.1)] bg-white cursor-pointer flex items-center justify-between min-h-[36px]"
+                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-[13px] outline-none focus:border-[#156372] focus:ring-2 focus:ring-[rgba(21,99,114,0.1)] bg-white cursor-pointer flex items-center justify-between min-h-[34px]"
                     onClick={() => setIsPaymentModeDropdownOpen(!isPaymentModeDropdownOpen)}
                   >
                     <span className={paymentData.paymentMode ? "text-gray-900" : "text-gray-400"}>
                       {paymentData.paymentMode || "Select Payment Mode"}
                     </span>
-                    <ChevronDown size={14} className={`text-gray-400 transition-transform ${isPaymentModeDropdownOpen ? 'rotate-180' : ''}`} />
+                    <ChevronDown size={13} className={`text-gray-400 transition-transform ${isPaymentModeDropdownOpen ? 'rotate-180' : ''}`} />
                   </div>
                   {isPaymentModeDropdownOpen && (
                     <div className="absolute top-full left-0 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg z-50 max-h-60 overflow-y-auto">
                       {paymentModeOptions.map((mode, idx) => (
                         <div
                           key={mode || idx}
-                          className="px-4 py-2  cursor-pointer text-sm"
+                          className="px-4 py-2 cursor-pointer text-[13px]"
                           onClick={() => {
                             setPaymentData(p => ({ ...p, paymentMode: mode }));
                             setIsPaymentModeDropdownOpen(false);
@@ -4155,26 +4257,26 @@ return (
               </div>
 
               {/* Deposit To */}
-              <div className="grid grid-cols-[140px_1fr] gap-3 items-center">
-                <label className="text-sm font-medium text-red-500">
+              <div className="grid grid-cols-[132px_1fr] gap-2 items-center">
+                <label className="text-[13px] font-medium text-red-500">
                   Deposit To*
                 </label>
-                <div className="max-w-[360px] relative" ref={depositToDropdownRef}>
+                <div className="max-w-[340px] relative" ref={depositToDropdownRef}>
                   <div
-                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-[#156372] focus:ring-2 focus:ring-[rgba(21,99,114,0.1)] bg-white cursor-pointer flex items-center justify-between min-h-[36px]"
+                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-[13px] outline-none focus:border-[#156372] focus:ring-2 focus:ring-[rgba(21,99,114,0.1)] bg-white cursor-pointer flex items-center justify-between min-h-[34px]"
                     onClick={() => setIsDepositToDropdownOpen(!isDepositToDropdownOpen)}
                   >
                     <span className={paymentData.depositTo ? "text-gray-900" : "text-gray-400"}>
                       {paymentData.depositTo || "Select Deposit Account"}
                     </span>
-                    <ChevronDown size={14} className={`text-gray-400 transition-transform ${isDepositToDropdownOpen ? 'rotate-180' : ''}`} />
+                    <ChevronDown size={13} className={`text-gray-400 transition-transform ${isDepositToDropdownOpen ? 'rotate-180' : ''}`} />
                   </div>
                   {isDepositToDropdownOpen && (
                     <div className="absolute top-full left-0 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg z-50 max-h-60 overflow-y-auto">
                       {depositToOptions.map((account, idx) => (
                         <div
                           key={account || idx}
-                          className="px-4 py-2  cursor-pointer text-sm"
+                          className="px-4 py-2 cursor-pointer text-[13px]"
                           onClick={() => {
                             setPaymentData(p => ({ ...p, depositTo: account }));
                             setIsDepositToDropdownOpen(false);
@@ -4194,18 +4296,18 @@ return (
               </div>
 
               {/* Amount Received */}
-              <div className="grid grid-cols-[140px_1fr] gap-3 items-start">
-                <label className="text-sm font-medium text-red-500 pt-2">
+              <div className="grid grid-cols-[132px_1fr] gap-2 items-start">
+                <label className="text-[13px] font-medium text-red-500 pt-2">
                   Amount Received*
                 </label>
-                <div className="max-w-[360px]">
+                <div className="max-w-[340px]">
                   <div className="flex border border-gray-300 rounded overflow-hidden focus-within:border-[#156372] focus-within:ring-2 focus-within:ring-[rgba(21,99,114,0.1)]">
-                    <div className="bg-gray-50 border-r border-gray-300 px-3 py-1.5 text-sm text-gray-600 flex items-center">
+                    <div className="bg-gray-50 border-r border-gray-300 px-3 py-1.5 text-[13px] text-gray-600 flex items-center">
                       {currencySymbol}
                     </div>
                     <input
                       type="number"
-                      className="flex-1 px-3 py-1.5 text-sm outline-none"
+                      className="flex-1 px-3 py-1.5 text-[13px] outline-none"
                       value={paymentData.amountReceived}
                       onChange={(e) => setPaymentData(p => ({ ...p, amountReceived: e.target.value }))}
                       placeholder="0.00"
@@ -4217,14 +4319,14 @@ return (
               </div>
 
               {/* Reference Number */}
-              <div className="grid grid-cols-[140px_1fr] gap-3 items-center">
-                <label className="text-sm font-medium text-gray-700">
+              <div className="grid grid-cols-[132px_1fr] gap-2 items-center">
+                <label className="text-[13px] font-medium text-gray-700">
                   Reference#
                 </label>
-                <div className="max-w-[360px]">
+                <div className="max-w-[340px]">
                   <input
                     type="text"
-                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-[#156372] focus:ring-2 focus:ring-[rgba(21,99,114,0.1)]"
+                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-[13px] outline-none focus:border-[#156372] focus:ring-2 focus:ring-[rgba(21,99,114,0.1)]"
                     value={paymentData.referenceNumber}
                     onChange={(e) => setPaymentData(p => ({ ...p, referenceNumber: e.target.value }))}
                     placeholder="Payment reference number"
@@ -4233,11 +4335,11 @@ return (
               </div>
 
               {/* Tax deducted? */}
-              <div className="grid grid-cols-[140px_1fr] gap-3 items-center">
-                <label className="text-sm font-medium text-gray-700">
+              <div className="grid grid-cols-[132px_1fr] gap-2 items-center">
+                <label className="text-[13px] font-medium text-gray-700">
                   Tax deducted?
                 </label>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="radio"
@@ -4247,7 +4349,7 @@ return (
                       onChange={(e) => setPaymentData(p => ({ ...p, taxDeducted: e.target.value }))}
                       className="w-4 h-4 border-gray-300 focus:ring-2 focus:ring-[rgba(21,99,114,0.1)] accent-[#156372]"
                     />
-                    <span className="text-sm text-gray-700">No Tax deducted</span>
+                    <span className="text-[13px] text-gray-700">No Tax deducted</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -4258,7 +4360,7 @@ return (
                       onChange={(e) => setPaymentData(p => ({ ...p, taxDeducted: e.target.value }))}
                       className="w-4 h-4 border-gray-300 focus:ring-2 focus:ring-[rgba(21,99,114,0.1)] accent-[#156372]"
                     />
-                    <span className="text-sm text-gray-700">Yes, TDS</span>
+                    <span className="text-[13px] text-gray-700">Yes, TDS</span>
                   </label>
                 </div>
               </div>
@@ -4266,15 +4368,15 @@ return (
           )}
 
           {/* Email Communications */}
-          <div className="bg-white border border-gray-200 rounded-lg p-4 mt-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-base font-semibold text-gray-900">Email Communications</h3>
+          <div className="mt-2 w-full max-w-[1120px] rounded-lg border border-gray-200 bg-white p-3 pr-12">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-[13px] font-semibold text-gray-900">Email Communications</h3>
               {selectedContactPersons.length > 0 && (
                 <button
                   onClick={() => setSelectedContactPersons([])}
-                  className="flex items-center gap-1 text-sm text-gray-700 hover:text-red-600 transition-colors"
+                  className="flex items-center gap-1 text-[13px] text-gray-700 hover:text-red-600 transition-colors"
                 >
-                  <X size={14} className="text-red-600" />
+                  <X size={13} className="text-red-600" />
                   <span>Clear Selection</span>
                 </button>
               )}
@@ -4290,15 +4392,15 @@ return (
                   }
                   setIsContactPersonModalOpen(true);
                 }}
-                className="flex items-center gap-2 px-4 py-2 border-2 border-dashed border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:border-gray-400  transition-colors"
+                className="flex items-center gap-2 px-3 py-1.5 border-2 border-dashed border-gray-300 rounded-md text-[13px] font-medium text-gray-700 bg-white hover:border-gray-400 transition-colors"
               >
-                <Plus size={16} className="text-gray-600" />
+                <Plus size={14} className="text-gray-600" />
                 <span>Add New</span>
               </button>
               {selectedContactPersons.map((cp, index) => (
                 <div
                   key={index}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-md border border-gray-200"
+                  className="flex items-center gap-2 px-2.5 py-1 bg-gray-100 rounded-md border border-gray-200"
                 >
                   <input
                     type="checkbox"
@@ -4306,12 +4408,12 @@ return (
                     readOnly
                     className="w-4 h-4 text-[#156372] border-gray-300 rounded"
                   />
-                  <div className="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center">
-                    <span className="text-xs text-gray-600">
+                  <div className="w-5 h-5 bg-gray-300 rounded-full flex items-center justify-center">
+                    <span className="text-[11px] text-gray-600">
                       {cp.firstName?.[0] || cp.email?.[0] || 'U'}
                     </span>
                   </div>
-                  <span className="text-sm text-gray-700">
+                  <span className="text-[13px] text-gray-700">
                     {cp.firstName && cp.lastName
                       ? `${cp.firstName} ${cp.lastName}`
                       : cp.email || 'Contact Person'}
@@ -4331,26 +4433,26 @@ return (
           </div>
 
           {/* Payment Gateway Section - Bottom Left */}
-          <div className="border-t border-gray-200 pt-6 mt-6">
-            <div className="flex items-center gap-4 mb-2">
-              <span className="text-sm text-gray-700 font-medium">Want to get paid faster?</span>
+          <div className="mt-4 w-full max-w-[1120px] border-t border-gray-200 pt-4 pr-12">
+            <div className="flex items-center gap-3 mb-2">
+              <span className="text-[13px] text-gray-700 font-medium">Want to get paid faster?</span>
               <div className="flex gap-2 items-center">
-                <div className="w-8 h-5 bg-red-600 rounded"></div>
-                <div className="w-8 h-5 bg-[#1a1f71] rounded text-white flex items-center justify-center text-[10px] font-semibold">VISA</div>
-                <div className="w-8 h-5 bg-[#1a1f71] rounded text-white flex items-center justify-center text-[10px] font-semibold">MC</div>
+                <div className="w-[28px] h-[18px] bg-red-600 rounded"></div>
+                <div className="w-[28px] h-[18px] bg-[#1a1f71] rounded text-white flex items-center justify-center text-[9px] font-semibold">VISA</div>
+                <div className="w-[28px] h-[18px] bg-[#1a1f71] rounded text-white flex items-center justify-center text-[9px] font-semibold">MC</div>
               </div>
             </div>
-            <p className="text-sm text-gray-600 mb-2">
+            <p className="text-[13px] text-gray-600 mb-2">
               Configure payment gateways and receive payments online.
             </p>
-            <button className="text-[#156372] hover:text-[#0D4A52] text-sm font-medium">
+            <button className="text-[#156372] hover:text-[#0D4A52] text-[13px] font-medium">
               Set up Payment Gateway
             </button>
           </div>
 
           {/* Additional Fields */}
-          <div className="border-t border-gray-200 pt-6 mt-6 mb-24">
-            <p className="text-sm text-gray-600">
+          <div className="mt-4 mb-16 w-full max-w-[1120px] border-t border-gray-200 pt-4 pr-12">
+            <p className="text-[13px] text-gray-600">
               Additional Fields: Start adding custom fields for your invoices by going to Settings ? Sales ? Invoices.
             </p>
           </div>
@@ -7351,15 +7453,6 @@ return (
           </button>
         </div>
 
-        <div className="flex items-center gap-6">
-          <button className="flex items-center gap-2 text-sm text-[#156372] hover:text-[#0D4A52] font-medium">
-            <RefreshCw size={15} />
-            Make Recurring
-          </button>
-          <div className="pl-6 border-l border-gray-200 text-xs text-gray-500 font-semibold">
-            Total Amount: <span className="text-sm font-bold text-gray-900 ml-1">KES {Number(formData.total || 0).toFixed(2)}</span>
-          </div>
-        </div>
       </div>
 
       <NewTaxQuickModal
