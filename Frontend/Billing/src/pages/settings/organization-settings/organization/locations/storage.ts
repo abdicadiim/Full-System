@@ -131,6 +131,7 @@ export const getDemoUsers = (currentUser?: any) => {
         name: currentUser.name,
         email: currentUser.email,
         role: currentUser.role || "Admin",
+        isPrimary: true,
       }
     : {
         _id: "demo-admin",
@@ -138,6 +139,7 @@ export const getDemoUsers = (currentUser?: any) => {
         name: "Admin User",
         email: "admin@example.com",
         role: "Admin",
+        isPrimary: true,
       };
 
   return [
@@ -148,6 +150,7 @@ export const getDemoUsers = (currentUser?: any) => {
       name: "Warehouse Manager",
       email: "warehouse@example.com",
       role: "Staff",
+      isPrimary: false,
     },
     {
       _id: "demo-sales",
@@ -155,6 +158,7 @@ export const getDemoUsers = (currentUser?: any) => {
       name: "Sales Lead",
       email: "sales@example.com",
       role: "Manager",
+      isPrimary: false,
     },
   ];
 };

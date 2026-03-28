@@ -423,16 +423,17 @@ export default function AddLocationPage() {
   );
   const selectedUserIds = new Set(formData.locationAccess.map(a => String(a.userId)));
   const availableUsers = filteredUsers.filter(u => !selectedUserIds.has(String(u._id || u.id)));
-  const primaryContactOptions = allUsers
-    .map((u: any) => {
-      const value = String(u._id || u.id || "");
-      const name = u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim();
-      return {
-        value,
-        label: u.email ? `${name || value} (${u.email})` : (name || value),
-      };
-    })
-    .filter((opt: any) => opt.value);
+    const primaryContactOptions = allUsers
+      .filter((u: any) => Boolean(u.isPrimary))
+      .map((u: any) => {
+        const value = String(u._id || u.id || "");
+        const name = u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim();
+        return {
+          value,
+          label: `${u.email ? `${name || value} (${u.email})` : (name || value)} - Primary`,
+        };
+      })
+      .filter((opt: any) => opt.value);
   const transactionSeriesOptions = txSeriesNames.map((name) => ({ value: name, label: name }));
   const countryOptions = COUNTRIES.map((country) => ({ value: country, label: country }));
   const parentOptions = readLocations().filter((loc: any) => loc?.name);

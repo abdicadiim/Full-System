@@ -384,16 +384,17 @@ export default function EditLocationPage() {
     (user.name?.toLowerCase().includes(userSearch.toLowerCase()) ||
      user.email?.toLowerCase().includes(userSearch.toLowerCase()))
   );
-  const primaryContactOptions = allUsers
-    .map((user: any) => {
-      const value = String(user._id || user.id || "");
-      const name = user.name || `${user.firstName || ""} ${user.lastName || ""}`.trim();
-      return {
-        value,
-        label: user.email ? `${name || value} (${user.email})` : (name || value),
-      };
-    })
-    .filter((opt: any) => opt.value);
+    const primaryContactOptions = allUsers
+      .filter((user: any) => Boolean(user.isPrimary))
+      .map((user: any) => {
+        const value = String(user._id || user.id || "");
+        const name = user.name || `${user.firstName || ""} ${user.lastName || ""}`.trim();
+        return {
+          value,
+          label: `${user.email ? `${name || value} (${user.email})` : (name || value)} - Primary`,
+        };
+      })
+      .filter((opt: any) => opt.value);
   const countryOptions = COUNTRIES.map((country) => ({ value: country, label: country }));
   const roleOptions = Array.from(
     new Set(

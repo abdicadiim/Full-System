@@ -315,16 +315,17 @@ export default function AddLocationPage() {
   const filteredDefaultTransactionSeries = transactionSeriesList.filter(series =>
     series.toLowerCase().includes(defaultTransactionSeriesSearch.toLowerCase())
   );
-  const primaryContactOptions = users
-    .map((user: any) => {
-      const value = String(user._id || user.id || "");
-      const name = user.name || `${user.firstName || ""} ${user.lastName || ""}`.trim();
-      return {
-        value,
-        label: user.email ? `${name || value} (${user.email})` : (name || value),
-      };
-    })
-    .filter((opt: any) => opt.value);
+    const primaryContactOptions = users
+      .filter((user: any) => Boolean(user.isPrimary))
+      .map((user: any) => {
+        const value = String(user._id || user.id || "");
+        const name = user.name || `${user.firstName || ""} ${user.lastName || ""}`.trim();
+        return {
+          value,
+          label: `${user.email ? `${name || value} (${user.email})` : (name || value)} - Primary`,
+        };
+      })
+      .filter((opt: any) => opt.value);
   const countryOptions = COUNTRIES.map((country) => ({ value: country, label: country }));
   const roleOptions = Array.from(
     new Set(
