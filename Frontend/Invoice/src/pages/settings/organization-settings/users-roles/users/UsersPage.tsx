@@ -1618,7 +1618,7 @@ export default function UsersPage() {
                 value={inviteRoleSearch}
                 onChange={(e) => setInviteRoleSearch(e.target.value)}
                 placeholder="Search..."
-                className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-400"
               />
             </div>
           </div>
@@ -1635,10 +1635,10 @@ export default function UsersPage() {
                     setInviteData({ ...inviteData, role: role.value });
                     closeInviteRoleDropdown();
                   }}
-                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-blue-50 ${selected ? "bg-blue-50" : ""}`}
+                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-red-50 ${selected ? "bg-red-50" : ""}`}
                 >
                   <span>{role.label}</span>
-                  {selected && <Check size={16} className="text-blue-600" />}
+                  {selected && <Check size={16} className="text-[#ea4335]" />}
                 </button>
               );
             })}
