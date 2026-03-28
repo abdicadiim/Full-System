@@ -1228,7 +1228,7 @@ export default function UsersPage() {
                   setEditModalOpen(true);
                 }
               }}
-              className="px-3 py-1.5 bg-[#156372] text-white text-sm font-medium hover:bg-[#0f4e5a] flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-3 py-1.5 rounded-lg bg-[#156372] text-white text-sm font-medium hover:bg-[#0f4e5a] flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Pencil size={14} />
               Edit
@@ -1278,7 +1278,7 @@ export default function UsersPage() {
                   <button
                     onClick={handleDeleteUser}
                     disabled={isSaving}
-                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed rounded-b-lg"
+                    className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed rounded-b-lg"
                   >
                     Delete
                   </button>
