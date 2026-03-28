@@ -1393,7 +1393,7 @@ export default function UsersPage() {
       {inviteRoleDropdownOpen && inviteRoleDropdownPos && createPortal(
         <div
           ref={inviteRoleMenuRef}
-          className="fixed z-[10002] overflow-hidden rounded-lg border border-gray-200 bg-gray-50 shadow-lg"
+          className="fixed z-[10002] max-h-44 overflow-y-auto overflow-x-hidden rounded-lg border border-gray-200 bg-gray-50 shadow-lg"
           style={{
             top: inviteRoleDropdownPos.top,
             left: inviteRoleDropdownPos.left,
@@ -1551,7 +1551,7 @@ export default function UsersPage() {
       {editRoleDropdownOpen && editRoleDropdownPos && createPortal(
         <div
           ref={editRoleMenuRef}
-          className="fixed z-[10002] overflow-hidden rounded-lg border border-gray-200 bg-gray-50 shadow-lg"
+          className="fixed z-[10002] max-h-44 overflow-y-auto overflow-x-hidden rounded-lg border border-gray-200 bg-gray-50 shadow-lg"
           style={{
             top: editRoleDropdownPos.top,
             left: editRoleDropdownPos.left,
