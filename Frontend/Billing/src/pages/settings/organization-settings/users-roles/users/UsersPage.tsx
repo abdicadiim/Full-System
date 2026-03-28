@@ -1688,12 +1688,12 @@ export default function UsersPage() {
               </div>
 
               {error && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+                <div className="mb-4 mx-auto max-w-2xl p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm break-words whitespace-pre-wrap">
                   {error}
                 </div>
               )}
 
-              <div className="space-y-4">
+              <div className="space-y-5">
                 <div>
                   <label className="block text-sm font-medium text-red-500 mb-2">
                     Name*
@@ -1702,7 +1702,7 @@ export default function UsersPage() {
                     type="text"
                     value={editData.name}
                     onChange={(e) => setEditData({ ...editData, name: e.target.value })}
-                    className="w-full h-10 px-3 rounded-lg border border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full h-10 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Enter user's name"
                   />
                 </div>
@@ -1772,7 +1772,7 @@ export default function UsersPage() {
                 <button
                   onClick={handleEditUser}
                   disabled={isSaving}
-                  className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 rounded-lg bg-[#e53935] text-white text-sm font-medium hover:bg-[#d32f2f] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Save & Continue
                 </button>
