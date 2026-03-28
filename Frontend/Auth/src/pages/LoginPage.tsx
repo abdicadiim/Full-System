@@ -44,6 +44,18 @@ export default function LoginPage() {
     const query = params.toString();
     return query ? `?${query}` : "";
   })();
+  const forgotPasswordQuery = (() => {
+    const params = new URLSearchParams(search);
+    params.delete("logout");
+    params.delete("auth_return");
+    if (trimmedEmail) {
+      params.set("email", trimmedEmail);
+    } else {
+      params.delete("email");
+    }
+    const query = params.toString();
+    return query ? `?${query}` : "";
+  })();
 
   const clearStoredSession = () => {
     if (typeof localStorage === "undefined") return;
@@ -127,7 +139,7 @@ export default function LoginPage() {
           </Link>
           <Link
             className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
-            to={`/forgot-password${search}`}
+            to={`/forgot-password${forgotPasswordQuery}`}
           >
             Forgot Password?
           </Link>

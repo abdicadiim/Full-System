@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import AuthShell from "../components/AuthShell";
 import { getAppDisplayName, getFallbackUrl } from "../lib/appBranding";
@@ -31,17 +31,38 @@ export default function ForgotPasswordPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [step, setStep] = useState<Step>("request");
+  const [codeSent, setCodeSent] = useState(false);
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const appName = getAppDisplayName();
   const search = window.location.search;
   const isLogoutRedirect = new URLSearchParams(search).get("logout") === "1";
   const app = new URLSearchParams(search).get("app") || "";
+  const initialEmail = useMemo(() => new URLSearchParams(search).get("email") || "", [search]);
 
   useEffect(() => {
     if (isLogoutRedirect) return;
-  }, [isLogoutRedirect]);
+    if (initialEmail && !email) {
+      setEmail(initialEmail);
+    }
+  }, [isLogoutRedirect, initialEmail, email]);
+
+  useEffect(() => {
+    if (!codeSent || remainingSeconds <= 0) return;
+
+    const interval = window.setInterval(() => {
+      setRemainingSeconds((current) => {
+        if (current <= 1) {
+          window.clearInterval(interval);
+          return 0;
+        }
+        return current - 1;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [codeSent, remainingSeconds]);
 
   const requestResetCode = async () => {
     const nextEmail = email.trim();
@@ -51,7 +72,6 @@ export default function ForgotPasswordPage() {
     }
     setLoading(true);
     setError(null);
-    setMessage(null);
     try {
       const result = await authApi.requestPasswordReset(nextEmail, app);
       if (!result.success) {
@@ -59,8 +79,12 @@ export default function ForgotPasswordPage() {
         return;
       }
 
+      setCode("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setCodeSent(true);
+      setRemainingSeconds(Math.max(0, Number(result.data?.expiresInSeconds ?? 90)));
       setStep("verify");
-      setMessage(result.message || "Reset code sent to your email.");
     } catch (err: any) {
       setError(err?.message || "Unable to send reset code");
     } finally {
@@ -77,7 +101,6 @@ export default function ForgotPasswordPage() {
     }
     setLoading(true);
     setError(null);
-    setMessage(null);
     try {
       const result = await authApi.verifyPasswordResetCode(nextEmail, nextCode);
       if (!result.success) {
@@ -86,7 +109,6 @@ export default function ForgotPasswordPage() {
       }
 
       setStep("reset");
-      setMessage("Code verified. Now set your new password.");
     } catch (err: any) {
       setError(err?.message || "Reset code verification failed");
     } finally {
@@ -107,7 +129,6 @@ export default function ForgotPasswordPage() {
     }
     setLoading(true);
     setError(null);
-    setMessage(null);
     try {
       const result = await authApi.resetPassword(nextEmail, nextCode, newPassword);
       if (!result.success) {
@@ -162,6 +183,27 @@ export default function ForgotPasswordPage() {
               onChange={(e) => setCode(e.target.value)}
               disabled={step === "reset"}
             />
+            {codeSent ? (
+              <div className="mt-2 flex items-center justify-between gap-3 text-sm font-medium">
+                <p className={remainingSeconds > 0 ? "text-slate-500" : "text-rose-600"}>
+                  {remainingSeconds > 0
+                    ? `Code expires in ${Math.floor(remainingSeconds / 60)
+                        .toString()
+                        .padStart(2, "0")}:${(remainingSeconds % 60).toString().padStart(2, "0")}`
+                    : "Code expired. Please resend the code."}
+                </p>
+                <button
+                  className="font-semibold text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={loading}
+                  onClick={() => {
+                    void requestResetCode();
+                  }}
+                  type="button"
+                >
+                  Resend code
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : null}
 
@@ -190,7 +232,6 @@ export default function ForgotPasswordPage() {
           </div>
         ) : null}
 
-        {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
         <button
@@ -216,34 +257,6 @@ export default function ForgotPasswordPage() {
       </form>
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-sm">
-        {step !== "request" ? (
-          <button
-            className="font-semibold text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={loading}
-            onClick={() => {
-              setStep("request");
-              setCode("");
-              setNewPassword("");
-              setConfirmPassword("");
-              setMessage(null);
-              setError(null);
-            }}
-            type="button"
-          >
-            Start over
-          </button>
-        ) : (
-          <button
-            className="font-semibold text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={loading}
-            onClick={() => {
-              void requestResetCode();
-            }}
-            type="button"
-          >
-            Resend code
-          </button>
-        )}
         <Link className="font-semibold text-slate-600 hover:underline" to={`/login${search}`}>
           Back to sign in
         </Link>

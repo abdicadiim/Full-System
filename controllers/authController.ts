@@ -268,7 +268,7 @@ export const requestLoginOtp = async (req: express.Request, res: express.Respons
 
   const user = await findUserByEmail(email);
   if (!user) {
-    return res.json({ success: true, message: "If the email exists, an OTP has been sent.", data: { email } });
+    return res.status(404).json({ success: false, message: "User is not recognized.", data: null });
   }
   if ((user as any).status === "Inactive") {
     return res.status(403).json({ success: false, message: "User is inactive", data: null });
@@ -388,7 +388,7 @@ export const requestPasswordReset = async (req: express.Request, res: express.Re
     return res.json({
       success: true,
       message: "Development reset code ready.",
-      data: { email, debugCode: "123456", expiresInSeconds: 600 },
+      data: { email, debugCode: "123456", expiresInSeconds: 90 },
     });
   }
   if (!isConfiguredForRealAuth()) {
@@ -402,7 +402,7 @@ export const requestPasswordReset = async (req: express.Request, res: express.Re
 
   const user = await findUserByEmail(email);
   if (!user) {
-    return res.json({ success: true, message: "If the email exists, a reset code has been sent.", data: { email } });
+    return res.status(404).json({ success: false, message: "User is not recognized.", data: null });
   }
   if ((user as any).status === "Inactive") {
     return res.status(403).json({ success: false, message: "User is inactive", data: null });
@@ -410,7 +410,8 @@ export const requestPasswordReset = async (req: express.Request, res: express.Re
 
   const resetCode = generateOtp();
   const resetHash = sha256(resetCode);
-  const resetExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+  const expiresInSeconds = 90;
+  const resetExpiresAt = new Date(Date.now() + expiresInSeconds * 1000);
   await User.updateOne(
     { _id: user._id },
     {
@@ -426,7 +427,7 @@ export const requestPasswordReset = async (req: express.Request, res: express.Re
   const subject = `Reset your ${appName} password`;
   const text =
     `Use this code to reset your ${appName} password: ${resetCode}\n\n` +
-    `This code expires in 10 minutes.`;
+    `This code expires in 90 seconds.`;
   const html = buildAuthEmailHtml({
     title: "Password Reset",
     headline: `Reset your ${appName} password`,
@@ -449,7 +450,7 @@ export const requestPasswordReset = async (req: express.Request, res: express.Re
     message: "If the email exists, a reset code has been sent.",
     data: {
       email,
-      expiresInSeconds: 600,
+      expiresInSeconds,
       ...(NODE_ENV !== "production" ? { debugCode: resetCode } : {}),
     },
   });

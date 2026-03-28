@@ -23,18 +23,16 @@ const persistSession = (result: any) => {
   }
 };
 
-const getAutoSendKey = (app: string, email: string) => `auth:otp:auto-send:${app.trim().toLowerCase()}:${email.trim().toLowerCase()}`;
+const getAutoSendKey = (app: string, email: string) => `auth:otp:auto-sent:${app.trim().toLowerCase()}:${email.trim().toLowerCase()}`;
 
-const shouldAutoSendOtp = (app: string, email: string) => {
-  if (typeof window === "undefined") return true;
-  const key = getAutoSendKey(app, email);
-  const lastSentAt = Number(window.sessionStorage.getItem(key) || "0");
-  const now = Date.now();
-  if (lastSentAt && now - lastSentAt < 5000) {
-    return false;
-  }
-  window.sessionStorage.setItem(key, String(now));
-  return true;
+const hasAutoSentOtp = (app: string, email: string) => {
+  if (typeof window === "undefined") return false;
+  return window.sessionStorage.getItem(getAutoSendKey(app, email)) === "1";
+};
+
+const markAutoSentOtp = (app: string, email: string) => {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(getAutoSendKey(app, email), "1");
 };
 
 export default function EmailOtpLoginPage() {
@@ -82,7 +80,7 @@ export default function EmailOtpLoginPage() {
     if (isLogoutRedirect) return;
     if (!initialEmail) return;
     if (autoSendAttemptedRef.current) return;
-    if (!shouldAutoSendOtp(app, initialEmail)) return;
+    if (hasAutoSentOtp(app, initialEmail)) return;
     autoSendAttemptedRef.current = true;
     setEmail(initialEmail);
     void requestCode(initialEmail);
@@ -106,6 +104,7 @@ export default function EmailOtpLoginPage() {
       setRemainingSeconds(Math.max(0, Number(result.data?.expiresInSeconds ?? 90)));
       setCodeSent(true);
       setOtp("");
+      markAutoSentOtp(app, nextEmail);
     } catch (err: any) {
       setError(err?.message || "Unable to send OTP");
     } finally {
