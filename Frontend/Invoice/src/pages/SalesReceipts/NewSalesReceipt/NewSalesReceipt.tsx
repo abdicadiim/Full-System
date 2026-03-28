@@ -2121,7 +2121,7 @@ export default function NewSalesReceipt() {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto bg-white pb-24">
+        <div className="flex-1 overflow-y-auto bg-white pb-40">
         <div className="w-full px-5 py-4">
           <div className="w-full overflow-visible border border-[#e5e7eb] bg-white">
             <div className="border-b border-[#eceef2] bg-[#f3f4f6] px-5 py-5">

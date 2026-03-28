@@ -105,7 +105,7 @@ export const buildTaxOptionGroups = (taxes: any[] = []): TaxDropdownGroup[] => {
 
   return [
     { label: "Tax", options: taxRows },
-    { label: "Compound tax", options: compoundRows },
+    { label: "Tax Component", options: compoundRows },
     { label: "Tax Group", options: groupRows },
   ].filter((group) => group.options.length > 0);
 };
