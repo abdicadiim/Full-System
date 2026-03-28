@@ -288,6 +288,62 @@ export default function EmailNotificationsPage() {
   const orgName = String(settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "").trim() || "Organization";
   const sendingFromAddress = primarySender?.isVerified ? primarySender.email : DEFAULT_SYSTEM_SENDER_EMAIL;
 
+  const getSenderId = (sender: Sender) => String(sender._id || sender.id || "").trim();
+
+  const handleResendSenderVerification = async (sender: Sender) => {
+    const senderId = getSenderId(sender);
+    if (!senderId) return;
+    try {
+      setErrorMessage(null);
+      const response = await senderEmailsAPI.resendVerification(senderId);
+      if (response?.success) {
+        showSuccess("Verification email sent.");
+      } else {
+        setErrorMessage(response?.message || "Failed to resend verification email.");
+      }
+    } catch (error: any) {
+      console.error("Error resending sender verification:", error);
+      setErrorMessage(error?.message || "Failed to resend verification email.");
+    }
+  };
+
+  const handleMarkSenderPrimary = async (sender: Sender) => {
+    const senderId = getSenderId(sender);
+    if (!senderId) return;
+    try {
+      setErrorMessage(null);
+      const response = await senderEmailsAPI.update(senderId, { isPrimary: true });
+      if (response?.success) {
+        await fetchSenders();
+        showSuccess("Primary sender updated.");
+      } else {
+        setErrorMessage(response?.message || "Failed to update primary sender.");
+      }
+    } catch (error: any) {
+      console.error("Error updating primary sender:", error);
+      setErrorMessage(error?.message || "Failed to update primary sender.");
+    }
+  };
+
+  const handleDeleteSender = async (sender: Sender) => {
+    const senderId = getSenderId(sender);
+    if (!senderId) return;
+    if (!window.confirm("Delete this sender?")) return;
+    try {
+      setErrorMessage(null);
+      const response = await senderEmailsAPI.delete(senderId);
+      if (response?.success) {
+        await fetchSenders();
+        showSuccess("Sender deleted.");
+      } else {
+        setErrorMessage(response?.message || "Failed to delete sender.");
+      }
+    } catch (error: any) {
+      console.error("Error deleting sender:", error);
+      setErrorMessage(error?.message || "Failed to delete sender.");
+    }
+  };
+
   // Verification emails are not used in this system. SMTP config is treated as ready-to-use.
 
   const toggleRelayServer = async (server: RelayServer, enabled: boolean) => {
@@ -518,6 +574,97 @@ export default function EmailNotificationsPage() {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-700">Name</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-700">Email Address</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-700">Status</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-700">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {loadingSenders && (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-6 text-sm text-slate-500">
+                          Loading sender emails...
+                        </td>
+                      </tr>
+                    )}
+                    {!loadingSenders && senders.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-6 text-sm text-slate-500">
+                          No sender emails found.
+                        </td>
+                      </tr>
+                    )}
+                    {senders.map((sender) => {
+                      const senderId = getSenderId(sender);
+                      const isVerified = Boolean(sender.isVerified);
+                      const isPrimary = Boolean(sender.isPrimary);
+                      return (
+                        <tr key={senderId || sender.email}>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-slate-900">{sender.name || "Unnamed sender"}</span>
+                              {isPrimary ? (
+                                <span className="rounded bg-lime-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-lime-700">Primary</span>
+                              ) : null}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-slate-700">{sender.email}</td>
+                          <td className="px-4 py-3">
+                            {isVerified ? (
+                              <span className="rounded bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-700">Verified</span>
+                            ) : (
+                              <span className="rounded bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-700">Unverified</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end gap-2">
+                              {!isVerified ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleResendSenderVerification(sender)}
+                                  className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                                >
+                                  Resend Email
+                                </button>
+                              ) : !isPrimary ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleMarkSenderPrimary(sender)}
+                                  className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                                >
+                                  Mark as Primary
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                onClick={() => setEditingSender(sender)}
+                                className="rounded-md p-2 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                aria-label="Edit sender"
+                              >
+                                <Edit size={16} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteSender(sender)}
+                                className="rounded-md p-2 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                                aria-label="Delete sender"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
 
             </div>
