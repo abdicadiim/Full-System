@@ -1228,7 +1228,7 @@ export default function UsersPage() {
                   setEditModalOpen(true);
                 }
               }}
-              className="px-3 py-1.5 bg-red-600 text-white text-sm font-medium hover:bg-red-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-3 py-1.5 bg-[#156372] text-white text-sm font-medium hover:bg-[#0f4e5a] flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Pencil size={14} />
               Edit
@@ -1254,7 +1254,7 @@ export default function UsersPage() {
                   <button
                     onClick={handleInviteAgain}
                     disabled={isSaving}
-                    className="w-full px-4 py-2 text-left text-sm text-white bg-blue-600 hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed rounded-t-lg"
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed rounded-t-lg"
                   >
                     Invite again
                   </button>
@@ -2038,7 +2038,6 @@ export default function UsersPage() {
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <LocationDropdown
                   label="User's Default Business Location"
-                  required
                   value={defaultBusinessLocation}
                   options={businessLocations.map((location) => ({
                     value: location._id || location.id,
@@ -2052,7 +2051,7 @@ export default function UsersPage() {
                       setDefaultWarehouseLocation("");
                     }
                   }}
-                  labelClassName="text-red-600"
+                  labelClassName="text-gray-700"
                 />
 
                 <LocationDropdown
@@ -2089,13 +2088,13 @@ export default function UsersPage() {
                   >
                     Cancel
                   </button>
-                  <button
-                    onClick={handleSendInvite}
-                    disabled={isSaving || !defaultBusinessLocation}
-                    className="px-4 py-2 rounded-lg bg-[#156372] text-white text-sm font-medium hover:bg-[#0f4e5a] disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isSaving ? "Sending..." : "Send Invite"}
-                  </button>
+                <button
+                  onClick={handleSendInvite}
+                  disabled={isSaving}
+                  className="px-4 py-2 rounded-lg bg-[#156372] text-white text-sm font-medium hover:bg-[#0f4e5a] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSaving ? "Sending..." : "Send Invite"}
+                </button>
                 </div>
               </div>
             </div>
@@ -2238,7 +2237,6 @@ export default function UsersPage() {
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <LocationDropdown
                   label="User's Default Business Location"
-                  required
                   value={defaultBusinessLocation}
                   options={businessLocations.map((location) => ({
                     value: location._id || location.id,
@@ -2252,11 +2250,10 @@ export default function UsersPage() {
                       setDefaultWarehouseLocation("");
                     }
                   }}
-                  labelClassName="text-red-600"
+                  labelClassName="text-gray-700"
                 />
                 <LocationDropdown
                   label="User's Default Warehouse Location"
-                  required
                   value={defaultWarehouseLocation}
                   options={warehouseLocations.map((location) => ({
                     value: location._id || location.id,
@@ -2297,13 +2294,13 @@ export default function UsersPage() {
                   >
                     Cancel
                   </button>
-                  <button
-                    onClick={handleUpdateUserLocationAccess}
-                    disabled={isSaving || !defaultBusinessLocation}
-                    className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isSaving ? "Saving..." : "Save & Send Email"}
-                  </button>
+                <button
+                  onClick={handleUpdateUserLocationAccess}
+                  disabled={isSaving}
+                  className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSaving ? "Saving..." : "Save & Send Email"}
+                </button>
                 </div>
               </div>
             </div>

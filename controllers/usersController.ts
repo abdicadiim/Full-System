@@ -239,7 +239,6 @@ export const sendUserInvitation = async (req: express.Request, res: express.Resp
 
   const org: any = await Organization.findById(orgId).lean();
   const orgName = String(org?.name || "Organization");
-  const senderName = String(sender.name || orgName || "Organization").trim() || orgName;
 
   const sender: any = await pickSmtpSender(orgId);
   if (!sender) {
@@ -249,6 +248,7 @@ export const sendUserInvitation = async (req: express.Request, res: express.Resp
       data: null,
     });
   }
+  const senderName = String(sender?.name || orgName || "Organization").trim() || orgName;
 
   const baseUrl = String(process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/+$/, "");
   const viewInvitationUrl = `${baseUrl}/login?email=${encodeURIComponent(String(user.email || ""))}`;
