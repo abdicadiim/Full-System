@@ -1682,7 +1682,7 @@ export default function UsersPage() {
                     type="text"
                     value={editData.name}
                     onChange={(e) => setEditData({ ...editData, name: e.target.value })}
-                    className="w-full h-10 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full h-10 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-400"
                     placeholder="Enter user's name"
                   />
                 </div>
@@ -1696,7 +1696,7 @@ export default function UsersPage() {
                       type="email"
                       value={editData.email}
                       onChange={(e) => setEditData({ ...editData, email: e.target.value })}
-                      className="w-full h-10 px-3 pr-10 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full h-10 px-3 pr-10 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-400"
                       placeholder="Enter user's email"
                     />
                     <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -1718,7 +1718,7 @@ export default function UsersPage() {
                         }
                         openRoleDropdown(editRoleButtonRef, setEditRoleDropdownPos, setEditRoleDropdownOpen);
                       }}
-                      className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-white text-left focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center justify-between"
+                      className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-white text-left focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-400 flex items-center justify-between"
                     >
                       <span className={editData.role ? "text-gray-900" : "text-gray-400"}>
                         {editData.role ? (roleOptions.find((role) => role.value === editData.role)?.label || "Select a role") : "Select a role"}
@@ -1752,7 +1752,7 @@ export default function UsersPage() {
                 <button
                   onClick={handleEditUser}
                   disabled={isSaving}
-                  className="px-4 py-2 rounded-lg bg-[#e53935] text-white text-sm font-medium hover:bg-[#d32f2f] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 rounded-lg bg-[#ea4335] text-white text-sm font-medium hover:bg-[#d93025] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Save & Continue
                 </button>
@@ -1781,7 +1781,7 @@ export default function UsersPage() {
                 value={editRoleSearch}
                 onChange={(e) => setEditRoleSearch(e.target.value)}
                 placeholder="Search..."
-                className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-400"
               />
             </div>
           </div>
@@ -1798,10 +1798,10 @@ export default function UsersPage() {
                     setEditData({ ...editData, role: role.value });
                     closeEditRoleDropdown();
                   }}
-                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-blue-50 ${selected ? "bg-blue-50" : ""}`}
+                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors hover:bg-red-50 ${selected ? "bg-red-50" : ""}`}
                 >
                   <span>{role.label}</span>
-                  {selected && <Check size={16} className="text-blue-600" />}
+                  {selected && <Check size={16} className="text-[#ea4335]" />}
                 </button>
               );
             })}
