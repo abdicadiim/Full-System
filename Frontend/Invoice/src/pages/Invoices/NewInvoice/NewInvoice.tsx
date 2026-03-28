@@ -2896,7 +2896,7 @@ return (
               </div>
               <textarea
                 name="subject"
-                className="flex-1 h-14 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-400 text-sm resize-none"
+                className="w-full max-w-[900px] h-14 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-400 text-sm resize-none"
                   placeholder="Let your customer know what this Invoice is for"
                 value={formData.subject}
                 onChange={handleChange}

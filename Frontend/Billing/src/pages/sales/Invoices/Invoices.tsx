@@ -2112,7 +2112,7 @@ export default function Invoices() {
   // };
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-white">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white">
       {isGeneratingPdf && (
         <div className="fixed top-5 right-5 z-[1200] flex items-center gap-2 px-4 py-2 rounded-md bg-white border border-gray-200 shadow-lg text-sm text-gray-700">
           <RefreshCw size={16} className="animate-spin text-[#156372]" />

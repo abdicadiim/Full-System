@@ -172,6 +172,27 @@ const mapRetainerListRow = (invoice: Invoice): RetainerListRow => {
   };
 };
 
+const getRetainerStatusColor = (status: string) => {
+  const s = String(status || "").toLowerCase().replace(/[\s_-]+/g, "");
+  const statusColors = {
+    draft: "#6B7280",
+    sent: "#3B82F6",
+    paid: "#059669",
+    partialpaid: "#F59E0B",
+    partiallypaid: "#F59E0B",
+    void: "#EF4444",
+    cancelled: "#EF4444",
+    canceled: "#EF4444",
+  };
+  return statusColors[s as keyof typeof statusColors] || "#6B7280";
+};
+
+const getRetainerStatusText = (status: string) => {
+  const s = String(status || "").toLowerCase().replace(/[\s_-]+/g, "");
+  if (s === "partialpaid" || s === "partiallypaid") return "PARTIALLY PAID";
+  return String(status || "").toUpperCase();
+};
+
 const AttachmentIcon = ({ className = "h-3.5 w-3.5" }: { className?: string }) => (
   <svg viewBox="0 0 215 468" className={className} fill="currentColor" aria-hidden="true">
     <path d="M107.84 468.1h-.97C47.94 468.1 0 420.16 0 361.23c0-11.6 9.4-21 21-21s21 9.4 21 21c0 35.77 29.1 64.87 64.87 64.87h.97c35.55 0 64.47-28.92 64.47-64.47V106.47c0-35.55-28.92-64.47-64.47-64.47h-.97C71.1 42 42 71.1 42 106.87v153.88c0 12.36 10.06 22.42 22.42 22.42s22.42-10.06 22.42-22.42v-97.98c0-11.6 9.4-21 21-21s21 9.4 21 21v97.98c0 35.52-28.9 64.42-64.42 64.42S0 296.27 0 260.75V106.87C0 47.94 47.94 0 106.87 0h.97c58.71 0 106.47 47.76 106.47 106.47v255.16c0 58.71-47.76 106.47-106.47 106.47z" />
@@ -212,6 +233,7 @@ export default function Retailinvoicedetail() {
   const [isPaymentsReceivedOpen, setIsPaymentsReceivedOpen] = useState(false);
   const [isApplyRetainersModalOpen, setIsApplyRetainersModalOpen] = useState(false);
   const [selectedPaymentRow, setSelectedPaymentRow] = useState<any | null>(null);
+  const [openPaymentMenuId, setOpenPaymentMenuId] = useState<string | null>(null);
   const [isApplyingRetainers, setIsApplyingRetainers] = useState(false);
   const [disableDraftRecordPaymentWarning, setDisableDraftRecordPaymentWarning] = useState(false);
   const [dontShowDraftRecordPaymentAgain, setDontShowDraftRecordPaymentAgain] = useState(false);
@@ -335,6 +357,9 @@ export default function Retailinvoicedetail() {
       if (paymentMenuRef.current && !paymentMenuRef.current.contains(target)) setIsRecordPaymentMenuOpen(false);
       if (attachmentsDropdownRef.current && !attachmentsDropdownRef.current.contains(target)) setIsAttachmentsDropdownOpen(false);
       if (detailActionsMenuRef.current && !detailActionsMenuRef.current.contains(target)) setIsDetailActionsMenuOpen(false);
+      if (target instanceof HTMLElement && !target.closest("[data-retainer-payment-menu='true']")) {
+        setOpenPaymentMenuId(null);
+      }
       if (headerMoreMenuRef.current && !headerMoreMenuRef.current.contains(target)) {
         setIsHeaderMoreMenuOpen(false);
         setIsSortSubMenuOpen(false);
@@ -659,7 +684,7 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
           resolveField(record, ["amount", "paymentAmount", "paidAmount", "receivedAmount"]),
           0
         );
-        const balanceValue = toFiniteNumber(resolveField(record, ["balance", "balanceAmount", "remainingBalance"]), balanceDue);
+        const balanceValue = getPaymentAvailableAmount(record);
         const paymentMode = String(resolveField(record, ["paymentMode", "mode", "paymentMethod"]) || "-");
         const paymentNumberValue = resolveField(record, ["paymentNumber", "number", "id", "_id"]);
         const referenceValue = resolveField(record, ["referenceNumber", "reference", "ref", "transactionId"]);
@@ -739,8 +764,42 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
     if (showPaymentsSummary) setIsPaymentsReceivedOpen(true);
   }, [showPaymentsSummary]);
 
-  const roundMoney = (value: any) =>
-    Math.round((toFiniteNumber(value, 0) + Number.EPSILON) * 100) / 100;
+  function roundMoney(value: any) {
+    return Math.round((toFiniteNumber(value, 0) + Number.EPSILON) * 100) / 100;
+  }
+
+  function getPaymentAvailableAmount(paymentRow: any) {
+    const explicitAvailable = toFiniteNumber(
+      paymentRow?.balance ??
+        paymentRow?.balanceAmount ??
+        paymentRow?.remainingBalance ??
+        paymentRow?.unappliedAmount ??
+        paymentRow?.availableAmount ??
+        paymentRow?.unusedAmount ??
+        paymentRow?.unusedBalance,
+      Number.NaN
+    );
+    if (Number.isFinite(explicitAvailable) && explicitAvailable > 0) return Math.max(0, explicitAvailable);
+
+    const amountReceived = toFiniteNumber(
+      paymentRow?.amountReceived ??
+        paymentRow?.amount ??
+        paymentRow?.paymentAmount ??
+        paymentRow?.receivedAmount,
+      0
+    );
+    const amountUsed =
+      toFiniteNumber(paymentRow?.amountUsedForPayments, 0) +
+      toFiniteNumber(paymentRow?.appliedAmount, 0) +
+      (Array.isArray(paymentRow?.allocations)
+        ? paymentRow.allocations.reduce((sum: number, allocation: any) => sum + toFiniteNumber(allocation?.amount, 0), 0)
+        : 0) +
+      (paymentRow?.invoicePayments && typeof paymentRow.invoicePayments === "object"
+        ? Object.values(paymentRow.invoicePayments).reduce((sum: number, amount: any) => sum + toFiniteNumber(amount, 0), 0)
+        : 0);
+
+    return Math.max(0, roundMoney(amountReceived - amountUsed));
+  }
 
   const getInvoiceBalanceForApply = (targetInvoice: any) => {
     const directBalance = toFiniteNumber(
@@ -775,7 +834,7 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
   };
 
   const handleOpenApplyRetainersModal = (paymentRow: any) => {
-    const available = roundMoney(toFiniteNumber(paymentRow?.balance, 0));
+    const available = roundMoney(getPaymentAvailableAmount(paymentRow));
     if (available <= 0) {
       toast("No remaining payment balance to apply.");
       return;
@@ -800,7 +859,7 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
       return;
     }
 
-    const availableFromPayment = roundMoney(toFiniteNumber(selectedPaymentRow?.balance, 0));
+    const availableFromPayment = roundMoney(getPaymentAvailableAmount(selectedPaymentRow));
     const totalApplied = roundMoney(validAllocations.reduce((sum, allocation) => sum + allocation.amount, 0));
     if (totalApplied > availableFromPayment) {
       toast("Applied amount cannot exceed selected payment balance.");
@@ -923,7 +982,7 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
 
               if (!isMatch) return record;
               const currentRecordBalance = roundMoney(
-                toFiniteNumber(record?.balance ?? record?.balanceAmount ?? record?.remainingBalance, selectedPaymentRow?.balance)
+                getPaymentAvailableAmount(record)
               );
               const nextRecordBalance = roundMoney(Math.max(0, currentRecordBalance - totalApplied));
               return {
@@ -937,14 +996,7 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
           : paymentRecordsSource;
 
       const currentRetainerAvailable = roundMoney(
-        toFiniteNumber(
-          (invoice as any)?.retainerAvailableAmount ??
-            (invoice as any)?.availableAmount ??
-            (invoice as any)?.unusedAmount ??
-            (invoice as any)?.unusedBalance ??
-            selectedPaymentRow?.balance,
-          0
-        )
+        getPaymentAvailableAmount(selectedPaymentRow)
       );
       const nextRetainerAvailable = roundMoney(Math.max(0, currentRetainerAvailable - totalApplied));
       const nextDrawStatus = nextRetainerAvailable <= 0 ? "drawn" : "partially_drawn";
@@ -968,7 +1020,7 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
       const updatedRetainer = await updateInvoice(currentInvoiceId, patchPayload as Partial<Invoice>);
       setInvoice((prev) => (prev ? ({ ...prev, ...updatedRetainer, ...patchPayload } as Invoice) : prev));
       setSelectedPaymentRow((prev: any) =>
-        prev ? { ...prev, balance: Math.max(0, roundMoney(toFiniteNumber(prev.balance, 0) - totalApplied)) } : prev
+        prev ? { ...prev, balance: Math.max(0, roundMoney(getPaymentAvailableAmount(prev) - totalApplied)) } : prev
       );
       setIsApplyRetainersModalOpen(false);
       setReloadTick((prev) => prev + 1);
@@ -1801,9 +1853,12 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
                     <div className="mt-1 text-[13px] text-slate-600 leading-[1.1]">
                       {row.invoiceNumber} <span className="mx-1">.</span> {row.date}
                     </div>
-                    <div className={`mt-1 text-[13px] uppercase tracking-wide inline-flex items-center gap-1 ${row.status === "SENT" ? "text-blue-600" : row.status === "DRAFT" ? "text-slate-500" : "text-slate-700"}`}>
-                      <span>{row.status}</span>
-                      {row.status === "SENT" && <Mail size={12} className="text-slate-500" />}
+                    <div
+                      className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide"
+                      style={{ color: getRetainerStatusColor(row.status) }}
+                    >
+                      <span>{getRetainerStatusText(row.status)}</span>
+                      {row.status === "SENT" && <Mail size={11} className="text-current" />}
                     </div>
                   </div>
                 </div>
@@ -2114,19 +2169,72 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
                                         <button
                                           type="button"
                                           onClick={() => {
+                                            setOpenPaymentMenuId(null);
                                             handleOpenApplyRetainersModal(row);
                                           }}
-                                          disabled={isApplyingRetainers || toFiniteNumber(row.balance, 0) <= 0}
+                                          disabled={isApplyingRetainers || getPaymentAvailableAmount(row) <= 0}
                                           className="px-2.5 py-1 rounded border border-[#d1d5db] text-[12px] text-[#374151] hover:bg-[#f8fafc] disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                           Apply to Invoices
                                         </button>
-                                        <button
-                                          type="button"
-                                          className="h-6 w-6 inline-flex items-center justify-center rounded border border-[#d1d5db] text-[#374151] hover:bg-[#f8fafc]"
-                                        >
-                                          <MoreHorizontal size={14} />
-                                        </button>
+                                        <div className="relative" data-retainer-payment-menu="true">
+                                          <button
+                                            type="button"
+                                            className="h-6 w-6 inline-flex items-center justify-center rounded border border-[#d1d5db] text-[#374151] hover:bg-[#f8fafc]"
+                                            onClick={() => {
+                                              const nextId = String(row.id || row.paymentId || row.paymentNumber || "");
+                                              setOpenPaymentMenuId((prev) => (prev === nextId ? null : nextId));
+                                            }}
+                                          >
+                                            <MoreHorizontal size={14} />
+                                          </button>
+                                          {openPaymentMenuId === String(row.id || row.paymentId || row.paymentNumber || "") && (
+                                            <div className="absolute right-0 bottom-full mb-2 w-[170px] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl z-50">
+                                              <button
+                                                type="button"
+                                                className="w-full px-4 py-2.5 text-left text-[13px] text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
+                                                onClick={() => {
+                                                  setOpenPaymentMenuId(null);
+                                                  const paymentId = String(row.paymentId || row.id || row.raw?.id || row.raw?._id || "").trim();
+                                                  if (paymentId) {
+                                                    navigate(`/payments/payments-received/${paymentId}/edit`, { state: { paymentData: row.raw || row } });
+                                                  }
+                                                }}
+                                              >
+                                                <Edit size={13} />
+                                                Edit
+                                              </button>
+                                              <button
+                                                type="button"
+                                                className="w-full px-4 py-2.5 text-left text-[13px] text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
+                                                onClick={() => {
+                                                  setOpenPaymentMenuId(null);
+                                                  const paymentId = String(row.paymentId || row.id || row.raw?.id || row.raw?._id || "").trim();
+                                                  if (paymentId) {
+                                                    navigate(`/payments/payments-received/${paymentId}`, { state: { paymentData: row.raw || row } });
+                                                  }
+                                                }}
+                                              >
+                                                <RotateCcw size={13} />
+                                                Refund
+                                              </button>
+                                              <button
+                                                type="button"
+                                                className="w-full px-4 py-2.5 text-left text-[13px] text-gray-700 hover:bg-gray-50 inline-flex items-center gap-2"
+                                                onClick={() => {
+                                                  setOpenPaymentMenuId(null);
+                                                  const paymentId = String(row.paymentId || row.id || row.raw?.id || row.raw?._id || "").trim();
+                                                  if (paymentId) {
+                                                    navigate(`/payments/payments-received/${paymentId}`, { state: { paymentData: row.raw || row } });
+                                                  }
+                                                }}
+                                              >
+                                                <Trash2 size={13} />
+                                                Delete Payment
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
                                       </div>
                                     </td>
                                   </tr>
