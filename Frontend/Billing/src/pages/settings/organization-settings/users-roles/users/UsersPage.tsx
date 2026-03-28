@@ -633,7 +633,9 @@ export default function UsersPage() {
 
   // Filter locations based on search
   const filteredLocations = locations.filter(location =>
-    location.name.toLowerCase().includes(locationSearch.toLowerCase())
+    String(location?.name || location?.label || location?.title || "")
+      .toLowerCase()
+      .includes(locationSearch.toLowerCase())
   );
 
   // Get accessible location objects

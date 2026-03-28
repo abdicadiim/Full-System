@@ -211,6 +211,7 @@ export default function UsersPage() {
     role: "",
     password: "",
   });
+  const [inviteRoleSearch, setInviteRoleSearch] = useState("");
   const [inviteRoleDropdownOpen, setInviteRoleDropdownOpen] = useState(false);
   const [inviteRoleDropdownPos, setInviteRoleDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -220,6 +221,7 @@ export default function UsersPage() {
     email: "",
     role: "",
   });
+  const [editRoleSearch, setEditRoleSearch] = useState("");
   const [editRoleDropdownOpen, setEditRoleDropdownOpen] = useState(false);
   const [editRoleDropdownPos, setEditRoleDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
@@ -621,7 +623,9 @@ export default function UsersPage() {
 
   // Filter locations based on search
   const filteredLocations = locations.filter(location =>
-    location.name.toLowerCase().includes(locationSearch.toLowerCase())
+    String(location?.name || location?.label || location?.title || "")
+      .toLowerCase()
+      .includes(locationSearch.toLowerCase())
   );
 
   // Get accessible location objects
