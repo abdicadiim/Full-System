@@ -17,8 +17,13 @@ const DEFAULT_CURRENCY: BaseCurrency = {
 
 const CURRENCY_STORAGE_KEYS = ["taban_currencies", "taban_books_currencies"];
 
-const isBaseCurrencyRecord = (currency: any) =>
-  Boolean(currency?.isBase || currency?.isBaseCurrency || currency?.is_base_currency);
+const isBaseCurrencyRecord = (currency: any) => {
+  const flag = currency?.isBase ?? currency?.isBaseCurrency ?? currency?.is_base_currency ?? currency?.baseCurrency ?? currency?.base_currency;
+  if (typeof flag === "string") {
+    return ["true", "yes", "1", "base"].includes(flag.trim().toLowerCase());
+  }
+  return Boolean(flag);
+};
 
 const extractCurrencyRows = (response: any) => {
   const candidates = [
@@ -67,7 +72,7 @@ const readStoredBaseCurrency = (): BaseCurrency | null => {
             ? parsed.currencies
             : [];
 
-      const base = currencies.find(isBaseCurrencyRecord) || currencies[0];
+      const base = currencies.find(isBaseCurrencyRecord);
       if (base) {
         return normalizeCurrency(base);
       }
@@ -89,7 +94,7 @@ export const useCurrency = () => {
       try {
         const res = await currenciesAPI.getAll({ limit: 2000 });
         const rows = extractCurrencyRows(res);
-        const base = rows.find(isBaseCurrencyRecord) || rows[0];
+        const base = rows.find(isBaseCurrencyRecord);
         if (base && isMounted) {
           setBaseCurrency(normalizeCurrency(base));
           return;
