@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import ThreePhaseImportWizard, { ImportFieldDef, ImportMappedRecord } from "../../shared/ThreePhaseImportWizard";
 import { normalizeAddon, readAddons, writeAddons } from "../storage";
+import { usePermissions } from "../../../../hooks/usePermissions";
+import AccessDenied from "../../../../components/AccessDenied";
 
 const IMPORT_FIELDS: ImportFieldDef[] = [
   { key: "product", label: "Product Name", required: true, aliases: ["product", "product name"] },
@@ -36,6 +38,25 @@ const toNum = (value: string, fallback = 0) => {
 
 export default function ImportAddonsPage() {
   const navigate = useNavigate();
+  const { canCreate, loading: permissionsLoading } = usePermissions();
+  const canCreateAddon = canCreate("products", "Addon");
+
+  if (permissionsLoading) {
+    return (
+      <div className="flex min-h-[40vh] w-full items-center justify-center p-6 text-sm text-gray-500">
+        Loading permissions...
+      </div>
+    );
+  }
+
+  if (!canCreateAddon) {
+    return (
+      <AccessDenied
+        title="Addons access required"
+        message="Your role does not include permission to import Addons."
+      />
+    );
+  }
 
   const handleImport = (rows: ImportMappedRecord[]) => {
     try {

@@ -4,6 +4,8 @@ import { Check, ChevronDown, Image as ImageIcon, Info, MinusCircle, PlusCircle, 
 import { toast } from "react-toastify";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useCurrency } from "../../../../hooks/useCurrency";
+import { usePermissions } from "../../../../hooks/usePermissions";
+import AccessDenied from "../../../../components/AccessDenied";
 import NewProductModal from "../../plans/newProduct/NewProductModal";
 import type { AddonRecord } from "../types";
 import { addonsAPI, plansAPI, productsAPI, taxesAPI } from "../../../../services/api";
@@ -545,6 +547,7 @@ export default function NewAddonPage() {
   const [searchParams] = useSearchParams();
   const productPrefill = String(searchParams.get("product") || "").trim();
   const { baseCurrency } = useCurrency();
+  const { canCreate, canEdit, loading: permissionsLoading } = usePermissions();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isEditMode = Boolean(addonId);
   const [activeTab, setActiveTab] = useState("Pricing");
@@ -565,6 +568,25 @@ export default function NewAddonPage() {
   const isBracketPricing = isVolumePricing || isTierPricing || isPackagePricing;
   const currencyCode = String(baseCurrency?.code || "USD").split(" - ")[0].trim().toUpperCase() || "USD";
   const currencyPrefix = currencyCode;
+  const canCreateAddon = canCreate("products", "Addon");
+  const canEditAddon = canEdit("products", "Addon");
+
+  if (permissionsLoading) {
+    return (
+      <div className="flex min-h-[40vh] w-full items-center justify-center p-6 text-sm text-gray-500">
+        Loading permissions...
+      </div>
+    );
+  }
+
+  if ((isEditMode && !canEditAddon) || (!isEditMode && !canCreateAddon)) {
+    return (
+      <AccessDenied
+        title="Addons access required"
+        message={isEditMode ? "Your role does not include permission to edit Addons." : "Your role does not include permission to create Addons."}
+      />
+    );
+  }
 
   const unitOptions = useMemo(() => dedupe([form.unit, ...UNIT_OPTIONS]), [form.unit]);
   const taxOptions = useMemo(() => dedupe([form.taxName, ...taxes]), [form.taxName, taxes]);
@@ -781,6 +803,23 @@ export default function NewAddonPage() {
       }
     })();
   }, [addonId, isEditMode, navigate, productPrefill]);
+
+  if (permissionsLoading) {
+    return (
+      <div className="flex min-h-[40vh] w-full items-center justify-center p-6 text-sm text-gray-500">
+        Loading permissions...
+      </div>
+    );
+  }
+
+  if ((isEditMode && !canEditAddon) || (!isEditMode && !canCreateAddon)) {
+    return (
+      <AccessDenied
+        title="Addons access required"
+        message={isEditMode ? "Your role does not include permission to edit Addons." : "Your role does not include permission to create Addons."}
+      />
+    );
+  }
 
   const handleSave = () => {
     const product = form.product.trim();

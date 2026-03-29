@@ -7,6 +7,7 @@ import { buildCloneName } from "../../utils/cloneName";
 import CommentsDrawer from "../../plans/components/CommentsDrawer";
 import { addonsAPI } from "../../../../services/api";
 import { usePermissions } from "../../../../hooks/usePermissions";
+import AccessDenied from "../../../../components/AccessDenied";
 
 const PLANS_STORAGE_KEY = "inv_plans_v1";
 const PRICE_LISTS_STORAGE_KEY = "inv_price_lists_v1";
@@ -44,7 +45,7 @@ const DetailsRow = ({ label, value }: { label: string; value: React.ReactNode })
 export default function AddonDetailPage() {
   const navigate = useNavigate();
   const { addonId } = useParams<{ addonId: string }>();
-  const { canCreate, canEdit, canDelete } = usePermissions();
+  const { canView, canCreate, canEdit, canDelete, loading: permissionsLoading } = usePermissions();
   const [addons, setAddons] = useState<AddonRecord[]>([]);
   const [plans, setPlans] = useState<any[]>([]);
   const [priceLists, setPriceLists] = useState<any[]>([]);
@@ -70,6 +71,7 @@ export default function AddonDetailPage() {
   const canCreatePlan = canCreate("products", "Plan");
   const canCreatePriceList = canCreate("products", "Price List");
   const showAddonActions = canEditAddon || canDeleteAddon || canCreateAddon;
+  const canViewAddon = canView("products", "Addon");
 
   const loadAddons = async () => {
     try {
@@ -100,6 +102,23 @@ export default function AddonDetailPage() {
     loadPlans();
     loadPriceLists();
   }, []);
+
+  if (permissionsLoading) {
+    return (
+      <div className="flex min-h-[40vh] w-full items-center justify-center p-6 text-sm text-gray-500">
+        Loading permissions...
+      </div>
+    );
+  }
+
+  if (!canViewAddon) {
+    return (
+      <AccessDenied
+        title="Addons access required"
+        message="Your role does not include permission to view Addons."
+      />
+    );
+  }
 
   const resolvedAddons = useMemo(() => addons, [addons]);
 
@@ -230,6 +249,23 @@ export default function AddonDetailPage() {
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
+
+  if (permissionsLoading) {
+    return (
+      <div className="flex min-h-[40vh] w-full items-center justify-center p-6 text-sm text-gray-500">
+        Loading permissions...
+      </div>
+    );
+  }
+
+  if (!canViewAddon) {
+    return (
+      <AccessDenied
+        title="Addons access required"
+        message="Your role does not include permission to view Addons."
+      />
+    );
+  }
 
   if (!addon) {
     return (
