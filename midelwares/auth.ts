@@ -19,7 +19,7 @@ type SessionClaims = { sub: string; ver: number };
 
 const normalizeRoleName = (value: unknown) => String(value || "").trim().toLowerCase();
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const STANDARD_ROLE_NAMES = new Set(["admin", "owner", "staff", "member", "staff_assigned", "timesheet_staff"]);
+const STANDARD_ROLE_NAMES = new Set(["admin", "owner", "staff", "member", "staff assigned", "timesheet staff"]);
 
 export const isStandardRoleName = (value: unknown) => STANDARD_ROLE_NAMES.has(normalizeRoleName(value));
 export const isSuperRoleName = (value: unknown) => ["admin", "owner"].includes(normalizeRoleName(value));
