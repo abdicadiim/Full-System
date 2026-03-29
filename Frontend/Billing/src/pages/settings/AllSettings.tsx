@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Search, X, Building2, Users, Receipt, Settings as SettingsIcon, Palette, Zap, CreditCard, ShoppingCart, ShoppingBag, Puzzle, Plug, Code, RefreshCw } from "lucide-react";
 import { useUser } from "../../lib/auth/UserContext";
 import { useSettings } from "../../lib/settings/SettingsContext";
+import { usePermissions } from "../../hooks/usePermissions";
 
 export default function AllSettings() {
   const navigate = useNavigate();
@@ -11,9 +12,112 @@ export default function AllSettings() {
   const [selectedCategory, setSelectedCategory] = useState(null);
 
   const { user } = useUser();
+  const { hasPermission } = usePermissions();
   const { settings } = useSettings();
   const permissions = user?.permissions;
   const organizationName = String(settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "").trim() || "Organization";
+  const hasSettingsAccess = hasPermission("settings");
+
+  const getItemLabel = (item: any) => (typeof item === "string" ? item : item?.label || "");
+
+  const canSeeOrgItem = (label: string) => {
+    if (!label) return false;
+    if (label === "Profile" || label === "Branding" || label === "Custom Domain") {
+      return hasPermission("settings", "Update organization profile");
+    }
+    if (label === "Locations") {
+      return hasPermission("locations", "Locations");
+    }
+    if (label === "Manage Subscription") {
+      return hasSettingsAccess;
+    }
+    if (label === "Users") {
+      return hasPermission("settings", "Users");
+    }
+    if (label === "Roles") {
+      return hasPermission("settings", "Roles");
+    }
+    if (label === "User Preferences") {
+      return hasPermission("settings", "General preferences");
+    }
+    if (label === "Taxes") {
+      return hasPermission("settings", "Taxes");
+    }
+    if (label === "General") {
+      return hasPermission("settings", "General preferences");
+    }
+    if (label === "Currencies") {
+      return hasPermission("settings", "Currencies");
+    }
+    if (label === "Reminders") {
+      return hasPermission("settings", "Reminders");
+    }
+    if (label === "Hosted Payment Pages") {
+      return hasPermission("settings", "Hosted Pages");
+    }
+    if (label === "Transaction Number Series") {
+      return hasPermission("settings", "Payment Terms") || hasPermission("settings", "Manage Integration");
+    }
+    if (label === "PDF Templates") {
+      return hasPermission("settings", "Templates");
+    }
+    if (label === "Email Notifications") {
+      return hasPermission("settings", "Email Notifications");
+    }
+    if (label === "Reporting Tags") {
+      return hasPermission("settings", "Reporting Tags");
+    }
+    if (label === "Web Tabs") {
+      return hasPermission("settings", "Manage Integration");
+    }
+    if (label === "Workflow Actions" || label === "Workflow Logs" || label === "Schedules" || label === "Workflow Rules") {
+      return hasPermission("settings", "Automation");
+    }
+    return hasSettingsAccess;
+  };
+
+  const canSeeModuleItem = (sectionTitle: string, label: string) => {
+    if (!label) return false;
+    const normalizedSection = String(sectionTitle || "").toLowerCase();
+    const normalizedLabel = String(label || "").toLowerCase();
+
+    if (normalizedSection === "general") {
+      if (normalizedLabel === "customers") return hasPermission("customers", "Customers");
+      if (normalizedLabel === "products") return hasPermission("products", "Products");
+      if (normalizedLabel === "tasks") return hasPermission("tasks", "Tasks");
+      if (normalizedLabel === "projects" || normalizedLabel === "timesheet") return hasPermission("timesheets", "Projects");
+      return hasSettingsAccess;
+    }
+
+    if (normalizedSection === "online payments") {
+      return hasPermission("payments");
+    }
+
+    if (normalizedSection === "sales") {
+      if (normalizedLabel === "customers") return hasPermission("customers", "Customers");
+      return hasPermission("sales");
+    }
+
+    if (normalizedSection === "subscriptions") {
+      return hasPermission("subscriptions");
+    }
+
+    if (normalizedSection === "purchases") {
+      return hasPermission("purchases");
+    }
+
+    if (normalizedSection === "customer portal") {
+      return hasSettingsAccess;
+    }
+
+    if (normalizedSection === "custom modules") {
+      return hasSettingsAccess;
+    }
+
+    return hasSettingsAccess;
+  };
+
+  const canSeeExtensionItem = () => hasSettingsAccess;
 
   // Helper to check permissions
   // Return true if access allowed
@@ -488,9 +592,30 @@ export default function AllSettings() {
     });
   };
 
-  const filteredOrgSettings = filterItems(organizationSettings, searchQuery);
-  const filteredModuleSettings = filterItems(moduleSettings, searchQuery);
-  const filteredExtensionSettings = filterItems(extensionSettings, searchQuery);
+  const orgSettingsVisible = organizationSettings
+    .map((setting) => ({
+      ...setting,
+      items: setting.items.filter((item: any) => canSeeOrgItem(getItemLabel(item))),
+    }))
+    .filter((setting) => setting.items.length > 0);
+
+  const moduleSettingsVisible = moduleSettings
+    .map((setting) => ({
+      ...setting,
+      items: setting.items.filter((item: any) => canSeeModuleItem(setting.title, getItemLabel(item))),
+    }))
+    .filter((setting) => setting.items.length > 0);
+
+  const extensionSettingsVisible = extensionSettings
+    .map((setting) => ({
+      ...setting,
+      items: setting.items.filter(() => canSeeExtensionItem()),
+    }))
+    .filter((setting) => setting.items.length > 0);
+
+  const filteredOrgSettings = filterItems(orgSettingsVisible, searchQuery);
+  const filteredModuleSettings = filterItems(moduleSettingsVisible, searchQuery);
+  const filteredExtensionSettings = filterItems(extensionSettingsVisible, searchQuery);
 
   // Hide sidebar when on settings page
   useEffect(() => {
