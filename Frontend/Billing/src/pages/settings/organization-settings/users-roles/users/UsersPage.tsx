@@ -716,6 +716,7 @@ export default function UsersPage() {
         accessibleLocations: userDetails?.accessibleLocations || [],
         defaultBusinessLocation: userDetails?.defaultBusinessLocation || null,
         defaultWarehouseLocation: userDetails?.defaultWarehouseLocation || null,
+        app: "billing",
       });
 
       if (response.success) {
@@ -899,6 +900,7 @@ export default function UsersPage() {
           accessibleLocations,
           defaultBusinessLocation: defaultBusinessLocation || null,
           defaultWarehouseLocation: defaultWarehouseLocation || null,
+          app: "billing",
         });
 
         if (sendInviteResponse.success) {
@@ -968,6 +970,7 @@ export default function UsersPage() {
           accessibleLocations,
           defaultBusinessLocation: defaultBusinessLocation || null,
           defaultWarehouseLocation: defaultWarehouseLocation || null,
+          app: "billing",
         });
 
         if (sendInviteResponse.success) {

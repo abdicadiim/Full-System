@@ -128,6 +128,7 @@ export default function NewUserPage() {
           defaultBusinessLocation: defaultBusinessLocation || null,
           defaultWarehouseLocation: defaultWarehouseLocation || null,
           tempPassword: password,
+          app: "billing",
         });
 
         if (inviteResponse.success) {
