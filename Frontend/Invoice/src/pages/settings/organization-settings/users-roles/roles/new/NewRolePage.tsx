@@ -2,6 +2,7 @@
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { HelpCircle, Lock, ChevronRight, ChevronDown, AlertCircle, X } from "lucide-react";
 import { rolesAPI } from "../../../../../../services/api";
+import { AUTH_USER_REFRESH_EVENT } from "../../../../../../services/auth";
 
 const isPlainObject = (value: any) =>
   value && typeof value === "object" && !Array.isArray(value);
@@ -3988,6 +3989,7 @@ export default function NewRolePage() {
                 : await rolesAPI.create(roleData);
 
               if (response.success) {
+                window.dispatchEvent(new Event(AUTH_USER_REFRESH_EVENT));
                 navigate("/settings/roles");
               } else {
                 setError(response.message || (isEditMode ? "Failed to update role" : "Failed to create role"));
