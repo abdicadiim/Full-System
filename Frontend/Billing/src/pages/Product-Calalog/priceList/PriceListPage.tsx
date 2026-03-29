@@ -432,14 +432,16 @@ export default function PriceListPage() {
                                     </button>
                                     {moreOpen && (
                                         <div className="absolute top-full right-0 mt-2 w-56 overflow-hidden rounded-xl border border-[#d8deea] bg-white py-2 shadow-xl z-[110] animate-in fade-in slide-in-from-top-1 duration-150">
-                                            <button
-                                                type="button"
-                                                onClick={handleOpenImport}
-                                                className="w-full flex items-center gap-3 px-4 py-2 text-[14px] text-[#2563eb] transition-colors hover:bg-[#2563eb] hover:text-white group"
-                                            >
-                                                <Download size={15} className="text-[#2563eb] group-hover:text-white" />
-                                                Import Sales Price List
-                                            </button>
+                                            {canCreatePriceList ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleOpenImport}
+                                                    className="w-full flex items-center gap-3 px-4 py-2 text-[14px] text-[#2563eb] transition-colors hover:bg-[#2563eb] hover:text-white group"
+                                                >
+                                                    <Download size={15} className="text-[#2563eb] group-hover:text-white" />
+                                                    Import Sales Price List
+                                                </button>
+                                            ) : null}
                                             <button
                                                 type="button"
                                                 onClick={handleExport}
