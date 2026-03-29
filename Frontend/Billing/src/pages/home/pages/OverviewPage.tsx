@@ -518,17 +518,19 @@ function ProjectsCard({
   );
 }
 
-function DashboardHero() {
+function DashboardHero({ baseCurrencyCode }: { baseCurrencyCode?: string } = {}) {
   const [activeTab, setActiveTab] = useState<"dashboard" | "getting-started" | "recent-updates">("dashboard");
   const [pageRange, setPageRange] = useState("Last 12 months");
   const { user } = useUser();
   const { settings } = useSettings();
+  const { baseCurrency } = useCurrency();
 
   const displayName = user?.name || "User";
   const displayEmail = user?.email || "";
   const avatarSrc = String(user?.photoUrl || "").trim();
   const organizationName =
     settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "Organization";
+  const resolvedCurrencyCode = String(baseCurrencyCode || baseCurrency?.code || "").trim().toUpperCase();
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -556,6 +558,11 @@ function DashboardHero() {
               <h1 className="text-[18px] font-medium text-slate-900">{`Hello, ${displayName}`}</h1>
               {displayEmail ? <div className="mt-1 text-[13px] text-slate-500">{displayEmail}</div> : null}
               <div className="mt-1 text-[14px] text-slate-500">{organizationName}</div>
+              {resolvedCurrencyCode ? (
+                <div className="mt-2 inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 shadow-sm">
+                  Base currency: {resolvedCurrencyCode}
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -652,7 +659,7 @@ export default function OverviewPage() {
   if (permissionsLoading) {
     return (
       <div className="mr-auto w-full max-w-[1500px] space-y-4 px-4 py-4 pr-7 md:px-5 md:pr-10 xl:pr-16 2xl:pr-20">
-        <DashboardHero />
+        <DashboardHero baseCurrencyCode={baseCurrency?.code} />
         <Card className="border-slate-200 p-8 text-sm text-slate-500">Checking dashboard permissions...</Card>
       </div>
     );
@@ -680,7 +687,7 @@ export default function OverviewPage() {
 
   return (
     <div className="mr-auto w-full max-w-[1500px] space-y-4 px-4 py-4 pr-7 md:px-5 md:pr-10 xl:pr-16 2xl:pr-20">
-      <DashboardHero />
+      <DashboardHero baseCurrencyCode={dashboardCurrencyCode} />
 
       {summaryError ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
