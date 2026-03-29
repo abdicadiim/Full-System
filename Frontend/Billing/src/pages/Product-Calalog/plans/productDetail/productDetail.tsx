@@ -106,9 +106,9 @@ export default function ProductDetailPage() {
   const canCreateProduct = canCreate("products", "Products");
   const canEditProduct = canEdit("products", "Products");
   const canDeleteProduct = canDelete("products", "Products");
-  const canCreatePlan = canCreate("products", "Plan");
-  const canCreateAddon = canCreate("products", "Addon");
-  const canCreateCoupon = canCreate("products", "Coupon");
+  const canCreatePlan = canCreate("products", "Plan") || canCreateProduct;
+  const canCreateAddon = canCreate("products", "Addon") || canCreateProduct;
+  const canCreateCoupon = canCreate("products", "Coupon") || canCreateProduct;
 
   const refreshProducts = async (silent = false) => {
     if (!silent && mountedRef.current) setProductsLoading(true);
