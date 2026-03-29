@@ -2003,7 +2003,7 @@ export const transactionNumberSeriesAPI = {
 
     const all = await txSeriesLocal.getAll({ limit: 10000 });
     const rows = all.data || [];
-    const selected = resolveTxSeriesRow(rows, normalized) || defaultTxSeries[0];
+    const selected = resolveTxSeriesRow(rows, normalized) || (!normalized.seriesId && !normalized.module && !normalized.moduleKey && !normalized.seriesName ? defaultTxSeries[0] : null);
     if (!selected) {
       return { success: false, message: "Transaction series not found", data: null };
     }
