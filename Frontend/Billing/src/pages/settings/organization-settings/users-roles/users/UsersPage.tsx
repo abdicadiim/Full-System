@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Play, MoreVertical, ChevronDown, X, Eye, EyeOff, Plus, Check, Search, Minus, ArrowLeft, Info, User as UserIcon, Pencil, Star } from "lucide-react";
 import { usersAPI, rolesAPI, locationsAPI } from "../../../../../services/api";
-import { getCurrentUser, setCurrentUser } from "../../../../../services/auth";
+import { setCurrentUser } from "../../../../../services/auth";
+import { usePermissions } from "../../../../../hooks/usePermissions";
 import Skeleton from "../../../../../components/ui/Skeleton";
 
 const STANDARD_ROLE_OPTIONS = [
@@ -169,8 +170,8 @@ const LocationDropdown = ({
   );
 };
 export default function UsersPage() {
-  const currentUser = getCurrentUser();
-  const canManageUsers = ["owner", "admin"].includes(String(currentUser?.role || "").toLowerCase());
+  const { hasPermission } = usePermissions();
+  const canManageUsers = hasPermission("settings", "Users");
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(false);
