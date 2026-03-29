@@ -507,12 +507,14 @@ export default function PriceListPage() {
                                                             <Box size={32} />
                                                         </div>
                                                         <p className="text-gray-500 font-medium">No price lists found</p>
-                                                        <button 
-                                                            onClick={openNewPriceList}
-                                                            className="text-blue-600 hover:text-blue-700 font-semibold text-sm"
-                                                        >
-                                                            Create your first price list
-                                                        </button>
+                                                        {canCreatePriceList ? (
+                                                            <button 
+                                                                onClick={openNewPriceList}
+                                                                className="text-blue-600 hover:text-blue-700 font-semibold text-sm"
+                                                            >
+                                                                Create your first price list
+                                                            </button>
+                                                        ) : null}
                                                     </div>
                                                 </td>
                                             </tr>
@@ -568,13 +570,15 @@ export default function PriceListPage() {
                                     </div>
                                     <h2 className="text-[26px] font-medium text-slate-800 mb-2">Customize Your Item Pricing with Flexibility</h2>
                                     <p className="text-slate-500 text-[14px] mb-8 max-w-md mx-auto">Create and manage multiple pricelists tailored to different customer segments, currencies, and pricing schemes.</p>
-                                    <button
-                                        onClick={openNewPriceList}
-                                        className="text-white px-10 py-2.5 rounded font-bold text-[13px] uppercase tracking-widest mb-10 transition-all hover:brightness-110 active:scale-95 shadow-md border-b-[4px] border-[#0D4A52]"
-                                        style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
-                                    >
-                                        Create New Pricelist
-                                    </button>
+                                    {canCreatePriceList ? (
+                                        <button
+                                            onClick={openNewPriceList}
+                                            className="text-white px-10 py-2.5 rounded font-bold text-[13px] uppercase tracking-widest mb-10 transition-all hover:brightness-110 active:scale-95 shadow-md border-b-[4px] border-[#0D4A52]"
+                                            style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
+                                        >
+                                            Create New Pricelist
+                                        </button>
+                                    ) : null}
 
                                     <div className="w-full max-w-5xl px-8 opacity-90">
                                         <h3 className="text-slate-700 text-[15px] font-medium mb-10">Life cycle of Price Lists</h3>
