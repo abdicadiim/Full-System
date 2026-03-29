@@ -118,23 +118,6 @@ export default function AllSettings() {
 
   const canSeeExtensionItem = () => hasSettingsAccess;
 
-  // Helper to check permissions
-  // Return true if access allowed
-  const checkPermission = (key: string, subKey?: string) => {
-    if (!user) return false;
-    if (user.role === 'owner' || user.role === 'admin' || permissions === 'full_access') return true;
-    if (!permissions) return false;
-
-    // Check settings permissions
-    const p = permissions.settings;
-    if (!p) return false;
-
-    if (subKey) {
-      return p[key]?.[subKey]?.view; // e.g. p.usersRoles.view
-    }
-    return p[key]?.view;
-  };
-
   // Sections are hardcoded to visible: true per user request "i need all of them disply it"
   const organizationSettings = [
     {
