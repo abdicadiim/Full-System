@@ -804,23 +804,6 @@ export default function NewAddonPage() {
     })();
   }, [addonId, isEditMode, navigate, productPrefill]);
 
-  if (permissionsLoading) {
-    return (
-      <div className="flex min-h-[40vh] w-full items-center justify-center p-6 text-sm text-gray-500">
-        Loading permissions...
-      </div>
-    );
-  }
-
-  if ((isEditMode && !canEditAddon) || (!isEditMode && !canCreateAddon)) {
-    return (
-      <AccessDenied
-        title="Addons access required"
-        message={isEditMode ? "Your role does not include permission to edit Addons." : "Your role does not include permission to create Addons."}
-      />
-    );
-  }
-
   const handleSave = () => {
     const product = form.product.trim();
     const productId = productNameToId[product.toLowerCase()];
