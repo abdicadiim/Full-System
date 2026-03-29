@@ -4,6 +4,7 @@ import { Play, MoreVertical, ChevronDown, X, Eye, EyeOff, Plus, Check, Search, M
 import { usersAPI, rolesAPI, locationsAPI } from "../../../../../services/api";
 import { usePermissions } from "../../../../../hooks/usePermissions";
 import Skeleton from "../../../../../components/ui/Skeleton";
+import AccessDenied from "../../../../../components/AccessDenied";
 
 const STANDARD_ROLE_OPTIONS = [
   { value: "admin", label: "Admin" },
@@ -169,7 +170,7 @@ const LocationDropdown = ({
   );
 };
 export default function UsersPage() {
-  const { hasPermission } = usePermissions();
+  const { hasPermission, loading: permissionsLoading } = usePermissions();
   const canManageUsers = hasPermission("settings", "Users");
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
@@ -1040,6 +1041,23 @@ export default function UsersPage() {
     const index = (upperLetter.charCodeAt(0) - 65) % colors.length;
     return colors[index >= 0 ? index : 0];
   };
+
+  if (permissionsLoading) {
+    return (
+      <div className="flex min-h-[40vh] w-full items-center justify-center p-6 text-sm text-gray-500">
+        Loading permissions...
+      </div>
+    );
+  }
+
+  if (!canManageUsers) {
+    return (
+      <AccessDenied
+        title="Users access required"
+        message="Your role does not include permission to manage users."
+      />
+    );
+  }
 
   return (
     <div className="flex gap-0 h-full">

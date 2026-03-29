@@ -3,12 +3,16 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { HelpCircle, ChevronRight, ChevronDown, AlertCircle, Lock } from "lucide-react";
 import { rolesAPI } from "../../../../../../services/api";
 import { AUTH_USER_REFRESH_EVENT } from "../../../../../../services/auth";
+import { usePermissions } from "../../../../../../hooks/usePermissions";
+import AccessDenied from "../../../../../../components/AccessDenied";
 
 export default function NewRolePage() {
   const navigate = useNavigate();
   const { id } = useParams();
   const location = useLocation();
   const isEditMode = Boolean(id);
+  const { hasPermission, loading: permissionsLoading } = usePermissions();
+  const canManageRoles = hasPermission("settings", "Roles");
   const [isLoadingRole, setIsLoadingRole] = useState(isEditMode);
   const [roleName, setRoleName] = useState("");
   const [description, setDescription] = useState("");
@@ -264,6 +268,23 @@ export default function NewRolePage() {
       isMounted = false;
     };
   }, [id, isEditMode]);
+
+  if (permissionsLoading) {
+    return (
+      <div className="flex min-h-[40vh] w-full items-center justify-center p-6 text-sm text-gray-500">
+        Loading permissions...
+      </div>
+    );
+  }
+
+  if (!canManageRoles) {
+    return (
+      <AccessDenied
+        title="Roles access required"
+        message="Your role does not include permission to create or edit roles."
+      />
+    );
+  }
 
   const handlePermChange = (section: string, item: string, action: string, value: boolean) => {
     setPermissions(prev => {

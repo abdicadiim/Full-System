@@ -3,6 +3,8 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { HelpCircle, Lock, ChevronRight, ChevronDown, AlertCircle, X } from "lucide-react";
 import { rolesAPI } from "../../../../../../services/api";
 import { AUTH_USER_REFRESH_EVENT } from "../../../../../../services/auth";
+import { usePermissions } from "../../../../../../hooks/usePermissions";
+import AccessDenied from "../../../../../../components/AccessDenied";
 
 const isPlainObject = (value: any) =>
   value && typeof value === "object" && !Array.isArray(value);
@@ -36,6 +38,8 @@ export default function NewRolePage() {
   const { id } = useParams();
   const location = useLocation();
   const isEditMode = Boolean(id);
+  const { hasPermission, loading: permissionsLoading } = usePermissions();
+  const canManageRoles = hasPermission("settings", "Roles");
   const [isLoadingRole, setIsLoadingRole] = useState(isEditMode);
   const [roleName, setRoleName] = useState("");
   const [description, setDescription] = useState("");
@@ -604,6 +608,23 @@ export default function NewRolePage() {
       isMounted = false;
     };
   }, [id, isEditMode, location.state]);
+
+  if (permissionsLoading) {
+    return (
+      <div className="flex min-h-[40vh] w-full items-center justify-center p-6 text-sm text-gray-500">
+        Loading permissions...
+      </div>
+    );
+  }
+
+  if (!canManageRoles) {
+    return (
+      <AccessDenied
+        title="Roles access required"
+        message="Your role does not include permission to create or edit roles."
+      />
+    );
+  }
 
   const toggleGroup = (groupName) => {
     setExpandedGroups(prev => ({

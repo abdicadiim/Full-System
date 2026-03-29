@@ -5,6 +5,7 @@ import { Loader2, MoreVertical, Eye, Copy, Trash2 } from "lucide-react";
 import { rolesAPI } from "../../../../../services/api";
 import { usePermissions } from "../../../../../hooks/usePermissions";
 import Skeleton from "../../../../../components/ui/Skeleton";
+import AccessDenied from "../../../../../components/AccessDenied";
 
 const STANDARD_ROLES = [
   {
@@ -34,7 +35,7 @@ const STANDARD_ROLES = [
 ];
 export default function RolesPage() {
   const navigate = useNavigate();
-  const { hasPermission } = usePermissions();
+  const { hasPermission, loading: permissionsLoading } = usePermissions();
   const canManageRoles = hasPermission("settings", "Roles");
   const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -231,6 +232,23 @@ export default function RolesPage() {
       setOpenMenuId(roleId);
     }
   };
+
+  if (permissionsLoading) {
+    return (
+      <div className="flex min-h-[40vh] w-full items-center justify-center p-6 text-sm text-gray-500">
+        Loading permissions...
+      </div>
+    );
+  }
+
+  if (!canManageRoles) {
+    return (
+      <AccessDenied
+        title="Roles access required"
+        message="Your role does not include permission to manage roles."
+      />
+    );
+  }
 
 
   return (
