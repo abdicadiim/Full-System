@@ -124,12 +124,12 @@ export const getDashboardSummary: express.RequestHandler = async (req, res) => {
 
   const [customers, projects, invoices, payments, expenses, subscriptions, timeEntries] = await Promise.all([
     Customer.find({ organizationId: orgId }).lean(),
-    projectAccessAllowed ? Project.find({ organizationId: orgId }).lean() : Promise.resolve([]),
+    projectAccessAllowed ? Project.find({ organizationId: orgId }).lean() : Promise.resolve([] as any[]),
     Invoice.find({ organizationId: orgId }).lean(),
     PaymentReceived.find({ organizationId: orgId }).lean(),
     Expense.find({ organizationId: orgId }).lean(),
     Subscription.find({ organizationId: orgId }).lean(),
-    projectAccessAllowed ? TimeEntry.find({ organizationId: orgId }).lean() : Promise.resolve([]),
+    projectAccessAllowed ? TimeEntry.find({ organizationId: orgId }).lean() : Promise.resolve([] as any[]),
   ]);
   const organization = await Organization.findById(orgId).lean();
 
