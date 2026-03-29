@@ -2294,7 +2294,7 @@ export default function Invoices() {
                         handleCreateNewInvoice();
                         setIsNewDropdownOpen(false);
                       }}
-                      className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                      className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
                     >
                       Invoice
                     </button>
@@ -2304,7 +2304,7 @@ export default function Invoices() {
                         handleCreateNewCreditNote();
                         setIsNewDropdownOpen(false);
                       }}
-                      className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                      className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
                     >
                       Credit Note
                     </button>
@@ -2314,7 +2314,7 @@ export default function Invoices() {
                         handleCreateDebitNote();
                         setIsNewDropdownOpen(false);
                       }}
-                      className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                      className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
                     >
                       Debit Note
                     </button>

@@ -124,6 +124,7 @@ export default function AppRoutes() {
       <Route path="/sales/receipts/*" element={<Navigate to="/sales/sales-receipts" replace />} />
       <Route path="/sales/sales-receipts/*" element={<SalesReceiptsRoutes />} />
       <Route path="/sales/credit-notes/*" element={<CreditNotesRoutes />} />
+      <Route path="/sales/debit-notes/:id/edit" element={<NewDebitNote />} />
       <Route path="/sales/debit-notes/new" element={<NewDebitNote />} />
       <Route path="/sales/debit-notes/:id" element={<InvoiceDetail />} />
 
@@ -147,8 +148,9 @@ export default function AppRoutes() {
       <Route path="/products/items/new" element={<Navigate to="/products/items" replace />} />
       <Route path="/products/plans" element={<PlansPage />} />
       <Route path="/products/plans/import" element={<ImportPlansPage />} />
+      <Route path="/products/products" element={<PlansPage />} />
       <Route path="/products/products/import" element={<ImportProductsPage />} />
-      <Route path="/products/products/new" element={<Navigate to="/products/plans?tab=products" replace />} />
+      <Route path="/products/products/new" element={<Navigate to="/products/products?new=1" replace />} />
       <Route path="/products/products/:productId" element={<ProductDetailPage />} />
       <Route path="/products/plans/new" element={<NewPlanPage />} />
       <Route path="/products/plans/:planId" element={<PlanDetailPage />} />

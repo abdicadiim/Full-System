@@ -485,9 +485,21 @@ export const saveInvoice = async (invoiceData: Partial<Invoice>): Promise<Invoic
       const saved = response.data;
       return { ...saved, id: saved._id || saved.id };
     }
-    throw new Error("Failed to create invoice");
+    const message =
+      String(response?.message || response?.data?.message || response?.error || "Failed to create invoice").trim();
+    const error: any = new Error(message || "Failed to create invoice");
+    if (response && typeof response.status === "number") {
+      error.status = response.status;
+    }
+    if (response?.data !== undefined) {
+      error.data = response.data;
+    }
+    throw error;
   } catch (error) {
-    console.error("Error saving invoice to API:", error);
+    const status = Number((error as any)?.status || (error as any)?.response?.status || 0);
+    if (status !== 409) {
+      console.error("Error saving invoice to API:", error);
+    }
     throw error;
   }
 };

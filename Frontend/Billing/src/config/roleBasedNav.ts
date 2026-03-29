@@ -34,6 +34,7 @@ const baseSections: NavSection[] = [
 const subMenus: NavConfig["subMenus"] = {
   "/products": [
     { label: "Items", to: "/products/items" },
+    { label: "Product", to: "/products/products" },
     { label: "Plans", to: "/products/plans" },
     { label: "Addons", to: "/products/addons" },
     { label: "Coupons", to: "/products/coupons" },

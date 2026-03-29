@@ -16,6 +16,7 @@ import ReportsRoutes from '../pages/reports/ReportsRoutes'
 import TaxesRoutes from '../pages/taxes/TaxesRoutes'
 import OrgsRoutes from '../pages/orgs/OrgsRoutes'
 import QuotesRoutes from '../pages/Quotes/QuotesRoutes'
+import InvoiceDetail from '../pages/Invoices/InvoiceDetail/InvoiceDetail'
 import NewDebitNote from '../pages/DebitNotes/NewDebitNote/NewDebitNote'
 import ItemsPage from '../pages/items/ItemsPage'
 import ImportItems from '../pages/items/ImportItems'
@@ -105,6 +106,7 @@ export default function AppRoutes() {
       <Route path="/sales/sales-receipts/*" element={<SalesReceiptsRoutes />} />
       <Route path="/sales/credit-notes/*" element={<CreditNotesRoutes />} />
       <Route path="/sales/recurring-invoices/*" element={<RecurringInvoicesRoutes />} />
+      <Route path="/sales/debit-notes/:id" element={<InvoiceDetail />} />
       <Route path="/sales/debit-notes/new" element={<NewDebitNote />} />
       <Route path="/sales/customer/*" element={<LegacyCustomersRedirect />} />
       <Route path="/customers/*" element={<LegacyCustomersRedirect />} />

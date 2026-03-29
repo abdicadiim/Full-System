@@ -64,7 +64,6 @@ const MAX_COLUMN_WIDTH = 900;
 
 const DEFAULT_PLAN_COLUMNS: ColumnConfig[] = [
     { key: "plan", label: "PLAN", visible: true, pinned: true, locked: true, width: 220 },
-    { key: "product", label: "PRODUCT", visible: true, width: 160 },
     { key: "planCode", label: "PLAN CODE", visible: true, width: 170 },
     { key: "description", label: "DESCRIPTION", visible: true, width: 420 },
     { key: "status", label: "STATUS", visible: true, width: 120 },
@@ -327,11 +326,18 @@ export default function PlansPage() {
     }, [productColumns]);
 
     useEffect(() => {
-        const qTab = new URLSearchParams(location.search).get("tab");
-        if (qTab === "products" || qTab === "plans") {
-            setTab(qTab);
+        const isProductRoute = location.pathname.startsWith("/products/products");
+        const qNew = new URLSearchParams(location.search).get("new");
+        setTab(isProductRoute ? "products" : "plans");
+        if (isProductRoute && qNew === "1") {
+            setNewProductModalOpen(true);
         }
-    }, [location.search]);
+    }, [location.pathname, location.search]);
+
+    useEffect(() => {
+        setSortKey(tab === "products" ? "name" : "plan");
+        setSortOrder("asc");
+    }, [tab]);
 
     useEffect(() => {
         const onClickOutside = (event: MouseEvent) => {
@@ -725,7 +731,6 @@ export default function PlansPage() {
         tab === "plans"
             ? [
                 { key: "plan", label: "Plan" },
-                { key: "product", label: "Product" },
                 { key: "planCode", label: "Plan Code" },
                 { key: "price", label: "Price" },
             ]
@@ -820,75 +825,62 @@ export default function PlansPage() {
             ) : (
                 <div className="flex-none flex items-center justify-between px-6 py-6 border-b border-gray-100 bg-white relative overflow-visible z-30">
                     <div className="flex items-center gap-6 pl-4">
-                        <div className="relative" ref={allPlansRef}>
-                            <button
-                                onClick={() => {
-                                    if (tab === "plans") {
-                                        setAllPlansDropdownOpen((prev) => !prev);
-                                    } else {
-                                        setTab("plans");
-                                        setAllProductsDropdownOpen(false);
-                                    }
-                                }}
-                                className={`flex items-center gap-1.5 py-4 text-[15px] font-bold border-b-2 -mb-[1px] ${tab === "plans" ? "text-slate-900 border-slate-900" : "text-slate-500 border-transparent hover:text-slate-700"
-                                    }`}
-                            >
-                                {tab === "plans" ? "All Plans" : "Plans"}
-                                {tab === "plans" ? <ChevronDown size={14} className="text-[#2563eb]" /> : null}
-                            </button>
-                            {tab === "plans" && allPlansDropdownOpen && (
-                                <div className="absolute left-0 top-full z-[120] mt-1 w-48 rounded-md border border-gray-200 bg-white py-1 shadow-xl">
-                                    {(["All Plans", "Active Plans", "Inactive Plans"] as const).map((option) => (
-                                        <button
-                                            key={option}
-                                            onClick={() => {
-                                                setPlanStatusFilter(option);
-                                                setAllPlansDropdownOpen(false);
-                                            }}
-                                            className={`w-full px-4 py-2 text-left text-sm ${planStatusFilter === option ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-gray-50"
-                                                }`}
-                                        >
-                                            {option}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
+                        {tab === "plans" ? (
+                            <div className="relative" ref={allPlansRef}>
+                                <button
+                                    onClick={() => setAllPlansDropdownOpen((prev) => !prev)}
+                                    className="flex items-center gap-1.5 py-4 text-[15px] font-bold border-b-2 -mb-[1px] text-slate-900 border-slate-900"
+                                >
+                                    All Plans
+                                    <ChevronDown size={14} className="text-[#2563eb]" />
+                                </button>
+                                {allPlansDropdownOpen && (
+                                    <div className="absolute left-0 top-full z-[120] mt-1 w-48 rounded-md border border-gray-200 bg-white py-1 shadow-xl">
+                                        {(["All Plans", "Active Plans", "Inactive Plans"] as const).map((option) => (
+                                            <button
+                                                key={option}
+                                                onClick={() => {
+                                                    setPlanStatusFilter(option);
+                                                    setAllPlansDropdownOpen(false);
+                                                }}
+                                                className={`w-full px-4 py-2 text-left text-sm ${planStatusFilter === option ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-gray-50"
+                                                    }`}
+                                            >
+                                                {option}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="relative" ref={allProductsRef}>
+                                <button
+                                    onClick={() => setAllProductsDropdownOpen((prev) => !prev)}
+                                    className="flex items-center gap-1.5 py-4 text-[15px] font-bold border-b-2 -mb-[1px] text-slate-900 border-slate-900"
+                                >
+                                    All Products
+                                    <ChevronDown size={14} className="text-[#2563eb]" />
+                                </button>
+                                {allProductsDropdownOpen && (
+                                    <div className="absolute left-0 top-full z-[120] mt-1 w-48 rounded-md border border-gray-200 bg-white py-1 shadow-xl">
+                                        {(["All Products", "Active Products", "Inactive Products"] as const).map((option) => (
+                                            <button
+                                                key={option}
+                                                onClick={() => {
+                                                    setProductStatusFilter(option);
+                                                    setAllProductsDropdownOpen(false);
+                                                }}
+                                                className={`w-full px-4 py-2 text-left text-sm ${productStatusFilter === option ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-gray-50"
+                                                    }`}
+                                            >
+                                                {option}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
-                        <div className="relative" ref={allProductsRef}>
-                            <button
-                                onClick={() => {
-                                    if (tab === "products") {
-                                        setAllProductsDropdownOpen((prev) => !prev);
-                                    } else {
-                                        setTab("products");
-                                        setAllPlansDropdownOpen(false);
-                                    }
-                                }}
-                                className={`flex items-center gap-1.5 py-4 text-[15px] font-bold border-b-2 -mb-[1px] ${tab === "products" ? "text-slate-900 border-slate-900" : "text-slate-500 border-transparent hover:text-slate-700"
-                                    }`}
-                            >
-                                {tab === "products" ? "All Products" : "Products"}
-                                {tab === "products" ? <ChevronDown size={14} className="text-[#2563eb]" /> : null}
-                            </button>
-                            {tab === "products" && allProductsDropdownOpen && (
-                                <div className="absolute left-0 top-full z-[120] mt-1 w-48 rounded-md border border-gray-200 bg-white py-1 shadow-xl">
-                                    {(["All Products", "Active Products", "Inactive Products"] as const).map((option) => (
-                                        <button
-                                            key={option}
-                                            onClick={() => {
-                                                setProductStatusFilter(option);
-                                                setAllProductsDropdownOpen(false);
-                                            }}
-                                            className={`w-full px-4 py-2 text-left text-sm ${productStatusFilter === option ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-gray-50"
-                                                }`}
-                                        >
-                                            {option}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-3 sm:gap-2 mr-4">

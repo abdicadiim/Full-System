@@ -1251,6 +1251,15 @@ export default function InvoiceDetail() { // Start of component
   const handleMarkAsSent = async () => {
     if (invoice) {
       try {
+        const resolveDebitNotePostSendStatus = (dueDateValue: any) => {
+          if (!dueDateValue) return "due";
+          const dueDate = new Date(dueDateValue);
+          if (Number.isNaN(dueDate.getTime())) return "due";
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          dueDate.setHours(0, 0, 0, 0);
+          return dueDate.getTime() < today.getTime() ? "overdue" : "due";
+        };
         const resolvePostSendStatus = (dueDateValue: any) => {
           if (!dueDateValue) return "unpaid";
           const dueDate = new Date(dueDateValue);
@@ -1261,14 +1270,26 @@ export default function InvoiceDetail() { // Start of component
           return dueDate.getTime() < today.getTime() ? "overdue" : "unpaid";
         };
 
-        const nextStatus = resolvePostSendStatus(invoice.dueDate);
-        const updatedInvoice = await updateInvoice(id, { ...invoice, status: nextStatus });
-        if (updatedInvoice) {
-          setInvoice(updatedInvoice);
-          // Update in list
-          const updatedInvoices = invoices.map(inv => inv.id === id ? updatedInvoice : inv);
-          setInvoices(updatedInvoices);
-          toast("Invoice updated successfully.");
+        if (isDebitNoteView) {
+          const nextStatus = resolveDebitNotePostSendStatus(invoice.dueDate);
+          const updatedDebitNote = await debitNotesAPI.update(id, { ...invoice, status: nextStatus } as any);
+          const nextInvoice = (updatedDebitNote as any)?.data || updatedDebitNote;
+          if (nextInvoice) {
+            setInvoice(nextInvoice);
+            const updatedInvoices = invoices.map(inv => inv.id === id ? nextInvoice : inv);
+            setInvoices(updatedInvoices);
+            toast("Debit note updated successfully.");
+          }
+        } else {
+          const nextStatus = resolvePostSendStatus(invoice.dueDate);
+          const updatedInvoice = await updateInvoice(id, { ...invoice, status: nextStatus });
+          if (updatedInvoice) {
+            setInvoice(updatedInvoice);
+            // Update in list
+            const updatedInvoices = invoices.map(inv => inv.id === id ? updatedInvoice : inv);
+            setInvoices(updatedInvoices);
+            toast("Invoice updated successfully.");
+          }
         }
       } catch (error: any) {
         console.error("Error marking invoice as sent:", error);
@@ -1278,7 +1299,52 @@ export default function InvoiceDetail() { // Start of component
   };
 
   const handleSendInvoice = () => {
+    if (isDebitNoteView) {
+      void handleSendDebitNote();
+      return;
+    }
     handleSendEmail();
+  };
+
+  const handleSendDebitNote = async () => {
+    if (!id) return;
+    try {
+      const customerEmail = String(
+        (invoice as any)?.customerEmail ||
+        (typeof invoice?.customer === "object" ? invoice?.customer?.email || "" : "") ||
+        ""
+      ).trim();
+      if (!customerEmail) {
+        toast("Customer email not found.");
+        return;
+      }
+
+      await debitNotesAPI.sendEmail(id, {
+        to: customerEmail,
+        subject: `Debit Note ${invoice?.debitNoteNumber || invoice?.invoiceNumber || ""}`.trim(),
+        body: `Please find attached Debit Note ${invoice?.debitNoteNumber || invoice?.invoiceNumber || ""}.`,
+      });
+
+      const dueDateValue = (invoice as any)?.dueDate;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const dueDate = dueDateValue ? new Date(dueDateValue) : null;
+      if (dueDate && !Number.isNaN(dueDate.getTime())) {
+        dueDate.setHours(0, 0, 0, 0);
+      }
+      const nextStatus = dueDate && !Number.isNaN(dueDate.getTime()) && dueDate.getTime() < today.getTime() ? "overdue" : "due";
+      const updatedDebitNote = await debitNotesAPI.update(id, { ...invoice, status: nextStatus } as any);
+      const nextInvoice = (updatedDebitNote as any)?.data || updatedDebitNote;
+      if (nextInvoice) {
+        setInvoice(nextInvoice);
+        const updatedInvoices = invoices.map(inv => inv.id === id ? nextInvoice : inv);
+        setInvoices(updatedInvoices);
+      }
+      toast("Debit note sent successfully!");
+    } catch (error: any) {
+      console.error("Error sending debit note:", error);
+      toast("Failed to send debit note: " + error.message);
+    }
   };
 
   const handleSendEmail = () => {
@@ -3197,12 +3263,120 @@ export default function InvoiceDetail() { // Start of component
       return sum + (value > 0 ? value : 0);
     }, 0);
   })();
+  const paymentDisplayRows = (() => {
+    const normalizedPayments = (Array.isArray(payments) ? payments : []).map((payment: any, index: number) => {
+      const rowId = String(payment?.id || payment?._id || payment?.paymentNumber || `payment-${index + 1}`).trim();
+      return {
+        ...payment,
+        id: rowId,
+        paymentId: rowId,
+        date: payment?.paymentDate || payment?.date || payment?.createdAt || payment?.updatedAt || "",
+        paymentNumber: payment?.paymentNumber || payment?.number || rowId || "-",
+        referenceNumber: payment?.referenceNumber || payment?.paymentReference || payment?.reference || "-",
+        paymentMode: payment?.paymentMode || payment?.paymentMethod || "-",
+        amountReceived: payment?.amountReceived ?? payment?.amount ?? 0,
+        amount: payment?.amountReceived ?? payment?.amount ?? 0,
+        earlyPaymentDiscount: payment?.earlyPaymentDiscount ?? payment?.discountAmount ?? 0,
+        isSyntheticRetainer: false,
+      };
+    });
+
+    const retainerRows = Array.isArray((invoice as any)?.retainerApplications)
+      ? (invoice as any).retainerApplications
+          .map((application: any, index: number) => {
+            const appliedAmount =
+              toNumber(application?.amount) ||
+              toNumber(application?.amountApplied) ||
+              toNumber(application?.appliedAmount) ||
+              toNumber(application?.applied);
+            if (appliedAmount <= 0) return null;
+
+            const rowId = String(
+              application?.paymentId ||
+                application?.retainerId ||
+                application?.retainerNumber ||
+                `retainer-${index + 1}`
+            ).trim();
+
+            return {
+              id: rowId,
+              paymentId: String(application?.paymentId || rowId).trim(),
+              paymentDate: application?.appliedAt || application?.date || "",
+              date: application?.appliedAt || application?.date || (invoice as any)?.invoiceDate || (invoice as any)?.date || (invoice as any)?.createdAt || "",
+              paymentNumber: application?.retainerNumber || application?.paymentNumber || application?.paymentId || rowId || "Retainer",
+              referenceNumber: application?.paymentNumber || application?.paymentId || application?.retainerId || "-",
+              paymentMode: "Retainer",
+              amountReceived: appliedAmount,
+              amount: appliedAmount,
+              earlyPaymentDiscount: 0,
+              status: "paid",
+              isSyntheticRetainer: true,
+              raw: application,
+            };
+          })
+          .filter(Boolean)
+      : [];
+
+    const fallbackRetainerRow =
+      retainerRows.length === 0 && retainerAppliedAmount > 0
+        ? [{
+            id: `retainer-summary-${String((invoice as any)?.id || (invoice as any)?._id || "current")}`,
+            paymentId: `retainer-summary-${String((invoice as any)?.id || (invoice as any)?._id || "current")}`,
+            paymentDate: (invoice as any)?.invoiceDate || (invoice as any)?.date || (invoice as any)?.createdAt || "",
+            date: (invoice as any)?.invoiceDate || (invoice as any)?.date || (invoice as any)?.createdAt || "",
+            paymentNumber: (invoice as any)?.invoiceNumber || "Retainer",
+            referenceNumber: "-",
+            paymentMode: "Retainer",
+            amountReceived: retainerAppliedAmount,
+            amount: retainerAppliedAmount,
+            earlyPaymentDiscount: 0,
+            status: "paid",
+            isSyntheticRetainer: true,
+            raw: null,
+          }]
+        : [];
+
+    const mergedRows = [...normalizedPayments];
+    [...retainerRows, ...fallbackRetainerRow].forEach((row: any) => {
+      const rowKey = normalizeKey(
+        [
+          row?.id,
+          row?.paymentId,
+          row?.paymentNumber,
+          row?.referenceNumber,
+          row?.raw?.paymentId,
+          row?.raw?.retainerId,
+        ]
+          .filter(Boolean)
+          .join("|")
+      );
+
+      const alreadyExists = mergedRows.some((existing: any) => {
+        const existingKey = normalizeKey(
+          [
+            existing?.id,
+            existing?.paymentId,
+            existing?.paymentNumber,
+            existing?.referenceNumber,
+            existing?.raw?.paymentId,
+            existing?.raw?.retainerId,
+          ]
+            .filter(Boolean)
+            .join("|")
+        );
+        return rowKey && existingKey && rowKey === existingKey;
+      });
+
+      if (!alreadyExists) mergedRows.push(row);
+    });
+
+    return mergedRows;
+  })();
   const shouldShowPaymentsAndCreditsSection =
-    payments.length > 0 ||
+    paymentDisplayRows.length > 0 ||
     creditsAppliedRows.length > 0 ||
     creditsAppliedCount > 0 ||
     creditAppliedAmount > 0 ||
-    retainerAppliedAmount > 0 ||
     (isDebitNoteView && ((invoice as any)?.associatedInvoiceId || (invoice as any)?.invoiceId));
 
   return (
@@ -3463,7 +3637,7 @@ export default function InvoiceDetail() { // Start of component
                 onClick={() => {
                   const editId = String((invoice as any)?.id || (invoice as any)?._id || id || "").trim();
                   if (!editId) return;
-                  navigate(`/sales/invoices/${editId}/edit`, { state: { invoice } });
+                  navigate(`/sales/debit-notes/${editId}/edit`, { state: { debitNote: invoice } });
                 }}
                 className="inline-flex items-center gap-1.5 px-2 py-1 rounded hover:bg-gray-100 cursor-pointer"
               >
@@ -3524,7 +3698,8 @@ export default function InvoiceDetail() { // Start of component
               <div className="relative ml-1" ref={moreMenuRef}>
                 <button
                   onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-100 cursor-pointer"
+                  aria-expanded={isMoreMenuOpen}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded bg-transparent hover:bg-gray-100 focus:outline-none focus:ring-0 focus-visible:outline-none cursor-pointer"
                 >
                   <MoreVertical size={16} />
                 </button>
@@ -3533,7 +3708,7 @@ export default function InvoiceDetail() { // Start of component
                     {invoice?.status?.toLowerCase() === "draft" ? (
                       <>
                         <div
-                          className="mx-1 mt-1 flex items-center gap-2 rounded-md bg-[#4a89e8] px-4 py-2 text-sm text-white cursor-pointer transition-colors"
+                          className="mx-1 mt-1 flex items-center gap-2 rounded-md px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50 transition-colors"
                           onClick={handleMarkAsSent}
                         >
                           <Send size={14} />
@@ -3581,10 +3756,7 @@ export default function InvoiceDetail() { // Start of component
                     ) : (
                       <>
                         <div
-                          className="flex items-center gap-2 px-4 py-2 text-sm text-white cursor-pointer transition-colors"
-                          style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                          onMouseEnter={(e) => e.currentTarget.style.opacity = "0.9"}
-                          onMouseLeave={(e) => e.currentTarget.style.opacity = "1"}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50 transition-colors"
                           onClick={handleMakeRecurring}
                         >
                           <Repeat size={14} />
@@ -3651,10 +3823,17 @@ export default function InvoiceDetail() { // Start of component
           {/* Payments / Credits Applied Section */}
           {shouldShowPaymentsAndCreditsSection && (
             <div className="mx-6 mt-4 rounded border border-gray-200 bg-white">
-              <button
-                type="button"
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => setIsPaymentsSectionOpen((prev) => !prev)}
-                className="w-full flex items-center justify-between px-4 py-3 text-left"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setIsPaymentsSectionOpen((prev) => !prev);
+                  }
+                }}
+                className="w-full flex items-center justify-between px-4 py-3 text-left cursor-pointer"
               >
                 <div className="flex items-center gap-4 flex-wrap">
                   <button
@@ -3666,7 +3845,7 @@ export default function InvoiceDetail() { // Start of component
                     className={`flex items-center gap-2 pb-1 border-b-2 ${paymentInfoTab === "payments" ? "border-[#2563eb]" : "border-transparent"}`}
                   >
                     <span className="text-[12px] font-medium text-gray-800">Payments Received</span>
-                    <span className="text-[12px] text-[#2563eb]">{payments.length}</span>
+                    <span className="text-[12px] text-[#2563eb]">{paymentDisplayRows.length}</span>
                   </button>
                   <div className="h-4 w-px bg-gray-300" />
                   <button
@@ -3695,23 +3874,16 @@ export default function InvoiceDetail() { // Start of component
                       </button>
                     </>
                   )}
-                  {(creditAppliedAmount > 0 || retainerAppliedAmount > 0) && (
+                  {creditAppliedAmount > 0 && (
                     <div className="flex items-center gap-2 flex-wrap">
-                      {creditAppliedAmount > 0 && (
-                        <span className="inline-flex items-center rounded-full bg-blue-50 text-blue-700 px-2 py-0.5 text-[11px] font-medium">
-                          Credit Note Applied: {formatCurrency(creditAppliedAmount, invoice.currency)}
-                        </span>
-                      )}
-                      {retainerAppliedAmount > 0 && (
-                        <span className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 text-[11px] font-medium">
-                          Retainer Applied: {formatCurrency(retainerAppliedAmount, invoice.currency)}
-                        </span>
-                      )}
+                      <span className="inline-flex items-center rounded-full bg-blue-50 text-blue-700 px-2 py-0.5 text-[11px] font-medium">
+                        Credit Note Applied: {formatCurrency(creditAppliedAmount, invoice.currency)}
+                      </span>
                     </div>
                   )}
                 </div>
                 <ChevronDown size={16} className={`text-gray-500 transition-transform ${isPaymentsSectionOpen ? "rotate-0" : "-rotate-90"}`} />
-              </button>
+              </div>
               {isPaymentsSectionOpen && (
                 <div className="border-t border-gray-200 overflow-x-auto relative z-[20]">
                   {paymentInfoTab === "associated" && isDebitNoteView ? (
@@ -3794,7 +3966,7 @@ export default function InvoiceDetail() { // Start of component
                         </tr>
                       </thead>
                       <tbody>
-                        {payments.map((payment: any, paymentIndex: number) => (
+                        {paymentDisplayRows.map((payment: any, paymentIndex: number) => (
                           <tr key={String(payment.id || payment._id || payment.paymentNumber || paymentIndex)} className="border-t border-gray-100">
                             <td className="px-4 py-3 text-[12px] text-gray-800">{formatDate(payment.paymentDate || payment.date)}</td>
                             <td className="px-4 py-3 text-[12px] text-[#2563eb]">{payment.paymentNumber || "-"}</td>
@@ -3804,56 +3976,60 @@ export default function InvoiceDetail() { // Start of component
                             <td className="px-4 py-3 text-[12px] text-gray-900">{formatCurrency(payment.amountReceived ?? payment.amount ?? 0, payment.currency || invoice.currency)}</td>
                             <td className="px-4 py-3 text-[12px] text-gray-700">{formatCurrency(0, payment.currency || invoice.currency)}</td>
                             <td className="px-4 py-3 text-[12px] text-gray-500 relative overflow-visible">
-                              {(() => {
-                                const rowMenuId = String(payment.id || payment._id || payment.paymentNumber || paymentIndex);
-                                const paymentId = String(payment.id || payment._id || "");
-                                return (
-                                  <>
-                                    <button
-                                      type="button"
-                                      className="px-1 py-0.5 rounded hover:bg-gray-100 text-gray-600"
-                                      onClick={() => setOpenPaymentMenuId((prev) => (prev === rowMenuId ? null : rowMenuId))}
-                                    >
-                                      <MoreHorizontal size={14} />
-                                    </button>
-                                    {openPaymentMenuId === rowMenuId && (
-                                      <div className="absolute right-0 bottom-8 w-[140px] bg-white border border-gray-200 rounded-lg shadow-xl z-[999] py-1">
-                                        <button
-                                          className="w-full flex items-center gap-2 px-4 py-2 text-[13px] text-gray-700 hover:bg-gray-50"
-                                          onClick={() => {
-                                            setOpenPaymentMenuId(null);
-                                            if (paymentId) navigate(`/payments/payments-received/${paymentId}`);
-                                          }}
-                                        >
-                                          <Pencil size={13} />
-                                          Edit
-                                        </button>
+                              {payment.isSyntheticRetainer ? (
+                                <span className="text-gray-400">-</span>
+                              ) : (
+                                (() => {
+                                  const rowMenuId = String(payment.id || payment._id || payment.paymentNumber || paymentIndex);
+                                  const paymentId = String(payment.id || payment._id || "");
+                                  return (
+                                    <>
                                       <button
-                                        className="w-full flex items-center gap-2 px-4 py-2 text-[13px] text-gray-700 hover:bg-gray-50"
-                                        onClick={() => {
-                                          setOpenPaymentMenuId(null);
-                                          handleOpenRefundModal(payment);
-                                        }}
+                                        type="button"
+                                        className="px-1 py-0.5 rounded hover:bg-gray-100 text-gray-600"
+                                        onClick={() => setOpenPaymentMenuId((prev) => (prev === rowMenuId ? null : rowMenuId))}
                                       >
-                                          <Banknote size={13} />
-                                          Refund
-                                        </button>
+                                        <MoreHorizontal size={14} />
+                                      </button>
+                                      {openPaymentMenuId === rowMenuId && (
+                                        <div className="absolute right-0 bottom-8 w-[140px] bg-white border border-gray-200 rounded-lg shadow-xl z-[999] py-1">
+                                          <button
+                                            className="w-full flex items-center gap-2 px-4 py-2 text-[13px] text-gray-700 hover:bg-gray-50"
+                                            onClick={() => {
+                                              setOpenPaymentMenuId(null);
+                                              if (paymentId) navigate(`/payments/payments-received/${paymentId}`);
+                                            }}
+                                          >
+                                            <Pencil size={13} />
+                                            Edit
+                                          </button>
                                         <button
                                           className="w-full flex items-center gap-2 px-4 py-2 text-[13px] text-gray-700 hover:bg-gray-50"
                                           onClick={() => {
                                             setOpenPaymentMenuId(null);
-                                            setSelectedPaymentForDelete(payment);
-                                            setShowDeletePaymentModal(true);
+                                            handleOpenRefundModal(payment);
                                           }}
                                         >
-                                          <Trash2 size={13} />
-                                          Delete
-                                        </button>
-                                      </div>
-                                    )}
-                                  </>
-                                );
-                              })()}
+                                            <Banknote size={13} />
+                                            Refund
+                                          </button>
+                                          <button
+                                            className="w-full flex items-center gap-2 px-4 py-2 text-[13px] text-gray-700 hover:bg-gray-50"
+                                            onClick={() => {
+                                              setOpenPaymentMenuId(null);
+                                              setSelectedPaymentForDelete(payment);
+                                              setShowDeletePaymentModal(true);
+                                            }}
+                                          >
+                                            <Trash2 size={13} />
+                                            Delete
+                                          </button>
+                                        </div>
+                                      )}
+                                    </>
+                                  );
+                                })()
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -3869,61 +4045,92 @@ export default function InvoiceDetail() { // Start of component
           {isDebitNoteView && (
             <div className="mx-6 mt-4 rounded border border-gray-200 bg-white">
               <div className="px-5 py-4 border-b border-gray-200">
-                {invoiceStatusKey !== "paid" && customerRetainerAvailable > 0 && (
-                  <div className="flex items-center gap-2 text-base text-gray-900 mb-3">
-                    <FileText size={16} className="text-gray-700" />
-                    <span>
-                      Retainer Available:{" "}
-                      <span className="font-semibold">
-                        {String(invoice?.currency || baseCurrency)}{customerRetainerAvailable.toFixed(2)}
-                      </span>{" "}
-                      <button
-                        type="button"
-                        className="text-[#3b82f6] hover:underline"
-                        onClick={handleOpenApplyRetainer}
-                      >
-                        Apply Now
-                      </button>
-                    </span>
-                  </div>
-                )}
-                <div className="flex items-center gap-2 text-base text-gray-900">
-                  <FileText size={16} className="text-gray-700" />
-                  <span>
-                    Associated Invoice:{" "}
-                    <button
-                      type="button"
-                      className="text-[#3b82f6] hover:underline"
-                      onClick={() => {
-                        const invId = String((invoice as any)?.associatedInvoiceId || (invoice as any)?.invoiceId || "");
-                        if (invId) navigate(`/sales/invoices/${invId}`);
-                      }}
-                    >
-                      {String((invoice as any)?.associatedInvoiceNumber || (invoice as any)?.invoiceNumber || "-")}
-                    </button>
-                  </span>
+                <div className="space-y-3 text-[14px] text-gray-900">
+                  {customerCreditsAvailable > 0 && (
+                    <div className="flex items-center gap-2">
+                      <FileText size={16} className="text-gray-700" />
+                      <span>
+                        Credits Available:{" "}
+                        <span className="font-semibold">
+                          {formatCurrency(customerCreditsAvailable, invoice.currency)}
+                        </span>{" "}
+                        <button
+                          type="button"
+                          className="text-[#3b82f6] hover:underline"
+                          onClick={() => void handleOpenApplyCredits("credit")}
+                        >
+                          Apply Now
+                        </button>
+                      </span>
+                    </div>
+                  )}
+                  {customerRetainerAvailable > 0 && (
+                    <div className="flex items-center gap-2">
+                      <Repeat size={16} className="text-gray-700" />
+                      <span>
+                        Retainer Available:{" "}
+                        <span className="font-semibold">
+                          {formatAmountWithCurrency(customerRetainerAvailable)}
+                        </span>{" "}
+                        <button
+                          type="button"
+                          className="text-[#3b82f6] hover:underline"
+                          onClick={handleOpenApplyRetainer}
+                        >
+                          Apply Now
+                        </button>
+                      </span>
+                    </div>
+                  )}
+                  {(associatedInvoiceRow as any) && (
+                    <div className="flex items-center gap-2">
+                      <FileText size={16} className="text-gray-700" />
+                      <span>
+                        Associated Invoice:{" "}
+                        <button
+                          type="button"
+                          className="text-[#3b82f6] hover:underline"
+                          onClick={() => {
+                            const invId = String(
+                              (associatedInvoiceRow as any)?.id ||
+                              (associatedInvoiceRow as any)?._id ||
+                              (invoice as any)?.associatedInvoiceId ||
+                              (invoice as any)?.invoiceId ||
+                              ""
+                            );
+                            if (invId) navigate(`/sales/invoices/${invId}`);
+                          }}
+                        >
+                          {String(
+                            (associatedInvoiceRow as any)?.invoiceNumber ||
+                            (invoice as any)?.associatedInvoiceNumber ||
+                            (invoice as any)?.invoiceNumber ||
+                            "-"
+                          )}
+                        </button>
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
-              <div className="px-5 py-5 border-b border-gray-200 flex items-center gap-3">
+              <div className="px-5 py-4 flex items-center gap-3">
                 <Sparkles size={16} className="text-[#7c72ff]" />
                 <span className="text-sm text-gray-800">
-                  <span className="font-semibold">WHAT&apos;S NEXT?</span> Payment Reminder is scheduled to be sent on{" "}
-                  {formatDate((invoice as any)?.dueDate || (invoice as any)?.date || new Date().toISOString())}
+                  <span className="font-semibold">WHAT&apos;S NEXT?</span> Send this Debit Note to your customer or mark it as Sent.
                 </span>
-                <button className="text-[#3b82f6] hover:underline text-sm">Stop Reminders</button>
-                <span className="text-sm text-gray-700">|</span>
-                <span className="text-sm text-gray-800">Received payment?</span>
                 <button
-                  onClick={handleRecordPayment}
+                  onClick={handleSendInvoice}
                   className="px-3 py-1.5 rounded-md text-sm text-white"
                   style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
                 >
-                  Record Payment
+                  Send Debit Note
                 </button>
-              </div>
-              <div className="px-5 py-3 bg-[#f8fafc] text-sm text-gray-700">
-                Get paid faster by setting up online payment gateways.{" "}
-                <button className="text-[#3b82f6] hover:underline">Set Up Now</button>
+                <button
+                  onClick={handleMarkAsSent}
+                  className="px-3 py-1.5 rounded-md bg-white border border-gray-300 text-gray-700 rounded-md text-sm font-medium cursor-pointer hover:bg-gray-50"
+                >
+                  Mark As Sent
+                </button>
               </div>
             </div>
           )}

@@ -104,14 +104,14 @@ export const PaymentTermsDropdown = ({
                     onMouseLeave={() => setActiveTermValue("")}
                     className={`flex w-full items-center justify-between rounded-md px-3 py-2.5 text-left text-sm transition-colors ${
                       isSelected
-                        ? "bg-[#4a8df0] font-medium text-white"
+                        ? "bg-slate-100 font-medium text-slate-900 ring-1 ring-slate-200"
                         : isActive
                           ? "border border-[#2b2b2b] bg-white text-gray-700"
                           : "border border-transparent text-gray-700 hover:bg-gray-50"
                     }`}
                   >
                     <span className="truncate">{term.label}</span>
-                    {isSelected && <Check size={16} className="shrink-0" />}
+                    {isSelected && <Check size={16} className="shrink-0 text-slate-500" />}
                   </button>
                 );
               })
