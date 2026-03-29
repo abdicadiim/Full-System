@@ -338,13 +338,15 @@ export default function ProductDetailPage() {
       <div className="min-h-[calc(100vh-100px)] rounded-lg border border-[#d8deea] bg-white p-8">
         <h1 className="text-2xl font-semibold text-[#111827]">Products</h1>
         <p className="mt-2 text-sm text-[#64748b]">{productsLoading ? "Loading product..." : "No products found."}</p>
-        <button
-          type="button"
-          onClick={() => navigate("/products/products/new")}
-          className="mt-4 rounded bg-[#1b5e6a] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
-        >
-          Create Product
-        </button>
+        {canCreateProduct ? (
+          <button
+            type="button"
+            onClick={() => navigate("/products/products/new")}
+            className="mt-4 rounded bg-[#1b5e6a] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+          >
+            Create Product
+          </button>
+        ) : null}
       </div>
     );
   }
@@ -382,13 +384,15 @@ export default function ProductDetailPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => navigate("/products/products/new")}
-              className="inline-flex h-8 w-8 items-center justify-center rounded bg-[#1b5e6a] text-white hover:opacity-90"
-            >
-              +
-            </button>
+            {canCreateProduct ? (
+              <button
+                type="button"
+                onClick={() => navigate("/products/products/new")}
+                className="inline-flex h-8 w-8 items-center justify-center rounded bg-[#1b5e6a] text-white hover:opacity-90"
+              >
+                +
+              </button>
+            ) : null}
             <div className="relative" ref={sidebarMoreRef}>
               <button
                 type="button"
@@ -399,17 +403,19 @@ export default function ProductDetailPage() {
               </button>
               {sidebarMoreOpen ? (
                 <div className="absolute right-0 top-full z-[140] mt-1 w-56 rounded-lg border border-[#d7dce8] bg-white py-1 shadow-xl">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSidebarMoreOpen(false);
-                      navigate("/products/products/import");
-                    }}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#475569] hover:bg-[#3b82f6] hover:text-white"
-                  >
-                    <Upload size={14} />
-                    Import Products
-                  </button>
+                  {canCreateProduct ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSidebarMoreOpen(false);
+                        navigate("/products/products/import");
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#475569] hover:bg-[#3b82f6] hover:text-white"
+                    >
+                      <Upload size={14} />
+                      Import Products
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={handleExportProducts}
