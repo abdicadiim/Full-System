@@ -32,6 +32,7 @@ export default function Layout({ children }) {
     location.pathname.startsWith("/products/addons") ||
     location.pathname.startsWith("/products/pricing-widgets") ||
     location.pathname.startsWith("/products/price-lists") ||
+    location.pathname.startsWith("/items") ||
     location.pathname.startsWith("/products/items");
 
   if (hideAppChrome) {

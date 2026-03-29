@@ -88,7 +88,7 @@ const moduleSettings = [
     path: "/settings/customers-vendors",
     items: [
       { label: "Customers", path: "/settings/customers-vendors" },
-      { label: "Products", path: "/settings/items" },
+      { label: "Items", path: "/settings/items" },
       { label: "Tasks", path: "/settings/tasks" },
       { label: "Projects", path: "/settings/projects" },
       { label: "Timesheet", path: "/settings/timesheet" },

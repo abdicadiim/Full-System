@@ -82,7 +82,7 @@ export default function AllSettings() {
 
     if (normalizedSection === "general") {
       if (normalizedLabel === "customers") return hasPermission("customers", "Customers");
-      if (normalizedLabel === "products") return hasPermission("products", "Products");
+      if (normalizedLabel === "items") return hasPermission("items", "Item");
       if (normalizedLabel === "tasks") return hasPermission("tasks", "Tasks");
       if (normalizedLabel === "projects" || normalizedLabel === "timesheet") return hasPermission("timesheets", "Projects");
       return hasSettingsAccess;
@@ -200,7 +200,7 @@ export default function AllSettings() {
       visible: true,
       items: [
         "Customers",
-        "Products",
+        "Items",
         "Tasks",
         "Projects",
         "Timesheet",
@@ -454,7 +454,7 @@ export default function AllSettings() {
       } else {
         navigate("/sales/customers");
       }
-    } else if (label === "Products") {
+    } else if (label === "Items" || label === "Products") {
       navigate("/settings/items");
     } else if (label === "Tasks") {
       navigate("/settings/tasks");

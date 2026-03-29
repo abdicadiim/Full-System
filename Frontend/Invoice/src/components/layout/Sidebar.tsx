@@ -300,7 +300,8 @@ const routePermissionMap = {
   "/customers": "customers",
   "/sales/customers": "customers",
   "/products": "products",
-  "/products/items": "products",
+  "/items": "items",
+  "/products/items": "items",
   "/products/subscription-items": "products",
   "/products/pricing-widgets": "products",
   "/products/price-lists": "products",
@@ -354,6 +355,7 @@ function getModuleKeyForPath(pathname) {
 const routePermissionContextMap = {
   "/customers": { module: "customers", submodule: "Customers" },
   "/sales/customers": { module: "customers", submodule: "Customers" },
+  "/items": { module: "items", submodule: "Item" },
   "/products/items": { module: "items", submodule: "Item" },
   "/sales/quotes": { module: "sales", submodule: "Quotes" },
   "/sales/retainer-invoices": { module: "sales", submodule: "Invoices" },

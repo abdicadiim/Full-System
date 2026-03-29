@@ -61,7 +61,7 @@ const normalizePath = (pathname: string) => {
 export const inferModuleFromPath = (pathname: string) => {
   const path = normalizePath(pathname);
   if (path === "/" || path.startsWith("/dashboard")) return "dashboard";
-  if (path.startsWith("/products/items")) return "products";
+  if (path.startsWith("/products/items") || path.startsWith("/items")) return "items";
   if (path.startsWith("/documents")) return "documents";
   if (path.startsWith("/time-tracking")) return "timesheets";
   if (path.startsWith("/expenses")) return "expenses";
