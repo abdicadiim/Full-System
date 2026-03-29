@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { Loader2, MoreVertical, Eye, Copy, Trash2 } from "lucide-react";
 import { rolesAPI } from "../../../../../services/api";
+import { usePermissions } from "../../../../../hooks/usePermissions";
 import Skeleton from "../../../../../components/ui/Skeleton";
 
 const STANDARD_ROLES = [
@@ -33,6 +34,8 @@ const STANDARD_ROLES = [
 ];
 export default function RolesPage() {
   const navigate = useNavigate();
+  const { hasPermission } = usePermissions();
+  const canManageRoles = hasPermission("settings", "Roles");
   const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
