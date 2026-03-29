@@ -367,13 +367,17 @@ export default function PriceListPage() {
             return (
                 <div className="flex flex-col py-1">
                     <div className="flex items-center gap-2">
-                        <button
-                            type="button"
-                            onClick={() => handleEdit(row)}
-                            className="text-[13px] font-medium text-left text-blue-500 hover:text-blue-600 cursor-pointer"
-                        >
-                            {row.name || '-'}
-                        </button>
+                        {canEditPriceList ? (
+                            <button
+                                type="button"
+                                onClick={() => handleEdit(row)}
+                                className="text-[13px] font-medium text-left text-blue-500 hover:text-blue-600 cursor-pointer"
+                            >
+                                {row.name || '-'}
+                            </button>
+                        ) : (
+                            <span className="text-[13px] font-medium text-left text-slate-700">{row.name || '-'}</span>
+                        )}
                         {row.status.toLowerCase() === 'inactive' && (
                             <span className="bg-gray-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded leading-none">INACTIVE</span>
                         )}
