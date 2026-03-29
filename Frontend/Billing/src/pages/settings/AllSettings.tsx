@@ -14,7 +14,6 @@ export default function AllSettings() {
   const { user } = useUser();
   const { hasPermission } = usePermissions();
   const { settings } = useSettings();
-  const permissions = user?.permissions;
   const organizationName = String(settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "").trim() || "Organization";
   const hasSettingsAccess = hasPermission("settings");
 
