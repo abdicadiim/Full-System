@@ -129,7 +129,7 @@ const EMPTY_SUMMARY: DashboardSummary = {
   },
 };
 
-const formatMoney = (value: number, currencyCode = "AMD") =>
+const formatMoney = (value: number, currencyCode = "") =>
   `${currencyCode}${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
     Number.isFinite(value) ? value : 0
   )}`;
