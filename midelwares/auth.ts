@@ -2,18 +2,61 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import { AUTH_BYPASS, JWT_SECRET, SESSION_COOKIE_NAME } from "../config/env.js";
 import { User } from "../models/User.js";
+import { Role } from "../models/Role.js";
 
 export type AuthedUser = {
   id: string;
   name: string;
   email: string;
   organizationId: string;
-  role: "admin" | "member";
+  role: string;
   sessionVersion: number;
   photoUrl?: string | null;
+  permissions?: Record<string, any> | null;
   activeTimer?: any | null;
 };
 type SessionClaims = { sub: string; ver: number };
+
+const normalizeRoleName = (value: unknown) => String(value || "").trim().toLowerCase();
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const STANDARD_ROLE_NAMES = new Set(["admin", "owner", "staff", "member", "staff_assigned", "timesheet_staff"]);
+
+export const isStandardRoleName = (value: unknown) => STANDARD_ROLE_NAMES.has(normalizeRoleName(value));
+export const isSuperRoleName = (value: unknown) => ["admin", "owner"].includes(normalizeRoleName(value));
+
+export const resolveRolePermissions = async (organizationId: unknown, roleName: unknown) => {
+  const normalizedRole = normalizeRoleName(roleName);
+  if (!normalizedRole || isStandardRoleName(normalizedRole)) {
+    return null;
+  }
+  if (!organizationId) return null;
+
+  const rawRoleName = String(roleName || "").trim();
+  if (!rawRoleName) return null;
+
+  const role = await Role.findOne({
+    organizationId,
+    name: { $regex: new RegExp(`^${escapeRegex(rawRoleName)}$`, "i") },
+  }).lean();
+
+  if (!role || (role as any).isSystem) {
+    return null;
+  }
+
+  return ((role as any).permissions && typeof (role as any).permissions === "object") ? (role as any).permissions : {};
+};
+
+const buildAuthedUser = async (user: any): Promise<AuthedUser> => ({
+  id: String(user._id),
+  name: user.name,
+  email: user.email,
+  organizationId: String(user.organizationId),
+  role: String(user.role || "member"),
+  sessionVersion: Number((user as any).sessionVersion || 0),
+  permissions: await resolveRolePermissions(user.organizationId, user.role),
+  photoUrl: (user as any).photoUrl || (user as any).avatar || (user as any).image || (user as any).photo || "",
+  activeTimer: (user as any).activeTimer || null,
+});
 
 export const issueSessionToken = (userId: string, sessionVersion = 0) => {
   if (!JWT_SECRET) return "";
@@ -45,6 +88,7 @@ export const getAuthedUser = async (req: express.Request): Promise<AuthedUser | 
       organizationId: "00000000000000000000000a",
       role: "admin",
       sessionVersion: 0,
+      permissions: null,
       photoUrl: "",
       activeTimer: null,
     };
@@ -62,17 +106,10 @@ export const getAuthedUser = async (req: express.Request): Promise<AuthedUser | 
     if (!user) return null;
     const sessionVersion = Number((user as any).sessionVersion || 0);
     if (Number(decoded.ver || 0) !== sessionVersion) return null;
-    return {
-      id: String(user._id),
-      name: user.name,
-      email: user.email,
-      organizationId: String(user.organizationId),
-      role: (user.role === "admin" ? "admin" : "member") as "admin" | "member",
-      sessionVersion,
-      photoUrl: (user as any).photoUrl || (user as any).avatar || (user as any).image || (user as any).photo || "",
-      activeTimer: (user as any).activeTimer || null,
-    };
+    return buildAuthedUser(user);
   } catch {
     return null;
   }
 };
+
+export const buildAuthUserData = async (user: any) => buildAuthedUser(user);

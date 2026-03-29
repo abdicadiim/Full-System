@@ -6,7 +6,7 @@ import { Organization } from "../models/Organization.js";
 import { User } from "../models/User.js";
 import { SenderEmail } from "../models/SenderEmail.js";
 import { Role } from "../models/Role.js";
-import { clearSessionCookie, getAuthedUser, issueSessionToken, setSessionCookie } from "../midelwares/auth.js";
+import { buildAuthUserData, clearSessionCookie, getAuthedUser, issueSessionToken, setSessionCookie } from "../midelwares/auth.js";
 import mongoose from "mongoose";
 import { sendSmtpMail } from "../services/smtpMailer.js";
 
@@ -199,9 +199,10 @@ export const signup = async (req: express.Request, res: express.Response) => {
   const created = await User.create({ name, email, passwordHash, organizationId: org._id, role: "admin", sessionVersion: 0 });
   setSessionCookie(res, String(created._id));
   const token = issueSessionToken(String(created._id), Number((created as any).sessionVersion || 0));
+  const authUser = await buildAuthUserData(created);
   return res.status(201).json({
     success: true,
-    data: { id: String(created._id), name: created.name, email, organizationId: String(org._id) },
+    data: authUser,
     token,
   });
 };
@@ -241,9 +242,10 @@ export const login = async (req: express.Request, res: express.Response) => {
   const sessionVersion = Number((user as any).sessionVersion || 0);
   setSessionCookie(res, String(user._id), sessionVersion);
   const token = issueSessionToken(String(user._id), sessionVersion);
+  const authUser = await buildAuthUserData(user);
   return res.json({
     success: true,
-    data: { id: String(user._id), name: user.name, email: user.email, organizationId: String(user.organizationId) },
+    data: authUser,
     token,
   });
 };
@@ -375,9 +377,10 @@ export const verifyLoginOtp = async (req: express.Request, res: express.Response
   const sessionVersion = Number((user as any).sessionVersion || 0);
   setSessionCookie(res, String(user._id), sessionVersion);
   const token = issueSessionToken(String(user._id), sessionVersion);
+  const authUser = await buildAuthUserData(user);
   return res.json({
     success: true,
-    data: { id: String(user._id), name: String((user as any).name || ""), email: String(user.email || ""), organizationId: String(user.organizationId) },
+    data: authUser,
     token,
   });
 };
@@ -544,16 +547,11 @@ export const resetPasswordWithCode = async (req: express.Request, res: express.R
   setSessionCookie(res, String(user._id), sessionVersion);
   const token = issueSessionToken(String(user._id), sessionVersion);
   const updated = await User.findById(user._id).lean();
+  const authUser = await buildAuthUserData(updated || user);
   return res.json({
     success: true,
     message: "Password updated successfully.",
-    data: {
-      id: String(updated?._id || user._id),
-      name: String((updated as any)?.name || nextName || user.name || ""),
-      email: String((updated as any)?.email || user.email || ""),
-      organizationId: String((updated as any)?.organizationId || user.organizationId),
-      photoUrl: String((updated as any)?.photoUrl || ""),
-    },
+    data: authUser,
     token,
   });
 };
@@ -614,7 +612,11 @@ export const updateMe = async (req: express.Request, res: express.Response) => {
       name: updated.name,
       email: updated.email,
       organizationId: String((updated as any).organizationId),
-      role: (updated as any).role === "admin" ? "admin" : "member",
+      role: String((updated as any).role || "member"),
+      permissions: await (async () => {
+        const current = await buildAuthUserData(updated);
+        return current.permissions ?? null;
+      })(),
       photoUrl: (updated as any).photoUrl || "",
       activeTimer: (updated as any).activeTimer || null,
     },
