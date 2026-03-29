@@ -9,6 +9,7 @@ const USER_KEYS = ["user", "current_user", "auth_user"];
 const LOGOUT_KEYS = ["fs_logout_requested"];
 const BRIDGE_TOKEN_COOKIE = "fs_session_bridge";
 export const AUTH_USER_UPDATED_EVENT = "auth:user-updated";
+export const AUTH_USER_REFRESH_EVENT = "auth:user-refresh";
 
 const readCookie = (name: string) => {
   if (typeof document === "undefined") return "";
