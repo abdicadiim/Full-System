@@ -306,6 +306,7 @@ export default function NewRolePage() {
   const [settingsPermissions, setSettingsPermissions] = useState({
     updateOrgProfile: false,
     users: false,
+    roles: false,
     exportData: false,
     generalPreferences: false,
     accountantPreferences: false,
@@ -2672,6 +2673,7 @@ export default function NewRolePage() {
             {[
               { key: "updateOrgProfile", label: "Update organization profile" },
               { key: "users", label: "Users" },
+              { key: "roles", label: "Roles" },
               { key: "exportData", label: "Export data" },
               { key: "generalPreferences", label: "General preferences", hasIcon: true },
               { key: "accountantPreferences", label: "Accountant preferences" },

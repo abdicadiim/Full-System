@@ -576,7 +576,7 @@ export default function NewRolePage() {
       {renderPermissionTable("Timesheets", "timesheets", ["Projects"], ["Full", "View", "Create", "Edit", "Delete"], true)}
       {renderPermissionTable("Expenses", "expenses", ["Expenses"], ["Full", "View", "Create", "Edit", "Delete"], true)}
 
-      {renderCheckboxList("Settings", "settings", ["Events", "General preferences", "Provide access to protected data", "Incoming Webhook", "Signal"])}
+      {renderCheckboxList("Settings", "settings", ["Events", "General preferences", "Roles", "Provide access to protected data", "Incoming Webhook", "Signal"])}
       {renderCheckboxList("Documents", "documents")}
       {renderCheckboxList("Dashboard", "dashboard")}
 
