@@ -591,17 +591,73 @@ const NewQuote = () => {
     const safeDigits = rawDigits ? rawDigits.padStart(6, "0") : "000001";
     return `${safePrefix}${safeDigits}`;
   };
+  const normalizeSeriesName = (value: any) => String(value || "").trim().toLowerCase();
+  const getLocationIdsForLocationName = (locationName: string) => {
+    if (typeof window === "undefined") return [];
+    const targetName = String(locationName || "").trim().toLowerCase();
+    if (!targetName) return [];
+
+    try {
+      const raw = localStorage.getItem(LS_LOCATIONS_CACHE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(parsed)) return [];
+
+      return Array.from(
+        new Set(
+          parsed
+            .filter((row: any) => {
+              const rowName = String(row?.name || row?.locationName || "").trim().toLowerCase();
+              return rowName === targetName;
+            })
+            .map((row: any) => String(row?._id || row?.id || "").trim())
+            .filter(Boolean)
+        )
+      );
+    } catch {
+      return [];
+    }
+  };
   const isQuoteSeriesRow = (row: any) => {
     const moduleValue = String(row?.module || row?.name || row?.moduleKey || "").toLowerCase();
     return moduleValue === "quote" || moduleValue === "quotes" || moduleValue.includes("quote");
   };
-  const resolveQuoteSeriesRow = (rows: any[]) => {
-    const quoteRows = (rows || []).filter(isQuoteSeriesRow);
+  const resolveQuoteSeriesRow = (rows: any[], selectedLocationName = "") => {
+    const quoteRows = (rows || []).filter((row: any) => isQuoteSeriesRow(row) && String(row?.status || "Active").toLowerCase() !== "inactive");
     if (!quoteRows.length) return null;
+
+    const locationIds = getLocationIdsForLocationName(selectedLocationName);
+    const scoreRow = (row: any) => {
+      const seriesName = normalizeSeriesName(row?.seriesName || "");
+      const rowLocationIds = Array.isArray(row?.locationIds)
+        ? row.locationIds.map((id: any) => String(id || "").trim()).filter(Boolean)
+        : [];
+      const createdAt = new Date(String(row?.updatedAt || row?.createdAt || 0)).getTime();
+
+      let score = 0;
+      if (locationIds.length) {
+        const matchesLocation = rowLocationIds.some((id) => locationIds.includes(id));
+        if (matchesLocation) score += 100;
+        else if (!rowLocationIds.length) score += 10;
+      }
+
+      if (!Boolean(row?.isDefault)) score += 25;
+      if (seriesName !== "default transaction series") score += 15;
+      if (rowLocationIds.length) score += 5;
+      if (Number.isFinite(createdAt) && createdAt > 0) score += Math.min(createdAt / 1e11, 10);
+
+      return score;
+    };
+
     return (
-      quoteRows.find((row: any) => Boolean(row?.isDefault)) ||
-      quoteRows.find((row: any) => String(row?.seriesName || "").toLowerCase() === "default transaction series") ||
-      quoteRows[0]
+      quoteRows
+        .slice()
+        .sort((a: any, b: any) => {
+          const scoreDiff = scoreRow(b) - scoreRow(a);
+          if (scoreDiff !== 0) return scoreDiff;
+          const timeB = new Date(String(b?.updatedAt || b?.createdAt || 0)).getTime();
+          const timeA = new Date(String(a?.updatedAt || a?.createdAt || 0)).getTime();
+          return timeB - timeA;
+        })[0] || null
     );
   };
   const resolveSeriesNextDigits = (row: any) => {
@@ -1154,7 +1210,7 @@ const NewQuote = () => {
                 ? txSeriesResponse
                 : [];
           setQuoteSeriesRows(rows);
-          resolvedSeriesRow = resolveQuoteSeriesRow(rows);
+          resolvedSeriesRow = resolveQuoteSeriesRow(rows, formData.selectedLocation);
           if (resolvedSeriesRow) {
             setQuoteSeriesRow(resolvedSeriesRow);
             const resolvedPrefix = sanitizeQuotePrefix(resolvedSeriesRow?.prefix || "QT-");
@@ -1181,12 +1237,10 @@ const NewQuote = () => {
             Number(listResponse?.pagination?.total ?? listResponse?.data?.pagination?.total ?? 0) ||
             Number(listResponse?.data?.length ?? 0) ||
             0;
-          const currentPrefix = String(resolvedSeriesRow?.prefix || "QT-");
-          const needsPrefixFix = !currentPrefix.startsWith("QT-");
           const needsReset = totalQuotes === 0 && Number(resolvedSeriesRow?.nextNumber || 0) > 1;
-          if (needsPrefixFix || needsReset) {
+          if (needsReset) {
             quoteSeriesSyncRef.current = true;
-            const desiredPrefix = "QT-";
+            const desiredPrefix = sanitizeQuotePrefix(resolvedSeriesRow?.prefix || "QT-");
             const desiredDigits = needsReset ? "000001" : resolveSeriesNextDigits(resolvedSeriesRow);
             setQuotePrefix(desiredPrefix);
             setQuoteNextNumber(desiredDigits);
@@ -1263,6 +1317,42 @@ const NewQuote = () => {
 
     loadData();
   }, [isEditMode]);
+
+  useEffect(() => {
+    if (isEditMode || quoteNumberMode !== "auto" || !quoteSeriesRows.length) return;
+
+    const resolvedSeriesRow = resolveQuoteSeriesRow(quoteSeriesRows, formData.selectedLocation);
+    if (!resolvedSeriesRow) return;
+
+    const resolvedPrefix = sanitizeQuotePrefix(resolvedSeriesRow?.prefix || "QT-");
+    const resolvedNextDigits = resolveSeriesNextDigits(resolvedSeriesRow);
+    const resolvedSeriesId = String(resolvedSeriesRow?.id || resolvedSeriesRow?._id || "").trim();
+    const currentSeriesId = String(quoteSeriesRow?.id || quoteSeriesRow?._id || "").trim();
+    const nextQuoteNumber = buildQuoteNumber(resolvedPrefix, resolvedNextDigits);
+
+    if (
+      currentSeriesId === resolvedSeriesId &&
+      quotePrefix === resolvedPrefix &&
+      quoteNextNumber === resolvedNextDigits &&
+      formData.quoteNumber === nextQuoteNumber
+    ) {
+      return;
+    }
+
+    setQuoteSeriesRow(resolvedSeriesRow);
+    setQuotePrefix(resolvedPrefix);
+    setQuoteNextNumber(resolvedNextDigits);
+    setFormData((prev) => ({ ...prev, quoteNumber: nextQuoteNumber }));
+  }, [
+    isEditMode,
+    quoteNumberMode,
+    quoteSeriesRows,
+    formData.selectedLocation,
+    quoteSeriesRow,
+    quotePrefix,
+    quoteNextNumber,
+    formData.quoteNumber,
+  ]);
 
   // Centralized totals calculation
   useEffect(() => {
@@ -6566,7 +6656,9 @@ const NewQuote = () => {
                   </div>
                   <div>
                     <p className="text-[13px] leading-none font-semibold text-gray-800 mb-2">Associated Series</p>
-                    <p className="text-[14px] leading-none text-gray-700">Default Transaction Series</p>
+                    <p className="text-[14px] leading-none text-gray-700">
+                      {quoteSeriesRow?.seriesName || "Default Transaction Series"}
+                    </p>
                   </div>
                 </div>
 
