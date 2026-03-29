@@ -930,20 +930,17 @@ export default function NewSalesReceipt() {
 
         // Load next sales receipt number
         if (!isEditMode) {
-          const numberSeriesResponse = await transactionNumberSeriesAPI.getAll();
-          if (numberSeriesResponse && numberSeriesResponse.data) {
-            const salesReceiptSeries = numberSeriesResponse.data.find(
-              series => series.module === 'sales_receipt' || (series.name || "").toLowerCase().includes('sales receipt')
-            );
-            if (salesReceiptSeries) {
-              const nextNumber = await transactionNumberSeriesAPI.getNextNumber(salesReceiptSeries.id);
-              if (nextNumber && nextNumber.data) {
-                setFormData(prev => ({
-                  ...prev,
-                  receiptNumber: nextNumber.data.next_number
-                }));
-              }
-            }
+          const nextNumberResponse = await transactionNumberSeriesAPI.getNextNumber({ module: "Sales Receipt", reserve: false });
+          const nextNumber =
+            nextNumberResponse?.data?.nextNumber ||
+            nextNumberResponse?.data?.next_number ||
+            nextNumberResponse?.data?.receiptNumber ||
+            nextNumberResponse?.nextNumber;
+          if (nextNumber) {
+            setFormData(prev => ({
+              ...prev,
+              receiptNumber: String(nextNumber).trim()
+            }));
           }
         }
 

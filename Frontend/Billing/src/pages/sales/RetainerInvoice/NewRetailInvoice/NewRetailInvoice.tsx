@@ -4,7 +4,7 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { Search, X, Plus, ChevronDown, ChevronUp, Settings, Info, BriefcaseBusiness, Check, PlusCircle } from "lucide-react";
 import { toast } from "react-toastify";
 import { getCustomers, getInvoiceById, saveInvoice, updateInvoice } from "../../salesModel";
-import { customersAPI, invoicesAPI, projectsAPI, reportingTagsAPI, taxesAPI } from "../../../../services/api";
+import { customersAPI, invoicesAPI, projectsAPI, reportingTagsAPI, taxesAPI, transactionNumberSeriesAPI } from "../../../../services/api";
 import { useOrganizationBranding } from "../../../../hooks/useOrganizationBranding";
 import NewTaxModal from "../../../../../components/modals/NewTaxModal";
 import { buildTaxOptionGroups, taxLabel, isTaxActive, normalizeCreatedTaxPayload } from "../../../../hooks/Taxdropdownstyle";
@@ -182,7 +182,7 @@ export default function NewRetailInvoice() {
       try {
         const [custs, nextNumResp, taxResp, projectResp, reportingTagsResp, editInvoiceResp] = await Promise.all([
           getCustomers(),
-          invoicesAPI.getNextNumber("RET-").catch(() => null),
+          transactionNumberSeriesAPI.getNextNumber({ module: "Retainer Invoice", reserve: false }).catch(() => null),
           taxesAPI.getForTransactions().catch(() => null),
           projectsAPI.getAll({ limit: 1000 }).catch(() => ({ data: [] })),
           reportingTagsAPI.getAll().catch(() => ({ data: [] })),

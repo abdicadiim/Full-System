@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { Check, ChevronDown, Search } from "lucide-react";
-import { creditNotesAPI, invoicesAPI, paymentsReceivedAPI, productsAPI, subscriptionsAPI } from "../../../../services/api";
+import { creditNotesAPI, invoicesAPI, paymentsReceivedAPI, productsAPI, subscriptionsAPI, transactionNumberSeriesAPI } from "../../../../services/api";
 
 type PreviewState = {
   currency?: string;
@@ -840,7 +840,7 @@ const SubscriptionPreviewPage = () => {
             // Auto-generate invoice for new subscriptions when enabled
             if (!isEditMode && finalSubscription.generateInvoices && (!createdViaApi || !backendGeneratedInvoice)) {
               try {
-                const nextNumberResponse = await invoicesAPI.getNextNumber("INV-");
+                const nextNumberResponse = await transactionNumberSeriesAPI.getNextNumber({ module: "Invoice", reserve: false });
                 const nextNumber =
                   nextNumberResponse?.data?.nextNumber ||
                   nextNumberResponse?.data?.invoiceNumber ||

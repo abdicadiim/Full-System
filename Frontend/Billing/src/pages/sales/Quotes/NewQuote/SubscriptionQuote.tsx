@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Calculator, CalendarDays, ChevronDown, ChevronRight, ChevronUp, Image as ImageIcon, Info, MoreVertical, PlusCircle, Search, Settings, ShoppingBag, Tag, Upload, X } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Customer, Salesperson, getCustomers, getPlansFromAPI, getQuotes, getSalespersonsFromAPI, getTaxesFromAPI, saveQuote, saveSalesperson, saveTax } from "../../salesModel";
-import { customersAPI, quotesAPI, reportingTagsAPI, priceListsAPI, productsAPI } from "../../../../services/api";
+import { customersAPI, quotesAPI, reportingTagsAPI, priceListsAPI, productsAPI, transactionNumberSeriesAPI } from "../../../../services/api";
 import { createTaxLocal, readTaxesLocal } from "../../../settings/organization-settings/taxes-compliance/TAX/storage";
 import { Country, State } from "country-state-city";
 
@@ -784,7 +784,7 @@ export default function SubscriptionQuote() {
 
     const loadNextQuoteNumber = async () => {
       try {
-        const response: any = await quotesAPI.getNextNumber("QT-");
+        const response: any = await transactionNumberSeriesAPI.getNextNumber({ module: "Quote", reserve: false });
         const nextFromApi = String(response?.data?.quoteNumber || response?.data?.nextNumber || "").trim();
         if (nextFromApi && isMounted) {
           setFormData((prev) => ({ ...prev, quoteNumber: normalizeQuoteNumber(nextFromApi, "QT-") }));

@@ -24,7 +24,7 @@ import {
   X,
   ChevronLeft,
 } from "lucide-react";
-import { customersAPI, debitNotesAPI, invoicesAPI, projectsAPI, reportingTagsAPI, salespersonsAPI } from "../../../../services/api";
+import { customersAPI, debitNotesAPI, invoicesAPI, projectsAPI, reportingTagsAPI, salespersonsAPI, transactionNumberSeriesAPI } from "../../../../services/api";
 import { getTaxes, saveInvoice } from "../../salesModel";
 import { usePaymentTermsDropdown, defaultPaymentTerms, PaymentTerm } from "../../../../hooks/usePaymentTermsDropdown";
 import PaymentTermsDropdown from "../../../../components/PaymentTermsDropdown";
@@ -528,8 +528,22 @@ export default function NewDebitNote() {
     }
   }, [clonedDataFromState, isEditMode]);
 
-  const fetchNextDebitNoteNumber = async () => {
+  const fetchNextDebitNoteNumber = async (options?: { reserve?: boolean }) => {
+    const reserve = Boolean(options?.reserve);
     const prefix = deriveDebitNotePrefix(formData.debitNoteNumber, "CDN-");
+    try {
+      const response: any = await transactionNumberSeriesAPI.getNextNumber({ module: "Debit Note", reserve });
+      const nextNumber =
+        response?.data?.nextNumber ||
+        response?.data?.next_number ||
+        response?.data?.debitNoteNumber ||
+        response?.data?.invoiceNumber ||
+        response?.nextNumber;
+      if (nextNumber) return String(nextNumber).trim();
+    } catch (error) {
+      console.warn("Failed to fetch next debit note number from transaction series:", error);
+    }
+
     try {
       const response: any = await invoicesAPI.getNextNumber(prefix);
       const nextNumber =
@@ -572,7 +586,7 @@ export default function NewDebitNote() {
       return await saveInvoice(payload as any);
     } catch (error: any) {
       if (!isEditMode && isDuplicateDebitNoteNumberError(error)) {
-        const freshNumber = await fetchNextDebitNoteNumber();
+        const freshNumber = await fetchNextDebitNoteNumber({ reserve: true });
         if (freshNumber) {
           const retryPayload = {
             ...payload,
@@ -1038,7 +1052,7 @@ export default function NewDebitNote() {
 
     const loadNextDebitNoteNumber = async () => {
       try {
-        const nextNumber = await fetchNextDebitNoteNumber();
+        const nextNumber = await fetchNextDebitNoteNumber({ reserve: false });
         if (!cancelled && nextNumber) {
           setField("debitNoteNumber", nextNumber);
         }

@@ -961,7 +961,34 @@ export const invoicesAPI = {
     const { data, pagination } = paginateRows(filterRowsByParams(filtered, params), params);
     return { success: true, data, pagination };
   },
-  getNextNumber: async (prefix?: string) => {
+  getNextNumber: async (prefixOrLookup?: string | Record<string, any>) => {
+    const prefix = typeof prefixOrLookup === "string" ? prefixOrLookup : String((prefixOrLookup as any)?.prefix || "");
+    const txModule =
+      typeof prefixOrLookup === "string" && prefixOrLookup.toUpperCase().startsWith("RET-")
+        ? "Retainer Invoice"
+        : "Invoice";
+    try {
+      const txRes: any = await transactionNumberSeriesAPI.getNextNumber({ module: txModule, reserve: false });
+      const nextNumber =
+        txRes?.data?.nextNumber ||
+        txRes?.data?.next_number ||
+        txRes?.data?.invoiceNumber ||
+        txRes?.nextNumber;
+      if (nextNumber) {
+        const normalized = String(nextNumber).trim();
+        return {
+          success: true,
+          data: {
+            nextNumber: normalized,
+            next_number: normalized,
+            invoiceNumber: normalized,
+            seriesId: txRes?.data?.seriesId || txRes?.seriesId || "",
+          },
+        };
+      }
+    } catch {
+      // fall back
+    }
     try {
       const res: any = await request({ path: "/invoices/next-number", params: { prefix: prefix || "INV-" } });
       if (res?.success) return res as any;
@@ -1237,6 +1264,28 @@ export const creditNotesAPI = {
   },
   getNextNumber: async () => {
     try {
+      const txRes: any = await transactionNumberSeriesAPI.getNextNumber({ module: "Credit Note", reserve: false });
+      const nextNumber =
+        txRes?.data?.nextNumber ||
+        txRes?.data?.next_number ||
+        txRes?.data?.creditNoteNumber ||
+        txRes?.nextNumber;
+      if (nextNumber) {
+        const normalized = String(nextNumber).trim();
+        return {
+          success: true,
+          data: {
+            nextNumber: normalized,
+            next_number: normalized,
+            creditNoteNumber: normalized,
+            seriesId: txRes?.data?.seriesId || txRes?.seriesId || "",
+          },
+        };
+      }
+    } catch {
+      // fall back
+    }
+    try {
       const res = await request({ path: "/credit-notes/next-number" });
       if (res?.success) return res as any;
     } catch {}
@@ -1288,7 +1337,32 @@ export const quotesAPI = {
   create: (data: any) => quotesBase.create(data),
   update: (id: string, data: any) => quotesBase.update(id, data),
   delete: (id: string) => quotesBase.delete(id),
-  getNextNumber: (prefix?: string) => request({ path: "/quotes/next-number", params: { prefix } }),
+  getNextNumber: async (prefixOrLookup?: string | Record<string, any>) => {
+    try {
+      const txRes: any = await transactionNumberSeriesAPI.getNextNumber({ module: "Quote", reserve: false });
+      const nextNumber =
+        txRes?.data?.nextNumber ||
+        txRes?.data?.next_number ||
+        txRes?.data?.quoteNumber ||
+        txRes?.nextNumber;
+      if (nextNumber) {
+        const normalized = String(nextNumber).trim();
+        return {
+          success: true,
+          data: {
+            nextNumber: normalized,
+            next_number: normalized,
+            quoteNumber: normalized,
+            seriesId: txRes?.data?.seriesId || txRes?.seriesId || "",
+          },
+        };
+      }
+    } catch {
+      // fall back
+    }
+    const prefix = typeof prefixOrLookup === "string" ? prefixOrLookup : String((prefixOrLookup as any)?.prefix || "");
+    return request({ path: "/quotes/next-number", params: { prefix } });
+  },
   bulkDelete: (ids: string[]) => request({ method: "POST", path: "/quotes/bulk-delete", data: { ids } }),
   sendEmail: async (id: string, data: any) => {
     const res: any = await request({ method: "POST", path: `/quotes/${encodeURIComponent(id)}/send-email`, data });
@@ -1739,12 +1813,36 @@ export const salesReceiptsAPI = {
   delete: (id: string) => salesReceiptsBase.delete(id),
   getNextNumber: async () => {
     try {
+      const txRes: any = await transactionNumberSeriesAPI.getNextNumber({ module: "Sales Receipt", reserve: false });
+      const nextNumber =
+        txRes?.data?.nextNumber ||
+        txRes?.data?.next_number ||
+        txRes?.data?.receiptNumber ||
+        txRes?.nextNumber;
+      if (nextNumber) {
+        const normalized = String(nextNumber).trim();
+        return {
+          success: true,
+          data: {
+            nextNumber: normalized,
+            next_number: normalized,
+            receiptNumber: normalized,
+            nextReceiptNumber: normalized,
+            seriesId: txRes?.data?.seriesId || txRes?.seriesId || "",
+          },
+        };
+      }
+    } catch {
+      // fall back
+    }
+    try {
       const res = await request({ path: "/sales-receipts/next-number" });
       if (res?.success) return res as any;
     } catch {}
     const all = await salesReceiptsLocal.getAll({ limit: 100000 });
     const next = (all.pagination?.total || 0) + 1;
-    return { success: true, data: { nextNumber: `SR-${String(next).padStart(5, "0")}` } };
+    const nextNumber = `SR-${String(next).padStart(5, "0")}`;
+    return { success: true, data: { nextNumber, next_number: nextNumber, receiptNumber: nextNumber, nextReceiptNumber: nextNumber } };
   },
   sendEmail: async (id: string, data: any) => {
     const res: any = await request({ method: "POST", path: `/sales-receipts/${encodeURIComponent(id)}/send-email`, data });
