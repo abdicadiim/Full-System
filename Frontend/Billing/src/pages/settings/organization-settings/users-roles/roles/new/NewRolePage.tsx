@@ -6,6 +6,26 @@ import { AUTH_USER_REFRESH_EVENT } from "../../../../../../services/auth";
 import { usePermissions } from "../../../../../../hooks/usePermissions";
 import AccessDenied from "../../../../../../components/AccessDenied";
 
+const PERMISSION_ACTION_KEYS = new Set(["view", "create", "edit", "delete", "approve", "export", "schedule", "share"]);
+
+const normalizePermissionTree = (value: any): any => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+
+  const normalized: Record<string, any> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    normalized[key] = normalizePermissionTree(entry);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(normalized, "full")) {
+    const actionKeys = Object.keys(normalized).filter((key) => PERMISSION_ACTION_KEYS.has(key));
+    if (actionKeys.length > 0) {
+      normalized.full = actionKeys.every((key) => Boolean(normalized[key]));
+    }
+  }
+
+  return normalized;
+};
+
 export default function NewRolePage() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -247,7 +267,7 @@ export default function NewRolePage() {
         setIsAccountantRole(Boolean(roleData.isAccountantRole));
 
         if (roleData.permissions) {
-           setPermissions(prev => ({
+           setPermissions(prev => normalizePermissionTree({
               ...prev,
               ...roleData.permissions
            }));
@@ -289,17 +309,20 @@ export default function NewRolePage() {
   const handlePermChange = (section: string, item: string, action: string, value: boolean) => {
     setPermissions(prev => {
         const newSection = { ...prev[section as keyof typeof prev] };
+        const currentPerm = { ...(newSection[item] || {}) };
+        const actionKeys = Object.keys(currentPerm).filter((key) => PERMISSION_ACTION_KEYS.has(key) && key !== "full");
+
         if (action === "full") {
-            newSection[item] = { 
-                ...newSection[item], 
-                full: value, 
-                view: value, 
-                create: value, 
-                edit: value, 
-                delete: value 
-            };
+            const nextPerm = { ...currentPerm };
+            actionKeys.forEach((key) => {
+                nextPerm[key] = value;
+            });
+            nextPerm.full = value;
+            newSection[item] = nextPerm;
         } else {
-            newSection[item] = { ...newSection[item], [action]: value };
+            const nextPerm = { ...currentPerm, [action]: value };
+            nextPerm.full = actionKeys.length > 0 ? actionKeys.every((key) => Boolean(nextPerm[key])) : Boolean(nextPerm.full);
+            newSection[item] = nextPerm;
         }
         return { ...prev, [section]: newSection };
     });
@@ -715,7 +738,7 @@ export default function NewRolePage() {
                 name: roleName.trim(),
                 description: description.trim(),
                 isAccountantRole,
-                permissions,
+                permissions: normalizePermissionTree(permissions),
                 updatedAt: new Date().toISOString()
               };
 
