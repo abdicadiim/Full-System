@@ -604,20 +604,12 @@ export const updateMe = async (req: express.Request, res: express.Response) => {
 
   const updated = await User.findByIdAndUpdate(userId, { $set: patch }, { new: true }).lean();
   if (!updated) return res.status(404).json({ success: false, message: "User not found", data: null });
+  const authUser = await buildAuthUserData(updated);
 
   return res.json({
     success: true,
     data: {
-      id: String(updated._id),
-      name: updated.name,
-      email: updated.email,
-      organizationId: String((updated as any).organizationId),
-      role: String((updated as any).role || "member"),
-      permissions: await (async () => {
-        const current = await buildAuthUserData(updated);
-        return current.permissions ?? null;
-      })(),
-      photoUrl: (updated as any).photoUrl || "",
+      ...authUser,
       activeTimer: (updated as any).activeTimer || null,
     },
   });
