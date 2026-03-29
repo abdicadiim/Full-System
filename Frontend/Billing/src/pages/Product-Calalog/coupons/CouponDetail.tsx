@@ -94,6 +94,9 @@ type CouponDetailProps = {
   onToggleActive: (id: string) => void;
   onClone: (id: string) => void;
   onDelete: (id: string) => void;
+  canCreate?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
 };
 
 const statusTextClass = (status: CouponDetailRecord['status']) => {
@@ -118,6 +121,9 @@ export default function CouponDetail({
   onToggleActive,
   onClone,
   onDelete,
+  canCreate = true,
+  canEdit = true,
+  canDelete = true,
 }: CouponDetailProps) {
   const [activeTab, setActiveTab] = useState<DetailTab>('details');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -174,14 +180,16 @@ export default function CouponDetail({
           </button>
 
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onNew}
-              className="h-8 w-8 rounded-md text-white flex items-center justify-center transition-all hover:brightness-110"
-              style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
-            >
-              <Plus size={18} />
-            </button>
+            {canCreate ? (
+              <button
+                type="button"
+                onClick={onNew}
+                className="h-8 w-8 rounded-md text-white flex items-center justify-center transition-all hover:brightness-110"
+                style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
+              >
+                <Plus size={18} />
+              </button>
+            ) : null}
             <button
               type="button"
               className="h-8 w-8 rounded-md border border-gray-200 text-gray-600 flex items-center justify-center hover:bg-gray-50"
@@ -238,24 +246,28 @@ export default function CouponDetail({
         </div>
 
         <div className="h-[40px] border-b border-[#d8deea] bg-[#f7f8fc] px-4 flex items-center gap-3 text-[12px]">
-          <button
-            type="button"
-            onClick={() => onEdit(selectedCoupon.id)}
-            className="text-[#1f2937] hover:text-[#0f172a] inline-flex items-center gap-1"
-          >
-            <Pencil size={13} />
-            Edit
-          </button>
-          <div className="h-4 w-px bg-[#d1d5db]" />
-          <button
-            type="button"
-            onClick={() => onToggleActive(selectedCoupon.id)}
-            className="text-[#1f2937] hover:text-[#0f172a] inline-flex items-center gap-1"
-          >
-            <Circle size={13} />
-            {toggleLabel}
-          </button>
-          <div className="h-4 w-px bg-[#d1d5db]" />
+          {canEdit ? (
+            <>
+              <button
+                type="button"
+                onClick={() => onEdit(selectedCoupon.id)}
+                className="text-[#1f2937] hover:text-[#0f172a] inline-flex items-center gap-1"
+              >
+                <Pencil size={13} />
+                Edit
+              </button>
+              <div className="h-4 w-px bg-[#d1d5db]" />
+              <button
+                type="button"
+                onClick={() => onToggleActive(selectedCoupon.id)}
+                className="text-[#1f2937] hover:text-[#0f172a] inline-flex items-center gap-1"
+              >
+                <Circle size={13} />
+                {toggleLabel}
+              </button>
+              <div className="h-4 w-px bg-[#d1d5db]" />
+            </>
+          ) : null}
           <div className="relative">
             <button
               type="button"
@@ -266,28 +278,32 @@ export default function CouponDetail({
             </button>
             {menuOpen && (
               <div className="absolute left-0 top-full mt-2 w-40 rounded-lg border border-gray-200 bg-white shadow-xl z-[90] p-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClone(selectedCoupon.id);
-                    setMenuOpen(false);
-                  }}
-                  className="w-full px-3 py-2 rounded-md text-left text-sm text-slate-700 hover:bg-slate-50 inline-flex items-center gap-2"
-                >
-                  <Copy size={14} className="text-[#3b82f6]" />
-                  Clone
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onDelete(selectedCoupon.id);
-                    setMenuOpen(false);
-                  }}
-                  className="w-full px-3 py-2 rounded-md text-left text-sm text-slate-700 hover:bg-slate-50 inline-flex items-center gap-2"
-                >
-                  <Trash2 size={14} className="text-red-500" />
-                  Delete
-                </button>
+                {canCreate ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClone(selectedCoupon.id);
+                      setMenuOpen(false);
+                    }}
+                    className="w-full px-3 py-2 rounded-md text-left text-sm text-slate-700 hover:bg-slate-50 inline-flex items-center gap-2"
+                  >
+                    <Copy size={14} className="text-[#3b82f6]" />
+                    Clone
+                  </button>
+                ) : null}
+                {canDelete ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onDelete(selectedCoupon.id);
+                      setMenuOpen(false);
+                    }}
+                    className="w-full px-3 py-2 rounded-md text-left text-sm text-slate-700 hover:bg-slate-50 inline-flex items-center gap-2"
+                  >
+                    <Trash2 size={14} className="text-red-500" />
+                    Delete
+                  </button>
+                ) : null}
               </div>
             )}
           </div>

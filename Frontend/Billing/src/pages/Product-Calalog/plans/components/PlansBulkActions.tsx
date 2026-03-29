@@ -8,6 +8,9 @@ interface PlansBulkActionsProps {
     onMarkInactive: () => void;
     onDelete: () => void;
     onBulkUpdate: () => void;
+    canBulkUpdate?: boolean;
+    canMarkStatus?: boolean;
+    canDelete?: boolean;
 }
 
 export default function PlansBulkActions({
@@ -17,36 +20,49 @@ export default function PlansBulkActions({
     onMarkInactive,
     onDelete,
     onBulkUpdate,
+    canBulkUpdate = true,
+    canMarkStatus = true,
+    canDelete = true,
 }: PlansBulkActionsProps) {
     return (
         <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-2">
-                <button
-                    onClick={onBulkUpdate}
-                    className="px-3 py-1.5 border border-gray-300 rounded text-xs font-medium text-slate-700 hover:bg-[#1b5e6a] hover:text-white bg-white shadow-sm transition-colors"
-                >
-                    Bulk Update
-                </button>
-                <button
-                    onClick={onMarkActive}
-                    className="px-3 py-1.5 border border-gray-300 rounded text-xs font-medium text-slate-700 hover:bg-[#1b5e6a] hover:text-white bg-white shadow-sm transition-colors"
-                >
-                    Mark as Active
-                </button>
-                <button
-                    onClick={onMarkInactive}
-                    className="px-3 py-1.5 border border-gray-300 rounded text-xs font-medium text-slate-700 hover:bg-[#1b5e6a] hover:text-white bg-white shadow-sm transition-colors"
-                >
-                    Mark as Inactive
-                </button>
-                <button
-                    onClick={onDelete}
-                    className="px-3 py-1.5 border border-gray-300 rounded text-xs font-medium text-slate-700 hover:bg-red-600 hover:text-white bg-white shadow-sm transition-colors"
-                >
-                    Delete
-                </button>
+                {canBulkUpdate ? (
+                    <button
+                        onClick={onBulkUpdate}
+                        className="px-3 py-1.5 border border-gray-300 rounded text-xs font-medium text-slate-700 hover:bg-[#1b5e6a] hover:text-white bg-white shadow-sm transition-colors"
+                    >
+                        Bulk Update
+                    </button>
+                ) : null}
+                {canMarkStatus ? (
+                    <>
+                        <button
+                            onClick={onMarkActive}
+                            className="px-3 py-1.5 border border-gray-300 rounded text-xs font-medium text-slate-700 hover:bg-[#1b5e6a] hover:text-white bg-white shadow-sm transition-colors"
+                        >
+                            Mark as Active
+                        </button>
+                        <button
+                            onClick={onMarkInactive}
+                            className="px-3 py-1.5 border border-gray-300 rounded text-xs font-medium text-slate-700 hover:bg-[#1b5e6a] hover:text-white bg-white shadow-sm transition-colors"
+                        >
+                            Mark as Inactive
+                        </button>
+                    </>
+                ) : null}
+                {canDelete ? (
+                    <button
+                        onClick={onDelete}
+                        className="px-3 py-1.5 border border-gray-300 rounded text-xs font-medium text-slate-700 hover:bg-red-600 hover:text-white bg-white shadow-sm transition-colors"
+                    >
+                        Delete
+                    </button>
+                ) : null}
 
-                <div className="hidden sm:block w-px h-6 bg-gray-300 mx-2" />
+                {(canBulkUpdate || canMarkStatus || canDelete) ? (
+                    <div className="hidden sm:block w-px h-6 bg-gray-300 mx-2" />
+                ) : null}
 
                 <div className="flex items-center gap-1">
                     <span className="text-sm font-medium text-slate-600 bg-slate-200 px-2 py-0.5 rounded-full">
