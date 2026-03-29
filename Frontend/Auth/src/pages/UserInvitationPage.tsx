@@ -124,14 +124,6 @@ export default function UserInvitationPage() {
               </p>
             </div>
 
-            {step === "invite" ? (
-              <Link
-                className="hidden rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 sm:inline-flex"
-                to={`/login${app ? `?app=${app}` : ""}`}
-              >
-                Back to sign in
-              </Link>
-            ) : null}
           </div>
 
           <div className="mt-8">
@@ -190,16 +182,6 @@ export default function UserInvitationPage() {
                   </div>
                 ) : null}
 
-                {step === "invite" ? (
-                  <div className="sm:hidden">
-                    <Link
-                      className="inline-flex rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
-                      to={`/login${app ? `?app=${app}` : ""}`}
-                    >
-                      Back to sign in
-                    </Link>
-                  </div>
-                ) : null}
               </div>
             )}
           </div>
