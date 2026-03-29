@@ -33,22 +33,25 @@ export default function DashboardRoutes() {
     return <div className="p-6 text-sm text-slate-500">Loading dashboard permissions...</div>;
   }
 
-  const ProjectsRoute = canViewProjects
-    ? ProjectsPage
-    : () => (
-        <AccessDenied
-          title="Projects access required"
-          message="Your role does not include permission to view the dashboard projects page."
-        />
-      );
-
   return (
     <Routes>
       <Route index element={<OverviewPage />} />
       <Route path="metrics" element={<MetricsPage />} />
       <Route path="subscriptions" element={<SubscriptionsPage />} />
       <Route path="finance" element={<FinancePage />} />
-      <Route path="projects" element={<ProjectsRoute />} />
+      <Route
+        path="projects"
+        element={
+          canViewProjects ? (
+            <ProjectsPage />
+          ) : (
+            <AccessDenied
+              title="Projects access required"
+              message="Your role does not include permission to view the dashboard projects page."
+            />
+          )
+        }
+      />
     </Routes>
   );
 }
