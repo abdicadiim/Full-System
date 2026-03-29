@@ -21,6 +21,7 @@ import PlansBulkUpdateModal from "./components/PlansBulkUpdateModal";
 import NewProductModal from "./newProduct/NewProductModal";
 import { addonsAPI, couponsAPI, plansAPI, productsAPI } from "../../../services/api";
 import { useCurrency } from "../../../hooks/useCurrency";
+import { usePermissions } from "../../../hooks/usePermissions";
 
 type TabType = "plans" | "products";
 type ImportEntity = "plans" | "products";
@@ -213,6 +214,7 @@ export default function PlansPage() {
     const navigate = useNavigate();
     const location = useLocation();
     const { formatMoney, baseCurrencyCode } = useCurrency();
+    const { canCreate, canEdit, canDelete } = usePermissions();
 
     const [tab, setTab] = useState<TabType>("plans");
     const [planStatusFilter, setPlanStatusFilter] = useState<"All Plans" | "Active Plans" | "Inactive Plans">("All Plans");
@@ -254,6 +256,16 @@ export default function PlansPage() {
     const moreRef = useRef<HTMLDivElement>(null);
     const tableToolsRef = useRef<HTMLDivElement>(null);
     const resizingRef = useRef<{ key: string; startX: number; startWidth: number } | null>(null);
+
+    const canCreateCurrent = tab === "products"
+        ? canCreate("products", "Products")
+        : canCreate("products", "Plan");
+    const canEditCurrent = tab === "products"
+        ? canEdit("products", "Products")
+        : canEdit("products", "Plan");
+    const canDeleteCurrent = tab === "products"
+        ? canDelete("products", "Products")
+        : canDelete("products", "Plan");
 
   useEffect(() => {
     const refreshProducts = async () => {
