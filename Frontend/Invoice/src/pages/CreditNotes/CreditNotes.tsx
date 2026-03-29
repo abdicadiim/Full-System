@@ -983,7 +983,7 @@ export default function CreditNotes() {
   }, []);
 
   return (
-    <div className="w-full h-[calc(100vh-4rem)] bg-white flex flex-col overflow-hidden overflow-x-hidden">
+    <div className="w-full h-[calc(100vh-4rem)] min-h-0 bg-white flex flex-col overflow-hidden overflow-x-hidden">
       {/* Header - Show Bulk Actions Bar when items are selected, otherwise show normal header */}
       {selectedCreditNotes.length > 0 ? (
         <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-white">
