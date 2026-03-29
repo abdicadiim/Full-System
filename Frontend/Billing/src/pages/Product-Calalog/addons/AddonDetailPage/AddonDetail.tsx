@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import { buildCloneName } from "../../utils/cloneName";
 import CommentsDrawer from "../../plans/components/CommentsDrawer";
 import { addonsAPI } from "../../../../services/api";
+import { usePermissions } from "../../../../hooks/usePermissions";
 
 const PLANS_STORAGE_KEY = "inv_plans_v1";
 const PRICE_LISTS_STORAGE_KEY = "inv_price_lists_v1";
@@ -43,6 +44,7 @@ const DetailsRow = ({ label, value }: { label: string; value: React.ReactNode })
 export default function AddonDetailPage() {
   const navigate = useNavigate();
   const { addonId } = useParams<{ addonId: string }>();
+  const { canCreate, canEdit, canDelete } = usePermissions();
   const [addons, setAddons] = useState<AddonRecord[]>([]);
   const [plans, setPlans] = useState<any[]>([]);
   const [priceLists, setPriceLists] = useState<any[]>([]);
@@ -62,6 +64,11 @@ export default function AddonDetailPage() {
   const sidebarMenuRef = useRef<HTMLDivElement>(null);
   const bulkActionsRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const canCreateAddon = canCreate("products", "Addon");
+  const canEditAddon = canEdit("products", "Addon");
+  const canDeleteAddon = canDelete("products", "Addon");
+  const canCreatePlan = canCreate("products", "Plan");
+  const canCreatePriceList = canCreate("products", "Price List");
 
   const loadAddons = async () => {
     try {
