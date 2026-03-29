@@ -571,23 +571,6 @@ export default function NewAddonPage() {
   const canCreateAddon = canCreate("products", "Addon");
   const canEditAddon = canEdit("products", "Addon");
 
-  if (permissionsLoading) {
-    return (
-      <div className="flex min-h-[40vh] w-full items-center justify-center p-6 text-sm text-gray-500">
-        Loading permissions...
-      </div>
-    );
-  }
-
-  if ((isEditMode && !canEditAddon) || (!isEditMode && !canCreateAddon)) {
-    return (
-      <AccessDenied
-        title="Addons access required"
-        message={isEditMode ? "Your role does not include permission to edit Addons." : "Your role does not include permission to create Addons."}
-      />
-    );
-  }
-
   const unitOptions = useMemo(() => dedupe([form.unit, ...UNIT_OPTIONS]), [form.unit]);
   const taxOptions = useMemo(() => dedupe([form.taxName, ...taxes]), [form.taxName, taxes]);
   const plansForSelectedProduct = useMemo(() => {
