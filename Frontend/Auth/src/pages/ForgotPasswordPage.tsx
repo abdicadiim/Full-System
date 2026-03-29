@@ -48,7 +48,6 @@ export default function ForgotPasswordPage() {
   const initialEmail = useMemo(() => searchParams.get("email") || "", [searchParams]);
   const initialName = useMemo(() => searchParams.get("name") || "", [searchParams]);
   const initialPhotoUrl = useMemo(() => searchParams.get("photoUrl") || "", [searchParams]);
-  const autoSentInviteCodeRef = useRef(false);
   const [fullName, setFullName] = useState(initialName);
   const [photoUrl, setPhotoUrl] = useState(initialPhotoUrl);
   const loginSearch = useMemo(() => {
@@ -93,13 +92,6 @@ export default function ForgotPasswordPage() {
 
     return () => window.clearInterval(interval);
   }, [codeSent, remainingSeconds]);
-
-  useEffect(() => {
-    if (!isInvitationFlow || step !== "request" || codeSent || loading) return;
-    if (!email.trim() || autoSentInviteCodeRef.current) return;
-    autoSentInviteCodeRef.current = true;
-    void requestResetCode();
-  }, [email, isInvitationFlow, codeSent, loading, step]);
 
   const requestResetCode = async () => {
     const nextEmail = email.trim();
