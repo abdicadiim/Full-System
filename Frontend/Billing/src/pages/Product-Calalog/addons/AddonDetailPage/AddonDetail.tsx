@@ -103,23 +103,6 @@ export default function AddonDetailPage() {
     loadPriceLists();
   }, []);
 
-  if (permissionsLoading) {
-    return (
-      <div className="flex min-h-[40vh] w-full items-center justify-center p-6 text-sm text-gray-500">
-        Loading permissions...
-      </div>
-    );
-  }
-
-  if (!canViewAddon) {
-    return (
-      <AccessDenied
-        title="Addons access required"
-        message="Your role does not include permission to view Addons."
-      />
-    );
-  }
-
   const resolvedAddons = useMemo(() => addons, [addons]);
 
   const sidebarAddons = useMemo(
