@@ -239,6 +239,10 @@ export default function AddonDetailPage() {
   }
 
   const handleClone = () => {
+    if (!canCreateAddon) {
+      toast.error("You do not have permission to create this item.");
+      return;
+    }
     const rows = resolvedAddons;
     const source = addon;
     const now = new Date().toISOString();
@@ -274,15 +278,27 @@ export default function AddonDetailPage() {
   };
 
   const handleDelete = () => {
+    if (!canDeleteAddon) {
+      toast.error("You do not have permission to delete this item.");
+      return;
+    }
     setActionsOpen(false);
     setIsDeleteModalOpen(true);
   };
 
   const handleEdit = () => {
+    if (!canEditAddon) {
+      toast.error("You do not have permission to edit this item.");
+      return;
+    }
     navigate(`/products/addons/${addon.id}/edit`);
   };
 
   const handleToggleStatus = () => {
+    if (!canEditAddon) {
+      toast.error("You do not have permission to update this item.");
+      return;
+    }
     const nextStatus: AddonRecord["status"] = statusIsActive ? "Inactive" : "Active";
     void (async () => {
       try {
@@ -338,6 +354,10 @@ export default function AddonDetailPage() {
   };
 
   const handleBulkDelete = () => {
+    if (!canDeleteAddon) {
+      toast.error("You do not have permission to delete this item.");
+      return;
+    }
     if (selectedIds.length === 0) return;
     if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} selected addons?`)) return;
     const selectedSet = new Set(selectedIds);
@@ -433,6 +453,10 @@ export default function AddonDetailPage() {
   };
 
   const handleDeleteImage = () => {
+    if (!canEditAddon) {
+      toast.error("You do not have permission to edit this item.");
+      return;
+    }
     void (async () => {
       try {
         await addonsAPI.update(String(addon.id), { imageUrl: "" });
