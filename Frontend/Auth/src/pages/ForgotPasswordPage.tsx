@@ -49,6 +49,14 @@ export default function ForgotPasswordPage() {
   const initialName = useMemo(() => searchParams.get("name") || "", [searchParams]);
   const autoSentInviteCodeRef = useRef(false);
   const [fullName, setFullName] = useState(initialName);
+  const loginSearch = useMemo(() => {
+    const params = new URLSearchParams(search);
+    params.delete("invite");
+    params.delete("email");
+    params.delete("name");
+    const query = params.toString();
+    return query ? `?${query}` : "";
+  }, [search]);
 
   useEffect(() => {
     if (isLogoutRedirect) return;
@@ -330,7 +338,7 @@ export default function ForgotPasswordPage() {
       </form>
 
       <div className="mt-5 flex flex-wrap items-center justify-end gap-3 text-sm">
-        <Link className="font-semibold text-slate-600 hover:underline" to={`/login${search}`}>
+        <Link className="font-semibold text-slate-600 hover:underline" to={`/login${loginSearch}`}>
           Back to sign in
         </Link>
       </div>

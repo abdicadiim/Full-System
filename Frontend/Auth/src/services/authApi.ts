@@ -2,11 +2,11 @@ type ApiResult<T> =
   | { success: true; data: T; message?: string }
   | { success: false; message?: string; data?: unknown };
 
-const request = async <T>(path: string, body?: unknown): Promise<ApiResult<T>> => {
+const request = async <T>(path: string, body?: unknown, method = "POST"): Promise<ApiResult<T>> => {
   const res = await fetch(`/api${path}`, {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body ?? {}),
+    body: method === "GET" ? undefined : JSON.stringify(body ?? {}),
     credentials: "include",
   });
   const payload = await res.json().catch(() => null);
@@ -42,8 +42,9 @@ export const authApi = {
     ),
   getUserInvitation: (userId: string, token: string) =>
     request<{ id: string; name: string; email: string; organizationName: string; role: string }>(
-      `/public/users/invitations/${encodeURIComponent(userId)}`,
-      { token }
+      `/public/users/invitations/${encodeURIComponent(userId)}?token=${encodeURIComponent(token)}`,
+      undefined,
+      "GET"
     ),
   acceptUserInvitation: (userId: string, token: string) =>
     request<{ id: string; name: string; email: string; organizationName: string; role: string }>(

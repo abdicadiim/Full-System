@@ -516,6 +516,7 @@ export const resetPasswordWithCode = async (req: express.Request, res: express.R
   }
 
   const passwordHash = await bcrypt.hash(newPassword, 10);
+  const nextName = typeof req.body?.name === "string" ? String(req.body.name).trim().slice(0, 120) : "";
   await User.updateOne(
     { _id: user._id },
     {
@@ -524,6 +525,17 @@ export const resetPasswordWithCode = async (req: express.Request, res: express.R
         passwordResetHash: "",
         passwordResetExpiresAt: null,
         passwordResetSentAt: null,
+        ...(nextName ? { name: nextName } : {}),
+        ...(String((user as any).status || "").toLowerCase() === "invited" || (user as any).inviteAcceptedAt
+          ? {
+              status: "Active",
+              inviteAcceptedAt: (user as any).inviteAcceptedAt || new Date(),
+              inviteRejectedAt: null,
+              inviteTokenHash: "",
+              inviteTokenExpiresAt: null,
+              inviteTokenSentAt: null,
+            }
+          : {}),
       },
     }
   );
