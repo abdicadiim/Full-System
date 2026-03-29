@@ -242,6 +242,10 @@ export default function ProductDetailPage() {
   }, [products, productFilter]);
 
   const handleToggleStatus = async () => {
+    if (!canEditProduct) {
+      toast.error("You do not have permission to update this item.");
+      return;
+    }
     if (!selectedProduct) return;
     const currentlyActive = isActive(selectedProduct);
     const hasActiveAssociations =
@@ -268,6 +272,10 @@ export default function ProductDetailPage() {
   };
 
   const handleDeleteProduct = () => {
+    if (!canDeleteProduct) {
+      toast.error("You do not have permission to delete this item.");
+      return;
+    }
     if (!selectedProduct) return;
     const hasTransactions = productPlans.length > 0 || productAddons.length > 0 || productCoupons.length > 0;
     if (hasTransactions) {
