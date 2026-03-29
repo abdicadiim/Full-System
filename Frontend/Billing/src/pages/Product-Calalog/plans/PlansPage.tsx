@@ -935,20 +935,6 @@ export default function PlansPage() {
                                     </div>
                                 ) : (
                                     <div className="absolute top-full right-0 mt-2 w-60 bg-white border border-gray-100 rounded-lg shadow-xl z-[110] py-2 animate-in fade-in slide-in-from-top-1 duration-200">
-                                        {canCreateCurrent ? (
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setMoreDropdownOpen(false);
-                                                    setSortSubMenuOpen(false);
-                                                    setImportEntity("plans");
-                                                }}
-                                                className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
-                                            >
-                                                <Upload size={16} className="text-teal-600 group-hover:text-white" />
-                                                Import Plans
-                                            </button>
-                                        ) : null}
                                         <div className="relative">
                                             <button
                                                 onClick={() => setSortSubMenuOpen((prev) => !prev)}
@@ -986,17 +972,19 @@ export default function PlansPage() {
                                             )}
                                         </div>
                                         <div className="h-px bg-gray-50 my-1 mx-2" />
-                                        <button
-                                            onClick={() => {
-                                                setMoreDropdownOpen(false);
-                                                setSortSubMenuOpen(false);
-                                                navigate("/products/plans/import");
-                                            }}
-                                            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
-                                        >
-                                            <Upload size={16} className="text-teal-600 group-hover:text-white" />
-                                            Import Plans
-                                        </button>
+                                        {canCreateCurrent ? (
+                                            <button
+                                                onClick={() => {
+                                                    setMoreDropdownOpen(false);
+                                                    setSortSubMenuOpen(false);
+                                                    navigate("/products/plans/import");
+                                                }}
+                                                className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
+                                            >
+                                                <Upload size={16} className="text-teal-600 group-hover:text-white" />
+                                                Import Plans
+                                            </button>
+                                        ) : null}
                                         <button
                                             onClick={handleExport}
                                             className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
