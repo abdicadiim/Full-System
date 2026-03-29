@@ -109,7 +109,7 @@ export default function UserInvitationPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-10 font-display text-slate-900 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-white px-4 py-10 font-display text-slate-900 sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-2xl flex-col items-center pt-2 sm:pt-6">
         <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_20px_60px_rgba(15,23,42,0.08)] sm:p-8">
           <div className="flex items-start justify-between gap-4">
