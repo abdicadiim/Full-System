@@ -4,6 +4,7 @@ import LoginPage from "./pages/LoginPage";
 import EmailOtpLoginPage from "./pages/EmailOtpLoginPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import SignupPage from "./pages/SignupPage";
+import UserInvitationPage from "./pages/UserInvitationPage";
 import OrgSetupPage from "./pages/OrgSetupPage";
 import OptimizePage from "./pages/OptimizePage";
 import MovingSystemPage from "./pages/MovingSystemPage";
@@ -16,6 +17,7 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/login/email-otp" element={<EmailOtpLoginPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/invite" element={<UserInvitationPage />} />
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/org-setup" element={<OrgSetupPage />} />
       <Route path="/optimize" element={<OptimizePage />} />

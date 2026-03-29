@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import AuthShell from "../components/AuthShell";
 import { getAppDisplayName, getFallbackUrl } from "../lib/appBranding";
 import { goReturnTo } from "../lib/returnTo";
+import { setSessionBridgeToken } from "../lib/sessionBridge";
 import { authApi } from "../services/authApi";
 
 const persistSession = (result: any) => {
@@ -14,6 +15,7 @@ const persistSession = (result: any) => {
     localStorage.setItem("auth_token", token);
     localStorage.setItem("token", token);
     localStorage.setItem("accessToken", token);
+    setSessionBridgeToken(token);
   }
   if (user) {
     const serialized = JSON.stringify(user);
@@ -30,6 +32,8 @@ export default function ForgotPasswordPage() {
   const [code, setCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [step, setStep] = useState<Step>("request");
   const [codeSent, setCodeSent] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
@@ -108,6 +112,7 @@ export default function ForgotPasswordPage() {
         return;
       }
 
+      setError(null);
       setStep("reset");
     } catch (err: any) {
       setError(err?.message || "Reset code verification failed");
@@ -171,7 +176,7 @@ export default function ForgotPasswordPage() {
           />
         </div>
 
-        {step !== "request" ? (
+        {step === "verify" ? (
           <div>
             <label className="mb-2 block text-sm font-semibold text-slate-700">Reset Code</label>
             <input
@@ -181,9 +186,8 @@ export default function ForgotPasswordPage() {
               maxLength={6}
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              disabled={step === "reset"}
             />
-            {codeSent ? (
+            {codeSent && step === "verify" ? (
               <div className="mt-2 flex items-center justify-between gap-3 text-sm font-medium">
                 <p className={remainingSeconds > 0 ? "text-slate-500" : "text-rose-600"}>
                   {remainingSeconds > 0
@@ -211,23 +215,47 @@ export default function ForgotPasswordPage() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
               <label className="mb-2 block text-sm font-semibold text-slate-700">New Password</label>
-              <input
-                className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-primary"
-                placeholder="Enter your new password"
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-              />
+              <div className="relative">
+                <input
+                  className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 pr-12 text-slate-900 outline-none transition-all placeholder:text-xs placeholder:font-medium focus:border-transparent focus:ring-2 focus:ring-primary"
+                  placeholder="Enter your new password"
+                  type={showNewPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+                <button
+                  aria-label={showNewPassword ? "Hide new password" : "Show new password"}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-500 transition-colors hover:text-slate-700"
+                  onClick={() => setShowNewPassword((current) => !current)}
+                  type="button"
+                >
+                  <span className="material-symbols-outlined text-[20px]">
+                    {showNewPassword ? "visibility_off" : "visibility"}
+                  </span>
+                </button>
+              </div>
             </div>
             <div>
               <label className="mb-2 block text-sm font-semibold text-slate-700">Confirm Password</label>
-              <input
-                className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-primary"
-                placeholder="Confirm your new password"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-              />
+              <div className="relative">
+                <input
+                  className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 pr-12 text-slate-900 outline-none transition-all placeholder:text-xs placeholder:font-medium focus:border-transparent focus:ring-2 focus:ring-primary"
+                  placeholder="Confirm your new password"
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+                <button
+                  aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-500 transition-colors hover:text-slate-700"
+                  onClick={() => setShowConfirmPassword((current) => !current)}
+                  type="button"
+                >
+                  <span className="material-symbols-outlined text-[20px]">
+                    {showConfirmPassword ? "visibility_off" : "visibility"}
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
         ) : null}
@@ -256,11 +284,12 @@ export default function ForgotPasswordPage() {
         </button>
       </form>
 
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-sm">
+      <div className="mt-5 flex flex-wrap items-center justify-end gap-3 text-sm">
         <Link className="font-semibold text-slate-600 hover:underline" to={`/login${search}`}>
           Back to sign in
         </Link>
       </div>
+
     </AuthShell>
   );
 }

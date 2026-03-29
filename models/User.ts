@@ -16,6 +16,10 @@ const UserSchema = new mongoose.Schema(
 
     inviteSentAt: { type: Date, default: null, index: true },
     inviteAcceptedAt: { type: Date, default: null, index: true },
+    inviteRejectedAt: { type: Date, default: null, index: true },
+    inviteTokenHash: { type: String, default: "", index: true },
+    inviteTokenExpiresAt: { type: Date, default: null, index: true },
+    inviteTokenSentAt: { type: Date, default: null, index: true },
 
     // Temporary auth codes for email OTP sign-in and password resets.
     loginOtpHash: { type: String, default: "" },

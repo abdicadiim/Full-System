@@ -12,8 +12,16 @@ const getStoredToken = () => {
     localStorage.getItem("token") ||
     localStorage.getItem("auth_token") ||
     localStorage.getItem("accessToken") ||
+    readCookie("fs_session_bridge") ||
     ""
   );
+};
+
+const readCookie = (name: string) => {
+  if (typeof document === "undefined") return "";
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = document.cookie.match(new RegExp(`(?:^|; )${escaped}=([^;]*)`));
+  return match ? decodeURIComponent(match[1] || "") : "";
 };
 
 const toQuery = (params?: Record<string, any>) => {

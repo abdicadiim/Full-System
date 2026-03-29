@@ -1,5 +1,12 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { AUTH_USER_UPDATED_EVENT, clearLogoutRequested, isLogoutRequested, logout as serviceLogout } from "../../services/auth";
+import {
+  AUTH_USER_UPDATED_EVENT,
+  clearLogoutRequested,
+  getToken,
+  isLogoutRequested,
+  logout as serviceLogout,
+  setToken,
+} from "../../services/auth";
 import { waitForBackendReady } from "../../services/backendReady";
 
 type User =
@@ -43,13 +50,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       url.searchParams.delete("auth_return");
       window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
     }
-    if (isLogoutRequested()) {
+    const token = getToken();
+    if (isLogoutRequested() && !token) {
       setUser(null);
       setLoading(false);
       setHasChecked(true);
       return;
     }
-    const token = localStorage.getItem("auth_token") || localStorage.getItem("token") || "";
+    if (isLogoutRequested() && token) {
+      clearLogoutRequested();
+    }
 
     const ac = new AbortController();
     const timeout = setTimeout(() => ac.abort(), 8000);
@@ -64,8 +74,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       if (res.ok && payload?.success && payload.data) {
         const nextToken = payload?.token;
         if (typeof nextToken === "string" && nextToken) {
-          localStorage.setItem("auth_token", nextToken);
-          localStorage.setItem("token", nextToken);
+          setToken(nextToken);
         }
         clearLogoutRequested();
         setUser(payload.data);

@@ -35,11 +35,23 @@ export const authApi = {
     ),
   verifyPasswordResetCode: (email: string, code: string) =>
     request<{ verified: true; email: string }>("/auth/password/reset-verify", { email, code }),
-  resetPassword: (email: string, code: string, newPassword: string) =>
+  resetPassword: (email: string, code: string, newPassword: string, name?: string) =>
     request<{ id: string; name: string; email: string }>(
       "/auth/password/reset",
-      { email, code, newPassword }
+      { email, code, newPassword, name }
     ),
+  getUserInvitation: (userId: string, token: string) =>
+    request<{ id: string; name: string; email: string; organizationName: string; role: string }>(
+      `/public/users/invitations/${encodeURIComponent(userId)}`,
+      { token }
+    ),
+  acceptUserInvitation: (userId: string, token: string) =>
+    request<{ id: string; name: string; email: string; organizationName: string; role: string }>(
+      `/public/users/invitations/${encodeURIComponent(userId)}/accept`,
+      { token }
+    ),
+  rejectUserInvitation: (userId: string, token: string) =>
+    request<{ id: string }>(`/public/users/invitations/${encodeURIComponent(userId)}/reject`, { token }),
   signup: (name: string, email: string, password: string) =>
     request<{ id: string; name: string; email: string }>("/auth/signup", { name, email, password }),
 };

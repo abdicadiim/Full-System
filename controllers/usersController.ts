@@ -1,4 +1,5 @@
 import express from "express";
+import crypto from "node:crypto";
 import mongoose from "mongoose";
 import { User } from "../models/User.js";
 import { ActivityLog } from "../models/ActivityLog.js";
@@ -9,6 +10,8 @@ import { sendSmtpMail } from "../services/smtpMailer.js";
 
 const normalizeEmail = (value: unknown) => String(typeof value === "string" ? value : "").trim().toLowerCase();
 const normalizeName = (value: unknown) => String(typeof value === "string" ? value : "").trim();
+const sha256 = (value: string) => crypto.createHash("sha256").update(String(value || ""), "utf8").digest("hex");
+const generateInviteToken = () => crypto.randomBytes(24).toString("hex");
 const isActiveStatus = (value: unknown) => String(value ?? "").trim().toLowerCase() === "active";
 const isInactiveStatus = (value: unknown) => {
   const normalized = String(value ?? "").trim().toLowerCase();
@@ -16,6 +19,20 @@ const isInactiveStatus = (value: unknown) => {
 };
 const isDuplicateEmailError = (error: any) =>
   error?.code === 11000 && String(error?.keyPattern?.email || error?.keyValue?.email || error?.message || "").toLowerCase().includes("email");
+
+const getAuthFrontendUrl = () => String(process.env.AUTH_FRONTEND_URL || "http://localhost:5172").replace(/\/+$/, "");
+
+const verifyInviteTokenForUser = (user: any, token: string) => {
+  const inviteExpiresAt = user?.inviteTokenExpiresAt ? new Date(user.inviteTokenExpiresAt) : null;
+  const inviteTokenHash = String(user?.inviteTokenHash || "");
+  if (!inviteExpiresAt || inviteExpiresAt.getTime() < Date.now()) {
+    return { ok: false as const, message: "Invitation link is invalid or expired." };
+  }
+  if (!inviteTokenHash || sha256(token) !== inviteTokenHash) {
+    return { ok: false as const, message: "Invalid invitation link." };
+  }
+  return { ok: true as const };
+};
 
 const pickSmtpSender = async (organizationId: any) => {
   const primary: any = await SenderEmail.findOne({
@@ -303,8 +320,14 @@ export const sendUserInvitation = async (req: express.Request, res: express.Resp
   }
   const senderName = String(sender?.name || orgName || "Organization").trim() || orgName;
 
-  const baseUrl = String(process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/+$/, "");
-  const viewInvitationUrl = `${baseUrl}/login?email=${encodeURIComponent(String(user.email || ""))}`;
+  const inviteToken = generateInviteToken();
+  const inviteTokenHash = sha256(inviteToken);
+  const inviteTokenExpiresAt = new Date(Date.now() + 25 * 24 * 60 * 60 * 1000);
+  const app = String(req.body?.app || "").trim().toLowerCase();
+  const authBaseUrl = getAuthFrontendUrl();
+  const invitationUrl = `${authBaseUrl}/invite?userId=${encodeURIComponent(String(user._id || id))}&token=${encodeURIComponent(
+    inviteToken
+  )}${app ? `&app=${encodeURIComponent(app)}` : ""}`;
   const expiresDays = 25;
 
   const subject = `Invitation to join the ${orgName} organization!`;
@@ -313,9 +336,8 @@ export const sendUserInvitation = async (req: express.Request, res: express.Resp
   const text =
     `Hi ${safeName},\n\n` +
     `You have been invited by the admin of ${orgName} to join their organization.\n` +
-    `View Invitation: ${viewInvitationUrl}\n` +
+    `View Invitation: ${invitationUrl}\n` +
     `This invitation will expire in ${expiresDays} days.\n\n` +
-    (tempPassword ? `Temporary Password: ${tempPassword}\n\n` : "") +
     `Regards,\n` +
     `${orgName}\n`;
 
@@ -375,15 +397,9 @@ export const sendUserInvitation = async (req: express.Request, res: express.Resp
     `You have been invited by the admin of <b>${orgName}</b> to join their organization. Click below to view the invitation.` +
     `</p>` +
     `<div style="margin:20px 0 10px;">` +
-    `<a href="${viewInvitationUrl}" style="display:inline-block; background:#156372; color:#ffffff; text-decoration:none; padding:12px 18px; border-radius:4px; font-weight:700; font-size:14px;">View Invitation</a>` +
+    `<a href="${invitationUrl}" style="display:inline-block; background:#156372; color:#ffffff; text-decoration:none; padding:12px 18px; border-radius:4px; font-weight:700; font-size:14px;">View Invitation</a>` +
     `</div>` +
     `<div style="font-size:12px; color:#6b7280; margin-bottom:18px;">This invitation will expire in ${expiresDays} days.</div>` +
-    (tempPassword
-      ? `<div style="background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px; padding:12px 14px; font-size:13px; color:#111827; margin:14px 0 18px;">` +
-        `<div style="font-weight:700; margin-bottom:6px;">Temporary Password</div>` +
-        `<div style="font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;">${tempPassword}</div>` +
-        `</div>`
-      : ``) +
     `<p style="margin:0 0 6px; font-size:13px; color:#374151;">If you have any trouble, please contact your administrator.</p>` +
     `<p style="margin:18px 0 0; font-size:13px; color:#374151;">Regards,<br/>${orgName}</p>` +
     `<div style="margin-top:18px; border-top:2px solid #156372;"></div>` +
@@ -412,7 +428,20 @@ export const sendUserInvitation = async (req: express.Request, res: express.Resp
     return res.status(400).json({ success: false, message: result.error || "Failed to send invitation", data: null });
   }
 
-  await User.updateOne({ _id: id, organizationId: orgId }, { $set: { inviteSentAt: new Date() } });
+  await User.updateOne(
+    { _id: id, organizationId: orgId },
+    {
+      $set: {
+        status: "Invited",
+        inviteSentAt: new Date(),
+        inviteAcceptedAt: null,
+        inviteRejectedAt: null,
+        inviteTokenHash,
+        inviteTokenExpiresAt,
+        inviteTokenSentAt: new Date(),
+      },
+    }
+  );
 
   return res.json({
     success: true,
@@ -424,7 +453,115 @@ export const sendUserInvitation = async (req: express.Request, res: express.Resp
       senderId: String(sender._id || sender.id || ""),
       smtpHost: String(sender.smtpHost || ""),
       smtpPort: Number(sender.smtpPort || 0),
+      invitationUrl,
       smtpDebug: (result as any).debug || null,
     },
   });
+};
+
+const getUserInvitationPayload = async (userId: string, token: string) => {
+  const user: any = await User.findById(userId).lean();
+  if (!user) return { ok: false as const, status: 404, message: "Invitation not found." };
+  const validation = verifyInviteTokenForUser(user, token);
+  if (!validation.ok) return { ok: false as const, status: 400, message: validation.message };
+
+  const org: any = await Organization.findById(user.organizationId).lean();
+  return {
+    ok: true as const,
+    data: {
+      id: String(user._id),
+      name: String(user.name || ""),
+      email: String(user.email || ""),
+      organizationName: String(org?.name || "Organization"),
+      role: String(user.role || "member"),
+      status: String(user.status || "Invited"),
+      inviteSentAt: user.inviteSentAt || null,
+      inviteAcceptedAt: user.inviteAcceptedAt || null,
+      inviteRejectedAt: user.inviteRejectedAt || null,
+      inviteTokenExpiresAt: user.inviteTokenExpiresAt || null,
+    },
+  };
+};
+
+export const getUserInvitationPublic = async (req: express.Request, res: express.Response) => {
+  if (mongoose.connection.readyState !== 1) return res.status(500).json({ success: false, message: "DB not connected", data: null });
+
+  const id = String(req.params.id || "").trim();
+  const token = String(req.query?.token || "").trim();
+  if (!id || !token) {
+    return res.status(400).json({ success: false, message: "Missing invitation data", data: null });
+  }
+
+  const result = await getUserInvitationPayload(id, token);
+  if (!result.ok) return res.status(result.status).json({ success: false, message: result.message, data: null });
+  return res.json({ success: true, data: result.data });
+};
+
+export const acceptUserInvitationPublic = async (req: express.Request, res: express.Response) => {
+  if (mongoose.connection.readyState !== 1) return res.status(500).json({ success: false, message: "DB not connected", data: null });
+
+  const id = String(req.params.id || "").trim();
+  const token = String(req.body?.token || "").trim();
+  if (!id || !token) {
+    return res.status(400).json({ success: false, message: "Missing invitation data", data: null });
+  }
+
+  const user: any = await User.findById(id).lean();
+  if (!user) return res.status(404).json({ success: false, message: "Invitation not found.", data: null });
+  const validation = verifyInviteTokenForUser(user, token);
+  if (!validation.ok) return res.status(400).json({ success: false, message: validation.message, data: null });
+
+  await User.updateOne(
+    { _id: id },
+    {
+      $set: {
+        inviteAcceptedAt: new Date(),
+        inviteRejectedAt: null,
+        status: "Invited",
+      },
+    }
+  );
+
+  const org: any = await Organization.findById(user.organizationId).lean();
+  return res.json({
+    success: true,
+    message: "Invitation accepted.",
+    data: {
+      id: String(user._id),
+      name: String(user.name || ""),
+      email: String(user.email || ""),
+      organizationName: String(org?.name || "Organization"),
+      role: String(user.role || "member"),
+    },
+  });
+};
+
+export const rejectUserInvitationPublic = async (req: express.Request, res: express.Response) => {
+  if (mongoose.connection.readyState !== 1) return res.status(500).json({ success: false, message: "DB not connected", data: null });
+
+  const id = String(req.params.id || "").trim();
+  const token = String(req.body?.token || "").trim();
+  if (!id || !token) {
+    return res.status(400).json({ success: false, message: "Missing invitation data", data: null });
+  }
+
+  const user: any = await User.findById(id).lean();
+  if (!user) return res.status(404).json({ success: false, message: "Invitation not found.", data: null });
+  const validation = verifyInviteTokenForUser(user, token);
+  if (!validation.ok) return res.status(400).json({ success: false, message: validation.message, data: null });
+
+  await User.updateOne(
+    { _id: id },
+    {
+      $set: {
+        status: "Inactive",
+        inviteAcceptedAt: null,
+        inviteRejectedAt: new Date(),
+        inviteTokenHash: "",
+        inviteTokenExpiresAt: null,
+      },
+    }
+  );
+
+  return res.json({ success: true, message: "Invitation rejected.", data: { id } });
 };

@@ -7,7 +7,25 @@ export const API_BASE_URL =
 const TOKEN_KEYS = ["token", "auth_token", "accessToken"];
 const USER_KEYS = ["user", "current_user", "auth_user"];
 const LOGOUT_KEYS = ["fs_logout_requested"];
+const BRIDGE_TOKEN_COOKIE = "fs_session_bridge";
 export const AUTH_USER_UPDATED_EVENT = "auth:user-updated";
+
+const readCookie = (name: string) => {
+  if (typeof document === "undefined") return "";
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = document.cookie.match(new RegExp(`(?:^|; )${escaped}=([^;]*)`));
+  return match ? decodeURIComponent(match[1] || "") : "";
+};
+
+const writeCookie = (name: string, value: string, maxAgeSeconds?: number) => {
+  if (typeof document === "undefined") return;
+  const encoded = encodeURIComponent(String(value || ""));
+  const parts = [`${name}=${encoded}`, "Path=/", "SameSite=Lax"];
+  if (typeof maxAgeSeconds === "number") {
+    parts.push(`Max-Age=${Math.max(0, Math.floor(maxAgeSeconds))}`);
+  }
+  document.cookie = parts.join("; ");
+};
 
 const broadcastUserUpdate = () => {
   if (typeof window === "undefined") return;
@@ -20,17 +38,19 @@ export const getToken = () => {
     const val = localStorage.getItem(key);
     if (val) return val;
   }
-  return "";
+  return readCookie(BRIDGE_TOKEN_COOKIE);
 };
 
 export const setToken = (token: string) => {
   if (typeof localStorage === "undefined") return;
   localStorage.setItem("token", token);
+  writeCookie(BRIDGE_TOKEN_COOKIE, token, 7 * 24 * 60 * 60);
 };
 
 export const clearToken = () => {
   if (typeof localStorage === "undefined") return;
   TOKEN_KEYS.forEach((key) => localStorage.removeItem(key));
+  writeCookie(BRIDGE_TOKEN_COOKIE, "", 0);
 };
 
 export const isAuthenticated = () => Boolean(getToken());

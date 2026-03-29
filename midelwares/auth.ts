@@ -53,8 +53,8 @@ export const getAuthedUser = async (req: express.Request): Promise<AuthedUser | 
   const header = req.headers.authorization;
   const bearerToken = header?.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : "";
   const cookieToken = (req.cookies as Record<string, string> | undefined)?.[SESSION_COOKIE_NAME];
-  // Prefer cookie auth for browser flows (avoids stale localStorage Bearer tokens overriding a fresh login cookie).
-  const token = cookieToken || bearerToken;
+  // Prefer bearer auth first so a freshly issued JWT can override any stale browser cookie.
+  const token = bearerToken || cookieToken;
   if (!token || !JWT_SECRET) return null;
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as SessionClaims;

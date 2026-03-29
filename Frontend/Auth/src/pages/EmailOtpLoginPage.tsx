@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import AuthShell from "../components/AuthShell";
 import { getAppDisplayName, getFallbackUrl } from "../lib/appBranding";
 import { goReturnTo } from "../lib/returnTo";
+import { setSessionBridgeToken } from "../lib/sessionBridge";
 import { authApi } from "../services/authApi";
 
 const persistSession = (result: any) => {
@@ -14,6 +15,7 @@ const persistSession = (result: any) => {
     localStorage.setItem("auth_token", token);
     localStorage.setItem("token", token);
     localStorage.setItem("accessToken", token);
+    setSessionBridgeToken(token);
   }
   if (user) {
     const serialized = JSON.stringify(user);
