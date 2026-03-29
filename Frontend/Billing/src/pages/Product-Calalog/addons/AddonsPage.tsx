@@ -282,6 +282,10 @@ export default function AddonsPage() {
   };
 
   const handleMarkStatus = (status: "Active" | "Inactive") => {
+    if (!canEditAddon) {
+      toast.error("You do not have permission to update this item.");
+      return;
+    }
     if (selectedIds.length === 0) return;
     void (async () => {
       try {
@@ -299,6 +303,10 @@ export default function AddonsPage() {
   };
 
   const handleBulkDelete = () => {
+    if (!canDeleteAddon) {
+      toast.error("You do not have permission to delete this item.");
+      return;
+    }
     if (selectedIds.length === 0) return;
     setIsDeleteModalOpen(true);
   };
@@ -370,10 +378,18 @@ export default function AddonsPage() {
               style={{ accentColor: "#1b5e6a" }}
               className="h-4 w-4 rounded border-gray-300 transition-all focus:ring-0"
             />
-            <button onClick={() => setBulkUpdateOpen(true)} className="h-9 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50 transition-colors shadow-sm">Bulk Update</button>
-            <button onClick={() => handleMarkStatus("Active")} className="h-9 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50 transition-colors shadow-sm">Mark as Active</button>
-            <button onClick={() => handleMarkStatus("Inactive")} className="h-9 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50 transition-colors shadow-sm">Mark as Inactive</button>
-            <button onClick={handleBulkDelete} className="h-9 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50 transition-colors shadow-sm">Delete</button>
+            {canEditAddon ? (
+              <button onClick={() => setBulkUpdateOpen(true)} className="h-9 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50 transition-colors shadow-sm">Bulk Update</button>
+            ) : null}
+            {canEditAddon ? (
+              <>
+                <button onClick={() => handleMarkStatus("Active")} className="h-9 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50 transition-colors shadow-sm">Mark as Active</button>
+                <button onClick={() => handleMarkStatus("Inactive")} className="h-9 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50 transition-colors shadow-sm">Mark as Inactive</button>
+              </>
+            ) : null}
+            {canDeleteAddon ? (
+              <button onClick={handleBulkDelete} className="h-9 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50 transition-colors shadow-sm">Delete</button>
+            ) : null}
 
             <div className="h-6 w-px bg-gray-200 mx-1" aria-hidden />
 
@@ -448,14 +464,16 @@ export default function AddonsPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3 sm:gap-2 mr-4">
-            <button
-              onClick={() => navigate("/products/addons/new")}
-              className="h-[38px] min-w-[100px] cursor-pointer transition-all text-white px-5 rounded-lg border-[#0D4A52] border-b-[4px] hover:brightness-110 hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:translate-y-[1px] text-sm font-semibold shadow-sm flex items-center justify-center gap-2"
-              style={{ background: "linear-gradient(180deg, #156372 0%, #0D4A52 100%)" }}
-            >
-              <Plus size={16} />
-              <span className="hidden sm:inline">New</span>
-            </button>
+            {canCreateAddon ? (
+              <button
+                onClick={() => navigate("/products/addons/new")}
+                className="h-[38px] min-w-[100px] cursor-pointer transition-all text-white px-5 rounded-lg border-[#0D4A52] border-b-[4px] hover:brightness-110 hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:translate-y-[1px] text-sm font-semibold shadow-sm flex items-center justify-center gap-2"
+                style={{ background: "linear-gradient(180deg, #156372 0%, #0D4A52 100%)" }}
+              >
+                <Plus size={16} />
+                <span className="hidden sm:inline">New</span>
+              </button>
+            ) : null}
 
             <div className="relative" ref={moreRef}>
               <button
@@ -493,13 +511,15 @@ export default function AddonsPage() {
                     )}
                   </div>
                   <div className="h-px bg-gray-50 my-1 mx-2" />
-                  <button
-                    onClick={() => navigate("/products/addons/import")}
-                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
-                  >
-                    <Upload size={16} className="text-teal-600 group-hover:text-white" />
-                    Import Addons
-                  </button>
+                  {canCreateAddon ? (
+                    <button
+                      onClick={() => navigate("/products/addons/import")}
+                      className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
+                    >
+                      <Upload size={16} className="text-teal-600 group-hover:text-white" />
+                      Import Addons
+                    </button>
+                  ) : null}
                   <button
                     onClick={handleExport}
                     className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"

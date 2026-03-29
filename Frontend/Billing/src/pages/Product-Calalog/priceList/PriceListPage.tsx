@@ -15,6 +15,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import NewPriceForm from './NewPriceList/NewPriceForm';
 import { priceListsAPI } from '../../../services/api';
+import { usePermissions } from '../../../hooks/usePermissions';
 
 type PriceListRecord = {
     id: string;
@@ -66,6 +67,7 @@ const toCsv = (headers: string[], rows: string[][]) => {
 export default function PriceListPage() {
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
+    const { canCreate, canEdit, canDelete } = usePermissions();
     const [editingPriceList, setEditingPriceList] = useState<any | null>(null);
     const [view, setView] = useState<'list' | 'form'>('list');
     const [moreOpen, setMoreOpen] = useState(false);
@@ -90,6 +92,9 @@ export default function PriceListPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [pendingDeletePriceList, setPendingDeletePriceList] = useState<PriceListRecord | null>(null);
+    const canCreatePriceList = canCreate('products', 'Price List');
+    const canEditPriceList = canEdit('products', 'Price List');
+    const canDeletePriceList = canDelete('products', 'Price List');
 
     const visibleColumns = useMemo(() => columns.filter((c) => c.visible), [columns]);
     const sortedPriceLists = useMemo(() => {
@@ -209,6 +214,10 @@ export default function PriceListPage() {
     };
 
     const handleOpenImport = () => {
+        if (!canCreatePriceList) {
+            toast.error('You do not have permission to create this item.');
+            return;
+        }
         setMoreOpen(false);
         navigate('/products/price-lists/import');
     };
@@ -238,6 +247,11 @@ export default function PriceListPage() {
     };
 
     const handleDisablePriceLists = async () => {
+        if (!canEditPriceList) {
+            toast.error('You do not have permission to update this item.');
+            setMoreOpen(false);
+            return;
+        }
         try {
             if (!priceLists.length) {
                 toast.info('No price lists available to disable.');
@@ -267,6 +281,10 @@ export default function PriceListPage() {
     };
 
     const handleEdit = async (row: PriceListRecord) => {
+        if (!canEditPriceList) {
+            toast.error('You do not have permission to edit this item.');
+            return;
+        }
         try {
             const res: any = await priceListsAPI.getById(row.id);
             if (res.success) {
@@ -281,11 +299,19 @@ export default function PriceListPage() {
     };
 
     const openNewPriceList = () => {
+        if (!canCreatePriceList) {
+            toast.error('You do not have permission to create this item.');
+            return;
+        }
         setEditingPriceList(null);
         setView('form');
     };
 
     const handleToggleStatus = async (row: PriceListRecord) => {
+        if (!canEditPriceList) {
+            toast.error('You do not have permission to update this item.');
+            return;
+        }
         try {
             const newStatus = row.status.toLowerCase() === 'active' ? 'Inactive' : 'Active';
             const res: any = await priceListsAPI.update(row.id, { status: newStatus });
@@ -301,6 +327,10 @@ export default function PriceListPage() {
     };
 
     const openDeleteModal = (row: PriceListRecord) => {
+        if (!canDeletePriceList) {
+            toast.error('You do not have permission to delete this item.');
+            return;
+        }
         setPendingDeletePriceList(row);
         setShowDeleteModal(true);
     };
@@ -312,6 +342,11 @@ export default function PriceListPage() {
 
     const confirmDeletePriceList = async () => {
         if (!pendingDeletePriceList) return;
+        if (!canDeletePriceList) {
+            toast.error('You do not have permission to delete this item.');
+            closeDeleteModal();
+            return;
+        }
         try {
             const res: any = await priceListsAPI.delete(pendingDeletePriceList.id);
             if (res.success) {

@@ -26,6 +26,7 @@ import CouponDetail, { type CouponDetailRecord } from './CouponDetail';
 import type { CouponRecord } from './types';
 import { buildCloneName } from '../utils/cloneName';
 import { couponsAPI } from '../../../services/api';
+import { usePermissions } from '../../../hooks/usePermissions';
 
 type CouponStatusFilter = 'All' | 'Active' | 'Inactive' | 'Expired';
 type CouponSortKey = 'couponName' | 'couponCode' | 'status' | 'discountValue' | 'createdAt';
@@ -214,6 +215,7 @@ const CouponsPage: React.FC = () => {
   const location = useLocation();
   const { accentColor } = useOrganizationBranding();
   const { baseCurrency, code: baseCurrencyCode } = useCurrency();
+  const { canCreate, canEdit, canDelete } = usePermissions();
 
   const [view, setView] = useState<'list' | 'create'>('list');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -247,6 +249,9 @@ const CouponsPage: React.FC = () => {
 
   const [records, setRecords] = useState<CouponRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const canCreateCoupon = canCreate('products', 'Coupon');
+  const canEditCoupon = canEdit('products', 'Coupon');
+  const canDeleteCoupon = canDelete('products', 'Coupon');
 
   const visibleColumns = useMemo(() => columns.filter((c) => c.visible), [columns]);
 
@@ -391,6 +396,10 @@ const CouponsPage: React.FC = () => {
   };
 
   const handleToggleCouponActive = (id: string) => {
+    if (!canEditCoupon) {
+      toast.error('You do not have permission to update this item.');
+      return;
+    }
     const current = records.find(r => r.id === id);
     if (!current) return;
     const nextStatus = current.status === 'Active' ? 'Inactive' : 'Active';
@@ -412,6 +421,10 @@ const CouponsPage: React.FC = () => {
   };
 
   const handleCloneCoupon = (id: string) => {
+    if (!canCreateCoupon) {
+      toast.error('You do not have permission to create this item.');
+      return;
+    }
     const target = records.find((record) => record.id === id);
     if (!target) return;
 
@@ -450,6 +463,10 @@ const CouponsPage: React.FC = () => {
   };
 
   const handleDeleteCoupon = (id: string) => {
+    if (!canDeleteCoupon) {
+      toast.error('You do not have permission to delete this item.');
+      return;
+    }
     setDeleteMode('single');
     setPendingDeleteId(id);
     setIsDeleteModalOpen(true);
@@ -461,6 +478,10 @@ const CouponsPage: React.FC = () => {
 
 
   const handleBulkMarkStatus = (status: 'Active' | 'Inactive') => {
+    if (!canEditCoupon) {
+      toast.error('You do not have permission to update this item.');
+      return;
+    }
     if (selectedIds.length === 0) return;
     void (async () => {
       try {
@@ -477,6 +498,10 @@ const CouponsPage: React.FC = () => {
   };
 
   const handleBulkDelete = () => {
+    if (!canDeleteCoupon) {
+      toast.error('You do not have permission to delete this item.');
+      return;
+    }
     if (selectedIds.length === 0) return;
     setDeleteMode('bulk');
     setPendingDeleteId(null);
@@ -660,6 +685,9 @@ const CouponsPage: React.FC = () => {
             onToggleActive={handleToggleCouponActive}
             onClone={handleCloneCoupon}
             onDelete={handleDeleteCoupon}
+            canCreate={canCreateCoupon}
+            canEdit={canEditCoupon}
+            canDelete={canDeleteCoupon}
           />
         ) : (
           <>
@@ -667,27 +695,33 @@ const CouponsPage: React.FC = () => {
               {selectedIds.length > 0 ? (
                 <div className="flex w-full items-center justify-between py-2.5">
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleBulkMarkStatus('Active')}
-                      className="flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-300"
-                    >
-                      Mark as Active
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleBulkMarkStatus('Inactive')}
-                      className="flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-300"
-                    >
-                      Mark as Inactive
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleBulkDelete}
-                      className="flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-300"
-                    >
-                      Delete
-                    </button>
+                    {canEditCoupon ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleBulkMarkStatus('Active')}
+                          className="flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-300"
+                        >
+                          Mark as Active
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleBulkMarkStatus('Inactive')}
+                          className="flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-300"
+                        >
+                          Mark as Inactive
+                        </button>
+                      </>
+                    ) : null}
+                    {canDeleteCoupon ? (
+                      <button
+                        type="button"
+                        onClick={handleBulkDelete}
+                        className="flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 hover:border-gray-300"
+                      >
+                        Delete
+                      </button>
+                    ) : null}
                     <div className="mx-2 h-5 w-px bg-gray-200" />
                     <div className="inline-flex items-center gap-2 text-sm text-slate-500">
                       <span
@@ -744,13 +778,15 @@ const CouponsPage: React.FC = () => {
                   </div>
 
                   <div className="flex gap-2 items-center mr-4">
-                    <button
-                      onClick={() => navigate('/products/coupons/new')}
-                      className="cursor-pointer transition-all text-white px-3 py-1.5 rounded-lg border-[#0D4A52] border-b-[4px] hover:brightness-110 hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:brightness-90 active:translate-y-[2px] flex items-center gap-1 text-sm font-semibold"
-                      style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
-                    >
-                      <Plus size={16} strokeWidth={3} /> New
-                    </button>
+                    {canCreateCoupon ? (
+                      <button
+                        onClick={() => navigate('/products/coupons/new')}
+                        className="cursor-pointer transition-all text-white px-3 py-1.5 rounded-lg border-[#0D4A52] border-b-[4px] hover:brightness-110 hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:brightness-90 active:translate-y-[2px] flex items-center gap-1 text-sm font-semibold"
+                        style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
+                      >
+                        <Plus size={16} strokeWidth={3} /> New
+                      </button>
+                    ) : null}
 
                     <div className="relative" ref={moreRef}>
                       <button
@@ -815,17 +851,19 @@ const CouponsPage: React.FC = () => {
                             )}
                           </div>
                           <div className="h-px bg-gray-50 my-1 mx-2" />
-                          <button
-                            onClick={() => {
-                              navigate('/products/coupons/import');
-                              setMoreOpen(false);
-                              setSortSubMenuOpen(false);
-                            }}
-                            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
-                          >
-                            <Upload size={16} className="text-teal-600 group-hover:text-white" />
-                            Import Coupons
-                          </button>
+                          {canCreateCoupon ? (
+                            <button
+                              onClick={() => {
+                                navigate('/products/coupons/import');
+                                setMoreOpen(false);
+                                setSortSubMenuOpen(false);
+                              }}
+                              className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
+                            >
+                              <Upload size={16} className="text-teal-600 group-hover:text-white" />
+                              Import Coupons
+                            </button>
+                          ) : null}
                           <button
                             onClick={handleExportCoupons}
                             className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
