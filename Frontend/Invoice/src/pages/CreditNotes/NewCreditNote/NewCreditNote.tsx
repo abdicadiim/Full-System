@@ -28,7 +28,8 @@ import {
   PlusCircle,
   Image as ImageIcon,
   Loader2,
-  Tag
+  Tag,
+  Mail
 } from "lucide-react";
 import {
   getCustomers,
@@ -46,7 +47,6 @@ import {
 } from "../../salesModel";
 import { getAllDocuments } from "../../../utils/documentStorage";
 import { customersAPI, salespersonsAPI, itemsAPI, taxesAPI, currenciesAPI, creditNotesAPI, reportingTagsAPI, locationsAPI } from "../../../services/api";
-import { API_BASE_URL, getToken } from "../../../services/auth";
 import { buildTaxOptionGroups, taxLabel } from "../../../hooks/Taxdropdownstyle";
 
 const accountCategories = {
@@ -657,19 +657,6 @@ export default function NewCreditNote() {
           }
         }
 
-        try {
-          const generalResponse = await fetch(`${API_BASE_URL}/settings/general`, {
-            headers: { Authorization: `Bearer ${getToken()}` },
-          });
-          if (generalResponse.ok) {
-            const generalJson = await generalResponse.json();
-            const settings = generalJson?.data?.settings;
-            if (settings) setEnabledSettings(settings);
-          }
-        } catch (generalError) {
-          console.error("Error loading general settings:", generalError);
-        }
-
         // If navigated from an Invoice (query param invoiceId), prefill credit note fields
         try {
           const params = new URLSearchParams(window.location.search);
@@ -1005,16 +992,25 @@ export default function NewCreditNote() {
   };
 
   const handleCustomerSelect = (customer: Customer) => {
+    closeAllDropdownMenus();
     setSelectedCustomer(customer);
     setFormData(prev => ({ ...prev, customerName: customer.displayName || customer.name || "" }));
-    setIsCustomerDropdownOpen(false);
   };
 
   const handleSalespersonSelect = (sp: any) => {
+    closeAllDropdownMenus();
     setSelectedSalesperson(sp);
     setFormData(prev => ({ ...prev, salesperson: sp.name }));
-    setIsSalespersonDropdownOpen(false);
     setSalespersonSearch("");
+  };
+
+  const closeAllDropdownMenus = () => {
+    setIsCustomerDropdownOpen(false);
+    setIsDatePickerOpen(false);
+    setIsSalespersonDropdownOpen(false);
+    setIsWarehouseDropdownOpen(false);
+    setIsPriceListDropdownOpen(false);
+    setIsBulkActionsOpen(false);
   };
 
   const getEntityId = (entity: any): string => {
@@ -1251,6 +1247,7 @@ export default function NewCreditNote() {
   };
 
   const handleItemSelect = (itemId: number, pItem: any) => {
+    closeAllDropdownMenus();
     const rawTaxValue = pItem?.taxId || pItem?.tax || pItem?.taxRateId || pItem?.salesTaxId || pItem?.tax_id || pItem?.taxs || pItem?.taxes;
     const rawTaxName = pItem?.taxName || pItem?.tax_label || pItem?.taxRate?.name || pItem?.taxNameDisplay || pItem?.taxDisplayName;
     const rawTaxRate =
@@ -1689,7 +1686,43 @@ export default function NewCreditNote() {
 
   const handleCancel = () => navigate("/sales/credit-notes");
 
-  const filteredCustomers = customers.filter(c => c.name.toLowerCase().includes(customerSearch.toLowerCase()));
+  const getCustomerDisplayName = (customer: any) =>
+    String(
+      customer?.displayName ||
+      customer?.name ||
+      customer?.companyName ||
+      `${customer?.firstName || ""} ${customer?.lastName || ""}`.trim() ||
+      "Unknown"
+    ).trim();
+  const getCustomerCode = (customer: any) =>
+    String(customer?.customerNumber || customer?.customerCode || customer?.code || customer?.id || "").trim();
+  const getCustomerDetailLine = (customer: any) => {
+    const parts = [
+      customer?.email ? String(customer.email).trim() : "",
+      customer?.companyName ? String(customer.companyName).trim() : "",
+      customer?.workPhone || customer?.mobile ? String(customer.workPhone || customer.mobile).trim() : "",
+    ].filter(Boolean);
+    return parts.join(" • ");
+  };
+  const getCustomerInitial = (customer: any) => {
+    const label = getCustomerDisplayName(customer);
+    return label ? label.charAt(0).toUpperCase() : "C";
+  };
+  const formatDecimal = (value: any, digits = 2) => {
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue.toFixed(digits) : (0).toFixed(digits);
+  };
+  const filteredCustomers = customers.filter((customer: any) => {
+    const term = customerSearch.toLowerCase().trim();
+    if (!term) return true;
+    return [
+      getCustomerDisplayName(customer),
+      getCustomerCode(customer),
+      customer?.email,
+      customer?.companyName,
+      customer?.workPhone || customer?.mobile
+    ].some((value) => String(value || "").toLowerCase().includes(term));
+  });
   const filteredSalespersons = salespersons.filter((salesperson: any) =>
     String(salesperson?.name || "").toLowerCase().includes(salespersonSearch.toLowerCase())
   );
@@ -1725,31 +1758,43 @@ export default function NewCreditNote() {
         <div className="bg-white overflow-visible">
           {/* Customer Row */}
           <div className="px-6 py-5 border-b border-gray-100 bg-[#fafafa]">
-            <div className="max-w-[980px]">
-              <div className="flex items-start gap-4">
+              <div className="max-w-[980px]">
+                <div className="flex items-start gap-4">
               <label className="text-sm text-red-600 w-40 pt-2 flex-shrink-0">Customer Name*</label>
               <div className="w-full max-w-[540px] relative" ref={customerDropdownRef}>
                 <div className="relative flex items-stretch">
                   <input
                     type="text"
-                    className="flex-1 px-3 py-2 pr-10 border border-gray-300 rounded-l text-sm text-gray-700 focus:outline-none focus:border-[#156372] bg-white"
+                    className="flex-1 px-3 py-2 pr-10 border border-[#3b82f6] rounded-l text-sm text-gray-700 focus:outline-none focus:border-[#3b82f6] bg-white"
                     placeholder="Select or add a customer"
                     value={formData.customerName}
                     readOnly
-                    onClick={() => setIsCustomerDropdownOpen(!isCustomerDropdownOpen)}
+                    onClick={() => {
+                      if (isCustomerDropdownOpen) {
+                        setIsCustomerDropdownOpen(false);
+                      } else {
+                        closeAllDropdownMenus();
+                        setIsCustomerDropdownOpen(true);
+                      }
+                    }}
                   />
                   <div
                     className="absolute right-10 top-0 bottom-0 flex items-center px-2 cursor-pointer"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setIsCustomerDropdownOpen(!isCustomerDropdownOpen);
+                      if (isCustomerDropdownOpen) {
+                        setIsCustomerDropdownOpen(false);
+                      } else {
+                        closeAllDropdownMenus();
+                        setIsCustomerDropdownOpen(true);
+                      }
                     }}
                   >
                     <ChevronDown size={14} className="text-gray-400" />
                   </div>
                   <button
                     type="button"
-                    className="w-10 bg-[#156372] text-white rounded-r hover:bg-[#0D4A52] flex items-center justify-center border border-[#156372]"
+                    className="w-10 bg-[#3b82f6] text-white rounded-r hover:bg-[#2563eb] flex items-center justify-center border border-[#3b82f6]"
                     onClick={(e) => {
                       e.stopPropagation();
                       setCustomerSearchModalOpen(true);
@@ -1760,15 +1805,15 @@ export default function NewCreditNote() {
                 </div>
 
                 {isCustomerDropdownOpen && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded shadow-lg z-50 max-h-80 overflow-y-auto">
-                    <div className="flex items-center gap-2 p-2 border-b border-gray-200 sticky top-0 bg-white">
-                      <Search size={14} className="text-gray-400" />
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#3b82f6] rounded-md shadow-lg z-50 overflow-hidden max-h-80">
+                    <div className="flex items-center gap-2 p-2 border-b border-[#bfdbfe] sticky top-0 bg-white">
+                      <Search size={14} className="text-blue-500" />
                       <input
                         type="text"
                         placeholder="Search"
                         value={customerSearch}
                         onChange={(e) => setCustomerSearch(e.target.value)}
-                        className="flex-1 text-sm focus:outline-none"
+                        className="flex-1 text-sm focus:outline-none placeholder:text-gray-400"
                         autoFocus
                       />
                     </div>
@@ -1777,10 +1822,30 @@ export default function NewCreditNote() {
                         filteredCustomers.map((c) => (
                           <div
                             key={c.id}
-                            className="p-2 cursor-pointer hover:bg-gray-50"
+                            className="px-3 py-2.5 cursor-pointer hover:bg-blue-50 transition-colors"
                             onClick={() => handleCustomerSelect(c)}
                           >
-                            <div className="text-sm font-medium truncate text-gray-900">{c.name}</div>
+                            <div className="flex items-start gap-3">
+                              <div className="h-9 w-9 shrink-0 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center text-sm font-semibold">
+                                {getCustomerInitial(c)}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <div className="text-sm font-medium truncate text-gray-900">
+                                    {getCustomerDisplayName(c)}
+                                  </div>
+                                  {getCustomerCode(c) && (
+                                    <div className="text-xs text-gray-500 shrink-0">| {getCustomerCode(c)}</div>
+                                  )}
+                                </div>
+                                {getCustomerDetailLine(c) && (
+                                  <div className="mt-1 text-xs text-gray-500 flex items-center gap-1.5 truncate">
+                                    <Mail size={11} className="text-gray-400 shrink-0" />
+                                    <span className="truncate">{getCustomerDetailLine(c)}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         ))
                       ) : (
@@ -1788,7 +1853,7 @@ export default function NewCreditNote() {
                       )}
                     </div>
                     <button
-                      className="flex items-center gap-2 px-3 py-2 border-t border-gray-200 bg-gray-50 text-sm font-medium text-[#156372] w-full"
+                      className="flex items-center gap-2 px-3 py-2 border-t border-gray-200 bg-white text-sm font-medium text-[#3b82f6] w-full hover:bg-blue-50"
                       onClick={(e) => {
                         e.stopPropagation();
                         setIsCustomerDropdownOpen(false);
@@ -1857,7 +1922,14 @@ export default function NewCreditNote() {
                   className="w-full px-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none cursor-pointer bg-gray-50"
                   value={formData.creditNoteDate}
                   readOnly
-                  onClick={() => setIsDatePickerOpen(!isDatePickerOpen)}
+                  onClick={() => {
+                    if (isDatePickerOpen) {
+                      setIsDatePickerOpen(false);
+                    } else {
+                      closeAllDropdownMenus();
+                      setIsDatePickerOpen(true);
+                    }
+                  }}
                 />
                 {isDatePickerOpen && (
                   <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-md shadow-xl z-50 w-64 p-2">
@@ -1902,7 +1974,14 @@ export default function NewCreditNote() {
               <div className="flex-1 max-w-xs relative" ref={salespersonDropdownRef}>
                 <div
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-700 flex justify-between items-center bg-white cursor-pointer"
-                  onClick={() => setIsSalespersonDropdownOpen(!isSalespersonDropdownOpen)}
+                  onClick={() => {
+                    if (isSalespersonDropdownOpen) {
+                      setIsSalespersonDropdownOpen(false);
+                    } else {
+                      closeAllDropdownMenus();
+                      setIsSalespersonDropdownOpen(true);
+                    }
+                  }}
                 >
                   <span className={formData.salesperson ? "text-gray-900" : "text-gray-400"}>
                     {formData.salesperson || "Select or Add Salesperson"}
@@ -1928,7 +2007,7 @@ export default function NewCreditNote() {
                         filteredSalespersons.map((salesperson: any) => (
                           <div
                             key={salesperson.id || salesperson._id}
-                            className="px-4 py-2 text-sm text-gray-700 hover:bg-[#156372] hover:text-white cursor-pointer truncate"
+                            className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer truncate"
                             onClick={() => handleSalespersonSelect(salesperson)}
                           >
                             {salesperson.name}
@@ -1981,7 +2060,14 @@ export default function NewCreditNote() {
                     <button
                       type="button"
                       className="h-9 min-w-[180px] border-b-2 border-gray-200 bg-transparent text-left text-sm text-gray-700 focus:border-[#156372] focus:outline-none flex items-center justify-between"
-                      onClick={() => setIsWarehouseDropdownOpen((open) => !open)}
+                      onClick={() => {
+                        if (isWarehouseDropdownOpen) {
+                          setIsWarehouseDropdownOpen(false);
+                        } else {
+                          closeAllDropdownMenus();
+                          setIsWarehouseDropdownOpen(true);
+                        }
+                      }}
                     >
                       <span>{warehouseLocation}</span>
                       <ChevronDown size={14} className={`text-gray-400 transition-transform ${isWarehouseDropdownOpen ? "rotate-180" : ""}`} />
@@ -2007,10 +2093,10 @@ export default function NewCreditNote() {
                               <button
                                 key={loc}
                                 type="button"
-                                className={`w-full px-3 py-2 text-left text-sm ${warehouseLocation === loc ? "bg-[#4285f4] text-white" : "text-gray-700 hover:bg-gray-50"}`}
+                                className={`w-full px-3 py-2 text-left text-sm ${warehouseLocation === loc ? "bg-slate-100 text-gray-900" : "text-gray-700 hover:bg-gray-50"}`}
                                 onClick={() => {
+                                  closeAllDropdownMenus();
                                   setWarehouseLocation(loc);
-                                  setIsWarehouseDropdownOpen(false);
                                   setWarehouseSearch("");
                                 }}
                               >
@@ -2028,7 +2114,14 @@ export default function NewCreditNote() {
                     <button
                       type="button"
                       className="h-9 min-w-[180px] border-b-2 border-gray-200 bg-transparent text-left text-sm text-gray-700 focus:border-[#156372] focus:outline-none flex items-center justify-between"
-                      onClick={() => setIsPriceListDropdownOpen((open) => !open)}
+                      onClick={() => {
+                        if (isPriceListDropdownOpen) {
+                          setIsPriceListDropdownOpen(false);
+                        } else {
+                          closeAllDropdownMenus();
+                          setIsPriceListDropdownOpen(true);
+                        }
+                      }}
                     >
                       <span>{priceList || "Select Price List"}</span>
                       <ChevronDown size={14} className={`text-gray-400 transition-transform ${isPriceListDropdownOpen ? "rotate-180" : ""}`} />
@@ -2054,10 +2147,10 @@ export default function NewCreditNote() {
                               <button
                                 key={pl}
                                 type="button"
-                                className={`w-full px-3 py-2 text-left text-sm ${priceList === pl ? "bg-[#4285f4] text-white" : "text-gray-700 hover:bg-gray-50"}`}
+                                className={`w-full px-3 py-2 text-left text-sm ${priceList === pl ? "bg-slate-100 text-gray-900" : "text-gray-700 hover:bg-gray-50"}`}
                                 onClick={() => {
+                                  closeAllDropdownMenus();
                                   setPriceList(pl);
-                                  setIsPriceListDropdownOpen(false);
                                   setPriceListSearch("");
                                 }}
                               >
@@ -2080,7 +2173,14 @@ export default function NewCreditNote() {
                     <div className="relative" ref={bulkActionsRef}>
                       <button
                         className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-                        onClick={() => setIsBulkActionsOpen(!isBulkActionsOpen)}
+                        onClick={() => {
+                          if (isBulkActionsOpen) {
+                            setIsBulkActionsOpen(false);
+                          } else {
+                            closeAllDropdownMenus();
+                            setIsBulkActionsOpen(true);
+                          }
+                        }}
                       >
                         <CheckSquare size={15} className="text-gray-600" />
                         Bulk Actions
@@ -2272,7 +2372,7 @@ export default function NewCreditNote() {
                                       <div className="flex-1 min-w-0">
                                         <div className="text-sm font-medium text-gray-900 truncate">{productItem.name}</div>
                                         <div className="text-xs text-gray-500 truncate">
-                                          SKU: {productItem.sku} • Rate: {formData.currency} {productItem.rate.toFixed(2)} • Stock: {productItem.stockOnHand}
+                                          SKU: {productItem.sku} • Rate: {formData.currency} {formatDecimal(productItem.rate)} • Stock: {productItem.stockOnHand}
                                         </div>
                                       </div>
                                     </div>
@@ -2349,6 +2449,7 @@ export default function NewCreditNote() {
                                               type="button"
                                               className={`block w-full px-4 py-2 text-left text-sm ${item.account === account ? "bg-[#4285f4] text-white" : "text-gray-700 hover:bg-gray-50"}`}
                                               onClick={() => {
+                                                closeAllDropdownMenus();
                                                 handleItemChange(item.id, "account", account);
                                                 setOpenAccountDropdowns(prev => ({ ...prev, [item.id]: false }));
                                                 setAccountSearches(prev => ({ ...prev, [item.id]: "" }));
@@ -2454,6 +2555,7 @@ export default function NewCreditNote() {
                                                       type="button"
                                                       className={`w-full rounded-lg px-2 py-1.5 text-left text-sm transition-colors ${selected ? "bg-slate-100 text-[#156372]" : "text-slate-700 hover:bg-slate-50"}`}
                                                       onClick={() => {
+                                                        closeAllDropdownMenus();
                                                         handleItemChange(item.id, "tax", taxId);
                                                         setOpenTaxDropdowns((prev) => ({ ...prev, [item.id]: false }));
                                                         setTaxSearches((prev) => ({ ...prev, [item.id]: "" }));
@@ -3633,7 +3735,7 @@ export default function NewCreditNote() {
                           <div className="flex-1">
                             <div className="font-medium text-gray-900">{item.name}</div>
                             <div className="text-xs text-gray-500 mt-1">
-                              SKU: {item.sku} Rate: {formData.currency}{item.rate.toFixed(2)}
+                              SKU: {item.sku} Rate: {formData.currency}{formatDecimal(item.rate)}
                             </div>
                           </div>
                           <div className="text-right">
@@ -3677,7 +3779,7 @@ export default function NewCreditNote() {
                             <div className="flex-1">
                               <div className="font-medium text-gray-900">{selectedItem.name}</div>
                               <div className="text-xs text-gray-500 mt-1">
-                                SKU: {selectedItem.sku} • {formData.currency}{selectedItem.rate.toFixed(2)}
+                                SKU: {selectedItem.sku} • {formData.currency}{formatDecimal(selectedItem.rate)}
                               </div>
                             </div>
                             <div className="flex items-center gap-2">

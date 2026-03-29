@@ -311,6 +311,8 @@ export default function RetainerInvoice() {
   const [draftSelectedColumns, setDraftSelectedColumns] = useState<Set<RetainerColumnKey>>(new Set());
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteRetainerIds, setDeleteRetainerIds] = useState<string[]>([]);
 
   const viewDropdownRef = useRef<HTMLDivElement>(null);
   const moreDropdownRef = useRef<HTMLDivElement>(null);
@@ -520,18 +522,24 @@ export default function RetainerInvoice() {
     });
   };
 
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = () => {
     if (bulkDeleteLoading) return;
     const ids = Array.from(selectedRowIds);
     if (ids.length === 0) return;
-    if (!window.confirm(`Delete ${ids.length} retainer invoice${ids.length > 1 ? "s" : ""}? This cannot be undone.`)) {
-      return;
-    }
+    setDeleteRetainerIds(ids);
+    setIsDeleteModalOpen(true);
+  };
+
+  const confirmBulkDelete = async () => {
+    if (bulkDeleteLoading) return;
+    if (deleteRetainerIds.length === 0) return;
     try {
       setBulkDeleteLoading(true);
-      await Promise.all(ids.map((retainerId) => deleteInvoice(retainerId)));
-      setRows((prev) => prev.filter((row) => !selectedRowIds.has(row.id)));
+      await Promise.all(deleteRetainerIds.map((retainerId) => deleteInvoice(retainerId)));
+      setRows((prev) => prev.filter((row) => !deleteRetainerIds.includes(row.id)));
       setSelectedRowIds(new Set());
+      setIsDeleteModalOpen(false);
+      setDeleteRetainerIds([]);
     } catch (error) {
       console.error("Failed to delete retainer invoices:", error);
     } finally {
@@ -910,7 +918,7 @@ export default function RetainerInvoice() {
 
               <button
                 type="button"
-                onClick={() => void handleBulkDelete()}
+                onClick={handleBulkDelete}
                 disabled={bulkDeleteLoading}
                 className="px-4 py-2 border border-gray-200 bg-white text-sm font-medium text-gray-700 rounded-md hover:bg-gray-50 transition-all shadow-sm flex items-center gap-2"
               >
@@ -1471,6 +1479,56 @@ export default function RetainerInvoice() {
                   setColumnSearchTerm("");
                 }}
                 className="bg-white border border-gray-300 text-slate-700 px-5 py-2 rounded-md text-sm"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+        )}
+
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200">
+            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+              <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
+                !
+              </div>
+              <h3 className="text-[15px] font-semibold text-slate-800 flex-1">
+                Delete {deleteRetainerIds.length} retainer invoice{deleteRetainerIds.length === 1 ? "" : "s"}?
+              </h3>
+              <button
+                type="button"
+                className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setDeleteRetainerIds([]);
+                }}
+                aria-label="Close"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="px-5 py-3 text-[13px] text-slate-600">
+              You cannot retrieve these retainer invoices once they have been deleted.
+            </div>
+            <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+              <button
+                type="button"
+                className={`px-4 py-1.5 rounded-md bg-blue-600 text-white text-[12px] hover:bg-blue-700 ${bulkDeleteLoading ? "opacity-70 cursor-not-allowed" : ""}`}
+                onClick={confirmBulkDelete}
+                disabled={bulkDeleteLoading}
+              >
+                {bulkDeleteLoading ? "Deleting..." : "Delete"}
+              </button>
+              <button
+                type="button"
+                className={`px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50 ${bulkDeleteLoading ? "opacity-70 cursor-not-allowed" : ""}`}
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setDeleteRetainerIds([]);
+                }}
+                disabled={bulkDeleteLoading}
               >
                 Cancel
               </button>

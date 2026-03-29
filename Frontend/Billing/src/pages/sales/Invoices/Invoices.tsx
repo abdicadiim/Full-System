@@ -139,6 +139,36 @@ export default function Invoices() {
       /^RET[-\d]/.test(rawNumber)
     );
   };
+  const isDebitNoteRecord = (invoice: any) => {
+    const rawType = String(
+      invoice?.invoiceType ||
+      invoice?.type ||
+      invoice?.documentType ||
+      invoice?.module ||
+      invoice?.source ||
+      ""
+    ).toLowerCase();
+    const rawNumber = String(invoice?.invoiceNumber || invoice?.number || "").toUpperCase();
+    return Boolean(
+      invoice?.debitNote ||
+      invoice?.isDebitNote ||
+      invoice?.is_debit_note ||
+      rawType.includes("debit") ||
+      /^CDN[-\d]/.test(rawNumber)
+    );
+  };
+  const isInvoiceEmailSent = (invoice: any) => {
+    const rawStatus = String(invoice?.status || invoice?.emailStatus || "").trim().toLowerCase();
+    return Boolean(
+      invoice?.emailSent ||
+      invoice?.emailSentAt ||
+      invoice?.lastEmailSentAt ||
+      invoice?.emailedAt ||
+      invoice?.sentAt ||
+      rawStatus === "sent" ||
+      rawStatus === "viewed"
+    );
+  };
   const stripRetainerInvoices = (records: any[] = []) =>
     (Array.isArray(records) ? records : []).filter((invoice) => !isRetainerInvoiceRecord(invoice));
   const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set());
@@ -885,6 +915,16 @@ export default function Invoices() {
             >
               {invoice.invoiceNumber || invoice.id}
             </span>
+            {isInvoiceEmailSent(invoice) && (
+              <div title="Sent by Email" className="p-0.5 rounded text-slate-500">
+                <Mail size={12} />
+              </div>
+            )}
+            {isDebitNoteRecord(invoice) && (
+              <div title="Debit Note" className="p-0.5 rounded text-slate-400">
+                <FileText size={12} />
+              </div>
+            )}
             {((invoice as any).isRecurringInvoice || (invoice as any).recurringProfileId) && (
               <div title="Generated from Recurring Profile" className="p-0.5 bg-blue-50 text-blue-600 rounded">
                 <RefreshCw size={12} />
@@ -2860,7 +2900,7 @@ export default function Invoices() {
       {sortedInvoices.length > 0 && (
         <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-white">
           <div className="flex items-center text-sm text-gray-500">
-            Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalItems)} of {totalItems} invoices
+            Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalItems)} invoices
           </div>
           <div className="flex items-center gap-2">
             <button

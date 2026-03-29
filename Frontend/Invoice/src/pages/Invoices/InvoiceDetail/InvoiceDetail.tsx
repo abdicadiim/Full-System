@@ -2534,12 +2534,16 @@ export default function InvoiceDetail() { // Start of component
   const handleCreateCreditNote = () => {
     setIsMoreMenuOpen(false);
     // TODO: Implement create credit note functionality
-    navigate(`/sales/credit-notes/new?invoiceId=${id}`);
+    navigate(`/sales/credit-notes/new?invoiceId=${id}`, {
+      state: { clonedData: invoice },
+    });
   };
 
   const handleCreateDebitNote = () => {
     setIsMoreMenuOpen(false);
-    navigate(`/sales/debit-notes/new${id ? `?invoiceId=${id}` : ''}`);
+    navigate(`/sales/debit-notes/new${id ? `?invoiceId=${id}` : ''}`, {
+      state: { clonedData: invoice },
+    });
   };
 
   const handleCreateRetailInvoice = () => {

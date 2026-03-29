@@ -177,6 +177,7 @@ export default function NewDebitNote() {
   const navigate = useNavigate();
   const location = useLocation();
   const invoiceId = new URLSearchParams(location.search).get("invoiceId") || "";
+  const clonedDataFromState = location.state?.clonedData || null;
 
   const [formData, setFormData] = useState({
     customerName: "",
@@ -250,6 +251,72 @@ export default function NewDebitNote() {
   const customerDropdownRef = useRef<HTMLDivElement | null>(null);
 
   const [saveLoading, setSaveLoading] = useState<string | null>(null);
+  const hasAppliedCloneRef = useRef(false);
+
+  useEffect(() => {
+    if (!clonedDataFromState || hasAppliedCloneRef.current) return;
+    hasAppliedCloneRef.current = true;
+
+    const cloned = clonedDataFromState as any;
+    const toDisplayDate = (value: any, fallback: string) => {
+      if (!value) return fallback;
+      const d = new Date(value);
+      if (!Number.isNaN(d.getTime())) {
+        return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+      }
+      return String(value);
+    };
+
+    const mappedItems = Array.isArray(cloned.items) && cloned.items.length > 0
+      ? cloned.items.map((item: any, index: number) => ({
+          id: Number(item?.id || item?._id || Date.now() + index),
+          description: String(item?.description || item?.name || item?.itemDetails || ""),
+          rate: Number(item?.rate ?? item?.unitPrice ?? item?.price ?? 0) || 0,
+          baseRate: Number(item?.baseRate ?? item?.rate ?? item?.unitPrice ?? item?.price ?? 0) || 0,
+          tax: String(item?.tax || item?.taxId || ""),
+          amount: Number(item?.amount ?? item?.total ?? 0) || 0,
+        }))
+      : [];
+
+    setFormData((prev) => ({
+      ...prev,
+      customerName: String(cloned.customerName || cloned.customer?.displayName || cloned.customer?.companyName || cloned.customer?.name || prev.customerName || "").trim(),
+      reason: String(cloned.reason || prev.reason || ""),
+      location: String(cloned.location || prev.location || "Head Office"),
+      orderNumber: String(cloned.orderNumber || prev.orderNumber || ""),
+      debitNoteDate: toDisplayDate(cloned.invoiceDate || cloned.date || cloned.debitNoteDate, prev.debitNoteDate),
+      dueDate: toDisplayDate(cloned.dueDate || cloned.invoiceDate || cloned.date || cloned.debitNoteDate, prev.dueDate),
+      salesperson: String(cloned.salesperson || prev.salesperson || ""),
+      customField: String(cloned.customField || prev.customField || "None"),
+      subject: String(cloned.subject || prev.subject || ""),
+      taxMode: String(cloned.taxExclusive || cloned.taxMode || prev.taxMode || "Tax Exclusive"),
+      priceList: String(cloned.priceList || prev.priceList || "Select Price List"),
+      customerNotes: String(cloned.customerNotes || cloned.notes || prev.customerNotes || ""),
+      termsAndConditions: String(cloned.termsAndConditions || cloned.terms || prev.termsAndConditions || ""),
+      discount: Number(cloned.discount ?? prev.discount ?? 0) || 0,
+      discountType: String(cloned.discountType || prev.discountType || "percent"),
+      shippingCharges: Number(cloned.shippingCharges ?? cloned.shipping ?? prev.shippingCharges ?? 0) || 0,
+      adjustment: Number(cloned.adjustment ?? prev.adjustment ?? 0) || 0,
+      currency: String(cloned.currency || prev.currency || "AMD"),
+    }));
+
+    if (mappedItems.length > 0) {
+      setItems(mappedItems);
+    }
+
+    const sourceInvoiceNumber = String(cloned.invoiceNumber || cloned.number || cloned.id || cloned._id || "").trim();
+    if (sourceInvoiceNumber) {
+      setSelectedInvoice(sourceInvoiceNumber);
+    }
+
+    if (cloned.customer || cloned.customerId || cloned.customerName) {
+      setSelectedCustomer((prev) => prev || {
+        id: String(cloned.customerId || cloned.customer?._id || cloned.customer?.id || "source-invoice"),
+        name: String(cloned.customerName || cloned.customer?.displayName || cloned.customer?.companyName || cloned.customer?.name || "Customer"),
+        displayName: String(cloned.customerName || cloned.customer?.displayName || cloned.customer?.companyName || cloned.customer?.name || "Customer"),
+      } as any);
+    }
+  }, [clonedDataFromState]);
 
   const handleSave = async (status = "open") => {
     if (!selectedCustomer) {

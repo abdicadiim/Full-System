@@ -3,13 +3,14 @@ import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { getSalesReceiptById, getSalesReceipts, deleteSalesReceipt, updateSalesReceipt, saveSalesReceipt, SalesReceipt } from "../../salesModel";
 import { currenciesAPI, salesReceiptsAPI, senderEmailsAPI } from "../../../services/api";
+import { getCurrentUser } from "../../../services/auth";
 import { resolveVerifiedPrimarySender } from "../../../utils/emailSenderDisplay";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import {
   X, Edit, Send, FileText, MoreVertical,
   ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Plus, Filter,
-  ArrowUpDown, CheckSquare, Square, Search, Star, Link2, Mail, Printer, Settings,
+  ArrowUpDown, CheckSquare, Square, Search, Star, Link2, Mail, Settings,
   User, Calendar, Paperclip, MessageSquare, Upload, Pencil
 } from "lucide-react";
 import { getStatesByCountry } from "../../../constants/locationData";
@@ -109,7 +110,6 @@ export default function SalesReceiptDetail() {
     message: ""
   });
   const [isReceiptDocumentHovered, setIsReceiptDocumentHovered] = useState(false);
-  const [isCustomizeDropdownOpen, setIsCustomizeDropdownOpen] = useState(false);
   const [isChooseTemplateModalOpen, setIsChooseTemplateModalOpen] = useState(false);
   const [templateSearch, setTemplateSearch] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("Standard Template");
@@ -140,7 +140,6 @@ export default function SalesReceiptDetail() {
   const pdfDropdownRef = useRef<HTMLDivElement>(null);
   const emailModalRef = useRef<HTMLDivElement>(null);
   const attachmentMenuRef = useRef<HTMLDivElement>(null);
-  const customizeDropdownRef = useRef<HTMLDivElement>(null);
   const organizationAddressFileInputRef = useRef<HTMLInputElement>(null);
   const attachmentsFileInputRef = useRef<HTMLInputElement>(null);
   const receiptDocumentRef = useRef<HTMLDivElement>(null);
@@ -226,19 +225,16 @@ export default function SalesReceiptDetail() {
       if (attachmentMenuRef.current && !attachmentMenuRef.current.contains(target)) {
         setIsAttachmentMenuOpen(false);
       }
-      if (customizeDropdownRef.current && !customizeDropdownRef.current.contains(target)) {
-        setIsCustomizeDropdownOpen(false);
-      }
     };
 
-    if (isMoreMenuOpen || isAllReceiptsDropdownOpen || isPdfDropdownOpen || isEmailModalOpen || isAttachmentMenuOpen || isCustomizeDropdownOpen) {
+    if (isMoreMenuOpen || isAllReceiptsDropdownOpen || isPdfDropdownOpen || isEmailModalOpen || isAttachmentMenuOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isMoreMenuOpen, isAllReceiptsDropdownOpen, isPdfDropdownOpen, isEmailModalOpen, isAttachmentMenuOpen, isCustomizeDropdownOpen]);
+  }, [isMoreMenuOpen, isAllReceiptsDropdownOpen, isPdfDropdownOpen, isEmailModalOpen, isAttachmentMenuOpen]);
   // Keep browser scroll locked so only this detail view panels scroll (same behavior as Quote detail).
   useEffect(() => {
     const previousHtmlOverflow = document.documentElement.style.overflow;
@@ -253,15 +249,61 @@ export default function SalesReceiptDetail() {
     };
   }, []);
 
+  const readJsonFromStorage = (key: string) => {
+    if (typeof window === "undefined") return null;
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  };
+
+  const formatLocation = (...parts: Array<any>) => {
+    const cleaned = parts
+      .flatMap((part) => Array.isArray(part) ? part : [part])
+      .map((part) => String(part || "").trim())
+      .filter(Boolean);
+    return cleaned.join(", ");
+  };
+
+  const getCurrentUserLabel = () => {
+    const user = getCurrentUser();
+    if (!user) return "System";
+    if (typeof user === "string") return String(user).trim() || "System";
+    return String(user.name || user.displayName || user.fullName || user.email || user.username || user.userName || "System").trim() || "System";
+  };
+
   // Default seller info (should come from settings/profile)
-  const sellerInfo = receipt?.organizationProfile ? {
-    name: receipt.organizationProfile.name || "Team",
-    location: receipt.organizationProfile.country || "Somalia",
-    email: receipt.organizationProfile.email || ""
-  } : {
-    name: "Team",
-    location: "Somalia",
-    email: ""
+  const storedOrganizationProfile = readJsonFromStorage("organization_profile") || {};
+  const storedOrganizationAddress = readJsonFromStorage("organization_address") || {};
+  const receiptOrganizationProfile = receipt?.organizationProfile || {};
+  const sellerInfo = {
+    name: String(
+      receiptOrganizationProfile.name ||
+      receiptOrganizationProfile.organizationName ||
+      storedOrganizationProfile?.name ||
+      storedOrganizationProfile?.organizationName ||
+      storedOrganizationProfile?.general?.companyDisplayName ||
+      storedOrganizationProfile?.general?.schoolDisplayName ||
+      "Team"
+    ).trim() || "Team",
+    location: formatLocation(
+      receiptOrganizationProfile.location,
+      receiptOrganizationProfile.city,
+      receiptOrganizationProfile.stateProvince || receiptOrganizationProfile.state,
+      receiptOrganizationProfile.country,
+      storedOrganizationAddress.city,
+      storedOrganizationAddress.stateProvince || storedOrganizationAddress.state,
+      storedOrganizationAddress.country
+    ) || receiptOrganizationProfile.country || storedOrganizationProfile?.address?.country || "Head Office",
+    email: String(
+      receiptOrganizationProfile.email ||
+      storedOrganizationProfile?.email ||
+      storedOrganizationProfile?.organizationEmail ||
+      ""
+    ).trim()
   };
 
   // Journal entries (should come from accounting system)
@@ -589,6 +631,8 @@ ${sellerInfo.name}`
           unitPrice: toFiniteNumber(line?.unitPrice ?? line?.rate ?? line?.price, 0),
           discount: toFiniteNumber(line?.discount, 0),
           discountType: String(line?.discountType || "percent").toLowerCase().includes("amount") ? "amount" : "percent",
+          tax: line?.tax || line?.taxId || line?.tax_id || "",
+          taxId: line?.taxId || line?.tax_id || line?.tax || "",
           taxRate: toFiniteNumber(line?.taxRate ?? line?.taxPercent ?? line?.tax_percentage, 0),
           taxAmount: toFiniteNumber(line?.taxAmount ?? line?.tax, 0),
           total: toFiniteNumber(line?.total ?? line?.amount, 0),
@@ -602,20 +646,31 @@ ${sellerInfo.name}`
         date: new Date().toISOString(),
         receiptDate: new Date().toISOString(),
         items: clonedItems,
+        customerEmail: receipt.customerEmail || receipt.customer?.email || "",
+        selectedLocation: receipt.selectedLocation || receipt.location || "Head Office",
+        location: receipt.location || receipt.selectedLocation || "Head Office",
+        reportingTags: Array.isArray(receipt.reportingTags) ? receipt.reportingTags : [],
+        salesperson: typeof receipt.salesperson === "object"
+          ? (receipt.salesperson?.name || receipt.salesperson?.displayName || "")
+          : (receipt.salesperson || ""),
+        taxInclusive: receipt.taxInclusive || "Tax Inclusive",
         subtotal: toFiniteNumber(receipt.subtotal ?? receipt.subTotal, 0),
         tax: toFiniteNumber(receipt.tax, 0),
         discount: toFiniteNumber(receipt.discount, 0),
         discountType: String(receipt.discountType || "percent").toLowerCase().includes("amount") ? "amount" : "percent",
         shippingCharges: toFiniteNumber(receipt.shippingCharges, 0),
+        shippingChargeTax: receipt.shippingChargeTax || receipt.shippingTax || "",
         adjustment: toFiniteNumber(receipt.adjustment, 0),
         total: toFiniteNumber(receipt.total ?? receipt.amount, 0),
         currency: receipt.currency || "USD",
         paymentMethod: String(receipt.paymentMethod || receipt.paymentMode || "cash").toLowerCase().replace(/\s+/g, "_"),
+        paymentMode: receipt.paymentMode || receipt.paymentMethod || "Cash",
         paymentReference: receipt.paymentReference || receipt.reference || "",
         depositToAccount: toEntityId(receipt.depositToAccount || receipt.depositTo) || undefined,
         status: "paid",
         notes: receipt.notes || "",
         termsAndConditions: receipt.termsAndConditions || receipt.terms || "",
+        createdBy: getCurrentUserLabel(),
       };
 
       const clonedReceipt = await saveSalesReceipt(clonedPayload as any);
@@ -721,7 +776,7 @@ ${sellerInfo.name}`
           </button>
           <div className="flex items-center gap-2">
             <button
-              className="h-8 w-8 rounded-md bg-[#3b82f6] text-white flex items-center justify-center hover:bg-[#2563eb] border border-[#2563eb] shadow-sm"
+              className="h-8 w-8 rounded-md bg-[#156372] text-white flex items-center justify-center hover:bg-[#0D4A52] border border-[#0D4A52] shadow-sm"
               onClick={() => navigate("/sales/sales-receipts/new")}
               title="New Sales Receipt"
             >
@@ -909,7 +964,7 @@ ${sellerInfo.name}`
           <div className="flex items-center gap-4 text-[12px] text-gray-700">
             {String(receipt.status || "").toLowerCase() !== "void" && (
               <>
-                <button className="flex items-center gap-1 hover:text-gray-900" onClick={() => navigate(`/sales/sales-receipts/${id}/edit`)}>
+                <button className="flex items-center gap-1 hover:text-gray-900" onClick={() => navigate(`/sales/sales-receipts/${id}/edit`, { state: { receipt } })}>
                   <Edit size={14} />
                   Edit
                 </button>
@@ -921,10 +976,9 @@ ${sellerInfo.name}`
                 <span className="h-4 w-px bg-gray-300" />
               </>
             )}
-            <button className="flex items-center gap-1 hover:text-gray-900" onClick={() => setIsPdfDropdownOpen(!isPdfDropdownOpen)}>
-              <Printer size={14} />
-              PDF/Print
-              <ChevronDown size={12} />
+            <button className="flex items-center gap-1 hover:text-gray-900" onClick={handleDownloadPDF}>
+              <FileText size={14} />
+              PDF
             </button>
             <span className="h-4 w-px bg-gray-300" />
             <div className="relative" ref={moreMenuRef}>
@@ -938,7 +992,7 @@ ${sellerInfo.name}`
               {isMoreMenuOpen && (
                 <div className="absolute top-full left-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[220px] p-2">
                   <button
-                    className="w-full text-left px-3 py-2 text-sm rounded-md bg-blue-500 text-white"
+                    className="w-full text-left px-3 py-2 text-sm text-gray-800 rounded-md hover:bg-gray-50"
                     onClick={handleClone}
                   >
                     Clone
@@ -952,7 +1006,7 @@ ${sellerInfo.name}`
                     </button>
                   )}
                   <button
-                    className="w-full text-left px-3 py-2 text-sm text-gray-800 rounded-md hover:bg-gray-50"
+                    className="w-full text-left px-3 py-2 text-sm text-red-600 rounded-md hover:bg-red-50"
                     onClick={handleDelete}
                   >
                     Delete
@@ -980,7 +1034,6 @@ ${sellerInfo.name}`
               onMouseEnter={() => setIsReceiptDocumentHovered(true)}
               onMouseLeave={() => {
                 setIsReceiptDocumentHovered(false);
-                setIsCustomizeDropdownOpen(false);
               }}
             >
               <div
@@ -988,101 +1041,6 @@ ${sellerInfo.name}`
                 className="max-w-4xl mx-auto bg-white shadow-lg relative border border-gray-100"
                 style={{ minHeight: "842px", padding: "40px" }}
               >
-              {/* Customize Button - appears on hover */}
-              {isReceiptDocumentHovered && (
-                <div className="absolute top-0 right-0 z-10" ref={customizeDropdownRef}>
-                  <button
-                    className="flex items-center gap-2 px-4 py-2 text-white rounded-md text-sm font-medium cursor-pointer transition-colors shadow-md"
-                    style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                    onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.opacity = "0.9"}
-                    onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.opacity = "1"}
-                    onClick={() => setIsCustomizeDropdownOpen(!isCustomizeDropdownOpen)}
-                  >
-                    <Settings size={16} />
-                    Customize
-                    <ChevronDown size={14} />
-                  </button>
-                  {isCustomizeDropdownOpen && (
-                    <div className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 min-w-[220px]">
-                      <div
-                        className="px-4 py-2 text-sm text-gray-600 cursor-pointer transition-colors"
-                        style={{ "--hover-bg": "rgba(21, 99, 114, 0.1)" } as React.CSSProperties}
-                        onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(21, 99, 114, 0.1)"}
-                        onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"}
-                        onClick={() => {
-                          setIsCustomizeDropdownOpen(false);
-                          // Handle Standard Template action
-                          console.log("Standard Template");
-                        }}
-                      >
-                        Standard Template
-                      </div>
-                      <div
-                        className="px-4 py-2 text-sm text-white cursor-pointer transition-colors"
-                        style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                        onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.opacity = "0.9"}
-                        onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.opacity = "1"}
-                        onClick={() => {
-                          setIsCustomizeDropdownOpen(false);
-                          setIsChooseTemplateModalOpen(true);
-                        }}
-                      >
-                        Change Template
-                      </div>
-                      <div
-                        className="px-4 py-2 text-sm text-gray-600 cursor-pointer transition-colors"
-                        style={{ "--hover-bg": "rgba(21, 99, 114, 0.1)" } as React.CSSProperties}
-                        onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(21, 99, 114, 0.1)"}
-                        onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"}
-                        onClick={() => {
-                          setIsCustomizeDropdownOpen(false);
-                          // Handle Edit Template action
-                          console.log("Edit Template");
-                        }}
-                      >
-                        Edit Template
-                      </div>
-                      <div
-                        className="px-4 py-2 text-sm text-gray-600 cursor-pointer transition-colors"
-                        style={{ "--hover-bg": "rgba(21, 99, 114, 0.1)" } as React.CSSProperties}
-                        onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(21, 99, 114, 0.1)"}
-                        onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"}
-                        onClick={() => {
-                          setIsCustomizeDropdownOpen(false);
-                          setIsOrganizationAddressModalOpen(true);
-                        }}
-                      >
-                        Update Logo & Address
-                      </div>
-                      <div
-                        className="px-4 py-2 text-sm text-gray-600 cursor-pointer transition-colors"
-                        style={{ "--hover-bg": "rgba(21, 99, 114, 0.1)" } as React.CSSProperties}
-                        onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(21, 99, 114, 0.1)"}
-                        onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"}
-                        onClick={() => {
-                          setIsCustomizeDropdownOpen(false);
-                          navigate("/settings/sales-receipts");
-                        }}
-                      >
-                        Manage Custom Fields
-                      </div>
-                      <div
-                        className="px-4 py-2 text-sm text-gray-600 cursor-pointer transition-colors"
-                        style={{ "--hover-bg": "rgba(21, 99, 114, 0.1)" } as React.CSSProperties}
-                        onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(21, 99, 114, 0.1)"}
-                        onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"}
-                        onClick={() => {
-                          setIsCustomizeDropdownOpen(false);
-                          setIsTermsAndConditionsModalOpen(true);
-                        }}
-                      >
-                        Terms & Conditions
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
               {/* Seller Info */}
               <div className="mb-6">
                 <div className="text-lg font-semibold text-gray-900">{sellerInfo.name}</div>
@@ -1309,45 +1267,41 @@ ${sellerInfo.name}`
         </div>
       )}
       {isDeleteModalOpen && (
-        <div className="fixed inset-0 z-[2000] flex items-start justify-center pt-6 bg-black/40">
-          <div className="relative w-full max-w-[520px] rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden mx-4">
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-amber-100 text-amber-700">
-                  <Trash2 size={20} />
-                </div>
-                <div>
-                  <h3 className="text-[15px] font-semibold text-slate-900">Delete receipt?</h3>
-                  <p className="text-sm text-slate-500">
-                    Receipt {receipt?.receiptNumber || receipt?.id || ""} will be deleted permanently.
-                  </p>
-                </div>
+        <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200">
+            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+              <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
+                !
               </div>
+              <h3 className="text-[15px] font-semibold text-slate-800 flex-1">
+                Delete receipt?
+              </h3>
               <button
                 type="button"
-                className="h-8 w-8 rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
+                className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
                 onClick={() => setIsDeleteModalOpen(false)}
+                aria-label="Close"
               >
-                <X size={16} />
+                <X size={14} />
               </button>
             </div>
-            <div className="px-6 py-4 text-sm text-slate-600">
-              This action cannot be undone.
+            <div className="px-5 py-3 text-[13px] text-slate-600">
+              Receipt {receipt?.receiptNumber || receipt?.id || ""} will be deleted permanently.
             </div>
-            <div className="flex items-center justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+            <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
               <button
                 type="button"
-                className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                onClick={() => setIsDeleteModalOpen(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="rounded-md bg-[#b91c1c] px-4 py-2 text-sm font-semibold text-white hover:bg-[#991b1b]"
+                className="px-4 py-1.5 rounded-md bg-blue-600 text-white text-[12px] hover:bg-blue-700"
                 onClick={confirmDeleteReceipt}
               >
                 Delete
+              </button>
+              <button
+                type="button"
+                className="px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50"
+                onClick={() => setIsDeleteModalOpen(false)}
+              >
+                Cancel
               </button>
             </div>
           </div>

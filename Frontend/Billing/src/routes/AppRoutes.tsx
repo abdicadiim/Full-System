@@ -18,6 +18,7 @@ import OrgsRoutes from '../pages/orgs/OrgsRoutes'
 import QuotesRoutes from '../pages/sales/Quotes/QuotesRoutes'
 import NewDebitNote from '../pages/sales/DebitNotes/NewDebitNote/NewDebitNote'
 import InvoiceDetail from '../pages/sales/Invoices/InvoiceDetail/InvoiceDetail'
+import SendInvoiceEmail from '../pages/sales/Invoices/SendInvoiceEmail/SendInvoiceEmail'
 import ItemsPage from '../pages/Product-Calalog/items/ItemsPage'
 import ImportItems from '../pages/Product-Calalog/items/ImportItems'
 import PlansPage from '../pages/Product-Calalog/plans/PlansPage'
@@ -126,6 +127,7 @@ export default function AppRoutes() {
       <Route path="/sales/credit-notes/*" element={<CreditNotesRoutes />} />
       <Route path="/sales/debit-notes/:id/edit" element={<NewDebitNote />} />
       <Route path="/sales/debit-notes/new" element={<NewDebitNote />} />
+      <Route path="/sales/debit-notes/:id/email" element={<SendInvoiceEmail />} />
       <Route path="/sales/debit-notes/:id" element={<InvoiceDetail />} />
 
       <Route path="/sales/subscriptions/*" element={<SubscriptionsRoutes />} />

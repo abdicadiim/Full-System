@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useLocation } from "react-router-dom";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import { getSalesReceipts, getSalesReceiptsPaginated, deleteSalesReceipt, updateSalesReceipt, getSalesReceiptById, getCustomers, getSalespersons, getTaxes, getProjects, getItemsFromAPI, getCustomViews, deleteCustomView } from "../salesModel";
@@ -30,7 +31,8 @@ import {
   CheckCircle,
   Download,
   RotateCcw,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Mail
 } from "lucide-react";
 import SalesReceiptsCustomizeColumnsModal, { SalesReceiptsColumnOption } from "./SalesReceiptsCustomizeColumnsModal";
 
@@ -57,6 +59,17 @@ const normalizeSalesReceiptStatus = (value: any) => {
 };
 
 const getSalesReceiptStatusLabel = (value: any) => (normalizeSalesReceiptStatus(value) === "void" ? "VOID" : "PAID");
+const isSalesReceiptEmailSent = (receipt: any) => {
+  const rawStatus = String(receipt?.status || receipt?.emailStatus || "").trim().toLowerCase();
+  return Boolean(
+    receipt?.emailSent ||
+    receipt?.emailSentAt ||
+    receipt?.lastEmailSentAt ||
+    receipt?.emailedAt ||
+    receipt?.sentAt ||
+    rawStatus === "sent"
+  );
+};
 
 const SALES_RECEIPTS_COLUMNS_STORAGE_KEY = "billing_sales_receipts_visible_columns_v1";
 const SALES_RECEIPTS_LIST_COLUMNS: SalesReceiptsColumnOption[] = [
@@ -175,6 +188,7 @@ export default function SalesReceipts() {
   const exportDropdownRef = useRef(null);
   const periodDropdownRef = useRef(null);
   const bulkUpdateFieldDropdownRef = useRef(null);
+  const bulkUpdateModalRoot = typeof document !== "undefined" ? document.body : null;
 
   const periodOptions = ["All", "Today", "This Week", "This Month", "This Quarter", "This Year", "Custom"];
 
@@ -1021,7 +1035,7 @@ export default function SalesReceipts() {
       const allReceipts = await getSalesReceipts();
       setSalesReceipts(allReceipts);
       applyFilters(allReceipts, selectedStatus);
-      alert("List refreshed successfully.");
+      toast.success("List refreshed successfully.");
     } catch (error) {
       console.error("Error refreshing list:", error);
     } finally {
@@ -1032,7 +1046,7 @@ export default function SalesReceipts() {
   const handleResetColumnWidth = () => {
     setIsMoreMenuOpen(false);
     localStorage.removeItem("salesReceiptColumnWidths");
-    alert("Column widths have been reset to default.");
+    toast.success("Column widths have been reset to default.");
   };
 
   const getSalesReceiptPdfTemplate = (receipt) => {
@@ -1126,7 +1140,7 @@ export default function SalesReceipts() {
   const downloadSalesReceiptsPdf = async (receipts, fileNamePrefix = "sales-receipts") => {
     const receiptsToDownload = Array.isArray(receipts) ? receipts.filter(Boolean) : [];
     if (receiptsToDownload.length === 0) {
-      alert("No sales receipts available for PDF download.");
+      toast.error("No sales receipts available for PDF download.");
       return;
     }
 
@@ -1207,7 +1221,7 @@ export default function SalesReceipts() {
 
     const dataToExport = filteredSalesReceipts;
     if (dataToExport.length === 0) {
-      alert("No data to export.");
+      toast.error("No data to export.");
       return;
     }
 
@@ -1264,7 +1278,7 @@ export default function SalesReceipts() {
 
   const handleBulkDelete = async () => {
     if (selectedReceipts.length === 0) {
-      alert("Please select at least one sales receipt.");
+      toast.error("Please select at least one sales receipt.");
       return;
     }
     setPendingBulkDeleteIds([...selectedReceipts]);
@@ -1300,7 +1314,7 @@ export default function SalesReceipts() {
 
   const handleBulkUpdate = () => {
     if (selectedReceipts.length === 0) {
-      alert("Please select at least one sales receipt.");
+      toast.error("Please select at least one sales receipt.");
       return;
     }
     setIsBulkUpdateModalOpen(true);
@@ -1316,18 +1330,18 @@ export default function SalesReceipts() {
 
   const handleBulkUpdateSubmit = async () => {
     if (!bulkUpdateField || !selectedBulkFieldConfig) {
-      alert("Please select a field.");
+      toast.error("Please select a field.");
       return;
     }
 
     if (selectedReceipts.length === 0) {
-      alert("Please select at least one sales receipt to update.");
+      toast.error("Please select at least one sales receipt to update.");
       return;
     }
 
     const rawValue = String(bulkUpdateValue || "").trim();
     if (!rawValue) {
-      alert("Please enter a value.");
+      toast.error("Please enter a value.");
       return;
     }
 
@@ -1335,7 +1349,7 @@ export default function SalesReceipts() {
     if (selectedBulkFieldConfig.type === "number") {
       const normalizedNumber = Number(rawValue.replace(/,/g, ""));
       if (!Number.isFinite(normalizedNumber)) {
-        alert("Please enter a valid number.");
+        toast.error("Please enter a valid number.");
         return;
       }
       parsedValue = normalizedNumber;
@@ -1344,7 +1358,7 @@ export default function SalesReceipts() {
     if (selectedBulkFieldConfig.type === "date") {
       const parsedDate = new Date(rawValue);
       if (Number.isNaN(parsedDate.getTime())) {
-        alert("Please select a valid date.");
+        toast.error("Please select a valid date.");
         return;
       }
       parsedValue = rawValue;
@@ -1352,7 +1366,7 @@ export default function SalesReceipts() {
 
     const updateData = selectedBulkFieldConfig.buildPayload(parsedValue);
     if (!updateData || Object.keys(updateData).length === 0) {
-      alert("Invalid value for selected field.");
+      toast.error("Invalid value for selected field.");
       return;
     }
 
@@ -1383,10 +1397,10 @@ export default function SalesReceipts() {
       setBulkUpdateField("");
       setBulkUpdateValue("");
 
-      alert(`Successfully updated ${count} sales receipt(s).`);
+      toast.success(`Successfully updated ${count} sales receipt(s).`);
     } catch (error) {
       console.error("Error updating sales receipts:", error);
-      alert("An error occurred while updating sales receipts.");
+      toast.error("An error occurred while updating sales receipts.");
     }
   };
 
@@ -1442,7 +1456,7 @@ export default function SalesReceipts() {
 
   const handleBulkPDFDownload = async () => {
     if (selectedReceipts.length === 0) {
-      alert("Please select at least one sales receipt.");
+      toast.error("Please select at least one sales receipt.");
       return;
     }
 
@@ -1459,10 +1473,7 @@ export default function SalesReceipts() {
           <div className="flex min-w-0 flex-1 items-center gap-3 pl-4 pr-2 overflow-visible">
             <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
               <button
-                className="px-4 py-2 text-white rounded-md text-sm font-medium cursor-pointer"
-                style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = "0.9"}
-                onMouseLeave={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = "1"}
+                className="px-4 py-2 rounded-md text-sm font-medium cursor-pointer bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
                 onClick={handleBulkUpdate}
               >
                 Bulk Update
@@ -1476,10 +1487,7 @@ export default function SalesReceipts() {
                 PDF Download
               </button>
               <button
-                className="px-4 py-2 text-white border-none rounded-md text-sm font-medium cursor-pointer transition-all flex items-center gap-2"
-                style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = "0.9"}
-                onMouseLeave={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = "1"}
+                className="px-4 py-2 rounded-md text-sm font-medium cursor-pointer transition-colors flex items-center gap-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
                 onClick={handleBulkDelete}
               >
                 <Trash2 size={16} />
@@ -1487,7 +1495,7 @@ export default function SalesReceipts() {
               </button>
               <div className="mx-2 h-5 w-px bg-gray-200" />
               <div className="inline-flex items-center gap-2 text-sm text-slate-500">
-                <span className="flex items-center justify-center min-w-[24px] h-6 px-2 rounded text-[13px] font-semibold text-white" style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}>
+                <span className="flex items-center justify-center min-w-[24px] h-6 px-2 rounded text-[13px] font-semibold text-gray-700 bg-gray-100 border border-gray-200">
                   {selectedReceipts.length}
                 </span>
                 <span className="text-sm text-gray-700">Selected</span>
@@ -1695,9 +1703,9 @@ export default function SalesReceipts() {
       )}
 
       {/* Bulk Update Modal */}
-      {isBulkUpdateModalOpen && (
+      {isBulkUpdateModalOpen && bulkUpdateModalRoot && createPortal(
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center"
+          className="fixed inset-0 z-[9999] flex items-start justify-center bg-black/50 pt-0"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               handleBulkUpdateCancel();
@@ -1728,7 +1736,7 @@ export default function SalesReceipts() {
                     <ChevronDown size={16} />
                   </button>
                   {isBulkUpdateFieldDropdownOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-2 bg-white border-2 border-gray-200 rounded-xl shadow-xl z-50 max-h-60 overflow-y-auto">
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-white border-2 border-gray-200 rounded-xl shadow-xl z-[10000] max-h-60 overflow-y-auto">
                       {bulkUpdateFieldOptions.map((option) => (
                         <div
                           key={option}
@@ -1751,8 +1759,8 @@ export default function SalesReceipts() {
               <button
                 className="px-6 py-2 text-white border-none rounded-lg text-sm font-semibold cursor-pointer transition-all shadow-md active:transform active:scale-95"
                 style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-              onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = "0.9"}
-              onMouseLeave={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = "1"}
+                onMouseEnter={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = "0.9"}
+                onMouseLeave={(e) => (e.currentTarget as HTMLButtonElement).style.opacity = "1"}
                 onClick={handleBulkUpdateSubmit}
               >
                 Update
@@ -1765,7 +1773,8 @@ export default function SalesReceipts() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        bulkUpdateModalRoot
       )}
 
       {/* Filter Bar */}
@@ -1832,8 +1841,8 @@ export default function SalesReceipts() {
               <table className="w-full min-w-full text-left border-collapse table-fixed bg-white">
                 <thead className="bg-[#f6f7fb] sticky top-0 z-20 border-b border-[#e6e9f2]">
                   <tr className="text-[10px] font-semibold text-[#7b8494] uppercase tracking-wider">
-                    <th className="px-4 py-3 w-16">
-                      <div className="flex items-center gap-2">
+                    <th className="px-4 py-3 w-[104px] min-w-[104px] sales-receipts-select-header">
+                      <div className="sales-receipts-select-header-actions flex items-center gap-2">
                         <button
                           type="button"
                           onClick={(e) => {
@@ -1845,12 +1854,11 @@ export default function SalesReceipts() {
                         >
                           <SlidersHorizontal size={13} className="text-[#1b5e6a]" />
                         </button>
-                        <div className="h-5 w-px bg-gray-200" />
                         <input
                           type="checkbox"
                           checked={selectedReceipts.length === filteredSalesReceipts.length && filteredSalesReceipts.length > 0}
                           onChange={handleSelectAll}
-                          className="w-4 h-4 text-[#156372] border-gray-300 rounded focus:ring-blue-500"
+                          className="sales-receipts-select-header-checkbox w-4 h-4 text-[#156372] border-gray-300 rounded focus:ring-blue-500"
                         />
                       </div>
                     </th>
@@ -1914,15 +1922,13 @@ export default function SalesReceipts() {
                         }}
                       >
                         <td
-                          className="px-4 py-3"
+                          className="px-4 py-3 w-[104px] min-w-[104px] sales-receipts-select-cell"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleSelectReceipt(receipt.id, e);
                           }}
                         >
-                          <div className="flex items-center gap-2">
-                            <span className="h-6 w-6 shrink-0" aria-hidden />
-                            <span className="h-5 w-px shrink-0 bg-transparent" aria-hidden />
+                          <div className="sales-receipts-select-cell-checkbox">
                             <input
                               type="checkbox"
                               checked={selectedReceipts.includes(receipt.id)}
@@ -1935,15 +1941,22 @@ export default function SalesReceipts() {
                         {isColumnVisible("receipt_date") && <td className="p-4 text-gray-900">{formatDate(receipt.date || receipt.receiptDate)}</td>}
                         {isColumnVisible("location") && <td className="p-4 text-gray-900">{receipt.location || receipt.branch || "Head Office"}</td>}
                         {isColumnVisible("receipt_number") && <td className="p-4">
-                          <span
-                            className="text-[#156372] hover:text-blue-700 hover:underline font-medium cursor-pointer"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/sales/sales-receipts/${receipt.id}`);
-                            }}
-                          >
-                            {receipt.receiptNumber || receipt.id || "-"}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className="text-[#156372] hover:text-blue-700 hover:underline font-medium cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/sales/sales-receipts/${receipt.id}`);
+                              }}
+                            >
+                              {receipt.receiptNumber || receipt.id || "-"}
+                            </span>
+                            {isSalesReceiptEmailSent(receipt) && (
+                              <div title="Sent by Email" className="p-0.5 rounded text-slate-500">
+                                <Mail size={12} />
+                              </div>
+                            )}
+                          </div>
                         </td>}
                         {isColumnVisible("reference") && <td className="p-4 text-gray-900">{receipt.paymentReference || receipt.referenceNumber || "-"}</td>}
                         {isColumnVisible("customer_name") && <td className="p-4 text-gray-900">{receipt.customerName || receipt.customer?.displayName || receipt.customer?.companyName || (typeof receipt.customer === 'string' ? receipt.customer : "-")}</td>}
@@ -1957,7 +1970,7 @@ export default function SalesReceipts() {
                           </span>
                         </td>}
                         {isColumnVisible("amount") && <td className="p-4 text-gray-900 font-semibold">{formatCurrency(receipt.total || receipt.amount, receipt.currency)}</td>}
-                        {isColumnVisible("created_by") && <td className="p-4 text-gray-900">{receipt.createdBy?.name || (typeof receipt.createdBy === 'string' ? receipt.createdBy : "-")}</td>}
+                        {isColumnVisible("created_by") && <td className="p-4 text-gray-900">{getCreatedByDisplayName(receipt)}</td>}
                         <td className="p-4"></td>
                       </tr>
                     ))
@@ -1970,43 +1983,41 @@ export default function SalesReceipts() {
       </div>
 
       {isBulkDeleteModalOpen && (
-        <div className="fixed inset-0 z-[2000] flex items-start justify-center pt-6 bg-black/40">
-          <div className="relative w-full max-w-[520px] rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden mx-4">
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-amber-100 text-amber-700">
-                  <Trash2 size={20} />
-                </div>
-                <div>
-                  <h3 className="text-[15px] font-semibold text-slate-900">Delete sales receipt(s)?</h3>
-                  <p className="text-sm text-slate-500">{pendingBulkDeleteIds.length} selected receipt(s) will be deleted permanently.</p>
-                </div>
+        <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200">
+            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+              <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
+                !
               </div>
+              <h3 className="text-[15px] font-semibold text-slate-800 flex-1">
+                Delete {pendingBulkDeleteIds.length} sales receipt{pendingBulkDeleteIds.length === 1 ? "" : "s"}?
+              </h3>
               <button
                 type="button"
-                className="h-8 w-8 rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
+                className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
                 onClick={handleCancelBulkDelete}
+                aria-label="Close"
               >
-                <X size={16} />
+                <X size={14} />
               </button>
             </div>
-            <div className="px-6 py-4 text-sm text-slate-600">
-              This action cannot be undone.
+            <div className="px-5 py-3 text-[13px] text-slate-600">
+              You cannot retrieve these sales receipts once they have been deleted.
             </div>
-            <div className="flex items-center justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+            <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
               <button
                 type="button"
-                className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                onClick={handleCancelBulkDelete}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="rounded-md bg-[#b91c1c] px-4 py-2 text-sm font-semibold text-white hover:bg-[#991b1b]"
+                className="px-4 py-1.5 rounded-md bg-blue-600 text-white text-[12px] hover:bg-blue-700"
                 onClick={handleConfirmBulkDelete}
               >
                 Delete
+              </button>
+              <button
+                type="button"
+                className="px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50"
+                onClick={handleCancelBulkDelete}
+              >
+                Cancel
               </button>
             </div>
           </div>

@@ -1299,10 +1299,6 @@ export default function InvoiceDetail() { // Start of component
   };
 
   const handleSendInvoice = () => {
-    if (isDebitNoteView) {
-      void handleSendDebitNote();
-      return;
-    }
     handleSendEmail();
   };
 
@@ -1361,7 +1357,7 @@ export default function InvoiceDetail() { // Start of component
         : "") ||
       ""
     ).trim();
-    navigate(`/sales/invoices/${id}/email`, {
+    navigate(isDebitNoteDocument ? `/sales/debit-notes/${id}/email` : `/sales/invoices/${id}/email`, {
       state: {
         customerEmail,
         sendTo: customerEmail,
@@ -2914,21 +2910,19 @@ export default function InvoiceDetail() { // Start of component
     }
   };
 
-  const handleMakeRecurring = () => {
-    setIsMoreMenuOpen(false);
-    // TODO: Implement make recurring functionality
-    navigate(`/sales/recurring-invoices/new?invoiceId=${id}`);
-  };
-
   const handleCreateCreditNote = () => {
     setIsMoreMenuOpen(false);
     // TODO: Implement create credit note functionality
-    navigate(`/sales/credit-notes/new?invoiceId=${id}`);
+    navigate(`/sales/credit-notes/new?invoiceId=${id}`, {
+      state: { clonedData: invoice },
+    });
   };
 
   const handleCreateDebitNote = () => {
     setIsMoreMenuOpen(false);
-    navigate(`/sales/debit-notes/new${id ? `?invoiceId=${id}` : ''}`);
+    navigate(`/sales/debit-notes/new${id ? `?invoiceId=${id}` : ''}`, {
+      state: { clonedData: invoice },
+    });
   };
 
   const handleCreateRetailInvoice = () => {
@@ -3241,6 +3235,7 @@ export default function InvoiceDetail() { // Start of component
   const hasProjectItems = displayItems.some((item) => Boolean(item.projectName || item.projectId || item.project));
   const itemsTableTitle = hasProjectItems ? "Project Details" : "Item Table";
   const invoiceStatusKey = String(invoice?.status || "").toLowerCase().replace(/[\s-]+/g, "_").trim();
+  const isDebitNoteDocument = isDebitNoteView || Boolean((invoice as any)?.debitNote || (invoice as any)?.debitNoteNumber);
   const canRecordPayment = !["paid", "void"].includes(invoiceStatusKey);
   const showWhatsNext = !isDebitNoteView && canRecordPayment;
   const creditAppliedAmount = Number(invoiceTotalsMeta.creditsApplied) || 0;
@@ -3756,13 +3751,6 @@ export default function InvoiceDetail() { // Start of component
                     ) : (
                       <>
                         <div
-                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50 transition-colors"
-                          onClick={handleMakeRecurring}
-                        >
-                          <Repeat size={14} />
-                          Make Recurring
-                        </div>
-                        <div
                           className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
                           onClick={handleCreateCreditNote}
                         >
@@ -3796,7 +3784,7 @@ export default function InvoiceDetail() { // Start of component
                         <div className="h-px bg-gray-200 my-1"></div>
                         <div
                           className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
-                          onClick={() => navigate(`/sales/debit-notes/new?invoiceId=${id}`)}
+                          onClick={() => navigate(`/sales/debit-notes/new?invoiceId=${id}`, { state: { clonedData: invoice } })}
                         >
                           <Plus size={14} className="text-blue-500" />
                           Create Debit Note
@@ -4168,7 +4156,14 @@ export default function InvoiceDetail() { // Start of component
           {showWhatsNext && (
             <div className="flex items-center gap-4 p-4 bg-blue-50 border border-blue-200 rounded-lg mx-6 mt-4 flex-shrink-0">
               <Sparkles size={20} className="text-blue-600 flex-shrink-0" />
-              <span>WHAT'S NEXT? {invoice.status === "draft" ? "Send this Invoice to your customer or record a payment." : "Record a payment for this invoice."}</span>
+              <span>
+                WHAT'S NEXT?{" "}
+                {isDebitNoteDocument
+                  ? "Send this Debit Note to your customer or mark it as Sent."
+                  : invoice.status === "draft"
+                    ? "Send this Invoice to your customer or record a payment."
+                    : "Record a payment for this invoice."}
+              </span>
               <div className="flex items-center gap-2 ml-auto">
                 {invoice.status === "draft" && (
                   <>
@@ -4179,7 +4174,7 @@ export default function InvoiceDetail() { // Start of component
                       onMouseEnter={(e) => e.currentTarget.style.opacity = "0.9"}
                       onMouseLeave={(e) => e.currentTarget.style.opacity = "1"}
                     >
-                      Send Invoice
+                      {isDebitNoteDocument ? "Send Debit Note" : "Send Invoice"}
                     </button>
                     <button
                       onClick={handleMarkAsSent}

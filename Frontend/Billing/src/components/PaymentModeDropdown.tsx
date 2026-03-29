@@ -6,6 +6,7 @@ type PaymentModeDropdownProps = {
   onChange: (value: string) => void;
   options?: string[];
   className?: string;
+  selectClassName?: string;
 };
 
 const DEFAULT_OPTIONS = [
@@ -22,13 +23,14 @@ export default function PaymentModeDropdown({
   onChange,
   options = DEFAULT_OPTIONS,
   className = "",
+  selectClassName = "",
 }: PaymentModeDropdownProps) {
   return (
     <div className={`relative ${className}`}>
       <select
         value={value || options[0]}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full appearance-none rounded border border-gray-300 bg-white px-3 py-2 pr-9 text-sm text-gray-700 focus:border-[#156372] focus:outline-none"
+        className={`w-full appearance-none rounded border border-gray-300 bg-white px-3 py-2 pr-9 text-sm text-gray-700 outline-none transition-all hover:border-[#156372] focus:border-[#156372] focus:ring-1 focus:ring-[#156372] ${selectClassName}`}
       >
         {options.map((option) => (
           <option key={option} value={option}>

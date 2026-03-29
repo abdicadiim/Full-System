@@ -87,6 +87,43 @@
   justify-content: center;
 }
 
+/* Align sales receipts list checkbox column */
+.sales-receipts-select-header {
+  position: relative;
+}
+
+.sales-receipts-select-header-actions {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  justify-content: flex-start;
+}
+
+.sales-receipts-select-header-checkbox {
+  position: absolute;
+  top: 50%;
+  left: 48px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sales-receipts-select-cell {
+  position: relative;
+}
+
+.sales-receipts-select-cell-checkbox {
+  position: absolute;
+  top: 50%;
+  left: 48px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* Projects columns dropdown (match reference styling) */
 .projects-columns-menu {
   padding: 6px;

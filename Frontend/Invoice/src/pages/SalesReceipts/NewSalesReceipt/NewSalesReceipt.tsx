@@ -40,7 +40,7 @@ import { getAllDocuments } from "../../../utils/documentStorage";
 import { useCurrency } from "../../../hooks/useCurrency";
 import ZohoSelect from "../../../components/ZohoSelect";
 import PaymentModeDropdown from "../../../components/PaymentModeDropdown";
-import { API_BASE_URL, getToken } from "../../../services/auth";
+import { API_BASE_URL, getCurrentUser, getToken } from "../../../services/auth";
 import NewTaxQuickModal from "../../../components/tax/NewTaxQuickModal";
 import { buildTaxOptionGroups, taxLabel } from "../../../hooks/Taxdropdownstyle";
 
@@ -205,13 +205,34 @@ const formatDate = (date) => {
   return `${day} ${month} ${year}`;
 };
 
+const getCreatedByValue = (value) => {
+  if (!value) return "";
+  if (typeof value === "string" || typeof value === "number") return String(value).trim();
+  if (typeof value === "object") {
+    return String(
+      value.name ||
+      value.displayName ||
+      value.fullName ||
+      value.username ||
+      value.userName ||
+      value.email ||
+      value.id ||
+      value._id ||
+      ""
+    ).trim();
+  }
+  return String(value).trim();
+};
+
+const getCurrentUserLabel = () => getCreatedByValue(getCurrentUser()) || "System";
+
 export default function NewSalesReceipt() {
   const navigate = useNavigate();
   const location = useLocation();
   const { id } = useParams();
   const isEditMode = !!id;
-  const { baseCurrency, symbol } = useCurrency();
-  const currencySymbol = symbol || "$";
+  const { baseCurrency, symbol, baseCurrencyCode } = useCurrency();
+  const currencySymbol = baseCurrencyCode || baseCurrency.code || symbol || "$";
   const [saveLoading, setSaveLoading] = useState(null);
   const [locationOptions, setLocationOptions] = useState(() => readStoredLocationOptions());
   const [availableReportingTags, setAvailableReportingTags] = useState([]);
@@ -222,6 +243,7 @@ export default function NewSalesReceipt() {
   // Get item data from navigation state (when coming from item detail page)
   const itemFromState = location.state?.item || null;
   const clonedDataFromState = location.state?.clonedData || null;
+  const receiptFromState = location.state?.receipt || location.state?.salesReceipt || null;
 
   const [formData, setFormData] = useState({
     customerName: "",
@@ -243,6 +265,7 @@ export default function NewSalesReceipt() {
     adjustment: 0,
     roundOff: 0,
     total: 0,
+    createdBy: "",
     currency: "",
     notes: "",
     termsAndConditions: "",
@@ -429,6 +452,7 @@ export default function NewSalesReceipt() {
   const [isSalespersonDropdownOpen, setIsSalespersonDropdownOpen] = useState(false);
   const [salespersonSearch, setSalespersonSearch] = useState("");
   const [selectedSalesperson, setSelectedSalesperson] = useState(null);
+  const [isLocationDropdownOpen, setIsLocationDropdownOpen] = useState(false);
   const [isNewSalespersonQuickActionOpen, setIsNewSalespersonQuickActionOpen] = useState(false);
   const [salespersonQuickActionBaseIds, setSalespersonQuickActionBaseIds] = useState<string[]>([]);
   const [isRefreshingSalespersonsQuickAction, setIsRefreshingSalespersonsQuickAction] = useState(false);
@@ -437,6 +461,8 @@ export default function NewSalesReceipt() {
   const [isReloadingSalespersonFrame, setIsReloadingSalespersonFrame] = useState(false);
   const [isTaxInclusiveDropdownOpen, setIsTaxInclusiveDropdownOpen] = useState(false);
   const [taxInclusiveSearch, setTaxInclusiveSearch] = useState("");
+  const [openReportingTagDropdowns, setOpenReportingTagDropdowns] = useState({});
+  const [reportingTagSearches, setReportingTagSearches] = useState({});
   const [openItemDropdowns, setOpenItemDropdowns] = useState({});
   const [itemSearches, setItemSearches] = useState({});
   const [openTaxDropdowns, setOpenTaxDropdowns] = useState({});
@@ -478,7 +504,9 @@ export default function NewSalesReceipt() {
 
   const customerDropdownRef = useRef(null);
   const salespersonDropdownRef = useRef(null);
+  const locationDropdownRef = useRef(null);
   const taxInclusiveDropdownRef = useRef(null);
+  const reportingTagDropdownRefs = useRef({});
   const paymentModeDropdownRef = useRef(null);
   const depositToDropdownRef = useRef(null);
   const shippingChargeTaxDropdownRef = useRef(null);
@@ -526,10 +554,94 @@ export default function NewSalesReceipt() {
     return `${baseName} [${rate}%]`;
   };
 
-  const findTaxById = (taxId) => {
-    if (!taxId) return undefined;
-    const normalized = String(taxId);
-    return taxes.find((t) => String(t.id || t._id || "") === normalized);
+  const parseTaxRate = (value) => {
+    const numeric = parseFloat(String(value ?? "").replace(/[^0-9.-]/g, ""));
+    return Number.isFinite(numeric) ? numeric : 0;
+  };
+
+  const getTaxBySelection = (value) => {
+    const valueStr = String(value ?? "").trim();
+    if (!valueStr) return null;
+
+    const byId = taxes.find((t) => String(t.id || t._id || "").trim() === valueStr);
+    if (byId) return byId;
+
+    const byName = taxes.find((t) => {
+      const taxName = String(t.name || t.taxName || "").trim().toLowerCase();
+      return taxName && taxName === valueStr.toLowerCase();
+    });
+    if (byName) return byName;
+
+    const numericRate = parseTaxRate(valueStr);
+    if (numericRate > 0) {
+      const byRate = taxes.find((t) => parseTaxRate(t.rate) === numericRate);
+      if (byRate) return byRate;
+    }
+
+    return null;
+  };
+
+  const findTaxById = (taxId) => getTaxBySelection(taxId);
+
+  const getNormalizedTaxId = (taxObj) => {
+    if (!taxObj) return "";
+    return String(taxObj?.id || taxObj?._id || taxObj?.taxId || "").trim();
+  };
+
+  const defaultTaxId = useMemo(() => {
+    const activeRows = (taxes || []).filter((tax) => {
+      if (!tax) return false;
+      const status = String(tax?.status || "").toLowerCase();
+      if (status === "inactive") return false;
+      if (tax?.active === false || tax?.isActive === false) return false;
+      const name = String(tax?.name || tax?.taxName || "").trim();
+      return Boolean(name);
+    });
+
+    const preferred =
+      activeRows.find((tax) => Boolean(tax?.isDefault || tax?.default)) ||
+      activeRows[0] ||
+      taxes?.[0] ||
+      null;
+
+    return preferred ? getNormalizedTaxId(preferred) : "";
+  }, [taxes]);
+
+  const getCustomerTaxMeta = (customer) => {
+    const raw = String(
+      customer?.taxRate ??
+      customer?.taxId ??
+      customer?.defaultTaxId ??
+      customer?.tax ??
+      customer?.taxName ??
+      ""
+    ).trim();
+    if (!raw) return { taxId: "", taxRate: 0 };
+    const taxObj = getTaxBySelection(raw);
+    if (!taxObj) return { taxId: "", taxRate: 0 };
+    return { taxId: getNormalizedTaxId(taxObj), taxRate: parseTaxRate(taxObj.rate) };
+  };
+
+  const getTaxMetaById = (taxId) => {
+    const taxObj = getTaxBySelection(taxId);
+    if (!taxObj) return { taxId: "", taxRate: 0 };
+    return { taxId: getNormalizedTaxId(taxObj), taxRate: parseTaxRate(taxObj.rate) };
+  };
+
+  const getItemTaxMeta = (item: any) => {
+    const raw = String(
+      item?.taxId ??
+      item?.tax ??
+      item?.taxName ??
+      ""
+    ).trim();
+    const taxObj = raw ? getTaxBySelection(raw) : null;
+    if (taxObj) {
+      return { taxId: getNormalizedTaxId(taxObj), taxRate: parseTaxRate(taxObj.rate) };
+    }
+
+    const taxRate = parseTaxRate(item?.taxRate ?? item?.taxInfo?.taxRate ?? item?.salesTaxRate);
+    return { taxId: "", taxRate };
   };
 
   const shippingChargeTaxOption = useMemo(
@@ -554,8 +666,8 @@ export default function NewSalesReceipt() {
       ? (lineBase * discount / 100)
       : discount;
     const afterDiscount = Math.max(0, lineBase - lineDiscount);
-    const taxOption = findTaxById(item.tax);
-    const taxRate = Number(taxOption?.rate || 0);
+    const taxOption = getTaxBySelection(item.tax);
+    const taxRate = Number(taxOption?.rate || item?.taxRate || 0);
     const taxAmount = taxRate > 0
       ? (taxInclusiveMode === "Tax Inclusive"
         ? (afterDiscount - (afterDiscount / (1 + taxRate / 100)))
@@ -682,12 +794,35 @@ export default function NewSalesReceipt() {
         // Load taxes
         const normalizeTaxes = (rows = []) =>
           rows.map((t) => ({
+            ...t,
             id: t.id || t._id,
             _id: t._id || t.id,
             name: t.name || "Tax",
             rate: Number(t.rate || 0),
             type: t.type || "both",
-            isActive: t.isActive !== false
+            isActive: t.isActive !== false,
+            isDefault: Boolean(t.isDefault || t.default),
+            default: Boolean(t.default || t.isDefault),
+            status: t.status || (t.isActive === false ? "inactive" : "active"),
+            active: t.active !== false,
+            isCompound: Boolean(t.isCompound || t.is_compound),
+            is_compound: Boolean(t.isCompound || t.is_compound),
+            isGroup: Boolean(t.isGroup || t.is_group),
+            is_group: Boolean(t.isGroup || t.is_group),
+            taxGroup: Boolean(t.taxGroup || t.isTaxGroup || t.is_tax_group),
+            isTaxGroup: Boolean(t.taxGroup || t.isTaxGroup || t.is_tax_group),
+            is_tax_group: Boolean(t.taxGroup || t.isTaxGroup || t.is_tax_group),
+            kind: t.kind,
+            taxType: t.taxType || t.tax_type,
+            tax_type: t.tax_type || t.taxType,
+            groupTaxes: Array.isArray(t.groupTaxes) ? t.groupTaxes : t.groupTaxes,
+            groupTaxesIds: Array.isArray(t.groupTaxesIds) ? t.groupTaxesIds : t.groupTaxesIds,
+            groupTaxIds: Array.isArray(t.groupTaxIds) ? t.groupTaxIds : t.groupTaxIds,
+            group_taxes: Array.isArray(t.group_taxes) ? t.group_taxes : t.group_taxes,
+            group_tax_ids: Array.isArray(t.group_tax_ids) ? t.group_tax_ids : t.group_tax_ids,
+            associatedTaxes: Array.isArray(t.associatedTaxes) ? t.associatedTaxes : t.associatedTaxes,
+            associated_taxes: Array.isArray(t.associated_taxes) ? t.associated_taxes : t.associated_taxes,
+            children: Array.isArray(t.children) ? t.children : t.children
           }));
 
         let loadedTaxes = [];
@@ -1044,9 +1179,21 @@ export default function NewSalesReceipt() {
       if (salespersonDropdownRef.current && !salespersonDropdownRef.current.contains(event.target)) {
         setIsSalespersonDropdownOpen(false);
       }
+      if (locationDropdownRef.current && !locationDropdownRef.current.contains(event.target)) {
+        setIsLocationDropdownOpen(false);
+      }
       if (taxInclusiveDropdownRef.current && !taxInclusiveDropdownRef.current.contains(event.target)) {
         setIsTaxInclusiveDropdownOpen(false);
       }
+      Object.keys(openReportingTagDropdowns).forEach((tagKey) => {
+        if (openReportingTagDropdowns[tagKey]) {
+          const ref = reportingTagDropdownRefs.current[tagKey];
+          if (ref && ref.current && !ref.current.contains(event.target)) {
+            setOpenReportingTagDropdowns((prev) => ({ ...prev, [tagKey]: false }));
+            setReportingTagSearches((prev) => ({ ...prev, [tagKey]: "" }));
+          }
+        }
+      });
       if (paymentModeDropdownRef.current && !paymentModeDropdownRef.current.contains(event.target)) {
         setIsPaymentModeDropdownOpen(false);
       }
@@ -1115,9 +1262,9 @@ export default function NewSalesReceipt() {
       }
     };
 
-      const hasOpenDropdown = isCustomerDropdownOpen || isSalespersonDropdownOpen ||
+      const hasOpenDropdown = isCustomerDropdownOpen || isSalespersonDropdownOpen || isLocationDropdownOpen ||
         isTaxInclusiveDropdownOpen || isPaymentModeDropdownOpen || isDepositToDropdownOpen || isShippingChargeTaxDropdownOpen || isPriceListDropdownOpen ||
-        isReceiptDatePickerOpen || Object.values(openItemDropdowns).some(Boolean) || Object.values(openTaxDropdowns).some(Boolean) ||
+        isReceiptDatePickerOpen || Object.values(openItemDropdowns).some(Boolean) || Object.values(openTaxDropdowns).some(Boolean) || Object.values(openReportingTagDropdowns).some(Boolean) ||
       isDiscountTypeDropdownOpen || activeAccountDropdownItemId !== null || activeReportingDropdownItemId !== null;
 
     if (hasOpenDropdown) {
@@ -1127,7 +1274,7 @@ export default function NewSalesReceipt() {
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-    }, [isCustomerDropdownOpen, isSalespersonDropdownOpen, isTaxInclusiveDropdownOpen, isPaymentModeDropdownOpen, isDepositToDropdownOpen, isShippingChargeTaxDropdownOpen, isPriceListDropdownOpen, isReceiptDatePickerOpen, openItemDropdowns, openTaxDropdowns, activeAccountDropdownItemId, activeReportingDropdownItemId]);
+    }, [isCustomerDropdownOpen, isSalespersonDropdownOpen, isLocationDropdownOpen, isTaxInclusiveDropdownOpen, isPaymentModeDropdownOpen, isDepositToDropdownOpen, isShippingChargeTaxDropdownOpen, isPriceListDropdownOpen, isReceiptDatePickerOpen, openItemDropdowns, openTaxDropdowns, openReportingTagDropdowns, activeAccountDropdownItemId, activeReportingDropdownItemId]);
 
   // Set item from navigation state (when coming from item detail page)
   useEffect(() => {
@@ -1216,7 +1363,11 @@ export default function NewSalesReceipt() {
       if (isEditMode && id) {
         if (!isDataLoaded || hasLoadedEditDataRef.current) return;
         try {
-          const receipt = await getSalesReceiptById(id);
+          const stateReceiptId = String(receiptFromState?.id || receiptFromState?._id || "").trim();
+          const currentReceiptId = String(id || "").trim();
+          const receipt = stateReceiptId && stateReceiptId === currentReceiptId
+            ? receiptFromState
+            : await getSalesReceiptById(id);
           if (!receipt) return;
 
           const mappedItems = Array.isArray(receipt.items) && receipt.items.length > 0
@@ -1298,6 +1449,7 @@ export default function NewSalesReceipt() {
             adjustment: toFiniteNumber(receipt.adjustment, prev.adjustment),
             roundOff: toFiniteNumber(receipt.roundOff, prev.roundOff),
             total: toFiniteNumber(receipt.total ?? receipt.amount, prev.total),
+            createdBy: getCreatedByValue(receipt.createdBy) || prev.createdBy,
             currency: receipt.currency || prev.currency,
             notes: receipt.notes || prev.notes,
             termsAndConditions: receipt.termsAndConditions || receipt.terms || prev.termsAndConditions,
@@ -1384,6 +1536,83 @@ export default function NewSalesReceipt() {
     setCustomerSearch("");
     setIsCustomerInlineSearchMode(false);
   };
+
+  const customerTaxAppliedRef = useRef<{
+    customerId: string;
+    taxApplied: boolean;
+  }>({ customerId: "", taxApplied: false });
+
+  useEffect(() => {
+    if (!selectedCustomer) {
+      customerTaxAppliedRef.current = { customerId: "", taxApplied: false };
+      return;
+    }
+
+    const selectedCustomerId = String((selectedCustomer as any)?.id || (selectedCustomer as any)?._id || "").trim();
+    if (!selectedCustomerId) return;
+
+    if (customerTaxAppliedRef.current.customerId !== selectedCustomerId) {
+      customerTaxAppliedRef.current = { customerId: selectedCustomerId, taxApplied: false };
+    }
+
+    if (customerTaxAppliedRef.current.taxApplied) return;
+
+    const customerTaxMeta = getCustomerTaxMeta(selectedCustomer);
+    const fallbackDefaultTax = defaultTaxId ? getTaxMetaById(defaultTaxId) : { taxId: "", taxRate: 0 };
+
+    if (!customerTaxMeta.taxId && !fallbackDefaultTax.taxId) return;
+
+    setFormData((prev) => {
+      const updatedItems = (prev.items || []).map((row: any) => {
+        if (customerTaxMeta.taxId) {
+          const currentTaxId = String(row?.tax || "").trim();
+          const currentTaxRate = parseTaxRate(row?.taxRate);
+          if (currentTaxId === customerTaxMeta.taxId && currentTaxRate === customerTaxMeta.taxRate) return row;
+          return { ...row, tax: customerTaxMeta.taxId, taxRate: customerTaxMeta.taxRate };
+        }
+
+        const currentTaxId = String(row?.tax || "").trim();
+        const currentTaxRate = parseTaxRate(row?.taxRate);
+        if (currentTaxId || currentTaxRate > 0) return row;
+
+        const rowItem = row?.itemId
+          ? availableItems.find((item: any) => {
+              const rowItemId = String(row?.itemId || "").trim();
+              const sourceId = String(item?.sourceId || item?.id || item?._id || "").trim();
+              return rowItemId && sourceId === rowItemId;
+            })
+          : null;
+        const rowItemTaxMeta = rowItem ? getItemTaxMeta(rowItem) : { taxId: "", taxRate: 0 };
+        if (rowItemTaxMeta.taxId || rowItemTaxMeta.taxRate > 0) {
+          return { ...row, tax: rowItemTaxMeta.taxId, taxRate: rowItemTaxMeta.taxRate };
+        }
+
+        if (fallbackDefaultTax.taxId) {
+          return { ...row, tax: fallbackDefaultTax.taxId, taxRate: fallbackDefaultTax.taxRate };
+        }
+
+        return row;
+      });
+
+      const { subTotal, roundOff, total } = calculateTotalsHelper(
+        updatedItems,
+        prev.discount,
+        prev.discountType,
+        prev.shippingCharges,
+        prev.adjustment
+      );
+
+      return {
+        ...prev,
+        items: updatedItems,
+        subTotal,
+        roundOff,
+        total
+      };
+    });
+
+    customerTaxAppliedRef.current.taxApplied = true;
+  }, [selectedCustomer, defaultTaxId, taxes]);
 
   const handleSalespersonSelect = (salesperson: any) => {
     const salespersonName = salesperson?.name || "";
@@ -1579,6 +1808,14 @@ export default function NewSalesReceipt() {
       const updatedItems = prev.items.map(item => {
         if (item.id === itemId) {
           const entityType = String(product.entityType || product.itemEntityType || "item").toLowerCase();
+          const selectedCustomerTax = selectedCustomer ? getCustomerTaxMeta(selectedCustomer) : { taxId: "", taxRate: 0 };
+          const itemTaxMeta = getItemTaxMeta(product);
+          const fallbackDefaultTax = defaultTaxId ? getTaxMetaById(defaultTaxId) : { taxId: "", taxRate: 0 };
+          const resolvedTaxMeta = selectedCustomerTax.taxId || selectedCustomerTax.taxRate > 0
+            ? selectedCustomerTax
+            : (itemTaxMeta.taxId || itemTaxMeta.taxRate > 0
+              ? itemTaxMeta
+              : fallbackDefaultTax);
           const updatedItem = {
             ...item,
             itemId: product.sourceId || product.id || product._id,
@@ -1592,6 +1829,10 @@ export default function NewSalesReceipt() {
             entityType,
             itemEntityType: entityType,
           };
+          if (resolvedTaxMeta.taxId || resolvedTaxMeta.taxRate > 0) {
+            updatedItem.tax = resolvedTaxMeta.taxId;
+            updatedItem.taxRate = resolvedTaxMeta.taxRate;
+          }
           updatedItem.amount = calculateItemAmount(updatedItem, prev.taxInclusive);
           return updatedItem;
         }
@@ -1647,11 +1888,23 @@ export default function NewSalesReceipt() {
   };
 
   const handleAddItem = () => {
+    const selectedCustomerTax = selectedCustomer ? getCustomerTaxMeta(selectedCustomer) : { taxId: "", taxRate: 0 };
+    const fallbackDefaultTax = defaultTaxId ? getTaxMetaById(defaultTaxId) : { taxId: "", taxRate: 0 };
     setFormData(prev => ({
       ...prev,
       items: [
         ...prev.items,
-        { id: Date.now() + Math.floor(Math.random() * 1000), itemDetails: "", quantity: 1, rate: 0, discount: 0, discountType: "percent", tax: "", amount: 0 }
+        {
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          itemDetails: "",
+          quantity: 1,
+          rate: 0,
+          discount: 0,
+          discountType: "percent",
+          tax: selectedCustomerTax.taxId || fallbackDefaultTax.taxId || "",
+          taxRate: selectedCustomerTax.taxRate || fallbackDefaultTax.taxRate || 0,
+          amount: 0
+        }
       ]
     }));
   };
@@ -1763,21 +2016,27 @@ export default function NewSalesReceipt() {
     if (bulkSelectedItems.length === 0) return;
 
     setFormData(prev => {
+      const selectedCustomerTax = selectedCustomer ? getCustomerTaxMeta(selectedCustomer) : { taxId: "", taxRate: 0 };
+      const fallbackDefaultTax = defaultTaxId ? getTaxMetaById(defaultTaxId) : { taxId: "", taxRate: 0 };
       const newItems = bulkSelectedItems.map((selectedItem, index) => {
         const quantity = selectedItem.quantity || 1;
         const rate = selectedItem.rate || 0;
-        const taxId = "";
-        const taxOption = taxes.find(t => (t.id || t._id) === taxId);
-        const taxRate = taxOption ? taxOption.rate : 0;
+        const itemTaxMeta = getItemTaxMeta(selectedItem);
+        const resolvedTaxMeta = selectedCustomerTax.taxId || selectedCustomerTax.taxRate > 0
+          ? selectedCustomerTax
+          : (itemTaxMeta.taxId || itemTaxMeta.taxRate > 0
+            ? itemTaxMeta
+            : fallbackDefaultTax);
         const subAmt = quantity * rate;
-        const amount = subAmt + (subAmt * taxRate / 100);
+        const amount = subAmt + (subAmt * (resolvedTaxMeta.taxRate || 0) / 100);
         return {
           id: Date.now() + index + Math.floor(Math.random() * 1000),
           itemId: selectedItem.sourceId || selectedItem.id || selectedItem._id,
           itemDetails: selectedItem.name,
           quantity: quantity,
           rate: rate,
-          tax: "",
+          tax: resolvedTaxMeta.taxId || "",
+          taxRate: resolvedTaxMeta.taxRate || 0,
           amount: amount,
           stockOnHand: selectedItem.stockQuantity ?? selectedItem.stock_on_hand ?? selectedItem.stockOnHand ?? 0
         };
@@ -1859,8 +2118,8 @@ export default function NewSalesReceipt() {
         return rowId === currentId || rowSourceId === currentId || rowName === String(item.itemDetails || "").trim().toLowerCase();
       });
 
-      const taxOption = taxes.find((tax) => String(tax.id || tax._id || "") === String(item.tax || ""));
-      const taxRate = Number(taxOption?.rate || 0);
+      const taxOption = getTaxBySelection(item.tax);
+      const taxRate = Number(taxOption?.rate || item?.taxRate || 0);
       const quantity = Number(item.quantity || 0);
       const rate = Number(item.rate || 0);
       const discount = showItemDiscount ? Number(item.discount || 0) : 0;
@@ -1923,6 +2182,7 @@ export default function NewSalesReceipt() {
       adjustment: showAdjustment ? Number(formData.adjustment || 0) : 0,
       depositTo: formData.depositTo,
       depositToAccount: formData.depositToAccountId || matchedDepositAccount?.id || matchedDepositAccount?._id,
+      createdBy: formData.createdBy || getCurrentUserLabel(),
       items: normalizedItems
     };
 
@@ -2132,7 +2392,7 @@ export default function NewSalesReceipt() {
                     <div className="flex items-center gap-2">
                       <input
                         type="text"
-                        className="h-9 w-full rounded-md border border-[#3b82f6] bg-white px-3 text-sm text-[#111827] outline-none transition-all placeholder:text-[#9ca3af] focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6]"
+                        className="h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-[#111827] outline-none transition-all placeholder:text-[#9ca3af] hover:border-[#156372] focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
                         placeholder="Type the customer's name"
                         value={formData.customerName}
                         onChange={(e) => {
@@ -2142,7 +2402,7 @@ export default function NewSalesReceipt() {
                       />
                       <button
                         type="button"
-                        className="text-[#2563eb] transition-colors hover:text-[#1d4ed8]"
+                        className="text-gray-500 transition-colors hover:text-[#156372]"
                         onClick={() => setCustomerSearchModalOpen(true)}
                         title="Advanced customer search"
                       >
@@ -2153,14 +2413,14 @@ export default function NewSalesReceipt() {
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        className="h-9 flex-1 rounded-md border border-[#3b82f6] bg-white px-3 text-left text-sm text-[#64748b] flex items-center justify-between"
+                        className="h-9 flex-1 rounded-md border border-gray-300 bg-white px-3 text-left text-sm text-[#111827] flex items-center justify-between hover:border-[#156372]"
                         onClick={() => {
                           setIsCustomerDropdownOpen((prev) => !prev);
                           setCustomerSearch("");
                         }}
                       >
-                        <span>{formData.customerName || "Select Customer"}</span>
-                        {isCustomerDropdownOpen ? <ChevronUp size={14} className="text-[#64748b]" /> : <ChevronDown size={14} className="text-[#64748b]" />}
+                        <span className={formData.customerName ? "text-[#111827]" : "text-gray-400"}>{formData.customerName || "Select Customer"}</span>
+                        {isCustomerDropdownOpen ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
                       </button>
                       <button
                         type="button"
@@ -2306,16 +2566,38 @@ export default function NewSalesReceipt() {
             <div className="border-b border-[#eceef2] bg-[#f8fafc] px-5 py-5">
               <div className="grid grid-cols-[140px_minmax(0,560px)] items-start gap-x-6 gap-y-5">
                 <label className="pt-2 text-[13px] font-medium text-[#374151]">Location</label>
-                <div className="max-w-[262px]">
-                  <select
-                    value={formData.selectedLocation || "Head Office"}
-                    onChange={(e) => setFormData(prev => ({ ...prev, selectedLocation: e.target.value }))}
-                    className="h-9 w-full rounded-md border border-[#cbd5e1] bg-white px-3 text-sm text-[#111827] outline-none transition-all focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6]"
+                <div className="flex-1 max-w-xs relative" ref={locationDropdownRef}>
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-700 flex justify-between items-center bg-white cursor-pointer focus:outline-none"
+                    onClick={() => setIsLocationDropdownOpen((prev) => !prev)}
                   >
-                    {locationOptions.map((option, index) => (
-                      <option key={`${option}-${index}`} value={option}>{option}</option>
-                    ))}
-                  </select>
+                    <span className={formData.selectedLocation ? "text-gray-900" : "text-gray-400"}>
+                      {formData.selectedLocation || "Head Office"}
+                    </span>
+                    <ChevronDown size={14} className="text-gray-400" />
+                  </button>
+                  {isLocationDropdownOpen && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded shadow-lg z-50 flex flex-col overflow-hidden">
+                      <div className="max-h-60 overflow-y-auto">
+                        {locationOptions.map((option, index) => {
+                          return (
+                            <button
+                              key={`${option}-${index}`}
+                              type="button"
+                              className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 cursor-pointer truncate"
+                              onClick={() => {
+                                setFormData((prev) => ({ ...prev, selectedLocation: option }));
+                                setIsLocationDropdownOpen(false);
+                              }}
+                            >
+                              {option}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <label className="pt-2 text-[13px] font-medium text-[#ef4444]">Sales Receipt#*</label>
@@ -2368,7 +2650,7 @@ export default function NewSalesReceipt() {
                           filteredSalespersons.map((salesperson) => (
                             <div
                               key={salesperson.id || salesperson._id}
-                              className="px-4 py-2 text-sm text-gray-700 hover:bg-[#156372] hover:text-white cursor-pointer truncate"
+                              className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 cursor-pointer truncate"
                               onClick={() => handleSalespersonSelect(salesperson)}
                             >
                               {salesperson.name}
@@ -2400,41 +2682,87 @@ export default function NewSalesReceipt() {
                           String(entry?.tagId || "") === String(tag.id || tag._id || tag.key) ||
                           String(entry?.name || "") === tag.label
                       )?.value || "";
+                    const openState = Boolean(openReportingTagDropdowns[String(tag.key)]);
+                    const searchValue = String(reportingTagSearches[String(tag.key)] || "").trim().toLowerCase();
+                    const options = [{ label: "None", value: "" }, ...(Array.isArray(tag.options) ? tag.options : [])];
+                    const filteredOptions = searchValue
+                      ? options.filter((option) => String(option.label || option.value || "").toLowerCase().includes(searchValue))
+                      : options;
 
                     return (
                       <React.Fragment key={tag.key}>
                         <label className="pt-2 text-[13px] font-medium text-[#ef4444]">{tag.label}</label>
-                        <div className="max-w-[262px]">
-                          <select
-                            value={currentValue}
-                            onChange={(e) =>
-                              setFormData((prev) => {
-                                const nextReportingTags = Array.isArray(prev.reportingTags)
-                                  ? prev.reportingTags.filter(
-                                      (entry) =>
-                                        String(entry?.tagId || "") !== String(tag.id || tag._id || tag.key) &&
-                                        String(entry?.name || "") !== tag.label
-                                    )
-                                  : [];
-
-                                if (e.target.value) {
-                                  nextReportingTags.push({
-                                    tagId: tag.id || tag._id || tag.key,
-                                    value: e.target.value,
-                                    name: tag.label,
-                                  });
-                                }
-
-                                return { ...prev, reportingTags: nextReportingTags };
-                              })
-                            }
-                            className="h-9 w-full rounded-md border border-[#cbd5e1] bg-white px-3 text-sm text-[#111827] outline-none transition-all focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6]"
+                        <div className="max-w-[262px] relative" ref={(el) => { reportingTagDropdownRefs.current[String(tag.key)] = el; }}>
+                          <button
+                            type="button"
+                            className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-700 flex justify-between items-center bg-white cursor-pointer hover:border-[#156372]"
+                            onClick={() => {
+                              setOpenReportingTagDropdowns((prev) => ({ ...prev, [String(tag.key)]: !prev[String(tag.key)] }));
+                              setReportingTagSearches((prev) => ({ ...prev, [String(tag.key)]: "" }));
+                            }}
                           >
-                            <option value="">None</option>
-                            {tag.options.map((option, index) => (
-                              <option key={`${option.key}-${index}`} value={option.value}>{option.label}</option>
-                            ))}
-                          </select>
+                            <span className={currentValue ? "text-gray-900" : "text-gray-400"}>
+                              {currentValue || "None"}
+                            </span>
+                            <ChevronDown size={14} className="text-gray-400" />
+                          </button>
+                          {openState && (
+                            <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded border border-gray-200 bg-white shadow-lg">
+                              <div className="flex items-center gap-2 border-b border-gray-200 p-2">
+                                <Search size={14} className="text-gray-400" />
+                                <input
+                                  type="text"
+                                  placeholder="Search"
+                                  value={String(reportingTagSearches[String(tag.key)] || "")}
+                                  onChange={(e) => setReportingTagSearches((prev) => ({ ...prev, [String(tag.key)]: e.target.value }))}
+                                  className="flex-1 text-sm focus:outline-none"
+                                  autoFocus
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </div>
+                              <div className="max-h-60 overflow-y-auto">
+                                {filteredOptions.length > 0 ? (
+                                  filteredOptions.map((option, index) => {
+                                    const selected = String(currentValue || "") === String(option.value || "");
+                                    return (
+                                      <button
+                                        key={`${String(tag.key)}-${index}`}
+                                        type="button"
+                                        className={`w-full px-4 py-2 text-left text-sm ${selected ? "bg-gray-50 text-gray-900 font-medium" : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"}`}
+                                        onClick={() => {
+                                          setFormData((prev) => {
+                                            const nextReportingTags = Array.isArray(prev.reportingTags)
+                                              ? prev.reportingTags.filter(
+                                                  (entry) =>
+                                                    String(entry?.tagId || "") !== String(tag.id || tag._id || tag.key) &&
+                                                    String(entry?.name || "") !== tag.label
+                                                )
+                                              : [];
+
+                                            if (String(option.value || "")) {
+                                              nextReportingTags.push({
+                                                tagId: tag.id || tag._id || tag.key,
+                                                value: String(option.value || ""),
+                                                name: tag.label,
+                                              });
+                                            }
+
+                                            return { ...prev, reportingTags: nextReportingTags };
+                                          });
+                                          setOpenReportingTagDropdowns((prev) => ({ ...prev, [String(tag.key)]: false }));
+                                          setReportingTagSearches((prev) => ({ ...prev, [String(tag.key)]: "" }));
+                                        }}
+                                      >
+                                        {option.label || option.value || "None"}
+                                      </button>
+                                    );
+                                  })
+                                ) : (
+                                  <div className="px-4 py-3 text-sm text-gray-500">No options found</div>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </React.Fragment>
                     );
@@ -2448,7 +2776,7 @@ export default function NewSalesReceipt() {
               <div className="relative" ref={priceListDropdownRef}>
                 <button
                   type="button"
-                  className="flex h-9 min-w-[180px] items-center justify-between rounded-md border border-transparent bg-white px-3 text-[13px] text-slate-500 shadow-sm ring-1 ring-slate-200 transition hover:text-slate-700"
+                  className="flex h-9 min-w-[180px] items-center justify-between rounded border border-gray-300 bg-white px-3 text-[13px] text-gray-700 shadow-sm transition hover:border-[#156372] hover:bg-gray-50"
                   onClick={() => {
                     loadCatalogPriceLists();
                     setIsPriceListDropdownOpen((prev) => !prev);
@@ -2467,16 +2795,16 @@ export default function NewSalesReceipt() {
                 </button>
 
                 {isPriceListDropdownOpen && (
-                  <div className="absolute left-0 top-full z-[90] mt-2 w-[260px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.14)]">
-                    <div className="border-b border-slate-100 p-2">
+                  <div className="absolute left-0 top-full z-[90] mt-2 w-[260px] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+                    <div className="border-b border-gray-200 p-2">
                       <div className="relative">
-                        <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                         <input
                           type="text"
                           value={priceListSearch}
                           onChange={(e) => setPriceListSearch(e.target.value)}
                           placeholder="Search"
-                          className="h-9 w-full rounded-md border border-[#3b82f6] bg-white pl-9 pr-3 text-[13px] text-slate-700 outline-none"
+                          className="h-9 w-full rounded border border-gray-300 bg-white pl-9 pr-3 text-[13px] text-gray-700 outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
                         />
                       </div>
                     </div>
@@ -2489,7 +2817,7 @@ export default function NewSalesReceipt() {
                               key={option.id || option.name}
                               type="button"
                               className={`mx-2 flex w-[calc(100%-16px)] items-center justify-between rounded-md px-3 py-2 text-left text-[13px] ${
-                                isSelected ? "bg-[#2563eb] text-white" : "text-slate-700 hover:bg-slate-50"
+                                isSelected ? "bg-[#156372] text-white" : "text-gray-700 hover:bg-gray-50"
                               }`}
                               onClick={() => {
                                 setFormData((prev) => ({ ...prev, selectedPriceList: option.name }));
@@ -2796,7 +3124,7 @@ export default function NewSalesReceipt() {
                                     <button
                                       type="button"
                                       key={`${productItem.id || productItem._id}-${idx}`}
-                                      className={`w-full p-3 text-left border-b border-gray-100 transition-colors ${isHighlighted ? "bg-[#4a89e8] text-white" : "text-gray-800 hover:bg-[#f8fafc]"
+                                      className={`w-full p-3 text-left border-b border-gray-100 transition-colors ${isHighlighted ? "bg-gray-50 text-gray-900" : "text-gray-800 hover:bg-[#f8fafc]"
                                         }`}
                                       onClick={() => {
                                         handleProductSelect(item.id, productItem);
@@ -2806,17 +3134,17 @@ export default function NewSalesReceipt() {
                                       <div className="flex items-center gap-2 text-[14px] leading-5 font-semibold truncate">
                                         <span className="truncate">{productItem.name}</span>
                                         {String(productItem.entityType || productItem.itemEntityType || "").toLowerCase() === "plan" && (
-                                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${isHighlighted ? "bg-white/20 text-white" : "bg-[#156372] text-white"}`}>
+                                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${isHighlighted ? "bg-gray-200 text-gray-700" : "bg-[#156372] text-white"}`}>
                                             Plan
                                           </span>
                                         )}
                                         {String(productItem.entityType || productItem.itemEntityType || "").toLowerCase() === "addon" && (
-                                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${isHighlighted ? "bg-white/20 text-white" : "bg-amber-50 text-amber-700"}`}>
+                                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${isHighlighted ? "bg-gray-200 text-gray-700" : "bg-amber-50 text-amber-700"}`}>
                                             Addon
                                           </span>
                                         )}
                                       </div>
-                                      <div className={`text-xs mt-0.5 truncate ${isHighlighted ? "text-blue-50" : "text-slate-500"}`}>
+                                      <div className={`text-xs mt-0.5 truncate ${isHighlighted ? "text-gray-600" : "text-slate-500"}`}>
                                         SKU: {productItem.sku || "-"} Rate: {formData.currency}{(productItem.rate || productItem.sellingPrice || 0).toFixed(2)}
                                       </div>
                                     </button>
@@ -2862,7 +3190,7 @@ export default function NewSalesReceipt() {
                             <select
                               value={item.warehouseLocation || formData.selectedLocation || "Head Office"}
                               onChange={(e) => handleItemChange(item.id, "warehouseLocation", e.target.value)}
-                              className="bg-transparent text-sm text-[#1f3f79] focus:outline-none appearance-none pr-4"
+                              className="rounded border border-gray-300 bg-white px-2 py-1 text-sm text-gray-700 outline-none transition-all hover:border-[#156372] focus:border-[#156372] focus:ring-1 focus:ring-[#156372] appearance-none pr-6"
                             >
                               {locationOptions.map((option, index) => (
                                 <option key={`${option}-${index}`} value={option}>
@@ -2938,7 +3266,7 @@ export default function NewSalesReceipt() {
                       <td className="p-3 relative overflow-visible">
                         <div className="relative" ref={el => taxDropdownRefs.current[item.id] = el}>
                           <button
-                            className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-sm text-left flex items-center justify-between hover:bg-white hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#2563eb] focus:border-[#2563eb] bg-white"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-left flex items-center justify-between bg-white shadow-sm transition hover:border-[#156372] hover:bg-gray-50 focus:outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
                             onClick={() => setOpenTaxDropdowns(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
                           >
                             <span className="truncate text-gray-700">
@@ -2969,44 +3297,44 @@ export default function NewSalesReceipt() {
                             </div>
                           </button>
                           {openTaxDropdowns[item.id] && (
-                            <div className="absolute top-full left-0 z-[2500] mt-1 w-72 rounded-xl border border-[#d6dbe8] bg-white p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
-                              {(() => {
-                                const searchValue = taxSearches[item.id] || "";
-                                const grouped = buildTaxOptionGroups(taxes);
-                                const filteredGroups = searchValue.trim()
-                                  ? grouped
-                                      .map((group) => ({
-                                        ...group,
-                                        options: group.options.filter((tax) =>
-                                          `${tax.name} [${tax.rate}%]`.toLowerCase().includes(searchValue.trim().toLowerCase())
-                                        ),
-                                      }))
-                                      .filter((group) => group.options.length > 0)
-                                  : grouped;
-                                const hasTaxes = filteredGroups.some((group) => group.options.length > 0);
+                          <div className="absolute top-full left-0 z-[2500] mt-1 w-72 rounded-lg border border-gray-200 bg-white p-1 shadow-lg animate-in fade-in zoom-in-95 duration-100">
+                            {(() => {
+                              const searchValue = taxSearches[item.id] || "";
+                              const taxGroups = buildTaxOptionGroups(taxes);
+                              const filteredTaxGroups = searchValue.trim()
+                                ? taxGroups
+                                    .map((group) => ({
+                                      ...group,
+                                      options: group.options.filter((tax) =>
+                                        `${tax.name} [${tax.rate}%]`.toLowerCase().includes(searchValue.trim().toLowerCase())
+                                      ),
+                                    }))
+                                    .filter((group) => group.options.length > 0)
+                                : taxGroups;
+                              const hasTaxes = filteredTaxGroups.length > 0;
 
-                                return (
-                                  <>
+                              return (
+                                <>
                                     <div className="p-2">
-                                      <div className="flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-all focus-within:bg-white" style={{ borderColor: "#156372" }}>
-                                        <Search size={14} className="text-slate-400" />
+                                      <div className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 transition-all focus-within:border-[#156372] focus-within:ring-1 focus-within:ring-[#156372]">
+                                        <Search size={14} className="text-gray-400" />
                                         <input
                                           type="text"
                                           value={searchValue}
                                           onChange={(e) => setTaxSearches(prev => ({ ...prev, [item.id]: e.target.value }))}
                                           placeholder="Search..."
-                                          className="w-full border-none bg-transparent text-[13px] text-slate-700 outline-none placeholder:text-slate-400"
+                                          className="w-full border-none bg-transparent text-[13px] text-gray-700 outline-none placeholder:text-gray-400"
                                           autoFocus
                                         />
                                       </div>
                                     </div>
                                     <div className="max-h-64 overflow-y-auto py-1 custom-scrollbar">
                                       {!hasTaxes ? (
-                                        <div className="px-4 py-3 text-center text-[13px] text-slate-400">No taxes found</div>
+                                        <div className="px-4 py-3 text-center text-[13px] text-gray-400">No taxes found</div>
                                       ) : (
-                                        filteredGroups.map((group) => (
-                                          <div key={group.label}>
-                                            <div className="px-4 py-1.5 text-[10px] font-extrabold uppercase tracking-widest text-slate-700">
+                                        filteredTaxGroups.map((group) => (
+                                          <div key={group.label} className="pb-1">
+                                            <div className="px-4 py-1.5 text-[10px] font-extrabold uppercase tracking-widest text-gray-600">
                                               {group.label}
                                             </div>
                                             {group.options.map((tax) => {
@@ -3018,8 +3346,8 @@ export default function NewSalesReceipt() {
                                                   key={taxId}
                                                   type="button"
                                                   className={`w-full px-4 py-2 text-left text-[13px] ${selected
-                                                    ? "text-[#156372] font-medium hover:bg-gray-50 hover:text-gray-900"
-                                                    : "text-slate-700 hover:bg-gray-50 hover:text-gray-900"
+                                                    ? "bg-gray-50 text-gray-900 font-medium"
+                                                    : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
                                                   }`}
                                                   onClick={() => {
                                                     handleItemChange(item.id, "tax", taxId);
@@ -3170,28 +3498,30 @@ export default function NewSalesReceipt() {
                             <div className="relative" ref={activeAccountDropdownItemId === item.id ? additionalInfoMenuRef : undefined}>
                               <button
                                 type="button"
-                                className={`inline-flex items-center gap-1.5 rounded border px-2 py-1 hover:text-slate-800 ${activeAccountDropdownItemId === item.id ? "border-[#3b82f6] bg-white" : "border-transparent hover:border-slate-300"}`}
+                                className={`inline-flex items-center gap-1.5 rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 transition-all hover:border-[#156372] hover:text-gray-900 ${activeAccountDropdownItemId === item.id ? "border-[#156372]" : ""}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setAdditionalInfoSearch("");
                                   setActiveAccountDropdownItemId((prev) => (prev === item.id ? null : item.id));
                                 }}
                               >
-                                <BriefcaseBusiness size={13} className="text-slate-500" />
-                                <span>{String(item?.account || "").trim() || "Select an account"}</span>
-                                <ChevronDown size={12} className="text-slate-400" />
+                                <BriefcaseBusiness size={13} className="text-gray-500" />
+                                <span className={String(item?.account || "").trim() ? "text-gray-900" : "text-gray-400"}>
+                                  {String(item?.account || "").trim() || "Select an account"}
+                                </span>
+                                <ChevronDown size={12} className="text-gray-400" />
                               </button>
                               {activeAccountDropdownItemId === item.id && (
-                                <div className="absolute left-0 top-full z-[170] mt-1 w-[280px] rounded-md border border-slate-200 bg-white shadow-xl">
-                                  <div className="border-b border-slate-100 p-2">
-                                    <div className="relative">
-                                      <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <div className="absolute left-0 top-full z-[170] mt-1 w-[280px] overflow-hidden rounded border border-gray-200 bg-white shadow-lg">
+                                  <div className="flex items-center gap-2 border-b border-gray-200 p-2">
+                                    <Search size={14} className="text-gray-400" />
+                                    <div className="relative flex-1">
                                       <input
                                         type="text"
                                         placeholder="Search"
                                         value={additionalInfoSearch}
                                         onChange={(e) => setAdditionalInfoSearch(e.target.value)}
-                                        className="h-8 w-full rounded border border-[#3b82f6] pl-7 pr-2 text-sm focus:outline-none"
+                                        className="w-full text-sm focus:outline-none"
                                       />
                                     </div>
                                   </div>
@@ -3199,12 +3529,12 @@ export default function NewSalesReceipt() {
                                     {filteredGroupedAccountOptions.length > 0 ? (
                                       filteredGroupedAccountOptions.map((group) => (
                                         <div key={group.group}>
-                                          <div className="px-3 py-1 text-sm font-semibold text-slate-700">{group.group}</div>
+                                          <div className="px-4 py-2 text-sm font-semibold text-gray-700">{group.group}</div>
                                           {group.options.map((option) => (
                                             <button
                                               key={option}
                                               type="button"
-                                              className={`w-full px-3 py-1.5 text-left text-sm ${String(item?.account || "").trim() === option ? "bg-[#4a89e8] text-white" : "text-slate-700 hover:bg-slate-50"}`}
+                                              className={`w-full px-4 py-2 text-left text-sm ${String(item?.account || "").trim() === option ? "bg-[#156372] text-white" : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"}`}
                                               onClick={() => {
                                                 setFormData((prev) => ({
                                                   ...prev,
@@ -3231,7 +3561,7 @@ export default function NewSalesReceipt() {
                             <div className="relative border-l border-slate-300 pl-5" ref={activeReportingDropdownItemId === item.id ? additionalInfoReportingRef : undefined}>
                               <button
                                 type="button"
-                                className="inline-flex items-center gap-1.5 hover:text-slate-800"
+                                className={`inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-700 shadow-sm transition hover:border-[#156372] hover:bg-gray-50 hover:text-gray-900 ${activeReportingDropdownItemId === item.id ? "border-[#156372]" : ""}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   const existing = Array.isArray(item?.reportingTags) ? item.reportingTags : [];
@@ -3248,16 +3578,18 @@ export default function NewSalesReceipt() {
                                   setActiveReportingDropdownItemId((prev) => (prev === item.id ? null : item.id));
                                 }}
                               >
-                                <Tag size={13} className="text-slate-500" />
-                                <span>{getItemReportingTagsSummary(item)}</span>
-                                <ChevronDown size={12} className="text-slate-400" />
+                                <Tag size={13} className="text-gray-500" />
+                                <span className={activeReportingDropdownItemId === item.id ? "text-gray-900" : "text-gray-700"}>
+                                  {getItemReportingTagsSummary(item)}
+                                </span>
+                                <ChevronDown size={12} className="text-gray-400" />
                               </button>
                               {activeReportingDropdownItemId === item.id && (
-                                <div className="absolute left-0 top-full z-[170] mt-1 w-[420px] rounded-md border border-slate-200 bg-white shadow-xl">
-                                  <div className="border-b border-slate-200 px-4 py-3 text-base text-slate-700">Reporting Tags</div>
+                                <div className="absolute left-0 top-full z-[170] mt-1 w-[420px] rounded-lg border border-gray-200 bg-white shadow-lg">
+                                  <div className="border-b border-gray-200 px-4 py-3 text-sm font-semibold text-gray-800">Reporting Tags</div>
                                   <div className="space-y-4 px-4 py-4">
                                     {normalizedReportingTags.length === 0 ? (
-                                      <p className="text-sm text-slate-500">No reporting tags found.</p>
+                                      <p className="text-sm text-gray-500">No reporting tags found.</p>
                                     ) : (
                                       normalizedReportingTags.map((tag) => (
                                         <div key={String(tag.key)} className="space-y-2">
@@ -3265,7 +3597,7 @@ export default function NewSalesReceipt() {
                                             {tag.label}{tag.isMandatory ? " *" : ""}
                                           </label>
                                           <select
-                                            className="h-10 w-full rounded-md border border-[#3b82f6] bg-white px-3 text-sm"
+                                            className="h-10 w-full rounded border border-gray-300 bg-white px-3 text-sm text-gray-700 outline-none transition-all hover:border-[#156372] focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
                                             value={itemReportingTagDraftValues[String(tag.key)] ?? ""}
                                             onChange={(e) =>
                                               setItemReportingTagDraftValues((prev) => ({ ...prev, [String(tag.key)]: e.target.value }))
@@ -3282,10 +3614,10 @@ export default function NewSalesReceipt() {
                                       ))
                                     )}
                                   </div>
-                                  <div className="flex items-center gap-3 border-t border-slate-200 px-4 py-3">
+                                  <div className="flex items-center gap-3 border-t border-gray-200 px-4 py-3">
                                     <button
                                       type="button"
-                                      className="rounded-md bg-[#17a86b] px-4 py-1.5 text-sm font-medium text-white"
+                                      className="rounded-md bg-[#156372] px-4 py-1.5 text-sm font-medium text-white hover:bg-[#0D4A52]"
                                       onClick={() => {
                                         const missingMandatory = normalizedReportingTags.some((tag) => {
                                           if (!tag.isMandatory) return false;
@@ -3320,7 +3652,7 @@ export default function NewSalesReceipt() {
                                     </button>
                                     <button
                                       type="button"
-                                      className="rounded-md border border-slate-300 px-4 py-1.5 text-sm text-slate-600"
+                                      className="rounded-md border border-gray-300 px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
                                       onClick={() => setActiveReportingDropdownItemId(null)}
                                     >
                                       Cancel
@@ -3504,63 +3836,60 @@ export default function NewSalesReceipt() {
                     <div className="flex justify-between items-center">
                       <div className="flex items-center gap-3">
                         <span className="text-sm text-gray-600">Shipping Charge Tax</span>
-                        <div className="relative" ref={shippingChargeTaxDropdownRef}>
-                          <button
-                            type="button"
-                            className={`flex h-9 w-36 items-center justify-between rounded-md border bg-white px-3 text-sm transition-colors focus:outline-none ${isShippingChargeTaxDropdownOpen
-                              ? "border-[#156372] shadow-[0_0_0_1px_rgba(21,99,114,0.18)]"
-                              : "border-[#d6dbe8] hover:border-[#156372]"
-                              }`}
-                            onClick={() => {
-                              setIsShippingChargeTaxDropdownOpen((prev) => !prev);
-                              setShippingChargeTaxSearch("");
-                            }}
-                          >
-                            <span className="truncate text-left text-slate-700">
-                              {formData.shippingChargeTax ? getTaxDisplayLabel(findTaxById(formData.shippingChargeTax)) : "Select a Tax"}
-                            </span>
-                            <ChevronDown size={14} className={`text-slate-400 transition-transform ${isShippingChargeTaxDropdownOpen ? "rotate-180" : ""}`} />
-                          </button>
+                      <div className="relative" ref={shippingChargeTaxDropdownRef}>
+                        <button
+                          type="button"
+                          className="flex h-9 w-36 items-center justify-between rounded border border-gray-300 bg-white px-3 text-sm text-gray-700 shadow-sm transition hover:border-[#156372] hover:bg-gray-50 focus:outline-none focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
+                          onClick={() => {
+                            setIsShippingChargeTaxDropdownOpen((prev) => !prev);
+                            setShippingChargeTaxSearch("");
+                          }}
+                        >
+                          <span className="truncate text-left text-gray-700">
+                            {formData.shippingChargeTax ? getTaxDisplayLabel(findTaxById(formData.shippingChargeTax)) : "Select a Tax"}
+                          </span>
+                          <ChevronDown size={14} className={`text-gray-400 transition-transform ${isShippingChargeTaxDropdownOpen ? "rotate-180" : ""}`} />
+                        </button>
 
-                          {isShippingChargeTaxDropdownOpen && (
-                            <div className="absolute left-0 top-full z-[2500] mt-1 w-72 rounded-xl border border-[#d6dbe8] bg-white p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
-                              {(() => {
-                                const searchValue = shippingChargeTaxSearch || "";
-                                const grouped = buildTaxOptionGroups(taxes);
-                                const filteredGroups = searchValue.trim()
-                                  ? grouped
-                                      .map((group) => ({
-                                        ...group,
-                                        options: group.options.filter((tax) =>
-                                          `${tax.name} [${tax.rate}%]`.toLowerCase().includes(searchValue.trim().toLowerCase())
-                                        ),
-                                      }))
-                                      .filter((group) => group.options.length > 0)
-                                  : grouped;
-                                const hasTaxes = filteredGroups.some((group) => group.options.length > 0);
+                        {isShippingChargeTaxDropdownOpen && (
+                          <div className="absolute left-0 top-full z-[2500] mt-1 w-72 rounded-lg border border-gray-200 bg-white p-1 shadow-lg animate-in fade-in zoom-in-95 duration-100">
+                            {(() => {
+                              const searchValue = shippingChargeTaxSearch || "";
+                              const taxGroups = buildTaxOptionGroups(taxes);
+                              const filteredTaxGroups = searchValue.trim()
+                                ? taxGroups
+                                    .map((group) => ({
+                                      ...group,
+                                      options: group.options.filter((tax) =>
+                                        `${tax.name} [${tax.rate}%]`.toLowerCase().includes(searchValue.trim().toLowerCase())
+                                      ),
+                                    }))
+                                    .filter((group) => group.options.length > 0)
+                                : taxGroups;
+                              const hasTaxes = filteredTaxGroups.length > 0;
 
-                                return (
-                                  <>
-                                    <div className="p-2">
-                                      <div className="flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-all focus-within:bg-white" style={{ borderColor: "#156372" }}>
-                                        <Search size={14} className="text-slate-400" />
-                                        <input
-                                          type="text"
-                                          value={searchValue}
-                                          onChange={(e) => setShippingChargeTaxSearch(e.target.value)}
-                                          placeholder="Search..."
-                                          className="w-full border-none bg-transparent text-[13px] text-slate-700 outline-none placeholder:text-slate-400"
-                                          autoFocus
-                                        />
-                                      </div>
+                              return (
+                                <>
+                                  <div className="p-2">
+                                    <div className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 transition-all focus-within:border-[#156372] focus-within:ring-1 focus-within:ring-[#156372]">
+                                      <Search size={14} className="text-gray-400" />
+                                      <input
+                                        type="text"
+                                        value={searchValue}
+                                        onChange={(e) => setShippingChargeTaxSearch(e.target.value)}
+                                        placeholder="Search..."
+                                        className="w-full border-none bg-transparent text-[13px] text-gray-700 outline-none placeholder:text-gray-400"
+                                        autoFocus
+                                      />
+                                    </div>
                                     </div>
                                     <div className="max-h-64 overflow-y-auto py-1 custom-scrollbar">
                                       {!hasTaxes ? (
-                                        <div className="px-4 py-3 text-center text-[13px] text-slate-400">No taxes found</div>
+                                        <div className="px-4 py-3 text-center text-[13px] text-gray-400">No taxes found</div>
                                       ) : (
-                                        filteredGroups.map((group) => (
-                                          <div key={group.label}>
-                                            <div className="px-4 py-1.5 text-[10px] font-extrabold uppercase tracking-widest text-slate-700">
+                                        filteredTaxGroups.map((group) => (
+                                          <div key={group.label} className="pb-1">
+                                            <div className="px-4 py-1.5 text-[10px] font-extrabold uppercase tracking-widest text-gray-600">
                                               {group.label}
                                             </div>
                                             {group.options.map((tax) => {
@@ -3572,8 +3901,8 @@ export default function NewSalesReceipt() {
                                                   key={taxId}
                                                   type="button"
                                                   className={`w-full px-4 py-2 text-left text-[13px] ${selected
-                                                    ? "text-[#156372] font-medium hover:bg-gray-50 hover:text-gray-900"
-                                                    : "text-slate-700 hover:bg-gray-50 hover:text-gray-900"
+                                                    ? "bg-gray-50 text-gray-900 font-medium"
+                                                    : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
                                                   }`}
                                                   onClick={() => {
                                                     setFormData((prev) => ({ ...prev, shippingChargeTax: taxId }));
@@ -3721,7 +4050,7 @@ export default function NewSalesReceipt() {
                       <div className="px-4 py-2">
                         <button
                           type="button"
-                          className="text-sm text-gray-900 cursor-pointer border-none bg-transparent w-full text-left hover:bg-[#2563eb] hover:text-white flex items-center"
+                          className="text-sm text-gray-900 cursor-pointer border-none bg-transparent w-full text-left hover:bg-gray-50 hover:text-gray-900 flex items-center"
                           onClick={() => handleAttachFromCloud()}
                         >
                           Attach From Cloud
@@ -3781,7 +4110,7 @@ export default function NewSalesReceipt() {
             </div>
           </div>
           {/* Payment Details Section */}
-          <div className="mt-10 border-t border-gray-200 pt-8 relative z-[200]">
+          <div className="mt-10 border-t border-gray-200 pt-8 relative z-0">
             <h3 className="text-sm font-bold text-gray-900 mb-6">Payment Details</h3>
             <div className="flex items-center gap-12">
               <div className="flex items-center gap-6 flex-1 max-w-[500px]">
@@ -3790,6 +4119,7 @@ export default function NewSalesReceipt() {
                   <PaymentModeDropdown
                     value={formData.paymentMode}
                     onChange={(val) => setFormData(prev => ({ ...prev, paymentMode: val }))}
+                    selectClassName="cursor-pointer"
                   />
                 </div>
               </div>
@@ -3811,6 +4141,7 @@ export default function NewSalesReceipt() {
                     placeholder="Select Deposit Account"
                     direction="up"
                     groupBy="account_type"
+                    className="h-9 w-full rounded border border-gray-300 bg-white px-3 text-sm text-gray-700 outline-none transition-all hover:border-[#156372] focus:border-[#156372] focus:ring-1 focus:ring-[#156372] cursor-pointer"
                   />
                 </div>
               </div>
@@ -3828,7 +4159,7 @@ export default function NewSalesReceipt() {
           </div>
 
           {/* Footer Fixed Action Buttons */}
-          <div className="fixed bottom-0 left-[260px] right-0 bg-white border-t border-gray-200 px-6 py-3 flex items-center gap-3 z-[100] shadow-[0_-2px_8px_rgba(15,23,42,0.08)]">
+          <div className="fixed bottom-0 left-[260px] right-0 bg-white border-t border-l border-gray-200 px-6 py-3 flex items-center gap-3 z-[100] shadow-[0_-2px_8px_rgba(15,23,42,0.08)]">
             <button
               disabled={saveLoading !== null}
               className={`px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded text-[13px] font-semibold transition-colors shadow-sm cursor-pointer flex items-center gap-2 ${saveLoading ? "opacity-70 cursor-not-allowed" : ""}`}
@@ -4074,13 +4405,13 @@ export default function NewSalesReceipt() {
                     <>
                       <button
                         onClick={() => setManageSalespersonMenuOpen(null)}
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
                       >
                         Mark as Active
                       </button>
                       <button
                         onClick={() => setManageSalespersonMenuOpen(null)}
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
                       >
                         Mark as Inactive
                       </button>
@@ -4088,7 +4419,7 @@ export default function NewSalesReceipt() {
                         onClick={() => {
                           setManageSalespersonMenuOpen(null);
                         }}
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
                       >
                         Delete
                       </button>
@@ -4096,7 +4427,7 @@ export default function NewSalesReceipt() {
                   ) : (
                     <>
                       <button
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
                       >
                         Mark as Inactive
                       </button>
@@ -4107,7 +4438,7 @@ export default function NewSalesReceipt() {
                           }
                           setManageSalespersonMenuOpen(null);
                         }}
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
                       >
                         Delete
                       </button>
@@ -5077,7 +5408,7 @@ export default function NewSalesReceipt() {
                             setCustomerSearchCriteria(criteria);
                             setCustomerSearchCriteriaOpen(false);
                           }}
-                          className="w-full px-4 py-2 text-sm text-left text-gray-700 hover:bg-indigo-600 hover:text-white"
+                          className="w-full px-4 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 hover:text-gray-900"
                         >
                           {criteria}
                         </button>

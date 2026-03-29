@@ -229,6 +229,7 @@ export default function Retailinvoicedetail() {
   const [isCommentsPanelOpen, setIsCommentsPanelOpen] = useState(false);
   const [isDetailActionsMenuOpen, setIsDetailActionsMenuOpen] = useState(false);
   const [isVoidModalOpen, setIsVoidModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDraftRecordPaymentModalOpen, setIsDraftRecordPaymentModalOpen] = useState(false);
   const [isPaymentsReceivedOpen, setIsPaymentsReceivedOpen] = useState(false);
   const [isApplyRetainersModalOpen, setIsApplyRetainersModalOpen] = useState(false);
@@ -240,6 +241,7 @@ export default function Retailinvoicedetail() {
   const [draftRecordPaymentLoading, setDraftRecordPaymentLoading] = useState(false);
   const [voidReason, setVoidReason] = useState("");
   const [detailActionLoading, setDetailActionLoading] = useState<"clone" | "void" | "delete" | "sent" | null>(null);
+  const [deleteRetainerId, setDeleteRetainerId] = useState<string>("");
   const [attachments, setAttachments] = useState<RetainerAttachment[]>([]);
   const [comments, setComments] = useState<RetainerComment[]>([]);
   const [commentText, setCommentText] = useState("");
@@ -1353,13 +1355,14 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
 
   const handleDeleteCurrentInvoice = async () => {
     if (!invoice || detailActionLoading) return;
-    if (!window.confirm("Delete this retainer invoice? This cannot be undone.")) return;
+    const invoiceId = String(deleteRetainerId || (invoice as any).id || (invoice as any)._id || id || "");
+    if (!invoiceId) return;
     try {
       setDetailActionLoading("delete");
-      const invoiceId = String((invoice as any).id || (invoice as any)._id || id || "");
-      if (!invoiceId) return;
       await deleteInvoice(invoiceId);
       setIsDetailActionsMenuOpen(false);
+      setIsDeleteModalOpen(false);
+      setDeleteRetainerId("");
       toast.success("Retainer invoice deleted");
       ensureRetainerListAllView();
       navigate("/sales/retainer-invoices");
@@ -1369,6 +1372,15 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
     } finally {
       setDetailActionLoading(null);
     }
+  };
+
+  const openDeleteModal = () => {
+    if (!invoice || detailActionLoading) return;
+    const invoiceId = String((invoice as any).id || (invoice as any)._id || id || "");
+    if (!invoiceId) return;
+    setIsDetailActionsMenuOpen(false);
+    setDeleteRetainerId(invoiceId);
+    setIsDeleteModalOpen(true);
   };
 
   const handleConvertToDraft = async () => {
@@ -2099,11 +2111,11 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
                   type="button"
                   disabled={detailActionLoading !== null}
                   onClick={() => {
-                    void handleDeleteCurrentInvoice();
+                    openDeleteModal();
                   }}
-                  className="w-full text-left px-3 py-2 text-[14px] text-slate-700 hover:bg-[#fff5f5] inline-flex items-center gap-2 border-t border-[#eef1f6] disabled:opacity-50"
+                  className="w-full text-left px-3 py-2 text-[14px] text-red-600 hover:bg-[#fff5f5] inline-flex items-center gap-2 border-t border-[#eef1f6] disabled:opacity-50"
                 >
-                  <Trash2 size={14} /> {detailActionLoading === "delete" ? "Deleting..." : "Delete"}
+                  <Trash2 size={14} className="text-red-500" /> {detailActionLoading === "delete" ? "Deleting..." : "Delete"}
                 </button>
               </div>
             )}
@@ -2312,7 +2324,7 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
                 <div className="mt-10 flex justify-end">
                   <div className="w-[360px] text-[13px] text-black">
                     <div className="flex justify-between py-2"><span>Sub Total</span><span>{formatMoney(subtotal)}</span></div>
-                    <div className="flex justify-between py-2"><span>Tax</span><span>{formatMoney(tax)}</span></div>
+                    <div className="flex justify-between py-2 text-red-600"><span>Tax</span><span>{formatMoney(tax)}</span></div>
                     <div className="flex justify-between py-2.5 font-semibold border-t border-[#e5e7eb] mt-1"><span>Total</span><span>{currencyPrefix}{formatMoney(total)}</span></div>
                     {paymentMadeAmount > 0 && (
                       <div className="flex justify-between py-2">
@@ -2449,6 +2461,68 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
                   setVoidReason("");
                 }}
                 className="px-3 py-1.5 rounded border border-[#cbd5e1] bg-white text-[14px] text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isDeleteModalOpen && (
+        <div
+          className="fixed inset-0 z-[131] flex items-start justify-center bg-black/40 pt-16"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && detailActionLoading !== "delete") {
+              setIsDeleteModalOpen(false);
+              setDeleteRetainerId("");
+            }
+          }}
+        >
+          <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200">
+            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+              <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
+                !
+              </div>
+              <h3 className="text-[15px] font-semibold text-slate-800 flex-1">
+                Delete retainer invoice?
+              </h3>
+              <button
+                type="button"
+                className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                onClick={() => {
+                  if (detailActionLoading === "delete") return;
+                  setIsDeleteModalOpen(false);
+                  setDeleteRetainerId("");
+                }}
+                aria-label="Close"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="px-5 py-3 text-[13px] text-slate-600">
+              You cannot retrieve this retainer invoice once it has been deleted.
+            </div>
+            <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+              <button
+                type="button"
+                className={`px-4 py-1.5 rounded-md bg-blue-600 text-white text-[12px] hover:bg-blue-700 ${detailActionLoading === "delete" ? "opacity-70 cursor-not-allowed" : ""}`}
+                onClick={() => {
+                  void handleDeleteCurrentInvoice();
+                }}
+                disabled={detailActionLoading === "delete"}
+              >
+                {detailActionLoading === "delete" ? "Deleting..." : "Delete"}
+              </button>
+              <button
+                type="button"
+                className={`px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50 ${detailActionLoading === "delete" ? "opacity-70 cursor-not-allowed" : ""}`}
+                onClick={() => {
+                  if (detailActionLoading === "delete") return;
+                  setIsDeleteModalOpen(false);
+                  setDeleteRetainerId("");
+                }}
+                disabled={detailActionLoading === "delete"}
               >
                 Cancel
               </button>

@@ -20,7 +20,7 @@ import {
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import { getInvoiceById, getInvoices } from "../../salesModel";
-import { invoicesAPI, senderEmailsAPI } from "../../../../services/api";
+import { debitNotesAPI, invoicesAPI, senderEmailsAPI } from "../../../../services/api";
 import { applyEmailTemplate } from "../../../settings/emailTemplateUtils";
 
 const normalizeInvoiceItems = (sourceInvoice: any) => {
@@ -95,6 +95,7 @@ export default function SendInvoiceEmail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const isDebitNoteRoute = location.pathname.includes("/sales/debit-notes/");
   const [invoice, setInvoice] = useState(null);
   const [loading, setLoading] = useState(false);
   const [sendingStage, setSendingStage] = useState("");
@@ -216,8 +217,13 @@ export default function SendInvoiceEmail() {
     const fetchInvoice = async () => {
       if (id) {
         try {
-          const invoiceData = await getInvoiceById(id);
-          if (invoiceData) {
+          const response = isDebitNoteRoute ? await debitNotesAPI.getById(id) : await getInvoiceById(id);
+          const documentData = (response as any)?.data || response;
+          if (documentData) {
+            const invoiceData = {
+              ...documentData,
+              debitNote: isDebitNoteRoute || Boolean((documentData as any)?.debitNote),
+            };
             setInvoice(invoiceData);
             const customerDisplayName = getCustomerDisplayName(invoiceData);
             const customerEmail = getCustomerEmail(invoiceData);
@@ -238,7 +244,7 @@ export default function SendInvoiceEmail() {
 
             setSenderName(sName);
 
-            const iNumber = invoiceData.invoiceNumber || invoiceData.id;
+            const iNumber = invoiceData.invoiceNumber || invoiceData.debitNoteNumber || invoiceData.id;
             const iDate = formatDate(invoiceData.invoiceDate || invoiceData.date);
             const rawBalance = Number(invoiceData?.balance ?? invoiceData?.balanceDue);
             const paidAmount = Number(invoiceData?.amountPaid ?? 0);
@@ -289,16 +295,16 @@ export default function SendInvoiceEmail() {
 
             setAttachInvoicePDF(getLocalAttachPdfSetting());
           } else {
-            navigate("/sales/invoices");
+            navigate(isDebitNoteRoute && id ? `/sales/debit-notes/${id}` : "/sales/invoices");
           }
         } catch (error) {
           console.error("Error fetching invoice:", error);
-          navigate("/sales/invoices");
+          navigate(isDebitNoteRoute && id ? `/sales/debit-notes/${id}` : "/sales/invoices");
         }
       }
     };
     fetchInvoice();
-  }, [id, navigate]);
+  }, [id, navigate, isDebitNoteRoute, prefilledRecipientFromState]);
 
   useEffect(() => {
     if (!bodyEditorRef.current || isBodyDirty) return;
@@ -334,7 +340,7 @@ export default function SendInvoiceEmail() {
   };
 
   const buildInvoiceEmailHtml = (invoiceData: any, customerName: string, organizationName: string) => {
-    const invoiceNumber = String(invoiceData?.invoiceNumber || invoiceData?.id || "-");
+    const invoiceNumber = String(invoiceData?.invoiceNumber || invoiceData?.debitNoteNumber || invoiceData?.id || "-");
     const invoiceDate = formatDate(invoiceData?.invoiceDate || invoiceData?.date);
     const dueDate = invoiceData?.dueDate ? formatDate(invoiceData.dueDate) : "";
     const rawBalance = Number(invoiceData?.balance ?? invoiceData?.balanceDue);
@@ -342,7 +348,10 @@ export default function SendInvoiceEmail() {
     const totalAmount = Number(invoiceData?.total ?? invoiceData?.amount ?? 0);
     const balanceDueAmount = Number.isFinite(rawBalance) ? rawBalance : Math.max(0, totalAmount - paidAmount);
     const amount = formatCurrency(balanceDueAmount, invoiceData?.currency);
-    const viewUrl = `${window.location.origin}/portal/invoices/${invoiceData?.id || invoiceData?._id || ""}`;
+    const documentId = invoiceData?.id || invoiceData?._id || "";
+    const viewUrl = invoiceData?.debitNote
+      ? `${window.location.origin}/portal/debit-notes/${documentId}`
+      : `${window.location.origin}/portal/invoices/${documentId}`;
 
     const isDebitNote = !!invoiceData.debitNote;
     const docLabel = isDebitNote ? "Debit Note" : "Invoice";
@@ -867,7 +876,8 @@ export default function SendInvoiceEmail() {
       }
 
       setSendingStage("Sending email...");
-      await invoicesAPI.sendEmail(id, {
+      const sendApi = isDebitNoteRoute ? debitNotesAPI : invoicesAPI;
+      await sendApi.sendEmail(id, {
         to: emailData.sendTo,
         subject: emailData.subject,
         body: htmlBody,
@@ -879,7 +889,7 @@ export default function SendInvoiceEmail() {
       });
 
       toast.success("Email sent successfully!");
-      navigate(`/sales/invoices/${id}`);
+      navigate(isDebitNoteRoute ? `/sales/debit-notes/${id}` : `/sales/invoices/${id}`);
     } catch (error: any) {
       console.error("Error sending invoice email:", error);
       toast.error(error.message || "Failed to send email. Please try again.");
@@ -890,7 +900,7 @@ export default function SendInvoiceEmail() {
   };
 
   const handleCancel = () => {
-    navigate(`/sales/invoices`);
+    navigate(isDebitNoteRoute && id ? `/sales/debit-notes/${id}` : `/sales/invoices`);
   };
 
   if (!invoice) {

@@ -33,13 +33,10 @@ import {
 
 const defaultCreditNoteViews = [
   "All",
-  "Draft",
-  "Locked",
-  "Pending Approval",
-  "Approved",
   "Open",
   "Closed",
-  "Void"
+  "Void",
+  "Draft"
 ];
 
 const CREDIT_NOTES_LIST_COLUMNS: CreditNotesColumnOption[] = [
@@ -106,7 +103,6 @@ export default function CreditNotes() {
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
-  const [viewSearchQuery, setViewSearchQuery] = useState("");
   const [customViews, setCustomViews] = useState(() => getCustomViews().filter(v => v.type === "credit-notes"));
 
   // Initialize with empty array, fetch in useEffect
@@ -937,13 +933,32 @@ export default function CreditNotes() {
     }
   };
 
-  const filteredDefaultViews = defaultCreditNoteViews.filter(view =>
-    view.toLowerCase().includes(viewSearchQuery.toLowerCase())
-  );
-
-  const filteredCustomViews = customViews.filter(view =>
-    view.name.toLowerCase().includes(viewSearchQuery.toLowerCase())
-  );
+  const renderViewOption = (label: string, value: string, isFavorite = false) => {
+    const isSelected = value === "All" ? selectedView === "All Credit Notes" : isViewSelected(value);
+    return (
+      <div
+        key={value}
+        onClick={() => handleViewSelect(value)}
+        className={`group flex items-center justify-between px-4 py-2.5 cursor-pointer transition-colors hover:bg-blue-50 ${
+          isSelected ? "bg-white" : "text-gray-700"
+        }`}
+      >
+        <div className="flex items-center gap-2">
+          {isSelected ? (
+            <span className="inline-flex items-center rounded-lg bg-gray-100 px-2 py-0.5 text-sm font-medium text-gray-900">
+              {label}
+            </span>
+          ) : (
+            <span className="text-sm font-medium text-gray-900">{label}</span>
+          )}
+        </div>
+        <Star
+          size={14}
+          className={isFavorite ? "text-yellow-400 fill-yellow-400" : "text-gray-300"}
+        />
+      </div>
+    );
+  };
 
   const isViewSelected = (view: string) => {
     if (view === "All") {
@@ -956,8 +971,19 @@ export default function CreditNotes() {
     localStorage.setItem(CREDIT_NOTES_COLUMNS_STORAGE_KEY, JSON.stringify(visibleColumns));
   }, [visibleColumns]);
 
+  useEffect(() => {
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+    };
+  }, []);
+
   return (
-    <div className="w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] -ml-4 md:-ml-6 min-h-screen bg-white">
+    <div className="w-full h-[calc(100vh-4rem)] bg-white flex flex-col overflow-hidden overflow-x-hidden">
       {/* Header - Show Bulk Actions Bar when items are selected, otherwise show normal header */}
       {selectedCreditNotes.length > 0 ? (
         <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-white">
@@ -1011,86 +1037,8 @@ export default function CreditNotes() {
               {/* Dropdown Menu */}
               {isViewDropdownOpen && (
                 <div className="absolute top-full left-0 mt-2 bg-white border-2 border-gray-200 rounded-xl shadow-xl z-50 min-w-[300px] overflow-hidden flex flex-col max-h-[500px]">
-                  {/* Search Bar */}
-                  <div className="flex items-center gap-2 p-3 border-b border-gray-100 bg-gray-50/50">
-                    <Search size={16} className="text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Search views..."
-                      value={viewSearchQuery}
-                      onChange={(e) => setViewSearchQuery(e.target.value)}
-                      onMouseEnter={(e) => (e.target as HTMLElement).style.backgroundColor = "#F9FAFB"}
-                      onMouseLeave={(e) => (e.target as HTMLElement).style.backgroundColor = "white"}
-                      className="flex-1 text-sm bg-transparent focus:outline-none placeholder-gray-400 font-medium"
-                    />
-                  </div>
-
-                  {/* View Options Scroll Area */}
-                  <div className="flex-1 overflow-y-auto custom-scrollbar pt-2">
-                    {/* Default Views */}
-                    <div className="px-3 pb-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-white">
-                      System Views
-                    </div>
-                    {filteredDefaultViews.map((view) => (
-                      <div
-                        key={view}
-                        onClick={() => handleViewSelect(view)}
-                        className={`group px-4 py-2.5 cursor-pointer hover:bg-blue-50 flex items-center justify-between transition-all ${isViewSelected(view) ? "bg-blue-50/50 text-blue-600" : "text-gray-700 font-medium"
-                          }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <Eye size={16} className={isViewSelected(view) ? "text-blue-500" : "text-gray-400 opacity-40"} />
-                          <span className="text-sm">{view}</span>
-                        </div>
-                        {isViewSelected(view) && <Check size={14} className="text-blue-600" />}
-                      </div>
-                    ))}
-
-                    {/* Custom Views */}
-                    {filteredCustomViews.length > 0 && (
-                      <div className="mt-4">
-                        <div className="px-3 pb-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-white">
-                          Custom Views
-                        </div>
-                        {filteredCustomViews.map((view) => (
-                          <div
-                            key={view.id}
-                            onClick={() => handleViewSelect(view.name)}
-                            className={`group px-4 py-2.5 cursor-pointer hover:bg-blue-50 flex items-center justify-between transition-all ${isViewSelected(view.name) ? "bg-blue-50/50 text-blue-600" : "text-gray-700 font-medium"
-                              }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <Star
-                                size={14}
-                                className={view.isFavorite ? "text-yellow-400 fill-yellow-400" : "text-gray-300"}
-                              />
-                              <span className="text-sm truncate max-w-[160px]">{view.name}</span>
-                            </div>
-                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                onClick={(e) => handleDeleteCustomView(view.id, e)}
-                                className="p-1.5 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded"
-                              >
-                                <Trash2 size={12} />
-                              </button>
-                              {isViewSelected(view.name) && <Check size={14} className="text-blue-600" />}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Footer Actions */}
-                  <div
-                    onClick={() => {
-                      setIsViewDropdownOpen(false);
-                      navigate("/sales/credit-notes/custom-view/new");
-                    }}
-                    className="mt-2 flex items-center justify-center gap-2 p-4 border-t border-gray-100 bg-white text-blue-600 text-sm font-bold cursor-pointer hover:bg-gray-50 transition-all active:scale-[0.98]"
-                  >
-                    <Plus size={18} strokeWidth={3} />
-                    New Custom View
+                  <div className="flex-1 overflow-y-auto custom-scrollbar py-2">
+                    {defaultCreditNoteViews.map((view) => renderViewOption(view, view))}
                   </div>
                 </div>
               )}
@@ -1353,6 +1301,7 @@ export default function CreditNotes() {
         </div>
       )}
 
+      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
       <div className="relative">
 
         <div className="bg-white overflow-hidden">
@@ -1934,6 +1883,8 @@ export default function CreditNotes() {
           onClose={() => setIsFieldCustomizationOpen(false)}
         />
       )}
+
+      </div>
 
       {/* Preferences Modal */}
       {isPreferencesModalOpen && (
