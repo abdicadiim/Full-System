@@ -559,6 +559,7 @@ export const rejectUserInvitationPublic = async (req: express.Request, res: expr
         inviteRejectedAt: new Date(),
         inviteTokenHash: "",
         inviteTokenExpiresAt: null,
+        inviteTokenSentAt: null,
       },
     }
   );
