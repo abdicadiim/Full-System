@@ -194,9 +194,9 @@ export default function TransactionNumberSeriesPage() {
   if (showNewSeriesPage) {
     return (
       <div className="flex min-h-screen flex-col bg-[#f8f9fb] font-sans">
-        <div className="mx-auto w-full max-w-[1800px] p-4 md:p-6 lg:px-8">
+        <div className="w-full px-0 py-2 md:py-3">
           <div className="overflow-hidden">
-            <div className="p-6 md:p-8">
+            <div className="p-3 md:p-4">
               <NewTransactionNumberSeriesPage
                 onBack={handleBackFromNewSeries}
                 editSeriesItems={selectedSeriesToEdit || undefined}
@@ -210,26 +210,26 @@ export default function TransactionNumberSeriesPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-[#f8f9fb] font-sans">
-      <div className="mx-auto w-full max-w-[1800px] p-4 md:p-6 lg:px-8">
+      <div className="w-full px-0 py-2 md:py-3">
         <div className="overflow-hidden">
           {/* Top Header */}
-          <div className="flex flex-col gap-4 border-b border-[#eff2f7] px-4 py-4 md:px-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-2.5 border-b border-[#eff2f7] px-3 py-3 md:px-4 md:py-3.5 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
-              <h1 className="truncate text-[17px] font-semibold text-[#1a202c]">
+              <h1 className="truncate text-[15px] font-semibold text-[#1a202c]">
                 Transaction Number Series
               </h1>
             </div>
-            <div className="flex flex-wrap items-center gap-3 md:gap-4 lg:justify-end">
+            <div className="flex flex-wrap items-center gap-2 md:gap-2.5 lg:justify-end">
               <button
                 onClick={() => setShowSettingsModal(true)}
-                className="flex items-center gap-1.5 whitespace-nowrap text-[12px] font-medium text-[#1e5e6e] hover:underline"
+                className="flex items-center gap-1.5 whitespace-nowrap text-[11px] font-medium text-[#1e5e6e] hover:underline"
               >
                 <Settings size={14} className="text-[#1e5e6e]" />
                 Prevent Duplicate Transaction Numbers
               </button>
               <button
                 onClick={handleNewSeries}
-                className="flex h-9 items-center gap-2 whitespace-nowrap rounded-md bg-[#1e5e6e] px-4 text-[12px] font-bold text-white shadow-sm transition-colors hover:bg-[#164a58] active:scale-95"
+                className="flex h-8 items-center gap-2 whitespace-nowrap rounded-md bg-[#1e5e6e] px-3 text-[10.5px] font-bold text-white shadow-sm transition-colors hover:bg-[#164a58] active:scale-95"
               >
                 <Plus size={16} />
                 New Series
@@ -237,8 +237,8 @@ export default function TransactionNumberSeriesPage() {
             </div>
           </div>
           {/* Sub Header */}
-          <div className="flex items-center gap-2 border-b border-[#eff2f7] bg-[#fcfdff] px-4 py-3 md:px-6">
-            <span className="text-[13px] font-semibold text-[#1a202c]">All Series</span>
+          <div className="flex items-center gap-2 border-b border-[#eff2f7] bg-[#fcfdff] px-3 py-2 md:px-4">
+            <span className="text-[11px] font-semibold text-[#1a202c]">All Series</span>
             <span className="rounded-[3px] bg-[#edf2f7] px-1.5 py-0.5 text-[11px] font-bold leading-none text-[#4a5568]">
               {seriesNames.length}
             </span>
@@ -246,21 +246,21 @@ export default function TransactionNumberSeriesPage() {
 
           {/* Horizontal Table */}
           <div className="w-full overflow-x-auto overflow-y-hidden custom-scrollbar">
-            <table className="min-w-max w-full border-collapse whitespace-nowrap border-l border-t border-[#eff2f7] text-left">
+            <table className="w-full table-fixed border-collapse border-l border-t border-[#eff2f7] text-left">
               <thead>
                 <tr className="border-b border-[#eff2f7] bg-[#fcfdff]">
-                  <th className="min-w-[180px] border-r border-[#eff2f7] px-4 py-3 text-[10.5px] font-bold uppercase tracking-wider text-[#718096] md:px-5">
+                  <th className="w-[16%] border-r border-[#eff2f7] px-2 py-2 text-[9px] font-bold uppercase tracking-wider leading-tight text-[#718096] md:px-3">
                     SERIES NAME
                   </th>
                   {displayModules.map((moduleName) => (
                     <th
                       key={moduleName}
-                      className="min-w-[120px] border-r border-[#eff2f7] px-4 py-3 text-[10.5px] font-bold uppercase tracking-wider text-[#718096] md:min-w-[130px] md:px-5"
+                      className="w-[8%] border-r border-[#eff2f7] px-2 py-2 text-[9px] font-bold uppercase tracking-wider leading-tight text-[#718096] md:px-3"
                     >
                       {moduleName}
                     </th>
                   ))}
-                  <th className="min-w-[150px] whitespace-normal border-r border-[#eff2f7] px-4 py-3 text-[10.5px] font-bold uppercase tracking-wider leading-tight text-[#718096] md:px-5">
+                  <th className="w-[10%] whitespace-normal border-r border-[#eff2f7] px-2 py-2 text-[9px] font-bold uppercase tracking-wider leading-tight text-[#718096] md:px-3">
                     ASSOCIATED LOCATIONS
                   </th>
                 </tr>
@@ -277,9 +277,9 @@ export default function TransactionNumberSeriesPage() {
                       className="group cursor-pointer transition-colors hover:bg-[#fcfdff]"
                       onClick={() => handleEditSeries(name)}
                     >
-                      <td className="relative border-r border-[#eff2f7] px-4 py-4 md:px-5">
+                      <td className="relative border-r border-[#eff2f7] px-2 py-2.5 md:px-3">
                         <div className="flex items-center justify-between group/name">
-                          <button className="text-left text-[13.5px] font-medium text-[#1e5e6e] hover:underline">
+                          <button className="min-w-0 flex-1 truncate text-left text-[12px] font-medium text-[#1e5e6e] hover:underline">
                             {name}
                           </button>
                           <button
@@ -298,19 +298,19 @@ export default function TransactionNumberSeriesPage() {
                         const moduleSeries = resolveModuleSeries(items, moduleName);
 
                         return (
-                          <td key={moduleName} className="border-r border-[#eff2f7] px-4 py-4 md:px-5">
+                          <td key={moduleName} className="border-r border-[#eff2f7] px-2 py-2.5 md:px-3">
                             {moduleSeries ? (
-                              <span className="text-[13px] text-[#4a5568]">
+                              <span className="text-[11.5px] text-[#4a5568]">
                                 {moduleSeries.prefix || ""}
                                 {moduleSeries.startingNumber || moduleSeries.nextNumber || "1"}
                               </span>
                             ) : (
-                              <span className="text-[13px] text-gray-200">-</span>
+                              <span className="text-[11.5px] text-gray-200">-</span>
                             )}
                           </td>
                         );
                       })}
-                      <td className="relative border-r border-[#eff2f7] px-4 py-4 md:px-5">
+                      <td className="relative border-r border-[#eff2f7] px-2 py-2.5 md:px-3">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -322,7 +322,7 @@ export default function TransactionNumberSeriesPage() {
                             });
                             setActivePopoverSeries(activePopoverSeries === name ? null : name);
                           }}
-                          className="ml-1 block w-full text-center text-[13px] font-medium text-[#3b82f6] hover:underline"
+                          className="ml-1 block w-full text-center text-[11.5px] font-medium text-[#3b82f6] hover:underline"
                         >
                           {locationCount}
                         </button>

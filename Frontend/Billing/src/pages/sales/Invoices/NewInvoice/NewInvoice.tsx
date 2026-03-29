@@ -2240,7 +2240,7 @@ const fetchLatestInvoiceNumber = async () => {
     console.warn("Failed to read transaction series for invoice number:", error);
   }
 
-  const response = await transactionNumberSeriesAPI.getNextNumber();
+  const response = await transactionNumberSeriesAPI.getNextNumber({ module: "Invoice" });
   const nextNumber = response?.data?.nextNumber || response?.data?.next_number;
   if (response && response.success && nextNumber) {
     const latestNumber = String(nextNumber);

@@ -8,6 +8,7 @@ interface Module {
   module: string;
   prefix: string;
   startingNumber: string;
+  nextNumber?: string;
   restartNumbering: string;
   preview: string;
 }
@@ -60,6 +61,7 @@ export default function NewTransactionNumberSeriesPage({ onBack, editSeriesItems
             ...dm,
             prefix: existing.prefix || "",
             startingNumber: String(existing.startingNumber || existing.nextNumber || "1"),
+            nextNumber: String(existing.nextNumber || existing.startingNumber || "1"),
             preview: (existing.prefix || "") + (existing.startingNumber || existing.nextNumber || "1")
           };
         }
@@ -134,7 +136,8 @@ export default function NewTransactionNumberSeriesPage({ onBack, editSeriesItems
           module: module.module,
           prefix: module.prefix,
           startingNumber: module.startingNumber,
-          currentNumber: parseInt(module.startingNumber) || 1,
+          nextNumber: module.nextNumber || module.startingNumber,
+          currentNumber: parseInt(String(module.nextNumber || module.startingNumber), 10) || 1,
           restartNumbering: module.restartNumbering.toLowerCase(),
           isDefault: false
         }))

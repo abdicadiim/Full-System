@@ -37,6 +37,7 @@ import recurringInvoicesRoutes from "./routes/recurringInvoicesRoutes.js";
 import salesReceiptsRoutes from "./routes/salesReceiptsRoutes.js";
 import debitNotesRoutes from "./routes/debitNotesRoutes.js";
 import subscriptionsRoutes from "./routes/subscriptionsRoutes.js";
+import { dashboardRoutes } from "./routes/dashboardRoutes.js";
 import { activityLogger } from "./midelwares/activityLogger.js";
 if (!MONGO_URI) {
     // eslint-disable-next-line no-console
@@ -106,6 +107,7 @@ app.use("/api/recurring-invoices", recurringInvoicesRoutes);
 app.use("/api/sales-receipts", salesReceiptsRoutes);
 app.use("/api/debit-notes", debitNotesRoutes);
 app.use("/api/subscriptions", subscriptionsRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 app.use("/api", (_req, res) => {
     res.status(501).json({ success: false, message: "Not implemented", data: null });
 });

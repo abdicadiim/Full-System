@@ -18,8 +18,8 @@ transactionNumberSeriesRoutes.delete("/:id", requireAuth, requireOrgAdmin, delet
 transactionNumberSeriesRoutes.post("/bulk", requireAuth, requireOrgAdmin, createTransactionNumberSeriesBulk);
 transactionNumberSeriesRoutes.put("/bulk", requireAuth, requireOrgAdmin, updateTransactionNumberSeriesBulk);
 
-transactionNumberSeriesRoutes.get("/:id/next-number", requireAuth, getNextTransactionNumber);
 transactionNumberSeriesRoutes.get("/next-number", requireAuth, getNextTransactionNumber);
+transactionNumberSeriesRoutes.get("/:id/next-number", requireAuth, getNextTransactionNumber);
 
 transactionNumberSeriesRoutes.get("/settings", requireAuth, getTransactionNumberSettings);
 transactionNumberSeriesRoutes.put("/settings", requireAuth, requireOrgAdmin, updateTransactionNumberSettings);

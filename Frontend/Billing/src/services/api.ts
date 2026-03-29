@@ -786,6 +786,82 @@ const txSeriesResource = resource("/transaction-number-series");
 const locationsResource = resource("/locations");
 const locationsLocal = localResource(LOCAL_LOCATIONS_KEY, "loc");
 
+type TransactionSeriesLookup = string | {
+  seriesId?: string;
+  id?: string;
+  module?: string;
+  moduleKey?: string;
+  seriesName?: string;
+  reserve?: boolean;
+  allowFallbackToFirst?: boolean;
+};
+
+const toTxSeriesKey = (value: any) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+
+const normalizeTxSeriesLookup = (lookup?: TransactionSeriesLookup) => {
+  if (typeof lookup === "string") {
+    return { seriesId: lookup.trim(), reserve: true, allowFallbackToFirst: false };
+  }
+
+  const hasExplicitLookup = Boolean(
+    String(lookup?.seriesId || lookup?.id || "").trim() ||
+    String(lookup?.module || "").trim() ||
+    String(lookup?.moduleKey || "").trim() ||
+    String(lookup?.seriesName || "").trim()
+  );
+
+  return {
+    seriesId: String(lookup?.seriesId || lookup?.id || "").trim(),
+    module: String(lookup?.module || "").trim(),
+    moduleKey: String(lookup?.moduleKey || "").trim(),
+    seriesName: String(lookup?.seriesName || "").trim(),
+    reserve: lookup?.reserve !== false,
+    allowFallbackToFirst: lookup?.allowFallbackToFirst === true || !hasExplicitLookup,
+  };
+};
+
+const isActiveTxSeriesRow = (row: any) => String(row?.status || "active").toLowerCase() !== "inactive";
+
+const resolveTxSeriesRow = (rows: any[], lookup: ReturnType<typeof normalizeTxSeriesLookup>) => {
+  const activeRows = (rows || []).filter(isActiveTxSeriesRow);
+  const targetSeriesId = String(lookup?.seriesId || "").trim();
+  if (targetSeriesId) {
+    return activeRows.find((row: any) => String(getEntityId(row)) === targetSeriesId) || rows.find((row: any) => String(getEntityId(row)) === targetSeriesId) || null;
+  }
+
+  const targetSeriesName = String(lookup?.seriesName || "").trim().toLowerCase();
+  if (targetSeriesName) {
+    const exactSeriesName = activeRows.find((row: any) => String(row?.seriesName || row?.name || "").trim().toLowerCase() === targetSeriesName);
+    if (exactSeriesName) return exactSeriesName;
+  }
+
+  const targetKey = toTxSeriesKey(lookup?.moduleKey || lookup?.module || lookup?.seriesName);
+  if (targetKey) {
+    const matched = activeRows.filter((row: any) => {
+      const rowKeys = [
+        row?.module,
+        row?.moduleKey,
+        row?.name,
+        row?.seriesName,
+      ].map((value) => toTxSeriesKey(value));
+      return rowKeys.some((key) => key === targetKey);
+    });
+    if (matched.length > 0) {
+      return matched.find((row: any) => Boolean(row?.isDefault)) || matched[0];
+    }
+  }
+
+  if (lookup?.allowFallbackToFirst) {
+    return activeRows.find((row: any) => Boolean(row?.isDefault)) || activeRows[0] || rows.find((row: any) => Boolean(row?.isDefault)) || rows[0] || null;
+  }
+
+  return null;
+};
+
 const readSettingsObject = (key: string, fallback: any = {}) => {
   try {
     const raw = localStorage.getItem(key);
@@ -2024,11 +2100,19 @@ export const transactionNumberSeriesAPI = {
     }
     return { success: true, data: created };
   },
-  getNextNumber: async (seriesId?: string) => {
+  getNextNumber: async (lookup?: TransactionSeriesLookup) => {
+    const normalized = normalizeTxSeriesLookup(lookup);
     try {
-      const id = String(seriesId || "").trim();
-      const path = id ? `/transaction-number-series/${encodeURIComponent(id)}/next-number` : "/transaction-number-series/next-number";
-      const res = await request({ path });
+      const params: Record<string, any> = {};
+      if (!normalized.seriesId && normalized.module) params.module = normalized.module;
+      if (!normalized.seriesId && normalized.moduleKey) params.moduleKey = normalized.moduleKey;
+      if (!normalized.seriesId && normalized.seriesName) params.seriesName = normalized.seriesName;
+      if (normalized.reserve === false) params.reserve = "false";
+
+      const path = normalized.seriesId
+        ? `/transaction-number-series/${encodeURIComponent(normalized.seriesId)}/next-number`
+        : "/transaction-number-series/next-number";
+      const res = await request({ path, params: Object.keys(params).length ? params : undefined });
       if (res?.success) return res as any;
       if (typeof (res as any)?.status === "number") return res as any;
     } catch {
@@ -2037,10 +2121,10 @@ export const transactionNumberSeriesAPI = {
 
     const all = await txSeriesLocal.getAll({ limit: 10000 });
     const rows = all.data || [];
-    const selected =
-      rows.find((row: any) => String(getEntityId(row)) === String(seriesId || "")) ||
-      rows[0] ||
-      defaultTxSeries[0];
+    const selected = resolveTxSeriesRow(rows, normalized) || defaultTxSeries[0];
+    if (!selected) {
+      return { success: false, message: "Transaction series not found", data: null };
+    }
 
     const starting = String(selected?.startingNumber || selected?.nextNumber || "1");
     const parsed = parseInt(starting, 10);
@@ -2048,9 +2132,11 @@ export const transactionNumberSeriesAPI = {
     const width = /^\d+$/.test(starting) ? starting.length : 5;
     const padded = width > 1 ? String(current).padStart(width, "0") : String(current);
     const nextNumber = `${selected?.prefix || ""}${padded}`;
-    await txSeriesLocal.update(getEntityId(selected), { ...selected, nextNumber: current + 1 });
+    if (normalized.reserve !== false) {
+      await txSeriesLocal.update(getEntityId(selected), { ...selected, nextNumber: current + 1 });
+    }
 
-    return { success: true, data: { seriesId: getEntityId(selected), nextNumber, next_number: nextNumber } };
+    return { success: true, data: { seriesId: getEntityId(selected), nextNumber, next_number: nextNumber, reserved: normalized.reserve !== false } };
   },
   getSettings: async () => {
     try {
