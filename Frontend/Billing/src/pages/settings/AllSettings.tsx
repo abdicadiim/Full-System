@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, X, Building2, Users, Receipt, Settings as SettingsIcon, Palette, Zap, CreditCard, ShoppingCart, ShoppingBag, Puzzle, Plug, Code, RefreshCw } from "lucide-react";
+import { Search, X, Building2, Users, Receipt, Settings as SettingsIcon, Palette, Zap, CreditCard, ShoppingCart, ShoppingBag, Puzzle, Plug, Code, RefreshCw, BarChart3 } from "lucide-react";
 import { useUser } from "../../lib/auth/UserContext";
 import { useSettings } from "../../lib/settings/SettingsContext";
 import { usePermissions } from "../../hooks/usePermissions";
@@ -85,6 +85,7 @@ export default function AllSettings() {
       if (normalizedLabel === "items") return hasPermission("items", "Item");
       if (normalizedLabel === "tasks") return hasPermission("tasks", "Tasks");
       if (normalizedLabel === "projects" || normalizedLabel === "timesheet") return hasPermission("timesheets", "Projects");
+      if (normalizedLabel === "reports") return hasPermission("reports");
       return hasSettingsAccess;
     }
 
@@ -204,6 +205,7 @@ export default function AllSettings() {
         "Tasks",
         "Projects",
         "Timesheet",
+        "Reports",
       ],
     },
     {
@@ -456,6 +458,8 @@ export default function AllSettings() {
       }
     } else if (label === "Items" || label === "Products") {
       navigate("/settings/items");
+    } else if (label === "Reports") {
+      navigate("/reports");
     } else if (label === "Tasks") {
       navigate("/settings/tasks");
     } else if (label === "Projects") {
