@@ -534,7 +534,7 @@ function DashboardHero({ baseCurrencyCode }: { baseCurrencyCode?: string } = {})
   const avatarSrc = String(user?.photoUrl || "").trim();
   const organizationName =
     settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "Organization";
-  const resolvedCurrencyCode = String(baseCurrencyCode || "").trim().toUpperCase();
+  const resolvedCurrencyCode = String(baseCurrencyCode || settings?.general?.baseCurrency || "").trim().toUpperCase();
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -615,6 +615,7 @@ function DashboardHero({ baseCurrencyCode }: { baseCurrencyCode?: string } = {})
 
 export default function OverviewPage() {
   const { loading: permissionsLoading, canView } = usePermissions();
+  const { settings } = useSettings();
   const canViewDashboard = canView("dashboard", "View Dashboard");
   const canViewProjects = canView("dashboard", "Projects");
   const canViewSalesAndExpenses = canView("dashboard", "Sales and Expenses");
@@ -680,7 +681,8 @@ export default function OverviewPage() {
   }
 
   const dashboardData = summary || EMPTY_SUMMARY;
-  const dashboardCurrencyCode = String(dashboardData.organization?.baseCurrency || "").trim().toUpperCase();
+  const dashboardCurrencyCode =
+    String(dashboardData.organization?.baseCurrency || settings?.general?.baseCurrency || "").trim().toUpperCase();
   const receivableBars = dashboardData.metrics.receivables.labels.map((label, index) => ({
     label,
     value: String(dashboardData.metrics.receivables.values[index] || 0),

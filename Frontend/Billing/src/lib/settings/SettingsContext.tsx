@@ -130,12 +130,13 @@ export function SettingsProvider({ children }) {
         const sidebarLightFrom = String(parsedBranding?.sidebarLightFrom || "").trim();
         const logo = String(parsedBranding?.logo || parsed.branding?.logoUrl || "").trim();
         return {
-          general: {
-            schoolDisplayName: parsed.general?.schoolDisplayName || 'Taban Enterprise',
-            shortName: parsed.general?.shortName || 'Taban',
-            companyDisplayName: parsed.general?.companyDisplayName || 'Taban Enterprise',
-            organizationEmail: parsed.general?.organizationEmail || "",
-          },
+        general: {
+          schoolDisplayName: parsed.general?.schoolDisplayName || 'Taban Enterprise',
+          shortName: parsed.general?.shortName || 'Taban',
+          companyDisplayName: parsed.general?.companyDisplayName || 'Taban Enterprise',
+          organizationEmail: parsed.general?.organizationEmail || "",
+          baseCurrency: parsed.general?.baseCurrency || "",
+        },
           branding: {
             primaryColor: parsed.branding?.primaryColor || DEFAULT_THEME.primaryColor,
             logoUrl: logo,
@@ -163,6 +164,7 @@ export function SettingsProvider({ children }) {
         shortName: 'Taban',
         companyDisplayName: 'Taban Enterprise',
         organizationEmail: "",
+        baseCurrency: "",
       },
       branding: {
         primaryColor: DEFAULT_THEME.primaryColor,
@@ -183,8 +185,9 @@ export function SettingsProvider({ children }) {
     const name = String(profile?.name || profile?.organizationName || "").trim();
     const logo = String(profile?.logoUrl || profile?.logo || "").trim();
     const orgEmail = String(profile?.email || profile?.primaryContactEmail || "").trim();
+    const baseCurrency = String(profile?.baseCurrency || "").trim().toUpperCase();
 
-    if (!name && !logo && !orgEmail) return;
+    if (!name && !logo && !orgEmail && !baseCurrency) return;
 
     setSettings((prev) => {
       const nextName = name || prev.general?.companyDisplayName || prev.general?.schoolDisplayName || "";
@@ -195,6 +198,7 @@ export function SettingsProvider({ children }) {
           ...prev.general,
           ...(nextName ? { companyDisplayName: nextName, schoolDisplayName: nextName, shortName } : {}),
           ...(orgEmail ? { organizationEmail: orgEmail } : {}),
+          ...(baseCurrency ? { baseCurrency } : {}),
         },
         branding: {
           ...prev.branding,
