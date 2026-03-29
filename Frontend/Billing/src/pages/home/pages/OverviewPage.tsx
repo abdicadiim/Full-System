@@ -433,9 +433,15 @@ function IncomeExpenseChart({
   );
 }
 
-function ExpenseDonut({ items, total }: { items: MetricLegendItem[]; total: number }) {
-  const { baseCurrency } = useCurrency();
-  const currencyCode = baseCurrency?.code || "USD";
+function ExpenseDonut({
+  items,
+  total,
+  currencyCode,
+}: {
+  items: MetricLegendItem[];
+  total: number;
+  currencyCode: string;
+}) {
   const active = items[0];
   const totalValue = Math.max(total, 0);
   const activeValue = Number(active?.value) || 0;
@@ -861,7 +867,11 @@ export default function OverviewPage() {
 
               {canViewTopExpense ? (
                 <SectionCard title="Top Expenses" range="Last 12 Months">
-                  <ExpenseDonut items={dashboardData.topExpenses.items} total={dashboardData.topExpenses.total} />
+                  <ExpenseDonut
+                    items={dashboardData.topExpenses.items}
+                    total={dashboardData.topExpenses.total}
+                    currencyCode={dashboardCurrencyCode}
+                  />
                 </SectionCard>
               ) : (
                 <div />
