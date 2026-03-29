@@ -63,6 +63,7 @@ export default function NewRolePage() {
       "Events": false,
       "Update organization profile": false,
       "Users": false,
+      "Roles": false,
       "Export data": false,
       "General preferences": false,
       "Payment Terms": false,
