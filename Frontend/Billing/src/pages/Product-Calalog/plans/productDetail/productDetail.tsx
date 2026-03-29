@@ -4,6 +4,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import NewProductModal from "../newProduct/NewProductModal";
 import { addonsAPI, couponsAPI, plansAPI, productsAPI } from "../../../../services/api";
+import { usePermissions } from "../../../../hooks/usePermissions";
 
 const EMAIL_TEMPLATE_EVENTS = [
   "Update Subscription",
@@ -66,6 +67,7 @@ export default function ProductDetailPage() {
   const navigate = useNavigate();
   const { productId } = useParams();
   const location = useLocation();
+  const { canCreate, canEdit, canDelete } = usePermissions();
   const actionsRef = useRef<HTMLDivElement>(null);
   const sidebarFilterRef = useRef<HTMLDivElement>(null);
   const sidebarMoreRef = useRef<HTMLDivElement>(null);
@@ -100,6 +102,13 @@ export default function ProductDetailPage() {
   const revealTabCount = (tab: "plans" | "addons" | "coupons") => {
     setShowTabCount((prev) => ({ ...prev, [tab]: true }));
   };
+
+  const canCreateProduct = canCreate("products", "Products");
+  const canEditProduct = canEdit("products", "Products");
+  const canDeleteProduct = canDelete("products", "Products");
+  const canCreatePlan = canCreate("products", "Plan");
+  const canCreateAddon = canCreate("products", "Addon");
+  const canCreateCoupon = canCreate("products", "Coupon");
 
   const refreshProducts = async (silent = false) => {
     if (!silent && mountedRef.current) setProductsLoading(true);
