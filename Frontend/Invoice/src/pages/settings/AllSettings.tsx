@@ -71,6 +71,7 @@ export default function AllSettings() {
       if (normalizedLabel === "items" || normalizedLabel === "inventory adjustments") return hasPermission("items", "Item");
       if (normalizedLabel === "accountant") return hasPermission("accountant");
       if (normalizedLabel === "projects" || normalizedLabel === "timesheet") return hasPermission("timesheets", "Projects");
+      if (normalizedLabel === "reports") return hasPermission("reports");
       return hasSettingsAccess;
     }
 
@@ -182,6 +183,7 @@ export default function AllSettings() {
         "Accountant",
         "Projects",
         "Timesheet",
+        "Reports",
       ],
     },
     {
@@ -500,6 +502,8 @@ export default function AllSettings() {
                             navigate("/settings/projects");
                           } else if (item === "Timesheet") {
                             navigate("/settings/timesheet");
+                          } else if (item === "Reports") {
+                            navigate("/reports");
                           } else if (item === "Inventory Adjustments") {
                             navigate("/settings/inventory-adjustments");
                           } else if (item === "Quotes") {

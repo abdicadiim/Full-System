@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import { Search, X, Building2, Users, Receipt, Settings as SettingsIcon, Palette, Zap, Package, CreditCard, ShoppingCart, ShoppingBag, Puzzle, Plug, Code, FileText } from "lucide-react";
+import { Search, X, Building2, Users, Receipt, Settings as SettingsIcon, Palette, Zap, Package, CreditCard, ShoppingCart, ShoppingBag, Puzzle, Plug, Code, FileText, BarChart3 } from "lucide-react";
 import { getToken, API_BASE_URL } from "../../services/auth";
 import { useSettings } from "../../lib/settings/SettingsContext";
 
@@ -14,6 +14,7 @@ const simpleSettingsNav = [
   { label: "Customer Portal", path: "/settings/customer-portal", icon: SettingsIcon },
   { label: "General Preferences", path: "/settings/general", icon: SettingsIcon },
   { label: "Items", path: "/settings/items", icon: Package },
+  { label: "Reports", path: "/reports", icon: BarChart3 },
   { label: "Customers", path: "/sales/customers", icon: Users },
   { label: "Quotes", path: "/settings/quotes", icon: FileText },
   { label: "Invoices", path: "/settings/invoices", icon: FileText },

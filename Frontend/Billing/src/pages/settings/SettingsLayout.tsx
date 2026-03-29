@@ -92,6 +92,7 @@ const moduleSettings = [
       { label: "Tasks", path: "/settings/tasks" },
       { label: "Projects", path: "/settings/projects" },
       { label: "Timesheet", path: "/settings/timesheet" },
+      { label: "Reports", path: "/reports" },
     ],
   },
   {
