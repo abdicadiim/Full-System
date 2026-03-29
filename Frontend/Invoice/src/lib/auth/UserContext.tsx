@@ -8,6 +8,7 @@ import {
   setToken,
 } from "../../services/auth";
 import { waitForBackendReady } from "../../services/backendReady";
+import { createPermissionEvaluator, type PermissionTree } from "./permissionUtils";
 
 type User =
   | {
@@ -22,6 +23,7 @@ type User =
       unreadNotifications?: number;
       studentClass?: string | null;
       activeTimer?: any | null;
+      permissions?: PermissionTree | null;
     }
   | null;
 
@@ -155,7 +157,14 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
-  const hasPermission = (_module: string, _action = "view") => Boolean(user);
+  const permissionEvaluator = useMemo(
+    () =>
+      createPermissionEvaluator({
+        role: user?.role,
+        permissions: user?.permissions,
+      }),
+    [user?.role, user?.permissions]
+  );
 
   const value = useMemo<UserContextValue>(
     () => ({
@@ -164,9 +173,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       hasChecked,
       refresh,
       logout,
-      hasPermission,
+      hasPermission: permissionEvaluator.hasPermission,
     }),
-    [user, loading, hasChecked, refresh, logout]
+    [user, loading, hasChecked, refresh, logout, permissionEvaluator]
   );
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
