@@ -529,22 +529,30 @@ export default function PriceListPage() {
                                                     ))}
                                                     <td className="px-4 py-3 text-right sticky right-0 bg-white/95 backdrop-blur-sm group-hover:bg-[#f8fafc] transition-colors">
                                                         <div className="invisible group-hover:visible flex items-center justify-end gap-2 text-[12px] whitespace-nowrap">
-                                                            <button onClick={() => handleEdit(row)} className="text-blue-500 hover:text-blue-600 font-medium transition-colors">Edit</button>
-                                                            <span className="text-slate-300">|</span>
-                                                            <button
-                                                                onClick={() => handleToggleStatus(row)}
-                                                                className="text-blue-500 hover:text-blue-600 font-medium transition-colors"
-                                                            >
-                                                                {row.status.toLowerCase() === 'active' ? 'Mark as Inactive' : 'Mark as Active'}
-                                                            </button>
-                                                            <span className="text-slate-300">|</span>
-                                                            <button
-                                                                onClick={() => openDeleteModal(row)}
-                                                                className="text-red-500 hover:text-red-700 font-medium flex items-center gap-1 transition-colors"
-                                                            >
-                                                                <Trash2 size={14} />
-                                                                Delete
-                                                            </button>
+                                                            {canEditPriceList ? (
+                                                                <>
+                                                                    <button onClick={() => handleEdit(row)} className="text-blue-500 hover:text-blue-600 font-medium transition-colors">Edit</button>
+                                                                    <span className="text-slate-300">|</span>
+                                                                    <button
+                                                                        onClick={() => handleToggleStatus(row)}
+                                                                        className="text-blue-500 hover:text-blue-600 font-medium transition-colors"
+                                                                    >
+                                                                        {row.status.toLowerCase() === 'active' ? 'Mark as Inactive' : 'Mark as Active'}
+                                                                    </button>
+                                                                </>
+                                                            ) : null}
+                                                            {canDeletePriceList ? (
+                                                                <>
+                                                                    <span className="text-slate-300">|</span>
+                                                                    <button
+                                                                        onClick={() => openDeleteModal(row)}
+                                                                        className="text-red-500 hover:text-red-700 font-medium flex items-center gap-1 transition-colors"
+                                                                    >
+                                                                        <Trash2 size={14} />
+                                                                        Delete
+                                                                    </button>
+                                                                </>
+                                                            ) : null}
                                                         </div>
                                                     </td>
                                                 </tr>
