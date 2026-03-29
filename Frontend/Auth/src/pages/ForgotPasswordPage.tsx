@@ -105,7 +105,6 @@ export default function ForgotPasswordPage() {
       const result = await authApi.requestPasswordReset(nextEmail, app);
       if (!result.success) {
         setError(result.message || "Unable to send reset code");
-        if (isInvitationFlow) autoSentInviteCodeRef.current = false;
         return;
       }
 
@@ -117,7 +116,6 @@ export default function ForgotPasswordPage() {
       setStep("verify");
     } catch (err: any) {
       setError(err?.message || "Unable to send reset code");
-      if (isInvitationFlow) autoSentInviteCodeRef.current = false;
     } finally {
       setLoading(false);
     }
@@ -231,7 +229,9 @@ export default function ForgotPasswordPage() {
 
         {step === "verify" ? (
           <div>
-            <label className="mb-2 block text-sm font-semibold text-slate-700">Reset Code</label>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">
+              {isInvitationFlow ? "Verification Code" : "Reset Code"}
+            </label>
             <input
               className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-primary"
               placeholder="Enter the 6-digit code"
@@ -323,15 +323,21 @@ export default function ForgotPasswordPage() {
           <span>
             {loading
               ? step === "request"
-                ? "Sending code..."
+                ? isInvitationFlow
+                  ? "Sending code..."
+                  : "Sending code..."
                 : step === "verify"
                   ? "Verifying code..."
                   : "Resetting..."
               : step === "request"
-                ? "Send reset code"
+                ? isInvitationFlow
+                  ? "Send code"
+                  : "Send reset code"
                 : step === "verify"
                   ? "Verify code"
-                  : "Reset Password"}
+                  : isInvitationFlow
+                    ? "Set Password"
+                    : "Reset Password"}
           </span>
           <span className="material-symbols-outlined text-sm">arrow_forward</span>
         </button>
