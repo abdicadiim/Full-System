@@ -358,6 +358,8 @@ function DashboardHero() {
   const { settings } = useSettings();
 
   const displayName = user?.name || "User";
+  const displayEmail = user?.email || "";
+  const avatarSrc = String(user?.photoUrl || "").trim();
   const organizationName =
     settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "Organization";
 
@@ -376,11 +378,16 @@ function DashboardHero() {
       >
         <div className="flex flex-col gap-4 pb-4 md:flex-row md:items-start md:justify-between">
           <div className="flex items-start gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm">
-              <FileText size={22} />
+            <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm">
+              {avatarSrc ? (
+                <img src={avatarSrc} alt={`${displayName} avatar`} className="h-full w-full object-cover" />
+              ) : (
+                <FileText size={22} />
+              )}
             </div>
             <div>
               <h1 className="text-[18px] font-medium text-slate-900">{`Hello, ${displayName}`}</h1>
+              {displayEmail ? <div className="mt-1 text-[13px] text-slate-500">{displayEmail}</div> : null}
               <div className="mt-1 text-[14px] text-slate-500">{organizationName}</div>
             </div>
           </div>
