@@ -587,7 +587,7 @@ export default function AllSettings() {
     if (!query) return items;
     const lowerQuery = query.toLowerCase();
     return items.filter((item) => {
-      const label = typeof item === "string" ? item : item.label;
+      const label = typeof item === "string" ? item : item.label || item.title || "";
       return label.toLowerCase().includes(lowerQuery);
     });
   };
