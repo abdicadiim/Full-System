@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import AuthShell from "../components/AuthShell";
 import { getAppDisplayName, getFallbackUrl } from "../lib/appBranding";
@@ -41,9 +41,14 @@ export default function ForgotPasswordPage() {
   const [error, setError] = useState<string | null>(null);
   const appName = getAppDisplayName();
   const search = window.location.search;
-  const isLogoutRedirect = new URLSearchParams(search).get("logout") === "1";
-  const app = new URLSearchParams(search).get("app") || "";
-  const initialEmail = useMemo(() => new URLSearchParams(search).get("email") || "", [search]);
+  const searchParams = useMemo(() => new URLSearchParams(search), [search]);
+  const isLogoutRedirect = searchParams.get("logout") === "1";
+  const app = searchParams.get("app") || "";
+  const isInvitationFlow = searchParams.get("invite") === "1";
+  const initialEmail = useMemo(() => searchParams.get("email") || "", [searchParams]);
+  const initialName = useMemo(() => searchParams.get("name") || "", [searchParams]);
+  const autoSentInviteCodeRef = useRef(false);
+  const [fullName, setFullName] = useState(initialName);
 
   useEffect(() => {
     if (isLogoutRedirect) return;
@@ -51,6 +56,11 @@ export default function ForgotPasswordPage() {
       setEmail(initialEmail);
     }
   }, [isLogoutRedirect, initialEmail, email]);
+
+  useEffect(() => {
+    if (!isInvitationFlow || !initialName || fullName) return;
+    setFullName(initialName);
+  }, [fullName, initialName, isInvitationFlow]);
 
   useEffect(() => {
     if (!codeSent || remainingSeconds <= 0) return;
@@ -68,6 +78,13 @@ export default function ForgotPasswordPage() {
     return () => window.clearInterval(interval);
   }, [codeSent, remainingSeconds]);
 
+  useEffect(() => {
+    if (!isInvitationFlow || step !== "request" || codeSent || loading) return;
+    if (!email.trim() || autoSentInviteCodeRef.current) return;
+    autoSentInviteCodeRef.current = true;
+    void requestResetCode();
+  }, [email, isInvitationFlow, codeSent, loading, step]);
+
   const requestResetCode = async () => {
     const nextEmail = email.trim();
     if (!nextEmail) {
@@ -80,6 +97,7 @@ export default function ForgotPasswordPage() {
       const result = await authApi.requestPasswordReset(nextEmail, app);
       if (!result.success) {
         setError(result.message || "Unable to send reset code");
+        if (isInvitationFlow) autoSentInviteCodeRef.current = false;
         return;
       }
 
@@ -91,6 +109,7 @@ export default function ForgotPasswordPage() {
       setStep("verify");
     } catch (err: any) {
       setError(err?.message || "Unable to send reset code");
+      if (isInvitationFlow) autoSentInviteCodeRef.current = false;
     } finally {
       setLoading(false);
     }
@@ -135,7 +154,12 @@ export default function ForgotPasswordPage() {
     setLoading(true);
     setError(null);
     try {
-      const result = await authApi.resetPassword(nextEmail, nextCode, newPassword);
+      const result = await authApi.resetPassword(
+        nextEmail,
+        nextCode,
+        newPassword,
+        isInvitationFlow ? fullName.trim() : undefined
+      );
       if (!result.success) {
         setError(result.message || "Password reset failed");
         return;
@@ -159,19 +183,40 @@ export default function ForgotPasswordPage() {
   return (
     <AuthShell>
       <div className="mb-8">
-        <h2 className="mb-2 text-3xl font-bold text-slate-900">Forgot Password?</h2>
-        <p className="text-slate-600">We will send a reset code to the email address for {appName}.</p>
+        <h2 className="mb-2 text-3xl font-bold text-slate-900">
+          {isInvitationFlow ? "Complete Invitation" : "Forgot Password?"}
+        </h2>
+        <p className="text-slate-600">
+          {isInvitationFlow
+            ? `Set up your ${appName} account by verifying your email and choosing a password.`
+            : `We will send a reset code to the email address for ${appName}.`}
+        </p>
       </div>
 
       <form className="space-y-5" onSubmit={onSubmit}>
+        {isInvitationFlow ? (
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-slate-700">Full Name</label>
+            <input
+              className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-primary"
+              placeholder="Your full name"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+            />
+          </div>
+        ) : null}
+
         <div>
           <label className="mb-2 block text-sm font-semibold text-slate-700">Email Address</label>
           <input
-            className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-primary"
+            className={`w-full rounded-lg border border-slate-200 px-4 py-3 text-slate-900 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-primary ${
+              isInvitationFlow ? "bg-slate-50" : "bg-white"
+            }`}
             placeholder="name@company.com"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            readOnly={isInvitationFlow}
             disabled={step !== "request" && step !== "verify"}
           />
         </div>
