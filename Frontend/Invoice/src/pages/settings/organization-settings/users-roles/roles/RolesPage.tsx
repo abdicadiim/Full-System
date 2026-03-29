@@ -44,8 +44,6 @@ export default function RolesPage() {
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 });
   const buttonRefs = useRef({});
   const hasFetchedRef = useRef(false);
-  const currentUser = getCurrentUser();
-  const canManageRoles = ["owner", "admin"].includes(String(currentUser?.role || "").toLowerCase());
 
   // Fetch roles from backend
   const fetchRoles = useCallback(async (showLoading = true) => {
