@@ -562,14 +562,16 @@ export default function AddonDetailPage() {
                 ) : null}
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => navigate("/products/addons/new")}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white transition-all hover:brightness-110"
-                  style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
-                  title="New"
-                >
-                  <Plus size={16} />
-                </button>
+                {canCreateAddon ? (
+                  <button
+                    onClick={() => navigate("/products/addons/new")}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white transition-all hover:brightness-110"
+                    style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
+                    title="New"
+                  >
+                    <Plus size={16} />
+                  </button>
+                ) : null}
                 <div className="relative" ref={sidebarMenuRef}>
                   <button
                     type="button"
@@ -580,17 +582,19 @@ export default function AddonDetailPage() {
                   </button>
                   {isSidebarMenuOpen ? (
                     <div className="absolute right-0 top-full z-[180] mt-1 w-44 rounded-lg border border-[#d7dce8] bg-white py-1 shadow-xl">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsSidebarMenuOpen(false);
-                          navigate("/products/addons/import");
-                        }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-sm text-[#475569] hover:bg-[#f8fafc]"
-                      >
-                        <Upload size={14} className="text-[#1b5e6a]" />
-                        Import Addons
-                      </button>
+                      {canCreateAddon ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsSidebarMenuOpen(false);
+                            navigate("/products/addons/import");
+                          }}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-sm text-[#475569] hover:bg-[#f8fafc]"
+                        >
+                          <Upload size={14} className="text-[#1b5e6a]" />
+                          Import Addons
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         onClick={handleExport}
