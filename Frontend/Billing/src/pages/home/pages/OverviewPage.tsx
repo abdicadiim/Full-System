@@ -6,7 +6,6 @@ import AccessDenied from "../../../components/AccessDenied";
 import { dashboardAPI } from "../../../services/api";
 import { useUser } from "../../../lib/auth/UserContext";
 import { useSettings } from "../../../lib/settings/SettingsContext";
-import { useCurrency } from "../../../hooks/useCurrency";
 import { usePermissions } from "../../../hooks/usePermissions";
 
 type MetricLegendItem = {
@@ -529,14 +528,13 @@ function DashboardHero({ baseCurrencyCode }: { baseCurrencyCode?: string } = {})
   const [pageRange, setPageRange] = useState("Last 12 months");
   const { user } = useUser();
   const { settings } = useSettings();
-  const { baseCurrency } = useCurrency();
 
   const displayName = user?.name || "User";
   const displayEmail = user?.email || "";
   const avatarSrc = String(user?.photoUrl || "").trim();
   const organizationName =
     settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "Organization";
-  const resolvedCurrencyCode = String(baseCurrencyCode || baseCurrency?.code || "").trim().toUpperCase();
+  const resolvedCurrencyCode = String(baseCurrencyCode || "").trim().toUpperCase();
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -617,7 +615,6 @@ function DashboardHero({ baseCurrencyCode }: { baseCurrencyCode?: string } = {})
 
 export default function OverviewPage() {
   const { loading: permissionsLoading, canView } = usePermissions();
-  const { baseCurrency } = useCurrency();
   const canViewDashboard = canView("dashboard", "View Dashboard");
   const canViewProjects = canView("dashboard", "Projects");
   const canViewSalesAndExpenses = canView("dashboard", "Sales and Expenses");
@@ -665,7 +662,7 @@ export default function OverviewPage() {
   if (permissionsLoading) {
     return (
       <div className="mr-auto w-full max-w-[1500px] space-y-4 px-4 py-4 pr-7 md:px-5 md:pr-10 xl:pr-16 2xl:pr-20">
-        <DashboardHero baseCurrencyCode={baseCurrency?.code} />
+        <DashboardHero />
         <Card className="border-slate-200 p-8 text-sm text-slate-500">Checking dashboard permissions...</Card>
       </div>
     );
@@ -683,8 +680,7 @@ export default function OverviewPage() {
   }
 
   const dashboardData = summary || EMPTY_SUMMARY;
-  const dashboardCurrencyCode =
-    String(dashboardData.organization?.baseCurrency || baseCurrency?.code || "USD").trim().toUpperCase() || "USD";
+  const dashboardCurrencyCode = String(dashboardData.organization?.baseCurrency || "").trim().toUpperCase();
   const receivableBars = dashboardData.metrics.receivables.labels.map((label, index) => ({
     label,
     value: String(dashboardData.metrics.receivables.values[index] || 0),
