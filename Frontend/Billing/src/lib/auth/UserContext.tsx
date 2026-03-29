@@ -33,7 +33,7 @@ type UserContextValue = {
   hasChecked: boolean;
   refresh: () => Promise<void>;
   logout: () => Promise<void>;
-  hasPermission: (_module: string, _action?: string) => boolean;
+  hasPermission: (module?: string, submoduleOrAction?: string, action?: string) => boolean;
 };
 
 const UserContext = createContext<UserContextValue | null>(null);
