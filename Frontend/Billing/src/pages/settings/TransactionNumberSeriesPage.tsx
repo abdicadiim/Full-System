@@ -136,6 +136,53 @@ export default function TransactionNumberSeriesPage() {
     "Sales Receipt"
   ];
 
+  const resolveModuleSeries = (items: any[], moduleName: string) =>
+    items.find((s) => {
+      const m = String(s.module || "").toLowerCase().replace(/s$/, "");
+      const target = moduleName.toLowerCase().replace(/s$/, "");
+      return m === target || m.replace(/\s/g, "-") === target.replace(/\s/g, "-");
+    });
+
+  const renderSeriesLocationPopover = (name: string, firstItem: any) =>
+    activePopoverSeries === name &&
+    popoverCoords &&
+    createPortal(
+      <div
+        className="fixed z-[9999] w-[220px] rounded border border-[#3b82f6] bg-white shadow-xl animate-in fade-in slide-in-from-top-2 duration-200"
+        style={{
+          top: `${popoverCoords.top + 8}px`,
+          left: `${popoverCoords.left}px`,
+          transform: "translateX(-50%)",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="absolute bottom-[100%] left-1/2 h-0 w-0 -translate-x-1/2 border-l-[7px] border-r-[7px] border-b-[7px] border-l-transparent border-r-transparent border-b-[#3b82f6]">
+          <div className="absolute left-[-7px] top-[1px] h-0 w-0 border-l-[7px] border-r-[7px] border-b-[7px] border-l-transparent border-r-transparent border-b-white"></div>
+        </div>
+
+        <div className="p-4 text-left">
+          <h3 className="mb-3 text-[12px] font-bold uppercase tracking-wide text-[#4a5568]">
+            Associated Locations
+          </h3>
+          <div className="space-y-2">
+            {firstItem.locationIds?.length > 0 ? (
+              firstItem.locationIds.map((locId: string) => {
+                const loc = locations.find((l) => (l._id || l.id) === locId);
+                return (
+                  <div key={locId} className="text-[13.5px] font-medium text-gray-700">
+                    {loc ? (loc.locationName || loc.name) : "Head Office"}
+                  </div>
+                );
+              })
+            ) : (
+              <div className="whitespace-nowrap text-[13.5px] font-medium text-gray-700">Head Office</div>
+            )}
+          </div>
+        </div>
+      </div>,
+      document.body
+    );
+
   if (isLoading && series.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -148,7 +195,7 @@ export default function TransactionNumberSeriesPage() {
     return (
       <div className="flex min-h-screen flex-col bg-[#f8f9fb] font-sans">
         <div className="mx-auto w-full max-w-[1800px] p-4 md:p-6 lg:px-8">
-          <div className="overflow-hidden rounded-2xl border border-[#eaedf3] bg-white shadow-sm">
+          <div className="overflow-hidden">
             <div className="p-6 md:p-8">
               <NewTransactionNumberSeriesPage
                 onBack={handleBackFromNewSeries}
@@ -164,7 +211,7 @@ export default function TransactionNumberSeriesPage() {
   return (
     <div className="flex min-h-screen flex-col bg-[#f8f9fb] font-sans">
       <div className="mx-auto w-full max-w-[1800px] p-4 md:p-6 lg:px-8">
-        <div className="overflow-hidden rounded-2xl border border-[#eaedf3] bg-white shadow-sm">
+        <div className="overflow-hidden">
           {/* Top Header */}
           <div className="flex flex-col gap-4 border-b border-[#eff2f7] px-4 py-4 md:px-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
@@ -248,12 +295,7 @@ export default function TransactionNumberSeriesPage() {
                         </div>
                       </td>
                       {displayModules.map((moduleName) => {
-                        // Robust matching for module names (singular vs plural, case insensitive)
-                        const moduleSeries = items.find((s) => {
-                          const m = String(s.module || "").toLowerCase().replace(/s$/, "");
-                          const target = moduleName.toLowerCase().replace(/s$/, "");
-                          return m === target || m.replace(/\s/g, "-") === target.replace(/\s/g, "-");
-                        });
+                        const moduleSeries = resolveModuleSeries(items, moduleName);
 
                         return (
                           <td key={moduleName} className="border-r border-[#eff2f7] px-4 py-4 md:px-5">
@@ -286,48 +328,7 @@ export default function TransactionNumberSeriesPage() {
                         </button>
 
                         {/* Associated Locations Popover - Rendered via Portal */}
-                        {activePopoverSeries === name &&
-                          popoverCoords &&
-                          createPortal(
-                            <div
-                              className="fixed z-[9999] w-[200px] rounded border border-[#3b82f6] bg-white shadow-xl animate-in fade-in slide-in-from-top-2 duration-200"
-                              style={{
-                                top: `${popoverCoords.top + 8}px`,
-                                left: `${popoverCoords.left}px`,
-                                transform: "translateX(-50%)",
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {/* Triangle Pointer (Top) */}
-                              <div className="absolute bottom-[100%] left-1/2 h-0 w-0 -translate-x-1/2 border-l-[7px] border-r-[7px] border-b-[7px] border-l-transparent border-r-transparent border-b-[#3b82f6]">
-                                {/* Inner triangle to hide the blue border inside */}
-                                <div className="absolute left-[-7px] top-[1px] h-0 w-0 border-l-[7px] border-r-[7px] border-b-[7px] border-l-transparent border-r-transparent border-b-white"></div>
-                              </div>
-
-                              <div className="p-4 text-left">
-                                <h3 className="mb-3 text-[12px] font-bold uppercase tracking-wide text-[#4a5568]">
-                                  ASSOCIATED LOCATIONS
-                                </h3>
-                                <div className="space-y-2">
-                                  {firstItem.locationIds?.length > 0 ? (
-                                    firstItem.locationIds.map((locId: string) => {
-                                      const loc = locations.find((l) => (l._id || l.id) === locId);
-                                      return (
-                                        <div key={locId} className="text-[13.5px] font-medium text-gray-700">
-                                          {loc ? (loc.locationName || loc.name) : "Head Office"}
-                                        </div>
-                                      );
-                                    })
-                                  ) : (
-                                    <div className="whitespace-nowrap text-[13.5px] font-medium text-gray-700">
-                                      Head Office
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </div>,
-                            document.body
-                          )}
+                        {renderSeriesLocationPopover(name, firstItem)}
                       </td>
                     </tr>
                   );
