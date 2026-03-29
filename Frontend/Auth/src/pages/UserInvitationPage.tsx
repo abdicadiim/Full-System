@@ -7,6 +7,7 @@ type InvitationData = {
   id: string;
   name: string;
   email: string;
+  photoUrl?: string;
   organizationName: string;
   role?: string;
   status?: string;
@@ -67,6 +68,7 @@ export default function UserInvitationPage() {
     if (app) next.searchParams.set("app", app);
     next.searchParams.set("email", data?.email || invitation?.email || "");
     next.searchParams.set("name", data?.name || invitation?.name || "");
+    next.searchParams.set("photoUrl", data?.photoUrl || invitation?.photoUrl || "");
     window.location.replace(next.toString());
   };
 
@@ -138,9 +140,24 @@ export default function UserInvitationPage() {
 
                 {step !== "rejected" ? (
                   <div className="rounded-2xl bg-white p-5">
-                    <div className="text-sm font-medium text-slate-500">Invited user</div>
-                    <div className="mt-1 text-lg font-semibold text-slate-900">{invitation?.name || "Invitation recipient"}</div>
-                    <div className="mt-1 text-sm text-slate-600">{invitation?.email || "Email not loaded"}</div>
+                    <div className="flex items-start gap-4">
+                      {invitation?.photoUrl ? (
+                        <img
+                          alt={invitation?.name || "Invitation recipient"}
+                          className="h-14 w-14 rounded-full border border-slate-200 object-cover"
+                          src={invitation.photoUrl}
+                        />
+                      ) : (
+                        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-lg font-bold text-slate-500">
+                          {(invitation?.name || "I").trim().charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium text-slate-500">Invited user</div>
+                        <div className="mt-1 text-lg font-semibold text-slate-900">{invitation?.name || "Invitation recipient"}</div>
+                        <div className="mt-1 text-sm text-slate-600">{invitation?.email || "Email not loaded"}</div>
+                      </div>
+                    </div>
                     <div className="mt-4 text-sm text-slate-600">
                       You were invited by <span className="font-semibold text-slate-900">{invitation?.organizationName || "your organization"}</span>.
                     </div>

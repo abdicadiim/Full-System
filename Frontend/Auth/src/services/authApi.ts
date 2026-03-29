@@ -41,13 +41,13 @@ export const authApi = {
       { email, code, newPassword, name }
     ),
   getUserInvitation: (userId: string, token: string) =>
-    request<{ id: string; name: string; email: string; organizationName: string; role: string }>(
+    request<{ id: string; name: string; email: string; photoUrl?: string; organizationName: string; role: string }>(
       `/public/users/invitations/${encodeURIComponent(userId)}?token=${encodeURIComponent(token)}`,
       undefined,
       "GET"
     ),
   acceptUserInvitation: (userId: string, token: string) =>
-    request<{ id: string; name: string; email: string; organizationName: string; role: string }>(
+    request<{ id: string; name: string; email: string; photoUrl?: string; organizationName: string; role: string }>(
       `/public/users/invitations/${encodeURIComponent(userId)}/accept`,
       { token }
     ),

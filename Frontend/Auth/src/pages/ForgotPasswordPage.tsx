@@ -47,13 +47,16 @@ export default function ForgotPasswordPage() {
   const isInvitationFlow = searchParams.get("invite") === "1";
   const initialEmail = useMemo(() => searchParams.get("email") || "", [searchParams]);
   const initialName = useMemo(() => searchParams.get("name") || "", [searchParams]);
+  const initialPhotoUrl = useMemo(() => searchParams.get("photoUrl") || "", [searchParams]);
   const autoSentInviteCodeRef = useRef(false);
   const [fullName, setFullName] = useState(initialName);
+  const [photoUrl, setPhotoUrl] = useState(initialPhotoUrl);
   const loginSearch = useMemo(() => {
     const params = new URLSearchParams(search);
     params.delete("invite");
     params.delete("email");
     params.delete("name");
+    params.delete("photoUrl");
     const query = params.toString();
     return query ? `?${query}` : "";
   }, [search]);
@@ -69,6 +72,11 @@ export default function ForgotPasswordPage() {
     if (!isInvitationFlow || !initialName || fullName) return;
     setFullName(initialName);
   }, [fullName, initialName, isInvitationFlow]);
+
+  useEffect(() => {
+    if (!isInvitationFlow || !initialPhotoUrl || photoUrl) return;
+    setPhotoUrl(initialPhotoUrl);
+  }, [initialPhotoUrl, isInvitationFlow, photoUrl]);
 
   useEffect(() => {
     if (!codeSent || remainingSeconds <= 0) return;
@@ -201,14 +209,29 @@ export default function ForgotPasswordPage() {
 
       <form className="space-y-5" onSubmit={onSubmit}>
         {isInvitationFlow ? (
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-slate-700">Full Name</label>
-            <input
-              className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-primary"
-              placeholder="Your full name"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-            />
+          <div className="rounded-2xl border border-slate-200 bg-white p-5">
+            <div className="flex items-start gap-4">
+              {photoUrl ? (
+                <img
+                  alt={fullName || "Invited user"}
+                  className="h-14 w-14 rounded-full border border-slate-200 object-cover"
+                  src={photoUrl}
+                />
+              ) : (
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-lg font-bold text-slate-500">
+                  {(fullName || email || "I").trim().charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <label className="mb-2 block text-sm font-semibold text-slate-700">Full Name</label>
+                <input
+                  className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-primary"
+                  placeholder="Your full name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                />
+              </div>
+            </div>
           </div>
         ) : null}
 
