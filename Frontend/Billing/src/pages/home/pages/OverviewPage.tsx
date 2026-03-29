@@ -3,7 +3,7 @@ import { FileText } from "lucide-react";
 import Card from "../../../components/ui/Card";
 import { RangeSelect } from "../../../components/dashboard/parts/SectionBits";
 import AccessDenied from "../../../components/AccessDenied";
-import { dashboardAPI } from "../../../services/api";
+import { dashboardAPI, settingsAPI } from "../../../services/api";
 import { useUser } from "../../../lib/auth/UserContext";
 import { useSettings } from "../../../lib/settings/SettingsContext";
 import { usePermissions } from "../../../hooks/usePermissions";
@@ -534,7 +534,7 @@ function DashboardHero({ baseCurrencyCode }: { baseCurrencyCode?: string } = {})
   const avatarSrc = String(user?.photoUrl || "").trim();
   const organizationName =
     settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "Organization";
-  const resolvedCurrencyCode = String(settings?.general?.baseCurrency || baseCurrencyCode || "").trim().toUpperCase();
+  const resolvedCurrencyCode = String(baseCurrencyCode || "").trim().toUpperCase();
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -623,6 +623,7 @@ export default function OverviewPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [organizationBaseCurrency, setOrganizationBaseCurrency] = useState<string>("");
 
   useEffect(() => {
     if (permissionsLoading) return;
@@ -660,6 +661,30 @@ export default function OverviewPage() {
     };
   }, [permissionsLoading, canViewDashboard]);
 
+  useEffect(() => {
+    if (permissionsLoading || !canViewDashboard) return;
+
+    let cancelled = false;
+    const loadOrganizationProfile = async () => {
+      try {
+        const response = await settingsAPI.getOrganizationProfile();
+        if (cancelled) return;
+        if (response?.success && response.data) {
+          const rawCurrency = String((response.data as any)?.baseCurrency || "").trim().toUpperCase();
+          setOrganizationBaseCurrency(rawCurrency);
+        }
+      } catch {
+        if (!cancelled) setOrganizationBaseCurrency("");
+      }
+    };
+
+    void loadOrganizationProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [permissionsLoading, canViewDashboard]);
+
   if (permissionsLoading) {
     return (
       <div className="mr-auto w-full max-w-[1500px] space-y-4 px-4 py-4 pr-7 md:px-5 md:pr-10 xl:pr-16 2xl:pr-20">
@@ -681,8 +706,7 @@ export default function OverviewPage() {
   }
 
   const dashboardData = summary || EMPTY_SUMMARY;
-  const dashboardCurrencyCode =
-    String(dashboardData.organization?.baseCurrency || settings?.general?.baseCurrency || "").trim().toUpperCase();
+  const dashboardCurrencyCode = String(organizationBaseCurrency || dashboardData.organization?.baseCurrency || "").trim().toUpperCase();
   const receivableBars = dashboardData.metrics.receivables.labels.map((label, index) => ({
     label,
     value: String(dashboardData.metrics.receivables.values[index] || 0),
