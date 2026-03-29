@@ -127,12 +127,9 @@ export const getDashboardSummary: express.RequestHandler = async (req, res) => {
   const invoicePayments = new Map<string, number>();
   for (const payment of payments || []) {
     const amount = asNumber((payment as any)?.amount, 0);
-    const keys = [payment?._id, payment?.invoiceId, payment?.invoiceNumber]
-      .map((entry) => String(entry || "").trim())
-      .filter(Boolean);
-    for (const key of keys) {
-      invoicePayments.set(key, (invoicePayments.get(key) || 0) + amount);
-    }
+    const key = String((payment as any)?.invoiceId || (payment as any)?.invoiceNumber || "").trim();
+    if (!key) continue;
+    invoicePayments.set(key, (invoicePayments.get(key) || 0) + amount);
   }
 
   const openInvoices = (invoices || []).filter(isOpenInvoice);
@@ -408,4 +405,3 @@ export const getDashboardSummary: express.RequestHandler = async (req, res) => {
 
   return res.json({ success: true, data: responseData });
 };
-
