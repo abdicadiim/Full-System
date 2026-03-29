@@ -111,7 +111,7 @@ export default function UserInvitationPage() {
   return (
     <div className="min-h-screen bg-white px-4 py-10 font-display text-slate-900 sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-2xl flex-col items-center pt-2 sm:pt-6">
-        <div className="w-full max-w-xl rounded-2xl bg-white p-6 sm:p-8">
+        <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.06)] sm:p-8">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-3xl font-black tracking-tight text-slate-900 sm:text-[2.2rem]">
