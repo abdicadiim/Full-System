@@ -104,8 +104,14 @@ const checkLeafAccess = (leaf: any, action: string) => {
   return false;
 };
 
-const checkLeafSection = (section: Record<string, any>, submodule: string | undefined, action: string) => {
-  const entries = Object.entries(section || {}).filter(([key]) => key !== "fullReportsAccess");
+const checkLeafSection = (
+  section: Record<string, any>,
+  submodule: string | undefined,
+  action: string,
+  ignoreKeys: string[] = []
+) => {
+  const ignored = new Set(["fullReportsAccess", ...ignoreKeys]);
+  const entries = Object.entries(section || {}).filter(([key]) => !ignored.has(key));
   if (submodule) {
     const target = compact(submodule);
     const match = entries.find(([key, value]) => compact(key) === target || compact((value as any)?.label) === target);
@@ -230,7 +236,7 @@ const customRoleAllows = (permissions: PermissionTree, moduleName: string, submo
     }
 
     if (typeof section === "object") {
-      if (checkLeafSection(section, submodule, normalizedAction)) return true;
+      if (checkLeafSection(section, submodule, normalizedAction, alias === "timesheets" ? ["noExpenses"] : [])) return true;
       continue;
     }
 
