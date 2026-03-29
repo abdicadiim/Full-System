@@ -410,13 +410,15 @@ export default function PriceListPage() {
 	                                </div>
 	                            </div>
 	                            <div className="flex items-center gap-3 mr-4 py-3">
-	                                <button
-	                                    onClick={openNewPriceList}
-	                                    className="cursor-pointer transition-all text-white px-3 sm:px-4 py-1.5 rounded-lg border-[#0D4A52] border-b-[4px] hover:brightness-110 hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:brightness-90 active:translate-y-[2px] text-sm font-semibold shadow-sm flex items-center gap-1"
-	                                    style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
-	                                >
-	                                    <Plus size={16} /> <span>New</span>
-	                                </button>
+	                                {canCreatePriceList ? (
+	                                    <button
+	                                        onClick={openNewPriceList}
+	                                        className="cursor-pointer transition-all text-white px-3 sm:px-4 py-1.5 rounded-lg border-[#0D4A52] border-b-[4px] hover:brightness-110 hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:brightness-90 active:translate-y-[2px] text-sm font-semibold shadow-sm flex items-center gap-1"
+	                                        style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
+	                                    >
+	                                        <Plus size={16} /> <span>New</span>
+	                                    </button>
+	                                ) : null}
 	                                <div className="relative" ref={moreRef}>
 	                                    <button
 	                                        onClick={() =>
