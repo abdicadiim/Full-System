@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import {
   AUTH_USER_UPDATED_EVENT,
+  AUTH_USER_REFRESH_EVENT,
   clearLogoutRequested,
   getToken,
   isLogoutRequested,
@@ -147,11 +148,13 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     };
     window.addEventListener("storage", syncFromStorage);
     window.addEventListener(AUTH_USER_UPDATED_EVENT, syncFromStorage as EventListener);
+    window.addEventListener(AUTH_USER_REFRESH_EVENT, refresh as EventListener);
     return () => {
       window.removeEventListener("storage", syncFromStorage);
       window.removeEventListener(AUTH_USER_UPDATED_EVENT, syncFromStorage as EventListener);
+      window.removeEventListener(AUTH_USER_REFRESH_EVENT, refresh as EventListener);
     };
-  }, []);
+  }, [refresh]);
 
   const logout = useCallback(async () => {
     await serviceLogout();

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { HelpCircle, ChevronRight, ChevronDown, AlertCircle, Lock } from "lucide-react";
 import { rolesAPI } from "../../../../../../services/api";
+import { AUTH_USER_REFRESH_EVENT } from "../../../../../../services/auth";
 
 export default function NewRolePage() {
   const navigate = useNavigate();
@@ -702,6 +703,7 @@ export default function NewRolePage() {
                 : await rolesAPI.create(roleData);
 
               if (response && response.success) {
+                window.dispatchEvent(new Event(AUTH_USER_REFRESH_EVENT));
                 navigate("/settings/roles");
               } else {
                 setError((response as any)?.message || "Failed to save role");
