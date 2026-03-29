@@ -2348,6 +2348,10 @@ export const priceListsAPI = {
   delete: (id: string) => request({ method: "DELETE", path: `/price-lists/${id}` }),
 };
 
+export const dashboardAPI = {
+  getSummary: () => request({ path: "/dashboard/summary" }),
+};
+
 export default {
   API_BASE_URL,
   apiRequest,
@@ -2385,6 +2389,7 @@ export default {
   plansAPI,
   addonsAPI,
   priceListsAPI,
+  dashboardAPI,
   emailTemplatesAPI,
 
   senderEmailsAPI,

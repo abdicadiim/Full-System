@@ -6,6 +6,8 @@ import MetricsPage from "./pages/MetricsPage";
 import SubscriptionsPage from "./pages/SubscriptionsPage";
 import FinancePage from "./pages/FinancePage";
 import ProjectsPage from "./pages/ProjectsPage";
+import { usePermissions } from "../../hooks/usePermissions";
+import AccessDenied from "../../components/AccessDenied";
 
 const Tab = ({ to, children }) => (
   <NavLink
@@ -24,13 +26,29 @@ const Tab = ({ to, children }) => (
 );
 
 export default function DashboardRoutes() {
+  const { loading, canView } = usePermissions();
+  const canViewProjects = canView("dashboard", "Projects");
+
+  if (loading) {
+    return <div className="p-6 text-sm text-slate-500">Loading dashboard permissions...</div>;
+  }
+
+  const ProjectsRoute = canViewProjects
+    ? ProjectsPage
+    : () => (
+        <AccessDenied
+          title="Projects access required"
+          message="Your role does not include permission to view the dashboard projects page."
+        />
+      );
+
   return (
     <Routes>
       <Route index element={<OverviewPage />} />
       <Route path="metrics" element={<MetricsPage />} />
       <Route path="subscriptions" element={<SubscriptionsPage />} />
       <Route path="finance" element={<FinancePage />} />
-      <Route path="projects" element={<ProjectsPage />} />
+      <Route path="projects" element={<ProjectsRoute />} />
     </Routes>
   );
 }
