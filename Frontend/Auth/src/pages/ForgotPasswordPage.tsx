@@ -25,6 +25,8 @@ const persistSession = (result: any) => {
   }
 };
 
+const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+
 type Step = "request" | "verify" | "reset";
 
 export default function ForgotPasswordPage() {
@@ -77,6 +79,17 @@ export default function ForgotPasswordPage() {
     setPhotoUrl(initialPhotoUrl);
   }, [initialPhotoUrl, isInvitationFlow, photoUrl]);
 
+  const handleEmailChange = (value: string) => {
+    setEmail(value);
+    if (step !== "request" && codeSent) {
+      setCode("");
+      setCodeSent(false);
+      setRemainingSeconds(0);
+      setStep("request");
+      setError(null);
+    }
+  };
+
   useEffect(() => {
     if (!codeSent || remainingSeconds <= 0) return;
 
@@ -97,6 +110,10 @@ export default function ForgotPasswordPage() {
     const nextEmail = email.trim();
     if (!nextEmail) {
       setError("Please enter your email address.");
+      return;
+    }
+    if (!isValidEmail(nextEmail)) {
+      setError("Please enter a valid email address.");
       return;
     }
     setLoading(true);
@@ -128,6 +145,10 @@ export default function ForgotPasswordPage() {
       setError("Please enter your email address and reset code.");
       return;
     }
+    if (!isValidEmail(nextEmail)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -151,6 +172,10 @@ export default function ForgotPasswordPage() {
     const nextCode = code.trim();
     if (!nextEmail || !nextCode || !newPassword) {
       setError("Please enter your email, code, and new password.");
+      return;
+    }
+    if (!isValidEmail(nextEmail)) {
+      setError("Please enter a valid email address.");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -236,8 +261,7 @@ export default function ForgotPasswordPage() {
             placeholder="name@company.com"
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            readOnly={isInvitationFlow}
+            onChange={(e) => handleEmailChange(e.target.value)}
             disabled={step !== "request" && step !== "verify"}
           />
         </div>
