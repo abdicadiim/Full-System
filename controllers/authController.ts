@@ -543,14 +543,16 @@ export const resetPasswordWithCode = async (req: express.Request, res: express.R
   const sessionVersion = Number((user as any).sessionVersion || 0);
   setSessionCookie(res, String(user._id), sessionVersion);
   const token = issueSessionToken(String(user._id), sessionVersion);
+  const updated = await User.findById(user._id).lean();
   return res.json({
     success: true,
     message: "Password updated successfully.",
     data: {
-      id: String(user._id),
-      name: String((user as any).name || ""),
-      email: String(user.email || ""),
-      organizationId: String(user.organizationId),
+      id: String(updated?._id || user._id),
+      name: String((updated as any)?.name || nextName || user.name || ""),
+      email: String((updated as any)?.email || user.email || ""),
+      organizationId: String((updated as any)?.organizationId || user.organizationId),
+      photoUrl: String((updated as any)?.photoUrl || ""),
     },
     token,
   });
