@@ -534,7 +534,7 @@ function DashboardHero({ baseCurrencyCode }: { baseCurrencyCode?: string } = {})
   const avatarSrc = String(user?.photoUrl || "").trim();
   const organizationName =
     settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "Organization";
-  const resolvedCurrencyCode = String(baseCurrencyCode || settings?.general?.baseCurrency || "").trim().toUpperCase();
+  const resolvedCurrencyCode = String(settings?.general?.baseCurrency || baseCurrencyCode || "").trim().toUpperCase();
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
