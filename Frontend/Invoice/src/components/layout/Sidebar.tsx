@@ -487,6 +487,12 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
   const visibleSections = React.useMemo(() => {
     if (!user) return [];
 
+    const hasViewPermissionForPath = (path: string) => {
+      const permissionContext = getPermissionContextForPath(path);
+      if (!permissionContext) return true;
+      return hasPermission(permissionContext.module, permissionContext.submodule, "view");
+    };
+
     return sections.map(section => ({
       ...section,
       items: section.items.filter(item => {
@@ -505,9 +511,13 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
           return true;
         }
 
-        // Check 'view' permission using the context helper
-        // Only show menu item if user has view permission for this module
-        return hasPermission(moduleKey, getPermissionContextForPath(item.to)?.submodule, 'view');
+        const parentHasAccess = hasPermission(moduleKey, getPermissionContextForPath(item.to)?.submodule, 'view');
+        if (!subMenus[item.to]) {
+          return parentHasAccess;
+        }
+
+        const childHasAccess = subMenus[item.to].some((sub) => hasViewPermissionForPath(sub.to));
+        return parentHasAccess || childHasAccess;
       }).map(item => {
         // Dynamic link replacements
         if (item.to === '/subjects' && user?.role === 'Student' && user?.studentClass) {
