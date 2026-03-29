@@ -22,18 +22,39 @@ export default function AllSettings() {
 
   const canSeeOrgItem = (label: string) => {
     if (!label) return false;
-    if (label === "Organization Profile" || label === "Branding" || label === "Custom Domain" || label === "Opening Balances") {
+    if (label === "Profile" || label === "Branding" || label === "Custom Domain") {
       return hasPermission("settings", "Update organization profile");
     }
     if (label === "Users") return hasPermission("settings", "Users");
     if (label === "Roles") return hasPermission("settings", "Roles");
     if (label === "Taxes") return hasPermission("settings", "Taxes");
     if (label === "Customer Portal" || label === "Vendor Portal") return hasSettingsAccess;
-    if (label === "General" || label === "Currencies" || label === "Reminders") {
-      return hasPermission("settings", label);
+    if (label === "General") {
+      return hasPermission("settings", "General preferences");
     }
-    if (label === "Transaction Number Series" || label === "PDF Templates" || label === "Email Notifications" || label === "Reporting Tags" || label === "Web Tabs") {
-      return hasPermission("settings", label === "PDF Templates" ? "Templates" : label);
+    if (label === "Currencies") {
+      return hasPermission("settings", "Currencies");
+    }
+    if (label === "Opening Balances") {
+      return hasSettingsAccess;
+    }
+    if (label === "Reminders") {
+      return hasPermission("settings", "Reminders");
+    }
+    if (label === "Transaction Number Series") {
+      return hasPermission("settings", "Manage Integration") || hasSettingsAccess;
+    }
+    if (label === "PDF Templates") {
+      return hasPermission("settings", "Templates");
+    }
+    if (label === "Email Notifications") {
+      return hasPermission("settings", "Email Notifications");
+    }
+    if (label === "Reporting Tags") {
+      return hasPermission("settings", "Reporting Tags");
+    }
+    if (label === "Web Tabs") {
+      return hasPermission("settings", "Manage Integration");
     }
     if (label === "Workflow Rules" || label === "Workflow Actions" || label === "Workflow Logs" || label === "Schedules") {
       return hasPermission("settings", "Automation");
