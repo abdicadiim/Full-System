@@ -488,6 +488,10 @@ export default function PlansPage() {
     const currentRows = tab === "plans" ? displayedPlans : displayedProducts;
 
     const handleNew = () => {
+        if (!canCreateCurrent) {
+            toast.error("You do not have permission to create this item.");
+            return;
+        }
         if (tab === "products") {
             setNewProductModalOpen(true);
             return;
@@ -518,6 +522,13 @@ export default function PlansPage() {
     };
 
     const handleImport = (entity: ImportEntity, rows: Record<string, string>[]) => {
+        if (!canCreateCurrent) {
+            toast.error("You do not have permission to create this item.");
+            setImportEntity(null);
+            setMoreDropdownOpen(false);
+            setSortSubMenuOpen(false);
+            return;
+        }
         if (entity === "plans") {
             void (async () => {
                 try {
@@ -591,6 +602,10 @@ export default function PlansPage() {
     };
 
     const handleBulkMarkStatus = (status: string) => {
+        if (!canEditCurrent) {
+            toast.error("You do not have permission to update this item.");
+            return;
+        }
         if (tab === "products") {
             void (async () => {
                 try {
@@ -622,12 +637,21 @@ export default function PlansPage() {
     };
 
     const handleBulkDelete = () => {
+        if (!canDeleteCurrent) {
+            toast.error("You do not have permission to delete this item.");
+            return;
+        }
         if (!selectedIds.length) return;
         setDeleteModal({ entityType: tab, ids: [...selectedIds] });
     };
 
     const confirmBulkDelete = async () => {
         if (!deleteModal) return;
+        if (!canDeleteCurrent) {
+            toast.error("You do not have permission to delete this item.");
+            setDeleteModal(null);
+            return;
+        }
 
         try {
             if (deleteModal.entityType === "products") {
@@ -788,6 +812,9 @@ export default function PlansPage() {
                         onMarkInactive={() => handleBulkMarkStatus("Inactive")}
                         onDelete={handleBulkDelete}
                         onBulkUpdate={() => setBulkUpdateOpen(true)}
+                        canBulkUpdate={canEditCurrent}
+                        canMarkStatus={canEditCurrent}
+                        canDelete={canDeleteCurrent}
                     />
                 </div>
             ) : (
@@ -866,13 +893,15 @@ export default function PlansPage() {
 
                     <div className="flex flex-wrap items-center gap-3 sm:gap-2 mr-4">
                         <div className="relative" ref={newRef}>
-                            <button
-                                onClick={handleNew}
-                                className="h-[38px] min-w-[100px] cursor-pointer transition-all text-white px-5 rounded-lg border-[#0D4A52] border-b-[4px] hover:brightness-110 hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:translate-y-[1px] text-sm font-semibold shadow-sm flex items-center justify-center gap-2"
-                                style={{ background: "linear-gradient(180deg, #156372 0%, #0D4A52 100%)" }}
-                            >
-                                <Plus size={16} /> <span className="hidden sm:inline">New</span>
-                            </button>
+                            {canCreateCurrent ? (
+                                <button
+                                    onClick={handleNew}
+                                    className="h-[38px] min-w-[100px] cursor-pointer transition-all text-white px-5 rounded-lg border-[#0D4A52] border-b-[4px] hover:brightness-110 hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:translate-y-[1px] text-sm font-semibold shadow-sm flex items-center justify-center gap-2"
+                                    style={{ background: "linear-gradient(180deg, #156372 0%, #0D4A52 100%)" }}
+                                >
+                                    <Plus size={16} /> <span className="hidden sm:inline">New</span>
+                                </button>
+                            ) : null}
                         </div>
                         <div className="relative" ref={moreRef}>
                             <button
@@ -884,16 +913,18 @@ export default function PlansPage() {
                             {moreDropdownOpen && (
                                 tab === "products" ? (
                                     <div className="absolute top-full right-0 mt-2 w-60 bg-white border border-gray-100 rounded-lg shadow-xl z-[110] py-2 animate-in fade-in slide-in-from-top-1 duration-200">
-                                        <button
-                                            onClick={() => {
-                                                setMoreDropdownOpen(false);
-                                                navigate("/products/products/import?tab=products");
-                                            }}
-                                            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
-                                        >
-                                            <Upload size={16} className="text-teal-600 group-hover:text-white" />
-                                            Import Products
-                                        </button>
+                                        {canCreateCurrent ? (
+                                            <button
+                                                onClick={() => {
+                                                    setMoreDropdownOpen(false);
+                                                    navigate("/products/products/import?tab=products");
+                                                }}
+                                                className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
+                                            >
+                                                <Upload size={16} className="text-teal-600 group-hover:text-white" />
+                                                Import Products
+                                            </button>
+                                        ) : null}
                                         <button
                                             onClick={handleExport}
                                             className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
@@ -904,6 +935,20 @@ export default function PlansPage() {
                                     </div>
                                 ) : (
                                     <div className="absolute top-full right-0 mt-2 w-60 bg-white border border-gray-100 rounded-lg shadow-xl z-[110] py-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                                        {canCreateCurrent ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setMoreDropdownOpen(false);
+                                                    setSortSubMenuOpen(false);
+                                                    setImportEntity("plans");
+                                                }}
+                                                className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
+                                            >
+                                                <Upload size={16} className="text-teal-600 group-hover:text-white" />
+                                                Import Plans
+                                            </button>
+                                        ) : null}
                                         <div className="relative">
                                             <button
                                                 onClick={() => setSortSubMenuOpen((prev) => !prev)}
