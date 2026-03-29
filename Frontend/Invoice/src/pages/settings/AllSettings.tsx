@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Search, X, Building2, Users, Receipt, Settings as SettingsIcon, Palette, Zap, Package, CreditCard, ShoppingCart, ShoppingBag, Puzzle, Plug, Code } from "lucide-react";
 import { useUser } from "../../lib/auth/UserContext";
 import { useSettings } from "../../lib/settings/SettingsContext";
+import { usePermissions } from "../../hooks/usePermissions";
 
 export default function AllSettings() {
   const navigate = useNavigate();
@@ -11,9 +12,67 @@ export default function AllSettings() {
   const [selectedCategory, setSelectedCategory] = useState(null);
 
   const { user } = useUser();
+  const { hasPermission } = usePermissions();
   const { settings } = useSettings();
   const permissions = user?.permissions;
   const organizationName = String(settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "").trim() || "Organization";
+  const hasSettingsAccess = hasPermission("settings");
+
+  const getItemLabel = (item: any) => (typeof item === "string" ? item : item?.label || "");
+
+  const canSeeOrgItem = (label: string) => {
+    if (!label) return false;
+    if (label === "Organization Profile" || label === "Branding" || label === "Custom Domain" || label === "Opening Balances") {
+      return hasPermission("settings", "Update organization profile");
+    }
+    if (label === "Users") return hasPermission("settings", "Users");
+    if (label === "Roles") return hasPermission("settings", "Roles");
+    if (label === "Taxes") return hasPermission("settings", "Taxes");
+    if (label === "Customer Portal" || label === "Vendor Portal") return hasSettingsAccess;
+    if (label === "General" || label === "Currencies" || label === "Reminders") {
+      return hasPermission("settings", label);
+    }
+    if (label === "Transaction Number Series" || label === "PDF Templates" || label === "Email Notifications" || label === "Reporting Tags" || label === "Web Tabs") {
+      return hasPermission("settings", label === "PDF Templates" ? "Templates" : label);
+    }
+    if (label === "Workflow Rules" || label === "Workflow Actions" || label === "Workflow Logs" || label === "Schedules") {
+      return hasPermission("settings", "Automation");
+    }
+    return hasSettingsAccess;
+  };
+
+  const canSeeModuleItem = (sectionTitle: string, label: string) => {
+    if (!label) return false;
+    const normalizedSection = String(sectionTitle || "").toLowerCase();
+    const normalizedLabel = String(label || "").toLowerCase();
+
+    if (normalizedSection === "general") {
+      if (normalizedLabel === "customers and vendors" || normalizedLabel === "customers") return hasPermission("customers", "Customers");
+      if (normalizedLabel === "items" || normalizedLabel === "inventory adjustments") return hasPermission("items", "Item");
+      if (normalizedLabel === "accountant") return hasPermission("accountant");
+      if (normalizedLabel === "projects" || normalizedLabel === "timesheet") return hasPermission("timesheets", "Projects");
+      return hasSettingsAccess;
+    }
+
+    if (normalizedSection === "inventory") {
+      return hasPermission("items", "Item");
+    }
+
+    if (normalizedSection === "sales") {
+      if (normalizedLabel === "customers") return hasPermission("customers", "Customers");
+      if (normalizedLabel === "recurring invoices") return hasPermission("subscriptions");
+      return hasPermission("sales");
+    }
+
+    if (normalizedSection === "purchases") {
+      if (normalizedLabel === "expenses" || normalizedLabel === "recurring expenses") return hasPermission("expenses", "Expenses");
+      return hasPermission("purchases");
+    }
+
+    return hasSettingsAccess;
+  };
+
+  const canSeeExtensionItem = () => hasSettingsAccess;
 
   // Helper to check permissions
   // Return true if access allowed
@@ -216,9 +275,30 @@ export default function AllSettings() {
     });
   };
 
-  const filteredOrgSettings = filterItems(organizationSettings, searchQuery);
-  const filteredModuleSettings = filterItems(moduleSettings, searchQuery);
-  const filteredExtensionSettings = filterItems(extensionSettings, searchQuery);
+  const orgSettingsVisible = organizationSettings
+    .map((setting) => ({
+      ...setting,
+      items: setting.items.filter((item: any) => canSeeOrgItem(getItemLabel(item))),
+    }))
+    .filter((setting) => setting.items.length > 0);
+
+  const moduleSettingsVisible = moduleSettings
+    .map((setting) => ({
+      ...setting,
+      items: setting.items.filter((item: any) => canSeeModuleItem(setting.title, getItemLabel(item))),
+    }))
+    .filter((setting) => setting.items.length > 0);
+
+  const extensionSettingsVisible = extensionSettings
+    .map((setting) => ({
+      ...setting,
+      items: setting.items.filter(() => canSeeExtensionItem()),
+    }))
+    .filter((setting) => setting.items.length > 0);
+
+  const filteredOrgSettings = filterItems(orgSettingsVisible, searchQuery);
+  const filteredModuleSettings = filterItems(moduleSettingsVisible, searchQuery);
+  const filteredExtensionSettings = filterItems(extensionSettingsVisible, searchQuery);
 
   // Hide sidebar when on settings page
   useEffect(() => {
