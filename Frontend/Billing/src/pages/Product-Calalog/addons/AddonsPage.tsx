@@ -6,6 +6,7 @@ import PlansCustomizeColumnsModal, { ColumnConfig } from "../plans/components/Pl
 import type { AddonRecord } from "./types";
 import { addonsAPI } from "../../../services/api";
 import { useCurrency } from "../../../hooks/useCurrency";
+import { usePermissions } from "../../../hooks/usePermissions";
 import Skeleton from "../../../components/ui/Skeleton";
 
 const ADDONS_COLUMNS_STORAGE_KEY = "taban_addons_columns_v1";
@@ -85,6 +86,7 @@ const loadAddonColumns = () => {
 export default function AddonsPage() {
   const navigate = useNavigate();
   const { code: baseCurrencyCode } = useCurrency();
+  const { canCreate, canEdit, canDelete } = usePermissions();
   const [addons, setAddons] = useState<AddonRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -165,6 +167,9 @@ export default function AddonsPage() {
     [bulkAccountSearch]
   );
   const allSelected = rows.length > 0 && selectedIds.length === rows.length;
+  const canCreateAddon = canCreate("products", "Addon");
+  const canEditAddon = canEdit("products", "Addon");
+  const canDeleteAddon = canDelete("products", "Addon");
 
   const setColumnWidth = (columnKey: string, width: number) => {
     const safeWidth = clampAddonColumnWidth(width, 160);
