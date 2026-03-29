@@ -69,6 +69,7 @@ export default function AddonDetailPage() {
   const canDeleteAddon = canDelete("products", "Addon");
   const canCreatePlan = canCreate("products", "Plan");
   const canCreatePriceList = canCreate("products", "Price List");
+  const showAddonActions = canEditAddon || canDeleteAddon || canCreateAddon;
 
   const loadAddons = async () => {
     try {
@@ -675,41 +676,50 @@ export default function AddonDetailPage() {
           </div>
 
           <div className="shrink-0 flex items-center gap-5 border-b border-gray-200 bg-white px-4 py-2 text-[13px] text-slate-700">
-            <button onClick={handleEdit} className="inline-flex items-center gap-1.5 hover:text-slate-900">
-              <Pencil size={13} /> Edit
-            </button>
-            <span className="h-4 w-px bg-gray-300" />
-            <button onClick={handleToggleStatus} className="inline-flex items-center gap-1.5 hover:text-slate-900">
-              <CircleDot size={13} /> {statusIsActive ? "Mark as Inactive" : "Mark as Active"}
-            </button>
-            <span className="h-4 w-px bg-gray-300" />
-            <div className="relative" ref={actionsRef}>
-              <button
-                onClick={() => setActionsOpen((prev) => !prev)}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-300 bg-white text-slate-600 hover:bg-slate-50"
-              >
-                <MoreHorizontal size={14} />
-              </button>
-              {actionsOpen && (
-                <div className="absolute left-0 top-full z-[60] mt-2 w-32 rounded-lg border border-gray-200 bg-white p-1.5 shadow-xl">
-                  <button
-                    onClick={handleClone}
-                    className="mb-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
-                  >
-                    <Copy size={14} />
-                    Clone
-                  </button>
-                  <button
-                    onClick={handleDelete}
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                  >
-                    <Trash2 size={14} className="text-red-600" />
-                    Delete
-                  </button>
-                </div>
-              )}
-            </div>
-            <span className="h-4 w-px bg-gray-300" />
+            {canEditAddon ? (
+              <>
+                <button onClick={handleEdit} className="inline-flex items-center gap-1.5 hover:text-slate-900">
+                  <Pencil size={13} /> Edit
+                </button>
+                <span className="h-4 w-px bg-gray-300" />
+                <button onClick={handleToggleStatus} className="inline-flex items-center gap-1.5 hover:text-slate-900">
+                  <CircleDot size={13} /> {statusIsActive ? "Mark as Inactive" : "Mark as Active"}
+                </button>
+                <span className="h-4 w-px bg-gray-300" />
+              </>
+            ) : null}
+            {showAddonActions ? (
+              <div className="relative" ref={actionsRef}>
+                <button
+                  onClick={() => setActionsOpen((prev) => !prev)}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-300 bg-white text-slate-600 hover:bg-slate-50"
+                >
+                  <MoreHorizontal size={14} />
+                </button>
+                {actionsOpen && (
+                  <div className="absolute left-0 top-full z-[60] mt-2 w-32 rounded-lg border border-gray-200 bg-white p-1.5 shadow-xl">
+                    {canCreateAddon ? (
+                      <button
+                        onClick={handleClone}
+                        className="mb-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+                      >
+                        <Copy size={14} />
+                        Clone
+                      </button>
+                    ) : null}
+                    {canDeleteAddon ? (
+                      <button
+                        onClick={handleDelete}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 size={14} className="text-red-600" />
+                        Delete
+                      </button>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
 
           <div className="flex-1 overflow-auto p-6">
@@ -796,22 +806,26 @@ export default function AddonDetailPage() {
                           <div className="flex-1 flex items-center justify-center p-2 bg-white">
                             <img src={addon.imageUrl} alt="Addon" className="max-h-full max-w-full object-contain" />
                           </div>
-                          <div className="flex min-h-[40px] items-center justify-between border-t border-gray-100 px-3 bg-white">
-                            <button onClick={() => fileInputRef.current?.click()} className="text-[14px] text-[#3b82f6] hover:text-[#2563eb]">
-                              Change Image
-                            </button>
-                            <button onClick={handleDeleteImage} className="text-gray-400 hover:text-red-500">
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
+                          {canEditAddon ? (
+                            <div className="flex min-h-[40px] items-center justify-between border-t border-gray-100 px-3 bg-white">
+                              <button onClick={() => fileInputRef.current?.click()} className="text-[14px] text-[#3b82f6] hover:text-[#2563eb]">
+                                Change Image
+                              </button>
+                              <button onClick={handleDeleteImage} className="text-gray-400 hover:text-red-500">
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          ) : null}
                         </div>
                       ) : (
                         <div className="mt-4 flex h-[140px] w-[240px] flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 bg-white text-center text-[#64748b]">
                           <ImageIcon size={34} className="mb-2 text-[#94a3b8]" />
                           <p className="text-[14px]">Drag image(s) here or</p>
-                          <button onClick={() => fileInputRef.current?.click()} className="text-[14px] text-[#3b82f6] hover:text-[#2563eb]">
-                            Browse images
-                          </button>
+                          {canEditAddon ? (
+                            <button onClick={() => fileInputRef.current?.click()} className="text-[14px] text-[#3b82f6] hover:text-[#2563eb]">
+                              Browse images
+                            </button>
+                          ) : null}
                         </div>
                       )}
                     </div>
@@ -845,16 +859,18 @@ export default function AddonDetailPage() {
 
               {activeTab === "plans" && (
                 <div className="mt-4">
-                  <div className="mb-4 flex items-center justify-between">
-                    <p className="text-[28px] text-[#0f172a]">Plans</p>
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/products/plans/new?product=${encodeURIComponent(String(addon.product || ""))}`)}
-                      className="inline-flex items-center gap-1 text-sm text-[#2563eb] hover:text-[#1d4ed8]"
-                    >
-                      <CirclePlus size={13} />
-                      New
-                    </button>
+                <div className="mb-4 flex items-center justify-between">
+                  <p className="text-[28px] text-[#0f172a]">Plans</p>
+                    {canCreatePlan ? (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/products/plans/new?product=${encodeURIComponent(String(addon.product || ""))}`)}
+                        className="inline-flex items-center gap-1 text-sm text-[#2563eb] hover:text-[#1d4ed8]"
+                      >
+                        <CirclePlus size={13} />
+                        New
+                      </button>
+                    ) : null}
                   </div>
                   <div className="overflow-hidden rounded-lg border border-gray-200">
                     <table className="w-full border-collapse text-left">
@@ -931,16 +947,18 @@ export default function AddonDetailPage() {
 
               {activeTab === "priceLists" && (
                 <div className="mt-4">
-                  <div className="mb-4 flex items-center justify-between">
-                    <p className="text-[28px] font-medium text-[#0f172a]">Price Lists</p>
-                    <button
-                      type="button"
-                      onClick={() => navigate("/products/price-lists?new=1")}
-                      className="inline-flex items-center gap-1 text-sm text-[#2563eb] hover:text-[#1d4ed8]"
-                    >
-                      <CirclePlus size={13} />
-                      New
-                    </button>
+                <div className="mb-4 flex items-center justify-between">
+                  <p className="text-[28px] font-medium text-[#0f172a]">Price Lists</p>
+                    {canCreatePriceList ? (
+                      <button
+                        type="button"
+                        onClick={() => navigate("/products/price-lists?new=1")}
+                        className="inline-flex items-center gap-1 text-sm text-[#2563eb] hover:text-[#1d4ed8]"
+                      >
+                        <CirclePlus size={13} />
+                        New
+                      </button>
+                    ) : null}
                   </div>
                   <div className="overflow-hidden rounded-lg border border-gray-200">
                     <table className="w-full border-collapse text-left">
