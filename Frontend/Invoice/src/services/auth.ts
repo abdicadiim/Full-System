@@ -34,11 +34,13 @@ const broadcastUserUpdate = () => {
 
 export const getToken = () => {
   if (typeof localStorage === "undefined") return "";
+  const bridgeToken = readCookie(BRIDGE_TOKEN_COOKIE);
+  if (bridgeToken) return bridgeToken;
   for (const key of TOKEN_KEYS) {
     const val = localStorage.getItem(key);
     if (val) return val;
   }
-  return readCookie(BRIDGE_TOKEN_COOKIE);
+  return "";
 };
 
 export const setToken = (token: string) => {
