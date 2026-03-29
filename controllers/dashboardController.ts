@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { Customer } from "../models/Customer.js";
 import { Expense } from "../models/Expense.js";
 import { Invoice } from "../models/Invoice.js";
+import { Organization } from "../models/Organization.js";
 import { PaymentReceived } from "../models/PaymentReceived.js";
 import { Project } from "../models/Project.js";
 import { Subscription } from "../models/Subscription.js";
@@ -36,6 +37,12 @@ const isActiveSubscription = (row: any) => !["cancelled", "canceled", "inactive"
 const isCancelledSubscription = (row: any) => ["cancelled", "canceled", "inactive", "expired"].includes(normalizeText(row?.status));
 const isBilledTimeEntry = (row: any) => ["billed", "invoiced"].includes(normalizeText(row?.billingStatus));
 const isUnbilledExpense = (row: any) => !["billed", "invoiced", "paid"].includes(normalizeText(row?.status));
+const canViewDashboardProjects = (permissions: unknown) => {
+  if (!permissions || typeof permissions !== "object") return true;
+  const dashboard = (permissions as any).dashboard;
+  if (!dashboard || typeof dashboard !== "object") return false;
+  return Boolean((dashboard as any)["Projects"]);
+};
 
 const subscriptionValue = (row: any) =>
   asNumber(
@@ -101,6 +108,7 @@ const normalizeDashboardRow = (row: any) => (row ? { ...row, id: String(row._id)
 
 export const getDashboardSummary: express.RequestHandler = async (req, res) => {
   const orgId = req.user?.organizationId;
+  const projectAccessAllowed = canViewDashboardProjects(req.user?.permissions);
   if (!orgId) {
     return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
   }
@@ -116,13 +124,14 @@ export const getDashboardSummary: express.RequestHandler = async (req, res) => {
 
   const [customers, projects, invoices, payments, expenses, subscriptions, timeEntries] = await Promise.all([
     Customer.find({ organizationId: orgId }).lean(),
-    Project.find({ organizationId: orgId }).lean(),
+    projectAccessAllowed ? Project.find({ organizationId: orgId }).lean() : Promise.resolve([]),
     Invoice.find({ organizationId: orgId }).lean(),
     PaymentReceived.find({ organizationId: orgId }).lean(),
     Expense.find({ organizationId: orgId }).lean(),
     Subscription.find({ organizationId: orgId }).lean(),
-    TimeEntry.find({ organizationId: orgId }).lean(),
+    projectAccessAllowed ? TimeEntry.find({ organizationId: orgId }).lean() : Promise.resolve([]),
   ]);
+  const organization = await Organization.findById(orgId).lean();
 
   const invoicePayments = new Map<string, number>();
   for (const payment of payments || []) {
@@ -371,7 +380,7 @@ export const getDashboardSummary: express.RequestHandler = async (req, res) => {
       totalReceipts,
       totalExpenses,
       labels: months.map((bucket) => bucket.label),
-      income: netRevenueSeries.map((value, index) => value + expenseSeries[index]),
+      income: netRevenueSeries,
       receipts: receiptSeries,
       expenses: expenseSeries,
     },
@@ -380,25 +389,32 @@ export const getDashboardSummary: express.RequestHandler = async (req, res) => {
       items: topExpenseItems,
     },
     projects: {
-      totalCount: projectStats.length,
-      totalUnbilledMinutes: totalProjectUnbilledMinutes,
-      totalUnbilledHours: formatMinutes(totalProjectUnbilledMinutes),
-      totalUnbilledExpenses: totalProjectUnbilledExpenses,
-      topProject: topProject
-        ? {
-            id: topProject.id,
-            name: topProject.name,
-            customerName: topProject.customerName,
-            unbilledHours: formatMinutes(topProject.unbilledMinutes),
-            unbilledExpenses: topProject.unbilledExpenses,
-            progress: topProject.progress,
-            budgetLabel: topProject.budgetLabel,
-          }
-        : null,
-      rows: projectStats.slice(0, 10).map((row) => ({
-        ...row,
-        unbilledHours: formatMinutes(row.unbilledMinutes),
-      })),
+      totalCount: projectAccessAllowed ? projectStats.length : 0,
+      totalUnbilledMinutes: projectAccessAllowed ? totalProjectUnbilledMinutes : 0,
+      totalUnbilledHours: projectAccessAllowed ? formatMinutes(totalProjectUnbilledMinutes) : "00:00",
+      totalUnbilledExpenses: projectAccessAllowed ? totalProjectUnbilledExpenses : 0,
+      topProject:
+        projectAccessAllowed && topProject
+          ? {
+              id: topProject.id,
+              name: topProject.name,
+              customerName: topProject.customerName,
+              unbilledHours: formatMinutes(topProject.unbilledMinutes),
+              unbilledExpenses: topProject.unbilledExpenses,
+              progress: topProject.progress,
+              budgetLabel: topProject.budgetLabel,
+            }
+          : null,
+      rows: projectAccessAllowed
+        ? projectStats.slice(0, 10).map((row) => ({
+            ...row,
+            unbilledHours: formatMinutes(row.unbilledMinutes),
+          }))
+        : [],
+    },
+    organization: {
+      name: String(organization?.name || "").trim(),
+      baseCurrency: String(organization?.baseCurrency || "").trim(),
     },
     generatedAt: new Date().toISOString(),
   };

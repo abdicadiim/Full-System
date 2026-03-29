@@ -6,6 +6,7 @@ import AccessDenied from "../../../components/AccessDenied";
 import { dashboardAPI } from "../../../services/api";
 import { useUser } from "../../../lib/auth/UserContext";
 import { useSettings } from "../../../lib/settings/SettingsContext";
+import { useCurrency } from "../../../hooks/useCurrency";
 import { usePermissions } from "../../../hooks/usePermissions";
 
 type MetricLegendItem = {
@@ -65,6 +66,10 @@ type DashboardSummary = {
       budgetLabel: string;
     };
   };
+  organization: {
+    name: string;
+    baseCurrency: string;
+  };
 };
 
 const EMPTY_SUMMARY: DashboardSummary = {
@@ -118,10 +123,14 @@ const EMPTY_SUMMARY: DashboardSummary = {
     totalUnbilledExpenses: 0,
     topProject: null,
   },
+  organization: {
+    name: "",
+    baseCurrency: "",
+  },
 };
 
-const formatMoney = (value: number) =>
-  `AMD${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
+const formatMoney = (value: number, currencyCode = "AMD") =>
+  `${currencyCode}${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
     Number.isFinite(value) ? value : 0
   )}`;
 
