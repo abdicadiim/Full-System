@@ -351,6 +351,40 @@ function getModuleKeyForPath(pathname) {
   return null;
 }
 
+const routePermissionContextMap = {
+  "/customers": { module: "customers", submodule: "Customers" },
+  "/sales/customers": { module: "customers", submodule: "Customers" },
+  "/products/items": { module: "items", submodule: "Item" },
+  "/sales/quotes": { module: "sales", submodule: "Quotes" },
+  "/sales/retainer-invoices": { module: "sales", submodule: "Invoices" },
+  "/sales/invoices": { module: "sales", submodule: "Invoices" },
+  "/sales/sales-receipts": { module: "sales", submodule: "Sales Receipt" },
+  "/sales/recurring-invoices": { module: "subscriptions", submodule: "Subscriptions" },
+  "/sales/credit-notes": { module: "sales", submodule: "Credit Notes" },
+  "/payments/payment-links": { module: "payments", submodule: "Payments" },
+  "/payments/payments-received": { module: "payments", submodule: "Payments" },
+  "/expenses": { module: "expenses", submodule: "Expenses" },
+  "/time-tracking/projects": { module: "time-tracking", submodule: "Projects" },
+  "/documents": { module: "documents" },
+  "/reports": { module: "reports" },
+  "/settings": { module: "settings" },
+  "/settings/all-settings": { module: "settings" },
+  "/settings/organization-settings/users-roles/users": { module: "settings", submodule: "Users" },
+  "/settings/organization-settings/users-roles/roles": { module: "settings", submodule: "Roles" },
+};
+
+function getPermissionContextForPath(pathname) {
+  if (!pathname) return null;
+  const sortedRoutes = Object.keys(routePermissionContextMap).sort((a, b) => b.length - a.length);
+  for (const route of sortedRoutes) {
+    if (pathname === route || pathname.startsWith(route + "/")) {
+      return routePermissionContextMap[route];
+    }
+  }
+  const moduleKey = getModuleKeyForPath(pathname);
+  return moduleKey ? { module: moduleKey } : null;
+}
+
 function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggleCollapse }) {
   const location = useLocation();
   const { user, hasPermission } = useUser();
@@ -458,7 +492,7 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
         if (item.special) return false;
 
         // Find module key (e.g., '/timetable' -> 'timetable')
-        const moduleKey = getModuleKeyForPath(item.to);
+        const moduleKey = getPermissionContextForPath(item.to)?.module || getModuleKeyForPath(item.to);
 
         // If no key found, assume it's allowed (or handle as 'public')
         // For Dashboard ( '/'), key is 'dashboard'.
@@ -471,7 +505,7 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
 
         // Check 'view' permission using the context helper
         // Only show menu item if user has view permission for this module
-        return hasPermission(moduleKey, 'view');
+        return hasPermission(moduleKey, getPermissionContextForPath(item.to)?.submodule, 'view');
       }).map(item => {
         // Dynamic link replacements
         if (item.to === '/subjects' && user?.role === 'Student' && user?.studentClass) {
@@ -678,9 +712,9 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
                                 {subMenus[item.to]
                                   .filter(sub => {
                                     // Filter submenu items based on permissions too
-                                    const subModuleKey = getModuleKeyForPath(sub.to);
-                                    if (!subModuleKey) return true;
-                                    return hasPermission(subModuleKey, 'view');
+                                    const permissionContext = getPermissionContextForPath(sub.to);
+                                    if (!permissionContext) return true;
+                                    return hasPermission(permissionContext.module, permissionContext.submodule, 'view');
                                   })
                                   .map((sub) => {
                                     const Icon = getSubmenuIcon(sub.to);
@@ -753,9 +787,9 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
                   <div className="pb-4 px-3 max-h-[70vh] overflow-y-auto">
                     {subMenus[hoveredParent]
                       .filter((sub) => {
-                        const subModuleKey = getModuleKeyForPath(sub.to);
-                        if (!subModuleKey) return true;
-                        return hasPermission(subModuleKey, "view");
+                        const permissionContext = getPermissionContextForPath(sub.to);
+                        if (!permissionContext) return true;
+                        return hasPermission(permissionContext.module, permissionContext.submodule, "view");
                       })
                       .map((sub) => (
                         <NavLink
