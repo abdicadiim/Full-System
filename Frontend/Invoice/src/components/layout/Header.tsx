@@ -36,7 +36,7 @@ function Header({ onToggleSidebar }) {
   const displayName = user?.name || "Guest";
   const role = user?.roleName || user?.role || "User";
   const email = user?.email || "";
-  const schoolName = settings?.general?.schoolDisplayName || "Taban Billing";
+  const organizationName = settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "Organization";
   const avatarInitial = displayName.trim().charAt(0).toUpperCase() || "A";
   const avatarSrc = String(settings?.branding?.logoUrl || settings?.branding?.logoFile || user?.photoUrl || "").trim();
   const unreadMessages = user?.unreadMessages ?? 0;
@@ -388,8 +388,8 @@ function Header({ onToggleSidebar }) {
               <div className="absolute right-0 top-11 z-50 w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-xl">
                 <div className="border-b border-slate-100 pb-3">
                   <p className="truncate text-sm font-semibold text-slate-800">{displayName}</p>
-                  <p className="truncate text-xs text-slate-500">{role}</p>
-                  <p className="truncate text-xs text-slate-500">{email || schoolName}</p>
+                  <p className="truncate text-xs text-slate-500">{organizationName}</p>
+                  <p className="truncate text-xs text-slate-500">{email}</p>
                 </div>
 
                 <div className="pt-2">
