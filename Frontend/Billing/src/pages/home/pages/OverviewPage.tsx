@@ -434,6 +434,8 @@ function IncomeExpenseChart({
 }
 
 function ExpenseDonut({ items, total }: { items: MetricLegendItem[]; total: number }) {
+  const { baseCurrency } = useCurrency();
+  const currencyCode = baseCurrency?.code || "USD";
   const active = items[0];
   const totalValue = Math.max(total, 0);
   const activeValue = Number(active?.value) || 0;
@@ -449,7 +451,7 @@ function ExpenseDonut({ items, total }: { items: MetricLegendItem[]; total: numb
         <div className="absolute inset-[9px] rounded-full bg-white" />
         <div className="relative text-center">
           <div className="text-[10px] text-slate-400">All Expenses</div>
-          <div className="text-[14px] font-semibold text-slate-800">{formatMoney(activeValue)}</div>
+          <div className="text-[14px] font-semibold text-slate-800">{formatMoney(activeValue, currencyCode)}</div>
         </div>
       </div>
 
@@ -459,7 +461,7 @@ function ExpenseDonut({ items, total }: { items: MetricLegendItem[]; total: numb
             <div key={item.label} className="flex min-w-[150px] items-center gap-3">
               <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: item.color }} />
               <span className="flex-1">{item.label}</span>
-              <span className="font-medium text-slate-700">{formatMoney(Number(item.value) || 0)}</span>
+              <span className="font-medium text-slate-700">{formatMoney(Number(item.value) || 0, currencyCode)}</span>
             </div>
           ))
         ) : (
@@ -474,10 +476,12 @@ function ProjectsCard({
   project,
   totalUnbilledHours,
   totalUnbilledExpenses,
+  currencyCode,
 }: {
   project: DashboardSummary["projects"]["topProject"];
   totalUnbilledHours: string;
   totalUnbilledExpenses: number;
+  currencyCode: string;
 }) {
   const label = project?.budgetLabel || "No budget hours";
   const progress = project?.progress ?? 0;
@@ -492,7 +496,7 @@ function ProjectsCard({
         </div>
         <div className="px-4 py-3 text-center">
           <div className="text-[11px] text-slate-500">Unbilled Expenses</div>
-          <div className="mt-1 text-[22px] font-semibold text-slate-800">{formatMoney(totalUnbilledExpenses)}</div>
+          <div className="mt-1 text-[22px] font-semibold text-slate-800">{formatMoney(totalUnbilledExpenses, currencyCode)}</div>
         </div>
       </div>
 
@@ -600,6 +604,7 @@ function DashboardHero() {
 
 export default function OverviewPage() {
   const { loading: permissionsLoading, canView } = usePermissions();
+  const { baseCurrency } = useCurrency();
   const canViewDashboard = canView("dashboard", "View Dashboard");
   const canViewProjects = canView("dashboard", "Projects");
   const canViewSalesAndExpenses = canView("dashboard", "Sales and Expenses");
@@ -665,6 +670,8 @@ export default function OverviewPage() {
   }
 
   const dashboardData = summary || EMPTY_SUMMARY;
+  const dashboardCurrencyCode =
+    String(dashboardData.organization?.baseCurrency || baseCurrency?.code || "USD").trim().toUpperCase() || "USD";
   const receivableBars = dashboardData.metrics.receivables.labels.map((label, index) => ({
     label,
     value: String(dashboardData.metrics.receivables.values[index] || 0),
@@ -687,7 +694,7 @@ export default function OverviewPage() {
         <>
           <div className="grid gap-4 xl:grid-cols-2">
             <SectionCard title="Net Revenue">
-              <MetricHeader value={formatMoney(dashboardData.metrics.netRevenue.total)} />
+              <MetricHeader value={formatMoney(dashboardData.metrics.netRevenue.total, dashboardCurrencyCode)} />
               <LineAreaChart
                 points={dashboardData.metrics.netRevenue.values}
                 stroke="#16c47f"
@@ -701,12 +708,14 @@ export default function OverviewPage() {
               <div className="mb-4 flex flex-col gap-4 md:flex-row md:justify-between">
                 <div>
                   <div className="text-[12px] text-slate-500">Total Receivables</div>
-                  <div className="mt-1 text-[17px] font-semibold text-slate-900">{formatMoney(dashboardData.metrics.receivables.total)}</div>
+                  <div className="mt-1 text-[17px] font-semibold text-slate-900">
+                    {formatMoney(dashboardData.metrics.receivables.total, dashboardCurrencyCode)}
+                  </div>
                 </div>
                 <SummaryLegend
                   items={[
-                    { label: "Current", value: formatMoney(dashboardData.metrics.receivables.current), color: "#2563eb" },
-                    { label: "Overdue", value: formatMoney(dashboardData.metrics.receivables.overdue), color: "#f97316" },
+                    { label: "Current", value: formatMoney(dashboardData.metrics.receivables.current, dashboardCurrencyCode), color: "#2563eb" },
+                    { label: "Overdue", value: formatMoney(dashboardData.metrics.receivables.overdue, dashboardCurrencyCode), color: "#f97316" },
                   ]}
                 />
               </div>
@@ -716,7 +725,7 @@ export default function OverviewPage() {
 
           <div className="grid gap-4 xl:grid-cols-[2fr_1fr_1fr]">
             <SectionCard title="MRR">
-              <MetricHeader value={formatMoney(dashboardData.metrics.mrr.total)} />
+              <MetricHeader value={formatMoney(dashboardData.metrics.mrr.total, dashboardCurrencyCode)} />
               <LineAreaChart
                 points={dashboardData.metrics.mrr.values}
                 stroke="#16c47f"
@@ -760,7 +769,7 @@ export default function OverviewPage() {
 
             <div className="grid gap-4">
               <SectionCard title="ARPU">
-                <MetricHeader value={formatMoney(dashboardData.metrics.arpu.total)} />
+                <MetricHeader value={formatMoney(dashboardData.metrics.arpu.total, dashboardCurrencyCode)} />
                 <LineAreaChart
                   points={dashboardData.metrics.arpu.values}
                   stroke="#16c47f"
@@ -772,7 +781,7 @@ export default function OverviewPage() {
 
               <SectionCard title="LTV">
                 <MetricHeader
-                  value={formatMoney(dashboardData.metrics.ltv.total)}
+                  value={formatMoney(dashboardData.metrics.ltv.total, dashboardCurrencyCode)}
                   sublabel="Month On Month"
                   right={<div className="pt-1 text-[11px] text-slate-500">On {dashboardData.metrics.ltv.asOf || "today"}</div>}
                 />
@@ -821,9 +830,9 @@ export default function OverviewPage() {
                 <SectionCard title="Income and Expense" range="Last 12 Months">
                   <div className="mb-4 flex flex-wrap items-center gap-5 text-[12px]">
                     {[
-                      { label: "Total Income", value: formatMoney(dashboardData.incomeExpense.totalIncome), color: "#22c55e" },
-                      { label: "Total Receipts", value: formatMoney(dashboardData.incomeExpense.totalReceipts), color: "#2563eb" },
-                      { label: "Total Expenses", value: formatMoney(dashboardData.incomeExpense.totalExpenses), color: "#f2c96b" },
+                      { label: "Total Income", value: formatMoney(dashboardData.incomeExpense.totalIncome, dashboardCurrencyCode), color: "#22c55e" },
+                      { label: "Total Receipts", value: formatMoney(dashboardData.incomeExpense.totalReceipts, dashboardCurrencyCode), color: "#2563eb" },
+                      { label: "Total Expenses", value: formatMoney(dashboardData.incomeExpense.totalExpenses, dashboardCurrencyCode), color: "#f2c96b" },
                     ].map((item) => (
                       <div key={item.label} className="flex items-center gap-2">
                         <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: item.color }} />
@@ -860,6 +869,7 @@ export default function OverviewPage() {
                   project={dashboardData.projects.topProject}
                   totalUnbilledHours={dashboardData.projects.totalUnbilledHours}
                   totalUnbilledExpenses={dashboardData.projects.totalUnbilledExpenses}
+                  currencyCode={dashboardCurrencyCode}
                 />
               </SectionCard>
               <div />
