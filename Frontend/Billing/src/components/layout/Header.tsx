@@ -35,7 +35,6 @@ function Header({ onToggleSidebar }) {
   const searchInputRef = useRef(null);
 
   const displayName = user?.name || "Guest";
-  const role = user?.roleName || user?.role || "User";
   const email = user?.email || "";
   const organizationName = settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "Organization";
   const avatarInitial = displayName.trim().charAt(0).toUpperCase() || "A";
