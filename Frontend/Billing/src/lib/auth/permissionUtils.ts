@@ -1,8 +1,8 @@
 export type PermissionTree = Record<string, any>;
 
 const SUPER_ROLES = new Set(["admin", "owner"]);
-const BROAD_ROLES = new Set(["staff", "member", "staff_assigned"]);
-const TIMESHEET_ONLY_ROLE = "timesheet_staff";
+const BROAD_ROLES = new Set(["staff", "member", "staff assigned"]);
+const TIMESHEET_ONLY_ROLE = "timesheet staff";
 
 const MODULE_ALIASES: Record<string, string[]> = {
   dashboard: ["dashboard"],
@@ -13,7 +13,7 @@ const MODULE_ALIASES: Record<string, string[]> = {
   subscriptions: ["subscriptions"],
   payments: ["transactions"],
   expenses: ["expenses"],
-  "time-tracking": ["timesheets"],
+  "time tracking": ["timesheets"],
   timesheets: ["timesheets"],
   events: ["settings"],
   reports: ["reportsData"],
@@ -167,7 +167,6 @@ const standardRoleAllows = (roleName: string, moduleName: string) => {
       "payments",
       "expenses",
       "time tracking",
-      "time-tracking",
       "timesheets",
       "events",
       "documents",
@@ -283,4 +282,3 @@ export const createPermissionEvaluator = ({
     canDelete: (module?: string, submodule?: string) => hasPermission(module, submodule, "delete"),
   };
 };
-
