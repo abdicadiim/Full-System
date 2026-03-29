@@ -6,15 +6,24 @@ const TIMESHEET_ONLY_ROLE = "timesheet staff";
 
 const MODULE_ALIASES: Record<string, string[]> = {
   dashboard: ["dashboard"],
+  contacts: ["customers"],
   customers: ["customers"],
   products: ["products"],
+  banking: ["banking"],
+  accountant: ["accountant"],
+  tasks: ["tasks"],
+  locations: ["locations"],
   sales: ["transactions", "subscriptions"],
   transactions: ["transactions"],
   subscriptions: ["subscriptions"],
   payments: ["transactions"],
+  purchases: ["purchases"],
   expenses: ["expenses"],
   "time tracking": ["timesheets"],
   timesheets: ["timesheets"],
+  "vat filing": ["vatFiling"],
+  "usage records": ["usageRecords"],
+  "multiple transaction series": ["multipleTransactionSeries"],
   events: ["settings"],
   reports: ["reportsData"],
   documents: ["documents"],
@@ -56,6 +65,8 @@ export const inferModuleFromPath = (pathname: string) => {
   if (path.startsWith("/documents")) return "documents";
   if (path.startsWith("/time-tracking")) return "timesheets";
   if (path.startsWith("/expenses")) return "expenses";
+  if (path.startsWith("/purchases")) return "purchases";
+  if (path.startsWith("/banking")) return "banking";
   if (path.startsWith("/sales/subscriptions")) return "subscriptions";
   if (path.startsWith("/sales")) return "sales";
   if (path.startsWith("/payments")) return "payments";
