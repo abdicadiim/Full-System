@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { Info, Phone, Smartphone, Upload, X, Search, ChevronDown, Check, Globe, File, Edit, CheckCircle, Plus, MoreVertical, Folder, Cloud, Box, Layers, HardDrive, Settings, Paperclip, FileText, CreditCard, ChevronUp, Square, Grid3x3, RefreshCw, LayoutGrid, Loader2 } from "lucide-react";
+import { Info, Phone, Smartphone, Upload, X, Search, ChevronDown, Check, Globe, File, Edit, CheckCircle, Plus, MoreVertical, Folder, Cloud, Box, Layers, HardDrive, Settings, Paperclip, FileText, CreditCard, ChevronUp, Square, Grid3x3, LayoutGrid, Loader2 } from "lucide-react";
 import { customersAPI, currenciesAPI, documentsAPI, taxesAPI, reportingTagsAPI, priceListsAPI } from "../../../services/api";
 
 import { getAllDocuments } from "../../../../utils/documentStorage";
@@ -1700,21 +1700,18 @@ export default function NewCustomer() {
                       name="customerNumber"
                       value={formData.customerNumber}
                       onChange={handleChange}
-                      className={`w-full pr-16 px-3 py-1.5 border rounded text-[13px] text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#156372] focus:border-[#156372] bg-white ${errors.customerNumber ? "border-red-500 bg-red-50" : "border-gray-300"}`}
+                      readOnly
+                      className={`w-full pr-10 px-3 py-1.5 border rounded text-[13px] text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#156372] focus:border-[#156372] bg-gray-50 cursor-default ${errors.customerNumber ? "border-red-500 bg-red-50" : "border-gray-300"}`}
                       required
                     />
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-                      <Settings
-                        size={14}
-                        className="text-[#156372] cursor-pointer hover:opacity-80"
-                        onClick={() => setIsCustomerNumberSettingsModalOpen(true)}
-                      />
-                      <RefreshCw
-                        size={14}
-                        className="text-[#156372] cursor-pointer hover:opacity-80"
-                        onClick={() => applyNextCustomerNumber(true)}
-                      />
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsCustomerNumberSettingsModalOpen(true)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-[#156372] hover:opacity-80"
+                      aria-label="Open customer number settings"
+                    >
+                      <Settings size={14} />
+                    </button>
                     {errors.customerNumber && (
                       <p className="mt-1 text-xs text-red-500 font-medium">{errors.customerNumber}</p>
                     )}

@@ -107,8 +107,15 @@ export const createCustomer: express.RequestHandler = async (req, res, next) => 
     let customerNumber = desiredCustomerNumber;
     if (!customerNumber) {
       const settings = await CustomersVendorsSettings.findOne({ organizationId: orgId }).lean();
-      customerNumber = computeNextNumber([], {
-        prefix: settings?.customerNumberPrefix || "CUS-",
+      const prefix = settings?.customerNumberPrefix || "CUS-";
+      const existingNumbers = await Customer.find(
+        { organizationId: orgId, customerNumber: new RegExp(`^${escapeRegExp(prefix)}`) },
+        { customerNumber: 1 }
+      )
+        .lean()
+        .then((rows) => rows.map((r: any) => String(r.customerNumber || "")));
+      customerNumber = computeNextNumber(existingNumbers, {
+        prefix,
         start: settings?.customerNumberStart || "0001",
       });
     } else {
