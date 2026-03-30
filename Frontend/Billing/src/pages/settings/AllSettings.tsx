@@ -205,7 +205,6 @@ export default function AllSettings() {
         "Tasks",
         "Projects",
         "Timesheet",
-        "Reports",
       ],
     },
     {
@@ -458,8 +457,6 @@ export default function AllSettings() {
       }
     } else if (label === "Items" || label === "Products") {
       navigate("/settings/items");
-    } else if (label === "Reports") {
-      navigate("/reports");
     } else if (label === "Tasks") {
       navigate("/settings/tasks");
     } else if (label === "Projects") {
