@@ -24,9 +24,6 @@ export default function CustomersVendorsPage() {
   const [enableCustomerNumbers, setEnableCustomerNumbers] = useState(false);
   const [customerNumberPrefix, setCustomerNumberPrefix] = useState("CUS-");
   const [customerNumberStart, setCustomerNumberStart] = useState("0001");
-  const [enableVendorNumbers, setEnableVendorNumbers] = useState(false);
-  const [vendorNumberPrefix, setVendorNumberPrefix] = useState("VEN-");
-  const [vendorNumberStart, setVendorNumberStart] = useState("0001");
   const [defaultCustomerType, setDefaultCustomerType] = useState("business");
   const [enableCreditLimit, setEnableCreditLimit] = useState(false);
   const [creditLimitAction, setCreditLimitAction] = useState("warn"); // "restrict" or "warn"
@@ -92,9 +89,6 @@ export default function CustomersVendorsPage() {
             setEnableCustomerNumbers(settings.enableCustomerNumbers || false);
             setCustomerNumberPrefix(settings.customerNumberPrefix || "CUS-");
             setCustomerNumberStart(settings.customerNumberStart || "0001");
-            setEnableVendorNumbers(settings.enableVendorNumbers || false);
-            setVendorNumberPrefix(settings.vendorNumberPrefix || "VEN-");
-            setVendorNumberStart(settings.vendorNumberStart || "0001");
             setDefaultCustomerType(settings.defaultCustomerType || "business");
             setEnableCreditLimit(settings.enableCreditLimit || false);
             setCreditLimitAction(settings.creditLimitAction || "warn");
@@ -134,9 +128,6 @@ export default function CustomersVendorsPage() {
         enableCustomerNumbers,
         customerNumberPrefix,
         customerNumberStart,
-        enableVendorNumbers,
-        vendorNumberPrefix,
-        vendorNumberStart,
         defaultCustomerType,
         enableCreditLimit,
         creditLimitAction,
@@ -321,51 +312,6 @@ export default function CustomersVendorsPage() {
                 )}
               </div>
 
-              {/* Enable Vendor Numbers */}
-              <div>
-                <label className="flex items-center gap-2 cursor-pointer mb-3">
-                  <input
-                    type="checkbox"
-                    checked={enableVendorNumbers}
-                    onChange={(e) => setEnableVendorNumbers(e.target.checked)}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <span className="text-sm font-semibold text-gray-900">Enable Vendor Numbers</span>
-                </label>
-                {enableVendorNumbers && (
-                  <div className="ml-6 mt-2 space-y-3 border border-gray-200 rounded-lg p-4">
-                    <p className="text-xs text-gray-600 mb-3">
-                      You can configure a series to generate vendor numbers automatically for all your existing vendors. A new Vendor Number field will be available, which will be mandatory when creating vendors.
-                    </p>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Prefix
-                        </label>
-                        <input
-                          type="text"
-                          value={vendorNumberPrefix}
-                          onChange={(e) => setVendorNumberPrefix(e.target.value)}
-                          placeholder="VEN-"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Unique No. Starts
-                        </label>
-                        <input
-                          type="text"
-                          value={vendorNumberStart}
-                          onChange={(e) => setVendorNumberStart(e.target.value)}
-                          placeholder="0001"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
 
