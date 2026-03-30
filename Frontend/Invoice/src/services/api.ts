@@ -729,7 +729,7 @@ const contactPersonsLocal = localResource(LOCAL_CONTACT_PERSONS_KEY, "cp");
 const bankAccountsLocal = localResource(LOCAL_BANK_ACCOUNTS_KEY, "ba", defaultBankAccounts);
 const paymentModesLocal = localResource(LOCAL_PAYMENT_MODES_KEY, "pm", defaultPaymentModes);
 const chartAccountsLocal = localResource(LOCAL_CHART_ACCOUNTS_KEY, "coa", defaultChartAccounts);
-const txSeriesLocal = localResource(LOCAL_TX_SERIES_KEY, "series", defaultTxSeries);
+const txSeriesLocal = localResource(LOCAL_TX_SERIES_KEY, "series");
 const reportingTagsResource = resource("/reporting-tags");
 const currenciesResource = resource("/currencies");
 const txSeriesResource = resource("/transaction-number-series");
@@ -2148,7 +2148,7 @@ export const transactionNumberSeriesAPI = {
 
     const all = await txSeriesLocal.getAll({ limit: 10000 });
     const rows = all.data || [];
-    const selected = resolveTxSeriesRow(rows, normalized) || (!normalized.seriesId && !normalized.module && !normalized.moduleKey && !normalized.seriesName ? defaultTxSeries[0] : null);
+    const selected = resolveTxSeriesRow(rows, normalized) || (!normalized.seriesId && !normalized.module && !normalized.moduleKey && !normalized.seriesName ? rows[0] : null);
     if (!selected) {
       return { success: false, message: "Transaction series not found", data: null };
     }
@@ -2172,7 +2172,7 @@ export const transactionNumberSeriesAPI = {
   getCachedNextNumber: (lookup?: TransactionSeriesLookup) => {
     const normalized = normalizeTxSeriesLookup(lookup);
     const cachedRows = readLocalCollection(LOCAL_TX_SERIES_KEY);
-    const rows = cachedRows.length > 0 ? cachedRows : defaultTxSeries;
+    const rows = cachedRows;
     const selected = resolveTxSeriesRow(rows, normalized) || (!normalized.seriesId && !normalized.module && !normalized.moduleKey && !normalized.seriesName ? rows[0] : null);
     if (!selected) return "";
 
