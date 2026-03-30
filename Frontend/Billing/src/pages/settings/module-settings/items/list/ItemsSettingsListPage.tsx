@@ -21,7 +21,7 @@ export default function ItemsPage() {
   const customFieldsUsage = customFields.length;
   const maxCustomFields = 59;
   
-  // Default fields for Items
+  // Default fields for Products
   const defaultFields = [
     { name: "Selling Price", dataType: "Decimal", mandatory: "No", showInAllPDFs: "Yes", status: "Active", locked: true },
     { name: "Purchase Price", dataType: "Decimal", mandatory: "No", showInAllPDFs: "Yes", status: "Active", locked: true },
@@ -161,19 +161,19 @@ export default function ItemsPage() {
 
   return (
     <div className="p-6 max-w-4xl">
-      <h1 className="text-2xl font-semibold text-gray-900 mb-6">Items</h1>
+      <h1 className="text-2xl font-semibold text-gray-900 mb-6">Products</h1>
 
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-gray-200 mb-6">
         <button
-          onClick={() => setActiveTab("general")}
+          onClick={() => setActiveTab("products")}
           className={`px-4 py-2 text-sm font-medium transition ${
-            activeTab === "general"
+            activeTab === "products"
               ? "text-blue-600 border-b-2 border-blue-600"
               : "text-gray-600 hover:text-gray-900"
           }`}
         >
-          General
+          Products
         </button>
         <button
           onClick={() => setActiveTab("field-customization")}
@@ -217,13 +217,12 @@ export default function ItemsPage() {
         </button>
       </div>
 
-      {/* General Tab Content */}
-      {activeTab === "general" && (
+      {/* Products Tab Content */}
+      {activeTab === "products" && (
         <div className="space-y-8 pb-6">
-          {/* Set decimal rate for item quantity */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Set a decimal rate for your item quantity:
+              Set a decimal rate for your item quantity
             </label>
             <div className="relative w-32">
               <select
@@ -241,7 +240,6 @@ export default function ItemsPage() {
             </div>
           </div>
 
-          {/* Duplicate Item Name */}
           <div className="border-t border-gray-200 pt-6">
             <label className="flex items-start gap-3 cursor-pointer">
               <input
@@ -269,7 +267,6 @@ export default function ItemsPage() {
             </label>
           </div>
 
-          {/* Enhanced Item Search */}
           <div className="border-t border-gray-200 pt-6">
             <label className="flex items-start gap-3 cursor-pointer">
               <input
@@ -296,7 +293,6 @@ export default function ItemsPage() {
             </label>
           </div>
 
-          {/* Price Lists */}
           <div className="border-t border-gray-200 pt-6">
             <label className="flex items-start gap-3 cursor-pointer">
               <input
@@ -319,110 +315,6 @@ export default function ItemsPage() {
             </label>
           </div>
 
-          {/* Inventory */}
-          <div className="border-t border-gray-200 pt-6">
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={enableInventoryTracking}
-                onChange={(e) => setEnableInventoryTracking(e.target.checked)}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mt-1"
-              />
-              <div className="flex-1">
-                <span className="text-sm font-medium text-gray-900">
-                  Enable Inventory Tracking
-                </span>
-                {enableInventoryTracking && (
-                  <div className="mt-4 space-y-4">
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <label className="block text-sm font-medium text-gray-700">
-                          Inventory Start Date <span className="text-red-500">*</span>
-                        </label>
-                        <Info size={14} className="text-gray-400" />
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="date"
-                          value={inventoryStartDate}
-                          onChange={(e) => setInventoryStartDate(e.target.value)}
-                          className="h-10 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        {inventoryStartDate && (
-                          <button
-                            type="button"
-                            onClick={() => setInventoryStartDate("")}
-                            className="text-sm text-blue-600 hover:text-blue-700 hover:underline"
-                          >
-                            Change
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Additional Inventory Options */}
-                    <div className="space-y-3 pt-4 border-t border-gray-200">
-                      <label className="flex items-start gap-3 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={preventNegativeStock}
-                          onChange={(e) => setPreventNegativeStock(e.target.checked)}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mt-1"
-                        />
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-gray-900">
-                            Prevent stock from going below zero
-                          </span>
-                          <Info size={14} className="text-gray-400" />
-                        </div>
-                      </label>
-
-                      <label className="flex items-start gap-3 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={showOutOfStockWarning}
-                          onChange={(e) => setShowOutOfStockWarning(e.target.checked)}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mt-1"
-                        />
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-gray-900">
-                            Show an Out of Stock warning when an item's stock drops below zero
-                          </span>
-                          <Info size={14} className="text-gray-400" />
-                        </div>
-                      </label>
-
-                      <label className="flex items-start gap-3 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={notifyReorderPoint}
-                          onChange={(e) => setNotifyReorderPoint(e.target.checked)}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mt-1"
-                        />
-                        <span className="text-sm text-gray-900">
-                          Notify me if an item's quantity reaches the reorder point
-                        </span>
-                      </label>
-
-                      <label className="flex items-start gap-3 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={trackLandedCost}
-                          onChange={(e) => setTrackLandedCost(e.target.checked)}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mt-1"
-                        />
-                        <span className="text-sm text-gray-900">
-                          Track landed cost on items
-                        </span>
-                      </label>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </label>
-          </div>
-
-          {/* Save Button */}
           <div className="flex items-center justify-start pt-6 border-t border-gray-200">
             <button
               onClick={handleSave}
