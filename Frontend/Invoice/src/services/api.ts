@@ -301,6 +301,32 @@ const LOCAL_PAYMENT_MODES_KEY = "taban_books_payment_modes";
 const LOCAL_CHART_ACCOUNTS_KEY = "taban_books_chart_accounts";
 const LOCAL_TX_SERIES_KEY = "taban_books_tx_series";
 const LOCAL_QUOTES_SETTINGS_KEY = "taban_books_settings_quotes";
+const DEFAULT_QUOTE_SETTINGS = {
+  allowEditingAcceptedQuotes: false,
+  allowCustomerAcceptDecline: false,
+  automationOption: "dont-convert",
+  allowProgressInvoice: false,
+  hideZeroValueItems: false,
+  retainFields: {
+    customerNotes: false,
+    termsConditions: false,
+    address: false,
+  },
+  termsConditions: "",
+  customerNotes: "Looking forward for your business.",
+  approvalType: "no-approval",
+  notificationPreference: "all-submitters",
+  notificationEmail: "",
+  sendNotifications: true,
+  notifySubmitter: true,
+  approvalLevels: [] as unknown[],
+  customFields: [
+    { name: "Sales person", dataType: "Text Box (Single Line)", mandatory: "No", showInAllPDFs: "Yes", status: "Active", locked: true },
+    { name: "Description", dataType: "Text Box (Single Line)", mandatory: "No", showInAllPDFs: "Yes", status: "Active", locked: true },
+  ],
+  customButtons: [] as unknown[],
+  relatedLists: [] as unknown[],
+};
 const LOCAL_RECURRING_SETTINGS_KEY = "taban_books_settings_recurring_invoices";
 const LOCAL_VENDORS_KEY = "taban_books_vendors";
 const LOCAL_DOCUMENTS_KEY = "taban_books_documents";
@@ -2302,13 +2328,42 @@ export const settingsAPI = {
     return { success: true, data: updated };
   },
   getQuotesSettings: async () => {
-    const defaults = { autoNumberGeneration: true, approvalRequired: false, allowEditingAcceptedQuotes: true };
-    const data = readSettingsObject(LOCAL_QUOTES_SETTINGS_KEY, defaults);
+    try {
+      const res = await request({ path: "/settings/quotes" });
+      if (res?.success) {
+        const data = res.data && typeof res.data === "object"
+          ? { ...DEFAULT_QUOTE_SETTINGS, ...(res.data as any) }
+          : DEFAULT_QUOTE_SETTINGS;
+        writeSettingsObject(LOCAL_QUOTES_SETTINGS_KEY, data);
+        return { success: true, data };
+      }
+    } catch {
+      // fall back to local cache
+    }
+
+    const data = readSettingsObject(LOCAL_QUOTES_SETTINGS_KEY, DEFAULT_QUOTE_SETTINGS);
     writeSettingsObject(LOCAL_QUOTES_SETTINGS_KEY, data);
     return { success: true, data };
   },
   updateQuotesSettings: async (data: any) => {
-    const current = readSettingsObject(LOCAL_QUOTES_SETTINGS_KEY, {});
+    try {
+      const res = await request({ method: "PUT", path: "/settings/quotes", data });
+      if (res?.success) {
+        const current = readSettingsObject(LOCAL_QUOTES_SETTINGS_KEY, DEFAULT_QUOTE_SETTINGS);
+        const updated = {
+          ...current,
+          ...(data || {}),
+          ...(res.data && typeof res.data === "object" ? (res.data as any) : {}),
+        };
+        writeSettingsObject(LOCAL_QUOTES_SETTINGS_KEY, updated);
+        return { success: true, data: updated };
+      }
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back to local cache
+    }
+
+    const current = readSettingsObject(LOCAL_QUOTES_SETTINGS_KEY, DEFAULT_QUOTE_SETTINGS);
     const updated = { ...current, ...(data || {}) };
     writeSettingsObject(LOCAL_QUOTES_SETTINGS_KEY, updated);
     return { success: true, data: updated };

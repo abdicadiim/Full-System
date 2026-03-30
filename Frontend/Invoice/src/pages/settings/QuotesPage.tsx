@@ -4,6 +4,11 @@ import { Lock, ChevronDown, Plus, GripVertical, X, Edit2, Loader2, Info, MinusCi
 import { settingsAPI, approvalRulesAPI, authAPI } from "../../services/api";
 import toast from "react-hot-toast";
 
+const DEFAULT_CUSTOM_FIELDS = [
+  { name: "Sales person", dataType: "Text Box (Single Line)", mandatory: "No", showInAllPDFs: "Yes", status: "Active", locked: true },
+  { name: "Description", dataType: "Text Box (Single Line)", mandatory: "No", showInAllPDFs: "Yes", status: "Active", locked: true },
+];
+
 export default function QuotesPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("general");
@@ -44,22 +49,19 @@ export default function QuotesPage() {
   ];
 
   // Field Customization tab states
-  const [customFields, setCustomFields] = useState([
-    { name: "Sales person", dataType: "Text Box (Single Line)", mandatory: "No", showInAllPDFs: "Yes", status: "Active", locked: true },
-    { name: "Description", dataType: "Text Box (Single Line)", mandatory: "No", showInAllPDFs: "Yes", status: "Active", locked: true }
-  ]);
+  const [customFields, setCustomFields] = useState([...DEFAULT_CUSTOM_FIELDS]);
   const [draggedLevelId, setDraggedLevelId] = useState<number | null>(null);
   const customFieldsUsage = customFields.length;
   const maxCustomFields = 59;
 
   // Custom Buttons tab states
-  const [customButtons, setCustomButtons] = useState([]);
+  const [customButtons, setCustomButtons] = useState<any[]>([]);
   const [locationFilter, setLocationFilter] = useState("All");
   const [showNewButtonDropdown, setShowNewButtonDropdown] = useState(false);
   const newButtonDropdownRef = useRef(null);
 
   // Related Lists tab states
-  const [relatedLists, setRelatedLists] = useState([]);
+  const [relatedLists, setRelatedLists] = useState<any[]>([]);
 
   // Click outside handler
   useEffect(() => {
@@ -94,9 +96,12 @@ export default function QuotesPage() {
 
   // Load settings
   useEffect(() => {
+    let cancelled = false;
+
     const fetchSettings = async () => {
       try {
         const response = await settingsAPI.getQuotesSettings();
+        if (cancelled) return;
         if (response.success && response.data) {
           const s = response.data;
           setAllowEditingAccepted(s.allowEditingAcceptedQuotes ?? false);
@@ -105,11 +110,9 @@ export default function QuotesPage() {
           setAllowProgressInvoice(s.allowProgressInvoice ?? false);
           setApprovalType(s.approvalType ?? "no-approval");
           setHideZeroValueItems(s.hideZeroValueItems ?? false);
-          if (s.retainFields) {
-            setRetainCustomerNotes(s.retainFields.customerNotes ?? false);
-            setRetainTermsConditions(s.retainFields.termsConditions ?? false);
-            setRetainAddress(s.retainFields.address ?? false);
-          }
+          setRetainCustomerNotes(s.retainFields?.customerNotes ?? false);
+          setRetainTermsConditions(s.retainFields?.termsConditions ?? false);
+          setRetainAddress(s.retainFields?.address ?? false);
           setTermsConditions(s.termsConditions ?? "");
           setCustomerNotes(s.customerNotes ?? "Looking forward for your business.");
 
@@ -117,11 +120,15 @@ export default function QuotesPage() {
           setNotificationEmail(s.notificationEmail ?? "");
           setSendNotifications(s.sendNotifications ?? true);
           setNotifySubmitter(s.notifySubmitter ?? true);
+          setCustomFields(Array.isArray(s.customFields) && s.customFields.length > 0 ? s.customFields : [...DEFAULT_CUSTOM_FIELDS]);
+          setCustomButtons(Array.isArray(s.customButtons) ? s.customButtons : []);
+          setRelatedLists(Array.isArray(s.relatedLists) ? s.relatedLists : []);
 
           // If no approval levels are saved in settings, try to fetch owner for level 1
-          if (!s.approvalLevels || s.approvalLevels.length === 0) {
+          if (!Array.isArray(s.approvalLevels) || s.approvalLevels.length === 0) {
             try {
               const ownerResponse = await settingsAPI.getOwnerEmail();
+              if (cancelled) return;
               if (ownerResponse.success && ownerResponse.data) {
                 setApprovalLevels([
                   { id: 1, level: 1, approver: ownerResponse.data.name, email: ownerResponse.data.email },
@@ -138,6 +145,7 @@ export default function QuotesPage() {
 
         // Fetch custom approval rules
         const rulesResponse = await approvalRulesAPI.getAll();
+        if (cancelled) return;
         if (rulesResponse.success) {
           setApprovalRules(rulesResponse.data || []);
         }
@@ -145,6 +153,7 @@ export default function QuotesPage() {
         // Fetch current user details for the approvers list
         try {
           const meResponse = await authAPI.getMe();
+          if (cancelled) return;
           if (meResponse.success && meResponse.data) {
             // Can be used to highlight the current user or add to a list
             console.log("Logged in user:", meResponse.data.user.email);
@@ -153,33 +162,50 @@ export default function QuotesPage() {
           console.error("Error fetching current user:", err);
         }
       } catch (error) {
+        if (cancelled) return;
         console.error("Error fetching quote settings:", error);
-        toast.error("Failed to load quote settings");
+        toast.error("Failed to load quote settings", { id: "quotes-settings-load-error" });
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
     fetchSettings();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  const buildQuotesSettingsPayload = () => ({
+    allowEditingAcceptedQuotes: allowEditingAccepted,
+    allowCustomerAcceptDecline: allowCustomerAcceptDecline,
+    automationOption,
+    allowProgressInvoice,
+    hideZeroValueItems,
+    retainFields: {
+      customerNotes: retainCustomerNotes,
+      termsConditions: retainTermsConditions,
+      address: retainAddress,
+    },
+    termsConditions,
+    customerNotes,
+    approvalType,
+    notificationPreference,
+    notificationEmail,
+    sendNotifications,
+    notifySubmitter,
+    approvalLevels: approvalLevels.map(({ id, ...rest }) => rest),
+    customFields,
+    customButtons,
+    relatedLists,
+  });
 
   const handleSaveGeneral = async () => {
     setSaving(true);
     try {
-      const payload = {
-        allowEditingAcceptedQuotes: allowEditingAccepted,
-        allowCustomerAcceptDecline: allowCustomerAcceptDecline,
-        automationOption: automationOption,
-        allowProgressInvoice: allowProgressInvoice,
-        hideZeroValueItems: hideZeroValueItems,
-        retainFields: {
-          customerNotes: retainCustomerNotes,
-          termsConditions: retainTermsConditions,
-          address: retainAddress,
-        },
-        termsConditions: termsConditions,
-        customerNotes: customerNotes,
-      };
-      const response = await settingsAPI.updateQuotesSettings(payload);
+      const response = await settingsAPI.updateQuotesSettings(buildQuotesSettingsPayload());
       if (response.success) {
         toast.success("Quote settings saved successfully");
       } else {
@@ -196,15 +222,7 @@ export default function QuotesPage() {
   const handleSaveApprovals = async () => {
     setSaving(true);
     try {
-      const payload = {
-        approvalType: approvalType,
-        notificationPreference,
-        notificationEmail,
-        sendNotifications,
-        notifySubmitter,
-        approvalLevels: approvalLevels.map(({ id, ...rest }) => rest) // Remove frontend-only IDs
-      };
-      const response = await settingsAPI.updateQuotesSettings(payload);
+      const response = await settingsAPI.updateQuotesSettings(buildQuotesSettingsPayload());
       if (response.success) {
         toast.success("Approval settings saved successfully");
       } else {
