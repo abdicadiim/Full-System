@@ -367,15 +367,6 @@ export default function CustomersVendorsPage() {
                 )}
               </div>
             </div>
-            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-              <div className="flex items-start gap-3">
-                <Info size={16} className="text-orange-600 flex-shrink-0 mt-0.5" />
-                <div className="space-y-1 text-sm text-gray-700">
-                  <p>• Generating these numbers may take a few minutes to a few hours, depending on the number of records that you have. The Customer and Vendor Number field will be available once this process is done.</p>
-                  <p>• Once you've enabled this feature, you cannot disable it.</p>
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* Default Customer Type */}
