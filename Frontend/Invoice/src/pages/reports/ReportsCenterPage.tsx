@@ -179,7 +179,9 @@ export default function ReportsCenterPage() {
               }}
               onFocus={() => setIsSearchOpen(true)}
               placeholder="Search reports"
-              className="h-10 w-full rounded-lg border border-[#d8dfea] bg-white pl-9 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#9bb5ff]"
+              className={`h-10 w-full rounded-lg border bg-white pl-9 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] ${
+                isSearchOpen ? "border-[#7da0ff] shadow-[0_0_0_1px_rgba(125,160,255,0.18)]" : "border-[#d8dfea]"
+              } focus:border-[#7da0ff]`}
             />
 
             {isSearchOpen ? (
@@ -188,7 +190,7 @@ export default function ReportsCenterPage() {
                   <div className="max-h-[320px] overflow-y-auto">
                     {dropdownSections.map((section) => (
                       <div key={section.id} className="border-b border-[#eef2f7] last:border-b-0">
-                        <div className="bg-[#f8fafc] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#0f172a]">
+                        <div className="bg-[#f8fafc] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[#111827]">
                           {section.label}
                         </div>
                         <div className="py-1">
@@ -201,7 +203,7 @@ export default function ReportsCenterPage() {
                                 setSearch("");
                                 setIsSearchOpen(false);
                               }}
-                              className="block px-5 py-2 text-[13px] text-[#2b6bf3] hover:bg-[#f8fafc]"
+                              className="block px-5 py-2 text-[13px] text-[#1d4ed8] hover:bg-[#f8fafc]"
                             >
                               {report.name}
                             </Link>
