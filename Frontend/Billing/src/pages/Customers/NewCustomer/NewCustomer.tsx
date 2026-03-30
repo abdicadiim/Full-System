@@ -1491,10 +1491,10 @@ export default function NewCustomer() {
 
       <div className="flex-1 flex">
         <div className="flex-1 overflow-x-hidden relative bg-gray-50">
-          <div className="w-full max-w-4xl px-4 sm:px-6 py-5 sm:py-8 overflow-x-hidden">
+          <div className="w-full max-w-4xl px-4 sm:px-6 py-5 sm:py-8 pb-[220px] overflow-x-hidden">
 
             <div>
-              <div className="space-y-6 pb-28">
+              <div className="space-y-6 pb-12">
                 {/* Customer Type */}
                 <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4 items-center">
                   <label className="text-[13px] font-medium text-gray-700 flex items-center gap-1">
@@ -3419,8 +3419,8 @@ export default function NewCustomer() {
               </div>
 
               {/* Action Buttons */}
-              <div className="fixed bottom-4 left-4 right-4 lg:left-[252px] lg:right-4 z-20 flex items-center gap-2">
-                <div className="flex items-center gap-2">
+              <div className="fixed bottom-4 left-4 right-4 lg:left-[252px] lg:right-4 z-20 flex items-center">
+                <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur-sm">
                 <button
                   type="button"
                   onClick={handleSave}
