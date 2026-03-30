@@ -237,7 +237,7 @@ export default function ItemsPage() {
 
       {/* General Tab Content */}
       {activeTab === "general" && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-8">
+        <div className="space-y-8 pb-6">
           {/* Set decimal rate for item quantity */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -456,7 +456,7 @@ export default function ItemsPage() {
 
       {/* Record Locking Tab Content */}
       {activeTab === "record-locking" && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="pb-6">
           <div className="space-y-4">
             <div>
               <h3 className="text-sm font-semibold text-gray-900 mb-2">
@@ -493,7 +493,7 @@ export default function ItemsPage() {
           </div>
 
           {/* Table */}
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="rounded-lg border border-gray-200 overflow-hidden">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
@@ -628,7 +628,7 @@ export default function ItemsPage() {
           </div>
 
           {/* Table */}
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="rounded-lg border border-gray-200 overflow-hidden">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
@@ -684,7 +684,7 @@ export default function ItemsPage() {
           </div>
 
           {/* Empty State with Illustration */}
-          <div className="bg-white rounded-lg border border-gray-200 p-12">
+          <div className="rounded-lg border border-gray-200 p-12">
             <div className="flex flex-col items-center justify-center py-12">
               {/* Illustration */}
               <div className="relative mb-8 flex items-center justify-center" style={{ width: "200px", height: "200px" }}>

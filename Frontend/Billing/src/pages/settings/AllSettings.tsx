@@ -201,7 +201,7 @@ export default function AllSettings() {
       visible: true,
       items: [
         "Customers",
-        "Items",
+        "Products",
         "Tasks",
         "Projects",
         "Timesheet",

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import { Search, X, Building2, Users, Receipt, Settings as SettingsIcon, Palette, Zap, CreditCard, Plug, Code, ChevronDown, ChevronRight } from "lucide-react";
+import { Search, X, Building2, Users, Receipt, Settings as SettingsIcon, Palette, Zap, CreditCard, ShoppingCart, ShoppingBag, Puzzle, RefreshCw, Plug, Code, ChevronDown, ChevronRight } from "lucide-react";
 import { getToken, API_BASE_URL } from "../../services/auth";
 import { useSettings } from "../../lib/settings/SettingsContext";
 
@@ -92,6 +92,7 @@ const moduleSettings = [
       { label: "Tasks", path: "/settings/tasks" },
       { label: "Projects", path: "/settings/projects" },
       { label: "Timesheet", path: "/settings/timesheet" },
+      { label: "Reports", path: "/reports" },
     ],
   },
   {
@@ -101,6 +102,66 @@ const moduleSettings = [
     path: "/settings/online-payments",
     items: [
       { label: "Payment Gateways", path: "/settings/online-payments" },
+    ],
+  },
+  {
+    icon: ShoppingCart,
+    color: "green",
+    title: "Sales",
+    path: "/settings/quotes",
+    items: [
+      { label: "Quotes", path: "/settings/quotes" },
+      { label: "Invoices", path: "/settings/invoices" },
+      { label: "Recurring Invoices", path: "/settings/recurring-invoices" },
+      { label: "Sales Receipts", path: "/settings/sales-receipts" },
+      { label: "Payments Received", path: "/settings/payments-received" },
+      { label: "Credit Notes", path: "/settings/credit-notes" },
+      { label: "Delivery Notes", path: "/settings/delivery-notes" },
+      { label: "Packing Slips", path: "/settings/packing-slips" },
+    ],
+  },
+  {
+    icon: RefreshCw,
+    color: "green",
+    title: "Subscriptions",
+    path: "/sales/subscriptions",
+    items: [
+      { label: "General", path: "/settings/subscription/general" },
+      { label: "Billing Preferences", path: "/settings/subscription/billing-preferences" },
+      { label: "Advance Billing", path: "/settings/subscription/advance-billing" },
+      { label: "Dunning Management", path: "/settings/subscription/dunning-management" },
+      { label: "Cancellation Preferences", path: "/settings/subscription/cancellation-preferences" },
+    ],
+  },
+  {
+    icon: ShoppingBag,
+    color: "green",
+    title: "Purchases",
+    path: "/settings/expenses",
+    items: [
+      { label: "Expenses", path: "/settings/expenses" },
+      { label: "Recurring Expenses", path: "/settings/recurring-expenses" },
+    ],
+  },
+  {
+    icon: Users,
+    color: "green",
+    title: "Customer Portal",
+    path: "/settings/customer-portal",
+    items: [
+      { label: "General", path: "/settings/customer-portal" },
+      { label: "Subscription Management", path: "/settings/customer-portal" },
+    ],
+  },
+  {
+    icon: Puzzle,
+    color: "indigo",
+    iconSize: 18,
+    iconStrokeWidth: 2.25,
+    title: "Custom Modules",
+    path: "/settings/custom-modules",
+    items: [
+      { label: "Overview", path: "/settings/custom-modules" },
     ],
   },
 ];
