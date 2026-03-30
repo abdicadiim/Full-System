@@ -48,7 +48,7 @@ import {
   Send
 } from "lucide-react";
 import { getQuoteById, getQuotes, updateQuote, deleteQuotes, getCustomers, getSalespersons, getProjects, getInvoices, saveInvoice, saveQuote } from "../../salesModel";
-import { currenciesAPI, documentsAPI, quotesAPI, senderEmailsAPI } from "../../../../services/api";
+import { currenciesAPI, documentsAPI, quotesAPI, senderEmailsAPI, settingsAPI } from "../../../../services/api";
 import { toast } from "react-toastify";
 import { resolveVerifiedPrimarySender } from "../../../../utils/emailSenderDisplay";
 
@@ -82,8 +82,22 @@ const QuoteDetail = () => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [statusSuccessMessage, setStatusSuccessMessage] = useState("");
   const [activityLogs, setActivityLogs] = useState([]);
+  const [allowEditingAcceptedQuotes, setAllowEditingAcceptedQuotes] = useState(false);
 
   useEffect(() => {
+    const loadQuoteSettings = async () => {
+      try {
+        const response = await settingsAPI.getQuotesSettings();
+        if (response?.success && response.data) {
+          setAllowEditingAcceptedQuotes(Boolean((response.data as any).allowEditingAcceptedQuotes));
+        }
+      } catch (error) {
+        console.error("Error loading quote settings:", error);
+      }
+    };
+
+    loadQuoteSettings();
+
     const fetchBaseCurrency = async () => {
       try {
         const response = await currenciesAPI.getBaseCurrency();
@@ -2766,7 +2780,8 @@ const QuoteDetail = () => {
   const isSentStatus = quoteStatus === "sent";
   const isAcceptedStatus = quoteStatus === "accepted";
   const isDeclinedStatus = quoteStatus === "declined" || quoteStatus === "rejected";
-  const isSimplifiedActionStatus = quoteStatus === "accepted" || isInvoicedStatus;
+  const canEditAcceptedQuote = !isAcceptedStatus || allowEditingAcceptedQuotes;
+  const isSimplifiedActionStatus = isInvoicedStatus;
   const statusRibbonConfig = (() => {
     if (isSentStatus) {
       return { label: "SENT", color: "#2F80FF" };
@@ -3198,7 +3213,7 @@ const QuoteDetail = () => {
 
           {/* Action Bar */}
           <div className="flex flex-wrap items-center gap-1.5 p-2 md:p-3 border-b border-gray-200 bg-[#f8fafc]">
-            {!isSimplifiedActionStatus && (
+            {canEditAcceptedQuote && !isSimplifiedActionStatus && (
               <button
                 className="flex items-center gap-1.5 px-2 py-1.5 bg-transparent text-gray-700 rounded-md text-sm font-medium cursor-pointer hover:text-[#156372]"
                 onClick={handleEdit}
