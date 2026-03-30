@@ -45,11 +45,11 @@ export default function NewRetailInvoice() {
   const [invoiceNumber, setInvoiceNumber] = useState(transactionNumberSeriesAPI.getCachedNextNumber({
     module: "Retainer Invoice",
     locationName: "Head Office",
-  }) || "RET-00001");
+  }) || "");
   const [isRetainerNumberModalOpen, setIsRetainerNumberModalOpen] = useState(false);
   const [retainerNumberMode, setRetainerNumberMode] = useState<"auto" | "manual">("auto");
-  const [retainerPrefix, setRetainerPrefix] = useState("RET-");
-  const [retainerNextNumber, setRetainerNextNumber] = useState("00001");
+  const [retainerPrefix, setRetainerPrefix] = useState("");
+  const [retainerNextNumber, setRetainerNextNumber] = useState("");
   const RETAINER_SELECTED_VIEW_STORAGE_KEY = "taban_retainer_selected_view_v1";
   const ensureRetainerListAllView = () => {
     try {
@@ -166,7 +166,7 @@ export default function NewRetailInvoice() {
     return matches ? matches[1] : "";
   };
 
-  const deriveRetainerPrefix = (value: any, fallbackPrefix = "RET-") => {
+  const deriveRetainerPrefix = (value: any, fallbackPrefix = "") => {
     const raw = String(value || "").trim();
     const match = raw.match(/^(.*?)(\d+)\s*$/);
     if (match && String(match[1] || "").trim()) return String(match[1]);
@@ -174,10 +174,10 @@ export default function NewRetailInvoice() {
   };
 
   const buildRetainerNumber = (prefixValue: any, numberValue: any) => {
-    const safePrefix = String(prefixValue || "RET-").trim() || "RET-";
+    const safePrefix = String(prefixValue || "").trim();
     const rawDigits = extractRetainerDigits(numberValue);
-    const safeDigits = rawDigits ? rawDigits.padStart(5, "0") : "00001";
-    return `${safePrefix}${safeDigits}`;
+    if (!safePrefix || !rawDigits) return "";
+    return `${safePrefix}${rawDigits.padStart(5, "0")}`;
   };
 
   useEffect(() => {
@@ -203,7 +203,7 @@ export default function NewRetailInvoice() {
         if (!isEditMode && nextNumber && typeof nextNumber === "string") {
           setInvoiceNumber(nextNumber);
           setRetainerPrefix(deriveRetainerPrefix(nextNumber, "RET-"));
-          setRetainerNextNumber(extractRetainerDigits(nextNumber) || "00001");
+          setRetainerNextNumber(extractRetainerDigits(nextNumber) || "");
         }
 
         const fallbackTaxesResp =
@@ -308,9 +308,12 @@ export default function NewRetailInvoice() {
             existing?.customer?._id || existing?.customer?.id || existing?.customerId || existing?.customer || ""
           );
 
-          setInvoiceNumber(String(existing?.invoiceNumber || "RET-00001"));
+          setInvoiceNumber(String(existing?.invoiceNumber || transactionNumberSeriesAPI.getCachedNextNumber({
+            module: "Retainer Invoice",
+            locationName: "Head Office",
+          }) || ""));
           setRetainerPrefix(deriveRetainerPrefix(existing?.invoiceNumber, "RET-"));
-          setRetainerNextNumber(extractRetainerDigits(existing?.invoiceNumber) || "00001");
+          setRetainerNextNumber(extractRetainerDigits(existing?.invoiceNumber) || "");
           setCustomerId(selectedCustomerId);
           setSelectedLocation(String(existing?.location || existing?.selectedLocation || "Head Office"));
           setReference(String(existing?.orderNumber || existing?.reference || ""));

@@ -18,7 +18,7 @@ export default function NewRetailInvoice() {
     invoiceNumber: transactionNumberSeriesAPI.getCachedNextNumber({
       module: "Retainer Invoice",
       locationName: "Head Office",
-    }) || "RET-00001",
+    }) || "",
     customerId: "",
     customerName: "",
     invoiceDate: todayISO(),
@@ -33,7 +33,7 @@ export default function NewRetailInvoice() {
       invoiceNumber: String(row?.invoiceNumber || transactionNumberSeriesAPI.getCachedNextNumber({
         module: "Retainer Invoice",
         locationName: "Head Office",
-      }) || "RET-00001"),
+      }) || ""),
       customerId: String(row?.customerId || row?.customer?._id || row?.customer?.id || ""),
       customerName: String(row?.customerName || row?.customer?.displayName || row?.customer?.name || ""),
       invoiceDate: String(row?.invoiceDate || row?.date || todayISO()).slice(0, 10),
@@ -59,8 +59,10 @@ export default function NewRetailInvoice() {
         setCustomers(customerRows);
 
         if (!isEditMode && nextNumberRes?.success) {
-          const nextNo = String(nextNumberRes?.data?.nextNumber || "RET-00001");
-          setForm((prev) => ({ ...prev, invoiceNumber: nextNo }));
+          const nextNo = String(nextNumberRes?.data?.nextNumber || "");
+          if (nextNo) {
+            setForm((prev) => ({ ...prev, invoiceNumber: nextNo }));
+          }
         }
 
         if (isEditMode && id) {
