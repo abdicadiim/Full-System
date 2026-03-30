@@ -256,7 +256,7 @@ export default function NewCreditNote() {
     creditNoteNumber: transactionNumberSeriesAPI.getCachedNextNumber({
       module: "Credit Note",
       locationName: "Head Office",
-    }) || "CN-00001",
+    }) || "",
     referenceNumber: "",
     creditNoteDate: "29 Dec 2025",
     accountsReceivable: "Accounts Receivable",
@@ -281,7 +281,9 @@ export default function NewCreditNote() {
   const showTransactionDiscount = discountMode === "transaction";
   const showShippingCharges = enabledSettings?.chargeSettings?.shippingCharges !== false;
   const showAdjustment = enabledSettings?.chargeSettings?.adjustments !== false;
-  const initialCreditNoteDigits = extractCreditNoteDigits("CN-00001") || "00001";
+  const initialCreditNoteDigits = extractCreditNoteDigits(
+    transactionNumberSeriesAPI.getCachedNextNumber({ module: "Credit Note", locationName: "Head Office" })
+  ) || "";
   const [isCreditNoteNumberModalOpen, setIsCreditNoteNumberModalOpen] = useState(false);
   const [creditNoteNumberMode, setCreditNoteNumberMode] = useState<"auto" | "manual">("auto");
   const [creditNotePrefix, setCreditNotePrefix] = useState("CN-");
@@ -1621,7 +1623,7 @@ export default function NewCreditNote() {
     setSaveLoading(status === "draft" ? "draft" : "open");
     try {
       let effectiveCreditNoteNumber = String(formData.creditNoteNumber || "").trim();
-      if (!isEditMode && (!effectiveCreditNoteNumber || effectiveCreditNoteNumber === "CN-00001")) {
+      if (!isEditMode && !effectiveCreditNoteNumber) {
             const nextNumber = await fetchNextCreditNoteNumber({ reserve: false });
         if (nextNumber) {
           effectiveCreditNoteNumber = nextNumber;

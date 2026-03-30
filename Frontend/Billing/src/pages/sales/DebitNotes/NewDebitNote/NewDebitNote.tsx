@@ -340,7 +340,7 @@ export default function NewDebitNote() {
     debitNoteNumber: transactionNumberSeriesAPI.getCachedNextNumber({
       module: "Debit Note",
       locationName: "Head Office",
-    }) || "CDN-000001",
+    }) || "",
     orderNumber: "",
     debitNoteDate: formatDate(new Date()),
     term: defaultPaymentTerms[2]?.value || "due-on-receipt",

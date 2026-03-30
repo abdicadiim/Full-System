@@ -245,7 +245,7 @@ export default function NewSalesReceipt() {
     receiptNumber: transactionNumberSeriesAPI.getCachedNextNumber({
       module: "Sales Receipt",
       locationName: "Head Office",
-    }) || "SR-00001",
+    }) || "",
     salesperson: "",
     taxInclusive: "Tax Inclusive",
     items: [

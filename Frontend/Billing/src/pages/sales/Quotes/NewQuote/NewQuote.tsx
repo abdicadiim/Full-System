@@ -77,7 +77,7 @@ const NewQuote = () => {
     quoteNumber: transactionNumberSeriesAPI.getCachedNextNumber({
       module: "Quote",
       locationName: "Head Office",
-    }) || "QT-000002",
+    }) || "",
     referenceNumber: "",
     quoteDate: new Date().toLocaleDateString("en-GB"), // DD/MM/YYYY format which our salesModel now handles
     expiryDate: "",
@@ -1227,11 +1227,9 @@ const NewQuote = () => {
         }
 
         if (!resolvedSeriesRow) {
-          const fallbackPrefix = "QT-";
-          const fallbackDigits = "000001";
-          setQuotePrefix(fallbackPrefix);
-          setQuoteNextNumber(fallbackDigits);
-          setFormData(prev => ({ ...prev, quoteNumber: buildQuoteNumber(fallbackPrefix, fallbackDigits) }));
+          setQuotePrefix("");
+          setQuoteNextNumber("");
+          setFormData(prev => ({ ...prev, quoteNumber: "" }));
         }
 
         if (!isEditMode && resolvedSeriesRow && !quoteSeriesSyncRef.current) {
