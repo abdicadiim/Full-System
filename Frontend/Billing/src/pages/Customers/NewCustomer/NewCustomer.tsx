@@ -663,23 +663,18 @@ export default function NewCustomer() {
   const applyNextCustomerNumber = useCallback(
     async (force = false) => {
       if (isEditMode) return;
-      if (!enableCustomerNumbers && !force) return;
       if (!force && isCustomerNumberManuallyEdited) return;
       try {
-        const nextNumber = await customersAPI.getNextCustomerNumber({
-          prefix: customerNumberPrefix,
-          start: customerNumberStart,
-        });
+        const nextNumber = `${customerNumberPrefix || "CUS-"}${customerNumberStart || "00003"}`;
         setFormData((prev) => ({ ...prev, customerNumber: nextNumber }));
         if (force) setIsCustomerNumberManuallyEdited(false);
         setErrors((prev) => ({ ...prev, customerNumber: "" }));
       } catch {
-        // Ignore auto-number failures; validation handles missing values.
+        // Ignore formatting failures; validation handles missing values.
       }
     },
     [
       isEditMode,
-      enableCustomerNumbers,
       isCustomerNumberManuallyEdited,
       customerNumberPrefix,
       customerNumberStart,
