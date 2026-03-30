@@ -1491,7 +1491,7 @@ export default function NewCustomer() {
 
       <div className="flex-1 flex">
         <div className="flex-1 overflow-x-hidden relative bg-gray-50">
-          <div className="w-full max-w-4xl px-4 sm:px-6 py-5 sm:py-8 pb-[220px] overflow-x-hidden">
+          <div className="w-full max-w-4xl px-4 sm:px-6 py-5 sm:py-8 pb-24 overflow-x-hidden">
 
             <div>
               <div className="space-y-6 pb-12">
@@ -3419,8 +3419,7 @@ export default function NewCustomer() {
               </div>
 
               {/* Action Buttons */}
-              <div className="fixed bottom-6 left-4 right-4 lg:left-[252px] lg:right-4 z-20 flex items-center pt-4">
-                <div className="flex items-center gap-2">
+              <div className="mt-10 pt-6 border-t border-gray-100 flex items-center gap-2 pb-6">
                 <button
                   type="button"
                   onClick={handleSave}
@@ -3447,7 +3446,6 @@ export default function NewCustomer() {
                 >
                   Cancel
                 </button>
-                </div>
               </div>
             </div>
           </div>
