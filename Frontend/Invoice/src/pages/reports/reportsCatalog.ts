@@ -22,15 +22,15 @@ export const REPORT_FUNCTION_LABELS: { key: ReportFunctionKey; label: string }[]
   { key: "custom", label: "Custom Report" },
 ];
 
-export const REPORT_CATEGORIES: ReportCategory[] = [
+const ALL_REPORT_CATEGORIES: ReportCategory[] = [
   {
     id: "sales",
-    name: "Sales Reports",
+    name: "Sales",
     description: "Track sales across customers, items, plans, addons, coupons, salespersons, and daily summary.",
   },
   {
     id: "receivables",
-    name: "Receivables Reports",
+    name: "Receivables",
     description: "Monitor outstanding amounts, aging intervals, receivable transactions, and bad debts.",
   },
   {
@@ -50,7 +50,7 @@ export const REPORT_CATEGORIES: ReportCategory[] = [
   },
   {
     id: "subscriptions",
-    name: "Subscriptions Reports",
+    name: "Recurring Invoices",
     description: "Track active subscriptions, net customers, upgrades, downgrades, ARPU, and LTV.",
   },
   {
@@ -69,18 +69,23 @@ export const REPORT_CATEGORIES: ReportCategory[] = [
     description: "Review payments, due intervals, credit notes, refunds, failures, and card expiry.",
   },
   {
+    id: "taxes",
+    name: "Taxes",
+    description: "Track tax summaries, withholding taxes, and receivable tax balances.",
+  },
+  {
     id: "purchases-expenses",
     name: "Purchases and Expenses",
     description: "Track expense totals, categories, customer/project split, and billable expenses.",
   },
   {
     id: "projects-timesheets",
-    name: "Projects and Timesheets",
+    name: "Projects and Timesheet",
     description: "Inspect timesheet details, project summaries, and project revenue performance.",
   },
   {
     id: "activity",
-    name: "Activity Reports",
+    name: "Activity",
     description: "Audit mails, user actions, portal activity, and customer reviews.",
   },
   {
@@ -90,7 +95,7 @@ export const REPORT_CATEGORIES: ReportCategory[] = [
   },
 ];
 
-export const REPORTS: ReportDefinition[] = [
+const ALL_REPORTS: ReportDefinition[] = [
   {
     id: "sales-by-customer",
     categoryId: "sales",
@@ -203,6 +208,14 @@ export const REPORTS: ReportDefinition[] = [
     summary: "Quote-level listing for follow-up and conversion workflows.",
     howItHelps: "Target unaccepted quotes for conversion recovery.",
     functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+  },
+  {
+    id: "bank-charges",
+    categoryId: "receivables",
+    name: "Bank Charges",
+    summary: "Bank charges related to receivable transactions and collections.",
+    howItHelps: "Track deductions and reconciliation adjustments from payment processing.",
+    functionSupport: support("filter", "sort", "share", "export", "print"),
   },
   {
     id: "bad-debts",
@@ -394,7 +407,7 @@ export const REPORTS: ReportDefinition[] = [
   {
     id: "subscription-details",
     categoryId: "subscriptions",
-    name: "Subscription Details",
+    name: "Recurring Invoice Details",
     summary: "Detailed subscription listing by selected date type.",
     howItHelps: "Audit subscriptions, billing milestones, and lifecycle state quickly.",
     functionSupport: support("filter", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
@@ -591,6 +604,14 @@ export const REPORTS: ReportDefinition[] = [
     functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
   },
   {
+    id: "withholding-tax",
+    categoryId: "payments-received",
+    name: "Withholding Tax",
+    summary: "Withholding tax collected or deducted on incoming payments.",
+    howItHelps: "Monitor tax deductions linked to customer receipts.",
+    functionSupport: support("filter", "sort", "share", "export", "print"),
+  },
+  {
     id: "payment-failures",
     categoryId: "payments-received",
     name: "Payment Failures",
@@ -626,7 +647,7 @@ export const REPORTS: ReportDefinition[] = [
   {
     id: "expenses-by-customer",
     categoryId: "purchases-expenses",
-    name: "Expenses by Customers",
+    name: "Expenses by Customer",
     summary: "Expense distribution and totals by customer.",
     howItHelps: "Understand customer-level profitability pressure.",
     functionSupport: support("filter", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
@@ -634,7 +655,7 @@ export const REPORTS: ReportDefinition[] = [
   {
     id: "expenses-by-project",
     categoryId: "purchases-expenses",
-    name: "Expenses by Projects",
+    name: "Expenses by Project",
     summary: "Project-wise expense totals and contribution.",
     howItHelps: "Track project profitability and budget pressure.",
     functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
@@ -672,6 +693,14 @@ export const REPORTS: ReportDefinition[] = [
     howItHelps: "Compare budget expectations against realized revenue.",
     functionSupport: support("filter", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
   },
+  {
+    id: "project-details",
+    categoryId: "projects-timesheets",
+    name: "Project Details",
+    summary: "Project-level detail view with billing and time context.",
+    howItHelps: "Drill into project performance and project-specific activity.",
+    functionSupport: support("filter", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+  },
 
   {
     id: "system-mails",
@@ -684,7 +713,7 @@ export const REPORTS: ReportDefinition[] = [
   {
     id: "activity-logs-audit-trail",
     categoryId: "activity",
-    name: "Activity Logs and Audit Trail",
+    name: "Activity Logs",
     summary: "System activity with versioned audit comparisons.",
     howItHelps: "Track who changed what and when for compliance and debugging.",
     functionSupport: support("filter", "customizeColumns", "sort", "schedule", "share", "export", "print"),
@@ -704,6 +733,30 @@ export const REPORTS: ReportDefinition[] = [
     summary: "Ratings summary and review-level listing.",
     howItHelps: "Identify detractor cohorts and improve customer experience.",
     functionSupport: support("filter", "customizeColumns", "sort", "schedule", "share", "export", "print"),
+  },
+  {
+    id: "exception-report",
+    categoryId: "activity",
+    name: "Exception Report",
+    summary: "Failed actions and exception events captured across the system.",
+    howItHelps: "Spot issues in workflows and investigate operational anomalies quickly.",
+    functionSupport: support("filter", "sort", "share", "export", "print"),
+  },
+  {
+    id: "tax-summary",
+    categoryId: "taxes",
+    name: "Tax Summary",
+    summary: "Tax totals and summary values for the selected period.",
+    howItHelps: "Review tax output and keep filing preparation simple.",
+    functionSupport: support("filter", "group", "sort", "share", "export", "print"),
+  },
+  {
+    id: "tds-receivables",
+    categoryId: "taxes",
+    name: "TDS Receivables",
+    summary: "Receivable tax balances and withholding-related amounts.",
+    howItHelps: "Track tax receivables due from deductions and collections.",
+    functionSupport: support("filter", "group", "sort", "share", "export", "print"),
   },
 
   {
@@ -766,6 +819,21 @@ export const REPORTS: ReportDefinition[] = [
     functionSupport: support("filter", "compare", "share"),
   },
 ];
+
+const ALLOWED_REPORT_CATEGORY_IDS = new Set([
+  "sales",
+  "receivables",
+  "subscriptions",
+  "payments-received",
+  "taxes",
+  "purchases-expenses",
+  "projects-timesheets",
+  "activity",
+]);
+
+export const REPORT_CATEGORIES = ALL_REPORT_CATEGORIES.filter((category) => ALLOWED_REPORT_CATEGORY_IDS.has(category.id));
+
+export const REPORTS = ALL_REPORTS.filter((report) => ALLOWED_REPORT_CATEGORY_IDS.has(report.categoryId));
 
 export const REPORTS_BY_CATEGORY = REPORT_CATEGORIES.reduce((acc, category) => {
   acc[category.id] = REPORTS.filter((report) => report.categoryId === category.id);
