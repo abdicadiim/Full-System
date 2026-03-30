@@ -51,30 +51,31 @@ export const upsertCustomersVendorsSettings: express.RequestHandler = async (req
     }
 
     const body = (req.body || {}) as Record<string, unknown>;
+    const current = await CustomersVendorsSettings.findOne({ organizationId: orgId }).lean();
 
-    const defaultCustomerTypeRaw = pickString(body.defaultCustomerType, DEFAULTS.defaultCustomerType);
+    const defaultCustomerTypeRaw = pickString(body.defaultCustomerType, current?.defaultCustomerType || DEFAULTS.defaultCustomerType);
     const defaultCustomerType = defaultCustomerTypeRaw === "individual" ? "individual" : "business";
 
-    const creditLimitActionRaw = pickString(body.creditLimitAction, DEFAULTS.creditLimitAction);
+    const creditLimitActionRaw = pickString(body.creditLimitAction, current?.creditLimitAction || DEFAULTS.creditLimitAction);
     const creditLimitAction = creditLimitActionRaw === "restrict" ? "restrict" : "warn";
 
     const update = {
-      allowDuplicates: pickBoolean(body.allowDuplicates, DEFAULTS.allowDuplicates),
-      enableCustomerNumbers: pickBoolean(body.enableCustomerNumbers, DEFAULTS.enableCustomerNumbers),
-      customerNumberPrefix: pickString(body.customerNumberPrefix, DEFAULTS.customerNumberPrefix),
-      customerNumberStart: pickString(body.customerNumberStart, DEFAULTS.customerNumberStart),
-      enableVendorNumbers: pickBoolean(body.enableVendorNumbers, DEFAULTS.enableVendorNumbers),
-      vendorNumberPrefix: pickString(body.vendorNumberPrefix, DEFAULTS.vendorNumberPrefix),
-      vendorNumberStart: pickString(body.vendorNumberStart, DEFAULTS.vendorNumberStart),
+      allowDuplicates: pickBoolean(body.allowDuplicates, current?.allowDuplicates ?? DEFAULTS.allowDuplicates),
+      enableCustomerNumbers: pickBoolean(body.enableCustomerNumbers, current?.enableCustomerNumbers ?? DEFAULTS.enableCustomerNumbers),
+      customerNumberPrefix: pickString(body.customerNumberPrefix, current?.customerNumberPrefix || DEFAULTS.customerNumberPrefix),
+      customerNumberStart: pickString(body.customerNumberStart, current?.customerNumberStart || DEFAULTS.customerNumberStart),
+      enableVendorNumbers: pickBoolean(body.enableVendorNumbers, current?.enableVendorNumbers ?? DEFAULTS.enableVendorNumbers),
+      vendorNumberPrefix: pickString(body.vendorNumberPrefix, current?.vendorNumberPrefix || DEFAULTS.vendorNumberPrefix),
+      vendorNumberStart: pickString(body.vendorNumberStart, current?.vendorNumberStart || DEFAULTS.vendorNumberStart),
       defaultCustomerType,
-      enableCreditLimit: pickBoolean(body.enableCreditLimit, DEFAULTS.enableCreditLimit),
+      enableCreditLimit: pickBoolean(body.enableCreditLimit, current?.enableCreditLimit ?? DEFAULTS.enableCreditLimit),
       creditLimitAction,
-      includeSalesOrders: pickBoolean(body.includeSalesOrders, DEFAULTS.includeSalesOrders),
-      billingAddressFormat: pickString(body.billingAddressFormat, DEFAULTS.billingAddressFormat),
-      shippingAddressFormat: pickString(body.shippingAddressFormat, DEFAULTS.shippingAddressFormat),
-      ...(pickArray(body.customFields) ? { customFields: body.customFields as unknown[] } : {}),
-      ...(pickArray(body.customButtons) ? { customButtons: body.customButtons as unknown[] } : {}),
-      ...(pickArray(body.relatedLists) ? { relatedLists: body.relatedLists as unknown[] } : {}),
+      includeSalesOrders: pickBoolean(body.includeSalesOrders, current?.includeSalesOrders ?? DEFAULTS.includeSalesOrders),
+      billingAddressFormat: pickString(body.billingAddressFormat, current?.billingAddressFormat || DEFAULTS.billingAddressFormat),
+      shippingAddressFormat: pickString(body.shippingAddressFormat, current?.shippingAddressFormat || DEFAULTS.shippingAddressFormat),
+      ...(pickArray(body.customFields) ? { customFields: body.customFields as unknown[] } : current?.customFields ? { customFields: current.customFields as unknown[] } : {}),
+      ...(pickArray(body.customButtons) ? { customButtons: body.customButtons as unknown[] } : current?.customButtons ? { customButtons: current.customButtons as unknown[] } : {}),
+      ...(pickArray(body.relatedLists) ? { relatedLists: body.relatedLists as unknown[] } : current?.relatedLists ? { relatedLists: current.relatedLists as unknown[] } : {}),
     };
 
     const saved = await CustomersVendorsSettings.findOneAndUpdate(

@@ -173,9 +173,9 @@ export default function NewCustomer() {
   const [paymentTermsList, setPaymentTermsList] = useState<PaymentTerm[]>(defaultPaymentTerms);
 
   // Customer Number Settings State
-  const [enableCustomerNumbers, setEnableCustomerNumbers] = useState(true);
+  const [enableCustomerNumbers, setEnableCustomerNumbers] = useState(false);
   const [customerNumberPrefix, setCustomerNumberPrefix] = useState("CUS-");
-  const [customerNumberStart, setCustomerNumberStart] = useState("00003");
+  const [customerNumberStart, setCustomerNumberStart] = useState("0001");
   const [isCustomerNumberSettingsModalOpen, setIsCustomerNumberSettingsModalOpen] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isCustomerNumberManuallyEdited, setIsCustomerNumberManuallyEdited] = useState(false);
@@ -431,7 +431,7 @@ export default function NewCustomer() {
     xHandle: "",
     skypeName: "",
     facebook: "",
-    customerNumber: "CUS-00003",
+    customerNumber: "",
     billingAttention: "",
     billingCountry: "",
     billingStreet1: "",
@@ -570,7 +570,7 @@ export default function NewCustomer() {
                 setEnableCustomerNumbers(data.data.enableCustomerNumbers);
               }
               const prefPrefix = data.data.customerNumberPrefix || "CUS-";
-              const prefStart = data.data.customerNumberStart || "00003";
+              const prefStart = data.data.customerNumberStart || "0001";
               setCustomerNumberPrefix(prefPrefix);
               setCustomerNumberStart(prefStart);
             }
@@ -663,9 +663,14 @@ export default function NewCustomer() {
   const applyNextCustomerNumber = useCallback(
     async (force = false) => {
       if (isEditMode) return;
+      if (!enableCustomerNumbers && !force) {
+        setFormData((prev) => ({ ...prev, customerNumber: "" }));
+        setErrors((prev) => ({ ...prev, customerNumber: "" }));
+        return;
+      }
       if (!force && isCustomerNumberManuallyEdited) return;
       try {
-        const nextNumber = `${customerNumberPrefix || "CUS-"}${customerNumberStart || "00003"}`;
+        const nextNumber = `${customerNumberPrefix || "CUS-"}${customerNumberStart || "0001"}`;
         setFormData((prev) => ({ ...prev, customerNumber: nextNumber }));
         if (force) setIsCustomerNumberManuallyEdited(false);
         setErrors((prev) => ({ ...prev, customerNumber: "" }));
@@ -675,6 +680,7 @@ export default function NewCustomer() {
     },
     [
       isEditMode,
+      enableCustomerNumbers,
       isCustomerNumberManuallyEdited,
       customerNumberPrefix,
       customerNumberStart,
@@ -1464,7 +1470,7 @@ export default function NewCustomer() {
   }
 
   return (
-    <div className="w-full h-screen flex flex-col bg-gray-50 overflow-hidden">
+    <div className="w-full min-h-full flex flex-col bg-gray-50">
       {/* Header */}
       <div className="border-b border-gray-200 bg-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
         <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 m-0">{isEditMode ? "Edit Customer" : "New Customer"}</h1>
@@ -1480,8 +1486,8 @@ export default function NewCustomer() {
         )}
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 overflow-y-auto overflow-x-hidden relative bg-gray-50">
+      <div className="flex-1 flex">
+        <div className="flex-1 overflow-x-hidden relative bg-gray-50">
           <div className="w-full max-w-4xl px-4 sm:px-6 py-5 sm:py-8 overflow-x-hidden">
 
             <div>
@@ -4296,7 +4302,7 @@ export default function NewCustomer() {
                     type="text"
                     value={customerNumberStart}
                     onChange={(e) => setCustomerNumberStart(e.target.value)}
-                    placeholder="00003"
+                    placeholder="0001"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>

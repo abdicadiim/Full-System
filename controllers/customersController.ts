@@ -21,6 +21,29 @@ const detectPrefix = (value: unknown) => {
   return match ? match[1] : "";
 };
 
+const findDuplicateCustomerDisplayName = async (
+  orgId: string,
+  displayName: string,
+  excludeId?: string
+) => {
+  const normalized = displayName.trim();
+  if (!normalized) return false;
+
+  const filter: Record<string, unknown> = {
+    organizationId: orgId,
+    $or: [
+      { displayName: new RegExp(`^${escapeRegExp(normalized)}$`, "i") },
+      { name: new RegExp(`^${escapeRegExp(normalized)}$`, "i") },
+    ],
+  };
+
+  if (excludeId) {
+    filter._id = { $ne: excludeId };
+  }
+
+  return Boolean(await Customer.exists(filter));
+};
+
 const computeNextNumber = (existing: string[], opts: { prefix: string; start: string }) => {
   const prefix = opts.prefix || "";
   const startRaw = opts.start || "0001";
@@ -102,11 +125,25 @@ export const createCustomer: express.RequestHandler = async (req, res, next) => 
     if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
 
     const payload = (req.body || {}) as Record<string, unknown>;
+    const settings = await CustomersVendorsSettings.findOne({ organizationId: orgId }).lean();
+    const allowDuplicates = settings?.allowDuplicates !== undefined ? settings.allowDuplicates : true;
+    const enableCustomerNumbers = settings?.enableCustomerNumbers ?? false;
     const desiredCustomerNumber = asString(payload.customerNumber).trim();
+    const displayName = asString(payload.displayName).trim() || asString(payload.name).trim();
+
+    if (!allowDuplicates && displayName) {
+      const duplicateDisplayName = await findDuplicateCustomerDisplayName(orgId, displayName);
+      if (duplicateDisplayName) {
+        return res.status(400).json({
+          success: false,
+          message: "Duplicate customer display name is not allowed.",
+          data: null,
+        });
+      }
+    }
 
     let customerNumber = desiredCustomerNumber;
-    if (!customerNumber) {
-      const settings = await CustomersVendorsSettings.findOne({ organizationId: orgId }).lean();
+    if (!customerNumber && enableCustomerNumbers) {
       const prefix = settings?.customerNumberPrefix || "CUS-";
       const existingNumbers = await Customer.find(
         { organizationId: orgId, customerNumber: new RegExp(`^${escapeRegExp(prefix)}`) },
@@ -122,7 +159,6 @@ export const createCustomer: express.RequestHandler = async (req, res, next) => 
       const exists = await Customer.exists({ organizationId: orgId, customerNumber });
       if (exists) {
         const prefix = detectPrefix(customerNumber) || "CUS-";
-        const settings = await CustomersVendorsSettings.findOne({ organizationId: orgId }).lean();
         const existingNumbers = await Customer.find(
           { organizationId: orgId, customerNumber: new RegExp(`^${escapeRegExp(prefix)}`) },
           { customerNumber: 1 }
@@ -148,9 +184,25 @@ export const updateCustomer: express.RequestHandler = async (req, res, next) => 
     const orgId = getOrgId(req);
     if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
 
+    const payload = (req.body || {}) as Record<string, unknown>;
+    const settings = await CustomersVendorsSettings.findOne({ organizationId: orgId }).lean();
+    const allowDuplicates = settings?.allowDuplicates !== undefined ? settings.allowDuplicates : true;
+    const displayName = asString(payload.displayName).trim() || asString(payload.name).trim();
+
+    if (!allowDuplicates && displayName) {
+      const duplicateDisplayName = await findDuplicateCustomerDisplayName(orgId, displayName, String(req.params.id));
+      if (duplicateDisplayName) {
+        return res.status(400).json({
+          success: false,
+          message: "Duplicate customer display name is not allowed.",
+          data: null,
+        });
+      }
+    }
+
     const updated = await Customer.findOneAndUpdate(
       { _id: req.params.id, organizationId: orgId },
-      { $set: { ...(req.body || {}) } },
+      { $set: { ...payload } },
       { new: true }
     ).lean();
     if (!updated) return res.status(404).json({ success: false, message: "Customer not found", data: null });
