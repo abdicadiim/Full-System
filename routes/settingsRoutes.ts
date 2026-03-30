@@ -37,6 +37,10 @@ import {
   getCustomersVendorsSettings,
   upsertCustomersVendorsSettings,
 } from "../controllers/customersVendorsSettingsController.js";
+import {
+  getQuotesSettings,
+  upsertQuotesSettings,
+} from "../controllers/quotesSettingsController.js";
 
 export const settingsRoutes = Router();
 
@@ -56,6 +60,10 @@ settingsRoutes.put("/customers-vendors", requireAuth, requireOrgAdmin, upsertCus
 // Products / Items (module settings)
 settingsRoutes.get("/items", requireAuth, getItemSettings);
 settingsRoutes.put("/items", requireAuth, requireOrgAdmin, upsertItemSettings);
+
+// Quotes (module settings)
+settingsRoutes.get("/quotes", requireAuth, getQuotesSettings);
+settingsRoutes.put("/quotes", requireAuth, requireOrgAdmin, upsertQuotesSettings);
 
 // Sender emails
 settingsRoutes.get("/sender-emails", requireAuth, listSenderEmails);
