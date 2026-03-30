@@ -15,7 +15,7 @@ const simpleSettingsNav = [
   { label: "General Preferences", path: "/settings/general", icon: SettingsIcon },
   { label: "Items", path: "/settings/items", icon: Package },
   { label: "Reports", path: "/reports", icon: BarChart3 },
-  { label: "Customers", path: "/sales/customers", icon: Users },
+  { label: "Customers", path: "/settings/customers-vendors", icon: Users },
   { label: "Quotes", path: "/settings/quotes", icon: FileText },
   { label: "Invoices", path: "/settings/invoices", icon: FileText },
   { label: "Recurring Invoices", path: "/settings/recurring-invoices", icon: FileText },

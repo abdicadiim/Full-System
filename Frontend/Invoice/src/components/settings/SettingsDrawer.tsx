@@ -45,7 +45,7 @@ const sections: SettingsSection[] = [
     title: "General Preferences",
     items: [
       { label: "Items", path: "/settings/items", icon: Package },
-      { label: "Customers", path: "/sales/customers", icon: Users },
+      { label: "Customers", path: "/settings/customers-vendors", icon: Users },
       { label: "Quotes", path: "/settings/quotes", icon: FileText },
       { label: "Invoices", path: "/settings/invoices", icon: FileText },
       { label: "Recurring Invoices", path: "/settings/recurring-invoices", icon: ScrollText },
