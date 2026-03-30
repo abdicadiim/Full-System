@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import { Search, X, Building2, Users, Receipt, Settings as SettingsIcon, Palette, Zap, Plug, Code, ChevronDown, ChevronRight } from "lucide-react";
+import { Search, X, Building2, Users, Receipt, Settings as SettingsIcon, Palette, Zap, CreditCard, Plug, Code, ChevronDown, ChevronRight } from "lucide-react";
 import { getToken, API_BASE_URL } from "../../services/auth";
 import { useSettings } from "../../lib/settings/SettingsContext";
 
