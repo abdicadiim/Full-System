@@ -299,9 +299,9 @@ export default function QuotesPage() {
 
       {/* General Tab Content */}
       {activeTab === "general" && (
-        <div className="space-y-6">
+        <div className="w-full min-w-0 space-y-6">
           {/* Allow editing of accepted quotes */}
-          <div className="pb-6 border-b border-gray-100">
+          <div className="w-full pb-6 border-b border-gray-100">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -314,7 +314,7 @@ export default function QuotesPage() {
           </div>
 
           {/* Allow customers to accept or decline */}
-          <div className="pb-6 border-b border-gray-100">
+          <div className="w-full pb-6 border-b border-gray-100">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -327,7 +327,7 @@ export default function QuotesPage() {
           </div>
 
           {/* Automate accepted quotes to invoices conversion */}
-          <div className="pb-6 border-b border-gray-100">
+          <div className="w-full pb-6 border-b border-gray-100">
             <h3 className="text-sm font-semibold text-gray-900 mb-4">Automate accepted quotes to invoices conversion</h3>
             <div className="space-y-3">
               <label className="flex items-start gap-2 cursor-pointer">
@@ -373,7 +373,7 @@ export default function QuotesPage() {
           </div>
 
           {/* Progress Invoice */}
-          <div className="pb-6 border-b border-gray-100">
+          <div className="w-full pb-6 border-b border-gray-100">
             <h3 className="text-sm font-semibold text-gray-900 mb-1 flex items-center gap-2">
               Progress Invoice
               <a href="#" className="text-[10px] text-blue-600 hover:underline flex items-center gap-1 font-normal uppercase">
@@ -398,7 +398,7 @@ export default function QuotesPage() {
           </div>
 
           {/* Zero-Value Line Items */}
-          <div className="pb-6 border-b border-gray-100">
+          <div className="w-full pb-6 border-b border-gray-100">
             <h3 className="text-sm font-semibold text-gray-900 mb-4">Zero-Value Line Items</h3>
             <label className="flex items-start gap-2 cursor-pointer">
               <input
@@ -453,25 +453,25 @@ export default function QuotesPage() {
           </div>
 
           {/* Terms & Conditions */}
-          <div>
+          <div className="w-full">
             <h3 className="text-sm font-semibold text-gray-900 mb-2">Terms & Conditions</h3>
             <textarea
               value={termsConditions}
               onChange={(e) => setTermsConditions(e.target.value)}
               rows={8}
-              className="w-full bg-transparent px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none text-sm"
+              className="w-full max-w-none bg-transparent px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none text-sm"
               placeholder="Enter terms and conditions"
             />
           </div>
 
           {/* Customer Notes */}
-          <div className="pt-4">
+          <div className="w-full pt-4">
             <h3 className="text-sm font-semibold text-gray-900 mb-2">Customer Notes</h3>
             <textarea
               value={customerNotes}
               onChange={(e) => setCustomerNotes(e.target.value)}
               rows={8}
-              className="w-full bg-transparent px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none text-sm"
+              className="w-full max-w-none bg-transparent px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none text-sm"
               placeholder="Enter customer notes"
             />
           </div>
