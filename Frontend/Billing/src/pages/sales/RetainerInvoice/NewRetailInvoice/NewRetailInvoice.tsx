@@ -182,7 +182,11 @@ export default function NewRetailInvoice() {
       try {
         const [custs, nextNumResp, taxResp, projectResp, reportingTagsResp, editInvoiceResp] = await Promise.all([
           getCustomers(),
-          transactionNumberSeriesAPI.getNextNumber({ module: "Retainer Invoice", reserve: false }).catch(() => null),
+          transactionNumberSeriesAPI.getNextNumber({
+            module: "Retainer Invoice",
+            locationName: selectedLocation,
+            reserve: false
+          }).catch(() => null),
           taxesAPI.getForTransactions().catch(() => null),
           projectsAPI.getAll({ limit: 1000 }).catch(() => ({ data: [] })),
           reportingTagsAPI.getAll().catch(() => ({ data: [] })),
