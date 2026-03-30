@@ -202,7 +202,7 @@ export default function CustomersVendorsPage() {
 
   return (
     <div className="p-6 max-w-4xl">
-      <h1 className="text-2xl font-semibold text-gray-900 mb-6">Customers and Vendors</h1>
+      <h1 className="text-2xl font-semibold text-gray-900 mb-6">Customers</h1>
 
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-gray-200 mb-6">
@@ -261,18 +261,18 @@ export default function CustomersVendorsPage() {
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
               />
               <span className="text-sm text-gray-700">
-                Allow duplicates for customer and vendor display name.
+                Allow duplicates for customer display name.
               </span>
             </label>
           </div>
 
-          {/* Customer & Vendor Numbers */}
+          {/* Customer Numbers */}
           <div className="border-t border-gray-200 pt-6">
             <h3 className="text-sm font-semibold text-gray-900 mb-2">
-              Customer & Vendor Numbers
+              Customer Numbers
             </h3>
             <p className="text-sm text-gray-600 mb-4">
-              Generate customer and vendor numbers automatically. You can configure the series in which numbers are generated while creating new records.
+              Generate customer numbers automatically. You can configure the series in which numbers are generated while creating new records.
             </p>
             <div className="space-y-4 mb-4">
               {/* Enable Customer Numbers */}
@@ -322,7 +322,7 @@ export default function CustomersVendorsPage() {
               </div>
 
               {/* Enable Vendor Numbers */}
-              <div>
+              <div className="hidden">
                 <label className="flex items-center gap-2 cursor-pointer mb-3">
                   <input
                     type="checkbox"
@@ -371,7 +371,7 @@ export default function CustomersVendorsPage() {
               <div className="flex items-start gap-3">
                 <Info size={16} className="text-orange-600 flex-shrink-0 mt-0.5" />
                 <div className="space-y-1 text-sm text-gray-700">
-                  <p>• Generating these numbers may take a few minutes to a few hours, depending on the number of records that you have. The Customer and Vendor Number field will be available once this process is done.</p>
+                  <p>• Generating these numbers may take a few minutes to a few hours, depending on the number of records that you have. The Customer Number field will be available once this process is done.</p>
                   <p>• Once you've enabled this feature, you cannot disable it.</p>
                 </div>
               </div>
@@ -500,11 +500,11 @@ export default function CustomersVendorsPage() {
             )}
           </div>
 
-          {/* Customer and Vendor Billing Address Format */}
+          {/* Customer Billing Address Format */}
           <div className="border-t border-gray-200 pt-6">
             <div className="flex items-center gap-2 mb-3">
               <h3 className="text-sm font-semibold text-gray-900">
-                Customer and Vendor Billing Address Format
+                Customer Billing Address Format
               </h3>
               <span className="text-xs text-gray-500">(Displayed in PDF only)</span>
               <Info size={14} className="text-gray-400" />
@@ -543,11 +543,11 @@ export default function CustomersVendorsPage() {
             </div>
           </div>
 
-          {/* Customer and Vendor Shipping Address Format */}
+          {/* Customer Shipping Address Format */}
           <div className="border-t border-gray-200 pt-6">
             <div className="flex items-center gap-2 mb-3">
               <h3 className="text-sm font-semibold text-gray-900">
-                Customer and Vendor Shipping Address Format
+                Customer Shipping Address Format
               </h3>
               <span className="text-xs text-gray-500">(Displayed in PDF only)</span>
               <Info size={14} className="text-gray-400" />
@@ -972,4 +972,5 @@ export default function CustomersVendorsPage() {
     </div>
   );
 }
+
 
