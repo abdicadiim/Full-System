@@ -95,14 +95,12 @@ const moduleSettings = [
     ],
   },
   {
-    icon: Puzzle,
-    color: "indigo",
-    iconSize: 18,
-    iconStrokeWidth: 2.25,
-    title: "Custom Modules",
-    path: "/settings/custom-modules",
+    icon: CreditCard,
+    color: "orange",
+    title: "Online Payments",
+    path: "/settings/online-payments",
     items: [
-      { label: "Overview", path: "/settings/custom-modules" },
+      { label: "Payment Gateways", path: "/settings/online-payments" },
     ],
   },
 ];
@@ -287,7 +285,7 @@ export default function SettingsLayout({ children }: { children?: React.ReactNod
                 ? "text-gray-700 hover:bg-gray-50"
                 : "text-gray-200 hover:bg-white/10"
             }`}
-          style={active ? {
+          style={active && !isExpanded ? {
           backgroundColor: activeSidebarColor,
           borderColor: activeSidebarColor,
           boxShadow: `0 0 0 1px ${activeSidebarColor} inset`,
