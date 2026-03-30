@@ -15,12 +15,6 @@ export default function ItemsPage() {
   const [allowDuplicateNames, setAllowDuplicateNames] = useState(true);
   const [enableEnhancedSearch, setEnableEnhancedSearch] = useState(true);
   const [enablePriceLists, setEnablePriceLists] = useState(true);
-  const [enableInventoryTracking, setEnableInventoryTracking] = useState(true);
-  const [inventoryStartDate, setInventoryStartDate] = useState("");
-  const [preventNegativeStock, setPreventNegativeStock] = useState(true);
-  const [showOutOfStockWarning, setShowOutOfStockWarning] = useState(false);
-  const [notifyReorderPoint, setNotifyReorderPoint] = useState(false);
-  const [trackLandedCost, setTrackLandedCost] = useState(false);
   
   // Field Customization tab states
   const [customFields, setCustomFields] = useState([]);
@@ -79,12 +73,6 @@ export default function ItemsPage() {
             setAllowDuplicateNames(settings.allowDuplicateNames !== undefined ? settings.allowDuplicateNames : true);
             setEnableEnhancedSearch(settings.enableEnhancedSearch !== undefined ? settings.enableEnhancedSearch : true);
             setEnablePriceLists(settings.enablePriceLists !== undefined ? settings.enablePriceLists : true);
-            setEnableInventoryTracking(settings.enableInventoryTracking !== undefined ? settings.enableInventoryTracking : true);
-            setInventoryStartDate(settings.inventoryStartDate || "");
-            setPreventNegativeStock(settings.preventNegativeStock !== undefined ? settings.preventNegativeStock : true);
-            setShowOutOfStockWarning(settings.showOutOfStockWarning || false);
-            setNotifyReorderPoint(settings.notifyReorderPoint || false);
-            setTrackLandedCost(settings.trackLandedCost || false);
             setCustomFields(settings.customFields || []);
             setCustomButtons(settings.customButtons || []);
             setRelatedLists(settings.relatedLists || []);
@@ -122,12 +110,6 @@ export default function ItemsPage() {
         allowDuplicateNames,
         enableEnhancedSearch,
         enablePriceLists,
-        enableInventoryTracking,
-        inventoryStartDate,
-        preventNegativeStock,
-        showOutOfStockWarning,
-        notifyReorderPoint,
-        trackLandedCost,
         customFields,
         customButtons,
         relatedLists,
