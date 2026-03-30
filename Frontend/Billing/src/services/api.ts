@@ -792,6 +792,8 @@ type TransactionSeriesLookup = string | {
   module?: string;
   moduleKey?: string;
   seriesName?: string;
+  locationId?: string;
+  locationName?: string;
   reserve?: boolean;
   allowFallbackToFirst?: boolean;
 };
@@ -811,7 +813,9 @@ const normalizeTxSeriesLookup = (lookup?: TransactionSeriesLookup) => {
     String(lookup?.seriesId || lookup?.id || "").trim() ||
     String(lookup?.module || "").trim() ||
     String(lookup?.moduleKey || "").trim() ||
-    String(lookup?.seriesName || "").trim()
+    String(lookup?.seriesName || "").trim() ||
+    String(lookup?.locationId || "").trim() ||
+    String(lookup?.locationName || "").trim()
   );
 
   return {
@@ -819,6 +823,8 @@ const normalizeTxSeriesLookup = (lookup?: TransactionSeriesLookup) => {
     module: String(lookup?.module || "").trim(),
     moduleKey: String(lookup?.moduleKey || "").trim(),
     seriesName: String(lookup?.seriesName || "").trim(),
+    locationId: String(lookup?.locationId || "").trim(),
+    locationName: String(lookup?.locationName || "").trim(),
     reserve: lookup?.reserve !== false,
     allowFallbackToFirst: lookup?.allowFallbackToFirst === true || !hasExplicitLookup,
   };
@@ -851,7 +857,22 @@ const resolveTxSeriesRow = (rows: any[], lookup: ReturnType<typeof normalizeTxSe
       return rowKeys.some((key) => key === targetKey);
     });
     if (matched.length > 0) {
-      return matched.find((row: any) => Boolean(row?.isDefault)) || matched[0];
+      const lookupLocationIds = resolveLocationIdsFromCache(lookup?.locationId, lookup?.locationName);
+      const scoreRow = (row: any) => {
+        const rowLocationIds = Array.isArray(row?.locationIds)
+          ? row.locationIds.map((id: any) => String(id || "").trim()).filter(Boolean)
+          : [];
+        let score = 0;
+        if (lookupLocationIds.length) {
+          const matchesLocation = rowLocationIds.some((id) => lookupLocationIds.includes(id));
+          if (matchesLocation) score += 100;
+          else if (!rowLocationIds.length) score += 10;
+        }
+        if (Boolean(row?.isDefault)) score += 25;
+        if (rowLocationIds.length) score += 5;
+        return score;
+      };
+      return matched.slice().sort((a: any, b: any) => scoreRow(b) - scoreRow(a))[0] || null;
     }
   }
 
@@ -860,6 +881,30 @@ const resolveTxSeriesRow = (rows: any[], lookup: ReturnType<typeof normalizeTxSe
   }
 
   return null;
+};
+
+const resolveLocationIdsFromCache = (locationId?: string, locationName?: string) => {
+  const ids = new Set<string>();
+  const direct = String(locationId || "").trim();
+  if (direct) ids.add(direct);
+  const targetName = String(locationName || "").trim().toLowerCase();
+  if (!targetName || typeof window === "undefined") return Array.from(ids);
+
+  try {
+    const raw = localStorage.getItem(LS_LOCATIONS_CACHE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return Array.from(ids);
+    parsed
+      .filter((row: any) => String(row?.name || row?.locationName || "").trim().toLowerCase() === targetName)
+      .forEach((row: any) => {
+        const id = String(row?._id || row?.id || "").trim();
+        if (id) ids.add(id);
+      });
+  } catch {
+    // ignore
+  }
+
+  return Array.from(ids);
 };
 
 const readSettingsObject = (key: string, fallback: any = {}) => {
@@ -2229,6 +2274,8 @@ export const transactionNumberSeriesAPI = {
       if (!normalized.seriesId && normalized.module) params.module = normalized.module;
       if (!normalized.seriesId && normalized.moduleKey) params.moduleKey = normalized.moduleKey;
       if (!normalized.seriesId && normalized.seriesName) params.seriesName = normalized.seriesName;
+      if (!normalized.seriesId && normalized.locationId) params.locationId = normalized.locationId;
+      if (!normalized.seriesId && normalized.locationName) params.locationName = normalized.locationName;
       if (normalized.reserve === false) params.reserve = "false";
 
       const path = normalized.seriesId
