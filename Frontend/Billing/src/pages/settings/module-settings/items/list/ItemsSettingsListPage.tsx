@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Info, ChevronDown, Lock, Loader2 } from "lucide-react";
+import { Check, Info, ChevronDown, Lock, Loader2 } from "lucide-react";
 import { getToken, API_BASE_URL } from "../../../../../services/auth";
 import toast from "react-hot-toast";
 
@@ -41,6 +41,9 @@ export default function ItemsPage() {
   const [showNewButtonDropdown, setShowNewButtonDropdown] = useState(false);
   const [locationFilter, setLocationFilter] = useState("All");
   const newButtonDropdownRef = useRef(null);
+
+  const [decimalPlacesDropdownOpen, setDecimalPlacesDropdownOpen] = useState(false);
+  const decimalPlacesDropdownRef = useRef(null);
   
   // Related Lists tab states
   const [relatedLists, setRelatedLists] = useState([]);
@@ -49,12 +52,15 @@ export default function ItemsPage() {
 
   // Load settings on mount
   useEffect(() => {
+    const loadErrorToastId = "products-settings-load-error";
+    const controller = new AbortController();
+
     const fetchSettings = async () => {
       try {
         setLoading(true);
         const token = getToken();
         if (!token) {
-          toast.error("Please login to access settings");
+          toast.error("Please login to access settings", { id: loadErrorToastId });
           return;
         }
 
@@ -62,6 +68,7 @@ export default function ItemsPage() {
           headers: {
             'Authorization': `Bearer ${token}`,
           },
+          signal: controller.signal,
         });
 
         if (response.ok) {
@@ -83,17 +90,21 @@ export default function ItemsPage() {
             setRelatedLists(settings.relatedLists || []);
           }
         } else {
-          toast.error("Failed to load products settings");
+          toast.error("Failed to load products settings", { id: loadErrorToastId });
         }
       } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
         console.error("Error fetching products settings:", error);
-        toast.error("Error loading products settings");
+        toast.error("Error loading products settings", { id: loadErrorToastId });
       } finally {
         setLoading(false);
       }
     };
 
     fetchSettings();
+    return () => controller.abort();
   }, []);
 
   // Save settings
@@ -153,6 +164,9 @@ export default function ItemsPage() {
   // Click outside handler for dropdowns
   useEffect(() => {
     const handleClickOutside = (event) => {
+      if (decimalPlacesDropdownRef.current && !decimalPlacesDropdownRef.current.contains(event.target)) {
+        setDecimalPlacesDropdownOpen(false);
+      }
       if (newButtonDropdownRef.current && !newButtonDropdownRef.current.contains(event.target)) {
         setShowNewButtonDropdown(false);
       }
@@ -160,11 +174,11 @@ export default function ItemsPage() {
         setShowNewRelatedListDropdown(false);
       }
     };
-    if (showNewButtonDropdown || showNewRelatedListDropdown) {
+    if (decimalPlacesDropdownOpen || showNewButtonDropdown || showNewRelatedListDropdown) {
       document.addEventListener("mousedown", handleClickOutside);
     }
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showNewButtonDropdown, showNewRelatedListDropdown]);
+  }, [decimalPlacesDropdownOpen, showNewButtonDropdown, showNewRelatedListDropdown]);
 
   if (loading) {
     return (
@@ -242,21 +256,45 @@ export default function ItemsPage() {
             <label className="text-sm font-medium text-gray-700 pt-2">
               Set a decimal rate for your item quantity
             </label>
-            <div className="relative w-[84px] shrink-0">
-              <select
-                value={decimalPlaces}
-                onChange={(e) => setDecimalPlaces(e.target.value)}
-                className="w-full h-10 px-2 pr-7 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white text-sm"
+            <div className="relative w-[84px] shrink-0" ref={decimalPlacesDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setDecimalPlacesDropdownOpen((open) => !open)}
+                className={`flex h-10 w-full items-center justify-between rounded-lg border bg-white px-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  decimalPlacesDropdownOpen ? "border-blue-500" : "border-gray-300"
+                }`}
               >
-                <option value="0">0</option>
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-                <option value="5">5</option>
-                <option value="6">6</option>
-              </select>
-              <ChevronDown size={16} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <span>{decimalPlaces}</span>
+                <ChevronDown
+                  size={16}
+                  className={`text-gray-400 transition-transform ${decimalPlacesDropdownOpen ? "rotate-180" : ""}`}
+                />
+              </button>
+              {decimalPlacesDropdownOpen && (
+                <div className="absolute left-0 top-full z-20 mt-1 w-full overflow-hidden rounded-lg border border-gray-300 bg-white shadow-lg">
+                  {[0, 1, 2, 3, 4, 5, 6].map((value) => {
+                    const isSelected = String(value) === decimalPlaces;
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => {
+                          setDecimalPlaces(String(value));
+                          setDecimalPlacesDropdownOpen(false);
+                        }}
+                        className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors ${
+                          isSelected
+                            ? "bg-white text-gray-900"
+                            : "text-gray-900 hover:bg-gray-100 hover:text-gray-900"
+                        }`}
+                      >
+                        {value}
+                        {isSelected && <Check size={14} className="text-gray-500" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
@@ -340,7 +378,7 @@ export default function ItemsPage() {
             <button
               onClick={handleSave}
               disabled={saving}
-              className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="inline-flex w-fit items-center justify-center rounded-md bg-[#156372] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0f4a56] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saving && <Loader2 className="animate-spin" size={16} />}
               {saving ? "Saving..." : "Save"}

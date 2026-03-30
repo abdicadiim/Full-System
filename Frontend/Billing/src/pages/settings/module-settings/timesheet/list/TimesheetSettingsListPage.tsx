@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Info, ChevronDown } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 
 export default function TimesheetPage() {
   const navigate = useNavigate();
@@ -20,11 +20,11 @@ export default function TimesheetPage() {
   const maxCustomFields = 52;
 
   return (
-    <div className="p-6 max-w-4xl">
-      <h1 className="text-2xl font-semibold text-gray-900 mb-6">Timesheet</h1>
+    <div className="p-6 max-w-5xl">
+      <h1 className="mb-6 text-2xl font-semibold text-gray-900">Timesheet</h1>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-gray-200 mb-6">
+      <div className="mb-6 flex items-center gap-1 border-b border-gray-200">
         <button
           onClick={() => setActiveTab("general")}
           className={`px-4 py-2 text-sm font-medium transition ${
@@ -49,17 +49,17 @@ export default function TimesheetPage() {
 
       {/* General Tab Content */}
       {activeTab === "general" && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-8">
+        <div className="space-y-8 rounded-lg border border-gray-200 bg-white p-6">
           {/* Round Off Time */}
           <div>
-            <div className="flex items-center gap-2 mb-2">
-              <label className="block text-sm font-medium text-gray-700">
+            <div className="mb-3 flex flex-wrap items-baseline gap-2">
+              <label className="block text-sm font-medium text-gray-900">
                 Round Off Time
               </label>
-            </div>
-            <p className="text-sm text-gray-600 mb-3">
+              <p className="text-xs text-gray-500">
               (Time entries will appear on your invoices and reports based on the selected round-off format.)
-            </p>
+              </p>
+            </div>
             <div className="relative w-64">
               <select
                 value={roundOffTime}
@@ -77,7 +77,7 @@ export default function TimesheetPage() {
 
           {/* Set maximum hours/day */}
           <div className="border-t border-gray-200 pt-6">
-            <label className="flex items-start gap-3 cursor-pointer">
+            <label className="flex cursor-pointer items-start gap-3">
               <input
                 type="checkbox"
                 checked={enableMaxHours}
@@ -105,7 +105,7 @@ export default function TimesheetPage() {
 
           {/* Track costs for time entries */}
           <div className="border-t border-gray-200 pt-6">
-            <label className="flex items-start gap-3 cursor-pointer">
+            <label className="flex cursor-pointer items-start gap-3">
               <input
                 type="checkbox"
                 checked={trackCosts}
@@ -128,7 +128,7 @@ export default function TimesheetPage() {
             <h3 className="text-sm font-semibold text-gray-900 mb-4">Timesheet Approvals</h3>
             
             <div className="space-y-4">
-              <label className="flex items-start gap-3 cursor-pointer">
+              <label className="flex cursor-pointer items-start gap-3">
                 <input
                   type="checkbox"
                   checked={enableApprovals}
@@ -145,7 +145,7 @@ export default function TimesheetPage() {
                 </div>
               </label>
 
-              <label className="flex items-start gap-3 cursor-pointer">
+              <label className="flex cursor-pointer items-start gap-3">
                 <input
                   type="checkbox"
                   checked={enableCustomerApprovals}
@@ -166,7 +166,7 @@ export default function TimesheetPage() {
 
           {/* Save Button */}
           <div className="flex items-center justify-start pt-6 border-t border-gray-200">
-            <button className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">
+            <button className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">
               Save
             </button>
           </div>
@@ -177,13 +177,13 @@ export default function TimesheetPage() {
       {activeTab === "field-customization" && (
         <div>
           {/* Header with button */}
-          <div className="flex items-center justify-between mb-6">
+          <div className="mb-6 flex items-center justify-between">
             <div className="text-sm text-gray-600">
               Custom Fields Usage: {customFieldsUsage}/{maxCustomFields}
             </div>
             <button
               onClick={() => navigate("/settings/timesheet/new-field")}
-              className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 flex items-center gap-2"
+              className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
             >
               <span className="text-lg">+</span>
               New Custom Field

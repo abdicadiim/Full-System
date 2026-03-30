@@ -7,6 +7,10 @@ import {
   updateOrganizationBranding,
   updateOrganizationProfile,
 } from "../controllers/settingsController.js";
+import {
+  getItemSettings,
+  upsertItemSettings,
+} from "../controllers/itemSettingsController.js";
 import { requireAuth, requireOrgAdmin } from "../midelwares/requireAuth.js";
 import {
   createEmailRelayServer,
@@ -48,6 +52,10 @@ settingsRoutes.get("/users", requireAuth, requireOrgAdmin, listUsersForSettings)
 // Customers & Vendors (module settings)
 settingsRoutes.get("/customers-vendors", requireAuth, getCustomersVendorsSettings);
 settingsRoutes.put("/customers-vendors", requireAuth, requireOrgAdmin, upsertCustomersVendorsSettings);
+
+// Products / Items (module settings)
+settingsRoutes.get("/items", requireAuth, getItemSettings);
+settingsRoutes.put("/items", requireAuth, requireOrgAdmin, upsertItemSettings);
 
 // Sender emails
 settingsRoutes.get("/sender-emails", requireAuth, listSenderEmails);
