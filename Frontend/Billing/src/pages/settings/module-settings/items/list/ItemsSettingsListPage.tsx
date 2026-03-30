@@ -242,17 +242,19 @@ export default function ItemsPage() {
             <label className="text-sm font-medium text-gray-700 pt-2">
               Set a decimal rate for your item quantity
             </label>
-            <div className="relative w-32 shrink-0">
+            <div className="relative w-28 shrink-0">
               <select
                 value={decimalPlaces}
                 onChange={(e) => setDecimalPlaces(e.target.value)}
-                className="w-full h-10 px-3 pr-8 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
+                className="w-full h-10 px-3 pr-8 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white text-sm"
               >
                 <option value="0">0</option>
                 <option value="1">1</option>
                 <option value="2">2</option>
                 <option value="3">3</option>
                 <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
               </select>
               <ChevronDown size={16} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             </div>
