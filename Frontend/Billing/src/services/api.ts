@@ -302,6 +302,7 @@ const LOCAL_CHART_ACCOUNTS_KEY = "taban_books_chart_accounts";
 const LOCAL_TX_SERIES_KEY = "taban_books_tx_series_v2";
 const LOCAL_QUOTES_SETTINGS_KEY = "taban_books_settings_quotes";
 const LOCAL_RECURRING_SETTINGS_KEY = "taban_books_settings_recurring_invoices";
+const LOCAL_RETAINER_INVOICE_SETTINGS_KEY = "taban_books_settings_retainer_invoices";
 const LOCAL_VENDORS_KEY = "taban_books_vendors";
 const LOCAL_DOCUMENTS_KEY = "taban_books_documents";
 const LOCAL_REPORTING_TAGS_KEY = "taban_books_reporting_tags";
@@ -2503,6 +2504,52 @@ export const settingsAPI = {
     const current = readSettingsObject(LOCAL_RECURRING_SETTINGS_KEY, {});
     const updated = { ...current, ...(data || {}) };
     writeSettingsObject(LOCAL_RECURRING_SETTINGS_KEY, updated);
+    return { success: true, data: updated };
+  },
+  getRetainerInvoiceSettings: async () => {
+    const defaults = {
+      termsConditions: "",
+      customerNotes: "",
+      approvalType: "no-approval",
+      notificationPreference: "all-submitters",
+      sendNotifications: true,
+      notifySubmitter: true,
+      customFields: [
+        { name: "Sales Person", dataType: "Text Box (Single Line)", mandatory: "No", showInAllPDFs: "Yes", status: "Active", locked: true },
+        { name: "Description", dataType: "Text Box (Single Line)", mandatory: "No", showInAllPDFs: "Yes", status: "Active", locked: true },
+      ],
+      customButtons: [] as unknown[],
+      relatedLists: [] as unknown[],
+    };
+
+    try {
+      const res = await request({ path: "/settings/retainer-invoices" });
+      if (res?.success) {
+        const data = res.data && typeof res.data === "object" ? { ...defaults, ...(res.data as any) } : defaults;
+        writeSettingsObject(LOCAL_RETAINER_INVOICE_SETTINGS_KEY, data);
+        return { success: true, data };
+      }
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+
+    const data = readSettingsObject(LOCAL_RETAINER_INVOICE_SETTINGS_KEY, defaults);
+    writeSettingsObject(LOCAL_RETAINER_INVOICE_SETTINGS_KEY, data);
+    return { success: true, data };
+  },
+  updateRetainerInvoiceSettings: async (data: any) => {
+    try {
+      const res = await request({ method: "PUT", path: "/settings/retainer-invoices", data });
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+
+    const current = readSettingsObject(LOCAL_RETAINER_INVOICE_SETTINGS_KEY, {});
+    const updated = { ...current, ...(data || {}) };
+    writeSettingsObject(LOCAL_RETAINER_INVOICE_SETTINGS_KEY, updated);
     return { success: true, data: updated };
   },
 };
