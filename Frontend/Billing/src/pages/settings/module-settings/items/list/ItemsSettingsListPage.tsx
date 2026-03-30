@@ -242,11 +242,11 @@ export default function ItemsPage() {
             <label className="text-sm font-medium text-gray-700 pt-2">
               Set a decimal rate for your item quantity
             </label>
-            <div className="relative w-28 shrink-0">
+            <div className="relative w-[84px] shrink-0">
               <select
                 value={decimalPlaces}
                 onChange={(e) => setDecimalPlaces(e.target.value)}
-                className="w-full h-10 px-3 pr-8 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white text-sm"
+                className="w-full h-10 px-2 pr-7 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white text-sm"
               >
                 <option value="0">0</option>
                 <option value="1">1</option>
