@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronDown } from "lucide-react";
+import SearchableDropdown from "../../../../../components/ui/SearchableDropdown";
 
 export default function TimesheetPage() {
   const navigate = useNavigate();
@@ -11,13 +11,19 @@ export default function TimesheetPage() {
   const [enableMaxHours, setEnableMaxHours] = useState(true);
   const [maxHours, setMaxHours] = useState("24:00");
   const [trackCosts, setTrackCosts] = useState(false);
-  const [enableApprovals, setEnableApprovals] = useState(false);
-  const [enableCustomerApprovals, setEnableCustomerApprovals] = useState(false);
+  const [enableApprovals, setEnableApprovals] = useState(true);
+  const [enableCustomerApprovals, setEnableCustomerApprovals] = useState(true);
   
   // Field Customization tab states
   const [customFields, setCustomFields] = useState([]);
   const customFieldsUsage = customFields.length;
   const maxCustomFields = 52;
+  const roundOffOptions = [
+    { value: "dont-round-off", label: "Don't Round-off" },
+    { value: "round-up", label: "Round up to" },
+    { value: "round-down", label: "Round down to" },
+    { value: "round-to-nearest", label: "Round to nearest" },
+  ];
 
   return (
     <div className="p-6 max-w-5xl">
@@ -49,7 +55,7 @@ export default function TimesheetPage() {
 
       {/* General Tab Content */}
       {activeTab === "general" && (
-        <div className="space-y-8 rounded-lg border border-gray-200 bg-white p-6">
+        <div className="space-y-8">
           {/* Round Off Time */}
           <div>
             <div className="mb-3 flex flex-wrap items-baseline gap-2">
@@ -61,17 +67,15 @@ export default function TimesheetPage() {
               </p>
             </div>
             <div className="relative w-64">
-              <select
+              <SearchableDropdown
                 value={roundOffTime}
-                onChange={(e) => setRoundOffTime(e.target.value)}
-                className="w-full h-10 px-3 pr-8 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
-              >
-                <option value="dont-round-off">Don't Round-off</option>
-                <option value="round-to-nearest-15">Round to nearest 15 minutes</option>
-                <option value="round-to-nearest-30">Round to nearest 30 minutes</option>
-                <option value="round-to-nearest-hour">Round to nearest hour</option>
-              </select>
-              <ChevronDown size={16} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                options={roundOffOptions}
+                onChange={setRoundOffTime}
+                placeholder="Don't Round-off"
+                openDirection="down"
+                className="w-64"
+                inputClassName="h-10 w-64"
+              />
             </div>
           </div>
 
