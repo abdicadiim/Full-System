@@ -257,13 +257,13 @@ export default function CustomersVendorsPage() {
             </label>
           </div>
 
-          {/* Customer & Vendor Numbers */}
+          {/* Customer Numbers */}
           <div className="border-t border-gray-200 pt-6">
             <h3 className="text-sm font-semibold text-gray-900 mb-2">
-              Customer & Vendor Numbers
+              Customer Numbers
             </h3>
             <p className="text-sm text-gray-600 mb-4">
-              Generate customer and vendor numbers automatically. You can configure the series in which numbers are generated while creating new records.
+              Generate customer numbers automatically. You can configure the series in which numbers are generated while creating new records.
             </p>
             <div className="space-y-4 mb-4">
               {/* Enable Customer Numbers */}
