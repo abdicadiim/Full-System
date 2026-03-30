@@ -468,7 +468,7 @@ export default function AllSettings() {
     } else if (label === "Quotes") {
       navigate("/settings/quotes");
     } else if (label === "Retainer Invoices") {
-      navigate("/sales/retainer-invoices");
+      navigate("/settings/retainer-invoices");
     } else if (label === "Invoices") {
       navigate("/settings/invoices");
     } else if (label === "Sales Receipts") {

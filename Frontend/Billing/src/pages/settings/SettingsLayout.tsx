@@ -110,7 +110,7 @@ const moduleSettings = [
     path: "/settings/quotes",
     items: [
       { label: "Quotes", path: "/settings/quotes" },
-      { label: "Retainer Invoices", path: "/sales/retainer-invoices" },
+      { label: "Retainer Invoices", path: "/settings/retainer-invoices" },
       { label: "Invoices", path: "/settings/invoices" },
       { label: "Sales Receipts", path: "/settings/sales-receipts" },
       { label: "Payments Received", path: "/settings/payments-received" },

@@ -26,6 +26,7 @@ import SettingsTimesheetWrapper from "./module-settings/timesheet/SettingsTimesh
 import SettingsTasksWrapper from "./SettingsTasksWrapper";
 import SettingsInventoryAdjustmentsWrapper from "./SettingsInventoryAdjustmentsWrapper";
 import SettingsQuotesWrapper from "./SettingsQuotesWrapper";
+import SettingsRetainerInvoicesWrapper from "./SettingsRetainerInvoicesWrapper";
 import SettingsInvoicesWrapper from "./SettingsInvoicesWrapper";
 import SettingsRecurringInvoicesWrapper from "./SettingsRecurringInvoicesWrapper";
 import SettingsSalesReceiptsWrapper from "./SettingsSalesReceiptsWrapper";
@@ -80,6 +81,7 @@ export default function SettingsRoutes() {
       <Route path="timesheet/*" element={<SettingsTimesheetWrapper />} />
       <Route path="inventory-adjustments/*" element={<SettingsInventoryAdjustmentsWrapper />} />
       <Route path="quotes/*" element={<SettingsQuotesWrapper />} />
+      <Route path="retainer-invoices/*" element={<SettingsRetainerInvoicesWrapper />} />
       <Route path="invoices/*" element={<SettingsInvoicesWrapper />} />
       <Route path="recurring-invoices/*" element={<SettingsRecurringInvoicesWrapper />} />
       <Route path="sales-receipts/*" element={<SettingsSalesReceiptsWrapper />} />

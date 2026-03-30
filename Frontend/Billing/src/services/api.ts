@@ -2529,7 +2529,6 @@ export const settingsAPI = {
         writeSettingsObject(LOCAL_RETAINER_INVOICE_SETTINGS_KEY, data);
         return { success: true, data };
       }
-      if (typeof (res as any)?.status === "number") return res as any;
     } catch {
       // fall back
     }
@@ -2541,8 +2540,12 @@ export const settingsAPI = {
   updateRetainerInvoiceSettings: async (data: any) => {
     try {
       const res = await request({ method: "PUT", path: "/settings/retainer-invoices", data });
-      if (res?.success) return res as any;
-      if (typeof (res as any)?.status === "number") return res as any;
+      if (res?.success) {
+        const current = readSettingsObject(LOCAL_RETAINER_INVOICE_SETTINGS_KEY, {});
+        const updated = { ...current, ...(data || {}), ...(res.data && typeof res.data === "object" ? (res.data as any) : {}) };
+        writeSettingsObject(LOCAL_RETAINER_INVOICE_SETTINGS_KEY, updated);
+        return { success: true, data: updated };
+      }
     } catch {
       // fall back
     }

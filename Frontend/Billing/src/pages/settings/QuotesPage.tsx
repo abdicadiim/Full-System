@@ -227,7 +227,7 @@ export default function QuotesPage() {
   }
 
   return (
-    <div className="w-full min-w-0 max-w-none p-8">
+    <div className="w-full min-w-0 p-8">
       <h1 className="text-2xl font-semibold text-gray-900 mb-6">Quotes</h1>
 
       {/* Tabs */}
@@ -297,6 +297,7 @@ export default function QuotesPage() {
         </button>
       </div>
 
+      <div className="w-full max-w-[760px] min-w-0 mr-auto">
       {/* General Tab Content */}
       {activeTab === "general" && (
         <div className="w-full min-w-0 space-y-6">
@@ -477,7 +478,7 @@ export default function QuotesPage() {
           </div>
 
           {/* Save Button */}
-          <div className="pt-6">
+          <div className="sticky bottom-0 z-20 pt-6 pb-8">
             <button
               onClick={handleSaveGeneral}
               disabled={saving}
@@ -953,7 +954,7 @@ export default function QuotesPage() {
           )}
 
           {/* Save Button */}
-          <div className="pt-8 border-t border-gray-100">
+          <div className="sticky bottom-0 z-20 pt-8 pb-8">
             <button
               onClick={handleSaveApprovals}
               disabled={saving}
@@ -1298,7 +1299,8 @@ export default function QuotesPage() {
           </div>
         )
       }
-    </div >
+      </div>
+    </div>
   );
 }
 

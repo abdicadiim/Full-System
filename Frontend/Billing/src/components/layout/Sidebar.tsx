@@ -291,6 +291,7 @@ const routePermissionMap = {
   "/sales/retainer-invoices": "sales",
   "/sales/receipts": "sales",
   "/sales/credit-notes": "sales",
+  "/settings/retainer-invoices": "settings",
   "/invoices": "sales",
   "/quotes": "sales",
 
@@ -343,6 +344,7 @@ const routePermissionContextMap = {
   "/sales/quotes": { module: "sales", submodule: "Quotes" },
   "/sales/retainer-invoices": { module: "sales", submodule: "Invoices" },
   "/sales/invoices": { module: "sales", submodule: "Invoices" },
+  "/settings/retainer-invoices": { module: "settings", submodule: "Sales" },
   "/sales/sales-receipts": { module: "sales", submodule: "Sales Receipt" },
   "/sales/subscriptions": { module: "sales", submodule: "Subscriptions" },
   "/sales/credit-notes": { module: "sales", submodule: "Credit Notes" },
