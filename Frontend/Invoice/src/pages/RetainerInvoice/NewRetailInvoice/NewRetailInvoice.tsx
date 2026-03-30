@@ -15,10 +15,7 @@ export default function NewRetailInvoice() {
   const [saving, setSaving] = useState(false);
   const [customers, setCustomers] = useState<any[]>([]);
   const [form, setForm] = useState({
-    invoiceNumber: transactionNumberSeriesAPI.getCachedNextNumber({
-      module: "Retainer Invoice",
-      locationName: "Head Office",
-    }) || "",
+    invoiceNumber: "",
     customerId: "",
     customerName: "",
     invoiceDate: todayISO(),
@@ -30,10 +27,7 @@ export default function NewRetailInvoice() {
   const applyRowToForm = (row: any) => {
     if (!row) return;
     setForm({
-      invoiceNumber: String(row?.invoiceNumber || transactionNumberSeriesAPI.getCachedNextNumber({
-        module: "Retainer Invoice",
-        locationName: "Head Office",
-      }) || ""),
+      invoiceNumber: String(row?.invoiceNumber || ""),
       customerId: String(row?.customerId || row?.customer?._id || row?.customer?.id || ""),
       customerName: String(row?.customerName || row?.customer?.displayName || row?.customer?.name || ""),
       invoiceDate: String(row?.invoiceDate || row?.date || todayISO()).slice(0, 10),

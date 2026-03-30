@@ -42,10 +42,7 @@ export default function NewRetailInvoice() {
   const [loading, setLoading] = useState(false);
   const [savingMode, setSavingMode] = useState<"draft" | "sent" | null>(null);
 
-  const [invoiceNumber, setInvoiceNumber] = useState(transactionNumberSeriesAPI.getCachedNextNumber({
-    module: "Retainer Invoice",
-    locationName: "Head Office",
-  }) || "");
+  const [invoiceNumber, setInvoiceNumber] = useState("");
   const [isRetainerNumberModalOpen, setIsRetainerNumberModalOpen] = useState(false);
   const [retainerNumberMode, setRetainerNumberMode] = useState<"auto" | "manual">("auto");
   const [retainerPrefix, setRetainerPrefix] = useState("");
@@ -308,10 +305,7 @@ export default function NewRetailInvoice() {
             existing?.customer?._id || existing?.customer?.id || existing?.customerId || existing?.customer || ""
           );
 
-          setInvoiceNumber(String(existing?.invoiceNumber || transactionNumberSeriesAPI.getCachedNextNumber({
-            module: "Retainer Invoice",
-            locationName: "Head Office",
-          }) || ""));
+          setInvoiceNumber(String(existing?.invoiceNumber || ""));
           setRetainerPrefix(deriveRetainerPrefix(existing?.invoiceNumber));
           setRetainerNextNumber(extractRetainerDigits(existing?.invoiceNumber) || "");
           setCustomerId(selectedCustomerId);
