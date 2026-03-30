@@ -69,9 +69,19 @@ export const REPORT_CATEGORIES: ReportCategory[] = [
     description: "Review payments, due intervals, credit notes, refunds, failures, and card expiry.",
   },
   {
+    id: "recurring-invoices",
+    name: "Recurring Invoices",
+    description: "Track recurring invoice schedules, generated invoices, and billing cycles.",
+  },
+  {
     id: "purchases-expenses",
     name: "Purchases and Expenses",
     description: "Track expense totals, categories, customer/project split, and billable expenses.",
+  },
+  {
+    id: "taxes",
+    name: "Taxes",
+    description: "Review tax totals, withheld taxes, and source-tax receivables.",
   },
   {
     id: "projects-timesheets",
@@ -591,6 +601,14 @@ export const REPORTS: ReportDefinition[] = [
     functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
   },
   {
+    id: "withholding-tax",
+    categoryId: "payments-received",
+    name: "Withholding Tax",
+    summary: "Withholding tax collected or deducted across payment transactions.",
+    howItHelps: "Review source-tax activity without leaving the payments report center.",
+    functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+  },
+  {
     id: "payment-failures",
     categoryId: "payments-received",
     name: "Payment Failures",
@@ -604,6 +622,14 @@ export const REPORTS: ReportDefinition[] = [
     name: "Card Expiry",
     summary: "Cards already expired or expiring soon.",
     howItHelps: "Trigger card update reminders before renewal failures occur.",
+    functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+  },
+  {
+    id: "recurring-invoice-details",
+    categoryId: "recurring-invoices",
+    name: "Recurring Invoice Details",
+    summary: "Recurring invoices generated from active billing schedules.",
+    howItHelps: "Monitor recurring invoice cadence and check the documents created automatically.",
     functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
   },
 
@@ -646,6 +672,22 @@ export const REPORTS: ReportDefinition[] = [
     summary: "Billable expenses with invoiced amount and status context.",
     howItHelps: "Reduce missed billing and improve expense recovery.",
     functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print"),
+  },
+  {
+    id: "tax-summary",
+    categoryId: "taxes",
+    name: "Tax Summary",
+    summary: "Tax collected and tax paid summary grouped by tax code.",
+    howItHelps: "Get a quick view of tax liability and filing readiness.",
+    functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+  },
+  {
+    id: "tds-receivables",
+    categoryId: "taxes",
+    name: "TDS Receivables",
+    summary: "Tax deducted at source amounts that are still receivable.",
+    howItHelps: "Track source deductions that are pending collection or settlement.",
+    functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
   },
 
   {
