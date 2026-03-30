@@ -192,7 +192,7 @@ export default function CustomersVendorsPage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl">
+    <div className="p-6 max-w-4xl min-h-full pb-24">
       <h1 className="text-2xl font-semibold text-gray-900 mb-6">Customers and Vendors</h1>
 
       {/* Tabs */}
@@ -524,8 +524,11 @@ export default function CustomersVendorsPage() {
           </div>
 
           {/* Save Button */}
-          <div className="flex items-center justify-start pt-6 border-t border-gray-200">
-            <button 
+          <div
+            className="fixed bottom-0 z-30 border-t border-gray-200 bg-gray-50/95 px-6 py-4 backdrop-blur"
+            style={{ left: "16rem", right: 0 }}
+          >
+            <button
               onClick={handleSave}
               disabled={saving}
               className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
