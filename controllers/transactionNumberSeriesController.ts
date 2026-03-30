@@ -2,6 +2,7 @@ import express from "express";
 import mongoose from "mongoose";
 import { TransactionNumberSeries } from "../models/TransactionNumberSeries.js";
 import { TransactionNumberSeriesSettings } from "../models/TransactionNumberSeriesSettings.js";
+import { Location } from "../models/Location.js";
 
 const pickString = (v: unknown) => (typeof v === "string" ? v : typeof v === "number" ? String(v) : "");
 const pickArray = (v: unknown) => (Array.isArray(v) ? v : []);
@@ -34,7 +35,13 @@ const normalizeRow = (row: any) => {
   return { ...row, id, _id: id };
 };
 
-const matchesSeriesLookup = (row: any, lookup: { seriesId?: string; module?: string; moduleKey?: string; seriesName?: string }) => {
+const normalizeLookupLocationIds = (value: unknown) =>
+  Array.isArray(value) ? value.map((item) => String(item || "").trim()).filter(Boolean) : [];
+
+const matchesSeriesLookup = (
+  row: any,
+  lookup: { seriesId?: string; module?: string; moduleKey?: string; seriesName?: string }
+) => {
   if (!row) return false;
 
   if (lookup.seriesId && String(row?._id || "").trim() === lookup.seriesId) {
@@ -59,15 +66,26 @@ const matchesSeriesLookup = (row: any, lookup: { seriesId?: string; module?: str
   return rowKeys.some((key) => key === targetKey);
 };
 
-const pickPreferredSeriesRow = (rows: any[]) => {
+const pickPreferredSeriesRow = (rows: any[], lookupLocationIds: string[] = []) => {
   const activeRows = rows.filter((row) => String(row?.status || "active").toLowerCase() !== "inactive");
-  return (
-    activeRows.find((row) => Boolean(row?.isDefault)) ||
-    activeRows[0] ||
-    rows.find((row) => Boolean(row?.isDefault)) ||
-    rows[0] ||
-    null
-  );
+  const scoreRow = (row: any) => {
+    const rowLocationIds = Array.isArray(row?.locationIds)
+      ? row.locationIds.map((id: any) => String(id || "").trim()).filter(Boolean)
+      : [];
+
+    let score = 0;
+    if (lookupLocationIds.length) {
+      const matchesLocation = rowLocationIds.some((id) => lookupLocationIds.includes(id));
+      if (matchesLocation) score += 100;
+      else if (!rowLocationIds.length) score += 10;
+    }
+    if (Boolean(row?.isDefault)) score += 25;
+    if (rowLocationIds.length) score += 5;
+    return score;
+  };
+
+  return [...activeRows, ...rows.filter((row) => String(row?.status || "active").toLowerCase() !== "inactive")]
+    .sort((a, b) => scoreRow(b) - scoreRow(a))[0] || null;
 };
 
 export const listTransactionNumberSeries = async (req: express.Request, res: express.Response) => {
@@ -165,17 +183,34 @@ export const getNextTransactionNumber = async (req: express.Request, res: expres
   const module = String(req.query.module || "").trim();
   const moduleKey = String(req.query.moduleKey || "").trim();
   const seriesName = String(req.query.seriesName || "").trim();
+  const locationId = String(req.query.locationId || "").trim();
+  const locationName = String(req.query.locationName || "").trim();
   const reserve = String(req.query.reserve || "").trim().toLowerCase() !== "false";
   const hasExplicitLookup = Boolean(seriesId || module || moduleKey || seriesName);
+  const lookupLocationIds: string[] = [];
 
   const rows: any[] = await TransactionNumberSeries.find({ organizationId: orgId }).lean();
+  if (locationId) {
+    lookupLocationIds.push(locationId);
+  }
+  if (locationName) {
+    const locations = await Location.find({ organizationId: orgId }).lean();
+    const normalizedLocationName = locationName.toLowerCase();
+    locations
+      .filter((loc: any) => String(loc?.name || "").trim().toLowerCase() === normalizedLocationName)
+      .forEach((loc: any) => {
+        const id = String(loc?._id || "").trim();
+        if (id) lookupLocationIds.push(id);
+      });
+  }
+
   const matchedRows = rows.filter((item) => matchesSeriesLookup(item, { seriesId, module, moduleKey, seriesName }));
   const row =
     (seriesId ? rows.find((item) => String(item?._id || "").trim() === seriesId) : null) ||
     (module || moduleKey || seriesName
-      ? pickPreferredSeriesRow(matchedRows)
+      ? pickPreferredSeriesRow(matchedRows, normalizeLookupLocationIds(lookupLocationIds))
       : null) ||
-    (!hasExplicitLookup ? pickPreferredSeriesRow(rows) : null);
+    (!hasExplicitLookup ? pickPreferredSeriesRow(rows, normalizeLookupLocationIds(lookupLocationIds)) : null);
 
   if (!row) return res.status(404).json({ success: false, message: "Series not found", data: null });
 
