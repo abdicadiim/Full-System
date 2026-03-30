@@ -276,14 +276,6 @@ export default function ItemsPage() {
                 <p className="mt-1 text-sm text-gray-600">
                   If you allow duplicate item names, all imports involving items will use SKU as the primary field for mapping.
                 </p>
-                {allowDuplicateNames && (
-                  <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-3 max-w-[620px]">
-                    <p className="text-xs text-gray-700">
-                      Before you enable this option, make the{" "}
-                      <a href="#" className="text-blue-600 hover:underline">SKU field active and mandatory</a>.
-                    </p>
-                  </div>
-                )}
               </div>
             </div>
           </div>
