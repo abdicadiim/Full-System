@@ -24,6 +24,8 @@ export default function Layout({ children }) {
     location.pathname === "/expenses/recurring-expenses" ||
     location.pathname.startsWith("/time-tracking") ||
     location.pathname.startsWith("/sales/subscriptions") ||
+    location.pathname.startsWith("/sales/credit-notes") ||
+    location.pathname.startsWith("/credit-notes") ||
     location.pathname.startsWith("/sales/customers") ||
     location.pathname.startsWith("/sales/quotes") ||
     location.pathname.startsWith("/sales/sales-receipts") ||
@@ -37,6 +39,12 @@ export default function Layout({ children }) {
     location.pathname.startsWith("/products/price-lists") ||
     location.pathname.startsWith("/items") ||
     location.pathname.startsWith("/products/items");
+  const isSubscriptionListPage = location.pathname === "/sales/subscriptions" || location.pathname === "/subscriptions";
+  const isSubscriptionDetailPage =
+    /^\/(?:sales\/)?subscriptions\/[^/]+$/.test(location.pathname) &&
+    !/^\/(?:sales\/)?subscriptions\/(new|preview)$/.test(location.pathname);
+  const isCreditNotesPage = location.pathname === "/sales/credit-notes" || location.pathname === "/credit-notes";
+  const disablePageScroll = isSubscriptionListPage || isSubscriptionDetailPage || isCreditNotesPage;
 
   useEffect(() => {
     ensureTimerTicker();
@@ -85,7 +93,13 @@ export default function Layout({ children }) {
               <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Navigation Menu</div>
             </div>
 
-            <main className={`w-full min-w-0 flex-1 min-h-0 overflow-y-auto ${isFullWidthPage ? "p-0" : "p-4 md:p-6"}`}>{children}</main>
+            <main
+              className={`w-full min-w-0 flex-1 min-h-0 ${disablePageScroll ? "overflow-hidden" : "overflow-y-auto"} ${
+                isFullWidthPage ? "p-0" : "p-4 md:p-6"
+              }`}
+            >
+              {children}
+            </main>
           </div>
         </div>
       </div>

@@ -380,9 +380,14 @@ export default function RecurringInvoiceDetail() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white">
-          {/* Large D Logo on the left */}
-          <div className="text-4xl font-bold text-black">
-            D
+          {/* Detail Title */}
+          <div className="min-w-0">
+            <div className="text-sm text-gray-600 truncate">
+              Recurring Invoice
+            </div>
+            <h1 className="text-2xl font-semibold text-gray-900 truncate">
+              {recurringInvoice.profileName || recurringInvoice.customerName || (typeof recurringInvoice.customer === 'object' ? (recurringInvoice.customer?.displayName || recurringInvoice.customer?.name) : recurringInvoice.customer) || "Recurring Invoice"}
+            </h1>
           </div>
 
           {/* Action buttons on the right */}
@@ -787,7 +792,23 @@ export default function RecurringInvoiceDetail() {
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    navigate(`/sales/invoices/${invoice.id}`, { state: { showRecordPayment: true } });
+                                    navigate("/payments/payments-received/new", {
+                                      state: {
+                                        invoiceId: invoice.id || invoice._id,
+                                        invoiceNumber: invoice.invoiceNumber || invoice.id || invoice._id,
+                                        customerId: invoice.customerId || invoice.customer?._id || invoice.customer?.id || recurringInvoice.customerId || "",
+                                        customerName: invoice.customerName || (typeof invoice.customer === "string"
+                                          ? invoice.customer
+                                          : invoice.customer?.displayName || invoice.customer?.name || recurringInvoice.customerName || ""),
+                                        amount: invoice.balanceDue !== undefined
+                                          ? invoice.balanceDue
+                                          : (invoice.balance !== undefined ? invoice.balance : (invoice.total ?? invoice.amount ?? 0)),
+                                        currency: invoice.currency || recurringInvoice.currency || "USD",
+                                        invoice,
+                                        showOnlyInvoice: true,
+                                        returnInvoiceId: invoice.id || invoice._id || ""
+                                      }
+                                    });
                                   }}
                                   className="px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
                                 >

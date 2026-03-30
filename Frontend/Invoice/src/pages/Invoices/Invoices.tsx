@@ -2020,6 +2020,7 @@ export default function Invoices() {
       }
     });
   }, [invoices, sortConfig]);
+  const hasInvoices = sortedInvoices.length > 0;
 
   const paymentSummary = useMemo(() => {
     const safeInvoices = Array.isArray(sortedInvoices) ? sortedInvoices : [];
@@ -2583,7 +2584,7 @@ export default function Invoices() {
         </div>
 
         <div className="flex-1 min-h-0 overflow-hidden">
-        {sortedInvoices.length === 0 && !isRefreshing ? (
+        {!hasInvoices && !isRefreshing ? (
           <div className="flex h-full flex-col items-center justify-center overflow-auto py-16 text-center">
             {/* Video Thumbnail */}
             <div className="relative w-full max-w-md mb-8">

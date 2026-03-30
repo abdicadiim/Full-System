@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { toast } from "react-toastify";
 import {
   X,
   Search,
@@ -28,8 +29,10 @@ import {
 import { saveRecurringInvoice, getRecurringInvoiceById, updateRecurringInvoice, getTaxesFromAPI, saveTax, deleteTax, getCustomersFromAPI, getItemsFromAPI, getSalespersonsFromAPI, getInvoiceById, generateInvoiceFromRecurring } from "../../salesModel";
 import { getAllDocuments } from "../../../../utils/documentStorage";
 import { API_BASE_URL, getToken } from "../../../../services/auth";
-import { projectsAPI, documentsAPI } from "../../../../services/api";
+import { projectsAPI, documentsAPI, salespersonsAPI } from "../../../../services/api";
 import { usePaymentTermsDropdown, defaultPaymentTerms, PaymentTerm } from "../../../../hooks/usePaymentTermsDropdown";
+import { useCurrency } from "../../../hooks/useCurrency";
+import { buildTaxOptionGroups, taxLabel } from "../../../hooks/Taxdropdownstyle";
 import SalespersonDropdown from "../../../components/SalespersonDropdown";
 import { ConfigurePaymentTermsModal } from "../../../../components/ConfigurePaymentTermsModal";
 
@@ -69,6 +72,7 @@ export default function NewRecurringInvoice() {
   const navigate = useNavigate();
   const location = useLocation();
   const { id } = useParams();
+  const { baseCurrencyCode } = useCurrency();
   const isEditMode = !!id;
   const clonedDataFromState = location.state?.clonedData || null;
   const invoiceIdFromQuery = React.useMemo(() => new URLSearchParams(location.search).get("invoiceId"), [location.search]);
@@ -118,7 +122,13 @@ export default function NewRecurringInvoice() {
     unit?: string;
   };
 
-  type TaxOption = { id: string; name: string; rate: number; isCompound?: boolean };
+  type TaxOption = {
+    id: string;
+    name: string;
+    rate: number;
+    isCompound?: boolean;
+    raw?: any;
+  };
 
   type DocumentItem = {
     id: number | string;
@@ -140,6 +150,7 @@ export default function NewRecurringInvoice() {
     id: number;
     itemId?: string | number | null;
     itemDetails?: string;
+    itemSku?: string;
     quantity: number;
     rate: number;
     tax?: string;
@@ -194,7 +205,7 @@ export default function NewRecurringInvoice() {
     projectIds: [],
     taxExclusive: "Tax Exclusive",
     items: [
-      { id: 1, itemDetails: "", quantity: 1, rate: 0, tax: "", amount: 0 }
+      { id: 1, itemDetails: "", itemSku: "", quantity: 1, rate: 0, tax: "", amount: 0 }
     ],
     subTotal: 0,
     discount: 0,
@@ -204,7 +215,7 @@ export default function NewRecurringInvoice() {
     adjustment: 0,
     roundOff: 0,
     total: 0,
-    currency: "USD",
+    currency: String(baseCurrencyCode || "USD").split(" - ")[0].trim().toUpperCase(),
     customerNotes: "Thank you for the payment. You just made our day.",
     termsAndConditions: "",
     documents: []
@@ -215,6 +226,18 @@ export default function NewRecurringInvoice() {
   useEffect(() => {
     hasAppliedInvoicePrefillRef.current = false;
   }, [invoiceIdFromQuery]);
+
+  useEffect(() => {
+    const nextBaseCurrency = String(baseCurrencyCode || "USD").split(" - ")[0].trim().toUpperCase();
+    if (!nextBaseCurrency) return;
+    if (isEditMode || clonedDataFromState || invoiceIdFromQuery) return;
+
+    setFormData(prev => {
+      const currentCurrency = String(prev.currency || "").trim().toUpperCase();
+      if (currentCurrency === nextBaseCurrency) return prev;
+      return { ...prev, currency: nextBaseCurrency };
+    });
+  }, [baseCurrencyCode, isEditMode, clonedDataFromState, invoiceIdFromQuery]);
 
   useEffect(() => {
     if (isEditMode || !clonedDataFromState || hasAppliedCloneRef.current) return;
@@ -233,6 +256,7 @@ export default function NewRecurringInvoice() {
         id: index + 1,
         itemId: item.itemId || item.id || item._id || null,
         itemDetails: item.itemDetails || item.name || item.description || "",
+        itemSku: item.itemSku || item.sku || "",
         quantity: Number(item.quantity ?? 1) || 1,
         rate: Number(item.rate ?? item.price ?? 0) || 0,
         tax: String(item.tax || item.taxId || ""),
@@ -298,6 +322,8 @@ export default function NewRecurringInvoice() {
   const [isAutoSelectingSalespersonFromQuickAction, setIsAutoSelectingSalespersonFromQuickAction] = useState(false);
   const [salespersonQuickActionFrameKey, setSalespersonQuickActionFrameKey] = useState(0);
   const [isReloadingSalespersonFrame, setIsReloadingSalespersonFrame] = useState(false);
+  const [newSalespersonData, setNewSalespersonData] = useState({ name: "", email: "" });
+  const [isSavingNewSalesperson, setIsSavingNewSalesperson] = useState(false);
   const [isManageSalespersonsOpen, setIsManageSalespersonsOpen] = useState<boolean>(false);
   const [manageSalespersonSearch, setManageSalespersonSearch] = useState<string>("");
   const [openItemDropdowns, setOpenItemDropdowns] = useState<Record<string, boolean>>({});
@@ -388,6 +414,121 @@ export default function NewRecurringInvoice() {
     }
   });
 
+  const getTaxIdentifier = (tax: any): string => {
+    return String(
+      tax?.id ||
+      tax?._id ||
+      tax?.taxId ||
+      tax?.tax_id ||
+      tax?.name ||
+      tax?.taxName ||
+      ""
+    ).trim();
+  };
+
+  const getCustomerTaxCandidate = (customer: any): string => {
+    return String(
+      customer?.taxRate ||
+      customer?.taxId ||
+      customer?.defaultTaxId ||
+      customer?.tax ||
+      customer?.taxInfo?.taxId ||
+      customer?.taxInfo?.taxName ||
+      ""
+    ).trim();
+  };
+
+  const getCustomerDisplayLabel = (customer: any): string => {
+    if (!customer) return "";
+    return String(
+      customer.displayName ||
+      customer.companyName ||
+      customer.name ||
+      `${customer.firstName || ""} ${customer.lastName || ""}`.trim()
+    ).trim();
+  };
+
+  const resolveCustomerNameForForm = (data: any, customerId: string): string => {
+    const normalizedCustomerId = String(customerId || "").trim();
+    const matchedCustomer = normalizedCustomerId
+      ? customers.find((customer) => String(customer.id || customer._id || "") === normalizedCustomerId)
+      : null;
+
+    const matchedCustomerName = getCustomerDisplayLabel(matchedCustomer);
+    if (matchedCustomerName) {
+      return matchedCustomerName;
+    }
+
+    const directCandidates = [
+      data?.customerDisplayName,
+      data?.customerName,
+      data?.customer?.displayName,
+      data?.customer?.companyName,
+      data?.customer?.name
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+
+    const directName = directCandidates.find((value) => value !== normalizedCustomerId) || "";
+    if (directName) {
+      return directName;
+    }
+
+    if (typeof data?.customer === "object") {
+      return getCustomerDisplayLabel(data.customer);
+    }
+
+    return "";
+  };
+
+  const getItemTaxCandidate = (item: any): string => {
+    return String(
+      item?.taxId ||
+      item?.salesTaxId ||
+      item?.tax ||
+      item?.salesTax ||
+      item?.taxInfo?.taxId ||
+      item?.taxInfo?.taxName ||
+      item?.taxRate ||
+      item?.salesTaxRate ||
+      ""
+    ).trim();
+  };
+
+  const defaultTaxId = React.useMemo(() => {
+    const activeTaxes = (taxOptions || []).filter((tax) => {
+      if (!tax) return false;
+      const status = String((tax as any)?.status || "").toLowerCase();
+      if (status === "inactive") return false;
+      if ((tax as any)?.active === false || (tax as any)?.isActive === false) return false;
+      return Boolean(getTaxIdentifier(tax));
+    });
+
+    const preferred =
+      activeTaxes.find((tax: any) => tax?.isDefault || tax?.default) ||
+      activeTaxes[0] ||
+      taxOptions[0] ||
+      null;
+
+    return preferred ? getTaxIdentifier(preferred) : "";
+  }, [taxOptions]);
+
+  const resolvePreferredTaxId = (customer: any, item: any = null): string => {
+    const customerCandidate = getCustomerTaxCandidate(customer);
+    const customerTax = customerCandidate ? findTaxOptionById(customerCandidate) : null;
+    if (customerTax) {
+      return getTaxIdentifier(customerTax);
+    }
+
+    const itemCandidate = getItemTaxCandidate(item);
+    const itemTax = itemCandidate ? findTaxOptionById(itemCandidate) : null;
+    if (itemTax) {
+      return getTaxIdentifier(itemTax);
+    }
+
+    return defaultTaxId || "";
+  };
+
   const handleCustomerSearch = () => {
     const searchTerm = customerSearchTerm.toLowerCase();
     let results: Customer[] = [];
@@ -443,7 +584,11 @@ export default function NewRecurringInvoice() {
           sku: item.sku || "",
           rate: item.sellingPrice || item.costPrice || item.rate || 0,
           stockOnHand: item.stockQuantity || item.stockOnHand || item.quantityOnHand || 0,
-          unit: item.unit || item.unitOfMeasure || "pcs"
+          unit: item.unit || item.unitOfMeasure || "pcs",
+          tax: item.taxId || item.salesTaxId || item.tax || item.salesTax || item.taxInfo?.taxId || item.taxInfo?.taxName || item.taxRate || item.salesTaxRate || "",
+          taxId: item.taxId || item.salesTaxId || item.taxInfo?.taxId || "",
+          taxRate: item.taxRate || item.salesTaxRate || item.taxInfo?.taxRate || 0,
+          taxInfo: item.taxInfo || undefined
         }));
         setItems(transformedItems);
 
@@ -454,7 +599,8 @@ export default function NewRecurringInvoice() {
             id: tax.id || tax._id,
             name: tax.name,
             rate: tax.rate,
-            isCompound: tax.isCompound || false
+            isCompound: tax.isCompound || false,
+            raw: tax
           }));
           setTaxOptions(formattedTaxes);
         }
@@ -848,21 +994,6 @@ export default function NewRecurringInvoice() {
             return parsed.toISOString().split("T")[0];
           };
 
-          const getCustomerDisplayName = (data: any) => {
-            if (data?.customerName) return String(data.customerName);
-            if (data?.customerDisplayName) return String(data.customerDisplayName);
-            if (typeof data?.customer === "string") return data.customer;
-            if (data?.customer && typeof data.customer === "object") {
-              return (
-                data.customer.displayName ||
-                data.customer.companyName ||
-                data.customer.name ||
-                `${data.customer.firstName || ""} ${data.customer.lastName || ""}`.trim()
-              );
-            }
-            return "";
-          };
-
           const getSalespersonName = (data: any) => {
             if (!data?.salesperson) return "";
             if (typeof data.salesperson === "string") return data.salesperson;
@@ -932,7 +1063,7 @@ export default function NewRecurringInvoice() {
                 amount: Number(it.amount ?? it.total ?? baseAmount) || baseAmount
               };
             })
-            : [{ id: 1, itemDetails: "", quantity: 1, rate: 0, tax: "", amount: 0 }];
+            : [{ id: 1, itemDetails: "", itemSku: "", quantity: 1, rate: 0, tax: "", amount: 0 }];
 
           const customerId = String(
             recurringInvoiceData.customerId ||
@@ -941,10 +1072,7 @@ export default function NewRecurringInvoice() {
             (typeof recurringInvoiceData.customer === "string" ? recurringInvoiceData.customer : "") ||
             ""
           );
-          const customerName =
-            getCustomerDisplayName(recurringInvoiceData) ||
-            customers.find(c => String(c.id || c._id || "") === customerId)?.name ||
-            "";
+          const customerName = resolveCustomerNameForForm(recurringInvoiceData, customerId);
           const salespersonName = getSalespersonName(recurringInvoiceData);
           const salespersonId = String(
             recurringInvoiceData.salespersonId ||
@@ -1000,7 +1128,7 @@ export default function NewRecurringInvoice() {
             const resolvedCustomer =
               customer || {
                 id: customerId || "",
-                name: customerName
+                name: customerName || customerId || ""
               };
             setSelectedCustomer(resolvedCustomer);
             const resolvedCustomerId = resolveEntityId(resolvedCustomer);
@@ -1038,20 +1166,6 @@ export default function NewRecurringInvoice() {
             const parsed = new Date(value);
             if (Number.isNaN(parsed.getTime())) return fallback;
             return parsed.toISOString().split("T")[0];
-          };
-
-          const getCustomerDisplayName = (invoice: any) => {
-            if (invoice?.customerName) return String(invoice.customerName);
-            if (typeof invoice?.customer === "string") return invoice.customer;
-            if (invoice?.customer && typeof invoice.customer === "object") {
-              return (
-                invoice.customer.displayName ||
-                invoice.customer.companyName ||
-                invoice.customer.name ||
-                `${invoice.customer.firstName || ""} ${invoice.customer.lastName || ""}`.trim()
-              );
-            }
-            return "";
           };
 
           const getSalespersonName = (invoice: any) => {
@@ -1103,7 +1217,7 @@ export default function NewRecurringInvoice() {
                 stockOnHand: Number(matchingDbItem?.stockOnHand ?? it.stockOnHand ?? 0) || 0
               };
             })
-            : [{ id: 1, itemDetails: "", quantity: 1, rate: 0, tax: "", amount: 0 }];
+            : [{ id: 1, itemDetails: "", itemSku: "", quantity: 1, rate: 0, tax: "", amount: 0 }];
 
           setFormData((prev) => {
             const startOn = toInputDate(
@@ -1112,7 +1226,7 @@ export default function NewRecurringInvoice() {
             );
             return calculateTotals({
               ...prev,
-              customerName: getCustomerDisplayName(invoiceData) || prev.customerName,
+              customerName: resolveCustomerNameForForm(invoiceData, String(invoiceData.customerId || invoiceData.customer?._id || invoiceData.customer?.id || "")) || prev.customerName,
               profileName: "",
               orderNumber: String(invoiceData.orderNumber ?? invoiceData.poNumber ?? invoiceData.purchaseOrderNumber ?? ""),
               repeatEvery: prev.repeatEvery || "weekly",
@@ -1151,7 +1265,7 @@ export default function NewRecurringInvoice() {
           });
 
           const invoiceCustomerId = String(invoiceData.customerId || invoiceData.customer?._id || invoiceData.customer?.id || "");
-          const invoiceCustomerName = getCustomerDisplayName(invoiceData);
+          const invoiceCustomerName = resolveCustomerNameForForm(invoiceData, invoiceCustomerId);
           if (invoiceCustomerId || invoiceCustomerName) {
             const matchedCustomer = customers.find((c) => {
               const customerId = String(c.id || c._id || "");
@@ -1168,7 +1282,7 @@ export default function NewRecurringInvoice() {
             } else {
               const fallbackCustomer = {
                 id: invoiceCustomerId || undefined,
-                name: invoiceCustomerName
+                name: invoiceCustomerName || invoiceCustomerId || ""
               };
               setSelectedCustomer(fallbackCustomer);
               const fallbackCustomerId = resolveEntityId(fallbackCustomer);
@@ -1228,13 +1342,26 @@ export default function NewRecurringInvoice() {
     const normalizedPaymentTerm = normalizePaymentTerm(paymentTermFromCustomer);
     const customerName = customer.name || customer.displayName || customer.companyName || "";
     const customerId = resolveEntityId(customer);
+    const customerTaxCandidate = getCustomerTaxCandidate(customer);
+    const customerTaxOption = customerTaxCandidate ? findTaxOptionById(customerTaxCandidate) : null;
+    const customerTaxId = customerTaxOption ? getTaxIdentifier(customerTaxOption) : "";
     setSelectedCustomer(customer);
-    setFormData(prev => ({
-      ...prev,
-      customerName,
-      projectIds: [],
-      paymentTerms: paymentTermFromCustomer ? normalizedPaymentTerm : prev.paymentTerms
-    }));
+    setFormData(prev => {
+      const nextItems = customerTaxId
+        ? prev.items.map((item) => {
+          const currentTax = String(item.tax || "").trim();
+          if (currentTax && currentTax !== defaultTaxId) return item;
+          return { ...item, tax: customerTaxId };
+        })
+        : prev.items;
+      return calculateTotals({
+        ...prev,
+        customerName,
+        projectIds: [],
+        paymentTerms: paymentTermFromCustomer ? normalizedPaymentTerm : prev.paymentTerms,
+        items: nextItems
+      } as FormDataType);
+    });
     if (customerId) {
       void loadProjectsForCustomer(customerId);
     } else {
@@ -1253,6 +1380,53 @@ export default function NewRecurringInvoice() {
     }));
     setIsSalespersonDropdownOpen(false);
     setSalespersonSearch("");
+  };
+
+  const handleNewSalespersonChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setNewSalespersonData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleSaveAndSelectSalesperson = async () => {
+    if (!newSalespersonData.name.trim()) {
+      toast.error("Please enter a name for the salesperson");
+      return;
+    }
+
+    try {
+      setIsSavingNewSalesperson(true);
+      const response = await salespersonsAPI.create({
+        name: newSalespersonData.name.trim(),
+        email: newSalespersonData.email.trim() || "",
+        phone: ""
+      });
+
+      if (response && response.success && response.data) {
+        const savedSalesperson = normalizeSalesperson(response.data);
+        const latestSalespersons = await reloadSalespersonsForRecurring();
+        const selected = latestSalespersons.find((s) => resolveEntityId(s) === resolveEntityId(savedSalesperson)) || savedSalesperson;
+        handleSalespersonSelect(selected);
+        setNewSalespersonData({ name: "", email: "" });
+        setIsNewSalespersonQuickActionOpen(false);
+        toast.success("Salesperson added successfully.");
+        return;
+      }
+
+      toast.error("Failed to save salesperson.");
+    } catch (error: any) {
+      console.error("Error saving salesperson:", error);
+      toast.error(error?.message || "Error saving salesperson.");
+    } finally {
+      setIsSavingNewSalesperson(false);
+    }
+  };
+
+  const handleCancelNewSalesperson = () => {
+    setNewSalespersonData({ name: "", email: "" });
+    setIsNewSalespersonQuickActionOpen(false);
   };
 
   const getEntityId = (entity: any): string => {
@@ -1342,38 +1516,30 @@ export default function NewRecurringInvoice() {
   const openSalespersonQuickAction = async () => {
     setIsSalespersonDropdownOpen(false);
     setIsManageSalespersonsOpen(false);
-    setIsRefreshingSalespersonsQuickAction(true);
-    const latestSalespersons = await reloadSalespersonsForRecurring();
-    setSalespersonQuickActionBaseIds(latestSalespersons.map((s: any) => getEntityId(s)).filter(Boolean));
-    setIsRefreshingSalespersonsQuickAction(false);
+    await reloadSalespersonsForRecurring();
     setIsNewSalespersonQuickActionOpen(true);
-  };
-
-  const tryAutoSelectNewSalespersonFromQuickAction = async () => {
-    if (!isNewSalespersonQuickActionOpen || isAutoSelectingSalespersonFromQuickAction) return;
-    setIsAutoSelectingSalespersonFromQuickAction(true);
-    try {
-      const latestSalespersons = await reloadSalespersonsForRecurring();
-      const baselineIds = new Set(salespersonQuickActionBaseIds);
-      const newSalespersons = latestSalespersons.filter((s: any) => {
-        const entityId = getEntityId(s);
-        return entityId && !baselineIds.has(entityId);
-      });
-      if (newSalespersons.length > 0) {
-        const newlyCreatedSalesperson = pickNewestEntity(newSalespersons) || newSalespersons[newSalespersons.length - 1];
-        handleSalespersonSelect(newlyCreatedSalesperson);
-        setSalespersonQuickActionBaseIds(latestSalespersons.map((s: any) => getEntityId(s)).filter(Boolean));
-        setIsNewSalespersonQuickActionOpen(false);
-      }
-    } finally {
-      setIsAutoSelectingSalespersonFromQuickAction(false);
-    }
   };
 
   const filteredCustomers = (Array.isArray(customers) ? customers : []).filter(customer =>
     (customer.name || "").toLowerCase().includes(customerSearch.toLowerCase()) ||
     (customer.email || "").toLowerCase().includes(customerSearch.toLowerCase())
   );
+
+  useEffect(() => {
+    const query = customerSearch.trim().toLowerCase();
+    if (!isCustomerDropdownOpen || !query || filteredCustomers.length !== 1) return;
+
+    const onlyCustomer = filteredCustomers[0];
+    if (!onlyCustomer || String(selectedCustomer?.id || selectedCustomer?._id || "") === String(onlyCustomer.id || onlyCustomer._id || "")) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      handleCustomerSelect(onlyCustomer);
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [customerSearch, filteredCustomers, isCustomerDropdownOpen, selectedCustomer]);
 
   const filteredSalespersons = salespersons.filter(salesperson =>
     (salesperson.name || "").toLowerCase().includes(salespersonSearch.toLowerCase())
@@ -1478,10 +1644,11 @@ export default function NewRecurringInvoice() {
         id: Date.now() + index,
         itemId: selectedItem.id ?? null,
         itemDetails: selectedItem.name ?? "",
+        itemSku: selectedItem.sku ?? "",
         quantity: Number(selectedItem.quantity ?? 1),
         rate: Number(selectedItem.rate ?? 0),
         stockOnHand: Number(selectedItem.stockOnHand ?? 0),
-        tax: "",
+        tax: resolvePreferredTaxId(selectedCustomer, selectedItem),
         amount: Number((selectedItem.quantity ?? 1) * (selectedItem.rate ?? 0))
       } as FormItem));
 
@@ -1504,17 +1671,24 @@ export default function NewRecurringInvoice() {
     setBulkAddSearch("");
   };
 
-  const getFilteredTaxes = (itemId: string | number) => {
+  const getFilteredTaxGroups = (itemId: string | number) => {
     const key = String(itemId);
     const search = taxSearches[key] || "";
+    const grouped = buildTaxOptionGroups(taxOptions as any[]);
+
     if (!search.trim()) {
-      return taxOptions; // Show all taxes if search is empty
+      return grouped;
     }
-    // Normalize search term (remove special characters for matching but allow them in search)
+
     const normalizedSearch = search.toLowerCase().trim();
-    return taxOptions.filter(tax =>
-      tax.name.toLowerCase().includes(normalizedSearch)
-    );
+    return grouped
+      .map((group) => ({
+        ...group,
+        options: group.options.filter((tax) =>
+          taxLabel(tax.raw ?? tax).toLowerCase().includes(normalizedSearch)
+        ),
+      }))
+      .filter((group) => group.options.length > 0);
   };
 
   const handleTaxSelect = (itemId: string | number, taxId: string) => {
@@ -1542,7 +1716,13 @@ export default function NewRecurringInvoice() {
       id: `TAX-${Date.now()}`,
       name: displayName,
       rate: rateValue,
-      isCompound: newTaxData.isCompound
+      isCompound: newTaxData.isCompound,
+      raw: {
+        id: `TAX-${Date.now()}`,
+        name: displayName,
+        rate: rateValue,
+        isCompound: newTaxData.isCompound
+      }
     };
 
     // Save to localStorage
@@ -1583,15 +1763,18 @@ export default function NewRecurringInvoice() {
     const key = String(itemId);
     setSelectedItemIds(prev => ({ ...prev, [key]: selectedItem.id ?? "" }));
     setFormData(prev => {
+      const taxId = resolvePreferredTaxId(selectedCustomer, selectedItem);
       const updatedItems = prev.items.map(item =>
         String(item.id) === key
           ? {
             ...item,
             itemId: selectedItem.id,
             itemDetails: selectedItem.name || "",
+            itemSku: selectedItem.sku || "",
             quantity: Number(item.quantity || 1),
             rate: Number(selectedItem.rate || 0),
             stockOnHand: Number(selectedItem.stockOnHand ?? 0),
+            tax: taxId,
             amount: Number((Number(item.quantity || 1)) * (Number(selectedItem.rate || 0)))
           } as FormItem
           : item
@@ -1740,6 +1923,7 @@ export default function NewRecurringInvoice() {
         id: Date.now(),
         itemType: "header",
         itemDetails: "",
+        itemSku: "",
         quantity: 0,
         rate: 0,
         amount: 0
@@ -1755,7 +1939,7 @@ export default function NewRecurringInvoice() {
       ...prev,
       items: [
         ...prev.items,
-        { id: Date.now(), itemId: null, itemDetails: "", quantity: 1, rate: 0, tax: "", amount: 0 }
+        { id: Date.now(), itemId: null, itemDetails: "", itemSku: "", quantity: 1, rate: 0, tax: resolvePreferredTaxId(selectedCustomer), amount: 0 }
       ]
     }));
   };
@@ -2134,7 +2318,7 @@ export default function NewRecurringInvoice() {
       }
 
       // Show clear confirmation and navigate to the saved recurring invoice page
-      alert(`Recurring Invoice Profile "${formData.profileName}" has been ${isEditMode ? "updated" : "created"}.\nInvoices will be generated automatically based on the schedule.`);
+      toast.success(`Recurring Invoice Profile "${formData.profileName}" has been ${isEditMode ? "updated" : "created"}. Invoices will be generated automatically based on the schedule.`);
       if (savedRecurringId) {
         navigate(`/sales/recurring-invoices/${savedRecurringId}`);
       } else {
@@ -2142,7 +2326,7 @@ export default function NewRecurringInvoice() {
       }
     } catch (error) {
       console.error("Error saving recurring invoice:", error);
-      alert("Failed to save recurring invoice. Please try again.");
+      toast.error("Failed to save recurring invoice. Please try again.");
     } finally {
       setSaveLoading(false);
     }
@@ -2166,8 +2350,8 @@ export default function NewRecurringInvoice() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto bg-white">
-        <div className="w-full px-6 py-6 space-y-6 pb-24">
+      <div className="flex-1 overflow-y-auto scrollbar-hide bg-white">
+            <div className="w-full max-w-[980px] px-6 py-6 space-y-6 pb-24">
 
           {/* Main Form Content */}
           <div className="space-y-4">
@@ -2220,6 +2404,12 @@ export default function NewRecurringInvoice() {
                           placeholder="Search"
                           value={customerSearch}
                           onChange={(e) => setCustomerSearch(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && filteredCustomers.length > 0) {
+                              e.preventDefault();
+                              handleCustomerSelect(filteredCustomers[0]);
+                            }
+                          }}
                           className="flex-1 text-sm bg-transparent focus:outline-none"
                         />
                       </div>
@@ -2275,7 +2465,7 @@ export default function NewRecurringInvoice() {
                   <div className="py-1">
                     <button
                       type="button"
-                      className="text-sm text-[#2563eb] underline hover:text-[#1d4ed8]"
+                      className="text-sm text-[#2563eb] hover:text-[#1d4ed8] hover:no-underline"
                       onClick={handleOpenProjectsModal}
                     >
                       Choose Project(s)
@@ -2654,8 +2844,8 @@ export default function NewRecurringInvoice() {
                   {isBulkActionsOpen && (
                     <div className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 min-w-[200px] overflow-hidden">
                       <div className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer" onClick={() => {
-                        // Logic for "Insert New Header" via Bulk Actions? 
-                        // Or just toggle additional info. 
+                        // Logic for "Insert New Header" via Bulk Actions?
+                        // Or just toggle additional info.
                         // NewQuote had "Show Additional Information".
                         setShowAdditionalInformation(!showAdditionalInformation);
                         setIsBulkActionsOpen(false);
@@ -2668,8 +2858,8 @@ export default function NewRecurringInvoice() {
               </div>
             </div>
 
-            <div className="overflow-x-auto min-h-[300px]">
-              <table className="w-full border-collapse text-sm">
+            <div className="overflow-visible min-h-0">
+                  <table className="w-full border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-gray-200">
                     <th className="text-left py-3 px-3 font-medium text-gray-700">ITEM DETAILS</th>
@@ -2729,9 +2919,14 @@ export default function NewRecurringInvoice() {
                                   className="w-full bg-transparent border-0 border-b border-transparent focus:border-[#156372]500 outline-none text-sm text-gray-900 transition-colors placeholder-gray-400"
                                 />
                               </div>
+                              {item.itemSku ? (
+                                <div className="mt-1 text-xs text-gray-500">
+                                  SKU: {item.itemSku}
+                                </div>
+                              ) : null}
 
                               {openItemDropdowns[String(item.id)] && (
-                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-80 overflow-y-auto">
+                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-[9999]">
                                   {getFilteredItems(item.id).map(productItem => (
                                     <div
                                       key={productItem.id}
@@ -2742,12 +2937,6 @@ export default function NewRecurringInvoice() {
                                         <div className="font-medium text-gray-900">{productItem.name}</div>
                                         <div className="text-xs text-gray-500 mt-1">
                                           SKU: {productItem.sku} Rate: {formData.currency}{Number(productItem?.rate || 0).toFixed(2)}
-                                        </div>
-                                      </div>
-                                      <div className="text-right">
-                                        <div className="text-xs text-gray-500">Stock on Hand</div>
-                                        <div className="text-sm font-medium text-gray-900">
-                                          {Number(productItem?.stockOnHand || 0).toFixed(2)} {productItem.unit}
                                         </div>
                                       </div>
                                     </div>
@@ -2779,23 +2968,9 @@ export default function NewRecurringInvoice() {
                                 type="number"
                                 value={item.quantity ?? 0}
                                 onChange={(e) => handleItemChange(item.id, 'quantity', e.target.value)}
-                                className={`w-full bg-transparent border-0 border-b outline-none text-sm text-right text-gray-900 transition-colors ${item.stockOnHand !== undefined && item.quantity > item.stockOnHand
-                                  ? "border-red-500 focus:border-red-600"
-                                  : "border-transparent focus:border-[#156372]500"
-                                  }`}
+                                className="w-full bg-transparent border-0 border-b border-transparent focus:border-[#156372]500 outline-none text-sm text-right text-gray-900 transition-colors"
                                 step="0.01"
                               />
-                              {item.stockOnHand !== undefined && (
-                                <div className={`text-[10px] mt-1 ${item.quantity > item.stockOnHand ? "text-red-500 font-medium" : "text-gray-400"}`}>
-                                  Stock: {Number(item.stockOnHand || 0).toFixed(2)}
-                                </div>
-                              )}
-                              {item.stockOnHand !== undefined && item.quantity > item.stockOnHand && (
-                                <span className="text-[10px] text-red-500 flex items-center gap-0.5 mt-0.5">
-                                  <AlertTriangle size={10} />
-                                  Not enough
-                                </span>
-                              )}
                             </div>
                           </td>
                           <td className="py-2 px-3">
@@ -2814,54 +2989,97 @@ export default function NewRecurringInvoice() {
                                 taxDropdownRefs.current[String(item.id)] = el;
                               }}
                             >
-                              <div
-                                className="w-full flex items-center justify-between cursor-pointer border-b border-transparent hover:border-gray-300 transition-colors"
-                                onClick={() => setOpenTaxDropdowns(prev => ({ ...prev, [String(item.id)]: !prev[String(item.id)] }))}
-                              >
-                                <span className={`text-sm ${item.tax ? "text-gray-900" : "text-gray-400"}`}>
-                                  {item.tax ? getTaxDisplayLabel(findTaxOptionById(item.tax)) || "Select Tax" : "Select Tax"}
-                                </span>
-                              </div>
+                              {(() => {
+                                const selectedTaxObj: any = findTaxOptionById(item.tax);
+                                const fallbackRate = parseTaxRate((item as any).taxRate);
+                                const displayLabel = selectedTaxObj
+                                  ? getTaxDisplayLabel(selectedTaxObj)
+                                  : (fallbackRate > 0 ? `Tax [${fallbackRate}%]` : "Select a Tax");
+                                const searchValue = taxSearches[String(item.id)] || "";
+                                const filteredGroups = getFilteredTaxGroups(item.id);
+                                const hasTaxes = filteredGroups.length > 0;
 
-                              {openTaxDropdowns[String(item.id)] && (
-                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-80 overflow-y-auto min-w-[200px]">
-                                  <div className="flex items-center gap-2 p-3 border-b border-gray-200 sticky top-0 bg-white">
-                                    <Search size={16} />
-                                    <input
-                                      type="text"
-                                      placeholder="Search"
-                                      value={taxSearches[String(item.id)] || ""}
-                                      onChange={(e) => setTaxSearches(prev => ({ ...prev, [String(item.id)]: e.target.value }))}
-                                      className="flex-1 text-sm focus:outline-none"
-                                      autoFocus
-                                    />
-                                  </div>
-                                  <div className="max-h-60 overflow-y-auto">
-                                    {getFilteredTaxes(item.id).map(tax => (
-                                      <div
-                                        key={tax.id}
-                                        className={`p-3 cursor-pointer hover:bg-gray-50 flex items-center justify-between ${item.tax === tax.id ? "bg-[rgba(21,99,114,0.1)]" : ""}`}
-                                        onClick={() => handleTaxSelect(item.id, tax.id)}
-                                      >
-                                        <span className="text-sm font-medium text-gray-900 truncate">{getTaxDisplayLabel(tax)}</span>
-                                        {item.tax === tax.id && <Check size={16} className="text-[#156372]" />}
+                                return (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="w-full px-2 py-1.5 border border-gray-300 bg-white rounded outline-none text-sm text-left flex items-center justify-between hover:border-gray-400 transition-colors"
+                                      onClick={() => setOpenTaxDropdowns(prev => ({ ...prev, [String(item.id)]: !prev[String(item.id)] }))}
+                                    >
+                                      <span className={displayLabel === "Select a Tax" ? "text-gray-500" : "text-gray-900"}>
+                                        {displayLabel}
+                                      </span>
+                                      <ChevronDown
+                                        size={14}
+                                        className={`transition-transform ${openTaxDropdowns[String(item.id)] ? "rotate-180" : ""}`}
+                                        style={{ color: "#156372" }}
+                                      />
+                                    </button>
+
+                                    {openTaxDropdowns[String(item.id)] && (
+                                      <div className="absolute left-0 top-full z-[9999] mt-1 w-72 rounded-xl border border-[#d6dbe8] bg-white p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+                                        <div className="p-2">
+                                          <div className="flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-all focus-within:bg-white" style={{ borderColor: "#156372" }}>
+                                            <Search size={14} className="text-slate-400" />
+                                            <input
+                                              type="text"
+                                              value={searchValue}
+                                              onChange={(e) => setTaxSearches(prev => ({ ...prev, [String(item.id)]: e.target.value }))}
+                                              placeholder="Search..."
+                                              className="w-full border-none bg-transparent text-[13px] text-slate-700 outline-none placeholder:text-slate-400"
+                                              autoFocus
+                                            />
+                                          </div>
+                                        </div>
+                                        <div className="max-h-64 overflow-y-auto py-1 custom-scrollbar">
+                                          {!hasTaxes ? (
+                                            <div className="px-4 py-3 text-center text-[13px] text-slate-400">No taxes found</div>
+                                          ) : (
+                                            filteredGroups.map((group) => (
+                                              <div key={group.label}>
+                                                <div className="px-4 py-1.5 text-[10px] font-extrabold uppercase tracking-widest text-slate-700">
+                                                  {group.label}
+                                                </div>
+                                                {group.options.map((tax) => {
+                                                  const taxId = tax.id;
+                                                  const label = getTaxDisplayLabel(tax as any);
+                                                  const selected = String(item.tax || "") === taxId || Number(item.taxRate || 0) === Number(tax.rate || 0);
+                                                  return (
+                                                    <button
+                                                      key={taxId}
+                                                      type="button"
+                                                      onClick={() => handleTaxSelect(item.id, taxId)}
+                                                      className={`w-full px-4 py-2 text-left text-[13px] ${selected
+                                                        ? "text-[#156372] font-medium hover:bg-gray-50 hover:text-gray-900"
+                                                        : "text-slate-700 hover:bg-gray-50 hover:text-gray-900"
+                                                      }`}
+                                                    >
+                                                      {label}
+                                                    </button>
+                                                  );
+                                                })}
+                                              </div>
+                                            ))
+                                          )}
+                                        </div>
+                                        <button
+                                          type="button"
+                                          className="w-full border-t border-gray-200 px-4 py-2 text-left text-[#156372] text-[13px] font-medium flex items-center gap-2 hover:bg-gray-50"
+                                          onClick={() => {
+                                            setOpenTaxDropdowns(prev => ({ ...prev, [String(item.id)]: false }));
+                                            navigate("/settings/taxes/new", {
+                                              state: { from: location.pathname },
+                                            });
+                                          }}
+                                        >
+                                          <Plus size={13} />
+                                          New Tax
+                                        </button>
                                       </div>
-                                    ))}
-                                  </div>
-                                  <button
-                                    className="flex items-center gap-2 px-4 py-3 border-t border-gray-200 bg-gray-50 text-sm font-medium text-gray-700 cursor-pointer hover:bg-gray-100 w-full"
-                                    onClick={() => {
-                                      setOpenTaxDropdowns(prev => ({ ...prev, [String(item.id)]: false }));
-                                      navigate("/settings/taxes/new", {
-                                        state: { from: location.pathname },
-                                      });
-                                    }}
-                                  >
-                                    <Plus size={16} />
-                                    New Tax
-                                  </button>
-                                </div>
-                              )}
+                                    )}
+                                  </>
+                                );
+                              })()}
                             </div>
                           </td>
                           <td className="py-2 px-3 text-right">
@@ -2919,139 +3137,130 @@ export default function NewRecurringInvoice() {
               </table>
             </div>
 
-            <div className="flex items-center gap-3 mt-4">
+            <div className="mt-4 flex items-center gap-3">
               <button
-                className="flex items-center gap-2 px-4 py-2 bg-[rgba(21,99,114,0.1)] text-[#156372] rounded-lg text-sm font-semibold hover:bg-[rgba(21,99,114,0.15)] transition-colors"
+                className="flex items-center gap-2 rounded-md border border-[#d7deef] bg-[#eef3ff] px-4 py-2 text-sm font-medium text-[#1f3f79] transition-colors hover:bg-[#e7eefb]"
                 onClick={handleAddItem}
               >
                 <Plus size={16} />
                 Add New Row
               </button>
               <button
-                className="flex items-center gap-2 px-4 py-2 bg-[rgba(21,99,114,0.1)] text-[#156372] rounded-lg text-sm font-semibold hover:bg-[rgba(21,99,114,0.15)] transition-colors"
+                className="flex items-center gap-2 rounded-md border border-[#d7deef] bg-[#eef3ff] px-4 py-2 text-sm font-medium text-[#1f3f79] transition-colors hover:bg-[#e7eefb]"
                 onClick={() => setIsBulkAddModalOpen(true)}
               >
                 <Plus size={16} />
                 Add Items in Bulk
               </button>
             </div>
-          </div>
 
-          <div className="mt-8 grid grid-cols-1 lg:grid-cols-[1fr_520px] gap-10">
-            {/* Customer Notes */}
+          <div className="mt-8 grid grid-cols-1 gap-10 lg:grid-cols-[1fr_520px]">
             <div>
-              <label className="block text-sm font-medium text-gray-900 mb-2">Customer Notes</label>
+              <label className="mb-2 block text-sm font-medium text-gray-900">Customer Notes</label>
               <textarea
                 name="customerNotes"
-                className="w-full h-24 px-3 py-2 border border-gray-300 rounded text-sm text-gray-700 focus:outline-none focus:border-[#156372] bg-white"
+                className="h-24 w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-[#156372] focus:outline-none bg-white"
                 value={formData.customerNotes}
                 onChange={handleChange}
               />
-              <p className="text-[11px] text-gray-400 mt-2">Will be displayed on the recurring invoice</p>
+              <p className="mt-2 text-[11px] text-gray-400">Will be displayed on the recurring invoice</p>
             </div>
 
-            {/* Summary */}
-            <div className="bg-[#fafafa] border border-gray-200 rounded-md p-6">
-              <div className="flex items-center justify-between text-sm mb-3">
-                <span className="font-semibold text-gray-600">Sub Total</span>
+            <div className="w-full rounded-xl border border-gray-200 bg-[#f3f5f8] p-5 shadow-sm">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-semibold text-gray-700">Sub Total</span>
                 <span className="font-semibold text-gray-900">{Number(formData?.subTotal || 0).toFixed(2)}</span>
               </div>
-              <div className="py-3 border-t border-gray-200">
+              <div className="mt-3 space-y-4 border-t border-gray-200 pt-4">
                 {showTransactionDiscount && (
-                  <>
-                    <div className="mb-3">
-                      <span className="text-sm font-medium text-gray-600 block mb-2">Discount</span>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          name="discount"
-                          value={formData.discount}
-                          onChange={handleChange}
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm text-gray-700 focus:outline-none focus:border-[#156372] bg-white"
-                        />
-                        <select
-                          name="discountType"
-                          value={formData.discountType}
-                          onChange={handleChange}
-                          className="px-3 py-2 border border-gray-300 rounded text-sm text-gray-700 focus:outline-none focus:border-[#156372] bg-white"
-                        >
-                          <option value="percent">%</option>
-                          <option value="amount">Amount</option>
-                        </select>
-                      </div>
+                  <div className="grid grid-cols-[1fr_140px_72px] items-center gap-3 text-sm">
+                    <span className="text-gray-700">Discount</span>
+                    <div className="flex h-9 items-center overflow-hidden rounded-md border border-gray-300 bg-white">
+                      <input
+                        type="number"
+                        className="h-full w-full bg-transparent px-2 text-right text-xs outline-none"
+                        value={formData.discount}
+                        onChange={(e) => setFormData(prev => ({ ...prev, discount: parseFloat(e.target.value) || 0 }))}
+                      />
+                      <select
+                        className="h-full min-w-[46px] cursor-pointer border-l border-gray-300 bg-[#f8fafc] px-1 text-[11px] text-gray-500 outline-none"
+                        value={formData.discountType}
+                        onChange={(e) => setFormData(prev => ({ ...prev, discountType: e.target.value }))}
+                      >
+                        <option value="percent">%</option>
+                        <option value="amount">{formData.currency}</option>
+                      </select>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-500">Discount Amount</span>
-                      <span className="text-sm font-semibold text-gray-900">
-                        {formData.currency} {Number(formData.discountType === "percent" ? (Number(formData.subTotal || 0) * Number(formData.discount || 0) / 100) : Number(formData.discount || 0)).toFixed(2)}
-                      </span>
-                    </div>
-                  </>
+                    <span className="text-right font-medium text-gray-900">
+                      {(formData.discountType === "percent" ? (formData.subTotal * formData.discount / 100) : formData.discount).toFixed(2)}
+                    </span>
+                  </div>
                 )}
-              </div>
-              {showShippingCharges && (
-                <div className="py-2">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-1">
-                      <span className="text-sm font-medium text-gray-600">Shipping Charges</span>
+
+                {showShippingCharges && (
+                  <div className="grid grid-cols-[1fr_140px_72px] items-center gap-3 text-sm">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-gray-700">Shipping Charges</span>
                       <Info size={14} className="text-gray-400" />
                     </div>
                     <input
                       type="number"
-                      name="shippingCharges"
+                      className="h-9 w-full rounded-md border border-gray-300 bg-white px-2 text-right text-xs outline-none focus:border-[#156372]"
                       value={formData.shippingCharges}
-                      onChange={handleChange}
-                      className="w-28 px-3 py-2 border border-gray-300 rounded text-sm text-right focus:outline-none focus:border-[#156372] bg-white"
+                      onChange={(e) => setFormData(prev => ({ ...prev, shippingCharges: parseFloat(e.target.value) || 0 }))}
                     />
+                    <span className="text-right font-medium text-gray-900">{(parseFloat(String(formData.shippingCharges)) || 0).toFixed(2)}</span>
                   </div>
-                </div>
-              )}
-              {showAdjustment && (
-                <div className="py-2">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-1">
-                      <span className="text-sm font-medium text-gray-600">Adjustment</span>
+                )}
+
+                {showAdjustment && (
+                  <div className="grid grid-cols-[1fr_140px_72px] items-center gap-3 text-sm">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-gray-700">Adjustment</span>
                       <Info size={14} className="text-gray-400" />
                     </div>
                     <input
                       type="number"
-                      name="adjustment"
+                      className="h-9 w-full rounded-md border border-gray-300 bg-white px-2 text-right text-xs outline-none focus:border-[#156372]"
                       value={formData.adjustment}
-                      onChange={handleChange}
-                      className="w-28 px-3 py-2 border border-gray-300 rounded text-sm text-right focus:outline-none focus:border-[#156372] bg-white"
+                      onChange={(e) => setFormData(prev => ({ ...prev, adjustment: parseFloat(e.target.value) || 0 }))}
                     />
+                    <span className="text-right font-medium text-gray-900">{(parseFloat(String(formData.adjustment)) || 0).toFixed(2)}</span>
                   </div>
+                )}
+
+                <div className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-gray-700">Round Off (No Rounding)</span>
+                    <LinkIcon size={14} className="text-[#156372]" />
+                  </div>
+                  <span className="font-medium text-gray-900">{Number(formData.roundOff || 0).toFixed(2)}</span>
                 </div>
-              )}
-              {Object.keys(taxSummary).length > 0 && (
-                <div className="py-2 border-t border-gray-200 mt-2 space-y-2">
-                  {Object.entries(taxSummary).map(([taxName, amount]) => (
-                    <div key={taxName} className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600">{taxName}</span>
-                      <span className="font-medium text-gray-900">{Number(amount).toFixed(2)}</span>
+
+                {Object.keys(taxSummary).length > 0 && (
+                  <div className="space-y-2 border-t border-gray-200 pt-2">
+                    {Object.entries(taxSummary).map(([taxName, amount]) => (
+                      <div key={taxName} className="flex items-center justify-between text-sm">
+                        <span className="text-gray-700">{taxName}</span>
+                        <span className="font-medium text-gray-900">{Number(amount).toFixed(2)}</span>
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-between pt-1 text-sm">
+                      <span className="font-semibold text-gray-700">Total Tax Amount</span>
+                      <span className="font-semibold text-gray-900">{Number(totalTaxAmount || 0).toFixed(2)}</span>
                     </div>
-                  ))}
-                  <div className="flex items-center justify-between text-sm pt-1">
-                    <span className="text-gray-600">Total Tax Amount</span>
-                    <span className="font-semibold text-gray-900">{Number(totalTaxAmount).toFixed(2)}</span>
                   </div>
+                )}
+
+                <div className="flex items-center justify-between border-t border-gray-200 pt-4">
+                  <span className="text-base font-bold text-gray-900">Total ({formData.currency})</span>
+                  <span className="text-base font-bold text-gray-900">{Number(formData?.total || 0).toFixed(2)}</span>
                 </div>
-              )}
-              <div className="flex items-center justify-between py-2 text-sm">
-                <div className="flex items-center gap-1">
-                  <span className="text-gray-600">Round Off (No Rounding)</span>
-                  <LinkIcon size={14} className="text-[#156372]" />
-                </div>
-                <span className="font-medium text-gray-900">{Number(formData?.roundOff || 0).toFixed(2)}</span>
-              </div>
-              <div className="flex items-center justify-between pt-4 border-t border-gray-200 mt-2">
-                <span className="text-base font-bold text-gray-900">Total ({formData.currency})</span>
-                <span className="text-base font-bold text-gray-900">{Number(formData?.total || 0).toFixed(2)}</span>
               </div>
             </div>
           </div>
 
-          <div className="mt-8 grid grid-cols-1 lg:grid-cols-[1fr_520px] gap-10">
+          <div className="mt-8 grid grid-cols-1 gap-10">
             {/* Terms & Conditions */}
             <div>
               <label className="block text-sm font-medium text-gray-900 mb-2">Terms & Conditions</label>
@@ -3063,66 +3272,8 @@ export default function NewRecurringInvoice() {
                 onChange={handleChange}
               />
             </div>
+          </div>
 
-            {/* Attach Files */}
-            <div ref={uploadDropdownRef}>
-              <label className="block text-sm font-medium text-gray-900 mb-2">Attach File(s) to Recurring Invoice</label>
-              <div className="relative">
-                <button
-                  type="button"
-                  className="flex items-center gap-2 h-9 px-4 border border-gray-300 rounded text-sm font-medium text-gray-700 hover:bg-gray-50 bg-white"
-                  onClick={() => setIsUploadDropdownOpen(!isUploadDropdownOpen)}
-                  disabled={formData.documents.length >= 10}
-                >
-                  <Upload size={14} className="text-gray-400" />
-                  Upload File
-                  <ChevronDown size={14} className={`transition-transform ${isUploadDropdownOpen ? 'rotate-180' : ''}`} />
-                </button>
-                {isUploadDropdownOpen && (
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden py-1">
-                    <div
-                      onClick={() => {
-                        handleUploadClick();
-                        setIsUploadDropdownOpen(false);
-                      }}
-                      className="px-4 py-3 text-sm text-white bg-[#156372] cursor-pointer hover:bg-[#0D4A52] transition-colors flex items-center gap-3"
-                    >
-                      <ImageIcon size={16} className="text-white" />
-                      Attach From Desktop
-                    </div>
-                    <div
-                      onClick={handleAttachFromDocuments}
-                      className="px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer flex items-center gap-3"
-                    >
-                      <FileText size={16} className="text-gray-400" />
-                      Attach From Documents
-                    </div>
-                    <div
-                      className="px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer flex items-center gap-3"
-                      onClick={() => {
-                        setSelectedCloudProvider("zoho");
-                        setIsUploadDropdownOpen(false);
-                        setIsCloudPickerOpen(true);
-                      }}
-                    >
-                      <Cloud size={16} className="text-gray-400" />
-                      Attach From Cloud
-                    </div>
-                  </div>
-                )}
-              </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                onChange={handleFileUpload}
-                style={{ display: 'none' }}
-                accept="*/*"
-              />
-              <p className="text-xs text-gray-500 mt-2">
-                You can upload a maximum of 10 files, 10MB each
-              </p>
-            </div>
           </div>
 
           {/* Payment Gateway */}
@@ -3335,68 +3486,65 @@ export default function NewRecurringInvoice() {
       {typeof document !== "undefined" && document.body && createPortal(
         <div
           className={`fixed inset-0 z-[10000] flex items-center justify-center transition-opacity duration-150 ${isNewSalespersonQuickActionOpen ? "bg-black bg-opacity-50 opacity-100" : "bg-transparent opacity-0 pointer-events-none"}`}
-          onClick={() => {
-            setIsNewSalespersonQuickActionOpen(false);
-            reloadSalespersonsForRecurring();
-          }}
+          onClick={handleCancelNewSalesperson}
         >
           <div
-            className="bg-white rounded-lg shadow-xl w-[96vw] h-[94vh] max-w-[1200px] flex flex-col"
+            className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between p-5 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">New Salesperson (Quick Action)</h2>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  disabled={isReloadingSalespersonFrame || isAutoSelectingSalespersonFromQuickAction}
-                  className="px-3 py-1.5 border border-gray-300 rounded text-sm text-gray-700 disabled:opacity-60 disabled:cursor-not-allowed"
-                  onClick={() => {
-                    setIsReloadingSalespersonFrame(true);
-                    setSalespersonQuickActionFrameKey(prev => prev + 1);
-                  }}
-                >
-                  {isReloadingSalespersonFrame ? "Reloading..." : "Reload Form"}
-                </button>
-                <button
-                  type="button"
-                  disabled={isRefreshingSalespersonsQuickAction || isAutoSelectingSalespersonFromQuickAction}
-                  className="px-3 py-1.5 border border-gray-300 rounded text-sm text-gray-700 disabled:opacity-60 disabled:cursor-not-allowed"
-                  onClick={async () => {
-                    setIsRefreshingSalespersonsQuickAction(true);
-                    await reloadSalespersonsForRecurring();
-                    setIsRefreshingSalespersonsQuickAction(false);
-                  }}
-                >
-                  {isRefreshingSalespersonsQuickAction ? "Refreshing..." : "Refresh Salespersons"}
-                </button>
-              </div>
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-xl font-bold text-gray-900">Add New Salesperson</h2>
               <button
                 type="button"
-                className="w-8 h-8 bg-[#156372] text-white rounded flex items-center justify-center"
-                onClick={() => {
-                  setIsNewSalespersonQuickActionOpen(false);
-                  reloadSalespersonsForRecurring();
-                }}
+                onClick={handleCancelNewSalesperson}
+                className="p-2 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700"
               >
-                <X size={16} />
+                <X size={20} />
               </button>
             </div>
 
-            <div className="flex-1 p-2 bg-gray-100">
-              <iframe
-                key={salespersonQuickActionFrameKey}
-                title="New Salesperson Quick Action"
-                src="/sales/salespersons/new?embed=1"
-                loading="eager"
-                onLoad={async () => {
-                  if (isReloadingSalespersonFrame) {
-                    setIsReloadingSalespersonFrame(false);
-                  }
-                  await tryAutoSelectNewSalespersonFromQuickAction();
-                }}
-                className="w-full h-full bg-white rounded border border-gray-200"
-              />
+            <div className="p-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={newSalespersonData.name}
+                    onChange={handleNewSalespersonChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#156372]"
+                    placeholder="Enter name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <input
+                    type="email"
+                    name="email"
+                    value={newSalespersonData.email}
+                    onChange={handleNewSalespersonChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#156372]"
+                    placeholder="Enter email"
+                  />
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleSaveAndSelectSalesperson}
+                    disabled={isSavingNewSalesperson}
+                    className="flex-1 px-4 py-2 bg-[#156372] text-white rounded-md text-sm font-medium hover:bg-[#0D4A52] disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {isSavingNewSalesperson ? "Saving..." : "Add"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCancelNewSalesperson}
+                    className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-300"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>,
@@ -3405,8 +3553,8 @@ export default function NewRecurringInvoice() {
 
       {/* Associate Projects Modal */}
       {isProjectsModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-[10000] flex items-center justify-center" onClick={handleCancelProjectsModal}>
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-[10000] flex items-start justify-center px-4 pt-12 pb-6 overflow-y-auto" onClick={handleCancelProjectsModal}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
               <h2 className="text-xl font-medium text-gray-700">Active Projects</h2>
               <button
@@ -3418,7 +3566,7 @@ export default function NewRecurringInvoice() {
               </button>
             </div>
 
-            <div className="max-h-[340px] overflow-y-auto">
+            <div className="max-h-[280px] overflow-y-auto">
               <div className="grid grid-cols-[40px_1fr] gap-3 px-4 py-2 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
                 <div></div>
                 <div>Project Details</div>
@@ -3430,12 +3578,17 @@ export default function NewRecurringInvoice() {
                   const projectId = resolveEntityId(project);
                   const isChecked = pendingProjectIds.includes(projectId);
                   return (
-                    <div key={projectId} className="grid grid-cols-[40px_1fr] gap-3 px-4 py-2 border-b border-gray-100 hover:bg-gray-50">
+                    <div
+                      key={projectId}
+                      className="grid grid-cols-[40px_1fr] gap-3 px-4 py-2 border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                      onClick={() => handleTogglePendingProject(projectId)}
+                    >
                       <div className="pt-1">
                         <input
                           type="checkbox"
                           checked={isChecked}
                           onChange={() => handleTogglePendingProject(projectId)}
+                          onClick={(e) => e.stopPropagation()}
                           className="w-4 h-4 border-gray-300 rounded text-[#156372] focus:ring-[#156372]"
                         />
                       </div>
@@ -3452,7 +3605,7 @@ export default function NewRecurringInvoice() {
             <div className="flex items-center gap-2 px-4 py-3 border-t border-gray-200">
               <button
                 type="button"
-                className="px-4 py-2 bg-[#3b82f6] text-white rounded text-sm font-medium hover:bg-[#2563eb]"
+                className="px-4 py-2 bg-[#156372] text-white rounded text-sm font-medium hover:bg-[#0D4A52]"
                 onClick={handleAddSelectedProjects}
               >
                 Add
@@ -3470,18 +3623,16 @@ export default function NewRecurringInvoice() {
       )}
 
       {/* Sticky Footer */}
-      <div className="fixed bottom-0 left-[260px] right-0 bg-white border-t border-gray-200 p-4 z-[100] shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
-        <div className="w-full flex items-center justify-between px-6">
-          <div className="flex gap-3">
-            <button
-              onClick={handleSaveAndSend}
-              disabled={saveLoading}
-              className={`px-6 py-2 bg-[#156372] text-white rounded-md text-sm font-medium cursor-pointer transition-all shadow-sm flex items-center gap-2 ${saveLoading ? "opacity-70 cursor-not-allowed" : "hover:bg-[#0D4A52]"}`}
-            >
-              {saveLoading ? <Loader2 size={16} className="animate-spin" /> : null}
-              {saveLoading ? "Saving..." : "Save"}
-            </button>
-          </div>
+      <div className="mt-6 bg-white border-t border-gray-200 p-4">
+        <div className="w-full flex items-center justify-start gap-3 px-6">
+          <button
+            onClick={handleSaveAndSend}
+            disabled={saveLoading}
+            className={`px-6 py-2 bg-[#0A5A32] text-white rounded-md text-sm font-medium cursor-pointer transition-all shadow-sm flex items-center gap-2 ${saveLoading ? "opacity-70 cursor-not-allowed" : "hover:bg-[#084629]"}`}
+          >
+            {saveLoading ? <Loader2 size={16} className="animate-spin" /> : null}
+            {saveLoading ? "Saving..." : "Save"}
+          </button>
           <button
             onClick={handleCancel}
             className="px-6 py-2 bg-white border border-gray-300 text-gray-700 rounded-md text-sm font-medium cursor-pointer hover:bg-gray-50 transition-colors"
@@ -3521,9 +3672,7 @@ export default function NewRecurringInvoice() {
                   className="px-4 py-2 bg-[#156372] text-white rounded-md text-sm font-medium hover:bg-[#0D4A52] flex items-center gap-2"
                   onClick={() => {
                     setIsManageSalespersonsOpen(false);
-                    navigate("/sales/salespersons/new", {
-                      state: { from: location.pathname },
-                    });
+                    openSalespersonQuickAction();
                   }}
                 >
                   <Plus size={16} />
@@ -3561,8 +3710,8 @@ export default function NewRecurringInvoice() {
       {/* Add Items in Bulk Modal */}
       {
         isBulkAddModalOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center" onClick={handleCancelBulkAdd}>
-            <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-start justify-center" onClick={handleCancelBulkAdd}>
+            <div className="bg-white rounded-b-lg shadow-xl max-w-4xl w-[calc(100vw-2rem)] mx-4 max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between p-6 border-b border-gray-200">
                 <h2 className="text-lg font-semibold text-gray-900">Add Items in Bulk</h2>
                 <button
@@ -3602,16 +3751,11 @@ export default function NewRecurringInvoice() {
                               SKU: {item.sku} Rate: {formData.currency}{Number(item?.rate || 0).toFixed(2)}
                             </div>
                           </div>
-                          <div className="text-right">
-                            <div className="text-xs text-gray-500">
-                              Stock on Hand {Number(item?.stockOnHand || 0).toFixed(2)} {item.unit}
+                          {isSelected && (
+                            <div className="mt-2 w-6 h-6 bg-[#156372] rounded-full flex items-center justify-center">
+                              <Check size={16} className="text-white" />
                             </div>
-                            {isSelected && (
-                              <div className="mt-2 w-6 h-6 bg-[#156372] rounded-full flex items-center justify-center">
-                                <Check size={16} className="text-white" />
-                              </div>
-                            )}
-                          </div>
+                          )}
                         </div>
                       );
                     })}

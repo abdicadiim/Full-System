@@ -2157,6 +2157,7 @@ export default function NewCreditNote() {
                                   closeAllDropdownMenus();
                                   setWarehouseLocation(loc);
                                   setWarehouseSearch("");
+                                  (document.activeElement as HTMLElement | null)?.blur?.();
                                 }}
                               >
                                 {loc}
@@ -2211,6 +2212,7 @@ export default function NewCreditNote() {
                                   closeAllDropdownMenus();
                                   setPriceList(pl);
                                   setPriceListSearch("");
+                                  (document.activeElement as HTMLElement | null)?.blur?.();
                                 }}
                               >
                                 {pl}

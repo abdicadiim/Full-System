@@ -2004,6 +2004,7 @@ export default function Invoices() {
       }
     });
   }, [invoices, sortConfig]);
+  const hasInvoices = sortedInvoices.length > 0;
 
   const paymentSummary = useMemo(() => {
     const safeInvoices = Array.isArray(sortedInvoices) ? sortedInvoices : [];
@@ -2253,7 +2254,7 @@ export default function Invoices() {
               <X size={16} className="text-red-500" />
             </button>
           </div>
-        ) : (
+          ) : (
           /* Normal Header */
           <div className="flex-none flex items-center justify-between px-6 py-6 bg-white relative overflow-visible">
             <div className="flex items-center gap-8 pl-4">
@@ -2620,7 +2621,7 @@ export default function Invoices() {
         </div>
 
         <div className="flex-1 min-h-0 overflow-hidden">
-        {sortedInvoices.length === 0 && !isRefreshing ? (
+        {!hasInvoices && !isRefreshing ? (
           <div className="flex h-full flex-col items-center justify-center overflow-auto py-16 text-center">
             {/* Video Thumbnail */}
             <div className="relative w-full max-w-md mb-8">

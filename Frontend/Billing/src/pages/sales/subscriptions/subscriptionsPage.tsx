@@ -62,6 +62,7 @@ const SubscriptionsPage = () => {
 
     const [filterType, setFilterType] = useState("All Subscriptions");
     const [subscriptions, setSubscriptions] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
     const [moreDropdownOpen, setMoreDropdownOpen] = useState(false);
@@ -133,11 +134,13 @@ const SubscriptionsPage = () => {
     }, [columns]);
 
     const loadSubscriptions = async () => {
+        setIsLoading(true);
         try {
             const res: any = await subscriptionsAPI.getAll({ limit: 10000 });
             if (res?.success) {
                 const rows = Array.isArray(res.data) ? res.data : [];
                 setSubscriptions(rows);
+                setIsLoading(false);
                 return;
             }
         } catch {
@@ -149,6 +152,8 @@ const SubscriptionsPage = () => {
             setSubscriptions(Array.isArray(parsed) ? parsed : []);
         } catch {
             setSubscriptions([]);
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -270,6 +275,7 @@ const SubscriptionsPage = () => {
     ]);
 
     const visibleColumns = useMemo(() => columns.filter((c) => c.visible), [columns]);
+    const skeletonRowCount = 6;
     const filteredColumns = useMemo(() => {
         const term = columnSearch.toLowerCase().trim();
         if (!term) return columns;
@@ -296,16 +302,14 @@ const SubscriptionsPage = () => {
 
     const deriveStatus = (sub: any) => {
         const explicit = String(sub?.status || "").toUpperCase();
-        if (explicit && !["LIVE", "UNPAID"].includes(explicit)) return explicit;
-        const immediate = Number(sub?.immediateCharges ?? 0) || 0;
-        const paymentReceived = Boolean(sub?.paymentReceived);
-        if (immediate > 0 && !paymentReceived) return "UNPAID";
-        return explicit || "LIVE";
+        if (!explicit) return "LIVE";
+        if (["PAUSED", "CANCELLED", "CANCELED", "EXPIRED"].includes(explicit)) return explicit;
+        return "LIVE";
     };
 
     const statusStyles = (status: string) => {
         const normalized = status.toUpperCase();
-        if (normalized === "UNPAID") return "text-red-500";
+        if (normalized === "LIVE") return "text-green-600";
         if (normalized === "CANCELLED" || normalized === "CANCELED") return "text-red-500";
         if (normalized === "EXPIRED") return "text-gray-500";
         if (normalized === "PAUSED") return "text-gray-500";
@@ -797,7 +801,7 @@ const SubscriptionsPage = () => {
     }, [selectedIds.length, filterType]);
 
     return (
-        <div className="flex flex-col h-[calc(100vh-64px)] w-full bg-white font-sans text-gray-800 antialiased relative overflow-hidden">
+        <div className="flex flex-col h-full min-h-0 w-full bg-white font-sans text-gray-800 antialiased relative overflow-hidden">
             {selectedIds.length > 0 ? (
                 <div
                     ref={headerRowRef}
@@ -889,10 +893,10 @@ const SubscriptionsPage = () => {
             ) : (
                 <div
                     ref={headerRowRef}
-                    className="sticky z-30 flex items-start justify-between px-4 border-b border-gray-100 bg-white relative overflow-visible"
+                    className="sticky z-30 flex items-start justify-between px-6 py-2.5 border-b border-gray-100 bg-white relative overflow-visible"
                     style={{ top: stickyTopOffset }}
                 >
-                    <div className="flex items-center gap-6 pl-4">
+                    <div className="flex items-center gap-6 pl-2">
                         <div className="relative" ref={filterDropdownRef}>
                             <div
                                 className="flex items-center gap-1.5 py-4 cursor-pointer group border-b-2 border-slate-900 -mb-[px]"
@@ -928,7 +932,7 @@ const SubscriptionsPage = () => {
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-3 mr-4 pt-4">
+                    <div className="flex items-center gap-3 mr-2 pt-3">
                         <button
                             onClick={handleNewSubscription}
                             className="cursor-pointer transition-all text-white px-3 sm:px-4 py-1.5 rounded-lg border-[#0D4A52] border-b-[4px] hover:brightness-110 hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:translate-y-[1px] text-sm font-semibold shadow-sm flex items-center gap-1"
@@ -1009,79 +1013,124 @@ const SubscriptionsPage = () => {
                         </tr>
                     </thead>
                     <tbody className="bg-white">
-                        {subscriptions.map((sub: any) => (
-                            <tr
-                                key={sub.id}
-                                className="text-[13px] group transition-all hover:bg-[#f8fafc] cursor-pointer h-[50px] border-b border-[#eef1f6]"
-                                style={selectedIds.includes(sub.id) ? { backgroundColor: "#1b5e6a1A" } : {}}
-                                onClick={() => navigate(`/sales/subscriptions/${sub.id}`)}
-                            >
-                                <td className="px-4 py-3">
-                                    <div className="flex items-center gap-2">
-                                        <span className="h-6 w-6 shrink-0" aria-hidden />
-                                        <span className="h-5 w-px shrink-0 bg-transparent" aria-hidden />
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedIds.includes(sub.id)}
-                                            onChange={() => { }}
-                                            onClick={(e) => toggleSelectOne(sub.id, e)}
-                                            style={{ accentColor: "#1b5e6a" }}
-                                            className="w-4 h-4 rounded border-gray-300 cursor-pointer focus:ring-0"
-                                        />
-                                    </div>
-                                </td>
-                                {visibleColumns.map((col) => {
-                                    const value = (sub as any)[col.key];
-                                    if (col.key === "customerName") {
-                                        return (
-                                            <td key={col.key} className="px-4 py-3">
-                                                <div className="flex flex-col">
-                                                    <span className="text-[#1b5e6a] font-medium hover:underline truncate">
-                                                        {sub.customerName}
-                                                    </span>
-                                                    <span className="text-[11px] text-gray-400 truncate">{getCustomerEmail(sub) || "-"}</span>
-                                                </div>
-                                            </td>
-                                        );
-                                    }
-                                    if (col.key === "subscriptionNumber") {
-                                        return (
-                                            <td key={col.key} className="px-4 py-3">
-                                                <span className="text-[#1b5e6a] font-medium hover:underline">{sub.subscriptionNumber}</span>
-                                            </td>
-                                        );
-                                    }
-                                    if (col.key === "status") {
-                                        const status = deriveStatus(sub);
-                                        return (
-                                            <td key={col.key} className="px-4 py-3">
-                                                <span className={`text-[11px] font-bold tracking-wide ${statusStyles(status)}`}>{status}</span>
-                                            </td>
-                                        );
-                                    }
-                                    if (col.key === "planName") {
-                                        return (
-                                            <td key={col.key} className="px-4 py-3 text-gray-700 uppercase">
-                                                {sub.planName}
-                                            </td>
-                                        );
-                                    }
-                                    if (col.key === "amount") {
-                                        return (
-                                            <td key={col.key} className="px-4 py-3 text-gray-700 font-medium whitespace-nowrap">
-                                                {sub.amount}
-                                            </td>
-                                        );
-                                    }
-                                    return (
-                                        <td key={col.key} className="px-4 py-3 text-gray-700">
-                                            {value || "-"}
+                        {isLoading ? (
+                            Array.from({ length: skeletonRowCount }).map((_, rowIndex) => (
+                                <tr
+                                    key={`subscription-skeleton-${rowIndex}`}
+                                    className="h-[50px] border-b border-[#eef1f6]"
+                                >
+                                    <td className="px-4 py-3">
+                                        <div className="flex items-center gap-2">
+                                            <span className="h-6 w-6 shrink-0 rounded-full bg-slate-100 animate-pulse" />
+                                            <span className="h-5 w-px shrink-0 bg-transparent" aria-hidden />
+                                            <span className="w-4 h-4 rounded border border-slate-200 bg-slate-100 animate-pulse" />
+                                        </div>
+                                    </td>
+                                    {visibleColumns.map((col) => (
+                                        <td key={`skeleton-${rowIndex}-${col.key}`} className="px-4 py-3">
+                                            <div
+                                                className="h-4 rounded bg-slate-100 animate-pulse"
+                                                style={{
+                                                    width:
+                                                        col.key === "customerName"
+                                                            ? "78%"
+                                                            : col.key === "subscriptionNumber"
+                                                                ? "62%"
+                                                                : col.key === "status"
+                                                                    ? "42%"
+                                                                    : col.key === "amount"
+                                                                        ? "48%"
+                                                                        : "70%",
+                                                }}
+                                            />
                                         </td>
-                                    );
-                                })}
-                                <td className="px-4 py-3 sticky right-0 bg-white/95 backdrop-blur-sm group-hover:bg-[#f8fafc] transition-colors" />
+                                    ))}
+                                    <td className="px-4 py-3 sticky right-0 bg-white/95 backdrop-blur-sm">
+                                        <div className="mx-auto h-4 w-4 rounded bg-slate-100 animate-pulse" />
+                                    </td>
+                                </tr>
+                            ))
+                        ) : subscriptions.length > 0 ? (
+                            subscriptions.map((sub: any) => (
+                                <tr
+                                    key={sub.id}
+                                    className="text-[13px] group transition-all hover:bg-[#f8fafc] cursor-pointer h-[50px] border-b border-[#eef1f6]"
+                                    style={selectedIds.includes(sub.id) ? { backgroundColor: "#1b5e6a1A" } : {}}
+                                    onClick={() => navigate(`/sales/subscriptions/${sub.id}`)}
+                                >
+                                    <td className="px-4 py-3">
+                                        <div className="flex items-center gap-2">
+                                            <span className="h-6 w-6 shrink-0" aria-hidden />
+                                            <span className="h-5 w-px shrink-0 bg-transparent" aria-hidden />
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedIds.includes(sub.id)}
+                                                onChange={() => { }}
+                                                onClick={(e) => toggleSelectOne(sub.id, e)}
+                                                style={{ accentColor: "#1b5e6a" }}
+                                                className="w-4 h-4 rounded border-gray-300 cursor-pointer focus:ring-0"
+                                            />
+                                        </div>
+                                    </td>
+                                    {visibleColumns.map((col) => {
+                                        const value = (sub as any)[col.key];
+                                        if (col.key === "customerName") {
+                                            return (
+                                                <td key={col.key} className="px-4 py-3">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[#1b5e6a] font-medium hover:underline truncate">
+                                                            {sub.customerName}
+                                                        </span>
+                                                        <span className="text-[11px] text-gray-400 truncate">{getCustomerEmail(sub) || "-"}</span>
+                                                    </div>
+                                                </td>
+                                            );
+                                        }
+                                        if (col.key === "subscriptionNumber") {
+                                            return (
+                                                <td key={col.key} className="px-4 py-3">
+                                                    <span className="text-[#1b5e6a] font-medium hover:underline">{sub.subscriptionNumber}</span>
+                                                </td>
+                                            );
+                                        }
+                                        if (col.key === "status") {
+                                            const status = deriveStatus(sub);
+                                            return (
+                                                <td key={col.key} className="px-4 py-3">
+                                                    <span className={`text-[11px] font-bold tracking-wide ${statusStyles(status)}`}>{status}</span>
+                                                </td>
+                                            );
+                                        }
+                                        if (col.key === "planName") {
+                                            return (
+                                                <td key={col.key} className="px-4 py-3 text-gray-700 uppercase">
+                                                    {sub.planName}
+                                                </td>
+                                            );
+                                        }
+                                        if (col.key === "amount") {
+                                            return (
+                                                <td key={col.key} className="px-4 py-3 text-gray-700 font-medium whitespace-nowrap">
+                                                    {sub.amount}
+                                                </td>
+                                            );
+                                        }
+                                        return (
+                                            <td key={col.key} className="px-4 py-3 text-gray-700">
+                                                {value || "-"}
+                                            </td>
+                                        );
+                                    })}
+                                    <td className="px-4 py-3 sticky right-0 bg-white/95 backdrop-blur-sm group-hover:bg-[#f8fafc] transition-colors" />
+                                </tr>
+                            ))
+                        ) : (
+                            <tr className="h-[180px] border-b border-[#eef1f6]">
+                                <td colSpan={visibleColumns.length + 2} className="px-4 py-6 text-center text-sm text-gray-500">
+                                    No subscriptions found.
+                                </td>
                             </tr>
-                        ))}
+                        )}
                     </tbody>
                 </table>
             </div>
@@ -2097,36 +2146,39 @@ const SubscriptionsPage = () => {
             )}
 
             {isDeleteModalOpen && (
-                <div className="fixed inset-0 bg-black/50 z-[10000] flex items-start justify-center pt-8 px-4 pb-8 overflow-y-auto">
-                    <div className="w-full max-w-[520px] rounded-xl bg-white shadow-2xl overflow-hidden">
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-[#fbfbfd]">
-                            <div className="text-[16px] font-medium text-gray-800">Delete Subscriptions</div>
+                <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16">
+                    <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200">
+                        <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+                            <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
+                                !
+                            </div>
+                            <h3 className="text-[15px] font-semibold text-slate-800 flex-1">
+                                Delete subscriptions?
+                            </h3>
                             <button
                                 type="button"
+                                className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
                                 onClick={() => setIsDeleteModalOpen(false)}
-                                className="h-8 w-8 rounded-md border border-blue-500 bg-white flex items-center justify-center hover:bg-blue-50"
                                 aria-label="Close"
                             >
-                                <X size={16} className="text-red-500" />
+                                <X size={14} />
                             </button>
                         </div>
-
-                        <div className="px-6 py-5 text-sm text-gray-700">
-                            Are you sure you want to delete the selected subscriptions? This action cannot be undone.
+                        <div className="px-5 py-3 text-[13px] text-slate-600">
+                            You cannot retrieve these subscriptions once they have been deleted.
                         </div>
-
-                        <div className="flex items-center gap-2 px-6 py-4 border-t border-gray-100 bg-white">
+                        <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
                             <button
                                 type="button"
+                                className="px-4 py-1.5 rounded-md bg-red-600 text-white text-[12px] hover:bg-red-700"
                                 onClick={handleProceedDelete}
-                                className="px-5 py-2 rounded-md bg-red-500 text-white text-sm font-semibold hover:brightness-95"
                             >
                                 Delete
                             </button>
                             <button
                                 type="button"
+                                className="px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50"
                                 onClick={() => setIsDeleteModalOpen(false)}
-                                className="px-5 py-2 rounded-md border border-gray-200 text-sm text-gray-700 hover:bg-gray-50"
                             >
                                 Cancel
                             </button>
@@ -2181,7 +2233,7 @@ const SubscriptionsPage = () => {
                                         checked={col.visible}
                                         onChange={() => toggleColumn(col.key)}
                                         className="h-4 w-4 rounded border-gray-300"
-                                        style={{ accentColor: "#3b82f6" }}
+                                        style={{ accentColor: "#156372" }}
                                     />
                                     <span>{col.label.replace("ON", "On").replace("DATE", "Date")}</span>
                                 </label>
@@ -2191,7 +2243,7 @@ const SubscriptionsPage = () => {
                         <div className="flex items-center gap-2 px-5 py-4 border-t border-[#eef1f6] bg-white">
                             <button
                                 onClick={() => setIsCustomizeModalOpen(false)}
-                                className="px-4 py-2 text-sm rounded-md bg-[#22b573] text-white font-semibold hover:brightness-95"
+                                className="px-4 py-2 text-sm rounded-md bg-[#156372] text-white font-semibold hover:bg-[#0D4A52]"
                             >
                                 Save
                             </button>

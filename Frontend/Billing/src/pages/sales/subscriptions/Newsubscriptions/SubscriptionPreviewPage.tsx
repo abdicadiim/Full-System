@@ -2,11 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { Check, ChevronDown, Search } from "lucide-react";
-import { creditNotesAPI, invoicesAPI, paymentsReceivedAPI, productsAPI, subscriptionsAPI, transactionNumberSeriesAPI } from "../../../../services/api";
+import { creditNotesAPI, invoicesAPI, paymentsReceivedAPI, subscriptionsAPI, transactionNumberSeriesAPI } from "../../../../services/api";
+import { buildSubscriptionEditDraft } from "../subscriptionDraftUtils";
 
 type PreviewState = {
   currency?: string;
   customerId?: string;
+  subscriptionNumber?: string;
   productId?: string;
   productName?: string;
   planName?: string;
@@ -18,6 +20,27 @@ type PreviewState = {
   coupon?: string;
   couponCode?: string;
   couponValue?: string;
+  manualRenewal?: boolean;
+  manualRenewalInvoicePreference?: string;
+  manualRenewalFreeExtension?: string;
+  advanceBillingEnabled?: boolean;
+  advanceBillingMethod?: string;
+  advanceBillingPeriodDays?: number;
+  advanceBillingAutoGenerate?: boolean;
+  advanceBillingApplyUpcomingTerms?: boolean;
+  invoicePreference?: string;
+  usageBillingEnabled?: boolean;
+  prepaidBillingEnabled?: boolean;
+  prepaidPlanName?: string;
+  drawdownCreditName?: string;
+  drawdownRate?: string;
+  consolidatedBillingEnabled?: boolean;
+  calendarBillingMode?: string;
+  calendarBillingDays?: string;
+  calendarBillingMonths?: string;
+  paymentReceived?: boolean;
+  amountReceived?: number;
+  paymentStatus?: string;
   applyChanges?: "immediately" | "end_of_term" | "scheduled";
   applyChangesDate?: string;
   backdatedGenerateInvoice?: boolean;
@@ -28,28 +51,6 @@ type PreviewState = {
     tax?: string;
     taxRate?: number;
   }>;
-};
-
-const normalizeSeriesDigits = (value: any, fallbackWidth = 5) => {
-  const raw = String(value ?? "").trim();
-  const digits = raw.replace(/[^\d]/g, "");
-  const numeric = Number(digits);
-  if (!digits || !Number.isFinite(numeric) || numeric < 0) {
-    return { current: 1, width: fallbackWidth };
-  }
-  return {
-    current: numeric,
-    width: Math.max(raw.match(/^\d+$/)?.[0].length || digits.length || fallbackWidth, fallbackWidth),
-  };
-};
-
-const buildProductSubscriptionNumber = (product: any) => {
-  const prefix = String(product?.prefix || "").trim();
-  const { current, width } = normalizeSeriesDigits(product?.nextNumber || "00001");
-  return {
-    subscriptionNumber: `${prefix}${String(current).padStart(width, "0")}`,
-    nextNumber: String(current + 1).padStart(width, "0"),
-  };
 };
 
 const formatMoney = (value: number, currency: string) => {
@@ -100,6 +101,13 @@ const parseCouponDiscount = (rawValue: string | undefined, baseAmount: number) =
   }
   const numeric = Number(raw.replace(/[^\d.-]/g, ""));
   return Number.isFinite(numeric) ? numeric : 0;
+};
+
+const normalizeLifecycleStatus = (value: any) => {
+  const raw = String(value || "").toUpperCase().trim();
+  if (!raw) return "LIVE";
+  if (["PAUSED", "CANCELLED", "CANCELED", "EXPIRED", "DRAFT"].includes(raw)) return raw;
+  return "LIVE";
 };
 
 const formatDateLabel = (value?: string) => {
@@ -368,6 +376,7 @@ const SubscriptionPreviewPage = () => {
   const [depositTo, setDepositTo] = useState("Petty Cash");
   const [referenceNumber, setReferenceNumber] = useState("");
   const [paymentNotes, setPaymentNotes] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState("");
 
 
   const paymentModes: SelectOption[] = [
@@ -399,10 +408,10 @@ const SubscriptionPreviewPage = () => {
           onClick={() => {
             const draft = readDraftFromSession();
             if (draft?.id) {
-              navigate(`/sales/subscriptions/${draft.id}/edit`, { state: { draft } });
+              navigate(`/sales/subscriptions/${draft.id}/edit`, { state: { draft: buildSubscriptionEditDraft(draft) } });
               return;
             }
-            navigate("/sales/subscriptions/new", { state: draft ? { draft } : state });
+            navigate("/sales/subscriptions/new", { state: draft ? { draft: buildSubscriptionEditDraft(draft) } : state });
           }}
           className="text-[13px] text-blue-600 hover:underline"
         >
@@ -444,7 +453,11 @@ const SubscriptionPreviewPage = () => {
               <input
                 type="checkbox"
                 checked={receivedPayment}
-                onChange={(e) => setReceivedPayment(e.target.checked)}
+                onChange={(e) => {
+                  const next = e.target.checked;
+                  setReceivedPayment(next);
+                  setPaymentAmount(next ? totalImmediate.toFixed(2) : "");
+                }}
                 className="sr-only"
               />
               <span
@@ -466,6 +479,17 @@ const SubscriptionPreviewPage = () => {
           <div className="border border-gray-200 rounded-md p-5 bg-white shadow-sm">
             <div className="text-[14px] font-semibold text-slate-800">Record Payment</div>
             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-[180px_1fr]">
+              <div className="text-[13px] text-slate-600">Amount Received</div>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+                placeholder={totalImmediate.toFixed(2)}
+                className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-[13px] text-slate-700 focus:border-blue-500 focus:outline-none"
+              />
+
               <div className="text-[13px] text-slate-600">Payment Date</div>
               <input
                 type="date"
@@ -630,6 +654,34 @@ const SubscriptionPreviewPage = () => {
                   </div>
                 )}
               </div>
+
+              <div className="rounded-md border border-gray-100 bg-white p-3">
+                <div className="text-[12px] font-semibold text-slate-600">Billing Preferences</div>
+                <div className="mt-3 space-y-2 text-[12px] text-gray-600">
+                  <div className="flex items-center justify-between gap-4">
+                    <span>Invoice Preference</span>
+                    <span className="text-gray-900 text-right max-w-[180px]">{state.invoicePreference || "Create and Send Invoices"}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span>Usage Billing</span>
+                    <span className="text-gray-900">{state.usageBillingEnabled ? "Enabled" : "Disabled"}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span>Prepaid Billing</span>
+                    <span className="text-gray-900">{state.prepaidBillingEnabled ? "Enabled" : "Disabled"}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span>Consolidated Billing</span>
+                    <span className="text-gray-900">{state.consolidatedBillingEnabled ? "Enabled" : "Disabled"}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span>Calendar Billing</span>
+                    <span className="text-gray-900 text-right max-w-[180px]">
+                      {state.calendarBillingMode || "Same as a subscription's activation date"}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -662,22 +714,10 @@ const SubscriptionPreviewPage = () => {
 
             const nextIndex = existing.length + 1;
             const fallbackNumber = `SUB-${String(nextIndex).padStart(5, "0")}`;
-            const selectedProductId = String(draft?.productId || state.productId || "").trim();
-            let selectedProduct: any = null;
-            if (selectedProductId) {
-              try {
-                const productResponse: any = await productsAPI.getById(selectedProductId);
-                selectedProduct = productResponse?.data || productResponse?.data?.data || productResponse || null;
-              } catch {
-                selectedProduct = null;
-              }
-            }
-            const productSeries = selectedProduct?.autoGenerateSubscriptionNumbers
-              ? buildProductSubscriptionNumber(selectedProduct)
-              : null;
             const subscriptionNumber = String(
-              productSeries?.subscriptionNumber ||
               draft?.subscriptionNumber ||
+              state.subscriptionNumber ||
+              existingRow?.subscriptionNumber ||
               fallbackNumber
             );
             const isEditMode = Boolean(draft?.id);
@@ -692,7 +732,25 @@ const SubscriptionPreviewPage = () => {
               ? formatShortDate(new Date().toISOString())
               : activatedOnValue || String(existingRow?.lastBilledOn || createdOnValue);
             const nextBillingOnValue = nextBillingOn || String(existingRow?.nextBillingOn || "");
-            const amountReceivedValue = receivedPayment ? totalImmediate : 0;
+            const enteredPaymentAmount = Number(String(paymentAmount || "").replace(/[^\d.-]/g, "")) || 0;
+            const amountReceivedValue = receivedPayment ? Math.max(0, Math.min(enteredPaymentAmount, totalImmediate)) : 0;
+            const paymentStatusValue =
+              totalImmediate <= 0
+                ? "paid"
+                : amountReceivedValue >= totalImmediate
+                ? "paid"
+                : amountReceivedValue > 0
+                ? "partially paid"
+                : "unpaid";
+            const manualRenewalPreference = String(
+              draft?.manualRenewalInvoicePreference || existingRow?.manualRenewalInvoicePreference || "Generate a New Invoice"
+            );
+            const shouldGenerateInvoices = Boolean(
+              draft?.manualRenewal ?? existingRow?.manualRenewal ?? false
+            )
+              ? manualRenewalPreference === "Generate a New Invoice" &&
+                Boolean(draft?.generateInvoices ?? existingRow?.generateInvoices ?? true)
+              : Boolean(draft?.generateInvoices ?? existingRow?.generateInvoices ?? true);
             const subscription = {
               ...(draft && typeof draft === "object" ? draft : {}),
               id: String(draft?.id || existingRow?.id || `sub-${Date.now()}`),
@@ -714,7 +772,7 @@ const SubscriptionPreviewPage = () => {
               productName: String(draft?.productName || existingRow?.productName || ""),
               planName: String(draft?.planName || state.planName || existingRow?.planName || ""),
               planDescription: String(draft?.planDescription || existingRow?.planDescription || ""),
-              status: "LIVE",
+              status: normalizeLifecycleStatus(draft?.status || existingRow?.status || "LIVE"),
               amount: amountLabel,
               quantity: Number(draft?.quantity || existingRow?.quantity || 1) || 1,
               price: Number(draft?.price || existingRow?.price || 0) || 0,
@@ -730,6 +788,32 @@ const SubscriptionPreviewPage = () => {
               coupon: String(draft?.coupon || existingRow?.coupon || ""),
               couponCode: String(draft?.couponCode || existingRow?.couponCode || ""),
               couponValue: String(draft?.couponValue || existingRow?.couponValue || ""),
+              manualRenewal: Boolean(draft?.manualRenewal ?? existingRow?.manualRenewal ?? false),
+              manualRenewalInvoicePreference: String(
+                draft?.manualRenewalInvoicePreference || existingRow?.manualRenewalInvoicePreference || "Generate a New Invoice"
+              ),
+              manualRenewalFreeExtension: String(draft?.manualRenewalFreeExtension || existingRow?.manualRenewalFreeExtension || ""),
+              advanceBillingEnabled: Boolean(draft?.advanceBillingEnabled ?? existingRow?.advanceBillingEnabled ?? false),
+              advanceBillingMethod: String(draft?.advanceBillingMethod || existingRow?.advanceBillingMethod || "Advance Invoice"),
+              advanceBillingPeriodDays: Number(draft?.advanceBillingPeriodDays ?? existingRow?.advanceBillingPeriodDays ?? 5) || 5,
+              advanceBillingAutoGenerate: Boolean(draft?.advanceBillingAutoGenerate ?? existingRow?.advanceBillingAutoGenerate ?? false),
+              advanceBillingApplyUpcomingTerms: Boolean(
+                draft?.advanceBillingApplyUpcomingTerms ?? existingRow?.advanceBillingApplyUpcomingTerms ?? false
+              ),
+              invoicePreference: String(draft?.invoicePreference || existingRow?.invoicePreference || "Create and Send Invoices"),
+              usageBillingEnabled: Boolean(draft?.usageBillingEnabled ?? existingRow?.usageBillingEnabled ?? false),
+              prepaidBillingEnabled: Boolean(draft?.prepaidBillingEnabled ?? existingRow?.prepaidBillingEnabled ?? false),
+              prepaidPlanName: String(draft?.prepaidPlanName || existingRow?.prepaidPlanName || ""),
+              drawdownCreditName: String(draft?.drawdownCreditName || existingRow?.drawdownCreditName || ""),
+              drawdownRate: String(draft?.drawdownRate || existingRow?.drawdownRate || ""),
+              consolidatedBillingEnabled: Boolean(
+                draft?.consolidatedBillingEnabled ?? existingRow?.consolidatedBillingEnabled ?? false
+              ),
+              calendarBillingMode: String(
+                draft?.calendarBillingMode || existingRow?.calendarBillingMode || "Same as a subscription's activation date"
+              ),
+              calendarBillingDays: String(draft?.calendarBillingDays || existingRow?.calendarBillingDays || ""),
+              calendarBillingMonths: String(draft?.calendarBillingMonths || existingRow?.calendarBillingMonths || ""),
               tag: String(draft?.tag || existingRow?.tag || ""),
               reportingTags: Array.isArray(draft?.reportingTags)
                 ? draft.reportingTags
@@ -739,15 +823,21 @@ const SubscriptionPreviewPage = () => {
               referenceNumber: String(draft?.referenceNumber || existingRow?.referenceNumber || ""),
               immediateCharges: totalImmediate,
               paymentReceived: amountReceivedValue > 0,
+              amountReceived: amountReceivedValue,
+              paymentStatus: paymentStatusValue,
+              paymentDate: paymentDate || createdOnValue,
+              paymentMode: String(paymentMode || ""),
+              depositTo: String(depositTo || ""),
+              paymentNotes: String(paymentNotes || ""),
+              paymentReferenceNumber: String(referenceNumber || ""),
               priceListId: draft?.priceListId || existingRow?.priceListId || "",
               priceListName: draft?.priceListName || existingRow?.priceListName || "",
               addonLines: Array.isArray(draft?.addonLines) ? draft.addonLines : existingRow?.addonLines || [],
               meteredBilling: Boolean(draft?.meteredBilling ?? existingRow?.meteredBilling ?? false),
-              paymentMode: String(draft?.paymentMode || existingRow?.paymentMode || "offline"),
               paymentTerms: String(draft?.paymentTerms || existingRow?.paymentTerms || "Due on Receipt"),
               partialPayments: Boolean(draft?.partialPayments ?? existingRow?.partialPayments ?? false),
               prorateCharges: Boolean(draft?.prorateCharges ?? existingRow?.prorateCharges ?? true),
-              generateInvoices: Boolean(draft?.generateInvoices ?? existingRow?.generateInvoices ?? true),
+              generateInvoices: shouldGenerateInvoices,
               invoiceTemplate: String(draft?.invoiceTemplate || existingRow?.invoiceTemplate || "Standard Template"),
               roundOffPreference: String(draft?.roundOffPreference || existingRow?.roundOffPreference || "No Rounding"),
               scheduledUpdate: existingRow?.scheduledUpdate || null,
@@ -829,14 +919,6 @@ const SubscriptionPreviewPage = () => {
               // ignore storage errors
             }
 
-            if (!isEditMode && selectedProductId && productSeries) {
-              try {
-                await productsAPI.update(selectedProductId, { nextNumber: productSeries.nextNumber });
-              } catch (error) {
-                console.error("Failed to increment product subscription number series:", error);
-              }
-            }
-
             // Auto-generate invoice for new subscriptions when enabled
             if (!isEditMode && finalSubscription.generateInvoices && (!createdViaApi || !backendGeneratedInvoice)) {
               try {
@@ -894,12 +976,28 @@ const SubscriptionPreviewPage = () => {
                     balance: balanceDue,
                     amountPaid: amountReceivedValue,
                     isRecurringInvoice: true,
+                    source: "subscription",
+                    invoiceSource: "subscription",
                     recurringProfileId: finalSubscription.id,
                     referenceNumber: finalSubscription.referenceNumber || "",
                     createdAt: new Date().toISOString(),
                   });
 
                   const createdInvoice = invoiceResponse?.data;
+                  if (createdInvoice?.id || createdInvoice?._id || createdInvoice?.invoiceNumber) {
+                    finalSubscription = {
+                      ...finalSubscription,
+                      generatedInvoiceId: String(createdInvoice?.id || createdInvoice?._id || "").trim(),
+                      generatedInvoiceNumber: String(createdInvoice?.invoiceNumber || nextNumber).trim(),
+                      generatedInvoiceStatus: String(createdInvoice?.status || invoiceStatus || "").trim(),
+                    };
+                    updated[existingIndex >= 0 ? existingIndex : 0] = finalSubscription;
+                    try {
+                      localStorage.setItem(listKey, JSON.stringify(updated));
+                    } catch {
+                      // ignore storage errors
+                    }
+                  }
                   if (amountReceivedValue > 0 && createdInvoice?.id) {
                     await paymentsReceivedAPI.create({
                       invoiceId: createdInvoice.id,
@@ -934,7 +1032,7 @@ const SubscriptionPreviewPage = () => {
             toast.success(isEditMode ? "Subscription updated successfully." : "Subscription created successfully.");
             navigate("/sales/subscriptions");
           }}
-          className="px-5 py-2 bg-[#22b573] text-white rounded font-bold text-[13px] hover:brightness-95"
+          className="px-5 py-2 bg-[#156372] text-white rounded font-bold text-[13px] hover:bg-[#0f4f5b]"
         >
           {draftSnapshot?.id ? "Update" : "Create"}
         </button>

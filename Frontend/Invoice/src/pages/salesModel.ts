@@ -777,11 +777,70 @@ export const generateInvoiceFromRecurring = async (recurringInvoiceId: string): 
   const baseForNext = String(recurring.nextInvoiceDate || recurring.startOn || recurring.startDate || now);
   const nextInvoiceDate = addIntervalISO(baseForNext, frequency);
 
+  const recurringItems = Array.isArray(recurring.items) ? recurring.items : [];
+  const invoiceNumber = `INV-${Date.now()}`;
+  const subTotal = Number(recurring.subTotal ?? recurring.subtotal ?? recurring.total ?? recurring.amount ?? 0) || 0;
+  const total = Number(recurring.total ?? recurring.amount ?? subTotal) || 0;
+  const taxAmount = Math.max(total - subTotal, 0);
+  const invoicePayload = {
+    invoiceNumber,
+    customer: recurring.customer || recurring.customerId || undefined,
+    customerId: recurring.customerId || recurring.customer || undefined,
+    customerName: resolveRecurringCustomerName(recurring),
+    date: recurring.startOn || recurring.startDate || now,
+    invoiceDate: recurring.startOn || recurring.startDate || now,
+    dueDate: recurring.endsOn || recurring.endDate || recurring.startOn || recurring.startDate || now,
+    items: recurringItems
+      .filter((item: any) => item && item.itemType !== "header")
+      .map((item: any) => ({
+        item: item.itemId || null,
+        itemId: item.itemId || null,
+        name: item.itemDetails || item.name || "",
+        quantity: Number(item.quantity || 0),
+        rate: Number(item.rate || 0),
+        unitPrice: Number(item.rate || 0),
+        taxRate: Number(item.taxRate || 0),
+        taxAmount: Number(item.amount || 0) - (Number(item.quantity || 0) * Number(item.rate || 0)),
+        total: Number(item.amount || 0),
+        amount: Number(item.amount || 0),
+        description: item.itemDetails || item.description || ""
+      })),
+    subtotal: subTotal,
+    subTotal,
+    tax: taxAmount,
+    amount: total,
+    total,
+    status: "draft",
+    sourceRecurringInvoiceId: id,
+    recurringInvoiceId: id,
+    frequency: recurring.frequency || recurring.repeatEvery || "monthly",
+    startDate: recurring.startDate || recurring.startOn || now,
+    nextInvoiceDate,
+    paymentTerms: recurring.paymentTerms || "",
+    salesperson: recurring.salesperson || "",
+    salespersonId: recurring.salespersonId || "",
+    orderNumber: recurring.orderNumber || "",
+    notes: recurring.notes || recurring.customerNotes || "",
+    terms: recurring.terms || recurring.termsAndConditions || "",
+    currency: recurring.currency || "USD",
+    taxExclusive: recurring.taxExclusive || "Tax Exclusive",
+    discount: Number(recurring.discount || 0) || 0,
+    discountType: recurring.discountType || "percent",
+    discountAmount: Number(recurring.discountAmount || 0) || 0,
+    discountAccount: recurring.discountAccount || "",
+    shippingCharges: Number(recurring.shippingCharges || 0) || 0,
+    adjustment: Number(recurring.adjustment || 0) || 0,
+    roundOff: Number(recurring.roundOff || 0) || 0,
+    generatedFromRecurring: true,
+  };
+
+  const savedInvoice = await saveInvoice(invoicePayload as Partial<Invoice>);
   const generated = {
     id: `gen-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    invoiceNumber: `INV-${Date.now()}`,
+    invoiceId: savedInvoice?.id || savedInvoice?._id || "",
+    invoiceNumber,
     createdAt: now,
-    amount: Number(recurring.total || recurring.amount || 0) || 0,
+    amount: total,
     customerName: resolveRecurringCustomerName(recurring),
     sourceRecurringInvoiceId: id
   };
@@ -797,7 +856,7 @@ export const generateInvoiceFromRecurring = async (recurringInvoiceId: string): 
   next[idx] = recurring;
   writeRecurringInvoicesToStorage(next);
 
-  return generated;
+  return { ...generated, savedInvoice };
 };
 
 export interface Payment {

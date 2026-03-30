@@ -2693,7 +2693,10 @@ return (
               <div className="relative w-[280px]">
                 <select
                   value={(formData as any).selectedLocation || "Head Office"}
-                  onChange={(e) => setFormData((prev: any) => ({ ...prev, selectedLocation: e.target.value }))}
+                  onChange={(e) => {
+                    setFormData((prev: any) => ({ ...prev, selectedLocation: e.target.value }));
+                    e.currentTarget.blur();
+                  }}
                   className="w-full h-9 px-3 pr-8 border border-gray-300 rounded focus:outline-none focus:border-blue-400 text-sm appearance-none bg-white"
                 >
                   {locationOptions.map((option, index) => (
@@ -3069,7 +3072,10 @@ return (
                 <div className="relative">
                   <select
                     value={(formData as any).selectedLocation || "Head Office"}
-                    onChange={(e) => setFormData((prev: any) => ({ ...prev, selectedLocation: e.target.value }))}
+                    onChange={(e) => {
+                      setFormData((prev: any) => ({ ...prev, selectedLocation: e.target.value }));
+                      e.currentTarget.blur();
+                    }}
                     className="h-9 min-w-[148px] appearance-none border-b border-dashed border-slate-300 bg-transparent pr-6 text-[13px] font-medium text-slate-700 outline-none"
                   >
                     {locationOptions.map((option, index) => (
@@ -3086,7 +3092,10 @@ return (
                 <select
                   name="taxExclusive"
                   value={formData.taxExclusive}
-                  onChange={handleChange}
+                  onChange={(e) => {
+                    handleChange(e);
+                    e.currentTarget.blur();
+                  }}
                   className="h-9 min-w-[152px] appearance-none rounded-md border border-transparent bg-white px-9 pr-8 text-[13px] text-slate-600 shadow-sm outline-none ring-1 ring-slate-200 transition focus:ring-2 focus:ring-blue-300"
                 >
                   {taxExclusiveOptions.map((option, index) => (

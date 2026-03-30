@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import { getCustomers, savePayment, getPaymentById, updatePayment, getInvoices, getInvoiceById, getNextPaymentNumber, updateInvoice, Invoice } from "../../../sales/salesModel";
 import { getAllDocuments } from "../../../../utils/documentStorage";
-import { customersAPI, bankAccountsAPI, paymentsReceivedAPI, chartOfAccountsAPI, reportingTagsAPI, senderEmailsAPI } from "../../../../services/api";
+import { customersAPI, bankAccountsAPI, paymentsReceivedAPI, chartOfAccountsAPI, reportingTagsAPI, senderEmailsAPI, subscriptionsAPI } from "../../../../services/api";
 import ZohoSelect from "../../../../components/ZohoSelect";
 import PaymentModeDropdown from "../../../../components/PaymentModeDropdown";
 import { toast } from "react-toastify";
@@ -1346,6 +1346,29 @@ export default function RecordPayment() {
         paymentsReceived: nextPaymentsReceived,
       };
       await updateInvoice(String(invoiceId), patch);
+
+      const linkedSubscriptionId = String(
+        (current as any)?.recurringProfileId ||
+        (current as any)?.subscriptionId ||
+        (current as any)?.subscription?.id ||
+        ""
+      ).trim();
+      if (linkedSubscriptionId) {
+        try {
+          const paymentStatus =
+            nextBalance <= 0 ? "paid" : nextPaid > 0 ? "partially paid" : "unpaid";
+          await subscriptionsAPI.update(linkedSubscriptionId, {
+            paymentReceived: nextPaid > 0,
+            amountReceived: nextPaid,
+            paymentStatus,
+            paymentDate: paymentMeta.paymentDate || new Date().toISOString(),
+            paymentMode: paymentMeta.paymentMode || "Cash",
+            paymentReferenceNumber: paymentMeta.referenceNumber || "",
+          });
+        } catch (error) {
+          console.warn("Failed to sync paid subscription status from invoice payment:", error);
+        }
+      }
     }
   };
 

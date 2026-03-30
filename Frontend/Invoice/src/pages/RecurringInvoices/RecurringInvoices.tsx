@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import {
   ChevronDown,
@@ -61,7 +62,6 @@ export default function RecurringInvoices() {
   const [bulkUpdateField, setBulkUpdateField] = useState("");
   const [bulkUpdateValue, setBulkUpdateValue] = useState("");
   const [isFieldDropdownOpen, setIsFieldDropdownOpen] = useState(false);
-  const [showSuccessNotification, setShowSuccessNotification] = useState(false);
   const [isFieldCustomizationOpen, setIsFieldCustomizationOpen] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [searchType, setSearchType] = useState("Recurring Invoices");
@@ -632,19 +632,11 @@ export default function RecurringInvoices() {
         }
 
         if (generatedCount > 0) {
-          setShowSuccessNotification(true);
-          // Update message for the notification
-          const notificationMsg = document.querySelector('.text-green-800');
-          if (notificationMsg) {
-            notificationMsg.textContent = `${generatedCount} invoice(s) have been automatically generated based on recurring schedules.`;
-          }
-
+          toast.success(`${generatedCount} invoice(s) have been automatically generated based on recurring schedules.`);
           // Refresh lists to reflect new state (like nextInvoiceDate changes)
           const refreshed = await getRecurringInvoices();
           setRecurringInvoices(refreshed);
           applyFilters(refreshed, selectedStatus);
-
-          setTimeout(() => setShowSuccessNotification(false), 5000);
         }
       }
     };
@@ -1143,22 +1135,7 @@ export default function RecurringInvoices() {
   };
 
   return (
-    <div className="w-full min-h-screen bg-white">
-      {/* Success Notification */}
-      {showSuccessNotification && (
-        <div className="fixed top-4 right-4 flex items-center gap-3 px-4 py-3 bg-green-50 border border-green-200 rounded-lg shadow-lg z-50">
-          <div className="flex-shrink-0">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <rect width="20" height="20" rx="4" fill="#10b981" />
-              <path d="M6 10l3 3 5-6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </div>
-          <span className="text-sm text-green-800">
-            The recurring invoice has been activated.
-          </span>
-        </div>
-      )}
-
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-white">
       {/* Header - Show Bulk Actions Bar when items are selected, otherwise show normal header */}
       {selectedInvoices.length > 0 ? (
         <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-white">
@@ -1331,7 +1308,7 @@ export default function RecurringInvoices() {
                     >
                       <ArrowUpDown size={16} className="text-gray-500" />
                       <span>Sort by</span>
-                      <ChevronRight size={16} className="text-gray-400 ml-auto" />
+                      <ChevronRightIcon size={16} className="text-gray-400 ml-auto" />
                       {/* Sort By Dropdown */}
                       {isSortDropdownOpen && (
                         <div
@@ -1379,7 +1356,7 @@ export default function RecurringInvoices() {
                     >
                       <FileUp size={16} className="text-gray-500" />
                       <span>Export</span>
-                      <ChevronRight size={16} className="text-gray-400 ml-auto" />
+                      <ChevronRightIcon size={16} className="text-gray-400 ml-auto" />
                     </div>
                     <div
                       className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
@@ -1422,11 +1399,11 @@ export default function RecurringInvoices() {
         </div>
       )}
 
-      <div className="relative">
+      <div className="relative flex-1 min-h-0 overflow-hidden">
 
         {!hasLoadedOnce ? (
-          <div className="bg-white">
-            <div className="overflow-x-auto bg-[#f6f7fb]">
+          <div className="h-full bg-white">
+                <div className="h-full overflow-auto scrollbar-hide bg-[#f6f7fb]">
               <table className="w-full min-w-full border-collapse text-sm bg-white">
                 <thead className="bg-[#f6f7fb] border-b border-[#e6e9f2] sticky top-0 z-20">
                   <tr className="text-[10px] font-semibold text-[#7b8494] uppercase tracking-wider">
@@ -1509,8 +1486,8 @@ export default function RecurringInvoices() {
             </button>
           </div>
         ) : (
-          <div className="bg-white">
-            <div className="overflow-x-auto bg-[#f6f7fb]">
+          <div className="h-full bg-white">
+            <div className="h-full overflow-auto scrollbar-hide bg-[#f6f7fb]">
               <table className="w-full min-w-full border-collapse text-sm bg-white">
                 <thead className="bg-[#f6f7fb] border-b border-[#e6e9f2] sticky top-0 z-20">
                   <tr className="text-[10px] font-semibold text-[#7b8494] uppercase tracking-wider">

@@ -7,7 +7,6 @@ import {
     ChevronUp,
     X,
     CreditCard,
-    AlertCircle,
     PlusCircle,
     ChevronRight,
     HelpCircle,
@@ -20,12 +19,19 @@ import {
     GripVertical,
     Image as ImageIcon,
     FileText,
+    Building2,
+    Mail,
+    BriefcaseBusiness,
+    Tag,
+    MapPin,
 } from "lucide-react";
 import { useOrganizationBranding } from "../../../../hooks/useOrganizationBranding";
 import { Customer, Salesperson, getCustomers, getSalespersonsFromAPI, getPlansFromAPI, getBaseCurrency, getItemsFromAPI, getTaxesFromAPI, Tax, getReportingTagsFromAPI, ReportingTag } from "../../salesModel";
-import { customersAPI, subscriptionsAPI, productsAPI } from "../../../../services/api";
+import { customersAPI, invoicesAPI, subscriptionsAPI, productsAPI, locationsAPI, transactionNumberSeriesAPI } from "../../../../services/api";
 import { toast } from "react-toastify";
 import { Country, State } from "country-state-city";
+import { buildSubscriptionEditDraft } from "../subscriptionDraftUtils";
+import { buildTaxOptionGroups, taxLabel } from "../../../../hooks/Taxdropdownstyle";
 
 type ProductOption = {
     id: string;
@@ -447,6 +453,7 @@ const NewSubscriptionPage = () => {
     const [availableItems, setAvailableItems] = useState<any[]>([]);
     const [taxes, setTaxes] = useState<Tax[]>([]);
     const [reportingTags, setReportingTags] = useState<ReportingTag[]>([]);
+    const [locationOptions, setLocationOptions] = useState<any[]>([]);
 
     // UI State
     const [customerSearch, setCustomerSearch] = useState("");
@@ -464,6 +471,9 @@ const NewSubscriptionPage = () => {
     const [isReportingTagDropdownOpen, setIsReportingTagDropdownOpen] = useState(false);
     const reportingTagDropdownRef = useRef<HTMLDivElement>(null);
     const [reportingTagSearch, setReportingTagSearch] = useState("");
+    const [isTaxDropdownOpen, setIsTaxDropdownOpen] = useState(false);
+    const taxDropdownRef = useRef<HTMLDivElement>(null);
+    const [taxSearch, setTaxSearch] = useState("");
     const [isCouponDropdownOpen, setIsCouponDropdownOpen] = useState(false);
     const couponDropdownRef = useRef<HTMLTableCellElement | null>(null);
     const [couponSearch, setCouponSearch] = useState("");
@@ -478,6 +488,8 @@ const NewSubscriptionPage = () => {
     const [itemSearches, setItemSearches] = useState<Record<number, string>>({});
     const [openTaxDropdowns, setOpenTaxDropdowns] = useState<Record<number, boolean>>({});
     const [taxSearches, setTaxSearches] = useState<Record<number, string>>({});
+    const [openAddonTaxDropdowns, setOpenAddonTaxDropdowns] = useState<Record<number, boolean>>({});
+    const [addonTaxSearches, setAddonTaxSearches] = useState<Record<number, string>>({});
     const [openAccountDropdowns, setOpenAccountDropdowns] = useState<Record<number, boolean>>({});
     const [accountSearches, setAccountSearches] = useState<Record<number, string>>({});
     const [openItemTagDropdowns, setOpenItemTagDropdowns] = useState<Record<number, boolean>>({});
@@ -485,10 +497,11 @@ const NewSubscriptionPage = () => {
     const [openItemMenus, setOpenItemMenus] = useState<Record<number, boolean>>({});
     const itemDropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const taxDropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
+    const addonTaxDropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const accountDropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const itemTagDropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const itemMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
-    const [showOtherPreferences, setShowOtherPreferences] = useState(false);
+    const [showBillingPreferences, setShowBillingPreferences] = useState(false);
     const [isBulkItemsModalOpen, setIsBulkItemsModalOpen] = useState(false);
     const [selectedBulkItems, setSelectedBulkItems] = useState<string[]>([]);
     const [bulkItemSearch, setBulkItemSearch] = useState("");
@@ -496,6 +509,11 @@ const NewSubscriptionPage = () => {
     const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
     const [billingAddress, setBillingAddress] = useState<any | null>(null);
     const [shippingAddress, setShippingAddress] = useState<any | null>(null);
+    const [unpaidInvoiceCount, setUnpaidInvoiceCount] = useState(0);
+    const [isLoadingUnpaidInvoices, setIsLoadingUnpaidInvoices] = useState(false);
+    const [customerUnpaidInvoices, setCustomerUnpaidInvoices] = useState<any[]>([]);
+    const [customerPanelTab, setCustomerPanelTab] = useState<"details" | "invoices" | "activity">("details");
+    const [isCustomerPanelOpen, setIsCustomerPanelOpen] = useState(false);
     const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
     const [addressModalType, setAddressModalType] = useState<"billing" | "shipping">("billing");
     const [isAddressSaving, setIsAddressSaving] = useState(false);
@@ -510,6 +528,7 @@ const NewSubscriptionPage = () => {
     const [digitalServiceEnabled, setDigitalServiceEnabled] = useState(false);
     const digitalServiceRef = useRef<HTMLDivElement | null>(null);
     const draftHydratedRef = useRef(false);
+    const LOCATION_CACHE_KEY = "taban_locations_cache";
     const countryDropdownRef = useRef<HTMLDivElement | null>(null);
     const stateDropdownRef = useRef<HTMLDivElement | null>(null);
     const [addressFormData, setAddressFormData] = useState({
@@ -538,7 +557,7 @@ const NewSubscriptionPage = () => {
         contactPersons: [] as any[],
         billingAddress: null as any,
         shippingAddress: null as any,
-        location: "Head Office",
+        location: "",
         contentType: "product", // product or items
         taxPreference: "Tax Exclusive",
         tag: "GGGGG",
@@ -548,7 +567,7 @@ const NewSubscriptionPage = () => {
         price: 0.00,
         basePrice: 0.00,
         tax: "Select a Tax",
-        subscriptionNumber: "SUB-00002",
+        subscriptionNumber: "",
         profileName: "",
         billEveryCount: 1,
         billEveryUnit: "Week(s)",
@@ -564,6 +583,24 @@ const NewSubscriptionPage = () => {
         partialPayments: false,
         prorateCharges: true,
         generateInvoices: true,
+        manualRenewal: false,
+        manualRenewalInvoicePreference: "Generate a New Invoice",
+        manualRenewalFreeExtension: "",
+        advanceBillingEnabled: false,
+        advanceBillingMethod: "Advance Invoice",
+        advanceBillingPeriodDays: 5,
+        advanceBillingAutoGenerate: false,
+        advanceBillingApplyUpcomingTerms: false,
+        invoicePreference: "Create and Send Invoices",
+        usageBillingEnabled: false,
+        prepaidBillingEnabled: false,
+        prepaidPlanName: "",
+        drawdownCreditName: "",
+        drawdownRate: "",
+        consolidatedBillingEnabled: false,
+        calendarBillingMode: "Same as a subscription's activation date",
+        calendarBillingDays: "",
+        calendarBillingMonths: "",
         invoiceTemplate: "Standard Template",
         roundOffPreference: "No Rounding",
         customerNotes: "Thanks for your business.",
@@ -585,7 +622,68 @@ const NewSubscriptionPage = () => {
         backdatedGenerateInvoice: true
     };
 
+    const getLocationName = (row: any) =>
+        String(row?.name || row?.locationName || row?.branchName || row?.displayName || "").trim();
+    const isActiveLocationRow = (row: any) => {
+        const status = String(row?.status || "").trim().toLowerCase();
+        if (row?.isActive === false) return false;
+        if (status && ["inactive", "disabled", "archived"].includes(status)) return false;
+        return true;
+    };
+    const getCustomerPrimaryName = (customer: any) =>
+        String(customer?.name || customer?.displayName || customer?.customerName || "Customer").trim();
+    const getCustomerEmail = (customer: any) =>
+        String(customer?.email || customer?.customerEmail || customer?.contactPersons?.[0]?.email || "").trim();
+    const getCustomerCompany = (customer: any) =>
+        String(customer?.companyName || customer?.company || customer?.organizationName || "").trim();
+    const getCustomerInitial = (customer: any) => {
+        const name = getCustomerPrimaryName(customer);
+        return name ? name.charAt(0).toUpperCase() : "C";
+    };
+    const getAddressLines = (address: any) => {
+        if (!address || typeof address !== "object") return [];
+        const line1 = [address.street1, address.street2].filter(Boolean).join(" ").trim();
+        const line2 = [address.city, address.state, address.country].filter(Boolean).join(", ").trim();
+        const phone = String(address.phone || address.mobile || address.mobilePhone || "").trim();
+        const lines = [line1, line2].filter(Boolean);
+        if (address.zipCode) {
+            if (lines.length > 0) {
+                lines[lines.length - 1] = `${lines[lines.length - 1]} ${address.zipCode}`.trim();
+            } else {
+                lines.push(String(address.zipCode));
+            }
+        }
+        if (phone) lines.push(phone);
+        return lines;
+    };
+    const getCustomerCurrency = (customer: any) =>
+        String(customer?.currency || customer?.currencyCode || formData.currency || "AMD").trim();
+    const getCustomerKey = (customer: any) =>
+        String(customer?.id || customer?._id || customer?.customerId || "").trim();
+
     const [formData, setFormData] = useState(initialFormData);
+    const taxOptionGroups = useMemo(() => buildTaxOptionGroups(taxes as any[]), [taxes]);
+    const filterTaxGroups = (searchValue: string) => {
+        const keyword = String(searchValue || "").trim().toLowerCase();
+        if (!keyword) return taxOptionGroups;
+        return taxOptionGroups
+            .map((group) => ({
+                ...group,
+                options: group.options.filter((option) => taxLabel(option.raw).toLowerCase().includes(keyword)),
+            }))
+            .filter((group) => group.options.length > 0);
+    };
+    const getTaxDisplayLabel = (taxValue: string) => {
+        const current = String(taxValue || "").trim().toLowerCase();
+        if (!current) return "Select a Tax";
+        const selectedTax = taxes.find((tax) => {
+            const id = String(tax.id || (tax as any)._id || "").trim().toLowerCase();
+            const name = String(tax.name || "").trim().toLowerCase();
+            return id === current || name === current;
+        });
+        return selectedTax ? taxLabel(selectedTax) : String(taxValue || "Select a Tax");
+    };
+    const selectedSubscriptionTaxLabel = getTaxDisplayLabel(formData.tax);
 
     const readRows = (key: string) => {
         try {
@@ -772,6 +870,16 @@ const NewSubscriptionPage = () => {
         return !keys.some((key) => String(addr?.[key] || "").trim());
     };
 
+    const computeInvoiceBalanceDue = (invoice: any) => {
+        if (!invoice) return 0;
+        const directBalance = Number(invoice.balance ?? invoice.balanceDue);
+        if (Number.isFinite(directBalance)) return Math.max(0, directBalance);
+
+        const total = Number(invoice.total ?? invoice.amount ?? 0) || 0;
+        const paid = Number(invoice.amountPaid ?? invoice.paidAmount ?? invoice.paid ?? 0) || 0;
+        return Math.max(0, total - paid);
+    };
+
     // Load Data
     useEffect(() => {
         const loadData = async () => {
@@ -951,6 +1059,68 @@ const NewSubscriptionPage = () => {
     }, []);
 
     useEffect(() => {
+        const readCachedLocationNames = () => {
+            try {
+                const raw = localStorage.getItem(LOCATION_CACHE_KEY);
+                const parsed = raw ? JSON.parse(raw) : [];
+                return Array.isArray(parsed)
+                    ? parsed
+                        .map((row) => (typeof row === "string" ? { name: row } : row))
+                        .filter(isActiveLocationRow)
+                        .filter((row) => Boolean(getLocationName(row)))
+                    : [];
+            } catch {
+                return [];
+            }
+        };
+
+        const loadLocations = async () => {
+            try {
+                const res: any = await locationsAPI.getAll({ limit: 10000 });
+                const rows = Array.isArray(res?.data) ? res.data : [];
+                const activeRows = rows.filter(isActiveLocationRow);
+                const uniqueRows = Array.from(
+                    new Map(
+                        activeRows
+                            .filter((row) => Boolean(getLocationName(row)))
+                            .map((row) => [getLocationName(row).toLowerCase(), row])
+                    ).values()
+                );
+                const nextOptions = uniqueRows.length > 0 ? uniqueRows : readCachedLocationNames();
+                const finalOptions = nextOptions.length > 0 ? nextOptions : [{ name: "Head Office", id: "head-office" }];
+                setLocationOptions(finalOptions);
+                setFormData((prev) => {
+                    const current = String(prev.location || "").trim();
+                    if (isEditMode && current) return prev;
+                    const nextLocation = getLocationName(finalOptions[0]) || current || "Head Office";
+                    return current === nextLocation ? prev : { ...prev, location: nextLocation };
+                });
+            } catch {
+                const nextOptions = readCachedLocationNames();
+                const finalOptions = nextOptions.length > 0 ? nextOptions : [{ name: "Head Office", id: "head-office" }];
+                setLocationOptions(finalOptions);
+                setFormData((prev) => {
+                    const current = String(prev.location || "").trim();
+                    if (isEditMode && current) return prev;
+                    const nextLocation = getLocationName(finalOptions[0]) || current || "Head Office";
+                    return current === nextLocation ? prev : { ...prev, location: nextLocation };
+                });
+            }
+        };
+
+        void loadLocations();
+    }, [isEditMode]);
+
+    useEffect(() => {
+        const current = String(formData.location || "").trim();
+        if (!current) return;
+        setLocationOptions((prev) => {
+            const exists = prev.some((row) => String(getLocationName(row)).trim().toLowerCase() === current.toLowerCase());
+            return exists ? prev : [...prev, { id: `loc-${current.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, name: current }];
+        });
+    }, [formData.location]);
+
+    useEffect(() => {
         const state = location.state as { customerId?: string; customerName?: string; draft?: any } | null;
         const customerId = state?.customerId || state?.draft?.customerId || formData.customerId;
         const customerName = state?.customerName || state?.draft?.customerName || formData.customerName;
@@ -971,17 +1141,22 @@ const NewSubscriptionPage = () => {
     useEffect(() => {
         const draft = (location.state as any)?.draft;
         if (!draft) return;
-        setFormData((prev) => ({ ...prev, ...draft }));
-        if (Array.isArray(draft.addonLines)) {
-            setAddonLines(draft.addonLines);
+        const normalizedDraft = buildSubscriptionEditDraft(draft);
+        setFormData((prev) => ({ ...prev, ...normalizedDraft }));
+        if (Array.isArray(normalizedDraft.addonLines)) {
+            setAddonLines(normalizedDraft.addonLines);
         }
     }, [location.state]);
 
     useEffect(() => {
         if (draftHydratedRef.current) return;
         const stateDraft = (location.state as any)?.draft;
+        if (stateDraft) {
+            draftHydratedRef.current = true;
+            return;
+        }
         const hydrate = async () => {
-            if (!stateDraft && subscriptionId) {
+            if (subscriptionId) {
                 try {
                     let found: any = null;
                     const apiRes: any = await subscriptionsAPI.getById(String(subscriptionId));
@@ -995,64 +1170,10 @@ const NewSubscriptionPage = () => {
                         found = rows.find((row: any) => String(row?.id) === String(subscriptionId));
                     }
                     if (found) {
-                        const draftFromSubscription = {
-                        id: String(found?.id || ""),
-                        customerId: String(found?.customerId || ""),
-                        customerName: String(found?.customerName || ""),
-                        contactPersons: Array.isArray(found?.contactPersons)
-                            ? found.contactPersons
-                            : found?.customerEmail
-                            ? [{ email: found.customerEmail }]
-                            : [],
-                        currency: String(found?.amount || "").match(/^[A-Za-z]+/)?.[0] || "USD",
-                        productId: String(found?.productId || ""),
-                        productName: String(found?.productName || found?.planName || ""),
-                        planName: String(found?.planName || "Select a Plan"),
-                        planDescription: String(found?.planDescription || ""),
-                        quantity: Number(found?.quantity || 1) || 1,
-                        price: Number(found?.price || 0) || 0,
-                        basePrice: Number(found?.basePrice || 0) || 0,
-                        tax: String(found?.tax || "Select a Tax"),
-                        taxRate: Number(found?.taxRate || 0) || 0,
-                        taxPreference: String(found?.taxPreference || "Tax Exclusive"),
-                        contentType: String(found?.contentType || "product"),
-                        items: Array.isArray(found?.items) ? found.items : initialFormData.items,
-                        customerNotes: String(found?.customerNotes || ""),
-                        expiresAfter: String(found?.expiresAfter || ""),
-                        neverExpires: Boolean(found?.neverExpires ?? false),
-                        tag: String(found?.tag || ""),
-                        reportingTags: Array.isArray(found?.reportingTags) ? found.reportingTags : [],
-                        startDate: String(found?.activatedOn || found?.startDate || initialFormData.startDate),
-                        coupon: String(found?.coupon || ""),
-                        couponCode: String(found?.couponCode || ""),
-                        couponValue: String(found?.couponValue || "0.00"),
-                        billingAddress: found?.billingAddress ?? null,
-                        shippingAddress: found?.shippingAddress ?? null,
-                        priceListId: String(found?.priceListId || ""),
-                        priceListName: String(found?.priceListName || "Select Price List"),
-                        location: String(found?.location || "Head Office"),
-                        subscriptionNumber: String(found?.subscriptionNumber || ""),
-                        referenceNumber: String(found?.referenceNumber || ""),
-                        salesperson: String(found?.salesperson || ""),
-                        salespersonName: String(found?.salespersonName || ""),
-                        meteredBilling: Boolean(found?.meteredBilling ?? initialFormData.meteredBilling),
-                        paymentMode: String(found?.paymentMode || initialFormData.paymentMode),
-                        paymentTerms: String(found?.paymentTerms || initialFormData.paymentTerms),
-                        partialPayments: Boolean(found?.partialPayments ?? initialFormData.partialPayments),
-                        prorateCharges: Boolean(found?.prorateCharges ?? initialFormData.prorateCharges),
-                        generateInvoices: Boolean(found?.generateInvoices ?? initialFormData.generateInvoices),
-                        invoiceTemplate: String(found?.invoiceTemplate || initialFormData.invoiceTemplate),
-                        roundOffPreference: String(found?.roundOffPreference || initialFormData.roundOffPreference),
-                        createdOn: String(found?.createdOn || ""),
-                        activatedOn: String(found?.activatedOn || ""),
-                        lastBilledOn: String(found?.lastBilledOn || ""),
-                        nextBillingOn: String(found?.nextBillingOn || ""),
-                        status: String(found?.status || ""),
-                        addonLines: Array.isArray(found?.addonLines) ? found.addonLines : defaultAddonLines,
-                    };
+                        const draftFromSubscription = buildSubscriptionEditDraft(found);
                         setFormData((prev) => ({ ...prev, ...draftFromSubscription }));
-                        if (Array.isArray(found?.addonLines)) {
-                            setAddonLines(found.addonLines);
+                        if (Array.isArray(draftFromSubscription.addonLines)) {
+                            setAddonLines(draftFromSubscription.addonLines);
                         }
                         draftHydratedRef.current = true;
                         return;
@@ -1065,9 +1186,10 @@ const NewSubscriptionPage = () => {
             if (!raw) return;
             try {
                 const draft = JSON.parse(raw);
-                setFormData((prev) => ({ ...prev, ...draft }));
-                if (Array.isArray(draft.addonLines)) {
-                    setAddonLines(draft.addonLines);
+                const normalizedDraft = buildSubscriptionEditDraft(draft);
+                setFormData((prev) => ({ ...prev, ...normalizedDraft }));
+                if (Array.isArray(normalizedDraft.addonLines)) {
+                    setAddonLines(normalizedDraft.addonLines);
                 }
                 draftHydratedRef.current = true;
             } catch {
@@ -1198,6 +1320,10 @@ const NewSubscriptionPage = () => {
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
+            if (taxDropdownRef.current && !taxDropdownRef.current.contains(event.target as Node)) {
+                setIsTaxDropdownOpen(false);
+                setTaxSearch("");
+            }
             if (phoneCodeDropdownRef.current && !phoneCodeDropdownRef.current.contains(event.target as Node)) {
                 setIsPhoneCodeDropdownOpen(false);
             }
@@ -1214,6 +1340,19 @@ const NewSubscriptionPage = () => {
             }
             if (couponDropdownRef.current && !couponDropdownRef.current.contains(event.target as Node)) {
                 setIsCouponDropdownOpen(false);
+            }
+            const addonTaxEntries = Object.entries(addonTaxDropdownRefs.current);
+            if (addonTaxEntries.length > 0) {
+                let clickedInsideAddonTax = false;
+                for (const [, ref] of addonTaxEntries) {
+                    if (ref && ref.contains(event.target as Node)) {
+                        clickedInsideAddonTax = true;
+                        break;
+                    }
+                }
+                if (!clickedInsideAddonTax) {
+                    setOpenAddonTaxDropdowns({});
+                }
             }
             const menuEntries = Object.entries(itemMenuRefs.current);
             if (menuEntries.length > 0) {
@@ -1318,9 +1457,78 @@ const NewSubscriptionPage = () => {
             setAddressFormData((prev) => ({ ...prev, phoneCountryCode: match.phoneCode }));
         }
     }, [addressFormData.country]);
+
+    useEffect(() => {
+        const customerId = String(formData.customerId || selectedCustomer?.id || (selectedCustomer as any)?._id || "").trim();
+        if (!customerId) {
+            setUnpaidInvoiceCount(0);
+            setCustomerUnpaidInvoices([]);
+            setIsLoadingUnpaidInvoices(false);
+            return;
+        }
+
+        let cancelled = false;
+
+        const loadUnpaidInvoiceCount = async () => {
+            setIsLoadingUnpaidInvoices(true);
+            try {
+                const response: any = await invoicesAPI.getByCustomer(customerId, { limit: 10000 });
+                const rows = Array.isArray(response?.data) ? response.data : [];
+                const unpaid = rows.filter((invoice: any) => {
+                    const status = String(invoice?.status || "").trim().toLowerCase();
+                    if (status === "paid" || status === "draft" || status === "void") return false;
+                    return computeInvoiceBalanceDue(invoice) > 0;
+                });
+                if (!cancelled) {
+                    setUnpaidInvoiceCount(unpaid.length);
+                    setCustomerUnpaidInvoices(unpaid);
+                }
+            } catch (error) {
+                console.error("Failed to load unpaid invoices for selected customer:", error);
+                if (!cancelled) {
+                    setUnpaidInvoiceCount(0);
+                    setCustomerUnpaidInvoices([]);
+                }
+            } finally {
+                if (!cancelled) {
+                    setIsLoadingUnpaidInvoices(false);
+                }
+            }
+        };
+
+        void loadUnpaidInvoiceCount();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [formData.customerId, selectedCustomer]);
+
     // Helper Functions
     const handleChange = (name: string, value: any) => {
         setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const closeAllDropdowns = () => {
+        setIsCustomerDropdownOpen(false);
+        setIsProductDropdownOpen(false);
+        setIsPlanAddonDropdownOpen(false);
+        setIsSalespersonDropdownOpen(false);
+        setIsReportingTagDropdownOpen(false);
+        setIsTaxDropdownOpen(false);
+        setTaxSearch("");
+        setIsCouponDropdownOpen(false);
+        setIsBulkActionsOpen(false);
+        setIsPhoneCodeDropdownOpen(false);
+        setIsCountryDropdownOpen(false);
+        setIsStateDropdownOpen(false);
+        setIsDigitalServiceOpen(false);
+        setOpenItemDropdowns({});
+        setOpenTaxDropdowns({});
+        setOpenAddonTaxDropdowns({});
+        setOpenAccountDropdowns({});
+        setOpenItemTagDropdowns({});
+        setOpenItemMenus({});
+        setAddonTaxSearches({});
     };
 
     const parsePercentage = (value: any) => {
@@ -1625,25 +1833,48 @@ const NewSubscriptionPage = () => {
         return found?.name || formData.productName || "";
     }, [activeProducts, formData.productId, formData.productName]);
 
-    const selectedSubscriptionSeries = useMemo(() => {
-        const found = activeProducts.find((p) => p.id === formData.productId);
-        if (!found?.autoGenerateSubscriptionNumbers) return null;
-        const prefix = String(found.prefix || "SUB-").trim();
-        const rawNext = String(found.nextNumber || "00001").trim();
-        const digits = rawNext.replace(/[^\d]/g, "");
-        const width = Math.max((rawNext.match(/^\d+$/)?.[0].length || digits.length || 5), 5);
-        const current = Number(digits) > 0 ? Number(digits) : 1;
-        return `${prefix}${String(current).padStart(width, "0")}`;
-    }, [activeProducts, formData.productId]);
+    const selectedLocationSeries = useMemo(() => {
+        const currentLocation = String(formData.location || "").trim().toLowerCase();
+        if (!currentLocation) return null;
+        const found = locationOptions.find((row) => String(getLocationName(row)).trim().toLowerCase() === currentLocation);
+        if (!found) return null;
+        return {
+            locationName: getLocationName(found),
+            seriesId: String(found?.transactionNumberSeriesId || found?.defaultTransactionNumberSeriesId || "").trim(),
+            seriesName: String(found?.defaultTransactionSeries || "").trim(),
+        };
+    }, [formData.location, locationOptions]);
 
     useEffect(() => {
-        if (!selectedSubscriptionSeries) return;
-        setFormData((prev) =>
-            prev.subscriptionNumber === selectedSubscriptionSeries
-                ? prev
-                : { ...prev, subscriptionNumber: selectedSubscriptionSeries }
-        );
-    }, [selectedSubscriptionSeries]);
+        if (isEditMode) return;
+        const locationName = String(selectedLocationSeries?.locationName || "").trim();
+        if (!locationName) return;
+
+        let cancelled = false;
+        const loadNextSubscriptionNumber = async () => {
+            try {
+                const lookup = selectedLocationSeries?.seriesId
+                    ? { seriesId: selectedLocationSeries.seriesId, reserve: false }
+                    : selectedLocationSeries?.seriesName
+                    ? { module: "Subscriptions", seriesName: selectedLocationSeries.seriesName, reserve: false }
+                    : { module: "Subscriptions", reserve: false };
+                const res: any = await transactionNumberSeriesAPI.getNextNumber(lookup as any);
+                const nextNumber = String(res?.data?.nextNumber || res?.data?.next_number || res?.nextNumber || "").trim();
+                if (!nextNumber || cancelled) return;
+                setFormData((prev) => {
+                    if (String(prev.location || "").trim().toLowerCase() !== locationName.toLowerCase()) return prev;
+                    return prev.subscriptionNumber === nextNumber ? prev : { ...prev, subscriptionNumber: nextNumber };
+                });
+            } catch {
+                // ignore numbering errors and keep the current value
+            }
+        };
+
+        void loadNextSubscriptionNumber();
+        return () => {
+            cancelled = true;
+        };
+    }, [isEditMode, selectedLocationSeries]);
 
     useEffect(() => {
         if (formData.productId || !formData.productName || !activeProducts.length) return;
@@ -1917,6 +2148,35 @@ const NewSubscriptionPage = () => {
         });
         setFormData(prev => ({ ...prev, items: newItems }));
         setOpenTaxDropdowns(prev => ({ ...prev, [id]: false }));
+        setTaxSearches(prev => ({ ...prev, [id]: "" }));
+    };
+
+    const handleSelectSubscriptionTax = (tax: Tax) => {
+        setFormData((prev) => ({
+            ...prev,
+            tax: tax.name,
+            taxRate: tax.rate,
+        }));
+        setIsTaxDropdownOpen(false);
+        setTaxSearch("");
+    };
+
+    const handleSelectAddonTax = (id: number, tax: Tax) => {
+        setAddonLines((prev) =>
+            prev.map((line) => {
+                if (line.id !== id) return line;
+                const quantity = Number(line.quantity) || 0;
+                const amount = quantity * line.rate + (quantity * line.rate * Number(tax.rate || 0)) / 100;
+                return {
+                    ...line,
+                    tax: tax.name,
+                    taxRate: Number(tax.rate || 0),
+                    amount,
+                };
+            })
+        );
+        setOpenAddonTaxDropdowns((prev) => ({ ...prev, [id]: false }));
+        setAddonTaxSearches((prev) => ({ ...prev, [id]: "" }));
     };
 
     const insertItemAt = (index: number, item: any) => {
@@ -2071,6 +2331,23 @@ const NewSubscriptionPage = () => {
         return formData.items.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
     }, [formData.items]);
 
+    const customerDetails = useMemo(() => {
+        if (selectedCustomer) return selectedCustomer;
+        if (!formData.customerId) return null;
+        return customers.find((customer) => String(customer.id || (customer as any)._id) === String(formData.customerId)) || null;
+    }, [customers, formData.customerId, selectedCustomer]);
+
+    const customerPanelName = getCustomerPrimaryName(customerDetails || selectedCustomer || {});
+    const customerPanelEmail = getCustomerEmail(customerDetails || selectedCustomer || {});
+    const customerPanelCompany = getCustomerCompany(customerDetails || selectedCustomer || {});
+    const customerPanelInitial = getCustomerInitial(customerDetails || selectedCustomer || {});
+    const customerPanelCurrency = getCustomerCurrency(customerDetails || selectedCustomer || {});
+    const customerPanelUnpaidInvoices = customerUnpaidInvoices;
+    const customerPanelOutstandingReceivables = customerPanelUnpaidInvoices.reduce(
+        (sum, invoice) => sum + computeInvoiceBalanceDue(invoice),
+        0
+    );
+
     const handleAddBulkItems = () => {
         const newItems = [...formData.items];
         let currentMaxId = newItems.length > 0 ? Math.max(...newItems.map((i: any) => i.id)) : 0;
@@ -2121,7 +2398,7 @@ const NewSubscriptionPage = () => {
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-                <div className="px-8 py-8 max-w-6xl pb-32">
+                <div className={`px-8 py-8 max-w-6xl pb-32 ${isCustomerPanelOpen ? "lg:pr-[430px]" : ""}`}>
                     <div className="flex flex-col gap-10">
 
                     {/* Main Content */}
@@ -2136,7 +2413,14 @@ const NewSubscriptionPage = () => {
                                     <div className="flex items-stretch gap-0 flex-1 relative" ref={customerDropdownRef}>
                                         <div className="relative flex-1">
                                             <button
-                                                onClick={() => setIsCustomerDropdownOpen(!isCustomerDropdownOpen)}
+                                                onClick={() => {
+                                                    if (isCustomerDropdownOpen) {
+                                                        setIsCustomerDropdownOpen(false);
+                                                        return;
+                                                    }
+                                                    closeAllDropdowns();
+                                                    setIsCustomerDropdownOpen(true);
+                                                }}
                                                 className={`w-full h-[34px] px-3 border border-gray-300 rounded-l-md rounded-r-none text-[13px] outline-none text-left bg-white flex items-center justify-between ${!formData.customerName ? 'text-gray-400' : 'text-gray-800'}`}
                                             >
                                                 <span>{formData.customerName || "Select or add a customer"}</span>
@@ -2174,7 +2458,7 @@ const NewSubscriptionPage = () => {
                                                                     </div>
                                                                     <div className="min-w-0 flex-1">
                                                                         <div className="flex items-center justify-between">
-                                                                            <span className="font-bold text-[13px] text-gray-800 truncate">{customer.name} | {customer.id}</span>
+                                                                            <span className="font-bold text-[13px] text-gray-800 truncate">{customer.name}</span>
                                                                             {formData.customerId === customer.id && <Check size={14} className="text-[#156372] shrink-0" />}
                                                                         </div>
                                                                         <div className="text-[12px] text-gray-500 truncate mt-0.5">
@@ -2310,7 +2594,12 @@ const NewSubscriptionPage = () => {
                                                 value={formData.location}
                                                 onChange={(e) => handleChange("location", e.target.value)}
                                             >
-                                                <option>Head Office</option>
+                                                {!formData.location && <option value="">Select Location</option>}
+                                                {locationOptions.map((locationRow) => (
+                                                    <option key={String(locationRow.id || locationRow._id || getLocationName(locationRow))} value={getLocationName(locationRow)}>
+                                                        {getLocationName(locationRow)}
+                                                    </option>
+                                                ))}
                                             </select>
                                             <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
                                         </div>
@@ -2325,7 +2614,14 @@ const NewSubscriptionPage = () => {
                                             </span>
                                             <button
                                                 type="button"
-                                                onClick={() => setIsDigitalServiceOpen((prev) => !prev)}
+                                                onClick={() => {
+                                                    if (isDigitalServiceOpen) {
+                                                        setIsDigitalServiceOpen(false);
+                                                        return;
+                                                    }
+                                                    closeAllDropdowns();
+                                                    setIsDigitalServiceOpen(true);
+                                                }}
                                                 className="text-blue-500 hover:text-blue-600"
                                                 aria-label="Edit digital service tracking"
                                             >
@@ -2400,21 +2696,30 @@ const NewSubscriptionPage = () => {
                                 </div>
                             </div>
 
-                            {/* Unpaid Invoices Widget */}
-                            {formData.customerId && (
-                                <div className="w-64 bg-[#334155] rounded-sm p-3 flex items-center justify-between text-white shadow-sm shrink-0 self-start mt-1">
-                                    <div className="space-y-0.5">
-                                        <p className="text-[11px] font-bold text-slate-300 uppercase truncate">
-                                            {formData.customerName ? `${formData.customerName}'s De...` : "Select a customer"}
-                                        </p>
-                                        <div className="flex items-center gap-1.5">
-                                            <AlertCircle size={14} className="text-orange-400" />
-                                            <span className="text-[12px]">1 Unpaid Invoices</span>
-                                        </div>
-                                    </div>
-                                    <ChevronRight size={18} className="text-slate-400" />
-                                </div>
-                            )}
+                            {/* Customer Summary Widget */}
+                            {customerDetails && !isCustomerPanelOpen ? (
+                                <button
+                                    type="button"
+                                    className="w-64 bg-[#565d79] rounded-md px-3 py-2 flex flex-col items-start text-left text-white shadow-sm shrink-0 self-start mt-1 transition-colors hover:bg-[#4a516b]"
+                                    onClick={() => {
+                                        setCustomerPanelTab("details");
+                                        setIsCustomerPanelOpen(true);
+                                    }}
+                                >
+                                    <span className="text-[12px] font-semibold leading-none truncate">
+                                        {customerPanelName}'s Details
+                                    </span>
+                                    <span className="mt-1 inline-flex items-center gap-1 text-[11px] text-white/85">
+                                        <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/45">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-white/80" />
+                                        </span>
+                                        {isLoadingUnpaidInvoices
+                                            ? "Loading unpaid invoices..."
+                                            : `${unpaidInvoiceCount} Unpaid Invoice${unpaidInvoiceCount === 1 ? "" : "s"}`}
+                                        <ChevronRight size={12} className="ml-1" />
+                                    </span>
+                                </button>
+                            ) : null}
                         </div>
 
                         <div className={!formData.customerId ? "opacity-30 pointer-events-none transition-all duration-500" : "transition-all duration-500"}>
@@ -2451,7 +2756,14 @@ const NewSubscriptionPage = () => {
                                         <div className="relative w-[460px]" ref={productDropdownRef}>
                                             <button
                                                 type="button"
-                                                onClick={() => setIsProductDropdownOpen((prev) => !prev)}
+                                                onClick={() => {
+                                                    if (isProductDropdownOpen) {
+                                                        setIsProductDropdownOpen(false);
+                                                        return;
+                                                    }
+                                                    closeAllDropdowns();
+                                                    setIsProductDropdownOpen(true);
+                                                }}
                                                 className={`w-full px-3 py-1.5 border border-[#3b82f6] rounded text-[13px] outline-none text-left bg-white flex items-center justify-between ${selectedProductName ? "text-gray-800" : "text-gray-400"}`}
                                             >
                                                 <span>{selectedProductName || "Select Product"}</span>
@@ -2480,7 +2792,7 @@ const NewSubscriptionPage = () => {
                                                                     type="button"
                                                                     onMouseDown={(e) => e.preventDefault()}
                                                                     onClick={() => handleProductSelect(product)}
-                                                                    className="w-full text-left px-3 py-2.5 text-[13px] hover:bg-blue-600 hover:text-white border-b border-gray-50 last:border-0"
+                                                                    className="w-full text-left px-3 py-2.5 text-[13px] hover:bg-gray-50 border-b border-gray-50 last:border-0"
                                                                 >
                                                                     {product.name}
                                                                 </button>
@@ -2506,7 +2818,10 @@ const NewSubscriptionPage = () => {
                                                 <select
                                                     className="w-full pl-3 pr-7 py-1.5 bg-transparent text-[13px] outline-none appearance-none"
                                                     value={formData.taxPreference}
-                                                    onChange={(e) => handleChange("taxPreference", e.target.value)}
+                                                    onChange={(e) => {
+                                                        handleChange("taxPreference", e.target.value);
+                                                        e.currentTarget.blur();
+                                                    }}
                                                 >
                                                     <option>Tax Exclusive</option>
                                                     <option>Tax Inclusive</option>
@@ -2526,6 +2841,7 @@ const NewSubscriptionPage = () => {
                                                             priceListId: nextId,
                                                             priceListName: nextList?.name || "Select Price List",
                                                         }));
+                                                        e.currentTarget.blur();
                                                     }}
                                                 >
                                                     <option value="">Select Price List</option>
@@ -2560,7 +2876,14 @@ const NewSubscriptionPage = () => {
                                                             <button
                                                                 type="button"
                                                                 disabled={!selectedProductName}
-                                                                onClick={() => setIsPlanAddonDropdownOpen((prev) => !prev)}
+                                                                onClick={() => {
+                                                                    if (isPlanAddonDropdownOpen) {
+                                                                        setIsPlanAddonDropdownOpen(false);
+                                                                        return;
+                                                                    }
+                                                                    closeAllDropdowns();
+                                                                    setIsPlanAddonDropdownOpen(true);
+                                                                }}
                                                                 className={`w-full py-1 text-left outline-none bg-transparent flex items-center justify-between ${formData.planName === "Select a Plan" ? "text-gray-400" : "text-gray-700"} ${!selectedProductName ? "cursor-not-allowed opacity-60" : ""}`}
                                                             >
                                                                 <span>{formData.planName || "Type or click to select a plan."}</span>
@@ -2588,7 +2911,7 @@ const NewSubscriptionPage = () => {
                                                                                     key={row.id}
                                                                                     type="button"
                                                                                     onClick={() => handlePlanAddonSelect(row)}
-                                                                                    className="w-full text-left px-3 py-2.5 hover:bg-blue-600 hover:text-white border-b border-gray-50 last:border-0"
+                                                                                    className="w-full text-left px-3 py-2.5 hover:bg-gray-50 border-b border-gray-50 last:border-0"
                                                                                 >
                                                                                     <div className="text-[13px] font-medium">{row.name}</div>
                                                                                     <div className="text-[12px] opacity-70">{row.type === "plan" ? "Code" : "Addon Code"}: {row.code || "-"}</div>
@@ -2633,20 +2956,72 @@ const NewSubscriptionPage = () => {
                                                     />
                                                 </td>
                                                 <td className="px-3 py-2 border-b border-l border-gray-100 align-middle">
-                                                    <div className="relative">
-                                                        <select
-                                                            className="w-full bg-transparent text-[13px] text-slate-600 outline-none appearance-none"
-                                                            value={formData.tax}
-                                                            onChange={(e) => handleChange("tax", e.target.value)}
+                                                    <div className="relative" ref={taxDropdownRef}>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                if (isTaxDropdownOpen) {
+                                                                    setIsTaxDropdownOpen(false);
+                                                                    setTaxSearch("");
+                                                                    return;
+                                                                }
+                                                                closeAllDropdowns();
+                                                                setIsTaxDropdownOpen(true);
+                                                            }}
+                                                            className="w-full bg-transparent text-[13px] text-slate-600 outline-none appearance-none flex items-center justify-between"
                                                         >
-                                                            <option>Select a Tax</option>
-                                                            {taxes.map((tax) => (
-                                                                <option key={tax.id || (tax as any)._id || tax.name} value={tax.name}>
-                                                                    {tax.name} {Number.isFinite(tax.rate) ? `(${tax.rate}%)` : ""}
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                        <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400" />
+                                                            <span className={`truncate ${formData.tax === "Select a Tax" ? "text-gray-400" : "text-slate-700"}`}>
+                                                                {selectedSubscriptionTaxLabel}
+                                                            </span>
+                                                            <ChevronDown size={14} className="shrink-0 text-gray-400" />
+                                                        </button>
+                                                        {isTaxDropdownOpen && (
+                                                            <div className="absolute left-0 top-full z-[220] mt-1 w-[300px] overflow-hidden rounded-md border border-gray-200 bg-white shadow-2xl">
+                                                                <div className="border-b border-gray-50 p-2">
+                                                                    <div className="relative">
+                                                                        <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+                                                                        <input
+                                                                            type="text"
+                                                                            className="w-full rounded bg-gray-50 pl-7 pr-2 py-1.5 text-[12px] outline-none"
+                                                                            placeholder="Search taxes"
+                                                                            value={taxSearch}
+                                                                            onChange={(e) => setTaxSearch(e.target.value)}
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                                <div className="max-h-[220px] overflow-y-auto py-1">
+                                                                    {filterTaxGroups(taxSearch).length > 0 ? (
+                                                                        filterTaxGroups(taxSearch).map((group) => (
+                                                                            <div key={group.label} className="pb-1">
+                                                                                <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                                                                                    {group.label}
+                                                                                </div>
+                                                                                {group.options.map((taxOption) => {
+                                                                                    const tax = taxOption.raw as Tax;
+                                                                                    const isSelected = String(formData.tax || "").trim().toLowerCase() === String(tax.name || "").trim().toLowerCase();
+                                                                                    return (
+                                                                                        <button
+                                                                                            key={taxOption.id}
+                                                                                            type="button"
+                                                                                            onMouseDown={(e) => e.preventDefault()}
+                                                                                            onClick={() => handleSelectSubscriptionTax(tax)}
+                                                                                            className={`flex w-full items-center justify-between px-3 py-2 text-left text-[13px] ${
+                                                                                                isSelected ? "bg-teal-700 text-white" : "hover:bg-gray-50 text-gray-700"
+                                                                                            }`}
+                                                                                        >
+                                                                                            <span className="truncate">{taxLabel(tax)}</span>
+                                                                                            {isSelected ? <Check size={14} /> : null}
+                                                                                        </button>
+                                                                                    );
+                                                                                })}
+                                                                            </div>
+                                                                        ))
+                                                                    ) : (
+                                                                        <div className="px-3 py-2 text-[12px] text-gray-400">No taxes found</div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </td>
                                                 <td className="px-3 py-2 border-b border-l border-gray-100 text-right text-[13px] text-slate-900 font-semibold">
@@ -2663,7 +3038,14 @@ const NewSubscriptionPage = () => {
                                                         <div className="relative" ref={reportingTagDropdownRef}>
                                                             <button
                                                                 type="button"
-                                                                onClick={() => setIsReportingTagDropdownOpen(!isReportingTagDropdownOpen)}
+                                                                onClick={() => {
+                                                                    if (isReportingTagDropdownOpen) {
+                                                                        setIsReportingTagDropdownOpen(false);
+                                                                        return;
+                                                                    }
+                                                                    closeAllDropdowns();
+                                                                    setIsReportingTagDropdownOpen(true);
+                                                                }}
                                                                 className="flex items-center gap-1.5 px-2 py-0.5 hover:bg-gray-100 rounded border border-transparent hover:border-gray-200 transition-all"
                                                             >
                                                                 <span className={formData.tag ? "text-blue-600" : "text-gray-400"}>
@@ -2729,7 +3111,14 @@ const NewSubscriptionPage = () => {
                                                             <div className="relative">
                                                                 <button
                                                                     type="button"
-                                                                    onClick={() => setOpenItemDropdowns((prev) => ({ ...prev, [line.id]: !prev[line.id] }))}
+                                                                    onClick={() => {
+                                                                        if (openItemDropdowns[line.id]) {
+                                                                            setOpenItemDropdowns({});
+                                                                            return;
+                                                                        }
+                                                                        closeAllDropdowns();
+                                                                        setOpenItemDropdowns({ [line.id]: true });
+                                                                    }}
                                                                     className={`w-full py-1 text-left outline-none bg-transparent flex items-center justify-between ${line.addonName ? "text-gray-700" : "text-gray-400"}`}
                                                                 >
                                                                     <span>{line.addonName || "Select an Addon"}</span>
@@ -2763,7 +3152,7 @@ const NewSubscriptionPage = () => {
                                                                                             handleAddonSelect(line.id, row);
                                                                                             setOpenItemDropdowns((prev) => ({ ...prev, [line.id]: false }));
                                                                                         }}
-                                                                                        className="w-full text-left px-3 py-2.5 hover:bg-blue-600 hover:text-white border-b border-gray-50 last:border-0"
+                                                                                        className="w-full text-left px-3 py-2.5 hover:bg-gray-50 border-b border-gray-50 last:border-0"
                                                                                     >
                                                                                         <div className="text-[13px] font-medium">{row.name}</div>
                                                                                         <div className="text-[12px] opacity-70">Addon Code: {row.code || "-"}</div>
@@ -2807,29 +3196,71 @@ const NewSubscriptionPage = () => {
                                                             {Number(line.rate || 0).toFixed(2)}
                                                         </td>
                                                         <td className="px-3 py-2 border-b border-l border-gray-100 align-middle">
-                                                            <select
-                                                                className="w-full bg-transparent text-[13px] text-slate-600 outline-none appearance-none"
-                                                                value={line.tax}
-                                                                onChange={(e) =>
-                                                                    setAddonLines((prev) =>
-                                                                        prev.map((l) => {
-                                                                            if (l.id !== line.id) return l;
-                                                                            const taxName = e.target.value;
-                                                                            const taxRow = taxes.find((t) => t.name === taxName);
-                                                                            const taxRate = taxRow ? Number(taxRow.rate) : 0;
-                                                                            const amount = (Number(l.quantity) || 0) * l.rate + ((Number(l.quantity) || 0) * l.rate * taxRate) / 100;
-                                                                            return { ...l, tax: taxName, taxRate, amount };
-                                                                        })
-                                                                    )
-                                                                }
-                                                            >
-                                                                <option>Select a Tax</option>
-                                                                {taxes.map((tax) => (
-                                                                    <option key={tax.id || (tax as any)._id || tax.name} value={tax.name}>
-                                                                        {tax.name} {Number.isFinite(tax.rate) ? `(${tax.rate}%)` : ""}
-                                                                    </option>
-                                                                ))}
-                                                            </select>
+                                                            <div className="relative" ref={(el) => { addonTaxDropdownRefs.current[String(line.id)] = el; }}>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        if (openAddonTaxDropdowns[line.id]) {
+                                                                            setOpenAddonTaxDropdowns({});
+                                                                            setAddonTaxSearches((prev) => ({ ...prev, [line.id]: "" }));
+                                                                            return;
+                                                                        }
+                                                                        closeAllDropdowns();
+                                                                        setOpenAddonTaxDropdowns({ [line.id]: true });
+                                                                    }}
+                                                                    className={`w-full bg-transparent text-[13px] outline-none appearance-none flex items-center justify-between ${line.tax === "Select a Tax" ? "text-gray-400" : "text-slate-700"}`}
+                                                                >
+                                                                    <span className="truncate">{getTaxDisplayLabel(line.tax)}</span>
+                                                                    <ChevronDown size={14} className="shrink-0 text-gray-400" />
+                                                                </button>
+                                                                {openAddonTaxDropdowns[line.id] && (
+                                                                    <div className="absolute left-0 top-full z-[220] mt-1 w-[300px] overflow-hidden rounded-md border border-gray-200 bg-white shadow-2xl">
+                                                                        <div className="border-b border-gray-50 p-2">
+                                                                            <div className="relative">
+                                                                                <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+                                                                                <input
+                                                                                    type="text"
+                                                                                    className="w-full rounded bg-gray-50 pl-7 pr-2 py-1.5 text-[12px] outline-none"
+                                                                                    placeholder="Search taxes"
+                                                                                    value={addonTaxSearches[line.id] || ""}
+                                                                                    onChange={(e) => setAddonTaxSearches((prev) => ({ ...prev, [line.id]: e.target.value }))}
+                                                                                />
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="max-h-[220px] overflow-y-auto py-1">
+                                                                            {filterTaxGroups(addonTaxSearches[line.id] || "").length > 0 ? (
+                                                                                filterTaxGroups(addonTaxSearches[line.id] || "").map((group) => (
+                                                                                    <div key={`${line.id}-${group.label}`} className="pb-1">
+                                                                                        <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                                                                                            {group.label}
+                                                                                        </div>
+                                                                                        {group.options.map((taxOption) => {
+                                                                                            const tax = taxOption.raw as Tax;
+                                                                                            const isSelected = String(line.tax || "").trim().toLowerCase() === String(tax.name || "").trim().toLowerCase();
+                                                                                            return (
+                                                                                                <button
+                                                                                                    key={taxOption.id}
+                                                                                                    type="button"
+                                                                                                    onMouseDown={(e) => e.preventDefault()}
+                                                                                                    onClick={() => handleSelectAddonTax(line.id, tax)}
+                                                                                                    className={`flex w-full items-center justify-between px-3 py-2 text-left text-[13px] ${
+                                                                                                        isSelected ? "bg-teal-700 text-white" : "hover:bg-gray-50 text-gray-700"
+                                                                                                    }`}
+                                                                                                >
+                                                                                                    <span className="truncate">{taxLabel(tax)}</span>
+                                                                                                    {isSelected ? <Check size={14} /> : null}
+                                                                                                </button>
+                                                                                            );
+                                                                                        })}
+                                                                                    </div>
+                                                                                ))
+                                                                            ) : (
+                                                                                <div className="px-3 py-2 text-[12px] text-gray-400">No taxes found</div>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
                                                         </td>
                                                         <td className="px-3 py-2 border-b border-l border-gray-100 text-right text-[13px] text-slate-900 font-semibold">
                                                             {Number(line.amount || 0).toFixed(2)}
@@ -2881,6 +3312,7 @@ const NewSubscriptionPage = () => {
                                                             priceListId: nextId,
                                                             priceListName: nextList?.name || "Select Price List",
                                                         }));
+                                                        e.currentTarget.blur();
                                                     }}
                                                 >
                                                     <option value="">Select Price List</option>
@@ -2900,7 +3332,14 @@ const NewSubscriptionPage = () => {
                                             <h2 className="text-[13px] font-semibold text-gray-800">Item Table</h2>
                                             <div className="relative" ref={bulkActionsRef}>
                                                 <button
-                                                    onClick={() => setIsBulkActionsOpen(!isBulkActionsOpen)}
+                                                    onClick={() => {
+                                                        if (isBulkActionsOpen) {
+                                                            setIsBulkActionsOpen(false);
+                                                            return;
+                                                        }
+                                                        closeAllDropdowns();
+                                                        setIsBulkActionsOpen(true);
+                                                    }}
                                                     className="flex items-center gap-1 text-[#156372] hover:text-[#0D4A52] text-[13px] font-medium"
                                                 >
                                                     <CheckCircle size={14} />
@@ -2973,15 +3412,18 @@ const NewSubscriptionPage = () => {
                                                                             onChange={(e) => {
                                                                                 handleItemChange(item.id, 'itemDetails', e.target.value);
                                                                                 setItemSearches(prev => ({ ...prev, [item.id]: e.target.value }));
-                                                                                setOpenItemDropdowns(prev => ({ ...prev, [item.id]: true }));
+                                                                                closeAllDropdowns();
+                                                                                setOpenItemDropdowns({ [item.id]: true });
                                                                             }}
                                                                             onFocus={() => {
                                                                                 setItemSearches(prev => ({ ...prev, [item.id]: "" }));
-                                                                                setOpenItemDropdowns(prev => ({ ...prev, [item.id]: true }));
+                                                                                closeAllDropdowns();
+                                                                                setOpenItemDropdowns({ [item.id]: true });
                                                                             }}
                                                                             onClick={() => {
                                                                                 setItemSearches(prev => ({ ...prev, [item.id]: "" }));
-                                                                                setOpenItemDropdowns(prev => ({ ...prev, [item.id]: true }));
+                                                                                closeAllDropdowns();
+                                                                                setOpenItemDropdowns({ [item.id]: true });
                                                                             }}
                                                                             placeholder="Type or click to select an item."
                                                                             className="w-full px-2 py-1.5 border border-transparent hover:border-gray-300 focus:border-blue-500 rounded outline-none text-[13px] transition-all bg-transparent"
@@ -3036,37 +3478,61 @@ const NewSubscriptionPage = () => {
                                                         <td className="py-3 px-4 align-top">
                                                             <div className="relative" ref={(el) => { taxDropdownRefs.current[String(item.id)] = el; }}>
                                                                 <button
-                                                                    onClick={() => setOpenTaxDropdowns(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        if (openTaxDropdowns[item.id]) {
+                                                                            setOpenTaxDropdowns({});
+                                                                            setTaxSearches(prev => ({ ...prev, [item.id]: "" }));
+                                                                            return;
+                                                                        }
+                                                                        closeAllDropdowns();
+                                                                        setOpenTaxDropdowns({ [item.id]: true });
+                                                                    }}
                                                                     className={`w-full px-3 py-1.5 border border-gray-200 hover:border-gray-300 rounded text-[13px] text-left flex items-center justify-between transition-all bg-white ${item.tax === "Select a Tax" ? "text-gray-400 font-normal" : "text-gray-800 font-medium"}`}
                                                                 >
-                                                                    <span className="truncate">{item.tax}</span>
+                                                                    <span className="truncate">{getTaxDisplayLabel(item.tax)}</span>
                                                                     <ChevronDown size={14} className="text-gray-400 shrink-0" />
                                                                 </button>
                                                                 {openTaxDropdowns[item.id] && (
-                                                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-2xl z-[210] max-h-[200px] overflow-y-auto">
+                                                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-2xl z-[210] max-h-[240px] overflow-y-auto">
                                                                         <div className="p-2 border-b border-gray-50">
                                                                             <div className="relative">
                                                                                 <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
                                                                                 <input
                                                                                     type="text"
                                                                                     className="w-full pl-7 pr-2 py-1.5 text-[12px] bg-gray-50 rounded outline-none"
-                                                                                    placeholder="Search"
+                                                                                    placeholder="Search taxes"
                                                                                     value={taxSearches[item.id] || ""}
                                                                                     onChange={(e) => setTaxSearches(prev => ({ ...prev, [item.id]: e.target.value }))}
                                                                                 />
                                                                             </div>
                                                                         </div>
-                                                                        <div className="py-1 uppercase text-[10px] font-bold text-gray-400 px-4 mb-1">Taxes</div>
-                                                                        {taxes.filter(t => t.name.toLowerCase().includes((taxSearches[item.id] || "").toLowerCase())).map(tax => (
-                                                                            <button
-                                                                                key={tax.id}
-                                                                                onClick={() => handleSelectTax(item.id, tax)}
-                                                                                className="w-full text-left px-4 py-2 hover:bg-gray-50 text-[13px] flex items-center justify-between"
-                                                                            >
-                                                                                <span>{tax.name}</span>
-                                                                                <span className="text-gray-400 text-[11px]">{tax.rate}%</span>
-                                                                            </button>
-                                                                        ))}
+                                                                        {filterTaxGroups(taxSearches[item.id] || "").length > 0 ? (
+                                                                            filterTaxGroups(taxSearches[item.id] || "").map((group) => (
+                                                                                <div key={`${item.id}-${group.label}`} className="pb-1">
+                                                                                    <div className="py-1 uppercase text-[10px] font-bold text-gray-400 px-4 mb-1">
+                                                                                        {group.label}
+                                                                                    </div>
+                                                                                    {group.options.map((taxOption) => {
+                                                                                        const tax = taxOption.raw as Tax;
+                                                                                        const isSelected = String(item.tax || "").trim().toLowerCase() === String(tax.name || "").trim().toLowerCase();
+                                                                                        return (
+                                                                                            <button
+                                                                                                key={taxOption.id}
+                                                                                                type="button"
+                                                                                                onClick={() => handleSelectTax(item.id, tax)}
+                                                                                                className={`w-full text-left px-4 py-2 text-[13px] flex items-center justify-between ${isSelected ? "bg-teal-700 text-white" : "hover:bg-gray-50 text-gray-700"}`}
+                                                                                            >
+                                                                                                <span className="truncate">{taxLabel(tax)}</span>
+                                                                                                {isSelected ? <Check size={14} /> : null}
+                                                                                            </button>
+                                                                                        );
+                                                                                    })}
+                                                                                </div>
+                                                                            ))
+                                                                        ) : (
+                                                                            <div className="px-4 py-3 text-[12px] text-gray-400">No taxes found</div>
+                                                                        )}
                                                                     </div>
                                                                 )}
                                                             </div>
@@ -3079,11 +3545,14 @@ const NewSubscriptionPage = () => {
                                                                 <div className="relative" ref={(el) => { itemMenuRefs.current[String(item.id)] = el; }}>
                                                                     <button
                                                                         type="button"
-                                                                        onClick={() =>
-                                                                            setOpenItemMenus((prev) => ({
-                                                                                [item.id]: !prev[item.id],
-                                                                            }))
-                                                                        }
+                                                                        onClick={() => {
+                                                                            if (openItemMenus[item.id]) {
+                                                                                setOpenItemMenus({});
+                                                                                return;
+                                                                            }
+                                                                            closeAllDropdowns();
+                                                                            setOpenItemMenus({ [item.id]: true });
+                                                                        }}
                                                                         className="text-gray-400 hover:text-gray-600"
                                                                     >
                                                                         <MoreVertical size={16} />
@@ -3159,7 +3628,14 @@ const NewSubscriptionPage = () => {
                                                                     <div className="relative w-56" ref={(el) => { accountDropdownRefs.current[String(item.id)] = el; }}>
                                                                         <button
                                                                             type="button"
-                                                                            onClick={() => setOpenAccountDropdowns(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
+                                                                            onClick={() => {
+                                                                                if (openAccountDropdowns[item.id]) {
+                                                                                    setOpenAccountDropdowns({});
+                                                                                    return;
+                                                                                }
+                                                                                closeAllDropdowns();
+                                                                                setOpenAccountDropdowns({ [item.id]: true });
+                                                                            }}
                                                                             className="w-full px-3 py-1.5 border border-gray-200 rounded text-left flex items-center justify-between text-[12px] bg-white hover:border-gray-300"
                                                                         >
                                                                             <span className={item.account ? "text-gray-700" : "text-gray-400"}>
@@ -3229,7 +3705,14 @@ const NewSubscriptionPage = () => {
                                                                         <div className="relative" ref={(el) => { itemTagDropdownRefs.current[String(item.id)] = el; }}>
                                                                             <button
                                                                                 type="button"
-                                                                                onClick={() => setOpenItemTagDropdowns(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
+                                                                                onClick={() => {
+                                                                                    if (openItemTagDropdowns[item.id]) {
+                                                                                        setOpenItemTagDropdowns({});
+                                                                                        return;
+                                                                                    }
+                                                                                    closeAllDropdowns();
+                                                                                    setOpenItemTagDropdowns({ [item.id]: true });
+                                                                                }}
                                                                                 className="flex items-center gap-1.5 px-2 py-0.5 hover:bg-gray-100 rounded border border-transparent hover:border-gray-200 transition-all text-[12px]"
                                                                             >
                                                                                 <span className={item.reportingTag ? "text-blue-600" : "text-gray-400"}>
@@ -3492,7 +3975,14 @@ const NewSubscriptionPage = () => {
                                             <td className="border-b border-gray-100 px-4 py-3 relative" ref={couponDropdownRef}>
                                                 <button
                                                     type="button"
-                                                    onClick={() => setIsCouponDropdownOpen((prev) => !prev)}
+                                                    onClick={() => {
+                                                        if (isCouponDropdownOpen) {
+                                                            setIsCouponDropdownOpen(false);
+                                                            return;
+                                                        }
+                                                        closeAllDropdowns();
+                                                        setIsCouponDropdownOpen(true);
+                                                    }}
                                                     className={`w-full text-left text-[13px] text-slate-500 flex items-center justify-between gap-2`}
                                                 >
                                                     <span>{formData.coupon || "Enter at least 3 characters to search"}</span>
@@ -3558,10 +4048,12 @@ const NewSubscriptionPage = () => {
                                         <label className="text-[13px] text-[#d9534f] w-44 shrink-0">Subscription Number*</label>
                                         <input
                                             type="text"
-                                            className="w-full px-3 py-1.5 border border-[#3b82f6] rounded text-[13px] outline-none"
+                                            className="w-full px-3 py-1.5 border border-[#3b82f6] rounded text-[13px] outline-none bg-gray-50"
                                             value={formData.subscriptionNumber}
                                             onChange={(e) => handleChange("subscriptionNumber", e.target.value)}
-                                            readOnly={Boolean(selectedSubscriptionSeries)}
+                                            readOnly
+                                            title="Automatically generated from the selected location's transaction series"
+                                            placeholder="Auto-generated"
                                         />
                                     </div>
                                     <div className="flex items-center">
@@ -3663,7 +4155,14 @@ const NewSubscriptionPage = () => {
                                         <div className="relative w-full" ref={salespersonDropdownRef}>
                                             <button
                                                 type="button"
-                                                onClick={() => setIsSalespersonDropdownOpen((prev) => !prev)}
+                                                onClick={() => {
+                                                    if (isSalespersonDropdownOpen) {
+                                                        setIsSalespersonDropdownOpen(false);
+                                                        return;
+                                                    }
+                                                    closeAllDropdowns();
+                                                    setIsSalespersonDropdownOpen(true);
+                                                }}
                                                 className={`w-full px-3 py-1.5 border border-gray-300 rounded text-[13px] outline-none text-left bg-white flex items-center justify-between ${selectedSalesperson ? "text-gray-800" : "text-gray-400"}`}
                                             >
                                                 <span>{selectedSalesperson?.name || (isLoadingSalespersons ? "Loading..." : "Select a salesperson")}</span>
@@ -3694,7 +4193,7 @@ const NewSubscriptionPage = () => {
                                                                         handleChange("salesperson", String(sp.id || sp._id || ""));
                                                                         setIsSalespersonDropdownOpen(false);
                                                                     }}
-                                                                    className="w-full text-left px-3 py-2.5 text-[13px] hover:bg-blue-600 hover:text-white border-b border-gray-50 last:border-0"
+                                                                    className="w-full text-left px-3 py-2.5 text-[13px] hover:bg-gray-50 border-b border-gray-50 last:border-0"
                                                                 >
                                                                     {sp.name}
                                                                 </button>
@@ -3785,6 +4284,124 @@ const NewSubscriptionPage = () => {
                                             Enable Partial Payments
                                         </label>
                                     </div>
+                                    <div className="flex items-start">
+                                        <label className="text-[13px] text-gray-600 w-44 shrink-0 pt-1">Manual Renewal</label>
+                                        <div className="space-y-3">
+                                            <label className="flex items-center gap-2 text-[13px] text-gray-600">
+                                                <input
+                                                    type="checkbox"
+                                                    className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-0"
+                                                    checked={formData.manualRenewal}
+                                                    onChange={(e) => {
+                                                        const checked = e.target.checked;
+                                                        handleChange("manualRenewal", checked);
+                                                        if (!checked) {
+                                                            handleChange("manualRenewalFreeExtension", "");
+                                                        }
+                                                    }}
+                                                />
+                                                Mark this subscription as manual renewal
+                                            </label>
+                                            {formData.manualRenewal && (
+                                                <div className="space-y-3 pl-6">
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="text-[12px] text-gray-500 w-28 shrink-0">Invoice Preference</span>
+                                                        <div className="relative w-[260px]">
+                                                            <select
+                                                                className="w-full px-3 py-1.5 border border-gray-300 rounded text-[13px] outline-none appearance-none bg-white"
+                                                                value={formData.manualRenewalInvoicePreference}
+                                                                onChange={(e) => handleChange("manualRenewalInvoicePreference", e.target.value)}
+                                                            >
+                                                                {[
+                                                                    "Generate a New Invoice",
+                                                                    "Associate an Existing Invoice",
+                                                                    "Skip Renewal Invoice",
+                                                                ].map((option) => (
+                                                                    <option key={option} value={option}>
+                                                                        {option}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                            <ChevronDown size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400" />
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="text-[12px] text-gray-500 w-28 shrink-0">Free Extension</span>
+                                                        <input
+                                                            type="number"
+                                                            min={0}
+                                                            className="w-28 px-3 py-1.5 border border-gray-300 rounded text-[13px] outline-none"
+                                                            value={formData.manualRenewalFreeExtension}
+                                                            onChange={(e) => handleChange("manualRenewalFreeExtension", e.target.value)}
+                                                            placeholder="0"
+                                                        />
+                                                        <span className="text-[12px] text-gray-500">days or months</span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-start">
+                                        <label className="text-[13px] text-gray-600 w-44 shrink-0 pt-1">Advance Billing</label>
+                                        <div className="space-y-3">
+                                            <label className="flex items-center gap-2 text-[13px] text-gray-600">
+                                                <input
+                                                    type="checkbox"
+                                                    className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-0"
+                                                    checked={formData.advanceBillingEnabled}
+                                                    onChange={(e) => handleChange("advanceBillingEnabled", e.target.checked)}
+                                                />
+                                                Enable advance billing
+                                            </label>
+                                            {formData.advanceBillingEnabled && (
+                                                <div className="space-y-3 pl-6">
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="text-[12px] text-gray-500 w-28 shrink-0">Method</span>
+                                                        <div className="relative w-[260px]">
+                                                            <select
+                                                                className="w-full px-3 py-1.5 border border-gray-300 rounded text-[13px] outline-none appearance-none bg-white"
+                                                                value={formData.advanceBillingMethod}
+                                                                onChange={(e) => handleChange("advanceBillingMethod", e.target.value)}
+                                                            >
+                                                                <option value="Advance Invoice">Advance Invoice</option>
+                                                                <option value="Advance Payment Request">Advance Payment Request</option>
+                                                            </select>
+                                                            <ChevronDown size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400" />
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="text-[12px] text-gray-500 w-28 shrink-0">Period</span>
+                                                        <input
+                                                            type="number"
+                                                            min={1}
+                                                            className="w-28 px-3 py-1.5 border border-gray-300 rounded text-[13px] outline-none"
+                                                            value={formData.advanceBillingPeriodDays}
+                                                            onChange={(e) => handleChange("advanceBillingPeriodDays", Math.max(1, Number(e.target.value) || 1))}
+                                                        />
+                                                        <span className="text-[12px] text-gray-500">days before renewal</span>
+                                                    </div>
+                                                    <label className="flex items-center gap-2 text-[13px] text-gray-600">
+                                                        <input
+                                                            type="checkbox"
+                                                            className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-0"
+                                                            checked={formData.advanceBillingAutoGenerate}
+                                                            onChange={(e) => handleChange("advanceBillingAutoGenerate", e.target.checked)}
+                                                        />
+                                                        Automate advance billing
+                                                    </label>
+                                                    <label className="flex items-center gap-2 text-[13px] text-gray-600">
+                                                        <input
+                                                            type="checkbox"
+                                                            className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-0"
+                                                            checked={formData.advanceBillingApplyUpcomingTerms}
+                                                            onChange={(e) => handleChange("advanceBillingApplyUpcomingTerms", e.target.checked)}
+                                                        />
+                                                        Apply payment terms from the upcoming billing cycle
+                                                    </label>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
                                     <div className="text-[12px] text-gray-500 pl-44">
                                         Want to get paid faster? Set up Payment Gateway
                                     </div>
@@ -3792,44 +4409,149 @@ const NewSubscriptionPage = () => {
                                     <div className="border-t border-gray-100 pt-4" />
                                     <button
                                         type="button"
-                                        onClick={() => setShowOtherPreferences((prev) => !prev)}
+                                        onClick={() => setShowBillingPreferences((prev) => !prev)}
                                         className="flex items-center gap-2 text-[13px] text-blue-600 hover:text-blue-700"
                                     >
-                                        Other Preferences
-                                        <ChevronRight size={14} className={`transition-transform ${showOtherPreferences ? "rotate-90" : ""}`} />
+                                        Billing Preferences
+                                        <ChevronRight size={14} className={`transition-transform ${showBillingPreferences ? "rotate-90" : ""}`} />
                                     </button>
 
-                                    {showOtherPreferences && (
+                                    {showBillingPreferences && (
                                         <div className="space-y-4">
                                             <div className="flex items-center">
-                                                <label className="text-[13px] text-gray-600 w-44 shrink-0">Invoice Template</label>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-[13px] text-gray-700">{formData.invoiceTemplate}</span>
-                                                    <Pencil size={14} className="text-blue-600" />
+                                                <label className="text-[13px] text-gray-600 w-44 shrink-0">Invoice Preference</label>
+                                                <div className="relative w-60">
+                                                    <select
+                                                        className="w-full px-3 py-1.5 border border-gray-300 rounded text-[13px] outline-none appearance-none bg-white"
+                                                        value={formData.invoicePreference}
+                                                        onChange={(e) => handleChange("invoicePreference", e.target.value)}
+                                                    >
+                                                        <option value="Create and Send Invoices">Create and Send Invoices</option>
+                                                        <option value="Generate invoices as drafts">Generate invoices as drafts</option>
+                                                    </select>
+                                                    <ChevronDown size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400" />
                                                 </div>
                                             </div>
                                             <div className="flex items-center">
-                                                <label className="text-[13px] text-gray-600 w-44 shrink-0">Round Off Preference</label>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-[13px] text-gray-700">{formData.roundOffPreference}</span>
-                                                    <Pencil size={14} className="text-blue-600" />
-                                                </div>
+                                                <label className="text-[13px] text-gray-600 w-44 shrink-0">Usage Billing</label>
+                                                <label className="flex items-center gap-2 text-[13px] text-gray-600">
+                                                    <input
+                                                        type="checkbox"
+                                                        className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-0"
+                                                        checked={formData.usageBillingEnabled}
+                                                        onChange={(e) => handleChange("usageBillingEnabled", e.target.checked)}
+                                                    />
+                                                    Enable usage billing
+                                                </label>
                                             </div>
                                             <div className="flex items-start">
-                                                <label className="text-[13px] text-gray-600 w-44 shrink-0 flex items-center gap-2">
-                                                    Customer Notes
-                                                    <Info size={12} className="text-gray-400" />
+                                                <label className="text-[13px] text-gray-600 w-44 shrink-0 pt-1">Prepaid Billing With Drawdown</label>
+                                                <div className="space-y-3">
+                                                    <label className="flex items-center gap-2 text-[13px] text-gray-600">
+                                                        <input
+                                                            type="checkbox"
+                                                            className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-0"
+                                                            checked={formData.prepaidBillingEnabled}
+                                                            onChange={(e) => handleChange("prepaidBillingEnabled", e.target.checked)}
+                                                        />
+                                                        Enable prepaid billing with drawdown
+                                                    </label>
+                                                    {formData.prepaidBillingEnabled && (
+                                                        <div className="space-y-3 pl-6">
+                                                            <div className="flex items-center gap-3">
+                                                                <span className="text-[12px] text-gray-500 w-32 shrink-0">Prepaid Plan</span>
+                                                                <input
+                                                                    type="text"
+                                                                    className="w-[260px] px-3 py-1.5 border border-gray-300 rounded text-[13px] outline-none"
+                                                                    value={formData.prepaidPlanName}
+                                                                    onChange={(e) => handleChange("prepaidPlanName", e.target.value)}
+                                                                    placeholder="Prepaid plan name"
+                                                                />
+                                                            </div>
+                                                            <div className="flex items-center gap-3">
+                                                                <span className="text-[12px] text-gray-500 w-32 shrink-0">Drawdown Credit</span>
+                                                                <input
+                                                                    type="text"
+                                                                    className="w-[260px] px-3 py-1.5 border border-gray-300 rounded text-[13px] outline-none"
+                                                                    value={formData.drawdownCreditName}
+                                                                    onChange={(e) => handleChange("drawdownCreditName", e.target.value)}
+                                                                    placeholder="Drawdown credit name"
+                                                                />
+                                                            </div>
+                                                            <div className="flex items-center gap-3">
+                                                                <span className="text-[12px] text-gray-500 w-32 shrink-0">Drawdown Rate</span>
+                                                                <input
+                                                                    type="text"
+                                                                    className="w-32 px-3 py-1.5 border border-gray-300 rounded text-[13px] outline-none"
+                                                                    value={formData.drawdownRate}
+                                                                    onChange={(e) => handleChange("drawdownRate", e.target.value)}
+                                                                    placeholder="1:2"
+                                                                />
+                                                                <span className="text-[12px] text-gray-500">e.g. credits to usage units</span>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center">
+                                                <label className="text-[13px] text-gray-600 w-44 shrink-0">Consolidated Billing</label>
+                                                <label className="flex items-center gap-2 text-[13px] text-gray-600">
+                                                    <input
+                                                        type="checkbox"
+                                                        className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-0"
+                                                        checked={formData.consolidatedBillingEnabled}
+                                                        onChange={(e) => handleChange("consolidatedBillingEnabled", e.target.checked)}
+                                                    />
+                                                    Combine customer subscriptions into a single invoice
                                                 </label>
-                                                <textarea
-                                                    className="w-full min-h-[90px] px-3 py-2 border border-gray-300 rounded text-[13px] outline-none"
-                                                    value={formData.customerNotes}
-                                                    onChange={(e) => handleChange("customerNotes", e.target.value)}
-                                                />
+                                            </div>
+                                            <div className="flex items-start">
+                                                <label className="text-[13px] text-gray-600 w-44 shrink-0 pt-1">Calendar Billing</label>
+                                                <div className="space-y-3">
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="text-[12px] text-gray-500 w-32 shrink-0">Mode</span>
+                                                        <div className="relative w-[300px]">
+                                                            <select
+                                                                className="w-full px-3 py-1.5 border border-gray-300 rounded text-[13px] outline-none appearance-none bg-white"
+                                                                value={formData.calendarBillingMode}
+                                                                onChange={(e) => handleChange("calendarBillingMode", e.target.value)}
+                                                            >
+                                                                <option value="Same as a subscription's activation date">Same as subscription activation date</option>
+                                                                <option value="Configure specific billing dates">Configure specific billing dates</option>
+                                                            </select>
+                                                            <ChevronDown size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400" />
+                                                        </div>
+                                                    </div>
+                                                    {String(formData.calendarBillingMode || "").toLowerCase().includes("specific") && (
+                                                        <div className="space-y-3 pl-6">
+                                                            <div className="flex items-center gap-3">
+                                                                <span className="text-[12px] text-gray-500 w-32 shrink-0">Billing Days</span>
+                                                                <input
+                                                                    type="text"
+                                                                    className="w-[260px] px-3 py-1.5 border border-gray-300 rounded text-[13px] outline-none"
+                                                                    value={formData.calendarBillingDays}
+                                                                    onChange={(e) => handleChange("calendarBillingDays", e.target.value)}
+                                                                    placeholder="1, 15"
+                                                                />
+                                                            </div>
+                                                            <div className="flex items-center gap-3">
+                                                                <span className="text-[12px] text-gray-500 w-32 shrink-0">Billing Months</span>
+                                                                <input
+                                                                    type="text"
+                                                                    className="w-[260px] px-3 py-1.5 border border-gray-300 rounded text-[13px] outline-none"
+                                                                    value={formData.calendarBillingMonths}
+                                                                    onChange={(e) => handleChange("calendarBillingMonths", e.target.value)}
+                                                                    placeholder="Jan, Apr, Jul"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     )}
 
-                                    {/* Additional preferences hidden for now */}
+                                    {/* Removed other preferences to keep only the billing controls above */}
                                 </div>
                             </div>
                         </div>
@@ -3881,10 +4603,14 @@ const NewSubscriptionPage = () => {
                                                 value={isCountryDropdownOpen ? countrySearch : addressFormData.country}
                                                 onChange={(e) => {
                                                     setCountrySearch(e.target.value);
-                                                    if (!isCountryDropdownOpen) setIsCountryDropdownOpen(true);
+                                                    if (!isCountryDropdownOpen) {
+                                                        closeAllDropdowns();
+                                                        setIsCountryDropdownOpen(true);
+                                                    }
                                                 }}
                                                 onFocus={() => {
                                                     setCountrySearch("");
+                                                    closeAllDropdowns();
                                                     setIsCountryDropdownOpen(true);
                                                 }}
                                                 placeholder="Select or type to add"
@@ -3967,10 +4693,14 @@ const NewSubscriptionPage = () => {
                                                 value={isStateDropdownOpen ? stateSearch : addressFormData.state}
                                                 onChange={(e) => {
                                                     setStateSearch(e.target.value);
-                                                    if (!isStateDropdownOpen) setIsStateDropdownOpen(true);
+                                                    if (!isStateDropdownOpen) {
+                                                        closeAllDropdowns();
+                                                        setIsStateDropdownOpen(true);
+                                                    }
                                                 }}
                                                 onFocus={() => {
                                                     setStateSearch("");
+                                                    closeAllDropdowns();
                                                     setIsStateDropdownOpen(true);
                                                 }}
                                                 placeholder="Select or type to add"
@@ -4025,7 +4755,12 @@ const NewSubscriptionPage = () => {
                                                 type="button"
                                                 className="flex h-9 w-full items-center justify-between rounded-l border border-slate-300 bg-white px-2 text-[12px] text-slate-700 outline-none focus:border-[#22b573]"
                                                 onClick={() => {
-                                                    setIsPhoneCodeDropdownOpen((prev) => !prev);
+                                                    if (isPhoneCodeDropdownOpen) {
+                                                        setIsPhoneCodeDropdownOpen(false);
+                                                        return;
+                                                    }
+                                                    closeAllDropdowns();
+                                                    setIsPhoneCodeDropdownOpen(true);
                                                     setPhoneCodeSearch("");
                                                 }}
                                             >
@@ -4122,7 +4857,206 @@ const NewSubscriptionPage = () => {
             )}
 
             {/* Sticky Footer */}
-            <div className="fixed bottom-0 left-[220px] right-0 bg-white border-t border-gray-100 py-4 px-8 flex items-center gap-4 z-[100] shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+            {isCustomerPanelOpen && customerDetails ? (
+                <aside className="fixed right-0 top-[64px] z-[120] h-[calc(100vh-64px)] w-[430px] border-l border-slate-200 bg-white shadow-2xl">
+                    <div className="flex h-full flex-col">
+                        <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-4">
+                            <div className="flex min-w-0 items-center gap-3">
+                                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-[18px] font-semibold text-slate-500">
+                                    {customerPanelInitial}
+                                </div>
+                                <div className="min-w-0">
+                                    <div className="text-[12px] text-slate-500">Customer</div>
+                                    <div className="truncate text-[18px] font-semibold text-slate-900">
+                                        {customerPanelName}
+                                    </div>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                className="mt-1 text-slate-400 hover:text-slate-700"
+                                onClick={() => setIsCustomerPanelOpen(false)}
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <div className="border-b border-slate-200 px-4 py-3">
+                            <div className="flex items-center gap-3 text-[13px] text-slate-600">
+                                {customerPanelCompany ? (
+                                    <span className="inline-flex items-center gap-1 truncate">
+                                        <Building2 size={14} className="text-slate-400" />
+                                        <span className="truncate">{customerPanelCompany}</span>
+                                    </span>
+                                ) : null}
+                                {customerPanelEmail ? (
+                                    <span className="inline-flex items-center gap-1 truncate">
+                                        <Mail size={14} className="text-slate-400" />
+                                        <span className="truncate">{customerPanelEmail}</span>
+                                    </span>
+                                ) : null}
+                            </div>
+                        </div>
+
+                        <div className="border-b border-slate-200 px-4">
+                            <div className="flex items-center gap-5 text-[14px]">
+                                {[
+                                    { key: "details", label: "Details" },
+                                    { key: "invoices", label: "Unpaid Invoices", badge: unpaidInvoiceCount },
+                                    { key: "activity", label: "Activity Log" },
+                                ].map((tab) => (
+                                    <button
+                                        key={tab.key}
+                                        type="button"
+                                        className={`relative py-3 text-left font-medium ${customerPanelTab === tab.key ? "text-slate-900" : "text-slate-500"}`}
+                                        onClick={() => setCustomerPanelTab(tab.key as "details" | "invoices" | "activity")}
+                                    >
+                                        <span className="inline-flex items-center gap-1">
+                                            {tab.label}
+                                            {"badge" in tab ? (
+                                                <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600">
+                                                    {tab.badge}
+                                                </span>
+                                            ) : null}
+                                        </span>
+                                        {customerPanelTab === tab.key ? (
+                                            <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-[#156372]" />
+                                        ) : null}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto bg-[#fbfbfe] p-4">
+                            {customerPanelTab === "details" ? (
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-slate-200 bg-white">
+                                        <div className="border-r border-slate-200 p-4 text-center">
+                                            <div className="mb-2 flex justify-center text-amber-500">
+                                                <BriefcaseBusiness size={18} />
+                                            </div>
+                                            <div className="text-[12px] text-slate-500">Outstanding Receivables</div>
+                                            <div className="mt-1 text-[20px] font-semibold text-slate-900">
+                                                {customerPanelCurrency}{customerPanelOutstandingReceivables.toFixed(2)}
+                                            </div>
+                                        </div>
+                                        <div className="p-4 text-center">
+                                            <div className="mb-2 flex justify-center text-emerald-500">
+                                                <Tag size={18} />
+                                            </div>
+                                            <div className="text-[12px] text-slate-500">Unpaid Invoices</div>
+                                            <div className="mt-1 text-[20px] font-semibold text-slate-900">
+                                                {unpaidInvoiceCount}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                                        <div className="border-b border-slate-200 px-4 py-3 text-[15px] font-medium text-slate-900">
+                                            Contact Details
+                                        </div>
+                                        <div className="grid grid-cols-[160px_1fr] gap-y-3 px-4 py-4 text-[13px]">
+                                            <div className="text-slate-500">Customer Type</div>
+                                            <div className="text-slate-900">{customerDetails?.customerType || customerDetails?.type || "Business"}</div>
+                                            <div className="text-slate-500">Currency</div>
+                                            <div className="text-slate-900">{customerPanelCurrency}</div>
+                                            <div className="text-slate-500">Payment Terms</div>
+                                            <div className="text-slate-900">{formData.paymentTerms || "Due on Receipt"}</div>
+                                            <div className="text-slate-500">Portal Status</div>
+                                            <div className="text-slate-900">
+                                                {String(customerDetails?.portalStatus || "").toLowerCase() === "enabled" || customerDetails?.portalEnabled
+                                                    ? "Enabled"
+                                                    : "Disabled"}
+                                            </div>
+                                            <div className="text-slate-500">Customer Language</div>
+                                            <div className="text-slate-900">{customerDetails?.language || customerDetails?.customerLanguage || "English"}</div>
+                                        </div>
+                                    </div>
+
+                                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                                        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 text-[15px] font-medium text-slate-900">
+                                            <span className="inline-flex items-center gap-2">
+                                                <MapPin size={14} className="text-slate-400" />
+                                                Billing Address
+                                                <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600">
+                                                    {billingAddress ? "Set" : "Empty"}
+                                                </span>
+                                            </span>
+                                        </div>
+                                        <div className="px-4 py-4 text-sm text-slate-900">
+                                            {billingAddress ? getAddressLines(billingAddress).map((line, idx) => <div key={`billing-${idx}`}>{line}</div>) : <div className="text-slate-500">No billing address.</div>}
+                                        </div>
+                                    </div>
+
+                                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                                        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 text-[15px] font-medium text-slate-900">
+                                            <span className="inline-flex items-center gap-2">
+                                                <MapPin size={14} className="text-slate-400" />
+                                                Shipping Address
+                                                <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600">
+                                                    {shippingAddress ? "Set" : "Empty"}
+                                                </span>
+                                            </span>
+                                        </div>
+                                        <div className="px-4 py-4 text-sm text-slate-900">
+                                            {shippingAddress ? getAddressLines(shippingAddress).map((line, idx) => <div key={`shipping-${idx}`}>{line}</div>) : <div className="text-slate-500">No shipping address.</div>}
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : customerPanelTab === "invoices" ? (
+                                <div className="space-y-3">
+                                    {customerPanelUnpaidInvoices.length > 0 ? (
+                                        customerPanelUnpaidInvoices.map((invoice, index) => {
+                                            const invoiceLabel = String(invoice?.invoiceNumber || invoice?.number || invoice?.id || invoice?._id || `Invoice ${index + 1}`);
+                                            const dueAmount = computeInvoiceBalanceDue(invoice);
+                                            const invoiceDate = String(invoice?.invoiceDate || invoice?.date || invoice?.createdAt || "").trim();
+                                            return (
+                                                <div key={`${invoiceLabel}-${index}`} className="rounded-xl border border-slate-200 bg-white p-4">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="min-w-0">
+                                                            <div className="truncate text-[14px] font-semibold text-slate-900">{invoiceLabel}</div>
+                                                            <div className="mt-1 text-[12px] text-slate-500">
+                                                                {invoiceDate ? `Issued ${invoiceDate}` : "Unpaid invoice"}
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <div className="text-[13px] font-semibold text-slate-900">
+                                                                {customerPanelCurrency}{dueAmount.toFixed(2)}
+                                                            </div>
+                                                            <div className="text-[11px] text-orange-500">Unpaid</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
+                                    ) : (
+                                        <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
+                                            No unpaid invoices found for this customer.
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {Array.isArray((customerDetails as any)?.activityLogs) && (customerDetails as any).activityLogs.length > 0 ? (
+                                        (customerDetails as any).activityLogs.map((log: any, index: number) => (
+                                            <div key={`${String(log?.date || index)}-${index}`} className="rounded-xl border border-slate-200 bg-white p-4">
+                                                <div className="text-[13px] font-semibold text-slate-900">{String(log?.title || log?.action || "Activity")}</div>
+                                                <div className="mt-1 text-[12px] text-slate-500">{String(log?.description || log?.note || "")}</div>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
+                                            No activity available yet.
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </aside>
+            ) : null}
+
+            <div className={`fixed bottom-0 left-[220px] ${isCustomerPanelOpen ? "right-[430px]" : "right-0"} bg-white border-t border-gray-100 py-4 px-8 flex items-center gap-4 z-[100] shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]`}>
                 <button
                     onClick={() => {
                         if (formData.contentType === "product") {
@@ -4154,6 +5088,7 @@ const NewSubscriptionPage = () => {
                             state: {
                                 currency: formData.currency,
                                 customerId: formData.customerId,
+                                subscriptionNumber: formData.subscriptionNumber,
                                 productId: formData.productId,
                                 productName: formData.productName,
                                 planName: formData.planName,
@@ -4165,6 +5100,24 @@ const NewSubscriptionPage = () => {
                                 coupon: formData.coupon,
                                 couponCode: formData.couponCode,
                                 couponValue: formData.couponValue,
+                                manualRenewal: formData.manualRenewal,
+                                manualRenewalInvoicePreference: formData.manualRenewalInvoicePreference,
+                                manualRenewalFreeExtension: formData.manualRenewalFreeExtension,
+                                advanceBillingEnabled: formData.advanceBillingEnabled,
+                                advanceBillingMethod: formData.advanceBillingMethod,
+                                advanceBillingPeriodDays: formData.advanceBillingPeriodDays,
+                                advanceBillingAutoGenerate: formData.advanceBillingAutoGenerate,
+                                advanceBillingApplyUpcomingTerms: formData.advanceBillingApplyUpcomingTerms,
+                                invoicePreference: formData.invoicePreference,
+                                usageBillingEnabled: formData.usageBillingEnabled,
+                                prepaidBillingEnabled: formData.prepaidBillingEnabled,
+                                prepaidPlanName: formData.prepaidPlanName,
+                                drawdownCreditName: formData.drawdownCreditName,
+                                drawdownRate: formData.drawdownRate,
+                                consolidatedBillingEnabled: formData.consolidatedBillingEnabled,
+                                calendarBillingMode: formData.calendarBillingMode,
+                                calendarBillingDays: formData.calendarBillingDays,
+                                calendarBillingMonths: formData.calendarBillingMonths,
                                 applyChanges: formData.applyChanges,
                                 applyChangesDate: formData.applyChangesDate,
                                 backdatedGenerateInvoice: formData.backdatedGenerateInvoice,
@@ -4180,7 +5133,8 @@ const NewSubscriptionPage = () => {
                             },
                         });
                     }}
-                    className={`px-6 py-2 text-white rounded font-bold text-[13px] shadow-sm transition-all shadow-blue-200 ${((formData.contentType === "product" && (!formData.productId || formData.planName === "Select a Plan")) || !formData.customerId) ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700 active:transform active:scale-95"}`}
+                    disabled={((formData.contentType === "product" && (!formData.productId || formData.planName === "Select a Plan")) || !formData.customerId || !String(formData.subscriptionNumber || "").trim())}
+                    className={`px-6 py-2 text-white rounded font-bold text-[13px] shadow-sm transition-all shadow-blue-200 ${((formData.contentType === "product" && (!formData.productId || formData.planName === "Select a Plan")) || !formData.customerId || !String(formData.subscriptionNumber || "").trim()) ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700 active:transform active:scale-95"}`}
                 >
                     Continue
                 </button>

@@ -983,7 +983,7 @@ export default function CreditNotes() {
   }, []);
 
   return (
-    <div className="w-full h-[calc(100vh-4rem)] min-h-0 bg-white flex flex-col overflow-hidden overflow-x-hidden">
+    <div className="w-full h-full min-h-0 bg-white flex flex-col overflow-hidden overflow-x-hidden">
       {/* Header - Show Bulk Actions Bar when items are selected, otherwise show normal header */}
       {selectedCreditNotes.length > 0 ? (
         <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-white">
@@ -1301,14 +1301,13 @@ export default function CreditNotes() {
         </div>
       )}
 
-      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
-      <div className="relative">
-
-        <div className="bg-white overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-[#f6f7fb] sticky top-0 z-10 border-b border-[#e6e9f2]">
-                <tr className="text-[10px] font-semibold text-[#7b8494] uppercase tracking-wider">
+      <div className="flex-1 min-h-0 w-full overflow-y-auto custom-scrollbar">
+        <div className="relative w-full min-w-0">
+          <div className="w-full bg-white overflow-hidden">
+            <div className="w-full min-w-0 overflow-x-auto">
+              <table className="min-w-full w-full text-left border-collapse">
+                <thead className="sticky top-0 z-10 border-b border-[#e6e9f2]">
+                <tr className="bg-[#f6f7fb] text-[10px] font-semibold text-[#7b8494] uppercase tracking-wider">
                   <th className="px-4 py-3 w-16 min-w-[64px]">
                     <div className="flex items-center gap-2">
                       <button
@@ -1474,7 +1473,8 @@ export default function CreditNotes() {
                   })
                 )}
               </tbody>
-            </table>
+              </table>
+            </div>
           </div>
         </div>
       </div>
@@ -1883,8 +1883,6 @@ export default function CreditNotes() {
           onClose={() => setIsFieldCustomizationOpen(false)}
         />
       )}
-
-      </div>
 
       {/* Preferences Modal */}
       {isPreferencesModalOpen && (

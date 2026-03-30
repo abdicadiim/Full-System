@@ -128,6 +128,8 @@ const buildInvoicePayload = async (subscription: any, invoiceDate: Date) => {
     balance: total || amountValue,
     amountPaid: 0,
     isRecurringInvoice: true,
+    source: "subscription",
+    invoiceSource: "subscription",
     recurringProfileId: subscription?.id,
     referenceNumber: subscription?.referenceNumber || "",
     createdAt: new Date().toISOString(),

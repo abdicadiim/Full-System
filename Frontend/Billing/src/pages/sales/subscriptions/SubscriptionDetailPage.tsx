@@ -15,10 +15,11 @@ import {
   FileText,
   Trash2,
 } from "lucide-react";
-import { salespersonsAPI, invoicesAPI, subscriptionsAPI } from "../../../services/api";
+import { salespersonsAPI, invoicesAPI, productsAPI, subscriptionsAPI } from "../../../services/api";
 import { getCustomerById } from "../salesModel";
 import { useUser } from "../../../lib/auth/UserContext";
 import { runSubscriptionBillingSimulation } from "./subscriptionBilling";
+import { buildSubscriptionEditDraft } from "./subscriptionDraftUtils";
 
 const parseShortDate = (value?: string) => {
   if (!value) return "";
@@ -44,6 +45,148 @@ const parseShortDate = (value?: string) => {
   return `${match[3]}-${month}-${day}`;
 };
 
+const formatShortDate = (value: Date | string) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+};
+
+const addMonthsToDate = (value: Date | string, months: number) => {
+  const date = value instanceof Date ? new Date(value) : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const next = new Date(date);
+  next.setMonth(next.getMonth() + months);
+  return next;
+};
+
+const normalizeSeriesDigits = (value: any, fallbackWidth = 5) => {
+  const raw = String(value ?? "").trim();
+  const digits = raw.replace(/[^\d]/g, "");
+  const numeric = Number(digits);
+  if (!digits || !Number.isFinite(numeric) || numeric < 0) {
+    return { current: 1, width: fallbackWidth };
+  }
+  return {
+    current: numeric,
+    width: Math.max(raw.match(/^\d+$/)?.[0].length || digits.length || fallbackWidth, fallbackWidth),
+  };
+};
+
+const buildProductSubscriptionNumber = (product: any) => {
+  const prefix = String(product?.prefix || "SUB-").trim() || "SUB-";
+  const { current, width } = normalizeSeriesDigits(product?.nextNumber || "00001");
+  return {
+    subscriptionNumber: `${prefix}${String(current).padStart(width, "0")}`,
+    nextNumber: String(current + 1).padStart(width, "0"),
+  };
+};
+
+const buildNextSubscriptionNumber = (currentValue: string, rows: any[]) => {
+  const current = String(currentValue || "").trim();
+  const match = current.match(/^(.*?)(\d+)$/);
+  if (!match) {
+    const base = current || "SUB-";
+    return `${base}${String(rows.length + 1).padStart(5, "0")}`;
+  }
+
+  const prefix = match[1];
+  const currentNumber = Number(match[2]) || 0;
+  const width = match[2].length;
+  const existingNumbers = rows
+    .map((row: any) => String(row?.subscriptionNumber || "").trim())
+    .filter((value) => value.startsWith(prefix))
+    .map((value) => value.match(/^(.*?)(\d+)$/))
+    .filter((item): item is RegExpMatchArray => Boolean(item))
+    .map((item) => Number(item[2]))
+    .filter((value) => Number.isFinite(value));
+
+  const highest = Math.max(currentNumber, ...existingNumbers, 0);
+  return `${prefix}${String(highest + 1).padStart(width, "0")}`;
+};
+
+const extractResponseRows = (response: any) => {
+  const candidates = [
+    response?.data,
+    response?.data?.data,
+    response?.data?.items,
+    response?.data?.rows,
+    response?.items,
+    response?.rows,
+    response?.result,
+    response?.data?.result,
+  ];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) return candidate;
+  }
+  if (Array.isArray(response)) return response;
+  return [];
+};
+
+const normalizeInvoiceRows = (rows: any[]) =>
+  rows.map((inv: any) => ({
+    id: String(inv?._id || inv?.id || inv?.invoiceId || "").trim(),
+    invoiceNumber: String(inv?.invoiceNumber || inv?.number || inv?.invoiceNo || "").trim(),
+    invoiceDate: String(inv?.invoiceDate || inv?.date || inv?.createdAt || "").trim(),
+    total: Number(inv?.total ?? inv?.amount ?? inv?.balance ?? inv?.balanceDue ?? 0) || 0,
+    status: String(inv?.status || "draft").toUpperCase(),
+    source: String(inv?.source || inv?.invoiceSource || "").trim().toLowerCase(),
+    isRecurringInvoice: Boolean(inv?.isRecurringInvoice || inv?.recurringProfileId || inv?.subscriptionId),
+    recurringProfileId: String(inv?.recurringProfileId || inv?.subscriptionId || inv?.recurringId || "").trim(),
+    referenceNumber: String(inv?.referenceNumber || "").trim(),
+    subscriptionNumber: String(inv?.subscriptionNumber || "").trim(),
+    customerId: String(inv?.customerId || inv?.customer?._id || inv?.customer?.id || inv?.customer || "").trim(),
+  }));
+
+const getInvoiceSortValue = (invoice: any) => {
+  const raw = String(invoice?.invoiceDate || invoice?.date || invoice?.createdAt || "").trim();
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+};
+
+const getPrimarySubscriptionInvoice = (rows: any[], subscription: any) => {
+  const subscriptionId = String(subscription?.id || subscription?._id || "").trim();
+  const generatedInvoiceId = String(subscription?.generatedInvoiceId || "").trim();
+  const generatedInvoiceNumber = String(subscription?.generatedInvoiceNumber || "").trim();
+  const renewalInvoiceId = String(subscription?.renewalInvoiceId || "").trim();
+  const renewalInvoiceNumber = String(subscription?.renewalInvoiceNumber || "").trim();
+  const advanceInvoiceId = String(subscription?.lastAdvanceInvoiceId || "").trim();
+  const advanceInvoiceNumber = String(subscription?.lastAdvanceInvoiceNumber || "").trim();
+  const exactOrder = [
+    generatedInvoiceId,
+    generatedInvoiceNumber,
+    renewalInvoiceId,
+    renewalInvoiceNumber,
+    advanceInvoiceId,
+    advanceInvoiceNumber,
+  ].filter(Boolean);
+
+  for (const target of exactOrder) {
+    const match = rows.find((invoice: any) => {
+      const invoiceId = String(invoice?.id || "").trim();
+      const invoiceNumber = String(invoice?.invoiceNumber || "").trim();
+      return invoiceId === target || invoiceNumber === target;
+    });
+    if (match) return match;
+  }
+
+  const recurringMatches = rows.filter((invoice: any) => {
+    if (!subscriptionId) return false;
+    const invoiceRecurringId = String(invoice?.recurringProfileId || invoice?.subscriptionId || "").trim();
+    const invoiceSource = String(invoice?.source || invoice?.invoiceSource || "").trim().toLowerCase();
+    return invoiceRecurringId === subscriptionId && invoiceSource === "subscription";
+  });
+
+  if (recurringMatches.length) {
+    return recurringMatches.sort((a: any, b: any) => getInvoiceSortValue(b) - getInvoiceSortValue(a))[0];
+  }
+
+  return null;
+};
+
 export default function SubscriptionDetailPage() {
   const navigate = useNavigate();
   const { subscriptionId } = useParams();
@@ -52,6 +195,7 @@ export default function SubscriptionDetailPage() {
   const [moreDropdownOpen, setMoreDropdownOpen] = useState(false);
   const [detailMoreOpen, setDetailMoreOpen] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isCloning, setIsCloning] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [subscriptions, setSubscriptions] = useState(() => {
     try {
@@ -66,6 +210,34 @@ export default function SubscriptionDetailPage() {
   const [isAddCouponOpen, setIsAddCouponOpen] = useState(false);
   const [isAddChargeOpen, setIsAddChargeOpen] = useState(false);
   const [isUpdateSalespersonOpen, setIsUpdateSalespersonOpen] = useState(false);
+  const [isManualRenewalOpen, setIsManualRenewalOpen] = useState(false);
+  const [manualRenewalPreference, setManualRenewalPreference] = useState("Generate a New Invoice");
+  const [manualRenewalFreeExtension, setManualRenewalFreeExtension] = useState("");
+  const [isAdvanceBillingOpen, setIsAdvanceBillingOpen] = useState(false);
+  const [advanceBillingMethod, setAdvanceBillingMethod] = useState("Advance Invoice");
+  const [advanceBillingPeriodDays, setAdvanceBillingPeriodDays] = useState(5);
+  const [advanceBillingAutoGenerate, setAdvanceBillingAutoGenerate] = useState(false);
+  const [advanceBillingApplyUpcomingTerms, setAdvanceBillingApplyUpcomingTerms] = useState(false);
+  const [isPauseModalOpen, setIsPauseModalOpen] = useState(false);
+  const [pauseWhen, setPauseWhen] = useState<"immediately" | "specific">("immediately");
+  const [pauseOnDate, setPauseOnDate] = useState("");
+  const [resumeOnDate, setResumeOnDate] = useState("");
+  const [pauseReason, setPauseReason] = useState("");
+  const [pauseError, setPauseError] = useState("");
+  const [isResumeModalOpen, setIsResumeModalOpen] = useState(false);
+  const [resumeWhen, setResumeWhen] = useState<"immediately" | "specific">("immediately");
+  const [resumeAtDate, setResumeAtDate] = useState("");
+  const [resumeReason, setResumeReason] = useState("");
+  const [resumeError, setResumeError] = useState("");
+  const [isReactivateModalOpen, setIsReactivateModalOpen] = useState(false);
+  const [reactivateWhen, setReactivateWhen] = useState<"immediately" | "specific">("immediately");
+  const [reactivateAtDate, setReactivateAtDate] = useState("");
+  const [reactivateReason, setReactivateReason] = useState("");
+  const [reactivateError, setReactivateError] = useState("");
+  const [isRenewNowOpen, setIsRenewNowOpen] = useState(false);
+  const [renewInvoicePreference, setRenewInvoicePreference] = useState("Generate a New Invoice");
+  const [renewFreeExtension, setRenewFreeExtension] = useState("");
+  const [renewError, setRenewError] = useState("");
   const [isManageContactsOpen, setIsManageContactsOpen] = useState(false);
   const [isAddNoteOpen, setIsAddNoteOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
@@ -111,19 +283,22 @@ export default function SubscriptionDetailPage() {
   const selectedCount = selectedIds.length;
   const isAllSelected = selectedCount > 0 && selectedIds.length === subscriptions.length;
   const rawStatus = String(selected?.status || "LIVE").toUpperCase();
-  const statusText = rawStatus === "UNPAID" ? "LIVE" : rawStatus;
+  const statusText = ["PAUSED", "CANCELLED", "CANCELED", "EXPIRED", "DRAFT"].includes(rawStatus) ? rawStatus : "LIVE";
   const statusClass =
-    statusText === "UNPAID"
+    statusText === "PAUSED"
+      ? "bg-amber-100 text-amber-700"
+      : statusText === "CANCELLED" || statusText === "CANCELED" || statusText === "EXPIRED"
       ? "bg-red-100 text-red-600"
-      : statusText === "CANCELLED" || statusText === "CANCELED"
-      ? "bg-red-100 text-red-600"
-      : "bg-[#e6f7f1] text-[#10a37f]";
+      : statusText === "DRAFT"
+      ? "bg-slate-100 text-slate-600"
+      : "bg-[#e6f2f3] text-[#156372]";
   const listStatusClass = (status: string) => {
     const normalized = String(status || "").toUpperCase();
     if (normalized === "UNPAID") return "text-red-500";
     if (normalized === "CANCELLED" || normalized === "CANCELED") return "text-red-500";
     if (normalized === "EXPIRED") return "text-gray-500";
-    return "text-[#10a37f]";
+    if (normalized === "PAUSED") return "text-amber-600";
+    return "text-[#156372]";
   };
   const hasSelection = !!selected;
   const normalizeAddress = (addr: any) => {
@@ -158,6 +333,8 @@ export default function SubscriptionDetailPage() {
   const amountValue = Number(String(selected?.amount || "").replace(/[^\d.]/g, "")) || 0;
   const currencyCode = String(selected?.amount || "").match(/^[A-Za-z]+/)?.[0] || "AMD";
   const formatMoney = (value: number) => `${currencyCode}${Number(value || 0).toFixed(2)}`;
+  const invoicePreferenceText = String(selected?.invoicePreference || "Create and Send Invoices");
+  const shouldDraftInvoices = invoicePreferenceText.toLowerCase().includes("draft");
   type LineItem = {
     key: string;
     label: string;
@@ -295,6 +472,156 @@ export default function SubscriptionDetailPage() {
     })();
   };
 
+  const updateSelectedSubscription = (patch: Record<string, any>) => {
+    if (!selected?.id) return;
+    const next = subscriptions.map((sub: any) => (sub.id === selected.id ? { ...sub, ...patch } : sub));
+    persistSubscriptions(next);
+  };
+
+  const createInvoiceFromSelected = async (options?: { source?: string; invoiceNumberPrefix?: string; status?: string }) => {
+    if (!selected?.id) return null;
+    const invoiceDate = formatShortDate(new Date().toISOString());
+    const dueDate = selected?.nextBillingOn || invoiceDate;
+    const invoiceNumber = `${options?.invoiceNumberPrefix || "INV"}-${String(Date.now()).slice(-8)}`;
+    const items = lineItems.map((item) => ({
+      itemDetails: item.label,
+      description: item.description || "",
+      quantity: item.quantity,
+      rate: item.rate,
+      tax: item.tax,
+      taxRate: item.tax === "Select a Tax" ? 0 : Number(item.tax.replace(/[^\d.-]/g, "")) || 0,
+      amount: item.amount,
+    }));
+    const subtotal = items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+
+    const payload = {
+      invoiceNumber,
+      invoiceDate,
+      date: invoiceDate,
+      dueDate,
+      status: options?.status || (shouldDraftInvoices ? "draft" : "sent"),
+      customerId: selected.customerId,
+      customerName: selected.customerName,
+      customerEmail: customerEmail,
+      billingAddress: selected.billingAddress,
+      shippingAddress: selected.shippingAddress,
+      salesperson: selected.salesperson,
+      currency: currencyCode,
+      items,
+      subTotal: subtotal,
+      totalTax: 0,
+      discountAmount: 0,
+      total: subtotal,
+      amountPaid: 0,
+      balanceDue: subtotal,
+      balance: subtotal,
+      recurringProfileId: selected.id,
+      subscriptionId: selected.id,
+      subscriptionNumber: selected.subscriptionNumber,
+      referenceNumber: selected.referenceNumber || "",
+      source: options?.source || "subscription",
+    };
+
+    const response: any = await invoicesAPI.create(payload);
+    return response?.data || response || null;
+  };
+
+  const handleSavePause = () => {
+    if (!selected?.id) return;
+    if (pauseWhen === "specific" && !pauseOnDate) {
+      setPauseError("Please choose the date to pause on.");
+      return;
+    }
+    if (!pauseReason.trim()) {
+      setPauseError("Please enter a reason.");
+      return;
+    }
+
+    const pauseISO = pauseWhen === "immediately" ? new Date().toISOString() : pauseOnDate;
+    const resumeISO = resumeOnDate ? new Date(resumeOnDate).toISOString() : "";
+
+    updateSelectedSubscription({
+      status: "PAUSED",
+      pauseDate: formatShortDate(pauseISO),
+      resumeDate: resumeISO ? formatShortDate(resumeISO) : "",
+      pauseMeta: {
+        when: pauseWhen,
+        pauseOn: pauseISO,
+        resumeOn: resumeISO || null,
+        issueCredits: false,
+        reason: pauseReason.trim(),
+      },
+    });
+    setIsPauseModalOpen(false);
+    setPauseWhen("immediately");
+    setPauseOnDate("");
+    setResumeOnDate("");
+    setPauseReason("");
+    setPauseError("");
+    toast.success("Subscription paused successfully.");
+  };
+
+  const handleSaveResume = () => {
+    if (!selected?.id) return;
+    if (resumeWhen === "specific" && !resumeAtDate) {
+      setResumeError("Please choose the date to resume on.");
+      return;
+    }
+    if (!resumeReason.trim()) {
+      setResumeError("Please enter a reason.");
+      return;
+    }
+
+    const resumeISO = resumeWhen === "immediately" ? new Date().toISOString() : resumeAtDate;
+
+    updateSelectedSubscription({
+      status: "LIVE",
+      resumeDate: formatShortDate(resumeISO),
+      resumeMeta: {
+        when: resumeWhen,
+        resumeOn: resumeISO,
+        issueCredits: false,
+        reason: resumeReason.trim(),
+      },
+    });
+    setIsResumeModalOpen(false);
+    setResumeWhen("immediately");
+    setResumeAtDate("");
+    setResumeReason("");
+    setResumeError("");
+    toast.success("Subscription resumed successfully.");
+  };
+
+  const handleSaveReactivate = () => {
+    if (!selected?.id) return;
+    if (reactivateWhen === "specific" && !reactivateAtDate) {
+      setReactivateError("Please choose the date to reactivate on.");
+      return;
+    }
+    if (!reactivateReason.trim()) {
+      setReactivateError("Please enter a reason.");
+      return;
+    }
+
+    const reactivateISO = reactivateWhen === "immediately" ? new Date().toISOString() : reactivateAtDate;
+
+    updateSelectedSubscription({
+      status: "LIVE",
+      reactivatedOn: formatShortDate(reactivateISO),
+      reactivationMeta: {
+        when: reactivateWhen,
+        reactivatedOn: reactivateISO,
+        reason: reactivateReason.trim(),
+      },
+    });
+    setIsReactivateModalOpen(false);
+    setReactivateWhen("immediately");
+    setReactivateAtDate("");
+    setReactivateReason("");
+    setReactivateError("");
+    toast.success("Subscription reactivated successfully.");
+  };
+
   const clearCouponForSelected = () => {
     if (!selected) return;
     const updated = subscriptions.map((sub: any) => {
@@ -357,6 +684,100 @@ export default function SubscriptionDetailPage() {
     toast.success("Coupon applied successfully.");
   };
 
+  const handleCloneSubscription = async () => {
+    if (!selected?.id || isCloning) return;
+    setDetailMoreOpen(false);
+    setIsCloning(true);
+
+    try {
+      const now = new Date();
+      const todayLabel = formatShortDate(now);
+      const nextBillingDate = addMonthsToDate(now, 1);
+      const nextBillingLabel = nextBillingDate ? formatShortDate(nextBillingDate) : todayLabel;
+
+      const selectedProductId = String(selected?.productId || "").trim();
+      let productSeries: { subscriptionNumber: string; nextNumber: string } | null = null;
+
+      if (selectedProductId) {
+        try {
+          const productResponse: any = await productsAPI.getById(selectedProductId);
+          const product = productResponse?.data || productResponse?.data?.data || productResponse || null;
+          if (product?.autoGenerateSubscriptionNumbers) {
+            productSeries = buildProductSubscriptionNumber(product);
+          }
+        } catch {
+          // fall back to local number generation
+        }
+      }
+
+      const subscriptionNumber =
+        productSeries?.subscriptionNumber ||
+        buildNextSubscriptionNumber(String(selected?.subscriptionNumber || ""), subscriptions);
+
+      const clonePayload: any = {
+        ...selected,
+        id: undefined,
+        _id: undefined,
+        subscriptionNumber,
+        createdOn: todayLabel,
+        activatedOn: todayLabel,
+        lastBilledOn: todayLabel,
+        nextBillingOn: nextBillingLabel,
+        status: "LIVE",
+        immediateCharges: 0,
+        amountReceived: 0,
+        paymentReceived: false,
+        cancellationReason: "",
+        scheduledCancellationDate: "",
+        scheduledUpdate: undefined,
+        scheduledUpdateDate: "",
+      };
+
+      const response: any = await subscriptionsAPI.create({
+        ...clonePayload,
+        id: undefined,
+        _id: undefined,
+      });
+      const created = response?.data || response || clonePayload;
+      const clonedId = String(created?.id || created?._id || "").trim() || `sub-${Date.now()}`;
+
+      const normalizedClone = {
+        ...clonePayload,
+        ...created,
+        id: clonedId,
+        subscriptionNumber,
+        createdOn: String(created?.createdOn || clonePayload.createdOn || todayLabel),
+        activatedOn: String(created?.activatedOn || clonePayload.activatedOn || todayLabel),
+        lastBilledOn: String(created?.lastBilledOn || clonePayload.lastBilledOn || todayLabel),
+        nextBillingOn: String(created?.nextBillingOn || clonePayload.nextBillingOn || nextBillingLabel),
+      };
+
+      const nextRows = [normalizedClone, ...subscriptions];
+      setSubscriptions(nextRows);
+      try {
+        localStorage.setItem("taban_subscriptions_v1", JSON.stringify(nextRows));
+      } catch {
+        // ignore storage errors
+      }
+
+      if (productSeries && selectedProductId) {
+        try {
+          await productsAPI.update(selectedProductId, { nextNumber: productSeries.nextNumber });
+        } catch {
+          // keep the cloned subscription even if series update fails
+        }
+      }
+
+      toast.success("Subscription cloned successfully.");
+      navigate(`/sales/subscriptions/${clonedId}`);
+    } catch (error) {
+      console.error("Failed to clone subscription:", error);
+      toast.error("Failed to clone subscription.");
+    } finally {
+      setIsCloning(false);
+    }
+  };
+
   const notes = Array.isArray(selected?.notes) ? selected.notes : [];
   const formatNoteDate = (value: string) =>
     new Date(value).toLocaleString("en-GB", {
@@ -383,48 +804,19 @@ export default function SubscriptionDetailPage() {
     const loadInvoices = async () => {
       setInvoiceLoading(true);
       try {
-        const response = await invoicesAPI.getAll({ limit: 1000 });
-        const rows = Array.isArray(response?.data) ? response.data : [];
-        const normalized = rows.map((inv: any) => ({
-          id: String(inv?._id || inv?.id || ""),
-          invoiceNumber: String(inv?.invoiceNumber || inv?.number || inv?.invoiceNo || "").trim(),
-          invoiceDate: String(inv?.invoiceDate || inv?.date || inv?.createdAt || "").trim(),
-          total: Number(inv?.total ?? inv?.amount ?? inv?.balance ?? 0) || 0,
-          status: String(inv?.status || "draft").toUpperCase(),
-          recurringProfileId: String(inv?.recurringProfileId || inv?.subscriptionId || inv?.recurringId || ""),
-          referenceNumber: String(inv?.referenceNumber || "").trim(),
-          subscriptionNumber: String(inv?.subscriptionNumber || "").trim(),
-          customerId: String(inv?.customerId || ""),
-        }));
-        const filtered = normalized.filter((inv: any) => {
-          if (inv.recurringProfileId && String(inv.recurringProfileId) === String(selected?.id)) return true;
-          if (inv.subscriptionNumber && inv.subscriptionNumber === String(selected?.subscriptionNumber || "")) return true;
-          if (inv.referenceNumber && inv.referenceNumber === String(selected?.referenceNumber || "")) return true;
-          return false;
-        });
-        if (mounted) setInvoiceHistory(filtered);
+        const response = customerId
+          ? await invoicesAPI.getByCustomer(customerId, { limit: 1000 })
+          : await invoicesAPI.getAll({ limit: 1000 });
+        const normalized = normalizeInvoiceRows(extractResponseRows(response));
+        const primary = getPrimarySubscriptionInvoice(normalized, selected);
+        if (mounted) setInvoiceHistory(primary ? [primary] : []);
       } catch {
         try {
           const raw = localStorage.getItem("taban_books_invoices");
           const parsed = raw ? JSON.parse(raw) : [];
-          const rows = Array.isArray(parsed) ? parsed : [];
-          const normalized = rows.map((inv: any) => ({
-            id: String(inv?._id || inv?.id || ""),
-            invoiceNumber: String(inv?.invoiceNumber || inv?.number || inv?.invoiceNo || "").trim(),
-            invoiceDate: String(inv?.invoiceDate || inv?.date || inv?.createdAt || "").trim(),
-            total: Number(inv?.total ?? inv?.amount ?? inv?.balance ?? 0) || 0,
-            status: String(inv?.status || "draft").toUpperCase(),
-            recurringProfileId: String(inv?.recurringProfileId || inv?.subscriptionId || inv?.recurringId || ""),
-            referenceNumber: String(inv?.referenceNumber || "").trim(),
-            subscriptionNumber: String(inv?.subscriptionNumber || "").trim(),
-          }));
-          const filtered = normalized.filter((inv: any) => {
-            if (inv.recurringProfileId && String(inv.recurringProfileId) === String(selected?.id)) return true;
-            if (inv.subscriptionNumber && inv.subscriptionNumber === String(selected?.subscriptionNumber || "")) return true;
-            if (inv.referenceNumber && inv.referenceNumber === String(selected?.referenceNumber || "")) return true;
-            return false;
-          });
-          if (mounted) setInvoiceHistory(filtered);
+          const normalized = normalizeInvoiceRows(extractResponseRows(parsed));
+          const primary = getPrimarySubscriptionInvoice(normalized, selected);
+          if (mounted) setInvoiceHistory(primary ? [primary] : []);
         } catch {
           if (mounted) setInvoiceHistory([]);
         }
@@ -436,7 +828,21 @@ export default function SubscriptionDetailPage() {
     return () => {
       mounted = false;
     };
-  }, [activeTab, selected?.id, selected?.subscriptionNumber, selected?.referenceNumber]);
+  }, [
+    activeTab,
+    selected?.id,
+    selected?.subscriptionNumber,
+    selected?.referenceNumber,
+    selected?.customerId,
+    selected?.customerName,
+    selected?.generatedInvoiceId,
+    selected?.generatedInvoiceNumber,
+    selected?.renewalInvoiceId,
+    selected?.renewalInvoiceNumber,
+    selected?.lastAdvanceInvoiceId,
+    selected?.lastAdvanceInvoiceNumber,
+    customerId,
+  ]);
 
   const saveNoteForSelected = () => {
     if (!selected) return;
@@ -704,7 +1110,7 @@ export default function SubscriptionDetailPage() {
   }, [selected?.customerId, selected?.customerName]);
 
   return (
-    <div className="flex h-[calc(100vh-0px)] overflow-hidden bg-white font-sans text-gray-800 antialiased">
+    <div className="flex h-full min-h-0 overflow-hidden bg-white font-sans text-gray-800 antialiased">
       <div className="w-[320px] border-r border-gray-200 flex flex-col h-full">
         {selectedCount === 0 && (
           <div className="flex items-center justify-between px-6 border-b border-gray-100 bg-white h-[60px] shrink-0">
@@ -737,7 +1143,7 @@ export default function SubscriptionDetailPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => navigate("/sales/subscriptions/new")}
-              className="flex items-center gap-1 bg-[#10a37f] hover:bg-[#0e8a6b] text-white px-3 py-1.5 rounded-md text-sm font-semibold transition-all shadow-sm"
+              className="flex items-center gap-1 bg-[#156372] hover:bg-[#0D4A52] text-white px-3 py-1.5 rounded-md text-sm font-semibold transition-all shadow-sm"
             >
               <Plus size={16} />
             </button>
@@ -844,8 +1250,8 @@ export default function SubscriptionDetailPage() {
       </div>
 
       {hasSelection ? (
-      <div className="flex-1 overflow-y-auto h-full bg-slate-50">
-        <div className="sticky top-0 z-[30] bg-white">
+      <div className="flex-1 h-full min-h-0 bg-slate-50 flex flex-col overflow-hidden">
+        <div className="shrink-0 bg-white">
           <div className="flex items-start justify-between px-8 py-4 border-b border-gray-200">
           <div>
             <h2 className="text-[18px] font-semibold text-slate-900">
@@ -860,65 +1266,7 @@ export default function SubscriptionDetailPage() {
             <button
               className="px-3 py-1.5 border border-gray-200 rounded-md text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-1"
               onClick={() => {
-                const amountText = String(selected?.amount || "");
-                const currencyMatch = amountText.match(/^[A-Za-z]+/);
-                const currency = currencyMatch ? currencyMatch[0] : "USD";
-                const price = Number(amountText.replace(/[^\d.]/g, "")) || 0;
-                const draft = {
-                  id: String(selected?.id || ""),
-                  customerId: String(selected?.customerId || ""),
-                  customerName: String(selected?.customerName || ""),
-                  contactPersons: Array.isArray(selected?.contactPersons)
-                    ? selected.contactPersons
-                    : selected?.customerEmail
-                    ? [{ email: selected.customerEmail }]
-                    : [],
-                  billingAddress: selected?.billingAddress ?? null,
-                  shippingAddress: selected?.shippingAddress ?? null,
-                  currency,
-                  productId: String(selected?.productId || ""),
-                  productName: String(selected?.productName || selected?.planName || ""),
-                  planName: String(selected?.planName || ""),
-                  planDescription: String(selected?.planDescription || ""),
-                  quantity: Number(selected?.quantity || 1) || 1,
-                  price,
-                  basePrice: Number(selected?.basePrice || 0) || 0,
-                  tax: String(selected?.tax || ""),
-                  taxRate: Number(selected?.taxRate || 0) || 0,
-                  taxPreference: String(selected?.taxPreference || "Tax Exclusive"),
-                  contentType: String(selected?.contentType || "product"),
-                  items: Array.isArray(selected?.items) ? selected.items : [],
-                  customerNotes: String(selected?.customerNotes || ""),
-                  expiresAfter: String(selected?.expiresAfter || ""),
-                  neverExpires: Boolean(selected?.neverExpires ?? false),
-                  tag: String(selected?.tag || ""),
-                  reportingTags: Array.isArray(selected?.reportingTags) ? selected.reportingTags : [],
-                  startDate: parseShortDate(selected?.activatedOn || ""),
-                  coupon: String(selected?.coupon || ""),
-                  couponCode: String(selected?.couponCode || ""),
-                  couponValue: String(selected?.couponValue || ""),
-                  addonLines: Array.isArray(selected?.addonLines) ? selected.addonLines : [],
-                  priceListId: String(selected?.priceListId || ""),
-                  priceListName: String(selected?.priceListName || ""),
-                  location: String(selected?.location || ""),
-                  subscriptionNumber: String(selected?.subscriptionNumber || ""),
-                  referenceNumber: String(selected?.referenceNumber || ""),
-                  salesperson: String(selected?.salesperson || selected?.salespersonId || ""),
-                  salespersonName: String(selected?.salespersonName || ""),
-                  meteredBilling: Boolean(selected?.meteredBilling ?? false),
-                  paymentMode: String(selected?.paymentMode || "offline"),
-                  paymentTerms: String(selected?.paymentTerms || "Due on Receipt"),
-                  partialPayments: Boolean(selected?.partialPayments ?? false),
-                  prorateCharges: Boolean(selected?.prorateCharges ?? true),
-                  generateInvoices: Boolean(selected?.generateInvoices ?? true),
-                  invoiceTemplate: String(selected?.invoiceTemplate || "Standard Template"),
-                  roundOffPreference: String(selected?.roundOffPreference || "No Rounding"),
-                  createdOn: String(selected?.createdOn || ""),
-                  activatedOn: String(selected?.activatedOn || ""),
-                  lastBilledOn: String(selected?.lastBilledOn || ""),
-                  nextBillingOn: String(selected?.nextBillingOn || ""),
-                  status: String(selected?.status || ""),
-                };
+                const draft = buildSubscriptionEditDraft(selected);
                 navigate(`/sales/subscriptions/${selected?.id || "unknown"}/edit`, { state: { draft } });
               }}
             >
@@ -974,6 +1322,126 @@ export default function SubscriptionDetailPage() {
                     }}
                   >
                     Create Quote
+                  </button>
+                  <div className="h-px bg-gray-100" />
+                  <button
+                    className={`w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 ${
+                      isCloning ? "opacity-60 pointer-events-none" : ""
+                    }`}
+                    onClick={handleCloneSubscription}
+                  >
+                    {isCloning ? "Cloning..." : "Clone Subscription"}
+                  </button>
+                  <div className="h-px bg-gray-100" />
+                  <button
+                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                    onClick={() => {
+                      setDetailMoreOpen(false);
+                      setManualRenewalPreference(
+                        String(selected?.manualRenewalInvoicePreference || "Generate a New Invoice")
+                      );
+                      setManualRenewalFreeExtension(String(selected?.manualRenewalFreeExtension || ""));
+                      setIsManualRenewalOpen(true);
+                    }}
+                  >
+                    {selected?.manualRenewal ? "Edit Manual Renewal" : "Enable Manual Renewal"}
+                  </button>
+                  <button
+                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                    onClick={() => {
+                      setDetailMoreOpen(false);
+                      setAdvanceBillingMethod(String(selected?.advanceBillingMethod || "Advance Invoice"));
+                      setAdvanceBillingPeriodDays(Number(selected?.advanceBillingPeriodDays || 5) || 5);
+                      setAdvanceBillingAutoGenerate(Boolean(selected?.advanceBillingAutoGenerate ?? false));
+                      setAdvanceBillingApplyUpcomingTerms(Boolean(selected?.advanceBillingApplyUpcomingTerms ?? false));
+                      setIsAdvanceBillingOpen(true);
+                    }}
+                  >
+                    Configure Advance Billing
+                  </button>
+                  <button
+                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                    onClick={() => {
+                      setDetailMoreOpen(false);
+                      setRenewInvoicePreference(
+                        String(selected?.manualRenewalInvoicePreference || "Generate a New Invoice")
+                      );
+                      setRenewFreeExtension(String(selected?.manualRenewalFreeExtension || ""));
+                      setRenewError("");
+                      setIsRenewNowOpen(true);
+                    }}
+                  >
+                    Renew Subscription
+                  </button>
+                  {statusText === "PAUSED" ? (
+                    <button
+                      className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                      onClick={() => {
+                        setDetailMoreOpen(false);
+                        setResumeWhen("immediately");
+                        setResumeAtDate("");
+                        setResumeReason("");
+                        setResumeError("");
+                        setIsResumeModalOpen(true);
+                      }}
+                    >
+                      Resume Subscription
+                    </button>
+                  ) : statusText === "CANCELLED" || statusText === "CANCELED" || statusText === "EXPIRED" ? (
+                    <button
+                      className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                      onClick={() => {
+                        setDetailMoreOpen(false);
+                        setReactivateWhen("immediately");
+                        setReactivateAtDate("");
+                        setReactivateReason("");
+                        setReactivateError("");
+                        setIsReactivateModalOpen(true);
+                      }}
+                    >
+                      Reactivate Subscription
+                    </button>
+                  ) : (
+                    <button
+                      className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                      onClick={() => {
+                        setDetailMoreOpen(false);
+                        setPauseWhen("immediately");
+                        setPauseOnDate("");
+                        setResumeOnDate("");
+                        setPauseReason("");
+                        setPauseError("");
+                        setIsPauseModalOpen(true);
+                      }}
+                    >
+                      Pause Subscription
+                    </button>
+                  )}
+                  <button
+                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                    onClick={async () => {
+                      setDetailMoreOpen(false);
+                      try {
+                        const invoice = await createInvoiceFromSelected({
+                          source: "advance-billing",
+                          invoiceNumberPrefix: "ADV",
+                          status: selected?.advanceBillingMethod === "Advance Payment Request" ? "sent" : undefined,
+                        });
+                        if (invoice) {
+                          updateSelectedSubscription({
+                            lastAdvanceInvoiceId: String(invoice.id || invoice._id || ""),
+                            lastAdvanceInvoiceNumber: String(invoice.invoiceNumber || ""),
+                            lastAdvanceInvoiceDate: new Date().toISOString(),
+                          });
+                        }
+                        toast.success("Advance invoice generated successfully.");
+                      } catch (error) {
+                        console.error("Failed to generate advance invoice:", error);
+                        toast.error("Failed to generate advance invoice.");
+                      }
+                    }}
+                  >
+                    Generate Advance Invoice
                   </button>
                   <div className="h-px bg-gray-100" />
                   <button
@@ -1044,6 +1512,7 @@ export default function SubscriptionDetailPage() {
           </div>
         </div>
 
+        <div className="flex-1 min-h-0 overflow-y-auto">
         {activeTab === "overview" && (
           <div className="px-8 py-3">
             <div className="max-w-[1240px] w-full grid grid-cols-[360px_minmax(0,1fr)] gap-8">
@@ -1149,6 +1618,92 @@ export default function SubscriptionDetailPage() {
                     <div className="flex justify-between"><span>Subscription ID</span><span className="text-gray-900">8340042000000108287</span></div>
                     <div className="flex justify-between"><span>Subscription Number</span><span className="text-gray-900">{selected.subscriptionNumber}</span></div>
                   <div className="flex justify-between"><span>Autocharge</span><span className="text-gray-900">Disabled</span></div>
+                  <div className="flex justify-between">
+                    <span>Manual Renewal</span>
+                    <span className="text-gray-900">{selected.manualRenewal ? "Enabled" : "Disabled"}</span>
+                  </div>
+                  {selected.manualRenewal && (
+                    <div className="flex justify-between">
+                      <span>Invoice Preference</span>
+                      <span className="text-gray-900 text-right max-w-[220px]">{selected.manualRenewalInvoicePreference || "Generate a New Invoice"}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span>Advance Billing</span>
+                    <span className="text-gray-900">{selected.advanceBillingEnabled ? "Enabled" : "Disabled"}</span>
+                  </div>
+                  {selected.advanceBillingEnabled && (
+                    <>
+                      <div className="flex justify-between">
+                        <span>Advance Billing Method</span>
+                        <span className="text-gray-900 text-right max-w-[220px]">{selected.advanceBillingMethod || "Advance Invoice"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Advance Period</span>
+                        <span className="text-gray-900">{selected.advanceBillingPeriodDays || 5} day(s)</span>
+                      </div>
+                    </>
+                  )}
+                  <div className="flex justify-between">
+                    <span>Invoice Preference</span>
+                    <span className="text-gray-900 text-right max-w-[220px]">{selected.invoicePreference || "Create and Send Invoices"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Payment Status</span>
+                    <span className="text-gray-900">{selected.paymentStatus || (selected.paymentReceived ? "Paid" : "Unpaid")}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Amount Received</span>
+                    <span className="text-gray-900">{formatMoney(Number(selected.amountReceived || 0))}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Usage Billing</span>
+                    <span className="text-gray-900">{selected.usageBillingEnabled ? "Enabled" : "Disabled"}</span>
+                  </div>
+                  {selected.usageBillingEnabled && (
+                    <div className="space-y-1 text-right">
+                      <div className="flex justify-between gap-4">
+                        <span>Prepaid Billing</span>
+                        <span className="text-gray-900">{selected.prepaidBillingEnabled ? "Enabled" : "Disabled"}</span>
+                      </div>
+                      {selected.prepaidBillingEnabled && (
+                        <>
+                          <div className="flex justify-between gap-4">
+                            <span>Prepaid Plan</span>
+                            <span className="text-gray-900 text-right max-w-[220px]">{selected.prepaidPlanName || "Not set"}</span>
+                          </div>
+                          <div className="flex justify-between gap-4">
+                            <span>Drawdown Credit</span>
+                            <span className="text-gray-900 text-right max-w-[220px]">{selected.drawdownCreditName || "Not set"}</span>
+                          </div>
+                          <div className="flex justify-between gap-4">
+                            <span>Drawdown Rate</span>
+                            <span className="text-gray-900 text-right max-w-[220px]">{selected.drawdownRate || "Not set"}</span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span>Consolidated Billing</span>
+                    <span className="text-gray-900">{selected.consolidatedBillingEnabled ? "Enabled" : "Disabled"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Calendar Billing</span>
+                    <span className="text-gray-900 text-right max-w-[220px]">{selected.calendarBillingMode || "Same as a subscription's activation date"}</span>
+                  </div>
+                  {String(selected.calendarBillingMode || "").toLowerCase().includes("specific") && (
+                    <>
+                      <div className="flex justify-between">
+                        <span>Billing Days</span>
+                        <span className="text-gray-900 text-right max-w-[220px]">{selected.calendarBillingDays || "Not set"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Billing Months</span>
+                        <span className="text-gray-900 text-right max-w-[220px]">{selected.calendarBillingMonths || "Not set"}</span>
+                      </div>
+                    </>
+                  )}
                   <div className="flex justify-between"><span>Reference Number</span><span className="text-gray-900">{selected.referenceNumber || "sc"}</span></div>
                   <div className="flex justify-between items-start">
                     <span>Salesperson</span>
@@ -1235,7 +1790,7 @@ export default function SubscriptionDetailPage() {
                   <div className="text-lg font-semibold text-slate-900">{selected.lastBilledOn}</div>
                 </div>
                 <div>
-                  <div className="text-xs uppercase text-[#22c55e]">Renews Forever</div>
+                  <div className="text-xs uppercase text-[#156372]">Renews Forever</div>
                   <div className="text-lg font-semibold text-slate-900">{"\u221e"}</div>
                 </div>
               </div>
@@ -1298,7 +1853,7 @@ export default function SubscriptionDetailPage() {
                             <div className="mt-2 flex items-center gap-2">
                               <button
                                 type="button"
-                                className="px-3 py-1 text-xs font-semibold text-white rounded bg-[#10a37f] hover:bg-[#0e8a6b]"
+                                className="px-3 py-1 text-xs font-semibold text-white rounded bg-[#156372] hover:bg-[#0D4A52]"
                                 onClick={() => {
                                   updateLineItemDescription(item, descriptionDraft.trim());
                                   setEditingItemKey(null);
@@ -1425,6 +1980,146 @@ export default function SubscriptionDetailPage() {
             </div>
           </div>
         )}
+        {activeTab === "invoice" && (
+          <div className="px-8 py-6">
+            <div className="max-w-[1240px] w-full">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-[15px] font-semibold text-slate-800">Invoice History</h3>
+                  <p className="text-xs text-slate-500">
+                    {invoiceHistory.length
+                      ? `${invoiceHistory.length} invoice${invoiceHistory.length === 1 ? "" : "s"} linked to this subscription`
+                      : "No linked invoices found yet"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  onClick={() => setActiveTab("overview")}
+                >
+                  Back to Overview
+                </button>
+              </div>
+
+              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                {invoiceLoading ? (
+                  <div className="divide-y divide-slate-100">
+                    {Array.from({ length: 5 }).map((_, idx) => (
+                      <div key={`invoice-skeleton-${idx}`} className="grid grid-cols-[1.1fr_0.8fr_0.8fr_0.7fr] gap-4 px-4 py-4">
+                        <div className="h-4 w-36 rounded bg-slate-100" />
+                        <div className="h-4 w-28 rounded bg-slate-100" />
+                        <div className="h-4 w-24 rounded bg-slate-100" />
+                        <div className="h-6 w-20 rounded-full bg-slate-100 justify-self-end" />
+                      </div>
+                    ))}
+                  </div>
+                ) : invoiceHistory.length ? (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-slate-200 text-sm">
+                      <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-semibold">Invoice #</th>
+                          <th className="px-4 py-3 text-left font-semibold">Date</th>
+                          <th className="px-4 py-3 text-right font-semibold">Amount</th>
+                          <th className="px-4 py-3 text-left font-semibold">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        {invoiceHistory.map((invoice) => {
+                          const normalizedStatus = String(invoice.status || "").toUpperCase();
+                          const statusClass = normalizedStatus.includes("PARTIALLY")
+                            ? "bg-amber-100 text-amber-700"
+                            : normalizedStatus.includes("PAID")
+                            ? "bg-emerald-100 text-emerald-700"
+                            : normalizedStatus === "SENT"
+                            ? "bg-blue-100 text-blue-700"
+                            : normalizedStatus === "UNPAID"
+                            ? "bg-red-100 text-red-600"
+                            : "bg-slate-100 text-slate-600";
+                          return (
+                            <tr
+                              key={invoice.id || invoice.invoiceNumber}
+                              className="cursor-pointer hover:bg-slate-50"
+                              onClick={() => invoice.id && navigate(`/sales/invoices/${invoice.id}`)}
+                            >
+                              <td className="px-4 py-3 font-medium text-[#156372]">{invoice.invoiceNumber || invoice.id || "-"}</td>
+                              <td className="px-4 py-3 text-slate-700">{formatDisplayDate(invoice.invoiceDate) || "-"}</td>
+                              <td className="px-4 py-3 text-right text-slate-700">{formatMoney(Number(invoice.total || 0))}</td>
+                              <td className="px-4 py-3">
+                                <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass}`}>
+                                  {normalizedStatus || "DRAFT"}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="flex min-h-[220px] flex-col items-center justify-center px-6 py-12 text-center">
+                    <div className="text-sm font-semibold text-slate-800">No invoice history yet</div>
+                    <div className="mt-1 max-w-md text-sm text-slate-500">
+                      When this subscription generates or links an invoice, it will appear here automatically.
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        {activeTab === "activity" && (
+          <div className="px-8 py-6">
+            <div className="max-w-[1240px] w-full">
+              <h3 className="mb-4 text-[15px] font-semibold text-slate-800">Recent Activities</h3>
+              <div className="rounded-lg border border-slate-200 bg-white px-5 py-4 shadow-sm">
+                <div className="space-y-4">
+                  {[
+                    selected?.createdOn && { label: "Subscription created", value: selected.createdOn },
+                    selected?.activatedOn && { label: "Activated on", value: selected.activatedOn },
+                    selected?.lastBilledOn && { label: "Last billed on", value: selected.lastBilledOn },
+                    selected?.nextBillingOn && { label: "Next billing on", value: selected.nextBillingOn },
+                    selected?.pauseMeta?.reason && { label: "Paused", value: selected.pauseMeta.reason },
+                    selected?.resumeMeta?.reason && { label: "Resumed", value: selected.resumeMeta.reason },
+                    selected?.reactivationMeta?.reason && { label: "Reactivated", value: selected.reactivationMeta.reason },
+                    selected?.cancellationReason && { label: "Cancelled", value: selected.cancellationReason },
+                  ]
+                    .filter(Boolean)
+                    .map((item: any, index: number) => (
+                      <div key={`${item.label}-${index}`} className="flex items-start gap-3">
+                        <div className="mt-1 h-2.5 w-2.5 rounded-full bg-[#156372]" />
+                        <div>
+                          <div className="text-sm font-medium text-slate-800">{item.label}</div>
+                          <div className="text-sm text-slate-500">{item.value}</div>
+                        </div>
+                      </div>
+                    ))}
+                  {notes.map((note: any) => (
+                    <div key={note.id} className="flex items-start gap-3">
+                      <div className="mt-1 h-2.5 w-2.5 rounded-full bg-slate-300" />
+                      <div>
+                        <div className="text-sm font-medium text-slate-800">Note added</div>
+                        <div className="text-sm text-slate-500">{note.text}</div>
+                      </div>
+                    </div>
+                  ))}
+                  {!selected?.createdOn &&
+                    !selected?.activatedOn &&
+                    !selected?.lastBilledOn &&
+                    !selected?.nextBillingOn &&
+                    !selected?.pauseMeta?.reason &&
+                    !selected?.resumeMeta?.reason &&
+                    !selected?.reactivationMeta?.reason &&
+                    !selected?.cancellationReason &&
+                    notes.length === 0 && (
+                      <div className="text-sm text-slate-500">No recent activities to show yet.</div>
+                    )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        </div>
 
         {isAddNoteOpen && (
           <div className="fixed inset-0 z-[200] flex items-start justify-center bg-black/40">
@@ -1450,7 +2145,7 @@ export default function SubscriptionDetailPage() {
               <div className="px-5 py-4 border-t border-gray-200 flex items-center gap-2">
                 <button
                   type="button"
-                  className="px-3 py-1.5 bg-[#10a37f] hover:bg-[#0e8a6b] text-white rounded-md text-sm font-semibold"
+                  className="px-3 py-1.5 bg-[#156372] hover:bg-[#0D4A52] text-white rounded-md text-sm font-semibold"
                   onClick={saveNoteForSelected}
                 >
                   Save
@@ -1515,7 +2210,7 @@ export default function SubscriptionDetailPage() {
               <div className="px-5 py-4 border-t border-gray-200 flex items-center gap-2">
                 <button
                   type="button"
-                  className="px-3 py-1.5 bg-[#10a37f] hover:bg-[#0e8a6b] text-white rounded-md text-sm font-semibold"
+                  className="px-3 py-1.5 bg-[#156372] hover:bg-[#0D4A52] text-white rounded-md text-sm font-semibold"
                   onClick={saveBillingDateChange}
                 >
                   Save
@@ -1567,7 +2262,7 @@ export default function SubscriptionDetailPage() {
 
               <div className="px-5 py-4 border-t border-gray-200 flex items-center gap-2">
                 <button
-                  className="px-4 py-2 bg-[#10a37f] hover:bg-[#0e8a6b] text-white rounded-md text-sm font-semibold"
+                  className="px-4 py-2 bg-[#156372] hover:bg-[#0D4A52] text-white rounded-md text-sm font-semibold"
                   onClick={applyCouponForSelected}
                 >
                   Apply
@@ -1675,7 +2370,7 @@ export default function SubscriptionDetailPage() {
 
               <div className="px-6 py-4 border-t border-gray-200 flex items-center gap-2">
                 <button
-                  className="px-4 py-2 bg-[#10a37f] hover:bg-[#0e8a6b] text-white rounded-md text-sm font-semibold"
+                  className="px-4 py-2 bg-[#156372] hover:bg-[#0D4A52] text-white rounded-md text-sm font-semibold"
                   onClick={() => {
                     setIsAddChargeOpen(false);
                     toast.success("Charge added successfully.");
@@ -1722,7 +2417,7 @@ export default function SubscriptionDetailPage() {
               </div>
               <div className="px-5 py-4 border-t border-gray-200 flex items-center gap-2">
                 <button
-                  className="px-4 py-2 bg-[#10a37f] hover:bg-[#0e8a6b] text-white rounded-md text-sm font-semibold"
+                  className="px-4 py-2 bg-[#156372] hover:bg-[#0D4A52] text-white rounded-md text-sm font-semibold"
                   onClick={() => {
                     const nextId = String(selectedSalespersonId || "");
                     const salespersonName =
@@ -1746,6 +2441,617 @@ export default function SubscriptionDetailPage() {
                   }}
                 >
                   Update
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isManualRenewalOpen && (
+          <div className="fixed inset-0 z-[225] flex items-start justify-center bg-black/45 pt-10 px-4">
+            <div className="w-full max-w-[620px] rounded-xl bg-white shadow-2xl overflow-hidden">
+              <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+                <h3 className="text-[16px] font-semibold text-slate-800">Manual Renewal</h3>
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-rose-500 hover:bg-rose-50"
+                  onClick={() => setIsManualRenewalOpen(false)}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="space-y-4 px-6 py-5">
+                <label className="flex items-center gap-2 text-[13px] text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={selected?.manualRenewal ?? false}
+                    onChange={(e) => {
+                      updateSelectedSubscription({
+                        manualRenewal: e.target.checked,
+                        generateInvoices:
+                          e.target.checked
+                            ? manualRenewalPreference === "Generate a New Invoice"
+                            : Boolean(selected?.generateInvoices ?? true),
+                      });
+                    }}
+                  />
+                  Enable manual renewal for this subscription
+                </label>
+
+                <div>
+                  <label className="mb-1 block text-[13px] text-slate-700">Invoice Preference</label>
+                  <select
+                    value={manualRenewalPreference}
+                    onChange={(e) => setManualRenewalPreference(e.target.value)}
+                    className="h-10 w-full rounded-md border border-slate-300 px-3 text-[13px] text-slate-700 outline-none focus:border-[#156372]"
+                  >
+                    <option value="Generate a New Invoice">Generate a New Invoice</option>
+                    <option value="Associate an Existing Invoice">Associate an Existing Invoice</option>
+                    <option value="Skip Renewal Invoice">Skip Renewal Invoice</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[13px] text-slate-700">Free Extension</label>
+                  <input
+                    value={manualRenewalFreeExtension}
+                    onChange={(e) => setManualRenewalFreeExtension(e.target.value)}
+                    placeholder="e.g. 10 days or 2 months"
+                    className="h-10 w-full rounded-md border border-slate-300 px-3 text-[13px] text-slate-700 outline-none focus:border-[#156372]"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2 border-t border-slate-200 px-6 py-4">
+                <button
+                  type="button"
+                  className="rounded-md bg-[#156372] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0D4A52]"
+                  onClick={() => {
+                    updateSelectedSubscription({
+                      manualRenewal: true,
+                      manualRenewalInvoicePreference: manualRenewalPreference,
+                      manualRenewalFreeExtension,
+                      generateInvoices: manualRenewalPreference === "Generate a New Invoice",
+                    });
+                    setIsManualRenewalOpen(false);
+                    toast.success("Manual renewal settings saved.");
+                  }}
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={() => setIsManualRenewalOpen(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isAdvanceBillingOpen && (
+          <div className="fixed inset-0 z-[226] flex items-start justify-center bg-black/45 pt-10 px-4 overflow-y-auto">
+            <div className="w-full max-w-[680px] rounded-xl bg-white shadow-2xl overflow-hidden">
+              <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+                <h3 className="text-[16px] font-semibold text-slate-800">Advance Billing</h3>
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-rose-500 hover:bg-rose-50"
+                  onClick={() => setIsAdvanceBillingOpen(false)}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="space-y-4 px-6 py-5">
+                <label className="flex items-center gap-2 text-[13px] text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(selected?.advanceBillingEnabled)}
+                    onChange={(e) => updateSelectedSubscription({ advanceBillingEnabled: e.target.checked })}
+                  />
+                  Enable advance billing for this subscription
+                </label>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-[13px] text-slate-700">Method</label>
+                    <select
+                      value={advanceBillingMethod}
+                      onChange={(e) => setAdvanceBillingMethod(e.target.value)}
+                      className="h-10 w-full rounded-md border border-slate-300 px-3 text-[13px] text-slate-700 outline-none focus:border-[#156372]"
+                    >
+                      <option value="Advance Invoice">Advance Invoice</option>
+                      <option value="Advance Payment Request">Advance Payment Request</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[13px] text-slate-700">Period</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={advanceBillingPeriodDays}
+                      onChange={(e) => setAdvanceBillingPeriodDays(Math.max(1, Number(e.target.value) || 1))}
+                      className="h-10 w-full rounded-md border border-slate-300 px-3 text-[13px] text-slate-700 outline-none focus:border-[#156372]"
+                    />
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-2 text-[13px] text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={advanceBillingAutoGenerate}
+                    onChange={(e) => setAdvanceBillingAutoGenerate(e.target.checked)}
+                  />
+                  Automate advance billing
+                </label>
+                <label className="flex items-center gap-2 text-[13px] text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={advanceBillingApplyUpcomingTerms}
+                    onChange={(e) => setAdvanceBillingApplyUpcomingTerms(e.target.checked)}
+                  />
+                  Apply payment terms from the upcoming billing cycle
+                </label>
+              </div>
+              <div className="flex items-center gap-2 border-t border-slate-200 px-6 py-4">
+                <button
+                  type="button"
+                  className="rounded-md bg-[#156372] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0D4A52]"
+                  onClick={() => {
+                    updateSelectedSubscription({
+                      advanceBillingEnabled: true,
+                      advanceBillingMethod,
+                      advanceBillingPeriodDays,
+                      advanceBillingAutoGenerate,
+                      advanceBillingApplyUpcomingTerms,
+                    });
+                    setIsAdvanceBillingOpen(false);
+                    toast.success("Advance billing settings saved.");
+                  }}
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={() => setIsAdvanceBillingOpen(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isRenewNowOpen && (
+          <div className="fixed inset-0 z-[227] flex items-start justify-center bg-black/45 pt-10 px-4">
+            <div className="w-full max-w-[620px] rounded-xl bg-white shadow-2xl overflow-hidden">
+              <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+                <h3 className="text-[16px] font-semibold text-slate-800">Renew Subscription</h3>
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-rose-500 hover:bg-rose-50"
+                  onClick={() => setIsRenewNowOpen(false)}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="space-y-4 px-6 py-5">
+                <div>
+                  <label className="mb-1 block text-[13px] text-slate-700">Invoice Preference</label>
+                  <select
+                    value={renewInvoicePreference}
+                    onChange={(e) => setRenewInvoicePreference(e.target.value)}
+                    className="h-10 w-full rounded-md border border-slate-300 px-3 text-[13px] text-slate-700 outline-none focus:border-[#156372]"
+                  >
+                    <option value="Generate a New Invoice">Generate a New Invoice</option>
+                    <option value="Associate an Existing Invoice">Associate an Existing Invoice</option>
+                    <option value="Skip Renewal Invoice">Skip Renewal Invoice</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[13px] text-slate-700">Free Extension</label>
+                  <input
+                    value={renewFreeExtension}
+                    onChange={(e) => setRenewFreeExtension(e.target.value)}
+                    placeholder="e.g. 10 days or 2 months"
+                    className="h-10 w-full rounded-md border border-slate-300 px-3 text-[13px] text-slate-700 outline-none focus:border-[#156372]"
+                  />
+                </div>
+                {renewError && <div className="text-sm text-red-600">{renewError}</div>}
+              </div>
+              <div className="flex items-center gap-2 border-t border-slate-200 px-6 py-4">
+                <button
+                  type="button"
+                  className="rounded-md bg-[#156372] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0D4A52]"
+                  onClick={async () => {
+                    if (!selected?.id) return;
+                    setRenewError("");
+                    try {
+                      const shouldCreateInvoice = renewInvoicePreference === "Generate a New Invoice";
+                      let invoice: any = null;
+                      if (shouldCreateInvoice) {
+                        invoice = await createInvoiceFromSelected({
+                          source: "manual-renewal",
+                          invoiceNumberPrefix: "REN",
+                        });
+                      }
+                      const currentBillingDate = parseShortDate(selected?.nextBillingOn) || new Date().toISOString().split("T")[0];
+                      const nextBilling = addMonthsToDate(currentBillingDate, 1);
+                      updateSelectedSubscription({
+                        manualRenewal: true,
+                        manualRenewalInvoicePreference: renewInvoicePreference,
+                        manualRenewalFreeExtension: renewFreeExtension,
+                        lastBilledOn: formatDisplayDate(new Date().toISOString()),
+                        nextBillingOn: nextBilling ? formatDisplayDate(nextBilling) : selected.nextBillingOn,
+                        renewalInvoiceId: invoice?.id || invoice?._id || "",
+                        renewalInvoiceNumber: invoice?.invoiceNumber || "",
+                      });
+                      setIsRenewNowOpen(false);
+                      toast.success("Subscription renewed successfully.");
+                    } catch (error) {
+                      console.error("Failed to renew subscription:", error);
+                      setRenewError("Failed to renew subscription.");
+                    }
+                  }}
+                >
+                  Renew
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={() => setIsRenewNowOpen(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isPauseModalOpen && (
+          <div className="fixed inset-0 z-[228] flex items-start justify-center bg-black/45 pt-10 px-4 overflow-y-auto">
+            <div className="w-full max-w-[640px] rounded-xl bg-white shadow-2xl overflow-hidden">
+              <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+                <h3 className="text-[16px] font-semibold text-slate-800">Pause Subscription</h3>
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-rose-500 hover:bg-rose-50"
+                  onClick={() => setIsPauseModalOpen(false)}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="space-y-4 px-6 py-5">
+                <div>
+                  <div className="mb-3 text-sm font-medium text-slate-700">When do you want to pause this subscription?</div>
+                  <div className="space-y-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPauseWhen("immediately");
+                        setPauseError("");
+                      }}
+                      className="w-full rounded-lg border border-slate-200 bg-white p-4 text-left hover:bg-slate-50"
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="radio"
+                          checked={pauseWhen === "immediately"}
+                          onChange={() => {}}
+                          className="mt-1 h-4 w-4"
+                          style={{ accentColor: "#156372" }}
+                        />
+                        <div>
+                          <div className="text-sm font-medium text-slate-800">Immediately</div>
+                          <div className="text-xs text-slate-500 mt-1">Pause the subscription right away.</div>
+                        </div>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPauseWhen("specific");
+                        setPauseError("");
+                      }}
+                      className="w-full rounded-lg border border-slate-200 bg-white p-4 text-left hover:bg-slate-50"
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="radio"
+                          checked={pauseWhen === "specific"}
+                          onChange={() => {}}
+                          className="mt-1 h-4 w-4"
+                          style={{ accentColor: "#156372" }}
+                        />
+                        <div className="w-full">
+                          <div className="text-sm font-medium text-slate-800">On Specific Date</div>
+                          <div className="text-xs text-slate-500 mt-1">Choose when the subscription should pause.</div>
+                          {pauseWhen === "specific" && (
+                            <div className="mt-3">
+                              <div className="mb-1 text-sm font-medium text-red-500">Pause On*</div>
+                              <input
+                                value={pauseOnDate}
+                                onChange={(e) => {
+                                  setPauseOnDate(e.target.value);
+                                  setPauseError("");
+                                }}
+                                type="date"
+                                className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:ring-2 focus:ring-[#156372]/20"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-1 text-sm font-medium text-slate-700">Resume On</div>
+                  <input
+                    value={resumeOnDate}
+                    onChange={(e) => setResumeOnDate(e.target.value)}
+                    type="date"
+                    className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:ring-2 focus:ring-[#156372]/20"
+                  />
+                </div>
+                <div>
+                  <div className="mb-1 text-sm font-medium text-red-500">Reason*</div>
+                  <textarea
+                    value={pauseReason}
+                    onChange={(e) => {
+                      setPauseReason(e.target.value);
+                      setPauseError("");
+                    }}
+                    placeholder="Mention why you are pausing this subscription."
+                    className="min-h-[88px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#156372]/20 resize-y"
+                    maxLength={500}
+                  />
+                  <div className="mt-1 text-xs text-slate-500">Max. 500 characters</div>
+                  {pauseError && <div className="mt-2 text-sm text-red-600">{pauseError}</div>}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 border-t border-slate-200 px-6 py-4">
+                <button
+                  type="button"
+                  className="rounded-md bg-[#156372] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0D4A52]"
+                  onClick={handleSavePause}
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={() => setIsPauseModalOpen(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isResumeModalOpen && (
+          <div className="fixed inset-0 z-[229] flex items-start justify-center bg-black/45 pt-10 px-4 overflow-y-auto">
+            <div className="w-full max-w-[640px] rounded-xl bg-white shadow-2xl overflow-hidden">
+              <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+                <h3 className="text-[16px] font-semibold text-slate-800">Resume Subscription</h3>
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-rose-500 hover:bg-rose-50"
+                  onClick={() => setIsResumeModalOpen(false)}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="space-y-4 px-6 py-5">
+                <div>
+                  <div className="mb-3 text-sm font-medium text-slate-700">When do you want to resume this subscription?</div>
+                  <div className="space-y-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setResumeWhen("immediately");
+                        setResumeError("");
+                      }}
+                      className="w-full rounded-lg border border-slate-200 bg-white p-4 text-left hover:bg-slate-50"
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="radio"
+                          checked={resumeWhen === "immediately"}
+                          onChange={() => {}}
+                          className="mt-1 h-4 w-4"
+                          style={{ accentColor: "#156372" }}
+                        />
+                        <div>
+                          <div className="text-sm font-medium text-slate-800">Immediately</div>
+                          <div className="text-xs text-slate-500 mt-1">Resume the subscription right away.</div>
+                        </div>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setResumeWhen("specific");
+                        setResumeError("");
+                      }}
+                      className="w-full rounded-lg border border-slate-200 bg-white p-4 text-left hover:bg-slate-50"
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="radio"
+                          checked={resumeWhen === "specific"}
+                          onChange={() => {}}
+                          className="mt-1 h-4 w-4"
+                          style={{ accentColor: "#156372" }}
+                        />
+                        <div className="w-full">
+                          <div className="text-sm font-medium text-slate-800">On Specific Date</div>
+                          <div className="text-xs text-slate-500 mt-1">Choose when the subscription should resume.</div>
+                          {resumeWhen === "specific" && (
+                            <div className="mt-3">
+                              <div className="mb-1 text-sm font-medium text-red-500">Resume On*</div>
+                              <input
+                                value={resumeAtDate}
+                                onChange={(e) => {
+                                  setResumeAtDate(e.target.value);
+                                  setResumeError("");
+                                }}
+                                type="date"
+                                className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:ring-2 focus:ring-[#156372]/20"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-1 text-sm font-medium text-red-500">Reason*</div>
+                  <textarea
+                    value={resumeReason}
+                    onChange={(e) => {
+                      setResumeReason(e.target.value);
+                      setResumeError("");
+                    }}
+                    placeholder="Mention why you are resuming this subscription."
+                    className="min-h-[88px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#156372]/20 resize-y"
+                    maxLength={500}
+                  />
+                  <div className="mt-1 text-xs text-slate-500">Max. 500 characters</div>
+                  {resumeError && <div className="mt-2 text-sm text-red-600">{resumeError}</div>}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 border-t border-slate-200 px-6 py-4">
+                <button
+                  type="button"
+                  className="rounded-md bg-[#156372] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0D4A52]"
+                  onClick={handleSaveResume}
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={() => setIsResumeModalOpen(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isReactivateModalOpen && (
+          <div className="fixed inset-0 z-[230] flex items-start justify-center bg-black/45 pt-10 px-4 overflow-y-auto">
+            <div className="w-full max-w-[640px] rounded-xl bg-white shadow-2xl overflow-hidden">
+              <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+                <h3 className="text-[16px] font-semibold text-slate-800">Reactivate Subscription</h3>
+                <button
+                  type="button"
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-rose-500 hover:bg-rose-50"
+                  onClick={() => setIsReactivateModalOpen(false)}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="space-y-4 px-6 py-5">
+                <div>
+                  <div className="mb-3 text-sm font-medium text-slate-700">When do you want to reactivate this subscription?</div>
+                  <div className="space-y-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReactivateWhen("immediately");
+                        setReactivateError("");
+                      }}
+                      className="w-full rounded-lg border border-slate-200 bg-white p-4 text-left hover:bg-slate-50"
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="radio"
+                          checked={reactivateWhen === "immediately"}
+                          onChange={() => {}}
+                          className="mt-1 h-4 w-4"
+                          style={{ accentColor: "#156372" }}
+                        />
+                        <div>
+                          <div className="text-sm font-medium text-slate-800">Immediately</div>
+                          <div className="text-xs text-slate-500 mt-1">Bring the subscription back to Live now.</div>
+                        </div>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReactivateWhen("specific");
+                        setReactivateError("");
+                      }}
+                      className="w-full rounded-lg border border-slate-200 bg-white p-4 text-left hover:bg-slate-50"
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="radio"
+                          checked={reactivateWhen === "specific"}
+                          onChange={() => {}}
+                          className="mt-1 h-4 w-4"
+                          style={{ accentColor: "#156372" }}
+                        />
+                        <div className="w-full">
+                          <div className="text-sm font-medium text-slate-800">On Specific Date</div>
+                          <div className="text-xs text-slate-500 mt-1">Choose when the subscription should reactivate.</div>
+                          {reactivateWhen === "specific" && (
+                            <div className="mt-3">
+                              <div className="mb-1 text-sm font-medium text-red-500">Reactivate On*</div>
+                              <input
+                                value={reactivateAtDate}
+                                onChange={(e) => {
+                                  setReactivateAtDate(e.target.value);
+                                  setReactivateError("");
+                                }}
+                                type="date"
+                                className="h-10 w-full rounded-md border border-slate-200 px-3 text-sm outline-none focus:ring-2 focus:ring-[#156372]/20"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-1 text-sm font-medium text-red-500">Reason*</div>
+                  <textarea
+                    value={reactivateReason}
+                    onChange={(e) => {
+                      setReactivateReason(e.target.value);
+                      setReactivateError("");
+                    }}
+                    placeholder="Mention why you are reactivating this subscription."
+                    className="min-h-[88px] w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#156372]/20 resize-y"
+                    maxLength={500}
+                  />
+                  <div className="mt-1 text-xs text-slate-500">Max. 500 characters</div>
+                  {reactivateError && <div className="mt-2 text-sm text-red-600">{reactivateError}</div>}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 border-t border-slate-200 px-6 py-4">
+                <button
+                  type="button"
+                  className="rounded-md bg-[#156372] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0D4A52]"
+                  onClick={handleSaveReactivate}
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={() => setIsReactivateModalOpen(false)}
+                >
+                  Cancel
                 </button>
               </div>
             </div>
@@ -1799,7 +3105,7 @@ export default function SubscriptionDetailPage() {
                         setCancelError("");
                       }}
                       placeholder="Type reason..."
-                      className="w-full h-10 px-3 rounded-md border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-teal-200"
+                      className="w-full h-10 px-3 rounded-md border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-[#156372]/20"
                     />
                   </div>
                 )}
@@ -1811,7 +3117,7 @@ export default function SubscriptionDetailPage() {
                 <button
                   type="button"
                   onClick={handleProceedCancel}
-                  className="px-5 py-2 rounded-md bg-[#22b573] text-white text-sm font-semibold hover:brightness-95"
+                  className="px-5 py-2 rounded-md bg-[#156372] text-white text-sm font-semibold hover:bg-[#0D4A52]"
                 >
                   Proceed
                 </button>
@@ -1882,7 +3188,7 @@ export default function SubscriptionDetailPage() {
 
               <div className="px-5 py-4 border-t border-gray-200 flex items-center gap-2">
                 <button
-                  className="px-4 py-2 bg-[#10a37f] hover:bg-[#0e8a6b] text-white rounded-md text-sm font-semibold"
+                  className="px-4 py-2 bg-[#156372] hover:bg-[#0D4A52] text-white rounded-md text-sm font-semibold"
                   onClick={() => {
                     const updated = subscriptions.map((row: any) => {
                       if (row.id !== selected?.id) return row;
@@ -1917,7 +3223,7 @@ export default function SubscriptionDetailPage() {
       )}
 
       {showDeleteModal && (
-        <div className="fixed inset-0 z-[200] flex items-start justify-center bg-black/40 pt-16">
+        <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16">
           <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200">
             <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
               <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
@@ -1939,7 +3245,7 @@ export default function SubscriptionDetailPage() {
             <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
               <button
                 type="button"
-                className="px-4 py-1.5 rounded-md bg-blue-600 text-white text-[12px] hover:bg-blue-700"
+                className="px-4 py-1.5 rounded-md bg-red-600 text-white text-[12px] hover:bg-red-700"
                 onClick={() => {
                   if (!selected?.id) return;
                   const updated = subscriptions.filter((row: any) => row.id !== selected.id);

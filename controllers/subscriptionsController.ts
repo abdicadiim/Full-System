@@ -15,6 +15,12 @@ const asDate = (value: any) => {
   const parsed = new Date(String(value));
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
+const normalizeLifecycleStatus = (value: any) => {
+  const raw = String(value || "").toUpperCase().trim();
+  if (!raw) return "LIVE";
+  if (["PAUSED", "CANCELLED", "CANCELED", "EXPIRED", "DRAFT"].includes(raw)) return raw;
+  return "LIVE";
+};
 const shouldGenerateBackdatedInvoice = (subscription: any) => {
   const startDate = String(subscription?.startDate || "").trim();
   if (!startDate) return true;
@@ -68,6 +74,8 @@ const buildInvoiceFromSubscription = async (organizationId: any, subscription: a
   const invoiceNumber = await getNextInvoiceNumber(organizationId, "INV-");
   const sourceItems = Array.isArray(subscription?.items) ? subscription.items : [];
   const sourceAddons = Array.isArray(subscription?.addonLines) ? subscription.addonLines : [];
+  const invoicePreference = String(subscription?.invoicePreference || "Create and Send Invoices").toLowerCase();
+  const preferredStatus = invoicePreference.includes("draft") ? "draft" : "";
   const items = [
     ...sourceItems.map((item: any) => ({
       itemDetails: item?.itemDetails || item?.name || item?.label || "",
@@ -90,7 +98,7 @@ const buildInvoiceFromSubscription = async (organizationId: any, subscription: a
   const invoicePayload = {
     organizationId,
     invoiceNumber,
-    status,
+    status: preferredStatus || status,
     date: invoiceDate,
     invoiceDate,
     dueDate,
@@ -146,10 +154,19 @@ export const createSubscription = async (req: any, res: any) => {
   delete payload._id;
   delete payload.organizationId;
 
-  const created = await Subscription.create({ ...payload, organizationId: orgId });
+  const created = await Subscription.create({
+    ...payload,
+    status: normalizeLifecycleStatus(payload?.status || "LIVE"),
+    organizationId: orgId,
+  });
   let generatedInvoice: any = null;
+  const manualRenewal = Boolean(payload?.manualRenewal ?? false);
+  const manualRenewalPreference = String(payload?.manualRenewalInvoicePreference || "Generate a New Invoice");
+  const shouldGenerateInvoice = manualRenewal
+    ? manualRenewalPreference === "Generate a New Invoice" && Boolean(payload?.generateInvoices ?? true)
+    : Boolean(payload?.generateInvoices ?? true);
 
-  if (Boolean(payload?.generateInvoices ?? true)) {
+  if (shouldGenerateInvoice) {
     try {
       generatedInvoice = await buildInvoiceFromSubscription(orgId, created.toObject());
     } catch (error) {
