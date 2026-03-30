@@ -12,9 +12,15 @@ export default function ItemsPage() {
   
   // Products tab states
   const [decimalPlaces, setDecimalPlaces] = useState("2");
-  const [allowDuplicateNames, setAllowDuplicateNames] = useState(false);
-  const [enableEnhancedSearch, setEnableEnhancedSearch] = useState(false);
-  const [enablePriceLists, setEnablePriceLists] = useState(false);
+  const [allowDuplicateNames, setAllowDuplicateNames] = useState(true);
+  const [enableEnhancedSearch, setEnableEnhancedSearch] = useState(true);
+  const [enablePriceLists, setEnablePriceLists] = useState(true);
+  const [enableInventoryTracking, setEnableInventoryTracking] = useState(true);
+  const [inventoryStartDate, setInventoryStartDate] = useState("");
+  const [preventNegativeStock, setPreventNegativeStock] = useState(true);
+  const [showOutOfStockWarning, setShowOutOfStockWarning] = useState(false);
+  const [notifyReorderPoint, setNotifyReorderPoint] = useState(false);
+  const [trackLandedCost, setTrackLandedCost] = useState(false);
   
   // Field Customization tab states
   const [customFields, setCustomFields] = useState([]);
@@ -63,19 +69,25 @@ export default function ItemsPage() {
           if (data.success && data.data) {
             const settings = data.data;
             setDecimalPlaces(settings.decimalPlaces || "2");
-            setAllowDuplicateNames(settings.allowDuplicateNames !== undefined ? settings.allowDuplicateNames : false);
-            setEnableEnhancedSearch(settings.enableEnhancedSearch || false);
-            setEnablePriceLists(settings.enablePriceLists || false);
+            setAllowDuplicateNames(settings.allowDuplicateNames !== undefined ? settings.allowDuplicateNames : true);
+            setEnableEnhancedSearch(settings.enableEnhancedSearch !== undefined ? settings.enableEnhancedSearch : true);
+            setEnablePriceLists(settings.enablePriceLists !== undefined ? settings.enablePriceLists : true);
+            setEnableInventoryTracking(settings.enableInventoryTracking !== undefined ? settings.enableInventoryTracking : true);
+            setInventoryStartDate(settings.inventoryStartDate || "");
+            setPreventNegativeStock(settings.preventNegativeStock !== undefined ? settings.preventNegativeStock : true);
+            setShowOutOfStockWarning(settings.showOutOfStockWarning || false);
+            setNotifyReorderPoint(settings.notifyReorderPoint || false);
+            setTrackLandedCost(settings.trackLandedCost || false);
             setCustomFields(settings.customFields || []);
             setCustomButtons(settings.customButtons || []);
             setRelatedLists(settings.relatedLists || []);
           }
         } else {
-          toast.error("Failed to load items settings");
+          toast.error("Failed to load products settings");
         }
       } catch (error) {
-        console.error("Error fetching items settings:", error);
-        toast.error("Error loading items settings");
+        console.error("Error fetching products settings:", error);
+        toast.error("Error loading products settings");
       } finally {
         setLoading(false);
       }
@@ -99,6 +111,12 @@ export default function ItemsPage() {
         allowDuplicateNames,
         enableEnhancedSearch,
         enablePriceLists,
+        enableInventoryTracking,
+        inventoryStartDate,
+        preventNegativeStock,
+        showOutOfStockWarning,
+        notifyReorderPoint,
+        trackLandedCost,
         customFields,
         customButtons,
         relatedLists,
@@ -116,7 +134,7 @@ export default function ItemsPage() {
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
-          toast.success("Items settings saved successfully!");
+          toast.success("Products settings saved successfully!");
         } else {
           toast.error(data.message || "Failed to save settings");
         }
@@ -125,8 +143,8 @@ export default function ItemsPage() {
         toast.error(errorData.message || "Failed to save settings");
       }
     } catch (error) {
-      console.error("Error saving items settings:", error);
-      toast.error("Error saving items settings");
+      console.error("Error saving products settings:", error);
+      toast.error("Error saving products settings");
     } finally {
       setSaving(false);
     }
@@ -153,7 +171,7 @@ export default function ItemsPage() {
       <div className="p-6 max-w-4xl flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="animate-spin text-blue-600" size={32} />
-          <p className="text-gray-600">Loading items settings...</p>
+          <p className="text-gray-600">Loading products settings...</p>
         </div>
       </div>
     );
@@ -220,11 +238,11 @@ export default function ItemsPage() {
       {/* Products Tab Content */}
       {activeTab === "products" && (
         <div className="space-y-8 pb-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+          <div className="flex items-start justify-between gap-6">
+            <label className="text-sm font-medium text-gray-700 pt-2">
               Set a decimal rate for your item quantity
             </label>
-            <div className="relative w-32">
+            <div className="relative w-32 shrink-0">
               <select
                 value={decimalPlaces}
                 onChange={(e) => setDecimalPlaces(e.target.value)}
@@ -241,6 +259,9 @@ export default function ItemsPage() {
           </div>
 
           <div className="border-t border-gray-200 pt-6">
+            <h2 className="text-base font-medium text-gray-900 mb-2">
+              Duplicate Item Name
+            </h2>
             <label className="flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
@@ -268,6 +289,9 @@ export default function ItemsPage() {
           </div>
 
           <div className="border-t border-gray-200 pt-6">
+            <h2 className="text-base font-medium text-gray-900 mb-2">
+              Enhanced Item Search
+            </h2>
             <label className="flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
@@ -283,7 +307,7 @@ export default function ItemsPage() {
                   <span className="text-xs bg-yellow-500 text-white px-2 py-0.5 rounded">NEW</span>
                 </div>
                 {enableEnhancedSearch && (
-                  <div className="mt-3 bg-orange-50 border border-orange-200 rounded-lg p-3">
+                  <div className="mt-3 max-w-[560px] bg-orange-50 border border-orange-200 rounded-lg p-3">
                     <p className="text-xs text-gray-700">
                       Enabling this option makes it easier to find any item using relevant keywords in any order.
                     </p>
@@ -294,6 +318,9 @@ export default function ItemsPage() {
           </div>
 
           <div className="border-t border-gray-200 pt-6">
+            <h2 className="text-base font-medium text-gray-900 mb-2">
+              Price Lists
+            </h2>
             <label className="flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
