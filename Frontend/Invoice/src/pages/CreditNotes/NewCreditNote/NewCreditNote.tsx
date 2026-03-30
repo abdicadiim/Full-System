@@ -1566,7 +1566,11 @@ export default function NewCreditNote() {
   async function fetchNextCreditNoteNumber(options?: { reserve?: boolean }) {
     const reserve = Boolean(options?.reserve);
     try {
-      const response = await transactionNumberSeriesAPI.getNextNumber({ module: "Credit Note", reserve });
+      const response = await transactionNumberSeriesAPI.getNextNumber({
+        module: "Credit Note",
+        locationName: warehouseLocation,
+        reserve
+      });
       const nextNumber =
         response?.data?.nextNumber ||
         response?.data?.next_number ||
