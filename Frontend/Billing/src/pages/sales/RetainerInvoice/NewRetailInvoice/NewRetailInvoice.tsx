@@ -202,7 +202,7 @@ export default function NewRetailInvoice() {
           nextNumResp?.data?.nextNumber || nextNumResp?.nextNumber || nextNumResp?.data?.invoiceNumber;
         if (!isEditMode && nextNumber && typeof nextNumber === "string") {
           setInvoiceNumber(nextNumber);
-          setRetainerPrefix(deriveRetainerPrefix(nextNumber, "RET-"));
+          setRetainerPrefix(deriveRetainerPrefix(nextNumber));
           setRetainerNextNumber(extractRetainerDigits(nextNumber) || "");
         }
 
@@ -1029,8 +1029,8 @@ export default function NewRetailInvoice() {
   const requiredLabelClass = "text-[13px] text-[#ef4444]";
 
   const openRetainerNumberModal = () => {
-    setRetainerPrefix(deriveRetainerPrefix(invoiceNumber, retainerPrefix || "RET-"));
-    setRetainerNextNumber(extractRetainerDigits(invoiceNumber) || retainerNextNumber || "00001");
+    setRetainerPrefix(deriveRetainerPrefix(invoiceNumber));
+    setRetainerNextNumber(extractRetainerDigits(invoiceNumber) || "");
     setIsRetainerNumberModalOpen(true);
   };
 
