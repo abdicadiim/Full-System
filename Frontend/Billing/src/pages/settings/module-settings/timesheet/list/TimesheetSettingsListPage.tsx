@@ -66,15 +66,15 @@ export default function TimesheetPage() {
               (Time entries will appear on your invoices and reports based on the selected round-off format.)
               </p>
             </div>
-            <div className="relative w-64">
+            <div className="relative w-56">
               <SearchableDropdown
                 value={roundOffTime}
                 options={roundOffOptions}
                 onChange={setRoundOffTime}
                 placeholder="Don't Round-off"
                 openDirection="down"
-                className="w-64"
-                inputClassName="h-10 w-64"
+                className="w-56"
+                inputClassName="h-10 w-56"
               />
             </div>
           </div>
@@ -98,7 +98,7 @@ export default function TimesheetPage() {
                       type="text"
                       value={maxHours}
                       onChange={(e) => setMaxHours(e.target.value)}
-                      className="h-10 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="h-10 w-28 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="24:00"
                     />
                   </div>
