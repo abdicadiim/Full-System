@@ -85,7 +85,7 @@ const pickPreferredSeriesRow = (rows: any[], lookupLocationIds: string[] = []) =
   };
 
   return [...activeRows, ...rows.filter((row) => String(row?.status || "active").toLowerCase() !== "inactive")]
-    .sort((a, b) => scoreRow(b) - scoreRow(a))[0] || null;
+    .sort((a: any, b: any) => scoreRow(b) - scoreRow(a))[0] || null;
 };
 
 export const listTransactionNumberSeries = async (req: express.Request, res: express.Response) => {
