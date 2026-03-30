@@ -1,26 +1,20 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Info, ChevronDown, HelpCircle, Lock, Loader2 } from "lucide-react";
+import { Info, ChevronDown, Lock, Loader2 } from "lucide-react";
 import { getToken, API_BASE_URL } from "../../../../../services/auth";
 import toast from "react-hot-toast";
 
 export default function ItemsPage() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("general");
+  const [activeTab, setActiveTab] = useState("products");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   
-  // General tab states
+  // Products tab states
   const [decimalPlaces, setDecimalPlaces] = useState("2");
   const [allowDuplicateNames, setAllowDuplicateNames] = useState(false);
   const [enableEnhancedSearch, setEnableEnhancedSearch] = useState(false);
   const [enablePriceLists, setEnablePriceLists] = useState(false);
-  const [enableInventoryTracking, setEnableInventoryTracking] = useState(true);
-  const [inventoryStartDate, setInventoryStartDate] = useState("");
-  const [preventNegativeStock, setPreventNegativeStock] = useState(true);
-  const [showOutOfStockWarning, setShowOutOfStockWarning] = useState(false);
-  const [notifyReorderPoint, setNotifyReorderPoint] = useState(false);
-  const [trackLandedCost, setTrackLandedCost] = useState(false);
   
   // Field Customization tab states
   const [customFields, setCustomFields] = useState([]);
@@ -72,12 +66,6 @@ export default function ItemsPage() {
             setAllowDuplicateNames(settings.allowDuplicateNames !== undefined ? settings.allowDuplicateNames : false);
             setEnableEnhancedSearch(settings.enableEnhancedSearch || false);
             setEnablePriceLists(settings.enablePriceLists || false);
-            setEnableInventoryTracking(settings.enableInventoryTracking !== undefined ? settings.enableInventoryTracking : true);
-            setInventoryStartDate(settings.inventoryStartDate || "");
-            setPreventNegativeStock(settings.preventNegativeStock !== undefined ? settings.preventNegativeStock : true);
-            setShowOutOfStockWarning(settings.showOutOfStockWarning || false);
-            setNotifyReorderPoint(settings.notifyReorderPoint || false);
-            setTrackLandedCost(settings.trackLandedCost || false);
             setCustomFields(settings.customFields || []);
             setCustomButtons(settings.customButtons || []);
             setRelatedLists(settings.relatedLists || []);
@@ -111,12 +99,6 @@ export default function ItemsPage() {
         allowDuplicateNames,
         enableEnhancedSearch,
         enablePriceLists,
-        enableInventoryTracking,
-        inventoryStartDate,
-        preventNegativeStock,
-        showOutOfStockWarning,
-        notifyReorderPoint,
-        trackLandedCost,
         customFields,
         customButtons,
         relatedLists,
