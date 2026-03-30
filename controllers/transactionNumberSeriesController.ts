@@ -75,7 +75,7 @@ const pickPreferredSeriesRow = (rows: any[], lookupLocationIds: string[] = []) =
 
     let score = 0;
     if (lookupLocationIds.length) {
-      const matchesLocation = rowLocationIds.some((id) => lookupLocationIds.includes(id));
+      const matchesLocation = rowLocationIds.some((id: string) => lookupLocationIds.includes(id));
       if (matchesLocation) score += 100;
       else if (!rowLocationIds.length) score += 10;
     }
