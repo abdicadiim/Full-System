@@ -841,7 +841,7 @@ const resolveLocationIdsFromCache = (locationId?: string, locationName?: string)
   if (!targetName || typeof window === "undefined") return Array.from(ids);
 
   try {
-    const raw = localStorage.getItem(LS_LOCATIONS_CACHE_KEY);
+    const raw = localStorage.getItem(LOCAL_LOCATIONS_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(parsed)) return Array.from(ids);
     parsed
