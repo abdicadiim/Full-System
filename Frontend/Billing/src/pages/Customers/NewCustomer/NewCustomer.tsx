@@ -670,7 +670,10 @@ export default function NewCustomer() {
       }
       if (!force && isCustomerNumberManuallyEdited) return;
       try {
-        const nextNumber = `${customerNumberPrefix || "CUS-"}${customerNumberStart || "0001"}`;
+        const nextNumber = await customersAPI.getNextCustomerNumber({
+          prefix: customerNumberPrefix,
+          start: customerNumberStart,
+        });
         setFormData((prev) => ({ ...prev, customerNumber: nextNumber }));
         if (force) setIsCustomerNumberManuallyEdited(false);
         setErrors((prev) => ({ ...prev, customerNumber: "" }));
@@ -1491,7 +1494,7 @@ export default function NewCustomer() {
           <div className="w-full max-w-4xl px-4 sm:px-6 py-5 sm:py-8 overflow-x-hidden">
 
             <div>
-              <div className="space-y-6">
+              <div className="space-y-6 pb-28">
                 {/* Customer Type */}
                 <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4 items-center">
                   <label className="text-[13px] font-medium text-gray-700 flex items-center gap-1">
@@ -3416,7 +3419,7 @@ export default function NewCustomer() {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center gap-2 pt-8 mt-12 border-t border-gray-100">
+              <div className="sticky bottom-0 z-20 flex items-center gap-2 pt-8 pb-6 mt-12 border-t border-gray-100 bg-gray-50/95 backdrop-blur-sm">
                 <button
                   type="button"
                   onClick={handleSave}
