@@ -227,7 +227,7 @@ export default function QuotesPage() {
   }
 
   return (
-    <div className="p-8 w-full">
+    <div className="w-full min-w-0 max-w-none p-8">
       <h1 className="text-2xl font-semibold text-gray-900 mb-6">Quotes</h1>
 
       {/* Tabs */}
@@ -299,7 +299,7 @@ export default function QuotesPage() {
 
       {/* General Tab Content */}
       {activeTab === "general" && (
-        <div className="bg-white rounded-lg p-6 space-y-6">
+        <div className="space-y-6">
           {/* Allow editing of accepted quotes */}
           <div className="pb-6 border-b border-gray-100">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -459,7 +459,7 @@ export default function QuotesPage() {
               value={termsConditions}
               onChange={(e) => setTermsConditions(e.target.value)}
               rows={8}
-              className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none text-sm"
+              className="w-full bg-transparent px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none text-sm"
               placeholder="Enter terms and conditions"
             />
           </div>
@@ -471,7 +471,7 @@ export default function QuotesPage() {
               value={customerNotes}
               onChange={(e) => setCustomerNotes(e.target.value)}
               rows={8}
-              className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none text-sm"
+              className="w-full bg-transparent px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none text-sm"
               placeholder="Enter customer notes"
             />
           </div>
@@ -492,7 +492,7 @@ export default function QuotesPage() {
 
       {/* Approvals Tab Content */}
       {activeTab === "approvals" && (
-        <div className="bg-white rounded-lg p-6">
+        <div className="w-full bg-white rounded-lg p-6">
           {/* Approval Type Section */}
           <div className="mb-10">
             <h3 className="text-sm font-semibold text-gray-900 mb-6 font-medium">Approval Type</h3>
@@ -985,7 +985,7 @@ export default function QuotesPage() {
               </button>
             </div>
 
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="w-full bg-white rounded-lg border border-gray-200 overflow-hidden">
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
@@ -1155,7 +1155,7 @@ export default function QuotesPage() {
               </div>
             </div>
 
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="w-full bg-white rounded-lg border border-gray-200 overflow-hidden">
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>

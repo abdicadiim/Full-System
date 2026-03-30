@@ -473,8 +473,6 @@ export default function AllSettings() {
       navigate("/settings/invoices");
     } else if (label === "Sales Receipts") {
       navigate("/settings/sales-receipts");
-    } else if (label === "Recurring Invoices") {
-      navigate("/settings/recurring-invoices");
     } else if (label === "Payments Received") {
       navigate("/settings/payments-received");
     } else if (label === "Credit Notes") {
