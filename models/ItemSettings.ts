@@ -9,13 +9,6 @@ const ItemSettingsSchema = new mongoose.Schema(
     enableEnhancedSearch: { type: Boolean, default: true },
     enablePriceLists: { type: Boolean, default: true },
 
-    enableInventoryTracking: { type: Boolean, default: true },
-    inventoryStartDate: { type: String, default: "" },
-    preventNegativeStock: { type: Boolean, default: true },
-    showOutOfStockWarning: { type: Boolean, default: false },
-    notifyReorderPoint: { type: Boolean, default: false },
-    trackLandedCost: { type: Boolean, default: false },
-
     customFields: { type: Array, default: [] },
     customButtons: { type: Array, default: [] },
     relatedLists: { type: Array, default: [] },

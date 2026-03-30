@@ -12,12 +12,6 @@ const DEFAULTS = {
   allowDuplicateNames: true,
   enableEnhancedSearch: true,
   enablePriceLists: true,
-  enableInventoryTracking: true,
-  inventoryStartDate: "",
-  preventNegativeStock: true,
-  showOutOfStockWarning: false,
-  notifyReorderPoint: false,
-  trackLandedCost: false,
   customFields: [] as unknown[],
   customButtons: [] as unknown[],
   relatedLists: [] as unknown[],
@@ -28,12 +22,6 @@ const normalizeItemSettings = (settings: any) => ({
   allowDuplicateNames: settings?.allowDuplicateNames !== undefined ? Boolean(settings.allowDuplicateNames) : DEFAULTS.allowDuplicateNames,
   enableEnhancedSearch: settings?.enableEnhancedSearch !== undefined ? Boolean(settings.enableEnhancedSearch) : DEFAULTS.enableEnhancedSearch,
   enablePriceLists: settings?.enablePriceLists !== undefined ? Boolean(settings.enablePriceLists) : DEFAULTS.enablePriceLists,
-  enableInventoryTracking: settings?.enableInventoryTracking !== undefined ? Boolean(settings.enableInventoryTracking) : DEFAULTS.enableInventoryTracking,
-  inventoryStartDate: settings?.inventoryStartDate || DEFAULTS.inventoryStartDate,
-  preventNegativeStock: settings?.preventNegativeStock !== undefined ? Boolean(settings.preventNegativeStock) : DEFAULTS.preventNegativeStock,
-  showOutOfStockWarning: settings?.showOutOfStockWarning !== undefined ? Boolean(settings.showOutOfStockWarning) : DEFAULTS.showOutOfStockWarning,
-  notifyReorderPoint: settings?.notifyReorderPoint !== undefined ? Boolean(settings.notifyReorderPoint) : DEFAULTS.notifyReorderPoint,
-  trackLandedCost: settings?.trackLandedCost !== undefined ? Boolean(settings.trackLandedCost) : DEFAULTS.trackLandedCost,
   customFields: Array.isArray(settings?.customFields) ? settings.customFields : DEFAULTS.customFields,
   customButtons: Array.isArray(settings?.customButtons) ? settings.customButtons : DEFAULTS.customButtons,
   relatedLists: Array.isArray(settings?.relatedLists) ? settings.relatedLists : DEFAULTS.relatedLists,
@@ -84,12 +72,6 @@ export const upsertItemSettings: express.RequestHandler = async (req, res, next)
       allowDuplicateNames: pickBoolean(body.allowDuplicateNames, normalizedCurrent.allowDuplicateNames),
       enableEnhancedSearch: pickBoolean(body.enableEnhancedSearch, normalizedCurrent.enableEnhancedSearch),
       enablePriceLists: pickBoolean(body.enablePriceLists, normalizedCurrent.enablePriceLists),
-      enableInventoryTracking: pickBoolean(body.enableInventoryTracking, normalizedCurrent.enableInventoryTracking),
-      inventoryStartDate: pickString(body.inventoryStartDate, normalizedCurrent.inventoryStartDate || DEFAULTS.inventoryStartDate),
-      preventNegativeStock: pickBoolean(body.preventNegativeStock, normalizedCurrent.preventNegativeStock),
-      showOutOfStockWarning: pickBoolean(body.showOutOfStockWarning, normalizedCurrent.showOutOfStockWarning),
-      notifyReorderPoint: pickBoolean(body.notifyReorderPoint, normalizedCurrent.notifyReorderPoint),
-      trackLandedCost: pickBoolean(body.trackLandedCost, normalizedCurrent.trackLandedCost),
       ...(pickArray(body.customFields) ? { customFields: body.customFields as unknown[] } : current?.customFields ? { customFields: current.customFields as unknown[] } : { customFields: DEFAULTS.customFields }),
       ...(pickArray(body.customButtons) ? { customButtons: body.customButtons as unknown[] } : current?.customButtons ? { customButtons: current.customButtons as unknown[] } : { customButtons: DEFAULTS.customButtons }),
       ...(pickArray(body.relatedLists) ? { relatedLists: body.relatedLists as unknown[] } : current?.relatedLists ? { relatedLists: current.relatedLists as unknown[] } : { relatedLists: DEFAULTS.relatedLists }),
@@ -97,7 +79,18 @@ export const upsertItemSettings: express.RequestHandler = async (req, res, next)
 
     const saved = await ItemSettings.findOneAndUpdate(
       { organizationId: orgId },
-      { $set: update, $setOnInsert: { organizationId: orgId } },
+      {
+        $set: update,
+        $unset: {
+          enableInventoryTracking: 1,
+          inventoryStartDate: 1,
+          preventNegativeStock: 1,
+          showOutOfStockWarning: 1,
+          notifyReorderPoint: 1,
+          trackLandedCost: 1,
+        },
+        $setOnInsert: { organizationId: orgId },
+      },
       { new: true, upsert: true }
     ).lean();
 
