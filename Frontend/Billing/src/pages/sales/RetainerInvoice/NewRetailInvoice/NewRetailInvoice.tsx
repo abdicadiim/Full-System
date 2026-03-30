@@ -312,7 +312,7 @@ export default function NewRetailInvoice() {
             module: "Retainer Invoice",
             locationName: "Head Office",
           }) || ""));
-          setRetainerPrefix(deriveRetainerPrefix(existing?.invoiceNumber, "RET-"));
+          setRetainerPrefix(deriveRetainerPrefix(existing?.invoiceNumber));
           setRetainerNextNumber(extractRetainerDigits(existing?.invoiceNumber) || "");
           setCustomerId(selectedCustomerId);
           setSelectedLocation(String(existing?.location || existing?.selectedLocation || "Head Office"));
@@ -927,7 +927,7 @@ export default function NewRetailInvoice() {
     const finalInvoiceNumber =
       normalizedInvoiceNumber.toUpperCase().startsWith("RET-")
         ? normalizedInvoiceNumber
-        : buildRetainerNumber(retainerPrefix || "RET-", normalizedInvoiceNumber);
+        : buildRetainerNumber(retainerPrefix, normalizedInvoiceNumber);
 
     const payload = {
       invoiceNumber: finalInvoiceNumber,
