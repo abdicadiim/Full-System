@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { getInvoiceById, saveInvoice, updateInvoice } from "../../salesModel";
-import { customersAPI, invoicesAPI } from "../../../services/api";
+import { customersAPI, invoicesAPI, transactionNumberSeriesAPI } from "../../../services/api";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -42,7 +42,7 @@ export default function NewRetailInvoice() {
       try {
         const [customersRes, nextNumberRes] = await Promise.all([
           customersAPI.getAll({ limit: 1000 }),
-          invoicesAPI.getNextNumber("RET-"),
+          transactionNumberSeriesAPI.getNextNumber({ module: "Retainer Invoice", reserve: false }),
         ]);
 
         const customerRows = Array.isArray(customersRes?.data) ? customersRes.data : [];

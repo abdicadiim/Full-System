@@ -46,7 +46,7 @@ import {
   AttachedFile
 } from "../../salesModel";
 import { getAllDocuments } from "../../../utils/documentStorage";
-import { customersAPI, salespersonsAPI, itemsAPI, taxesAPI, currenciesAPI, creditNotesAPI, reportingTagsAPI, locationsAPI } from "../../../services/api";
+import { customersAPI, salespersonsAPI, itemsAPI, taxesAPI, currenciesAPI, creditNotesAPI, reportingTagsAPI, locationsAPI, transactionNumberSeriesAPI } from "../../../services/api";
 import { buildTaxOptionGroups, taxLabel } from "../../../hooks/Taxdropdownstyle";
 
 const accountCategories = {
@@ -1563,7 +1563,21 @@ export default function NewCreditNote() {
     return `${day} ${month} ${year}`;
   };
 
-  async function fetchNextCreditNoteNumber() {
+  async function fetchNextCreditNoteNumber(options?: { reserve?: boolean }) {
+    const reserve = Boolean(options?.reserve);
+    try {
+      const response = await transactionNumberSeriesAPI.getNextNumber({ module: "Credit Note", reserve });
+      const nextNumber =
+        response?.data?.nextNumber ||
+        response?.data?.next_number ||
+        response?.data?.creditNoteNumber ||
+        response?.nextNumber ||
+        "";
+      if (nextNumber) return String(nextNumber).trim();
+    } catch (error) {
+      console.error("Error fetching next credit note number from transaction series:", error);
+    }
+
     try {
       const response = await creditNotesAPI.getNextNumber();
       const nextNumber = response?.data?.creditNoteNumber || response?.nextNumber || "";
@@ -1601,7 +1615,7 @@ export default function NewCreditNote() {
     try {
       let effectiveCreditNoteNumber = String(formData.creditNoteNumber || "").trim();
       if (!isEditMode && (!effectiveCreditNoteNumber || effectiveCreditNoteNumber === "CN-00001")) {
-        const nextNumber = await fetchNextCreditNoteNumber();
+            const nextNumber = await fetchNextCreditNoteNumber({ reserve: false });
         if (nextNumber) {
           effectiveCreditNoteNumber = nextNumber;
           setFormData(prev => ({ ...prev, creditNoteNumber: nextNumber }));
@@ -1662,7 +1676,7 @@ export default function NewCreditNote() {
             throw error;
           }
 
-          const retryNumber = await fetchNextCreditNoteNumber();
+          const retryNumber = await fetchNextCreditNoteNumber({ reserve: true });
           if (!retryNumber) {
             throw error;
           }
