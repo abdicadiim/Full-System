@@ -3419,8 +3419,8 @@ export default function NewCustomer() {
               </div>
 
               {/* Action Buttons */}
-              <div className="fixed bottom-4 left-4 right-4 lg:left-[252px] lg:right-4 z-20 flex items-center">
-                <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur-sm">
+              <div className="fixed bottom-6 left-4 right-4 lg:left-[252px] lg:right-4 z-20 flex items-center pt-4">
+                <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={handleSave}
