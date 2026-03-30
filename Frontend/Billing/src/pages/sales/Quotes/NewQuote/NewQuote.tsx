@@ -74,7 +74,10 @@ const NewQuote = () => {
     customerName: "",
     selectedLocation: "Head Office",
     selectedPriceList: "Select Price List",
-    quoteNumber: "QT-000002",
+    quoteNumber: transactionNumberSeriesAPI.getCachedNextNumber({
+      module: "Quote",
+      locationName: "Head Office",
+    }) || "QT-000002",
     referenceNumber: "",
     quoteDate: new Date().toLocaleDateString("en-GB"), // DD/MM/YYYY format which our salesModel now handles
     expiryDate: "",

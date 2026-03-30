@@ -42,7 +42,10 @@ export default function NewRetailInvoice() {
   const [loading, setLoading] = useState(false);
   const [savingMode, setSavingMode] = useState<"draft" | "sent" | null>(null);
 
-  const [invoiceNumber, setInvoiceNumber] = useState("RET-00001");
+  const [invoiceNumber, setInvoiceNumber] = useState(transactionNumberSeriesAPI.getCachedNextNumber({
+    module: "Retainer Invoice",
+    locationName: "Head Office",
+  }) || "RET-00001");
   const [isRetainerNumberModalOpen, setIsRetainerNumberModalOpen] = useState(false);
   const [retainerNumberMode, setRetainerNumberMode] = useState<"auto" | "manual">("auto");
   const [retainerPrefix, setRetainerPrefix] = useState("RET-");

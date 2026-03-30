@@ -253,7 +253,10 @@ export default function NewCreditNote() {
 
   const [formData, setFormData] = useState({
     customerName: "",
-    creditNoteNumber: "CN-00001",
+    creditNoteNumber: transactionNumberSeriesAPI.getCachedNextNumber({
+      module: "Credit Note",
+      locationName: "Head Office",
+    }) || "CN-00001",
     referenceNumber: "",
     creditNoteDate: "29 Dec 2025",
     accountsReceivable: "Accounts Receivable",
