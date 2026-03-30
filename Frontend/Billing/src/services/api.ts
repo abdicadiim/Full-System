@@ -2307,6 +2307,20 @@ export const transactionNumberSeriesAPI = {
 
     return { success: true, data: { seriesId: getEntityId(selected), nextNumber, next_number: nextNumber, reserved: normalized.reserve !== false } };
   },
+  getCachedNextNumber: (lookup?: TransactionSeriesLookup) => {
+    const normalized = normalizeTxSeriesLookup(lookup);
+    const cachedRows = readLocalCollection(LOCAL_TX_SERIES_KEY);
+    const rows = cachedRows.length > 0 ? cachedRows : defaultTxSeries;
+    const selected = resolveTxSeriesRow(rows, normalized) || (!normalized.seriesId && !normalized.module && !normalized.moduleKey && !normalized.seriesName ? rows[0] : null);
+    if (!selected) return "";
+
+    const starting = String(selected?.startingNumber || selected?.nextNumber || "1");
+    const parsed = parseInt(starting, 10);
+    const current = Number(selected?.nextNumber) > 0 ? Number(selected.nextNumber) : Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+    const width = /^\d+$/.test(starting) ? starting.length : 5;
+    const padded = width > 1 ? String(current).padStart(width, "0") : String(current);
+    return `${selected?.prefix || ""}${padded}`;
+  },
   getSettings: async () => {
     try {
       const res = await request({ path: "/transaction-number-series/settings" });
