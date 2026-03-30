@@ -42,7 +42,11 @@ export default function NewRetailInvoice() {
       try {
         const [customersRes, nextNumberRes] = await Promise.all([
           customersAPI.getAll({ limit: 1000 }),
-          transactionNumberSeriesAPI.getNextNumber({ module: "Retainer Invoice", reserve: false }),
+          transactionNumberSeriesAPI.getNextNumber({
+            module: "Retainer Invoice",
+            locationName: "Head Office",
+            reserve: false
+          }),
         ]);
 
         const customerRows = Array.isArray(customersRes?.data) ? customersRes.data : [];
