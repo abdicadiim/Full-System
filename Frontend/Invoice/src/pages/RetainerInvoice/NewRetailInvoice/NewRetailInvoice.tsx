@@ -15,7 +15,10 @@ export default function NewRetailInvoice() {
   const [saving, setSaving] = useState(false);
   const [customers, setCustomers] = useState<any[]>([]);
   const [form, setForm] = useState({
-    invoiceNumber: "",
+    invoiceNumber: transactionNumberSeriesAPI.getCachedNextNumber({
+      module: "Retainer Invoice",
+      locationName: "Head Office",
+    }),
     customerId: "",
     customerName: "",
     invoiceDate: todayISO(),
@@ -40,24 +43,25 @@ export default function NewRetailInvoice() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [customersRes, nextNumberRes] = await Promise.all([
-          customersAPI.getAll({ limit: 1000 }),
-          transactionNumberSeriesAPI.getNextNumber({
-            module: "Retainer Invoice",
-            locationName: "Head Office",
-            reserve: false
-          }),
-        ]);
+        const nextNumberPromise = transactionNumberSeriesAPI.getNextNumber({
+          module: "Retainer Invoice",
+          locationName: "Head Office",
+          reserve: false
+        }).catch(() => null);
+
+        nextNumberPromise.then((nextNumberRes) => {
+          if (!isEditMode && nextNumberRes?.success) {
+            const nextNo = String(nextNumberRes?.data?.nextNumber || "");
+            if (nextNo) {
+              setForm((prev) => ({ ...prev, invoiceNumber: nextNo }));
+            }
+          }
+        });
+
+        const customersRes = await customersAPI.getAll({ limit: 1000 });
 
         const customerRows = Array.isArray(customersRes?.data) ? customersRes.data : [];
         setCustomers(customerRows);
-
-        if (!isEditMode && nextNumberRes?.success) {
-          const nextNo = String(nextNumberRes?.data?.nextNumber || "");
-          if (nextNo) {
-            setForm((prev) => ({ ...prev, invoiceNumber: nextNo }));
-          }
-        }
 
         if (isEditMode && id) {
           const cachedRow = (location.state as any)?.row;

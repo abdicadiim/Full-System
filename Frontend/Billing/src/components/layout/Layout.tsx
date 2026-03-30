@@ -4,6 +4,7 @@ import Header from './Header'
 import Sidebar from './Sidebar'
 import { OrgsProvider } from '../../state/orgsContext'
 import { ensureTimerTicker } from '../../lib/timeTracking/timerService'
+import { transactionNumberSeriesAPI } from '../../services/api'
 
 export default function Layout({ children }) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -39,6 +40,10 @@ export default function Layout({ children }) {
 
   useEffect(() => {
     ensureTimerTicker();
+  }, []);
+
+  useEffect(() => {
+    transactionNumberSeriesAPI.getAll({ limit: 10000 }).catch(() => null);
   }, []);
 
   if (hideAppChrome) {

@@ -2033,7 +2033,15 @@ export const transactionNumberSeriesAPI = {
   getAll: async (params?: Record<string, any>) => {
     try {
       const res = await txSeriesResource.getAll(params);
-      if (res?.success) return res as any;
+      if (res?.success) {
+        const rows = Array.isArray((res as any).data)
+          ? (res as any).data
+          : Array.isArray((res as any).data?.data)
+            ? (res as any).data.data
+            : [];
+        if (rows.length > 0) writeLocalCollection(LOCAL_TX_SERIES_KEY, rows);
+        return res as any;
+      }
       if (typeof (res as any)?.status === "number") return res as any;
     } catch {
       // fall back

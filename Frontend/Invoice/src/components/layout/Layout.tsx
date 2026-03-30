@@ -1,8 +1,9 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import Header from './Header'
 import Sidebar from './Sidebar'
 import { OrgsProvider } from '../../state/orgsContext'
+import { transactionNumberSeriesAPI } from '../../services/api'
 
 export default function Layout({ children }) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -34,6 +35,10 @@ export default function Layout({ children }) {
     location.pathname.startsWith("/products/price-lists") ||
     location.pathname.startsWith("/items") ||
     location.pathname.startsWith("/products/items");
+
+  useEffect(() => {
+    transactionNumberSeriesAPI.getAll({ limit: 10000 }).catch(() => null);
+  }, []);
 
   if (hideAppChrome) {
     return (

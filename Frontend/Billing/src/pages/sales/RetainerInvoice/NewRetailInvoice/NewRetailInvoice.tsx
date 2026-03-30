@@ -42,7 +42,12 @@ export default function NewRetailInvoice() {
   const [loading, setLoading] = useState(false);
   const [savingMode, setSavingMode] = useState<"draft" | "sent" | null>(null);
 
-  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [invoiceNumber, setInvoiceNumber] = useState(() =>
+    transactionNumberSeriesAPI.getCachedNextNumber({
+      module: "Retainer Invoice",
+      locationName: "Head Office",
+    })
+  );
   const [isRetainerNumberModalOpen, setIsRetainerNumberModalOpen] = useState(false);
   const [retainerNumberMode, setRetainerNumberMode] = useState<"auto" | "manual">("auto");
   const [retainerPrefix, setRetainerPrefix] = useState("");
@@ -180,13 +185,24 @@ export default function NewRetailInvoice() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [custs, nextNumResp, taxResp, projectResp, reportingTagsResp, editInvoiceResp] = await Promise.all([
+        const nextNumberPromise = transactionNumberSeriesAPI.getNextNumber({
+          module: "Retainer Invoice",
+          locationName: selectedLocation,
+          reserve: false
+        }).catch(() => null);
+
+        nextNumberPromise.then((nextNumResp) => {
+          const nextNumber =
+            nextNumResp?.data?.nextNumber || nextNumResp?.nextNumber || nextNumResp?.data?.invoiceNumber;
+          if (!isEditMode && nextNumber && typeof nextNumber === "string") {
+            setInvoiceNumber(nextNumber);
+            setRetainerPrefix(deriveRetainerPrefix(nextNumber));
+            setRetainerNextNumber(extractRetainerDigits(nextNumber) || "");
+          }
+        });
+
+        const [custs, taxResp, projectResp, reportingTagsResp, editInvoiceResp] = await Promise.all([
           getCustomers(),
-          transactionNumberSeriesAPI.getNextNumber({
-            module: "Retainer Invoice",
-            locationName: selectedLocation,
-            reserve: false
-          }).catch(() => null),
           taxesAPI.getForTransactions().catch(() => null),
           projectsAPI.getAll({ limit: 1000 }).catch(() => ({ data: [] })),
           reportingTagsAPI.getAll().catch(() => ({ data: [] })),
@@ -194,14 +210,6 @@ export default function NewRetailInvoice() {
         ]);
 
         setCustomers(Array.isArray(custs) ? custs : []);
-
-        const nextNumber =
-          nextNumResp?.data?.nextNumber || nextNumResp?.nextNumber || nextNumResp?.data?.invoiceNumber;
-        if (!isEditMode && nextNumber && typeof nextNumber === "string") {
-          setInvoiceNumber(nextNumber);
-          setRetainerPrefix(deriveRetainerPrefix(nextNumber));
-          setRetainerNextNumber(extractRetainerDigits(nextNumber) || "");
-        }
 
         const fallbackTaxesResp =
           Array.isArray((taxResp as any)?.data) && (taxResp as any).data.length > 0

@@ -250,7 +250,7 @@ export default function CustomersVendorsPage() {
 
       {/* General Tab Content */}
       {activeTab === "general" && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-8">
+        <div className="space-y-8">
           {/* Allow duplicates */}
           <div>
             <label className="flex items-center gap-2 cursor-pointer">
@@ -287,7 +287,7 @@ export default function CustomersVendorsPage() {
                   <span className="text-sm font-semibold text-gray-900">Enable Customer Numbers</span>
                 </label>
                 {enableCustomerNumbers && (
-                  <div className="ml-6 mt-2 space-y-3 bg-white border border-gray-200 rounded-lg p-4">
+                  <div className="ml-6 mt-2 space-y-3 border border-gray-200 rounded-lg p-4">
                     <p className="text-xs text-gray-600 mb-3">
                       You can configure a series to generate customer numbers automatically for all your existing customers. A new Customer Number field will be available, which will be mandatory when creating customers.
                     </p>
@@ -333,7 +333,7 @@ export default function CustomersVendorsPage() {
                   <span className="text-sm font-semibold text-gray-900">Enable Vendor Numbers</span>
                 </label>
                 {enableVendorNumbers && (
-                  <div className="ml-6 mt-2 space-y-3 bg-white border border-gray-200 rounded-lg p-4">
+                  <div className="ml-6 mt-2 space-y-3 border border-gray-200 rounded-lg p-4">
                     <p className="text-xs text-gray-600 mb-3">
                       You can configure a series to generate vendor numbers automatically for all your existing vendors. A new Vendor Number field will be available, which will be mandatory when creating vendors.
                     </p>
@@ -444,7 +444,7 @@ export default function CustomersVendorsPage() {
             </div>
 
             {enableCreditLimit && (
-              <div className="mt-6 space-y-4 bg-white border border-gray-200 rounded-lg p-4">
+              <div className="mt-6 space-y-4 border border-gray-200 rounded-lg p-4">
                 <div>
                   <h4 className="text-sm font-semibold text-gray-900 mb-3">
                     What do you want to do when credit limit is exceeded?
@@ -618,7 +618,7 @@ export default function CustomersVendorsPage() {
           </div>
 
           {/* Table */}
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="rounded-lg border border-gray-200 overflow-hidden">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
@@ -760,7 +760,7 @@ export default function CustomersVendorsPage() {
           </div>
 
           {/* Table */}
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="rounded-lg border border-gray-200 overflow-hidden">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
@@ -860,7 +860,7 @@ export default function CustomersVendorsPage() {
           </div>
 
           {/* Empty State with Illustration */}
-          <div className="bg-white rounded-lg border border-gray-200 p-12">
+          <div className="rounded-lg border border-gray-200 p-12">
             <div className="flex flex-col items-center justify-center py-12">
               {/* Illustration */}
               <div className="relative mb-8 flex items-center justify-center" style={{ width: "200px", height: "200px" }}>
