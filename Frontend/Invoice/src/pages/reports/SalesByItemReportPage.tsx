@@ -3182,21 +3182,22 @@ export default function SalesByItemReportView({
                               const comparatorMenuSearch = comparatorMenuOpen ? activeDropdown.search : "";
                               const filteredFieldGroups = getFilteredFieldGroups(fieldMenuSearch);
                               const filteredComparatorOptions = getFilteredComparatorOptions(comparatorMenuSearch, row.field);
-                              const valueOptions = row.field ? MORE_FILTER_VALUE_OPTIONS[row.field] : [];
+                              const valueOptions = getFilteredValueOptions(row.field);
                               const valueMode: MoreFilterValueMode =
-                                row.comparator && MORE_FILTER_NO_VALUE_COMPARATORS.includes(row.comparator)
+                                (typeof row.field === "string" && row.field.startsWith("reporting-tag:")) ||
+                                (row.comparator && MORE_FILTER_NO_VALUE_COMPARATORS.includes(row.comparator))
                                   ? "none"
                                   : row.comparator && MORE_FILTER_TEXT_COMPARATORS.includes(row.comparator)
                                     ? "text"
                                     : "dropdown";
-                              const fieldLabel = getMoreFilterFieldLabel(row.field);
+                              const fieldLabel = getMoreFilterFieldLabel(row.field, availableReportingTags);
                               const comparatorLabel = getMoreFilterComparatorLabel(row.comparator);
                               const valueLabel =
                                 valueMode === "text"
                                   ? row.value || "Enter a value"
                                   : row.value
-                                    ? getMoreFilterValueLabel(row.field, row.value)
-                                    : getMoreFilterValuePlaceholder(row.field);
+                                    ? getMoreFilterValueLabel(row.field, row.value, availableLocations)
+                                    : getMoreFilterValuePlaceholder(row.field, availableLocations);
 
                               return (
                                 <div
