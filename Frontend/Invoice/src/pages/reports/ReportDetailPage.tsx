@@ -852,6 +852,17 @@ function SalesByCustomerReportView({
     [reportCurrency, visibleReportColumns]
   );
 
+  const closeAllOpenPanels = () => {
+    setIsCompareWithOpen(false);
+    setIsCompareWithSelectOpen(false);
+    setIsExportOpen(false);
+    setIsCustomizeColumnsOpen(false);
+    setIsMoreFiltersOpen(false);
+    setIsEntityOpen(false);
+    setIsDateRangeOpen(false);
+    closeMoreFilterDropdown();
+  };
+
   const hasMoreFilters = moreFilterRows.some((row) => row.field || row.comparator || row.value.trim());
   const getFilteredFieldGroups = (query: string) => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -1029,7 +1040,12 @@ function SalesByCustomerReportView({
           >
             <RefreshCw size={15} />
           </button>
-          <button type="button" className="inline-flex h-9 w-9 items-center justify-center rounded border border-[#d4d9e4] text-[#ef4444] hover:bg-[#fef2f2]">
+          <button
+            type="button"
+            onClick={closeAllOpenPanels}
+            className="inline-flex h-9 w-9 items-center justify-center rounded border border-[#d4d9e4] text-[#ef4444] hover:bg-[#fef2f2]"
+            aria-label="Close report controls"
+          >
             <X size={15} />
           </button>
         </div>
