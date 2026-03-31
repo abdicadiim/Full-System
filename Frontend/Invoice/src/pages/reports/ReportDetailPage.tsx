@@ -1631,7 +1631,10 @@ function SalesByCustomerReportView({
                               <button
                                 key={option.key}
                                 type="button"
-                                onClick={() => setCompareWithDraftKey(option.key)}
+                                onClick={() => {
+                                  setCompareWithDraftKey(option.key);
+                                  setIsCompareWithSelectOpen(false);
+                                }}
                                 className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
                                   isSelected ? "font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"
                                 }`}
@@ -1671,7 +1674,7 @@ function SalesByCustomerReportView({
                         </button>
 
                         {isCompareWithCountOpen ? (
-                          <div className="absolute left-0 top-[calc(100%+6px)] z-60 w-[168px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                          <div className="absolute left-0 top-[calc(100%+6px)] z-[60] w-[168px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
                             <div className="border-b border-[#eef2f7] p-2">
                               <div className="relative">
                                 <input
