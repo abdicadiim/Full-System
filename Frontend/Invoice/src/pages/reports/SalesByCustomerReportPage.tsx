@@ -3318,7 +3318,11 @@ function SalesByCustomerReportView({
                                   </div>
 
                                   <div className="relative">
-                                    {valueMode === "text" ? (
+                                    {valueMode === "none" ? (
+                                      <div className="flex h-8 items-center rounded border border-[#e2e8f0] bg-[#f8fafc] px-3 text-sm text-[#94a3b8]">
+                                        No value needed
+                                      </div>
+                                    ) : valueMode === "text" ? (
                                       <input
                                         type="text"
                                         value={row.value}
