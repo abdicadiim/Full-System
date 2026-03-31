@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
-import { CalendarDays, ChevronDown, ChevronRight, Columns3, Folder, Menu, Plus, RefreshCw, SlidersHorizontal, X } from "lucide-react";
+import { CalendarDays, Check, ChevronDown, ChevronRight, Columns3, Folder, Menu, Plus, RefreshCw, SlidersHorizontal, X } from "lucide-react";
 import ReportDetailHeader from "./ReportDetailHeader";
 import { getCategoryById, getReportById, REPORT_FUNCTION_LABELS, REPORTS_BY_CATEGORY } from "./reportsCatalog";
 
@@ -445,11 +445,12 @@ function SalesByCustomerReportView({
                         setDateRangeKey(option.key);
                         setIsDateRangeOpen(false);
                       }}
-                      className={`block w-full px-4 py-2 text-left text-sm ${
+                      className={`flex w-full items-center justify-between px-4 py-2 text-left text-sm ${
                         isSelected ? "bg-[#f1f5f9] font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"
                       }`}
                     >
-                      {option.label}
+                      <span>{option.label}</span>
+                      {isSelected ? <Check size={14} className="text-[#0f172a]" /> : null}
                     </button>
                   );
                 })}
