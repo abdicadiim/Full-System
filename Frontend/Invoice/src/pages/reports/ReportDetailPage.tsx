@@ -553,6 +553,12 @@ function SalesByCustomerReportView({
 
   const closeMoreFilterDropdown = () => setMoreFilterDropdown(null);
 
+  const addMoreFilterRow = () => {
+    const newRowId = `more-filter-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    setMoreFilterRows((prev) => [...prev, { id: newRowId, field: "", comparator: "", value: "" }]);
+    openMoreFilterDropdown(newRowId, "field");
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#e5e7eb] pb-3">
@@ -981,14 +987,7 @@ function SalesByCustomerReportView({
 
                       <button
                         type="button"
-                        onClick={() => {
-                          const newRowId = `more-filter-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-                          setMoreFilterRows((prev) => [
-                            ...prev,
-                            { id: newRowId, field: "", comparator: "", value: "" },
-                          ]);
-                          openMoreFilterDropdown(newRowId, "field");
-                        }}
+                        onClick={addMoreFilterRow}
                         className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#cfd6e4] text-[#334155] hover:bg-[#f8fafc]"
                         aria-label="Add filter row"
                       >
@@ -1014,7 +1013,11 @@ function SalesByCustomerReportView({
               </div>
 
               <div className="mt-3">
-                <button type="button" className="inline-flex items-center gap-1 text-sm font-medium text-[#2563eb] hover:underline">
+                <button
+                  type="button"
+                  onClick={addMoreFilterRow}
+                  className="inline-flex items-center gap-1 text-sm font-medium text-[#2563eb] hover:underline"
+                >
                   <Plus size={14} /> Add More
                 </button>
               </div>
