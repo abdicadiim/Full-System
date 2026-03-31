@@ -507,11 +507,11 @@ function SalesByCustomerReportView({
             </div>
           ) : null}
         </div>
-        <div ref={entityRef} className="relative">
+        <div ref={entityRef} className="relative inline-flex">
           <button
             type="button"
             onClick={() => setIsEntityOpen((prev) => !prev)}
-            className={`inline-flex h-8 max-w-[170px] items-center gap-1 rounded border px-3 text-sm text-[#334155] hover:bg-white ${
+            className={`inline-flex h-8 max-w-[170px] items-center gap-1 rounded border px-3 pr-10 text-sm text-[#334155] hover:bg-white ${
               isEntityOpen ? "border-[#7aa7ff] bg-white" : "border-[#cfd6e4] bg-[#f8fafc]"
             }`}
             aria-haspopup="menu"
@@ -521,6 +521,20 @@ function SalesByCustomerReportView({
             <span className="min-w-0 max-w-[92px] truncate font-medium">{entityLabel}</span>
             <ChevronDown size={14} className="flex-none" />
           </button>
+
+          {entityKeys.length > 0 ? (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setEntityKeys([]);
+              }}
+              className="absolute right-6 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-[#ef4444] hover:bg-[#fef2f2]"
+              aria-label="Clear selected entities"
+            >
+              <X size={12} />
+            </button>
+          ) : null}
 
           {isEntityOpen ? (
             <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-[168px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
