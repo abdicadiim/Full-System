@@ -913,6 +913,11 @@ function SalesByCustomerReportView({
     return MORE_FILTER_COMPARATOR_OPTIONS.filter((option) => option.label.toLowerCase().includes(normalizedQuery));
   };
 
+  const filteredCompareWithNumberOptions = useMemo(() => {
+    const query = compareWithCountSearch.trim().toLowerCase();
+    return COMPARE_WITH_NUMBER_OPTIONS.filter((option) => option.includes(query));
+  }, [compareWithCountSearch]);
+
   const handleExportAction = (label: string) => {
     setIsExportOpen(false);
     toast.success(`Export option selected: ${label}`);
@@ -956,22 +961,33 @@ function SalesByCustomerReportView({
 
   const openCompareWithDropdown = () => {
     setCompareWithDraftKey(compareWithKey);
+    setCompareWithDraftCount(compareWithCount);
+    setCompareWithDraftArrangeLatest(compareWithArrangeLatest);
     setCompareWithSearch("");
+    setCompareWithCountSearch("");
+    setIsCompareWithCountOpen(false);
     setIsCompareWithSelectOpen(false);
     setIsCompareWithOpen((prev) => !prev);
   };
 
   const applyCompareWith = () => {
     setCompareWithKey(compareWithDraftKey);
+    setCompareWithCount(compareWithDraftCount);
+    setCompareWithArrangeLatest(compareWithDraftArrangeLatest);
     setIsCompareWithOpen(false);
     setIsCompareWithSelectOpen(false);
+    setIsCompareWithCountOpen(false);
   };
 
   const cancelCompareWith = () => {
     setCompareWithDraftKey(compareWithKey);
+    setCompareWithDraftCount(compareWithCount);
+    setCompareWithDraftArrangeLatest(compareWithArrangeLatest);
     setCompareWithSearch("");
+    setCompareWithCountSearch("");
     setIsCompareWithOpen(false);
     setIsCompareWithSelectOpen(false);
+    setIsCompareWithCountOpen(false);
   };
 
   const openMoreFilterDropdown = (rowId: string, kind: "field" | "comparator" | "value") => {
@@ -1629,6 +1645,83 @@ function SalesByCustomerReportView({
                           <div className="px-3 py-3 text-sm uppercase tracking-[0.04em] text-[#64748b]">No results found</div>
                         )}
                       </div>
+                    </div>
+                  ) : null}
+
+                  {compareWithDraftKey !== "none" ? (
+                    <div className="mt-3">
+                      <div className="mb-2 text-sm text-[#334155]">
+                        {compareWithDraftKey === "previous-years" ? "Number of Year(s)" : "Number of Period(s)"}
+                      </div>
+                      <div ref={compareWithCountRef} className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setIsCompareWithCountOpen((prev) => !prev)}
+                          className="relative flex h-10 w-full items-center justify-between rounded border border-[#7aa7ff] bg-white px-3 pr-9 text-sm text-[#334155] outline-none hover:bg-[#f8fafc]"
+                          aria-haspopup="menu"
+                          aria-expanded={isCompareWithCountOpen}
+                        >
+                          <span className="min-w-0 truncate">{compareWithDraftCount}</span>
+                          <ChevronDown
+                            size={14}
+                            className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
+                              isCompareWithCountOpen ? "rotate-180 text-[#2563eb]" : "text-[#64748b]"
+                            }`}
+                          />
+                        </button>
+
+                        {isCompareWithCountOpen ? (
+                          <div className="absolute left-0 top-[calc(100%+6px)] z-60 w-[168px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                            <div className="border-b border-[#eef2f7] p-2">
+                              <div className="relative">
+                                <input
+                                  value={compareWithCountSearch}
+                                  onChange={(event) => setCompareWithCountSearch(event.target.value)}
+                                  placeholder="Search"
+                                  className="h-9 w-full rounded-md border border-[#7aa7ff] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                                />
+                                <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                              </div>
+                            </div>
+
+                            <div className="max-h-[220px] overflow-y-auto py-1">
+                              {filteredCompareWithNumberOptions.length > 0 ? (
+                                filteredCompareWithNumberOptions.map((option) => {
+                                  const isSelected = String(compareWithDraftCount) === option;
+                                  return (
+                                    <button
+                                      key={option}
+                                      type="button"
+                                      onClick={() => {
+                                        setCompareWithDraftCount(Number(option));
+                                        setIsCompareWithCountOpen(false);
+                                      }}
+                                      className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
+                                        isSelected ? "bg-[#2f80ed] font-medium text-white" : "text-[#334155] hover:bg-[#f8fafc]"
+                                      }`}
+                                    >
+                                      <span>{option}</span>
+                                      {isSelected ? <Check size={14} className="text-white" /> : null}
+                                    </button>
+                                  );
+                                })
+                              ) : (
+                                <div className="px-3 py-3 text-sm uppercase tracking-[0.04em] text-[#64748b]">No results found</div>
+                              )}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <label className="mt-3 flex items-start gap-2 text-sm text-[#334155]">
+                        <input
+                          type="checkbox"
+                          checked={compareWithDraftArrangeLatest}
+                          onChange={(event) => setCompareWithDraftArrangeLatest(event.target.checked)}
+                          className="mt-1 h-4 w-4 rounded border-[#cfd6e4] text-[#2563eb] focus:ring-[#2563eb]"
+                        />
+                        <span>Arrange period/year from latest to oldest</span>
+                      </label>
                     </div>
                   ) : null}
                 </div>
