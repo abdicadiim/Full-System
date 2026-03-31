@@ -2234,6 +2234,13 @@ export const reportsAPI = {
     }
     return res as any;
   },
+  getSalesBySalesPerson: async (params?: Record<string, any>) => {
+    const res = await request({ path: "/reports/sales-by-sales-person", params });
+    if (!res?.success) {
+      throw new Error(res?.message || "Failed to fetch sales by sales person report");
+    }
+    return res as any;
+  },
 };
 
 export const locationsAPI = {
