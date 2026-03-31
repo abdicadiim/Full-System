@@ -136,6 +136,188 @@ const getRange = (key: string) => {
 
 const makeId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
+type ReportsDrawerSection = {
+  id: string;
+  label: string;
+  reportIds: string[];
+};
+
+const REPORTS_DRAWER_SECTIONS: ReportsDrawerSection[] = [
+  { id: "sales", label: "Sales", reportIds: ["sales-by-customer", "sales-by-item", "sales-by-sales-person"] },
+  {
+    id: "receivables",
+    label: "Receivables",
+    reportIds: [
+      "ar-aging-summary",
+      "ar-aging-details",
+      "invoice-details",
+      "quote-details",
+      "bad-debts",
+      "bank-charges",
+      "customer-balance-summary",
+      "receivable-summary",
+      "receivable-details",
+    ],
+  },
+  {
+    id: "payments-received",
+    label: "Payments Received",
+    reportIds: ["payments-received", "time-to-get-paid", "credit-note-details", "refund-history", "withholding-tax"],
+  },
+  { id: "subscriptions", label: "Recurring Invoices", reportIds: ["subscription-details"] },
+  {
+    id: "purchases-expenses",
+    label: "Purchases and Expenses",
+    reportIds: ["expense-details", "expenses-by-category", "expenses-by-customer", "expenses-by-project", "billable-expense-details"],
+  },
+  { id: "taxes", label: "Taxes", reportIds: ["tax-summary", "tds-receivables"] },
+  {
+    id: "projects-timesheets",
+    label: "Projects and Timesheet",
+    reportIds: ["timesheet-details", "project-summary", "project-details", "projects-revenue-summary"],
+  },
+  {
+    id: "activity",
+    label: "Activity",
+    reportIds: ["system-mails", "activity-logs-audit-trail", "exception-report", "portal-activities", "customer-reviews"],
+  },
+];
+
+function ReportsDrawer({
+  open,
+  currentCategoryId,
+  currentReportId,
+  triggerRef,
+  onClose,
+}: {
+  open: boolean;
+  currentCategoryId: string;
+  currentReportId: string;
+  triggerRef: React.RefObject<HTMLButtonElement | null>;
+  onClose: () => void;
+}) {
+  const drawerRef = React.useRef<HTMLDivElement | null>(null);
+  const [search, setSearch] = useState("");
+  const [expandedSections, setExpandedSections] = useState<string[]>([currentCategoryId]);
+
+  useEffect(() => {
+    setExpandedSections((prev) => (prev.includes(currentCategoryId) ? prev : [currentCategoryId]));
+  }, [currentCategoryId]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!drawerRef.current?.contains(target) && !triggerRef.current?.contains(target)) {
+        onClose();
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open, onClose, triggerRef]);
+
+  const sections = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return REPORTS_DRAWER_SECTIONS.map((section) => {
+      const available = REPORTS_BY_CATEGORY[section.id] || [];
+      const reports = section.reportIds
+        .map((reportId) => available.find((report) => report.id === reportId))
+        .filter(Boolean) as typeof available;
+
+      const filteredReports = query
+        ? reports.filter((report) => report.name.toLowerCase().includes(query) || section.label.toLowerCase().includes(query))
+        : reports;
+
+      return { ...section, reports: filteredReports };
+    }).filter((section) => section.reports.length > 0);
+  }, [search]);
+
+  if (!open) return null;
+
+  const isSearching = search.trim().length > 0;
+
+  return (
+    <div ref={drawerRef} className="absolute left-0 top-0 z-30 h-full w-[260px] overflow-hidden border-r border-[#e5e7eb] bg-white shadow-[8px_0_20px_rgba(15,23,42,0.08)]">
+      <div className="flex h-full flex-col">
+        <div className="flex items-center justify-between border-b border-[#eef2f7] px-4 py-3">
+          <div className="text-[18px] font-semibold text-[#0f172a]">Reports</div>
+          <button type="button" onClick={onClose} className="inline-flex h-7 w-7 items-center justify-center text-[#ef4444] hover:bg-[#fef2f2]" aria-label="Close reports drawer">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="border-b border-[#eef2f7] px-3 py-3">
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search reports"
+            className="h-9 w-full rounded-lg border border-[#d8dfea] bg-white px-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#7da0ff]"
+          />
+        </div>
+        <div className="flex-1 overflow-y-auto px-2 py-2">
+          <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">All Reports</div>
+          {sections.length > 0 ? (
+            <div className="space-y-1">
+              {sections.map((section) => {
+                const expanded = isSearching || expandedSections.includes(section.id);
+                return (
+                  <div key={section.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isSearching) return;
+                        setExpandedSections((prev) => (prev.includes(section.id) ? [] : [section.id]));
+                      }}
+                      className="flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm text-[#111827] hover:bg-[#f8fafc]"
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <Folder size={14} className="text-[#9aa3b2]" />
+                        <span className="truncate">{section.label}</span>
+                      </span>
+                      {expanded ? <ChevronDown size={12} className="text-[#9aa3b2]" /> : <ChevronRight size={12} className="text-[#9aa3b2]" />}
+                    </button>
+
+                    {expanded ? (
+                      <div className="ml-5 mt-1 space-y-0.5">
+                        {section.reports.map((report) => {
+                          const isActive = report.id === currentReportId;
+                          return (
+                            <Link
+                              key={report.id}
+                              to={`/reports/${report.categoryId}/${report.id}`}
+                              onClick={onClose}
+                              className={`block rounded px-2 py-1.5 text-sm hover:bg-[#eef4ff] ${
+                                isActive ? "bg-[#eef4ff] font-medium text-[#111827]" : "text-[#111827] hover:text-black"
+                              }`}
+                            >
+                              {report.name}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="px-2 py-4 text-sm text-[#64748b]">No reports found.</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const RECEIVABLES_CONFIG: Record<ReceivablesReportId, ReportConfig> = {
   "ar-aging-summary": {
     fetcher: reportsAPI.getARAgingSummary,
@@ -387,6 +569,8 @@ function ReceivablesReportShell({ reportId }: { reportId: ReceivablesReportId })
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
+  const [isReportsDrawerOpen, setIsReportsDrawerOpen] = useState(false);
+  const reportsMenuButtonRef = React.useRef<HTMLButtonElement | null>(null);
 
   const range = useMemo(() => {
     return rangeKey === "custom" ? { start: parseInputDate(customStart), end: parseInputDate(customEnd) } : getRange(rangeKey);
@@ -474,9 +658,19 @@ function ReceivablesReportShell({ reportId }: { reportId: ReceivablesReportId })
   };
 
   return (
-    <div className="min-h-[calc(100vh-64px)] bg-white">
-      <div className="px-4 pt-3">
-        <div className="flex items-start justify-between gap-4 border-b border-[#e6e9f0] pb-3">
+    <div className="relative min-h-[calc(100vh-64px)] pt-3">
+      <ReportsDrawer
+        open={isReportsDrawerOpen}
+        currentCategoryId={category.id}
+        currentReportId={report.id}
+        triggerRef={reportsMenuButtonRef}
+        onClose={() => setIsReportsDrawerOpen(false)}
+      />
+
+      <div className={`pr-3 transition-[padding-left] duration-200 ${isReportsDrawerOpen ? "lg:pl-[260px]" : ""}`}>
+        <div className="min-h-[calc(100vh-64px)] bg-white">
+          <div className="px-4 pt-3">
+            <div className="flex items-start justify-between gap-4 border-b border-[#e6e9f0] pb-3">
           <div>
             <div className="text-sm font-medium text-[#0f172a]">Receivables</div>
             <div className="mt-1 flex items-center gap-2">
@@ -486,6 +680,15 @@ function ReceivablesReportShell({ reportId }: { reportId: ReceivablesReportId })
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              ref={reportsMenuButtonRef}
+              type="button"
+              onClick={() => setIsReportsDrawerOpen((prev) => !prev)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]"
+              aria-label="Toggle reports menu"
+            >
+              <Menu size={15} />
+            </button>
             <button type="button" onClick={openColumns} className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]" title="Customize report columns">
               <SlidersHorizontal size={15} />
             </button>
@@ -502,7 +705,7 @@ function ReceivablesReportShell({ reportId }: { reportId: ReceivablesReportId })
         </div>
       </div>
 
-      <div className="px-4 py-3">
+          <div className="px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center gap-1 text-sm text-[#334155]">
             <Filter size={14} />
@@ -811,7 +1014,9 @@ function ReceivablesReportShell({ reportId }: { reportId: ReceivablesReportId })
             </div>
           </div>
         </div>
-      ) : null}
+        ) : null}
+        </div>
+      </div>
     </div>
   );
 }
