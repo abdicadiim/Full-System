@@ -2263,9 +2263,18 @@ function SalesByCustomerReportView({
 
                       <section className="space-y-6">
                         <div className="grid gap-6 md:grid-cols-2">
-                          <div>
+                          <div ref={customizeCompareRef} className="relative">
                             <div className="text-sm font-medium text-[#111827]">Compare With</div>
-                            <div className="mt-2 inline-flex h-9 w-full max-w-[260px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155]">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsCustomizeCompareCountOpen(false);
+                                setIsCustomizeCompareOpen((prev) => !prev);
+                              }}
+                              className="mt-2 inline-flex h-9 w-full max-w-[260px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                              aria-haspopup="menu"
+                              aria-expanded={isCustomizeCompareOpen}
+                            >
                               <span className="truncate">{getCompareWithLabel(compareWithDraftKey)}</span>
                               <span className="ml-3 flex items-center gap-2">
                                 {compareWithDraftKey !== "none" ? (
@@ -2276,6 +2285,8 @@ function SalesByCustomerReportView({
                                       setCompareWithDraftKey("none");
                                       setCompareWithDraftCount(1);
                                       setCompareWithDraftArrangeLatest(false);
+                                      setIsCustomizeCompareOpen(false);
+                                      setIsCustomizeCompareCountOpen(false);
                                     }}
                                     className="inline-flex h-4 w-4 items-center justify-center text-[#ef4444]"
                                     aria-label="Clear compare selection"
@@ -2283,21 +2294,135 @@ function SalesByCustomerReportView({
                                     <X size={12} />
                                   </button>
                                 ) : null}
-                                <ChevronDown size={14} className="text-[#64748b]" />
+                                <ChevronDown
+                                  size={14}
+                                  className={`transition-transform duration-150 ${
+                                    isCustomizeCompareOpen ? "rotate-180 text-[#1b6f7b]" : "text-[#64748b]"
+                                  }`}
+                                />
                               </span>
-                            </div>
+                            </button>
+
+                            {isCustomizeCompareOpen ? (
+                              <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-[260px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                                <div className="border-b border-[#eef2f7] p-2">
+                                  <div className="relative">
+                                    <input
+                                      value={customizeCompareSearch}
+                                      onChange={(event) => setCustomizeCompareSearch(event.target.value)}
+                                      placeholder="Search"
+                                      className="h-9 w-full rounded-md border border-[#1b6f7b] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                                    />
+                                    <Search
+                                      size={14}
+                                      className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="max-h-[170px] overflow-y-auto py-1">
+                                  {filteredCustomizeCompareOptions.length > 0 ? (
+                                    filteredCustomizeCompareOptions.map((option) => {
+                                      const isSelected = compareWithDraftKey === option.key;
+                                      return (
+                                        <button
+                                          key={option.key}
+                                          type="button"
+                                          onClick={() => {
+                                            setCompareWithDraftKey(option.key);
+                                            setIsCustomizeCompareOpen(false);
+                                            setIsCustomizeCompareCountOpen(true);
+                                            setCustomizeCompareCountSearch("");
+                                            if (compareWithDraftCount < 1) {
+                                              setCompareWithDraftCount(1);
+                                            }
+                                          }}
+                                          className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
+                                            isSelected ? "bg-[#eef4ff] font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"
+                                          }`}
+                                        >
+                                          <span>{option.label}</span>
+                                          {isSelected ? <Check size={14} className="text-[#64748b]" /> : null}
+                                        </button>
+                                      );
+                                    })
+                                  ) : (
+                                    <div className="px-3 py-3 text-sm uppercase tracking-[0.04em] text-[#64748b]">No results found</div>
+                                  )}
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
 
-                          <div>
+                          <div ref={customizeCompareCountRef} className="relative">
                             {compareWithDraftKey !== "none" ? (
                               <>
                                 <div className="text-sm font-medium text-[#111827]">
                                   {compareWithDraftKey === "previous-years" ? "Number of Year(s)" : "Number of Period(s)"}
                                 </div>
-                                <div className="mt-2 inline-flex h-9 w-full max-w-[260px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155]">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setIsCustomizeCompareOpen(false);
+                                    setIsCustomizeCompareCountOpen((prev) => !prev);
+                                  }}
+                                  className="mt-2 inline-flex h-9 w-full max-w-[260px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                                  aria-haspopup="menu"
+                                  aria-expanded={isCustomizeCompareCountOpen}
+                                >
                                   <span>{compareWithDraftCount}</span>
-                                  <ChevronDown size={14} className="text-[#64748b]" />
-                                </div>
+                                  <ChevronDown
+                                    size={14}
+                                    className={`transition-transform duration-150 ${
+                                      isCustomizeCompareCountOpen ? "rotate-180 text-[#1b6f7b]" : "text-[#64748b]"
+                                    }`}
+                                  />
+                                </button>
+
+                                {isCustomizeCompareCountOpen ? (
+                                  <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-[168px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                                    <div className="border-b border-[#eef2f7] p-2">
+                                      <div className="relative">
+                                        <input
+                                          value={customizeCompareCountSearch}
+                                          onChange={(event) => setCustomizeCompareCountSearch(event.target.value)}
+                                          placeholder="Search"
+                                          className="h-9 w-full rounded-md border border-[#1b6f7b] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                                        />
+                                        <Search
+                                          size={14}
+                                          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]"
+                                        />
+                                      </div>
+                                    </div>
+
+                                    <div className="max-h-[220px] overflow-y-auto py-1">
+                                      {filteredCustomizeCompareNumberOptions.length > 0 ? (
+                                        filteredCustomizeCompareNumberOptions.map((option) => {
+                                          const isSelected = String(compareWithDraftCount) === option;
+                                          return (
+                                            <button
+                                              key={option}
+                                              type="button"
+                                              onClick={() => {
+                                                setCompareWithDraftCount(Number(option));
+                                                setIsCustomizeCompareCountOpen(false);
+                                              }}
+                                              className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
+                                                isSelected ? "font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"
+                                              }`}
+                                            >
+                                              <span>{option}</span>
+                                              {isSelected ? <Check size={14} className="text-[#64748b]" /> : null}
+                                            </button>
+                                          );
+                                        })
+                                      ) : (
+                                        <div className="px-3 py-3 text-sm uppercase tracking-[0.04em] text-[#64748b]">No results found</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ) : null}
                               </>
                             ) : null}
                           </div>
