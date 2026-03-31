@@ -1015,7 +1015,7 @@ function SalesByCustomerReportView({
             <Menu size={15} />
           </button>
           <div>
-            <p className="text-sm font-medium text-[#2563eb]">{categoryName}</p>
+            <p className="text-sm font-medium text-[#1b6f7b]">{categoryName}</p>
             <h1 className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[24px] font-semibold leading-tight text-[#0f172a]">
               <span>{reportName}</span>
               <span className="text-sm font-normal text-[#475569]">
@@ -1034,7 +1034,7 @@ function SalesByCustomerReportView({
               type="button"
               onClick={() => setIsExportOpen((prev) => !prev)}
               className={`inline-flex h-9 items-center gap-1 rounded border bg-white px-3 text-sm font-medium text-[#1e293b] hover:bg-[#f8fafc] ${
-                isExportOpen ? "border-[#7aa7ff]" : "border-[#d4d9e4]"
+                isExportOpen ? "border-[#1b6f7b]" : "border-[#d4d9e4]"
               }`}
               aria-haspopup="menu"
               aria-expanded={isExportOpen}
@@ -1109,7 +1109,7 @@ function SalesByCustomerReportView({
             type="button"
             onClick={() => setIsDateRangeOpen((prev) => !prev)}
             className={`inline-flex h-8 items-center gap-1 rounded border px-3 text-sm text-[#334155] hover:bg-white ${
-              isDateRangeOpen ? "border-[#7aa7ff] bg-white" : "border-[#cfd6e4] bg-[#f8fafc]"
+              isDateRangeOpen ? "border-[#1b6f7b] bg-white" : "border-[#cfd6e4] bg-[#f8fafc]"
             }`}
             aria-haspopup="menu"
             aria-expanded={isDateRangeOpen}
@@ -1149,7 +1149,7 @@ function SalesByCustomerReportView({
             type="button"
             onClick={() => setIsEntityOpen((prev) => !prev)}
             className={`relative inline-flex h-8 w-[184px] items-center overflow-hidden rounded border px-3 pr-12 text-sm text-[#334155] hover:bg-white ${
-              isEntityOpen ? "border-[#7aa7ff] bg-white" : "border-[#cfd6e4] bg-[#f8fafc]"
+              isEntityOpen ? "border-[#1b6f7b] bg-white" : "border-[#cfd6e4] bg-[#f8fafc]"
             }`}
             aria-haspopup="menu"
             aria-expanded={isEntityOpen}
@@ -1181,7 +1181,7 @@ function SalesByCustomerReportView({
                     value={entitySearch}
                     onChange={(event) => setEntitySearch(event.target.value)}
                     placeholder="Search"
-                    className="h-9 w-full rounded-md border border-[#7aa7ff] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                    className="h-9 w-full rounded-md border border-[#1b6f7b] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
                   />
                   <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
                 </div>
@@ -1720,7 +1720,7 @@ function SalesByCustomerReportView({
                           type="checkbox"
                           checked={compareWithDraftArrangeLatest}
                           onChange={(event) => setCompareWithDraftArrangeLatest(event.target.checked)}
-                          className="mt-1 h-4 w-4 rounded border-[#cfd6e4] text-[#2563eb] focus:ring-[#2563eb]"
+                          className="mt-1 h-4 w-4 rounded border-[#cfd6e4] text-[#1b6f7b] focus:ring-[#1b6f7b]"
                         />
                         <span>Arrange period/year from latest to oldest</span>
                       </label>
@@ -1732,7 +1732,7 @@ function SalesByCustomerReportView({
                   <button
                     type="button"
                     onClick={applyCompareWith}
-                    className="inline-flex h-8 items-center rounded bg-[#7aa7ff] px-3 text-sm font-semibold text-white hover:bg-[#6498ff]"
+                    className="inline-flex h-8 items-center rounded bg-[#1b6f7b] px-3 text-sm font-semibold text-white hover:bg-[#155963]"
                   >
                     Apply
                   </button>
@@ -1750,7 +1750,7 @@ function SalesByCustomerReportView({
           <button type="button" onClick={openCustomizeColumnsModal} className="inline-flex items-center gap-1 hover:text-[#0f172a]">
             <Columns3 size={14} />
             Customize Report Columns
-            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#dbeafe] px-1 text-[11px] font-semibold text-[#2563eb]">
+            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#d9eff1] px-1 text-[11px] font-semibold text-[#1b6f7b]">
               {selectedReportColumns.length}
             </span>
           </button>
@@ -1788,7 +1788,7 @@ function SalesByCustomerReportView({
                           value={customizeColumnsSearch}
                           onChange={(event) => setCustomizeColumnsSearch(event.target.value)}
                           placeholder="Search"
-                          className="h-9 w-full rounded-md border border-[#d7dce7] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#7aa7ff]"
+                          className="h-9 w-full rounded-md border border-[#d7dce7] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#1b6f7b]"
                         />
                         <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
                       </div>
@@ -1874,7 +1874,7 @@ function SalesByCustomerReportView({
                 <button
                   type="button"
                   onClick={applyCustomizeColumns}
-                  className="inline-flex h-9 items-center rounded bg-[#7aa7ff] px-4 text-sm font-semibold text-white hover:bg-[#6498ff]"
+              className="inline-flex h-9 items-center rounded bg-[#1b6f7b] px-4 text-sm font-semibold text-white hover:bg-[#155963]"
                 >
                   Apply
                 </button>
@@ -1921,7 +1921,7 @@ function SalesByCustomerReportView({
                       key={column.key}
                       className={`px-4 py-3 text-sm ${
                         column.kind === "text" ? "text-left" : "text-center"
-                      } ${column.key === "name" ? "font-medium text-[#2563eb]" : "text-[#2563eb]"}`}
+                      } ${column.key === "name" ? "font-medium text-[#1b6f7b]" : "text-[#1b6f7b]"}`}
                     >
                       {formatReportColumnValue(column.key, row.values[column.key])}
                     </td>
@@ -2082,7 +2082,7 @@ export default function ReportDetailPage() {
                     const value = Number(event.target.value);
                     setCalculatorInputs((prev) => ({ ...prev, [field.key]: Number.isFinite(value) ? value : 0 }));
                   }}
-                  className="h-9 w-full rounded border border-[#cfd6e4] px-3 text-sm text-[#0f172a] outline-none focus:border-[#2563eb]"
+                  className="h-9 w-full rounded border border-[#cfd6e4] px-3 text-sm text-[#0f172a] outline-none focus:border-[#1b6f7b]"
                 />
               </label>
             ))}
