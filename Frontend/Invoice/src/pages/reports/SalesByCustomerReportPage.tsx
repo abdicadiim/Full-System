@@ -3,6 +3,9 @@ import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { CalendarDays, Check, ChevronDown, ChevronRight, Columns3, Filter, Folder, Menu, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
 import ReportDetailHeader from "./ReportDetailHeader";
+import ARAgingSummaryReportPage from "./ARAgingSummaryReportPage";
+import ARAgingDetailsReportPage from "./ARAgingDetailsReportPage";
+import InvoiceDetailsReportPage from "./InvoiceDetailsReportPage";
 import SalesByItemReportView from "./SalesByItemReportPage";
 import { SalesBySalesPersonReportView } from "./SalesBySalesPersonReportPage";
 import { getCategoryById, getReportById, REPORT_FUNCTION_LABELS, REPORTS_BY_CATEGORY } from "./reportsCatalog";
@@ -3774,6 +3777,18 @@ export default function ReportDetailPage() {
         </div>
       </div>
     );
+  }
+
+  if (report.id === "ar-aging-summary") {
+    return <ARAgingSummaryReportPage />;
+  }
+
+  if (report.id === "ar-aging-details") {
+    return <ARAgingDetailsReportPage />;
+  }
+
+  if (report.id === "invoice-details") {
+    return <InvoiceDetailsReportPage />;
   }
 
   return (
