@@ -704,6 +704,8 @@ export default function SalesByItemReportView({
   ]);
   const { settings } = useSettings();
   const organizationName = String(settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "").trim();
+  const [availableLocations, setAvailableLocations] = useState<LocationFieldOption[]>([]);
+  const [availableReportingTags, setAvailableReportingTags] = useState<ReportingTagFieldOption[]>([]);
   const [customizeActiveAvailableColumn, setCustomizeActiveAvailableColumn] = useState<ReportColumnKey | "">("");
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isMoreFiltersOpen, setIsMoreFiltersOpen] = useState(false);
@@ -717,6 +719,58 @@ export default function SalesByItemReportView({
   const [reportError, setReportError] = useState("");
   const [reportRefreshTick, setReportRefreshTick] = useState(0);
   const shouldToastRunRef = useRef(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadFilterMetadata = async () => {
+      try {
+        const [locationsResponse, reportingTagsResponse] = await Promise.all([locationsAPI.getAll(), reportingTagsAPI.getAll()]);
+
+        const locationRows = Array.isArray(locationsResponse) ? locationsResponse : Array.isArray(locationsResponse?.data) ? locationsResponse.data : [];
+        const locationOptions = locationRows
+          .map((row: any) => ({
+            key: String(row?._id || row?.id || row?.name || row?.locationName || "").trim(),
+            label: String(row?.name || row?.locationName || row?.title || row?.label || "").trim(),
+          }))
+          .filter((option: LocationFieldOption) => option.key && option.label);
+
+        const reportingTagRows = Array.isArray(reportingTagsResponse)
+          ? reportingTagsResponse
+          : Array.isArray(reportingTagsResponse?.data)
+            ? reportingTagsResponse.data
+            : [];
+        const activeReportingTags = reportingTagRows
+          .filter((tag: any) => tag?.isActive !== false)
+          .map((tag: any) => ({
+            key: String(tag?._id || tag?.id || "").trim(),
+            label: String(tag?.name || tag?.title || tag?.label || "").trim(),
+            appliesTo: Array.isArray(tag?.appliesTo) ? tag.appliesTo.map((entry: any) => String(entry || "").trim()).filter(Boolean) : [],
+          }))
+          .filter((tag: any) => tag.key && tag.label);
+
+        const itemReportingTags = activeReportingTags.filter((tag: any) =>
+          (tag.appliesTo || []).some((entry: string) => entry.toLowerCase().includes("item"))
+        );
+
+        if (mounted) {
+          setAvailableLocations(locationOptions);
+          setAvailableReportingTags(itemReportingTags.length > 0 ? itemReportingTags : activeReportingTags);
+        }
+      } catch (error) {
+        if (mounted) {
+          setAvailableLocations([]);
+          setAvailableReportingTags([]);
+        }
+      }
+    };
+
+    void loadFilterMetadata();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const selectedDateRange = dateRangeKey === "custom" ? customDateRange : getDateRangeValue(dateRangeKey);
   const dateRangeLabel = DATE_RANGE_OPTIONS.find((option) => option.key === dateRangeKey)?.label ?? "Today";
   const customizeDateRangeLabel = DATE_RANGE_OPTIONS.find((option) => option.key === customizeDateRangeDraftKey)?.label ?? "Today";
