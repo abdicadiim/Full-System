@@ -520,7 +520,7 @@ function SalesByCustomerReportView({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 border-b border-[#e6e9f0] pb-3 text-sm">
+      <div ref={moreFiltersRef} className="relative flex flex-wrap items-center gap-2 border-b border-[#e6e9f0] pb-3 text-sm">
         <span className="text-[#334155]">Filters :</span>
         <div ref={dateRangeRef} className="relative">
           <button
@@ -636,131 +636,127 @@ function SalesByCustomerReportView({
             </div>
           ) : null}
         </div>
-        <div ref={moreFiltersRef} className="relative">
-          <button
-            type="button"
-            onClick={() => setIsMoreFiltersOpen((prev) => !prev)}
-            className={`inline-flex h-8 items-center gap-1 rounded border px-3 text-sm text-[#334155] hover:bg-[#f8fafc] ${
-              isMoreFiltersOpen || hasMoreFilters ? "border-[#7aa7ff] bg-white" : "border-[#cfd6e4] bg-white"
-            }`}
-          >
-            <Plus size={14} className="text-[#2563eb]" /> More Filters
-          </button>
+        <button
+          type="button"
+          onClick={() => setIsMoreFiltersOpen((prev) => !prev)}
+          className={`inline-flex h-8 items-center gap-1 rounded border px-3 text-sm text-[#334155] hover:bg-[#f8fafc] ${
+            isMoreFiltersOpen || hasMoreFilters ? "border-[#7aa7ff] bg-white" : "border-[#cfd6e4] bg-white"
+          }`}
+        >
+          <Plus size={14} className="text-[#2563eb]" /> More Filters
+        </button>
 
-          {isMoreFiltersOpen ? (
-            <div className="absolute left-0 top-[calc(100%+10px)] z-40 w-[720px] rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
-              <div className="px-4 py-4">
-                <div className="space-y-3">
-                  {moreFilterRows.map((row, index) => (
-                    <div key={row.id} className="grid grid-cols-[42px_1fr_1fr_1.4fr_auto_auto] items-center gap-3">
-                      <div className="flex h-10 items-center justify-center rounded border border-[#d7dce7] bg-[#f8fafc] text-sm text-[#475569]">
-                        {index + 1}
-                      </div>
-
-                      <select
-                        value={row.field}
-                        onChange={(event) => {
-                          const value = event.target.value as MoreFilterFieldKey | "";
-                          setMoreFilterRows((prev) => prev.map((item) => (item.id === row.id ? { ...item, field: value } : item)));
-                        }}
-                        className="h-10 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#7aa7ff]"
-                      >
-                        <option value="">Select a field</option>
-                        {MORE_FILTER_FIELD_OPTIONS.map((option) => (
-                          <option key={option.key} value={option.key}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-
-                      <select
-                        value={row.comparator}
-                        onChange={(event) => {
-                          const value = event.target.value as MoreFilterComparatorKey | "";
-                          setMoreFilterRows((prev) =>
-                            prev.map((item) => (item.id === row.id ? { ...item, comparator: value } : item))
-                          );
-                        }}
-                        className="h-10 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#7aa7ff]"
-                      >
-                        <option value="">Select a comparator</option>
-                        {MORE_FILTER_COMPARATOR_OPTIONS.map((option) => (
-                          <option key={option.key} value={option.key}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-
-                      <input
-                        value={row.value}
-                        onChange={(event) => {
-                          const value = event.target.value;
-                          setMoreFilterRows((prev) => prev.map((item) => (item.id === row.id ? { ...item, value } : item)));
-                        }}
-                        placeholder="Enter a value"
-                        className="h-10 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#7aa7ff]"
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setMoreFilterRows((prev) => [
-                            ...prev,
-                            { id: `more-filter-${Date.now()}-${Math.random().toString(16).slice(2)}`, field: "", comparator: "", value: "" },
-                          ])
-                        }
-                        className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#cfd6e4] text-[#334155] hover:bg-[#f8fafc]"
-                        aria-label="Add filter row"
-                      >
-                        <Plus size={14} />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setMoreFilterRows((prev) => (prev.length > 1 ? prev.filter((item) => item.id !== row.id) : prev))
-                        }
-                        className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#cfd6e4] text-[#334155] hover:bg-[#fef2f2]"
-                        aria-label="Remove filter row"
-                      >
-                        <X size={14} className="text-[#ef4444]" />
-                      </button>
+        {isMoreFiltersOpen ? (
+          <div className="absolute left-0 top-[calc(100%+10px)] z-40 w-[720px] rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+            <div className="px-4 py-4">
+              <div className="space-y-3">
+                {moreFilterRows.map((row, index) => (
+                  <div key={row.id} className="grid grid-cols-[42px_1fr_1fr_1.4fr_auto_auto] items-center gap-3">
+                    <div className="flex h-10 items-center justify-center rounded border border-[#d7dce7] bg-[#f8fafc] text-sm text-[#475569]">
+                      {index + 1}
                     </div>
-                  ))}
-                </div>
 
-                <div className="mt-3">
-                  <button type="button" className="inline-flex items-center gap-1 text-sm font-medium text-[#2563eb] hover:underline">
-                    <Plus size={14} /> Add More
-                  </button>
-                </div>
+                    <select
+                      value={row.field}
+                      onChange={(event) => {
+                        const value = event.target.value as MoreFilterFieldKey | "";
+                        setMoreFilterRows((prev) => prev.map((item) => (item.id === row.id ? { ...item, field: value } : item)));
+                      }}
+                      className="h-10 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#7aa7ff]"
+                    >
+                      <option value="">Select a field</option>
+                      {MORE_FILTER_FIELD_OPTIONS.map((option) => (
+                        <option key={option.key} value={option.key}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={row.comparator}
+                      onChange={(event) => {
+                        const value = event.target.value as MoreFilterComparatorKey | "";
+                        setMoreFilterRows((prev) =>
+                          prev.map((item) => (item.id === row.id ? { ...item, comparator: value } : item))
+                        );
+                      }}
+                      className="h-10 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#7aa7ff]"
+                    >
+                      <option value="">Select a comparator</option>
+                      {MORE_FILTER_COMPARATOR_OPTIONS.map((option) => (
+                        <option key={option.key} value={option.key}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+
+                    <input
+                      value={row.value}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setMoreFilterRows((prev) => prev.map((item) => (item.id === row.id ? { ...item, value } : item)));
+                      }}
+                      placeholder="Enter a value"
+                      className="h-10 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#7aa7ff]"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setMoreFilterRows((prev) => [
+                          ...prev,
+                          { id: `more-filter-${Date.now()}-${Math.random().toString(16).slice(2)}`, field: "", comparator: "", value: "" },
+                        ])
+                      }
+                      className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#cfd6e4] text-[#334155] hover:bg-[#f8fafc]"
+                      aria-label="Add filter row"
+                    >
+                      <Plus size={14} />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setMoreFilterRows((prev) => (prev.length > 1 ? prev.filter((item) => item.id !== row.id) : prev))}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#cfd6e4] text-[#334155] hover:bg-[#fef2f2]"
+                      aria-label="Remove filter row"
+                    >
+                      <X size={14} className="text-[#ef4444]" />
+                    </button>
+                  </div>
+                ))}
               </div>
 
-              <div className="flex items-center gap-2 border-t border-[#eef2f7] px-4 py-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsMoreFiltersOpen(false);
-                    onRunReport();
-                  }}
-                  className="inline-flex h-9 items-center rounded bg-[#7aa7ff] px-4 text-sm font-semibold text-white hover:bg-[#6498ff]"
-                >
-                  Run Report
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMoreFilterRows([{ id: "more-filter-1", field: "", comparator: "", value: "" }]);
-                    setIsMoreFiltersOpen(false);
-                  }}
-                  className="inline-flex h-9 items-center rounded border border-[#d4d9e4] bg-white px-4 text-sm text-[#334155] hover:bg-[#f8fafc]"
-                >
-                  Cancel
+              <div className="mt-3">
+                <button type="button" className="inline-flex items-center gap-1 text-sm font-medium text-[#2563eb] hover:underline">
+                  <Plus size={14} /> Add More
                 </button>
               </div>
             </div>
-          ) : null}
-        </div>
+
+            <div className="flex items-center gap-2 border-t border-[#eef2f7] px-4 py-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMoreFiltersOpen(false);
+                  onRunReport();
+                }}
+                className="inline-flex h-9 items-center rounded bg-[#7aa7ff] px-4 text-sm font-semibold text-white hover:bg-[#6498ff]"
+              >
+                Run Report
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMoreFilterRows([{ id: "more-filter-1", field: "", comparator: "", value: "" }]);
+                  setIsMoreFiltersOpen(false);
+                }}
+                className="inline-flex h-9 items-center rounded border border-[#d4d9e4] bg-white px-4 text-sm text-[#334155] hover:bg-[#f8fafc]"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
         <button
           type="button"
           onClick={onRunReport}
