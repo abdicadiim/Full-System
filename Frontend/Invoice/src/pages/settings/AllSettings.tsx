@@ -377,7 +377,7 @@ export default function AllSettings() {
               return (
                 <div
                   key={idx}
-                  className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow"
+                  className="rounded-lg bg-transparent p-4 transition-colors hover:bg-white/40"
                 >
                   <div className="flex items-center gap-3 mb-3">
                     <div className={`w-10 h-10 rounded-lg ${getColorClasses(setting.color)} flex items-center justify-center`}>
@@ -472,7 +472,7 @@ export default function AllSettings() {
               return (
                 <div
                   key={idx}
-                  className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow"
+                  className="rounded-lg bg-transparent p-4 transition-colors hover:bg-white/40"
                 >
                   <div className="flex items-center gap-3 mb-3">
                     <div className={`w-10 h-10 rounded-lg ${getColorClasses(setting.color)} flex items-center justify-center`}>
@@ -560,7 +560,7 @@ export default function AllSettings() {
               return (
                 <div
                   key={idx}
-                  className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow"
+                  className="rounded-lg bg-transparent p-4 transition-colors hover:bg-white/40"
                 >
                   <div className="flex items-center gap-3 mb-3">
                     <div className={`w-10 h-10 rounded-lg ${getColorClasses(setting.color)} flex items-center justify-center`}>

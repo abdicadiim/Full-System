@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import { CalendarDays, Check, ChevronDown, ChevronRight, Columns3, Filter, Folder, Menu, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
 import ReportDetailHeader from "./ReportDetailHeader";
 import { getCategoryById, getReportById, REPORT_FUNCTION_LABELS, REPORTS_BY_CATEGORY } from "./reportsCatalog";
+import { useSettings } from "../../lib/settings/SettingsContext";
 import { reportsAPI } from "../../services/api";
 
 const formatDate = (value: Date) => value.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
@@ -718,6 +719,8 @@ function SalesByCustomerReportView({
     "sales",
     "sales-with-tax",
   ]);
+  const { settings } = useSettings();
+  const organizationName = String(settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "").trim();
   const [customizeActiveAvailableColumn, setCustomizeActiveAvailableColumn] = useState<ReportColumnKey | "">("");
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isMoreFiltersOpen, setIsMoreFiltersOpen] = useState(false);
@@ -3567,6 +3570,7 @@ function SalesByCustomerReportView({
         ) : null}
 
         <div className="border-b border-[#eef2f7] px-4 py-10 text-center">
+          {organizationName ? <p className="text-sm text-[#6b7280]">{organizationName}</p> : null}
           <h2 className="mt-2 text-[22px] font-semibold text-[#111827]">{reportName}</h2>
           <p className="mt-1 text-sm text-[#475569]">
             From {formatDate(selectedDateRange.start)} To {formatDate(selectedDateRange.end)}
