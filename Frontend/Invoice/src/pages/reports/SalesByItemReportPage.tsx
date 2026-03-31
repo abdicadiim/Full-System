@@ -286,6 +286,7 @@ const REPORT_COLUMN_GROUPS: ReportColumnGroup[] = [
     ],
   },
   {
+    label: "Item",
     options: [
       { key: "sku", label: "SKU", kind: "text" },
       { key: "item-type", label: "Item Type", kind: "text" },
@@ -2136,7 +2137,7 @@ export default function SalesByItemReportView({
                                               setMoreFilterRows((prev) =>
                                                 prev.map((item) =>
                                                   item.id === row.id
-                                                    ? { ...item, field: option.key, comparator: "", value: "" }
+                                                    ? { ...item, field: option.key as MoreFilterFieldKey | "", comparator: "", value: "" }
                                                     : item
                                                 )
                                               );
@@ -3307,7 +3308,7 @@ export default function SalesByItemReportView({
                                                           setCustomizeMoreFilterRows((prev) =>
                                                             prev.map((item) =>
                                                               item.id === row.id
-                                                                ? { ...item, field: option.key, comparator: "", value: "" }
+                                                                ? { ...item, field: option.key as MoreFilterFieldKey | "", comparator: "", value: "" }
                                                                 : item
                                                             )
                                                           );
