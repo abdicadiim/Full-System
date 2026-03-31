@@ -237,7 +237,7 @@ export default function ItemsPage() {
 
       {/* General Tab Content */}
       {activeTab === "general" && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-8">
+        <div className="rounded-lg bg-transparent p-6 space-y-8">
           {/* Set decimal rate for item quantity */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">

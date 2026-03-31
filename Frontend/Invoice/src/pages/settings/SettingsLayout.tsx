@@ -1,20 +1,19 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import { Search, X, Building2, Users, Receipt, Settings as SettingsIcon, Palette, Zap, Package, CreditCard, ShoppingCart, ShoppingBag, Puzzle, Plug, Code, FileText, BarChart3 } from "lucide-react";
+import { Search, X, Building2, Users, Receipt, Settings as SettingsIcon, Palette, Package, CreditCard, ShoppingCart, FileText } from "lucide-react";
 import { getToken, API_BASE_URL } from "../../services/auth";
 import { useSettings } from "../../lib/settings/SettingsContext";
 
 const simpleSettingsNav = [
   { label: "Organization Profile", path: "/settings/profile", icon: Building2 },
   { label: "Branding", path: "/settings/branding", icon: Palette },
-  { label: "Usage Stats", path: "/settings/usage-stats", icon: Zap },
+  { label: "Usage Stats", path: "/settings/usage-stats", icon: SettingsIcon },
   { label: "Users", path: "/settings/users", icon: Users },
   { label: "Roles", path: "/settings/roles", icon: Users },
   { label: "Taxes", path: "/settings/taxes", icon: Receipt },
   { label: "Customer Portal", path: "/settings/customer-portal", icon: SettingsIcon },
   { label: "General Preferences", path: "/settings/general", icon: SettingsIcon },
   { label: "Items", path: "/settings/items", icon: Package },
-  { label: "Reports", path: "/reports", icon: BarChart3 },
   { label: "Customers", path: "/settings/customers-vendors", icon: Users },
   { label: "Quotes", path: "/settings/quotes", icon: FileText },
   { label: "Invoices", path: "/settings/invoices", icon: FileText },
@@ -25,16 +24,6 @@ const simpleSettingsNav = [
   { label: "Delivery Notes", path: "/settings/delivery-notes", icon: FileText },
   { label: "Packing Slips", path: "/settings/packing-slips", icon: FileText },
   { label: "Expenses", path: "/settings/expenses", icon: FileText },
-  { label: "Projects", path: "/settings/projects", icon: Puzzle },
-  { label: "Timesheet", path: "/settings/timesheet", icon: SettingsIcon },
-  { label: "Online Payments", path: "/settings/online-payments", icon: CreditCard },
-  { label: "Reminders", path: "/settings/reminders", icon: SettingsIcon },
-  { label: "PDF Templates", path: "/settings/customization/pdf-templates", icon: FileText },
-  { label: "Email Notifications", path: "/settings/customization/email-notifications", icon: FileText },
-  { label: "Integrations", path: "/settings/integrations/zoho", icon: Plug },
-  { label: "API Usage", path: "/settings/developer/api-usage", icon: Code },
-  { label: "Data Management", path: "/settings/custom-modules", icon: Puzzle },
-  { label: "Marketplace", path: "/settings/marketplace", icon: ShoppingBag },
 ];
 
 export default function SettingsLayout({ children }: { children?: React.ReactNode }) {

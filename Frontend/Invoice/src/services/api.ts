@@ -2227,6 +2227,13 @@ export const reportsAPI = {
     }
     return res as any;
   },
+  getSalesByItem: async (params?: Record<string, any>) => {
+    const res = await request({ path: "/reports/sales-by-item", params });
+    if (!res?.success) {
+      throw new Error(res?.message || "Failed to fetch sales by item report");
+    }
+    return res as any;
+  },
 };
 
 export const locationsAPI = {

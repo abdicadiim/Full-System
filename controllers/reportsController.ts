@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { Customer } from "../models/Customer.js";
 import { CreditNote } from "../models/CreditNote.js";
 import { Invoice } from "../models/Invoice.js";
+import { Item } from "../models/Item.js";
 import { SalesReceipt } from "../models/SalesReceipt.js";
 
 type ReportEntity = "invoice" | "credit-note" | "sales-receipt";
@@ -325,6 +326,10 @@ const matchesMoreFilters = (values: Record<string, unknown>, filters: MoreFilter
     const left =
       field === "customer-name"
         ? String(values.name || "")
+        : field === "item-name"
+          ? String(values["item-name"] || values.name || "")
+          : field === "sku"
+            ? String(values.sku || "")
         : field === "currency"
           ? String(values.currency || "")
           : field === "location"
@@ -443,6 +448,153 @@ const buildRows = (
   };
 };
 
+const resolveItemName = (line: any, itemDoc: any, fallback = "") => {
+  const values = [
+    line?.itemDetails,
+    line?.name,
+    line?.itemName,
+    line?.description,
+    itemDoc?.name,
+    fallback,
+  ];
+  return values.map((value) => String(value ?? "").trim()).find(Boolean) || "Unassigned";
+};
+
+const resolveItemSku = (line: any, itemDoc: any) =>
+  String(line?.sku || line?.itemSku || line?.code || itemDoc?.sku || "").trim();
+
+const getTransactionSign = (source: ReportEntity) => (source === "credit-note" ? -1 : 1);
+
+const buildItemRows = (
+  rows: Array<{ source: ReportEntity; row: any }>,
+  customers: any[],
+  items: any[],
+  range: { start: Date; end: Date },
+  moreFilters: MoreFilterRow[]
+) => {
+  const customerById = new Map<string, any>();
+  const customerByName = new Map<string, any>();
+  for (const customer of customers || []) {
+    const id = String(customer?._id || customer?.id || "").trim();
+    const name = resolveCustomerName(customer);
+    if (id) customerById.set(id, customer);
+    if (name) customerByName.set(normalizeText(name), customer);
+    const number = String(customer?.customerNumber || "").trim();
+    if (number) customerByName.set(normalizeText(number), customer);
+  }
+
+  const itemById = new Map<string, any>();
+  const itemByName = new Map<string, any>();
+  const itemBySku = new Map<string, any>();
+  for (const item of items || []) {
+    const id = String(item?._id || item?.id || "").trim();
+    const name = String(item?.name || "").trim();
+    const sku = String(item?.sku || "").trim();
+    if (id) itemById.set(id, item);
+    if (name) itemByName.set(normalizeText(name), item);
+    if (sku) itemBySku.set(normalizeText(sku), item);
+  }
+
+  const groupMap = new Map<string, any>();
+  let currency = "";
+
+  for (const item of rows || []) {
+    const source = item?.source || "invoice";
+    const row = item?.row || {};
+    const date = asDate(row?.date || row?.invoiceDate || row?.createdAt);
+    if (!date || date < range.start || date > range.end) continue;
+
+    const customerId = String(row?.customerId || row?.customer?._id || row?.customer?.id || "").trim();
+    const fallbackName = String(row?.customerName || row?.customer?.displayName || row?.customer?.name || row?.customer?.companyName || "").trim();
+    const customer = customerById.get(customerId) || customerByName.get(normalizeText(fallbackName)) || row?.customer || null;
+
+    const customerContext = buildCustomerContext(customer, fallbackName);
+    const location =
+      String(row?.locationName || row?.location || customerContext["billing-city"] || customerContext["shipping-city"] || customerContext["billing-state"] || "").trim();
+    const rowCurrency = String(row?.currency || customer?.currency || "SOS").trim() || "SOS";
+    const baseTransactionValues = {
+      ...customerContext,
+      location,
+      currency: rowCurrency,
+    };
+
+    const lineItems = Array.isArray(row?.items) ? row.items : [];
+    for (const line of lineItems) {
+      if (!line || line.itemType === "header") continue;
+
+      const lineItemId = String(line?.itemId || line?.item?._id || line?.item?.id || line?.item || "").trim();
+      const itemDoc = itemById.get(lineItemId) || itemByName.get(normalizeText(resolveItemName(line, null, ""))) || itemBySku.get(normalizeText(resolveItemSku(line, null))) || null;
+      const itemName = resolveItemName(line, itemDoc);
+      const sku = resolveItemSku(line, itemDoc);
+      const quantity = Math.abs(asNumber(line?.quantity, 0)) * getTransactionSign(source);
+      const lineAmountRaw =
+        line?.amount ?? line?.total ?? line?.lineTotal ?? line?.subtotal ?? quantity * asNumber(line?.rate ?? line?.unitPrice ?? line?.price, 0);
+      const amount = Math.abs(asNumber(lineAmountRaw, 0)) * getTransactionSign(source);
+      const averagePrice = quantity !== 0 ? amount / quantity : asNumber(line?.rate ?? line?.unitPrice ?? line?.price, 0);
+
+      const baseValues = {
+        ...baseTransactionValues,
+        "item-name": itemName,
+        sku,
+        "quantity-sold": quantity,
+        amount,
+        "average-price": averagePrice,
+      };
+
+      if (!matchesMoreFilters(baseValues, moreFilters)) continue;
+
+      const key = String(lineItemId || sku || itemName || "unassigned").trim().toLowerCase();
+      if (!groupMap.has(key)) {
+        groupMap.set(key, {
+          values: {
+            ...baseValues,
+            "quantity-sold": 0,
+            amount: 0,
+            "average-price": 0,
+          },
+        });
+        if (!currency) currency = rowCurrency;
+      }
+
+      const target = groupMap.get(key);
+      target.values["item-name"] = itemName;
+      target.values.sku = sku;
+      target.values["quantity-sold"] = asNumber(target.values["quantity-sold"], 0) + quantity;
+      target.values.amount = asNumber(target.values.amount, 0) + amount;
+      target.values.currency = rowCurrency || String(target.values.currency || "");
+      target.values.location = target.values.location || location;
+      target.values.name = target.values["item-name"];
+      target.values["average-price"] = target.values["quantity-sold"] !== 0 ? target.values.amount / target.values["quantity-sold"] : averagePrice;
+    }
+  }
+
+  const groupedRows = [...groupMap.values()].sort((left, right) => {
+    const amountDelta = asNumber(right.values.amount, 0) - asNumber(left.values.amount, 0);
+    if (amountDelta !== 0) return amountDelta;
+    return String(left.values["item-name"] || "").localeCompare(String(right.values["item-name"] || ""));
+  });
+
+  const totalQuantity = groupedRows.reduce((sum, row) => sum + asNumber(row.values["quantity-sold"], 0), 0);
+  const totalAmount = groupedRows.reduce((sum, row) => sum + asNumber(row.values.amount, 0), 0);
+
+  return {
+    rows: groupedRows,
+    currency: currency || "SOS",
+    totals: groupedRows.reduce(
+      (acc, row) => {
+        acc["quantity-sold"] += asNumber(row.values["quantity-sold"], 0);
+        acc.amount += asNumber(row.values.amount, 0);
+        return acc;
+      },
+      {
+        "quantity-sold": 0,
+        amount: 0,
+        "average-price": totalQuantity !== 0 ? totalAmount / totalQuantity : 0,
+      } as Record<string, number>
+    ),
+  };
+};
+
 export const getSalesByCustomerReport: express.RequestHandler = async (req, res) => {
   const orgId = requireOrgId(req, res);
   if (!orgId) return;
@@ -490,6 +642,64 @@ export const getSalesByCustomerReport: express.RequestHandler = async (req, res)
         normalizeRange(compareRange)!,
         moreFilters
       )
+    : null;
+
+  return res.json({
+    success: true,
+    data: {
+      rows: main.rows,
+      currency: main.currency,
+      totals: main.totals,
+      comparison,
+      appliedFilters: {
+        fromDate: range.start.toISOString(),
+        toDate: range.end.toISOString(),
+        compareWith,
+        compareCount,
+        entities,
+        moreFilters,
+      },
+    },
+  });
+};
+
+export const getSalesByItemReport: express.RequestHandler = async (req, res) => {
+  const orgId = requireOrgId(req, res);
+  if (!orgId) return;
+
+  const range = getDateRangeFromQuery(req);
+  const compareWith = String(req.query.compareWith ?? req.query.compare_with ?? "none").trim();
+  const compareCount = Math.max(1, Number(req.query.compareCount ?? req.query.compare_count ?? 1) || 1);
+  const entities = parseEntities(req.query.entities ?? req.query.entity_list);
+  const moreFilters = parseMoreFilters(req.query.moreFilters ?? req.query.more_filters ?? req.query.filter_rows);
+
+  const [customers, items, invoices, creditNotes, salesReceipts] = await Promise.all([
+    Customer.find({ organizationId: orgId }).lean(),
+    Item.find({ organizationId: orgId }).lean(),
+    Invoice.find({ organizationId: orgId }).lean(),
+    CreditNote.find({ organizationId: orgId }).lean(),
+    SalesReceipt.find({ organizationId: orgId }).lean(),
+  ]);
+
+  const transactions: Array<{ source: ReportEntity; row: any }> = [];
+  if (entities.includes("invoice")) {
+    for (const row of invoices || []) transactions.push({ source: "invoice", row });
+  }
+  if (entities.includes("credit-note")) {
+    for (const row of creditNotes || []) transactions.push({ source: "credit-note", row });
+  }
+  if (entities.includes("sales-receipt")) {
+    for (const row of salesReceipts || []) transactions.push({ source: "sales-receipt", row });
+  }
+
+  const normalizeRange = (value: { start: Date; end: Date } | null) =>
+    value ? { start: startOfDay(value.start), end: endOfDay(value.end) } : null;
+
+  const main = buildItemRows(transactions, customers, items, normalizeRange(range)!, moreFilters);
+
+  const compareRange = compareWith && compareWith !== "none" ? shiftDateRange(range, compareWith, compareCount) : null;
+  const comparison = compareRange
+    ? buildItemRows(transactions, customers, items, normalizeRange(compareRange)!, moreFilters)
     : null;
 
   return res.json({
