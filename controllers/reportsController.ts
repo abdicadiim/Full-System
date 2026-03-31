@@ -327,19 +327,21 @@ const matchesMoreFilters = (values: Record<string, unknown>, filters: MoreFilter
     if (!rawValue && !["is-empty", "is-not-empty"].includes(comparator)) return true;
 
     const left =
-      field === "customer-name"
+      field === "salesperson-name"
         ? String(values.name || "")
-        : field === "item-name"
-          ? String(values["item-name"] || values.name || "")
-          : field === "sku"
-            ? String(values.sku || "")
-        : field === "usage-unit"
-          ? String(values["usage-unit"] || "")
-          : field === "currency"
-            ? String(values.currency || "")
-            : field === "location"
-              ? String(values.location || "")
-            : String(values[field] ?? "");
+        : field === "customer-name"
+          ? String(values.name || "")
+          : field === "item-name"
+            ? String(values["item-name"] || values.name || "")
+            : field === "sku"
+              ? String(values.sku || "")
+              : field === "usage-unit"
+                ? String(values["usage-unit"] || "")
+                : field === "currency"
+                  ? String(values.currency || "")
+                  : field === "location"
+                    ? String(values.location || "")
+                    : String(values[field] ?? "");
     return compareValue(left, comparator, rawValue);
   });
 
