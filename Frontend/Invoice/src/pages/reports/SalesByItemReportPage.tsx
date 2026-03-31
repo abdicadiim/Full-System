@@ -197,7 +197,7 @@ const getMoreFilterValueLabel = (field: MoreFilterFieldKey | "", value: string, 
     return locations.find((option) => option.key === value)?.label ?? getMoreFilterValuePlaceholder(field, locations);
   }
   if (typeof field === "string" && field.startsWith("reporting-tag:")) return "No value needed";
-  return MORE_FILTER_VALUE_OPTIONS[field].find((option) => option.key === value)?.label ?? getMoreFilterValuePlaceholder(field);
+  return MORE_FILTER_VALUE_OPTIONS[field].find((option) => option.key === value)?.label ?? getMoreFilterValuePlaceholder(field, locations);
 };
 
 const getCompareWithLabel = (key: CompareWithKey) => COMPARE_WITH_OPTIONS.find((option) => option.key === key)?.label ?? "None";
@@ -2019,11 +2019,13 @@ export default function SalesByItemReportView({
                   const filteredComparatorOptions = getFilteredComparatorOptions(comparatorMenuSearch, row.field);
                   const valueOptions = getFilteredValueOptions(row.field);
                   const valueMode: MoreFilterValueMode =
-                    (typeof row.field === "string" && row.field.startsWith("reporting-tag:")) || row.comparator && MORE_FILTER_NO_VALUE_COMPARATORS.includes(row.comparator)
+                    typeof row.field === "string" && row.field.startsWith("reporting-tag:")
                       ? "none"
-                      : row.comparator && MORE_FILTER_TEXT_COMPARATORS.includes(row.comparator)
-                        ? "text"
-                        : "dropdown";
+                      : row.comparator && MORE_FILTER_NO_VALUE_COMPARATORS.includes(row.comparator)
+                        ? "none"
+                        : row.comparator && MORE_FILTER_TEXT_COMPARATORS.includes(row.comparator)
+                          ? "text"
+                          : "dropdown";
                   const fieldLabel = getMoreFilterFieldLabel(row.field, availableReportingTags);
                   const comparatorLabel = getMoreFilterComparatorLabel(row.comparator);
                   const valueLabel =
@@ -3184,12 +3186,13 @@ export default function SalesByItemReportView({
                               const filteredComparatorOptions = getFilteredComparatorOptions(comparatorMenuSearch, row.field);
                               const valueOptions = getFilteredValueOptions(row.field);
                               const valueMode: MoreFilterValueMode =
-                                (typeof row.field === "string" && row.field.startsWith("reporting-tag:")) ||
-                                (row.comparator && MORE_FILTER_NO_VALUE_COMPARATORS.includes(row.comparator))
+                                typeof row.field === "string" && row.field.startsWith("reporting-tag:")
                                   ? "none"
-                                  : row.comparator && MORE_FILTER_TEXT_COMPARATORS.includes(row.comparator)
-                                    ? "text"
-                                    : "dropdown";
+                                  : row.comparator && MORE_FILTER_NO_VALUE_COMPARATORS.includes(row.comparator)
+                                    ? "none"
+                                    : row.comparator && MORE_FILTER_TEXT_COMPARATORS.includes(row.comparator)
+                                      ? "text"
+                                      : "dropdown";
                               const fieldLabel = getMoreFilterFieldLabel(row.field, availableReportingTags);
                               const comparatorLabel = getMoreFilterComparatorLabel(row.comparator);
                               const valueLabel =
