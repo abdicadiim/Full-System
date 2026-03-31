@@ -1315,23 +1315,46 @@ export default function SalesByItemReportView({
   const hasMoreFilters = moreFilterRows.some((row) => row.field || row.comparator || row.value.trim());
   const getFilteredFieldGroups = (query: string) => {
     const normalizedQuery = query.trim().toLowerCase();
-    return MORE_FILTER_FIELD_GROUPS.map((group) => {
-      const options = group.options.filter((option) => option.label.toLowerCase().includes(normalizedQuery));
-      return { ...group, options };
-    }).filter((group) => group.options.length > 0);
+    const groups = [
+      ...MORE_FILTER_FIELD_GROUPS,
+      {
+        label: "Reporting Tag",
+        options: availableReportingTags.map((tag) => ({
+          key: `reporting-tag:${tag.key}`,
+          label: tag.label,
+        })),
+      },
+    ];
+    return groups
+      .map((group) => {
+        const options = group.options.filter((option) => option.label.toLowerCase().includes(normalizedQuery));
+        return { ...group, options };
+      })
+      .filter((group) => group.options.length > 0);
   };
 
   const getFilteredComparatorOptions = (query: string, field?: MoreFilterFieldKey | "") => {
     const normalizedQuery = query.trim().toLowerCase();
     const fieldSpecificOptions =
-      field === "item-name" || field === "sku" || field === "usage-unit"
+      typeof field === "string" && field.startsWith("reporting-tag:")
+        ? MORE_FILTER_COMPARATOR_OPTIONS.filter((option) => ["is-empty", "is-not-empty"].includes(option.key))
+        : field === "item-name" || field === "sku" || field === "usage-unit"
         ? MORE_FILTER_COMPARATOR_OPTIONS.filter((option) =>
             ["is-empty", "is-not-empty", "starts-with", "ends-with", "contains", "does-not-contain"].includes(option.key)
           )
-        : field === "customer-name"
-          ? MORE_FILTER_COMPARATOR_OPTIONS.filter((option) => ["is-empty", "is-not-empty", "is-in", "is-not-in", "starts-with", "ends-with", "contains", "does-not-contain"].includes(option.key))
+        : field === "location"
+          ? MORE_FILTER_COMPARATOR_OPTIONS.filter((option) => ["is-in", "is-not-in"].includes(option.key))
+          : field === "customer-name"
+            ? MORE_FILTER_COMPARATOR_OPTIONS.filter((option) => ["is-empty", "is-not-empty", "is-in", "is-not-in", "starts-with", "ends-with", "contains", "does-not-contain"].includes(option.key))
           : MORE_FILTER_COMPARATOR_OPTIONS;
     return fieldSpecificOptions.filter((option) => option.label.toLowerCase().includes(normalizedQuery));
+  };
+
+  const getFilteredValueOptions = (field: MoreFilterFieldKey | "") => {
+    if (!field) return [];
+    if (field === "location") return availableLocations;
+    if (typeof field === "string" && field.startsWith("reporting-tag:")) return [];
+    return MORE_FILTER_VALUE_OPTIONS[field] || [];
   };
 
   const filteredCompareWithNumberOptions = useMemo(() => {
