@@ -669,7 +669,7 @@ function SalesByCustomerReportView({
 
   const filteredCompareWithOptions = useMemo(() => {
     const query = compareWithSearch.trim().toLowerCase();
-    return COMPARE_WITH_OPTIONS.filter((option) => option.label.toLowerCase().includes(query));
+    return COMPARE_WITH_OPTIONS.filter((option) => option.key !== "none" && option.label.toLowerCase().includes(query));
   }, [compareWithSearch]);
 
   const hasMoreFilters = moreFilterRows.some((row) => row.field || row.comparator || row.value.trim());
