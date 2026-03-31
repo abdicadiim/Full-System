@@ -233,6 +233,10 @@ const REPORT_COLUMN_GROUPS: ReportColumnGroup[] = [
     label: "Reports",
     options: [
       { key: "name", label: "Name", kind: "text", locked: true },
+      { key: "balance-due", label: "Balance Due", kind: "currency" },
+      { key: "credits", label: "Credits", kind: "currency" },
+      { key: "email", label: "Email", kind: "text" },
+      { key: "status", label: "Status", kind: "text" },
       { key: "invoice-count", label: "Invoice Count", kind: "number" },
       { key: "invoice-sales", label: "Invoice Sales", kind: "currency" },
       { key: "invoice-sales-with-tax", label: "Invoice Sales With Tax", kind: "currency" },
