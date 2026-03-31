@@ -2173,17 +2173,13 @@ function SalesByCustomerReportView({
                     <div className="space-y-6">
                       <section>
                         <div className="text-sm font-medium text-[#111827]">Date Range</div>
-                        <button
-                          type="button"
-                          onClick={() => setIsDateRangeOpen(true)}
-                          className="mt-2 inline-flex h-9 min-w-[250px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
-                        >
+                        <div className="mt-2 inline-flex h-9 min-w-[250px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155]">
                           <span className="inline-flex items-center gap-2 truncate">
                             <CalendarDays size={14} className="text-[#64748b]" />
                             <span>{dateRangeLabel}</span>
                           </span>
                           <ChevronDown size={14} className="text-[#64748b]" />
-                        </button>
+                        </div>
                       </section>
 
                       <hr className="border-[#e5e7eb]" />
@@ -2191,11 +2187,7 @@ function SalesByCustomerReportView({
                       <section className="grid gap-6 md:grid-cols-2">
                         <div>
                           <div className="text-sm font-medium text-[#111827]">Compare With</div>
-                          <button
-                            type="button"
-                            onClick={() => setIsCompareWithOpen(true)}
-                            className="mt-2 inline-flex h-9 w-full max-w-[260px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
-                          >
+                          <div className="mt-2 inline-flex h-9 w-full max-w-[260px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155]">
                             <span className="truncate">{getCompareWithLabel(compareWithKey)}</span>
                             <span className="ml-3 flex items-center gap-2">
                               {compareWithKey !== "none" ? (
@@ -2218,21 +2210,17 @@ function SalesByCustomerReportView({
                               ) : null}
                               <ChevronDown size={14} className="text-[#64748b]" />
                             </span>
-                          </button>
+                          </div>
 
                           {compareWithKey !== "none" ? (
                             <>
                               <div className="mt-4 text-sm font-medium text-[#111827]">
                                 {compareWithKey === "previous-years" ? "Number of Year(s)" : "Number of Period(s)"}
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => setIsCompareWithCountOpen(true)}
-                                className="mt-2 inline-flex h-9 w-full max-w-[260px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
-                              >
+                              <div className="mt-2 inline-flex h-9 w-full max-w-[260px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155]">
                                 <span>{compareWithCount}</span>
                                 <ChevronDown size={14} className="text-[#64748b]" />
-                              </button>
+                              </div>
 
                               <label className="mt-3 flex items-start gap-2 text-sm text-[#334155]">
                                 <input
@@ -2249,14 +2237,10 @@ function SalesByCustomerReportView({
 
                         <div>
                           <div className="text-sm font-medium text-[#111827]">Entities :</div>
-                          <button
-                            type="button"
-                            onClick={() => setIsEntityOpen(true)}
-                            className="mt-2 inline-flex h-9 w-full max-w-[260px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
-                          >
+                          <div className="mt-2 inline-flex h-9 w-full max-w-[260px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155]">
                             <span className="truncate">{entityLabel === "None" ? "All" : entityLabel}</span>
                             <ChevronDown size={14} className="text-[#64748b]" />
-                          </button>
+                          </div>
                         </div>
                       </section>
 
