@@ -801,7 +801,7 @@ function SalesByCustomerReportView({
                               {filteredFieldGroups.length > 0 ? (
                                 filteredFieldGroups.map((group) => (
                                   <div key={group.label}>
-                                    <div className="px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.08em] text-[#475569]">
+                                    <div className="px-3 py-2 text-sm font-semibold text-[#475569]">
                                       {group.label}
                                     </div>
                                     <div className="pb-1">
