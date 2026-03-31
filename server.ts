@@ -38,6 +38,7 @@ import recurringInvoicesRoutes from "./routes/recurringInvoicesRoutes.js";
 import salesReceiptsRoutes from "./routes/salesReceiptsRoutes.js";
 import debitNotesRoutes from "./routes/debitNotesRoutes.js";
 import subscriptionsRoutes from "./routes/subscriptionsRoutes.js";
+import { reportsRoutes } from "./routes/reportsRoutes.js";
 import { dashboardRoutes } from "./routes/dashboardRoutes.js";
 import { activityLogger } from "./midelwares/activityLogger.js";
 
@@ -116,6 +117,7 @@ app.use("/api/recurring-invoices", recurringInvoicesRoutes);
 app.use("/api/sales-receipts", salesReceiptsRoutes);
 app.use("/api/debit-notes", debitNotesRoutes);
 app.use("/api/subscriptions", subscriptionsRoutes);
+app.use("/api/reports", reportsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 
 app.use("/api", (_req, res) => {

@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import { CalendarDays, Check, ChevronDown, ChevronRight, Columns3, Filter, Folder, Menu, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
 import ReportDetailHeader from "./ReportDetailHeader";
 import { getCategoryById, getReportById, REPORT_FUNCTION_LABELS, REPORTS_BY_CATEGORY } from "./reportsCatalog";
+import { reportsAPI } from "../../services/api";
 
 const formatDate = (value: Date) => value.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 
@@ -375,25 +376,6 @@ type SalesByCustomerRow = {
   values: Partial<Record<ReportColumnKey, string | number>>;
 };
 
-const SALES_BY_CUSTOMER_ROWS: SalesByCustomerRow[] = [
-  {
-    values: {
-      name: "ss",
-      "invoice-count": 2,
-      sales: 44,
-      "sales-with-tax": 44,
-      "sales-without-discount": 44,
-      currency: "SOS",
-      location: "Mogadishu",
-      "customer-id": "CUST-001",
-      "company-name": "ss Trading",
-      "customer-number": "1001",
-      "first-name": "Sam",
-      "last-name": "Sheikh",
-    },
-  },
-];
-
 const formatCurrency = (value: number, currency = "SOS") => `${currency}${value.toFixed(2)}`;
 
 type ReportsDrawerSection = {
@@ -740,6 +722,12 @@ function SalesByCustomerReportView({
   const [moreFilterRows, setMoreFilterRows] = useState<MoreFilterRow[]>([
     { id: "more-filter-1", field: "", comparator: "", value: "" },
   ]);
+  const [reportRows, setReportRows] = useState<SalesByCustomerRow[]>([]);
+  const [reportCurrency, setReportCurrency] = useState("SOS");
+  const [isReportLoading, setIsReportLoading] = useState(true);
+  const [reportError, setReportError] = useState("");
+  const [reportRefreshTick, setReportRefreshTick] = useState(0);
+  const shouldToastRunRef = useRef(false);
   const selectedDateRange = dateRangeKey === "custom" ? customDateRange : getDateRangeValue(dateRangeKey);
   const dateRangeLabel = DATE_RANGE_OPTIONS.find((option) => option.key === dateRangeKey)?.label ?? "Today";
   const customizeDateRangeLabel = DATE_RANGE_OPTIONS.find((option) => option.key === customizeDateRangeDraftKey)?.label ?? "Today";
@@ -1164,12 +1152,11 @@ function SalesByCustomerReportView({
 
   const visibleReportColumns = useMemo(() => selectedReportColumns.map((key) => getReportColumnOption(key)), [selectedReportColumns]);
 
-  const reportCurrency = String(SALES_BY_CUSTOMER_ROWS[0]?.values.currency ?? "SOS");
 
   const formatReportColumnValue = (key: ReportColumnKey, value: string | number | undefined) => {
     if (value === undefined || value === null || value === "") return "—";
     const option = getReportColumnOption(key);
-    if (option.kind === "currency" && typeof value === "number") return formatCurrency(value, reportCurrency);
+    if (option.kind === "currency" && typeof value === "number") return formatCurrency(value, reportCurrency || "SOS");
     return String(value);
   };
 
@@ -1177,16 +1164,92 @@ function SalesByCustomerReportView({
     () =>
       visibleReportColumns.map((option) => {
         if (option.key === "name") return "Total";
-        const total = SALES_BY_CUSTOMER_ROWS.reduce((sum, row) => {
+        const total = reportRows.reduce((sum, row) => {
           const value = row.values[option.key];
           return typeof value === "number" ? sum + value : sum;
         }, 0);
         if (option.kind === "number") return total;
-        if (option.kind === "currency") return formatCurrency(total, reportCurrency);
+        if (option.kind === "currency") return formatCurrency(total, reportCurrency || "SOS");
         return "";
       }),
-    [reportCurrency, visibleReportColumns]
+    [reportCurrency, reportRows, visibleReportColumns]
   );
+
+  const buildSalesByCustomerQuery = () => {
+    const query: Record<string, string> = {
+      filter_by: dateRangeKey,
+      compare_with: compareWithKey,
+      compare_count: String(compareWithCount),
+    };
+
+    if (dateRangeKey === "custom") {
+      query.from_date = selectedDateRange.start.toISOString();
+      query.to_date = selectedDateRange.end.toISOString();
+    }
+
+    if (entityKeys.length > 0) {
+      query.entities = entityKeys.join(",");
+    }
+
+    const activeMoreFilters = moreFilterRows
+      .filter((row) => row.field || row.comparator || row.value.trim())
+      .map((row) => ({
+        field: row.field,
+        comparator: row.comparator,
+        value: row.value,
+      }));
+
+    if (activeMoreFilters.length > 0) {
+      query.more_filters = JSON.stringify(activeMoreFilters);
+    }
+
+    return query;
+  };
+
+  const refreshReport = (notify = true) => {
+    shouldToastRunRef.current = notify;
+    setReportRefreshTick((value) => value + 1);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadReport = async () => {
+      setIsReportLoading(true);
+      setReportError("");
+
+      try {
+        const response = await reportsAPI.getSalesByCustomer(buildSalesByCustomerQuery());
+        if (cancelled) return;
+
+        const data = response?.data || {};
+        setReportRows(Array.isArray(data.rows) ? data.rows : []);
+        setReportCurrency(String(data.currency || "SOS"));
+        if (shouldToastRunRef.current) {
+          onRunReport();
+        }
+      } catch (error) {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : "Failed to load report";
+          setReportError(message);
+          setReportRows([]);
+          setReportCurrency("SOS");
+        }
+      } finally {
+        if (!cancelled) {
+          shouldToastRunRef.current = false;
+          setIsReportLoading(false);
+        }
+      }
+    };
+
+    void loadReport();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportRefreshTick]);
 
   const closeAllOpenPanels = () => {
     setIsCompareWithOpen(false);
@@ -2192,15 +2255,15 @@ function SalesByCustomerReportView({
             </div>
 
             <div className="flex items-center gap-2 border-t border-[#eef2f7] px-4 py-3">
-              <button
-                type="button"
-                onClick={() => {
-                  closeMoreFilterDropdown();
-                  setIsMoreFiltersOpen(false);
-                  onRunReport();
-                }}
-                className="inline-flex h-9 items-center rounded bg-[#1b6f7b] px-4 text-sm font-semibold text-white hover:bg-[#155963]"
-              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeMoreFilterDropdown();
+                    setIsMoreFiltersOpen(false);
+                    refreshReport();
+                  }}
+                  className="inline-flex h-9 items-center rounded bg-[#1b6f7b] px-4 text-sm font-semibold text-white hover:bg-[#155963]"
+                >
                 Run Report
               </button>
               <button
@@ -2219,7 +2282,10 @@ function SalesByCustomerReportView({
         ) : null}
         <button
           type="button"
-          onClick={onRunReport}
+          onClick={() => {
+            closeAllOpenPanels();
+            refreshReport();
+          }}
           className="inline-flex h-8 items-center gap-1 rounded bg-[#1b6f7b] px-4 text-sm font-semibold text-white hover:bg-[#155963]"
         >
           <CalendarDays size={14} /> Run Report
@@ -3456,7 +3522,7 @@ function SalesByCustomerReportView({
                     type="button"
                     onClick={() => {
                       applyCustomizeColumns();
-                      onRunReport();
+                      refreshReport();
                     }}
                     className="inline-flex h-9 items-center rounded bg-[#1b6f7b] px-4 text-sm font-semibold text-white hover:bg-[#155963]"
                   >
@@ -3499,35 +3565,57 @@ function SalesByCustomerReportView({
               </tr>
             </thead>
             <tbody>
-              {SALES_BY_CUSTOMER_ROWS.map((row, index) => (
-                <tr key={`${index}-${row.values.name ?? index}`} className="border-b border-[#eef2f7]">
-                  {visibleReportColumns.map((column) => (
-                    <td
-                      key={column.key}
-                      className={`px-4 py-3 text-sm ${
-                        column.kind === "text" ? "text-left" : "text-center"
-                      } ${column.key === "name" ? "font-medium text-[#2563eb]" : "text-[#2563eb]"}`}
-                    >
-                      {formatReportColumnValue(column.key, row.values[column.key])}
-                    </td>
-                  ))}
+              {isReportLoading ? (
+                <tr className="border-b border-[#eef2f7]">
+                  <td className="px-4 py-8 text-center text-sm text-[#64748b]" colSpan={visibleReportColumns.length}>
+                    Loading report data...
+                  </td>
                 </tr>
-              ))}
-              <tr className="border-b border-[#e5e7eb]">
-                {reportColumnTotals.map((value, index) => {
-                  const column = visibleReportColumns[index];
-                  return (
-                    <td
-                      key={column.key}
-                      className={`px-4 py-3 text-sm ${column.kind === "text" ? "text-left" : "text-center"} ${
-                        column.key === "name" ? "font-semibold text-[#111827]" : "text-[#111827]"
-                      }`}
-                    >
-                      {value as React.ReactNode}
-                    </td>
-                  );
-                })}
-              </tr>
+              ) : reportError ? (
+                <tr className="border-b border-[#eef2f7]">
+                  <td className="px-4 py-8 text-center text-sm text-[#b91c1c]" colSpan={visibleReportColumns.length}>
+                    {reportError}
+                  </td>
+                </tr>
+              ) : reportRows.length === 0 ? (
+                <tr className="border-b border-[#eef2f7]">
+                  <td className="px-4 py-8 text-center text-sm text-[#64748b]" colSpan={visibleReportColumns.length}>
+                    No report rows found for the selected filters.
+                  </td>
+                </tr>
+              ) : (
+                <>
+                  {reportRows.map((row, index) => (
+                    <tr key={`${index}-${row.values.name ?? index}`} className="border-b border-[#eef2f7]">
+                      {visibleReportColumns.map((column) => (
+                        <td
+                          key={column.key}
+                          className={`px-4 py-3 text-sm ${
+                            column.kind === "text" ? "text-left" : "text-center"
+                          } ${column.key === "name" ? "font-medium text-[#2563eb]" : "text-[#2563eb]"}`}
+                        >
+                          {formatReportColumnValue(column.key, row.values[column.key])}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                  <tr className="border-b border-[#e5e7eb]">
+                    {reportColumnTotals.map((value, index) => {
+                      const column = visibleReportColumns[index];
+                      return (
+                        <td
+                          key={column.key}
+                          className={`px-4 py-3 text-sm ${column.kind === "text" ? "text-left" : "text-center"} ${
+                            column.key === "name" ? "font-semibold text-[#111827]" : "text-[#111827]"
+                          }`}
+                        >
+                          {value as React.ReactNode}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </>
+              )}
             </tbody>
           </table>
         </div>

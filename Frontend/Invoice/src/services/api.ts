@@ -2219,6 +2219,16 @@ export const transactionNumberSeriesAPI = {
   },
 };
 
+export const reportsAPI = {
+  getSalesByCustomer: async (params?: Record<string, any>) => {
+    const res = await request({ path: "/reports/sales-by-customer", params });
+    if (!res?.success) {
+      throw new Error(res?.message || "Failed to fetch sales by customer report");
+    }
+    return res as any;
+  },
+};
+
 export const locationsAPI = {
   ...locationsLocal,
   getAll: async (params?: Record<string, any>) => {
@@ -2491,6 +2501,7 @@ export default {
   timeEntriesAPI,
   billsAPI,
   salesReceiptsAPI,
+  reportsAPI,
   salespersonsAPI,
   contactPersonsAPI,
   bankAccountsAPI,
