@@ -118,7 +118,7 @@ type MoreFilterValueMode = "dropdown" | "text" | "none";
 
 type FilterOption = { key: string; label: string };
 
-type ReportingTagFieldOption = FilterOption;
+type ReportingTagFieldOption = FilterOption & { appliesTo?: string[] };
 type LocationFieldOption = FilterOption;
 
 const MORE_FILTER_FIELD_OPTIONS: Array<FilterOption> = [
