@@ -1225,10 +1225,10 @@ function SalesByCustomerReportView({
             closeMoreFilterDropdown();
           }}
           className={`inline-flex h-8 items-center gap-1 rounded border px-3 text-sm text-[#334155] hover:bg-[#f8fafc] ${
-            isMoreFiltersOpen || hasMoreFilters ? "border-[#7aa7ff] bg-white" : "border-[#cfd6e4] bg-white"
+            isMoreFiltersOpen || hasMoreFilters ? "border-[#1b6f7b] bg-white" : "border-[#cfd6e4] bg-white"
           }`}
         >
-          <Plus size={14} className="text-[#2563eb]" /> More Filters
+          <Plus size={14} className="text-[#1b6f7b]" /> More Filters
         </button>
 
         {isMoreFiltersOpen ? (
@@ -1260,7 +1260,7 @@ function SalesByCustomerReportView({
                           type="button"
                           onClick={() => openMoreFilterDropdown(row.id, "field")}
                           className={`relative flex h-10 w-full items-center overflow-hidden rounded border px-3 pr-10 text-sm text-[#334155] outline-none ${
-                            fieldMenuOpen ? "border-[#7aa7ff] bg-white" : "border-[#cfd6e4] bg-white hover:bg-[#f8fafc]"
+                            fieldMenuOpen ? "border-[#1b6f7b] bg-white" : "border-[#cfd6e4] bg-white hover:bg-[#f8fafc]"
                           }`}
                           aria-haspopup="menu"
                           aria-expanded={fieldMenuOpen}
@@ -1271,7 +1271,7 @@ function SalesByCustomerReportView({
                           <ChevronDown
                             size={14}
                             className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
-                              fieldMenuOpen ? "rotate-180 text-[#2563eb]" : "text-[#64748b]"
+                              fieldMenuOpen ? "rotate-180 text-[#1b6f7b]" : "text-[#64748b]"
                             }`}
                           />
                         </button>
@@ -1303,7 +1303,7 @@ function SalesByCustomerReportView({
                                     setMoreFilterDropdown((prev) => (prev ? { ...prev, search: event.target.value } : prev))
                                   }
                                   placeholder="Search"
-                                  className="h-9 w-full rounded-md border border-[#7aa7ff] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                                  className="h-9 w-full rounded-md border border-[#1b6f7b] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
                                 />
                                 <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
                               </div>
@@ -1334,7 +1334,7 @@ function SalesByCustomerReportView({
                                               closeMoreFilterDropdown();
                                             }}
                                             className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
-                                              isSelected ? "bg-[#2f80ed] font-medium text-white" : "text-[#334155] hover:bg-[#f8fafc]"
+                                              isSelected ? "bg-[#1b6f7b] font-medium text-white" : "text-[#334155] hover:bg-[#f8fafc]"
                                             }`}
                                           >
                                             <span>{option.label}</span>
@@ -1363,9 +1363,9 @@ function SalesByCustomerReportView({
                           disabled={!row.field}
                           className={`relative flex h-10 w-full items-center overflow-hidden rounded border px-3 pr-9 text-sm text-[#334155] outline-none ${
                             row.field
-                              ? comparatorMenuOpen
-                                ? "border-[#7aa7ff] bg-white"
-                                : "border-[#cfd6e4] bg-white hover:bg-[#f8fafc]"
+                                ? comparatorMenuOpen
+                                  ? "border-[#1b6f7b] bg-white"
+                                  : "border-[#cfd6e4] bg-white hover:bg-[#f8fafc]"
                               : "cursor-not-allowed border-[#e2e8f0] bg-[#f8fafc] text-[#94a3b8]"
                           }`}
                           aria-haspopup="menu"
@@ -1378,7 +1378,7 @@ function SalesByCustomerReportView({
                             size={14}
                             className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
                               comparatorMenuOpen
-                                ? "rotate-180 text-[#2563eb]"
+                                ? "rotate-180 text-[#1b6f7b]"
                                 : row.field
                                   ? "text-[#64748b]"
                                   : "text-[#cbd5e1]"
@@ -1396,7 +1396,7 @@ function SalesByCustomerReportView({
                                     setMoreFilterDropdown((prev) => (prev ? { ...prev, search: event.target.value } : prev))
                                   }
                                   placeholder="Search"
-                                  className="h-9 w-full rounded-md border border-[#7aa7ff] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                                  className="h-9 w-full rounded-md border border-[#1b6f7b] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
                                 />
                                 <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
                               </div>
@@ -1417,7 +1417,7 @@ function SalesByCustomerReportView({
                                         closeMoreFilterDropdown();
                                       }}
                                       className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
-                                        isSelected ? "bg-[#2f80ed] font-medium text-white" : "text-[#334155] hover:bg-[#f8fafc]"
+                                        isSelected ? "bg-[#1b6f7b] font-medium text-white" : "text-[#334155] hover:bg-[#f8fafc]"
                                       }`}
                                     >
                                       <span>{option.label}</span>
@@ -1443,9 +1443,9 @@ function SalesByCustomerReportView({
                           disabled={!row.field}
                           className={`relative flex h-10 w-full items-center overflow-hidden rounded border px-3 pr-9 text-sm outline-none ${
                             row.field
-                              ? valueMenuOpen
-                                ? "border-[#7aa7ff] bg-white text-[#334155]"
-                                : "border-[#cfd6e4] bg-white text-[#334155] hover:bg-[#f8fafc]"
+                                ? valueMenuOpen
+                                  ? "border-[#1b6f7b] bg-white text-[#334155]"
+                                  : "border-[#cfd6e4] bg-white text-[#334155] hover:bg-[#f8fafc]"
                               : "cursor-not-allowed border-[#e2e8f0] bg-[#f8fafc] text-[#94a3b8]"
                           }`}
                           aria-haspopup="menu"
@@ -1457,7 +1457,7 @@ function SalesByCustomerReportView({
                           <ChevronDown
                             size={14}
                             className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
-                              valueMenuOpen ? "rotate-180 text-[#2563eb]" : row.field ? "text-[#64748b]" : "text-[#cbd5e1]"
+                              valueMenuOpen ? "rotate-180 text-[#1b6f7b]" : row.field ? "text-[#64748b]" : "text-[#cbd5e1]"
                             }`}
                           />
                         </button>
@@ -1483,7 +1483,7 @@ function SalesByCustomerReportView({
                                         closeMoreFilterDropdown();
                                       }}
                                       className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
-                                        isSelected ? "bg-[#2f80ed] font-medium text-white" : "text-[#334155] hover:bg-[#f8fafc]"
+                                        isSelected ? "bg-[#1b6f7b] font-medium text-white" : "text-[#334155] hover:bg-[#f8fafc]"
                                       }`}
                                     >
                                       <span>{option.label}</span>
@@ -1530,7 +1530,7 @@ function SalesByCustomerReportView({
                 <button
                   type="button"
                   onClick={addMoreFilterRow}
-                  className="inline-flex items-center gap-1 text-sm font-medium text-[#2563eb] hover:underline"
+                  className="inline-flex items-center gap-1 text-sm font-medium text-[#1b6f7b] hover:underline"
                 >
                   <Plus size={14} /> Add More
                 </button>
@@ -1545,7 +1545,7 @@ function SalesByCustomerReportView({
                   setIsMoreFiltersOpen(false);
                   onRunReport();
                 }}
-                className="inline-flex h-9 items-center rounded bg-[#7aa7ff] px-4 text-sm font-semibold text-white hover:bg-[#6498ff]"
+                className="inline-flex h-9 items-center rounded bg-[#1b6f7b] px-4 text-sm font-semibold text-white hover:bg-[#155963]"
               >
                 Run Report
               </button>
@@ -1566,7 +1566,7 @@ function SalesByCustomerReportView({
         <button
           type="button"
           onClick={onRunReport}
-          className="inline-flex h-8 items-center gap-1 rounded bg-[#7aa7ff] px-4 text-sm font-semibold text-white hover:bg-[#6498ff]"
+          className="inline-flex h-8 items-center gap-1 rounded bg-[#1b6f7b] px-4 text-sm font-semibold text-white hover:bg-[#155963]"
         >
           <CalendarDays size={14} /> Run Report
         </button>
@@ -1595,7 +1595,7 @@ function SalesByCustomerReportView({
                   <button
                     type="button"
                     onClick={() => setIsCompareWithSelectOpen((prev) => !prev)}
-                    className="relative flex h-10 w-full items-center justify-between rounded border border-[#7aa7ff] bg-white px-3 pr-9 text-sm text-[#334155] outline-none hover:bg-[#f8fafc]"
+                    className="relative flex h-10 w-full items-center justify-between rounded border border-[#1b6f7b] bg-white px-3 pr-9 text-sm text-[#334155] outline-none hover:bg-[#f8fafc]"
                     aria-haspopup="menu"
                     aria-expanded={isCompareWithSelectOpen}
                   >
@@ -1603,7 +1603,7 @@ function SalesByCustomerReportView({
                     <ChevronDown
                       size={14}
                       className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
-                        isCompareWithSelectOpen ? "rotate-180 text-[#2563eb]" : "text-[#64748b]"
+                        isCompareWithSelectOpen ? "rotate-180 text-[#1b6f7b]" : "text-[#64748b]"
                       }`}
                     />
                   </button>
@@ -1616,7 +1616,7 @@ function SalesByCustomerReportView({
                             value={compareWithSearch}
                             onChange={(event) => setCompareWithSearch(event.target.value)}
                             placeholder="Search"
-                            className="h-9 w-full rounded-md border border-[#7aa7ff] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                            className="h-9 w-full rounded-md border border-[#1b6f7b] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
                           />
                           <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
                         </div>
@@ -1659,7 +1659,7 @@ function SalesByCustomerReportView({
                         <button
                           type="button"
                           onClick={() => setIsCompareWithCountOpen((prev) => !prev)}
-                          className="relative flex h-10 w-full items-center justify-between rounded border border-[#7aa7ff] bg-white px-3 pr-9 text-sm text-[#334155] outline-none hover:bg-[#f8fafc]"
+                          className="relative flex h-10 w-full items-center justify-between rounded border border-[#1b6f7b] bg-white px-3 pr-9 text-sm text-[#334155] outline-none hover:bg-[#f8fafc]"
                           aria-haspopup="menu"
                           aria-expanded={isCompareWithCountOpen}
                         >
@@ -1667,7 +1667,7 @@ function SalesByCustomerReportView({
                           <ChevronDown
                             size={14}
                             className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
-                              isCompareWithCountOpen ? "rotate-180 text-[#2563eb]" : "text-[#64748b]"
+                              isCompareWithCountOpen ? "rotate-180 text-[#1b6f7b]" : "text-[#64748b]"
                             }`}
                           />
                         </button>
@@ -1680,7 +1680,7 @@ function SalesByCustomerReportView({
                                   value={compareWithCountSearch}
                                   onChange={(event) => setCompareWithCountSearch(event.target.value)}
                                   placeholder="Search"
-                                  className="h-9 w-full rounded-md border border-[#7aa7ff] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                                  className="h-9 w-full rounded-md border border-[#1b6f7b] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
                                 />
                                 <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
                               </div>
