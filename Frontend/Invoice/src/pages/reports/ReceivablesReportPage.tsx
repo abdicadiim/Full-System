@@ -15,6 +15,19 @@ type ColumnGroup = { label: string; options: ColumnOption[] };
 type FilterOption = { key: string; label: string; values?: FilterOption[] };
 type FilterGroup = { label: string; options: FilterOption[] };
 type FilterRow = { id: string; field: string; comparator: string; value: string };
+type DateRangeKey =
+  | "today"
+  | "this-week"
+  | "this-month"
+  | "this-quarter"
+  | "this-year"
+  | "yesterday"
+  | "previous-week"
+  | "previous-month"
+  | "previous-quarter"
+  | "previous-year"
+  | "custom";
+type ReportPayload = { rows: ReportRow[]; totals?: Record<string, any>; currency?: string };
 
 type ReportConfig = {
   fetcher: (params?: Record<string, any>) => Promise<any>;
@@ -62,9 +75,22 @@ const ENTITY_OPTIONS = [{ key: "invoice", label: "Invoice" }];
 
 const formatDate = (d: Date) => d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 const toInputDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const inputDate = toInputDate;
 const parseInputDate = (value: string) => {
   const [y, m, d] = value.split("-").map(Number);
   return new Date(y, m - 1, d);
+};
+const currencyValue = (value: any, currency = "SOS") => {
+  const num = Number(value ?? 0);
+  return Number.isNaN(num) ? String(value ?? "") : `${num < 0 ? `${currency}-` : currency}${Math.abs(num).toFixed(2)}`;
+};
+const numberValue = (value: any) => {
+  const num = Number(value ?? 0);
+  return Number.isNaN(num) ? String(value ?? "") : num.toLocaleString("en-US");
+};
+const dateValue = (value: any) => {
+  const date = new Date(String(value ?? ""));
+  return Number.isNaN(date.getTime()) ? String(value ?? "") : formatDate(date);
 };
 
 const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());

@@ -451,7 +451,7 @@ const buildAgingSummaryRows = (rows: Array<{ source: ReportEntity; row: any }>, 
 
   const groupMap = new Map<string, any>();
   let currency = "";
-  const asOf = startOfDay(asOf);
+  const cutoffDate = startOfDay(asOf);
 
   for (const item of rows || []) {
     const source = item?.source || "invoice";
@@ -460,7 +460,7 @@ const buildAgingSummaryRows = (rows: Array<{ source: ReportEntity; row: any }>, 
     const date = getDocumentDate(row);
     const dueDate = getDocumentDueDate(row);
     if (!date || !dueDate) continue;
-    if (date > asOf) continue;
+    if (date > cutoffDate) continue;
 
     const customerId = String(row?.customerId || row?.customer?._id || row?.customer?.id || "").trim();
     const fallbackName = String(row?.customerName || row?.customer?.displayName || row?.customer?.name || row?.customer?.companyName || "").trim();
@@ -562,7 +562,7 @@ const buildAgingDetailsRows = (rows: Array<{ source: ReportEntity; row: any }>, 
     if (number) customerByName.set(normalizeText(number), customer);
   }
 
-  const asOf = startOfDay(asOf);
+  const cutoffDate = startOfDay(asOf);
   const detailRows: Array<{ values: Record<string, any> }> = [];
   let currency = "";
 
@@ -572,7 +572,7 @@ const buildAgingDetailsRows = (rows: Array<{ source: ReportEntity; row: any }>, 
     const date = getDocumentDate(row);
     const dueDate = getDocumentDueDate(row);
     if (!date || !dueDate) continue;
-    if (date > asOf) continue;
+    if (date > cutoffDate) continue;
 
     const customerId = String(row?.customerId || row?.customer?._id || row?.customer?.id || "").trim();
     const fallbackName = String(row?.customerName || row?.customer?.displayName || row?.customer?.name || row?.customer?.companyName || "").trim();
@@ -627,7 +627,7 @@ const buildAgingDetailsRows = (rows: Array<{ source: ReportEntity; row: any }>, 
   };
 };
 
-const buildInvoiceDetailsRows = (rows: Array<{ source: ReportEntity; row: any }>, customers: any[], moreFilters: MoreFilterRow[]) => {
+const buildInvoiceDetailSummaryRows = (rows: Array<{ source: ReportEntity; row: any }>, customers: any[], moreFilters: MoreFilterRow[]) => {
   const customerById = new Map<string, any>();
   const customerByName = new Map<string, any>();
   for (const customer of customers || []) {
