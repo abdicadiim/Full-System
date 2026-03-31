@@ -2103,13 +2103,13 @@ const QuoteDetail = () => {
       wrapper.appendChild(cloned);
       document.body.appendChild(wrapper);
 
-      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 
       const canvas = await html2canvas(wrapper, {
-        scale: 1.3,
+        scale: 2,
         useCORS: true,
         backgroundColor: "#ffffff",
-        allowTaint: false,
+        allowTaint: true,
         width: 794,
         windowWidth: 794,
         scrollX: 0,
@@ -2117,7 +2117,7 @@ const QuoteDetail = () => {
       });
       document.body.removeChild(wrapper);
 
-      const imgData = canvas.toDataURL('image/jpeg', 0.86);
+      const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
       const margin = 10;
       const pageWidth = pdf.internal.pageSize.getWidth();
