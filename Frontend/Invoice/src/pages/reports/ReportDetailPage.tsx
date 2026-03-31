@@ -511,14 +511,14 @@ function SalesByCustomerReportView({
           <button
             type="button"
             onClick={() => setIsEntityOpen((prev) => !prev)}
-            className={`inline-flex h-8 max-w-[170px] items-center gap-1 rounded border px-3 pr-10 text-sm text-[#334155] hover:bg-white ${
+            className={`inline-flex h-8 w-[184px] items-center gap-1 overflow-hidden rounded border px-3 pr-8 text-sm text-[#334155] hover:bg-white ${
               isEntityOpen ? "border-[#7aa7ff] bg-white" : "border-[#cfd6e4] bg-[#f8fafc]"
             }`}
             aria-haspopup="menu"
             aria-expanded={isEntityOpen}
           >
-            <span>Entities :</span>
-            <span className="min-w-0 max-w-[92px] truncate font-medium">{entityLabel}</span>
+            <span className="shrink-0 whitespace-nowrap">Entities :</span>
+            <span className="min-w-0 flex-1 truncate text-left font-medium whitespace-nowrap">{entityLabel}</span>
             <ChevronDown size={14} className="flex-none" />
           </button>
 
