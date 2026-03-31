@@ -1709,7 +1709,7 @@ export default function Quotes() {
       try {
         await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
         const canvas = await html2canvas(tempDiv, {
-          scale: 2,
+          scale: 1.5,
           useCORS: true,
           allowTaint: true,
           backgroundColor: '#ffffff',
@@ -1725,18 +1725,18 @@ export default function Quotes() {
           pdf.addPage();
         }
 
-        const imgData = canvas.toDataURL('image/png');
+        const imgData = canvas.toDataURL('image/jpeg', 0.97);
         const imgHeight = (canvas.height * printableWidth) / canvas.width;
         let heightLeft = imgHeight;
         let positionY = margin;
 
-        pdf.addImage(imgData, 'PNG', margin, positionY, printableWidth, imgHeight);
+        pdf.addImage(imgData, 'JPEG', margin, positionY, printableWidth, imgHeight, undefined, 'FAST');
         heightLeft -= printableHeight;
 
         while (heightLeft > 0.01) {
           pdf.addPage();
           positionY = margin - (imgHeight - heightLeft);
-          pdf.addImage(imgData, 'PNG', margin, positionY, printableWidth, imgHeight);
+          pdf.addImage(imgData, 'JPEG', margin, positionY, printableWidth, imgHeight, undefined, 'FAST');
           heightLeft -= printableHeight;
         }
       } finally {
