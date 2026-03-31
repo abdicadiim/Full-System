@@ -79,7 +79,7 @@ type DateRangeValue = {
   end: Date;
 };
 
-type EntityKey = "invoice" | "credit-note" | "sales-receipt";
+type EntityKey = "invoice" | "credit-note";
 
 type EntityOption = {
   key: EntityKey;
@@ -88,7 +88,7 @@ type EntityOption = {
 
 type CompareWithKey = "none" | "previous-years" | "previous-periods";
 
-type MoreFilterFieldKey = "item-name" | "sku" | "customer-name" | "currency" | "location";
+type MoreFilterFieldKey = "item-name" | "sku" | "usage-unit" | "customer-name";
 
 type MoreFilterComparatorKey = "is-empty" | "is-not-empty" | "is-in" | "is-not-in" | "starts-with" | "ends-with" | "contains" | "does-not-contain";
 
@@ -113,9 +113,8 @@ type MoreFilterValueMode = "dropdown" | "text" | "none";
 const MORE_FILTER_FIELD_OPTIONS: Array<{ key: MoreFilterFieldKey; label: string }> = [
   { key: "item-name", label: "Item Name" },
   { key: "sku", label: "SKU" },
+  { key: "usage-unit", label: "Usage unit" },
   { key: "customer-name", label: "Customer Name" },
-  { key: "currency", label: "Currency" },
-  { key: "location", label: "Location" },
 ];
 
 const MORE_FILTER_FIELD_GROUPS: Array<{ label: string; options: Array<{ key: MoreFilterFieldKey; label: string }> }> = [
@@ -124,18 +123,12 @@ const MORE_FILTER_FIELD_GROUPS: Array<{ label: string; options: Array<{ key: Mor
     options: [
       { key: "item-name", label: "Item Name" },
       { key: "sku", label: "SKU" },
+      { key: "usage-unit", label: "Usage unit" },
     ],
   },
   {
     label: "Reports",
-    options: [
-      { key: "customer-name", label: "Customer Name" },
-      { key: "currency", label: "Currency" },
-    ],
-  },
-  {
-    label: "Locations",
-    options: [{ key: "location", label: "Location" }],
+    options: [{ key: "customer-name", label: "Customer Name" }],
   },
 ];
 
@@ -153,19 +146,10 @@ const MORE_FILTER_COMPARATOR_OPTIONS: Array<{ key: MoreFilterComparatorKey; labe
 const MORE_FILTER_VALUE_OPTIONS: Record<MoreFilterFieldKey, Array<{ key: string; label: string }>> = {
   "item-name": [{ key: "select-item", label: "Select Item" }],
   sku: [{ key: "select-sku", label: "Select SKU" }],
+  "usage-unit": [{ key: "select-unit", label: "Enter a value" }],
   "customer-name": [
     { key: "select-customer", label: "Select Customer" },
     { key: "ss", label: "ss" },
-  ],
-  currency: [
-    { key: "select-currency", label: "Select Currency" },
-    { key: "SOS", label: "SOS" },
-    { key: "USD", label: "USD" },
-  ],
-  location: [
-    { key: "select-location", label: "Select Location" },
-    { key: "mogadishu", label: "Mogadishu" },
-    { key: "hargeisa", label: "Hargeisa" },
   ],
 };
 
@@ -212,7 +196,6 @@ const DATE_RANGE_OPTIONS: DateRangeOption[] = [
 const ENTITY_OPTIONS: EntityOption[] = [
   { key: "invoice", label: "Invoice" },
   { key: "credit-note", label: "Credit Note" },
-  { key: "sales-receipt", label: "Sales Receipt" },
 ];
 
 const COMPARE_WITH_OPTIONS: Array<{ key: CompareWithKey; label: string }> = [
@@ -243,53 +226,28 @@ const REPORT_COLUMN_GROUPS: ReportColumnGroup[] = [
     label: "Reports",
     options: [
       { key: "name", label: "Item Name", kind: "text", locked: true },
-      { key: "sku", label: "SKU", kind: "text" },
       { key: "quantity-sold", label: "Quantity Sold", kind: "number" },
       { key: "amount", label: "Amount", kind: "currency" },
       { key: "average-price", label: "Average Price", kind: "currency" },
-      { key: "currency", label: "Currency", kind: "text" },
+    ],
+  },
+  {
+    options: [
+      { key: "sku", label: "SKU", kind: "text" },
+      { key: "item-type", label: "Item Type", kind: "text" },
+      { key: "product-type", label: "Product Type", kind: "text" },
+      { key: "status", label: "Status", kind: "text" },
+      { key: "usage-unit", label: "Usage Unit", kind: "text" },
+      { key: "sales-description", label: "Sales Description", kind: "text" },
+      { key: "sales-price", label: "Sales Price", kind: "currency" },
+      { key: "created-by", label: "Created By", kind: "text" },
+      { key: "created-time", label: "Created Time", kind: "text" },
+      { key: "last-modified-time", label: "Last Modified Time", kind: "text" },
     ],
   },
   {
     label: "Locations",
     options: [{ key: "location", label: "Location", kind: "text" }],
-  },
-  {
-    label: "Contacts",
-    options: [
-      { key: "customer-name", label: "Customer Name", kind: "text" },
-    ],
-  },
-  {
-    label: "Misc",
-    options: [
-      { key: "customer-id", label: "Customer ID", kind: "text" },
-      { key: "company-name", label: "Company Name", kind: "text" },
-      { key: "customer-number", label: "Customer Number", kind: "text" },
-      { key: "first-name", label: "First Name", kind: "text" },
-      { key: "last-name", label: "Last Name", kind: "text" },
-      { key: "website", label: "Website", kind: "text" },
-      { key: "customer-email", label: "Customer Email", kind: "text" },
-      { key: "customer-type", label: "Customer Type", kind: "text" },
-      { key: "mobile-phone", label: "Mobile Phone", kind: "text" },
-      { key: "work-phone", label: "Work Phone", kind: "text" },
-      { key: "department", label: "Department", kind: "text" },
-      { key: "designation", label: "Designation", kind: "text" },
-      { key: "facebook", label: "Facebook", kind: "text" },
-      { key: "twitter", label: "Twitter", kind: "text" },
-      { key: "skype", label: "Skype", kind: "text" },
-      { key: "status", label: "Status", kind: "text" },
-      { key: "created-by", label: "Created By", kind: "text" },
-      { key: "created-time", label: "Created Time", kind: "text" },
-      { key: "last-modified-time", label: "Last Modified Time", kind: "text" },
-      { key: "credit-limit", label: "Credit Limit", kind: "currency" },
-      { key: "payment-terms", label: "Payment Terms", kind: "text" },
-      { key: "remarks", label: "Remarks", kind: "text" },
-      { key: "receivables", label: "Receivables", kind: "currency" },
-      { key: "receivables-fcy", label: "Receivables (FCY)", kind: "currency" },
-      { key: "unused-credits", label: "Unused Credits", kind: "currency" },
-      { key: "unused-credits-fcy", label: "Unused Credits (FCY)", kind: "currency" },
-    ],
   },
 ];
 
@@ -658,7 +616,7 @@ export default function SalesByItemReportView({
   const [customDateRange, setCustomDateRange] = useState<DateRangeValue>(() => getDateRangeValue("this-week"));
   const [customDateRangeDraft, setCustomDateRangeDraft] = useState<DateRangeValue>(() => getDateRangeValue("this-week"));
   const [customDateRangeMonth, setCustomDateRangeMonth] = useState<Date>(() => getStartOfMonth(getDateRangeValue("this-week").start));
-  const [entityKeys, setEntityKeys] = useState<EntityKey[]>([]);
+  const [entityKeys, setEntityKeys] = useState<EntityKey[]>(() => ENTITY_OPTIONS.map((option) => option.key));
   const [isEntityOpen, setIsEntityOpen] = useState(false);
   const [entitySearch, setEntitySearch] = useState("");
   const [compareWithKey, setCompareWithKey] = useState<CompareWithKey>("none");
@@ -1280,15 +1238,13 @@ export default function SalesByItemReportView({
   const getFilteredComparatorOptions = (query: string, field?: MoreFilterFieldKey | "") => {
     const normalizedQuery = query.trim().toLowerCase();
     const fieldSpecificOptions =
-      field === "item-name" || field === "sku"
+      field === "item-name" || field === "sku" || field === "usage-unit"
         ? MORE_FILTER_COMPARATOR_OPTIONS.filter((option) =>
             ["is-empty", "is-not-empty", "starts-with", "ends-with", "contains", "does-not-contain"].includes(option.key)
           )
-        : field === "currency"
-          ? MORE_FILTER_COMPARATOR_OPTIONS.filter((option) => ["is-empty", "is-not-empty", "is-in", "is-not-in"].includes(option.key))
-          : field === "location"
-            ? MORE_FILTER_COMPARATOR_OPTIONS.filter((option) => ["is-in", "is-not-in"].includes(option.key))
-            : MORE_FILTER_COMPARATOR_OPTIONS;
+        : field === "customer-name"
+          ? MORE_FILTER_COMPARATOR_OPTIONS.filter((option) => ["is-empty", "is-not-empty", "is-in", "is-not-in", "starts-with", "ends-with", "contains", "does-not-contain"].includes(option.key))
+          : MORE_FILTER_COMPARATOR_OPTIONS;
     return fieldSpecificOptions.filter((option) => option.label.toLowerCase().includes(normalizedQuery));
   };
 
@@ -3103,7 +3059,7 @@ export default function SalesByItemReportView({
                       <section ref={customizeMoreFiltersRef}>
                         <div className="text-base font-semibold text-[#111827]">Advanced Filters</div>
                         <p className="mt-1 text-sm text-[#64748b]">
-                          Use advanced filters to filter the report based on the fields of Reports, Locations.
+                          Use advanced filters to filter the report based on the fields of Items, Reports.
                         </p>
 
                         {customizeMoreFilterRows.length > 0 ? (

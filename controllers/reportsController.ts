@@ -330,10 +330,12 @@ const matchesMoreFilters = (values: Record<string, unknown>, filters: MoreFilter
           ? String(values["item-name"] || values.name || "")
           : field === "sku"
             ? String(values.sku || "")
-        : field === "currency"
-          ? String(values.currency || "")
-          : field === "location"
-            ? String(values.location || "")
+        : field === "usage-unit"
+          ? String(values["usage-unit"] || "")
+          : field === "currency"
+            ? String(values.currency || "")
+            : field === "location"
+              ? String(values.location || "")
             : String(values[field] ?? "");
     return compareValue(left, comparator, rawValue);
   });
@@ -526,16 +528,29 @@ const buildItemRows = (
       const itemDoc = itemById.get(lineItemId) || itemByName.get(normalizeText(resolveItemName(line, null, ""))) || itemBySku.get(normalizeText(resolveItemSku(line, null))) || null;
       const itemName = resolveItemName(line, itemDoc);
       const sku = resolveItemSku(line, itemDoc);
+      const itemType = String(itemDoc?.type || line?.itemType || "").trim();
+      const usageUnit = String(line?.unit || line?.usageUnit || itemDoc?.unit || "").trim();
+      const salesDescription = String(line?.description || itemDoc?.description || "").trim();
+      const salesPrice = asNumber(line?.rate ?? line?.unitPrice ?? line?.price ?? itemDoc?.rate, 0);
       const quantity = Math.abs(asNumber(line?.quantity, 0)) * getTransactionSign(source);
       const lineAmountRaw =
         line?.amount ?? line?.total ?? line?.lineTotal ?? line?.subtotal ?? quantity * asNumber(line?.rate ?? line?.unitPrice ?? line?.price, 0);
       const amount = Math.abs(asNumber(lineAmountRaw, 0)) * getTransactionSign(source);
-      const averagePrice = quantity !== 0 ? amount / quantity : asNumber(line?.rate ?? line?.unitPrice ?? line?.price, 0);
+      const averagePrice = quantity !== 0 ? amount / quantity : salesPrice;
 
       const baseValues = {
         ...baseTransactionValues,
         "item-name": itemName,
         sku,
+        "item-type": itemType,
+        "product-type": itemType,
+        status: String(itemDoc?.status || "").trim(),
+        "usage-unit": usageUnit,
+        "sales-description": salesDescription,
+        "sales-price": salesPrice,
+        "created-by": String(itemDoc?.createdBy || row?.createdBy || "").trim(),
+        "created-time": itemDoc?.createdAt ? new Date(itemDoc.createdAt).toISOString() : "",
+        "last-modified-time": itemDoc?.updatedAt ? new Date(itemDoc.updatedAt).toISOString() : "",
         "quantity-sold": quantity,
         amount,
         "average-price": averagePrice,
@@ -559,6 +574,17 @@ const buildItemRows = (
       const target = groupMap.get(key);
       target.values["item-name"] = itemName;
       target.values.sku = sku;
+      target.values["item-type"] = itemType;
+      target.values["product-type"] = itemType;
+      target.values.status = String(target.values.status || itemDoc?.status || "").trim();
+      target.values["usage-unit"] = usageUnit || String(target.values["usage-unit"] || "");
+      target.values["sales-description"] = salesDescription || String(target.values["sales-description"] || "");
+      target.values["sales-price"] = salesPrice;
+      target.values["created-by"] = String(target.values["created-by"] || itemDoc?.createdBy || row?.createdBy || "").trim();
+      target.values["created-time"] = String(target.values["created-time"] || (itemDoc?.createdAt ? new Date(itemDoc.createdAt).toISOString() : ""));
+      target.values["last-modified-time"] = String(
+        target.values["last-modified-time"] || (itemDoc?.updatedAt ? new Date(itemDoc.updatedAt).toISOString() : "")
+      );
       target.values["quantity-sold"] = asNumber(target.values["quantity-sold"], 0) + quantity;
       target.values.amount = asNumber(target.values.amount, 0) + amount;
       target.values.currency = rowCurrency || String(target.values.currency || "");
