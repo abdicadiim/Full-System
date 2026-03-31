@@ -119,6 +119,15 @@ const getMoreFilterValueLabel = (field: MoreFilterFieldKey | "", value: string) 
 
 const getCompareWithLabel = (key: CompareWithKey) => COMPARE_WITH_OPTIONS.find((option) => option.key === key)?.label ?? "None";
 
+const getReportColumnOption = (key: ReportColumnKey) => REPORT_COLUMN_GROUPS.flatMap((group) => group.options).find((option) => option.key === key)!;
+
+const getReportColumnLabel = (key: ReportColumnKey) => getReportColumnOption(key).label;
+
+const getReportColumnGroupLabel = (key: ReportColumnKey) => {
+  const group = REPORT_COLUMN_GROUPS.find((section) => section.options.some((option) => option.key === key));
+  return group?.label ?? "Reports";
+};
+
 const DATE_RANGE_OPTIONS: DateRangeOption[] = [
   { key: "today", label: "Today" },
   { key: "this-week", label: "This Week" },
@@ -143,6 +152,95 @@ const COMPARE_WITH_OPTIONS: Array<{ key: CompareWithKey; label: string }> = [
   { key: "none", label: "None" },
   { key: "previous-years", label: "Previous Year(s)" },
   { key: "previous-periods", label: "Previous Period(s)" },
+];
+
+type ReportColumnKey = string;
+type ReportColumnKind = "text" | "number" | "currency";
+
+type ReportColumnOption = {
+  key: ReportColumnKey;
+  label: string;
+  kind: ReportColumnKind;
+  locked?: boolean;
+};
+
+type ReportColumnGroup = {
+  label: string;
+  options: ReportColumnOption[];
+};
+
+const REPORT_COLUMN_GROUPS: ReportColumnGroup[] = [
+  {
+    label: "Reports",
+    options: [
+      { key: "name", label: "Name", kind: "text", locked: true },
+      { key: "invoice-count", label: "Invoice Count", kind: "number" },
+      { key: "sales", label: "Sales", kind: "currency" },
+      { key: "sales-with-tax", label: "Sales With Tax", kind: "currency" },
+      { key: "sales-without-discount", label: "Sales Without Discount", kind: "currency" },
+      { key: "sales-fcy", label: "Sales(FCY)", kind: "currency" },
+      { key: "sales-with-tax-fcy", label: "Sales With Tax(FCY)", kind: "currency" },
+      { key: "sales-without-discount-fcy", label: "Sales Without Discount (FCY)", kind: "currency" },
+      { key: "invoice-amount", label: "Invoice Amount", kind: "currency" },
+      { key: "invoice-amount-fcy", label: "Invoice Amount (FCY)", kind: "currency" },
+      { key: "credit-note-amount", label: "Credit Note Amount", kind: "currency" },
+      { key: "credit-note-amount-fcy", label: "Credit Note Amount (FCY)", kind: "currency" },
+      { key: "currency", label: "Currency", kind: "text" },
+    ],
+  },
+  {
+    label: "Locations",
+    options: [{ key: "location", label: "Location", kind: "text" }],
+  },
+  {
+    label: "Contacts",
+    options: [
+      { key: "customer-id", label: "Customer ID", kind: "text" },
+      { key: "company-name", label: "Company Name", kind: "text" },
+      { key: "customer-number", label: "Customer Number", kind: "text" },
+      { key: "first-name", label: "First Name", kind: "text" },
+      { key: "last-name", label: "Last Name", kind: "text" },
+      { key: "website", label: "Website", kind: "text" },
+      { key: "customer-email", label: "Customer Email", kind: "text" },
+      { key: "customer-type", label: "Customer Type", kind: "text" },
+      { key: "mobile-phone", label: "Mobile Phone", kind: "text" },
+      { key: "work-phone", label: "Work Phone", kind: "text" },
+      { key: "department", label: "Department", kind: "text" },
+      { key: "designation", label: "Designation", kind: "text" },
+      { key: "facebook", label: "Facebook", kind: "text" },
+      { key: "twitter", label: "Twitter", kind: "text" },
+      { key: "skype", label: "Skype", kind: "text" },
+      { key: "status", label: "Status", kind: "text" },
+      { key: "created-by", label: "Created By", kind: "text" },
+      { key: "created-time", label: "Created Time", kind: "text" },
+      { key: "last-modified-time", label: "Last Modified Time", kind: "text" },
+      { key: "credit-limit", label: "Credit Limit", kind: "currency" },
+      { key: "payment-terms", label: "Payment Terms", kind: "text" },
+      { key: "remarks", label: "Remarks", kind: "text" },
+      { key: "receivables", label: "Receivables", kind: "currency" },
+      { key: "receivables-fcy", label: "Receivables (FCY)", kind: "currency" },
+      { key: "unused-credits", label: "Unused Credits", kind: "currency" },
+      { key: "unused-credits-fcy", label: "Unused Credits (FCY)", kind: "currency" },
+      { key: "billing-name", label: "Billing Name", kind: "text" },
+      { key: "billing-street-1", label: "Billing Street 1", kind: "text" },
+      { key: "billing-street-2", label: "Billing Street 2", kind: "text" },
+      { key: "billing-city", label: "Billing City", kind: "text" },
+      { key: "billing-state", label: "Billing State", kind: "text" },
+      { key: "billing-code", label: "Billing Code", kind: "text" },
+      { key: "billing-country", label: "Billing Country", kind: "text" },
+      { key: "billing-phone", label: "Billing Phone", kind: "text" },
+      { key: "billing-fax", label: "Billing Fax", kind: "text" },
+      { key: "shipping-name", label: "Shipping Name", kind: "text" },
+      { key: "shipping-street-1", label: "Shipping Street 1", kind: "text" },
+      { key: "shipping-street-2", label: "Shipping Street 2", kind: "text" },
+      { key: "shipping-city", label: "Shipping City", kind: "text" },
+      { key: "shipping-state", label: "Shipping State", kind: "text" },
+      { key: "shipping-code", label: "Shipping Code", kind: "text" },
+      { key: "shipping-country", label: "Shipping Country", kind: "text" },
+      { key: "shipping-phone", label: "Shipping Phone", kind: "text" },
+      { key: "shipping-fax", label: "Shipping Fax", kind: "text" },
+    ],
+  },
 ];
 
 const getStartOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -220,14 +318,26 @@ const getDateRangeValue = (key: DateRangeKey, referenceDate = new Date()): DateR
 };
 
 type SalesByCustomerRow = {
-  name: string;
-  invoiceCount: number;
-  sales: number;
-  salesWithTax: number;
+  values: Partial<Record<ReportColumnKey, string | number>>;
 };
 
 const SALES_BY_CUSTOMER_ROWS: SalesByCustomerRow[] = [
-  { name: "ss", invoiceCount: 2, sales: 44, salesWithTax: 44 },
+  {
+    values: {
+      name: "ss",
+      "invoice-count": 2,
+      sales: 44,
+      "sales-with-tax": 44,
+      "sales-without-discount": 44,
+      currency: "SOS",
+      location: "Mogadishu",
+      "customer-id": "CUST-001",
+      "company-name": "ss Trading",
+      "customer-number": "1001",
+      "first-name": "Sam",
+      "last-name": "Sheikh",
+    },
+  },
 ];
 
 const formatCurrency = (value: number, currency = "SOS") => `${currency}${value.toFixed(2)}`;
@@ -519,6 +629,21 @@ function SalesByCustomerReportView({
   const [isCompareWithOpen, setIsCompareWithOpen] = useState(false);
   const [isCompareWithSelectOpen, setIsCompareWithSelectOpen] = useState(false);
   const [compareWithSearch, setCompareWithSearch] = useState("");
+  const [isCustomizeColumnsOpen, setIsCustomizeColumnsOpen] = useState(false);
+  const [customizeColumnsSearch, setCustomizeColumnsSearch] = useState("");
+  const [selectedReportColumns, setSelectedReportColumns] = useState<ReportColumnKey[]>([
+    "name",
+    "invoice-count",
+    "sales",
+    "sales-with-tax",
+  ]);
+  const [customizeDraftSelectedColumns, setCustomizeDraftSelectedColumns] = useState<ReportColumnKey[]>([
+    "name",
+    "invoice-count",
+    "sales",
+    "sales-with-tax",
+  ]);
+  const [customizeActiveAvailableColumn, setCustomizeActiveAvailableColumn] = useState<ReportColumnKey | "">("");
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isMoreFiltersOpen, setIsMoreFiltersOpen] = useState(false);
   const [moreFilterDropdown, setMoreFilterDropdown] = useState<MoreFilterDropdownState>(null);
@@ -529,10 +654,6 @@ function SalesByCustomerReportView({
   const dateRangeLabel = DATE_RANGE_OPTIONS.find((option) => option.key === dateRangeKey)?.label ?? "Today";
   const selectedEntityLabels = ENTITY_OPTIONS.filter((option) => entityKeys.includes(option.key)).map((option) => option.label);
   const entityLabel = selectedEntityLabels.length > 0 ? selectedEntityLabels.join(", ") : "None";
-  const totalInvoiceCount = SALES_BY_CUSTOMER_ROWS.reduce((sum, row) => sum + row.invoiceCount, 0);
-  const totalSales = SALES_BY_CUSTOMER_ROWS.reduce((sum, row) => sum + row.sales, 0);
-  const totalSalesWithTax = SALES_BY_CUSTOMER_ROWS.reduce((sum, row) => sum + row.salesWithTax, 0);
-
   useEffect(() => {
     if (!isDateRangeOpen) return;
 
@@ -636,6 +757,22 @@ function SalesByCustomerReportView({
   }, [isExportOpen]);
 
   useEffect(() => {
+    if (!isCustomizeColumnsOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsCustomizeColumnsOpen(false);
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isCustomizeColumnsOpen]);
+
+  useEffect(() => {
     if (!isMoreFiltersOpen) return;
 
     const handlePointerDown = (event: MouseEvent) => {
@@ -672,6 +809,49 @@ function SalesByCustomerReportView({
     return COMPARE_WITH_OPTIONS.filter((option) => option.key !== "none" && option.label.toLowerCase().includes(query));
   }, [compareWithSearch]);
 
+  const selectedCustomizeColumns = useMemo(
+    () => customizeDraftSelectedColumns.map((key) => getReportColumnOption(key)),
+    [customizeDraftSelectedColumns]
+  );
+
+  const filteredCustomizeGroups = useMemo(() => {
+    const query = customizeColumnsSearch.trim().toLowerCase();
+    return REPORT_COLUMN_GROUPS.map((group) => ({
+      label: group.label,
+      options: group.options.filter((option) => {
+        if (customizeDraftSelectedColumns.includes(option.key)) return false;
+        if (!query) return true;
+        return option.label.toLowerCase().includes(query) || group.label.toLowerCase().includes(query);
+      }),
+    })).filter((group) => group.options.length > 0);
+  }, [customizeColumnsSearch, customizeDraftSelectedColumns]);
+
+  const visibleReportColumns = useMemo(() => selectedReportColumns.map((key) => getReportColumnOption(key)), [selectedReportColumns]);
+
+  const reportCurrency = String(SALES_BY_CUSTOMER_ROWS[0]?.values.currency ?? "SOS");
+
+  const formatReportColumnValue = (key: ReportColumnKey, value: string | number | undefined) => {
+    if (value === undefined || value === null || value === "") return "—";
+    const option = getReportColumnOption(key);
+    if (option.kind === "currency" && typeof value === "number") return formatCurrency(value, reportCurrency);
+    return String(value);
+  };
+
+  const reportColumnTotals = useMemo(
+    () =>
+      visibleReportColumns.map((option) => {
+        if (option.key === "name") return "Total";
+        const total = SALES_BY_CUSTOMER_ROWS.reduce((sum, row) => {
+          const value = row.values[option.key];
+          return typeof value === "number" ? sum + value : sum;
+        }, 0);
+        if (option.kind === "number") return total;
+        if (option.kind === "currency") return formatCurrency(total, reportCurrency);
+        return "";
+      }),
+    [reportCurrency, visibleReportColumns]
+  );
+
   const hasMoreFilters = moreFilterRows.some((row) => row.field || row.comparator || row.value.trim());
   const getFilteredFieldGroups = (query: string) => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -689,6 +869,42 @@ function SalesByCustomerReportView({
   const handleExportAction = (label: string) => {
     setIsExportOpen(false);
     toast.success(`Export option selected: ${label}`);
+  };
+
+  const openCustomizeColumnsModal = () => {
+    setCustomizeDraftSelectedColumns(selectedReportColumns);
+    setCustomizeColumnsSearch("");
+    setCustomizeActiveAvailableColumn("");
+    setIsCompareWithOpen(false);
+    setIsCompareWithSelectOpen(false);
+    setIsExportOpen(false);
+    setIsCustomizeColumnsOpen(true);
+  };
+
+  const applyCustomizeColumns = () => {
+    const nextColumns = customizeDraftSelectedColumns.includes("name")
+      ? customizeDraftSelectedColumns
+      : ["name", ...customizeDraftSelectedColumns];
+    setSelectedReportColumns(nextColumns);
+    setIsCustomizeColumnsOpen(false);
+  };
+
+  const cancelCustomizeColumns = () => {
+    setCustomizeDraftSelectedColumns(selectedReportColumns);
+    setCustomizeColumnsSearch("");
+    setCustomizeActiveAvailableColumn("");
+    setIsCustomizeColumnsOpen(false);
+  };
+
+  const addCustomizeColumn = (key: ReportColumnKey) => {
+    setCustomizeDraftSelectedColumns((prev) => (prev.includes(key) ? prev : [...prev, key]));
+    setCustomizeActiveAvailableColumn("");
+  };
+
+  const removeCustomizeColumn = (key: ReportColumnKey) => {
+    if (key === "name") return;
+    setCustomizeDraftSelectedColumns((prev) => prev.filter((item) => item !== key));
+    setCustomizeActiveAvailableColumn((prev) => (prev === key ? "" : prev));
   };
 
   const openCompareWithDropdown = () => {
@@ -1384,14 +1600,148 @@ function SalesByCustomerReportView({
               </div>
             ) : null}
           </div>
-          <button type="button" className="inline-flex items-center gap-1 hover:text-[#0f172a]">
+          <button type="button" onClick={openCustomizeColumnsModal} className="inline-flex items-center gap-1 hover:text-[#0f172a]">
             <Columns3 size={14} />
             Customize Report Columns
             <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#dbeafe] px-1 text-[11px] font-semibold text-[#2563eb]">
-              4
+              {selectedReportColumns.length}
             </span>
           </button>
         </div>
+
+        {isCustomizeColumnsOpen ? (
+          <div
+            className="fixed inset-0 z-[90] bg-[#111827]/60 px-4 py-6"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                cancelCustomizeColumns();
+              }
+            }}
+          >
+            <div className="mx-auto mt-0 w-full max-w-[720px] overflow-hidden rounded-lg bg-white shadow-[0_20px_60px_rgba(15,23,42,0.28)]">
+              <div className="flex items-center justify-between border-b border-[#eef2f7] px-5 py-3">
+                <div className="text-[18px] font-medium text-[#111827]">Customize Report Columns</div>
+                <button
+                  type="button"
+                  onClick={cancelCustomizeColumns}
+                  className="inline-flex h-7 w-7 items-center justify-center text-[#ef4444] hover:bg-[#fef2f2]"
+                  aria-label="Close customize columns"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-[minmax(0,1fr)_56px_minmax(0,1fr)] gap-4 px-6 py-5">
+                <div>
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#64748b]">Available Columns</div>
+                  <div className="rounded-lg border border-[#d7dce7] bg-white">
+                    <div className="border-b border-[#eef2f7] p-2">
+                      <div className="relative">
+                        <input
+                          value={customizeColumnsSearch}
+                          onChange={(event) => setCustomizeColumnsSearch(event.target.value)}
+                          placeholder="Search"
+                          className="h-9 w-full rounded-md border border-[#d7dce7] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#7aa7ff]"
+                        />
+                        <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                      </div>
+                    </div>
+
+                    <div className="max-h-[330px] overflow-y-auto py-1">
+                      {filteredCustomizeGroups.length > 0 ? (
+                        filteredCustomizeGroups.map((group) => (
+                          <div key={group.label}>
+                            <div className="px-4 py-2 text-sm font-medium text-[#9aa3b2]">{group.label}</div>
+                            <div className="pb-1">
+                              {group.options.map((option) => {
+                                const isActive = customizeActiveAvailableColumn === option.key;
+                                return (
+                                  <button
+                                    key={option.key}
+                                    type="button"
+                                    onClick={() => setCustomizeActiveAvailableColumn(option.key)}
+                                    className={`flex w-full items-center px-4 py-2 text-left text-sm ${
+                                      isActive ? "bg-[#eef4ff] font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"
+                                    }`}
+                                  >
+                                    {option.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="px-4 py-3 text-sm text-[#64748b]">No results found</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (customizeActiveAvailableColumn) {
+                        addCustomizeColumn(customizeActiveAvailableColumn);
+                      }
+                    }}
+                    disabled={!customizeActiveAvailableColumn}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#8a94c9] bg-white text-[#475569] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label="Add selected column"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+
+                <div>
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#64748b]">Selected Columns</div>
+                  <div className="rounded-lg border border-[#d7dce7] bg-white">
+                    <div className="max-h-[382px] overflow-y-auto p-3">
+                      <div className="space-y-1">
+                        {selectedCustomizeColumns.map((option) => (
+                          <div key={option.key} className="flex items-center justify-between rounded px-3 py-2 text-sm text-[#334155] hover:bg-[#f8fafc]">
+                            <div className="min-w-0">
+                              <div className="truncate">{option.label}</div>
+                              <div className="text-xs text-[#94a3b8]">({getReportColumnGroupLabel(option.key)})</div>
+                            </div>
+                            {option.locked ? null : (
+                              <button
+                                type="button"
+                                onClick={() => removeCustomizeColumn(option.key)}
+                                className="ml-2 inline-flex h-6 w-6 items-center justify-center rounded text-[#ef4444] hover:bg-[#fef2f2]"
+                                aria-label={`Remove ${option.label}`}
+                              >
+                                <X size={13} />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 border-t border-[#eef2f7] px-5 py-3">
+                <button
+                  type="button"
+                  onClick={applyCustomizeColumns}
+                  className="inline-flex h-9 items-center rounded bg-[#7aa7ff] px-4 text-sm font-semibold text-white hover:bg-[#6498ff]"
+                >
+                  Apply
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelCustomizeColumns}
+                  className="inline-flex h-9 items-center rounded border border-[#d4d9e4] bg-white px-4 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <div className="border-b border-[#eef2f7] px-4 py-10 text-center">
           <h2 className="mt-2 text-[22px] font-semibold text-[#111827]">{reportName}</h2>
@@ -1401,29 +1751,50 @@ function SalesByCustomerReportView({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] border-collapse">
+          <table className="w-full min-w-[720px] border-collapse">
             <thead>
               <tr className="border-b border-[#e5e7eb] text-left text-[11px] uppercase tracking-[0.08em] text-[#64748b]">
-                <th className="px-4 py-3 font-semibold">Name</th>
-                <th className="px-4 py-3 text-center font-semibold">Invoice Count</th>
-                <th className="px-4 py-3 text-center font-semibold">Sales</th>
-                <th className="px-4 py-3 text-center font-semibold">Sales With Tax</th>
+                {visibleReportColumns.map((column) => (
+                  <th
+                    key={column.key}
+                    className={`px-4 py-3 font-semibold ${
+                      column.kind === "text" ? "text-left" : "text-center"
+                    }`}
+                  >
+                    {column.label}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {SALES_BY_CUSTOMER_ROWS.map((row) => (
-                <tr key={row.name} className="border-b border-[#eef2f7]">
-                  <td className="px-4 py-3 text-sm font-medium text-[#2563eb]">{row.name}</td>
-                  <td className="px-4 py-3 text-center text-sm text-[#2563eb]">{row.invoiceCount}</td>
-                  <td className="px-4 py-3 text-center text-sm text-[#2563eb]">{formatCurrency(row.sales)}</td>
-                  <td className="px-4 py-3 text-center text-sm text-[#2563eb]">{formatCurrency(row.salesWithTax)}</td>
+              {SALES_BY_CUSTOMER_ROWS.map((row, index) => (
+                <tr key={`${index}-${row.values.name ?? index}`} className="border-b border-[#eef2f7]">
+                  {visibleReportColumns.map((column) => (
+                    <td
+                      key={column.key}
+                      className={`px-4 py-3 text-sm ${
+                        column.kind === "text" ? "text-left" : "text-center"
+                      } ${column.key === "name" ? "font-medium text-[#2563eb]" : "text-[#2563eb]"}`}
+                    >
+                      {formatReportColumnValue(column.key, row.values[column.key])}
+                    </td>
+                  ))}
                 </tr>
               ))}
               <tr className="border-b border-[#e5e7eb]">
-                <td className="px-4 py-3 text-sm font-semibold text-[#111827]">Total</td>
-                <td className="px-4 py-3 text-center text-sm text-[#111827]">{totalInvoiceCount}</td>
-                <td className="px-4 py-3 text-center text-sm text-[#111827]">{formatCurrency(totalSales)}</td>
-                <td className="px-4 py-3 text-center text-sm text-[#111827]">{formatCurrency(totalSalesWithTax)}</td>
+                {reportColumnTotals.map((value, index) => {
+                  const column = visibleReportColumns[index];
+                  return (
+                    <td
+                      key={column.key}
+                      className={`px-4 py-3 text-sm ${column.kind === "text" ? "text-left" : "text-center"} ${
+                        column.key === "name" ? "font-semibold text-[#111827]" : "text-[#111827]"
+                      }`}
+                    >
+                      {value as React.ReactNode}
+                    </td>
+                  );
+                })}
               </tr>
             </tbody>
           </table>
