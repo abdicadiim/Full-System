@@ -39,7 +39,7 @@ type EntityOption = {
 
 type MoreFilterFieldKey = "customer-name" | "currency" | "location";
 
-type MoreFilterComparatorKey = "is-in" | "is-not-in" | "starts-with" | "ends-with" | "contains";
+type MoreFilterComparatorKey = "is-in" | "is-not-in" | "starts-with" | "ends-with" | "contains" | "does-not-contain";
 
 type MoreFilterRow = {
   id: string;
@@ -80,6 +80,7 @@ const MORE_FILTER_COMPARATOR_OPTIONS: Array<{ key: MoreFilterComparatorKey; labe
   { key: "starts-with", label: "starts with" },
   { key: "ends-with", label: "ends with" },
   { key: "contains", label: "contains" },
+  { key: "does-not-contain", label: "doesn't contain" },
 ];
 
 const MORE_FILTER_VALUE_OPTIONS: Record<MoreFilterFieldKey, Array<{ key: string; label: string }>> = {
