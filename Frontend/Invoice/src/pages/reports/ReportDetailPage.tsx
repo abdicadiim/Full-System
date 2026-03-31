@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { CalendarDays, Check, ChevronDown, ChevronRight, Columns3, Folder, Menu, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
 import ReportDetailHeader from "./ReportDetailHeader";
@@ -606,6 +606,7 @@ function SalesByCustomerReportView({
   onMenuClick,
   onRunReport,
   onActivityClick,
+  onClosePage,
 }: {
   categoryName: string;
   reportName: string;
@@ -613,6 +614,7 @@ function SalesByCustomerReportView({
   onMenuClick: () => void;
   onRunReport: () => void;
   onActivityClick: () => void;
+  onClosePage: () => void;
 }) {
   const dateRangeRef = useRef<HTMLDivElement | null>(null);
   const entityRef = useRef<HTMLDivElement | null>(null);
