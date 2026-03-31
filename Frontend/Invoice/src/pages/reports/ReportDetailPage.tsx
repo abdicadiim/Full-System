@@ -1591,7 +1591,7 @@ function SalesByCustomerReportView({
             </button>
 
             {isCompareWithOpen ? (
-              <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-[252px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+              <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-[252px] overflow-visible rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
                 <div className="border-b border-[#eef2f7] px-4 py-3 text-sm font-medium text-[#0f172a]">Compare With</div>
                 <div className="p-3">
                   <button
