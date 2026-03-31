@@ -696,6 +696,7 @@ function SalesByCustomerReportView({
   const [isCompareWithCountOpen, setIsCompareWithCountOpen] = useState(false);
   const [compareWithCountSearch, setCompareWithCountSearch] = useState("");
   const [isCustomizeColumnsOpen, setIsCustomizeColumnsOpen] = useState(false);
+  const [customizeReportTab, setCustomizeReportTab] = useState<"general" | "columns">("general");
   const [customizeColumnsSearch, setCustomizeColumnsSearch] = useState("");
   const [selectedReportColumns, setSelectedReportColumns] = useState<ReportColumnKey[]>([
     "name",
@@ -905,7 +906,7 @@ function SalesByCustomerReportView({
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setIsCustomizeColumnsOpen(false);
+        cancelCustomizeColumns();
       }
     };
 
@@ -1039,7 +1040,14 @@ function SalesByCustomerReportView({
     setCustomizeActiveAvailableColumn("");
     setIsCompareWithOpen(false);
     setIsCompareWithSelectOpen(false);
+    setIsCompareWithCountOpen(false);
     setIsExportOpen(false);
+    setIsMoreFiltersOpen(false);
+    setIsEntityOpen(false);
+    setIsDateRangeOpen(false);
+    setIsCustomDateRangeOpen(false);
+    closeMoreFilterDropdown();
+    setCustomizeReportTab("general");
     setIsCustomizeColumnsOpen(true);
   };
 
@@ -1055,6 +1063,16 @@ function SalesByCustomerReportView({
     setCustomizeDraftSelectedColumns(selectedReportColumns);
     setCustomizeColumnsSearch("");
     setCustomizeActiveAvailableColumn("");
+    setCustomizeReportTab("general");
+    setIsCompareWithOpen(false);
+    setIsCompareWithSelectOpen(false);
+    setIsCompareWithCountOpen(false);
+    setIsExportOpen(false);
+    setIsMoreFiltersOpen(false);
+    setIsEntityOpen(false);
+    setIsDateRangeOpen(false);
+    setIsCustomDateRangeOpen(false);
+    closeMoreFilterDropdown();
     setIsCustomizeColumnsOpen(false);
   };
 
@@ -1137,7 +1155,13 @@ function SalesByCustomerReportView({
         </div>
 
         <div className="flex items-center gap-2">
-          <button type="button" className="inline-flex h-9 w-9 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]">
+          <button
+            type="button"
+            onClick={openCustomizeColumnsModal}
+            className="inline-flex h-9 w-9 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]"
+            aria-label="Customize report columns"
+            title="Customize report columns"
+          >
             <SlidersHorizontal size={15} />
           </button>
           <div ref={exportRef} className="relative">
@@ -2093,133 +2117,286 @@ function SalesByCustomerReportView({
 
         {isCustomizeColumnsOpen ? (
           <div
-            className="fixed inset-0 z-[90] bg-[#111827]/60 px-4 py-6"
+            className="absolute inset-0 z-[90] bg-[#111827]/55"
             onMouseDown={(event) => {
               if (event.target === event.currentTarget) {
                 cancelCustomizeColumns();
               }
             }}
           >
-            <div className="mx-auto mt-0 w-full max-w-[720px] overflow-hidden rounded-lg bg-white shadow-[0_20px_60px_rgba(15,23,42,0.28)]">
-              <div className="flex items-center justify-between border-b border-[#eef2f7] px-5 py-3">
-                <div className="text-[18px] font-medium text-[#111827]">Customize Report Columns</div>
+            <div className="flex h-full w-full flex-col bg-white" onMouseDown={(event) => event.stopPropagation()}>
+              <div className="flex items-center justify-between border-b border-[#eef2f7] px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] bg-white text-[#334155]"
+                    aria-label="Customize report menu"
+                  >
+                    <Menu size={16} />
+                  </button>
+                  <div className="text-[20px] font-medium text-[#111827]">Customize Report</div>
+                </div>
                 <button
                   type="button"
                   onClick={cancelCustomizeColumns}
-                  className="inline-flex h-7 w-7 items-center justify-center text-[#ef4444] hover:bg-[#fef2f2]"
-                  aria-label="Close customize columns"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded text-[#ef4444] hover:bg-[#fef2f2]"
+                  aria-label="Close customize report"
                 >
                   <X size={16} />
                 </button>
               </div>
 
-              <div className="grid grid-cols-[minmax(0,1fr)_56px_minmax(0,1fr)] gap-4 px-6 py-5">
-                <div>
-                  <div className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#64748b]">Available Columns</div>
-                  <div className="rounded-lg border border-[#d7dce7] bg-white">
-                    <div className="border-b border-[#eef2f7] p-2">
-                      <div className="relative">
-                        <input
-                          value={customizeColumnsSearch}
-                          onChange={(event) => setCustomizeColumnsSearch(event.target.value)}
-                          placeholder="Search"
-                          className="h-9 w-full rounded-md border border-[#d7dce7] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#1b6f7b]"
-                        />
-                        <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
-                      </div>
-                    </div>
+              <div className="flex min-h-0 flex-1 overflow-hidden">
+                <aside className="w-[150px] shrink-0 border-r border-[#eef2f7] bg-[#fbfcfe] px-0 py-2">
+                  <button
+                    type="button"
+                    onClick={() => setCustomizeReportTab("general")}
+                    className={`flex w-full items-center px-4 py-3 text-left text-sm ${
+                      customizeReportTab === "general" ? "border-l-4 border-[#1b6f7b] bg-white font-medium text-[#0f172a]" : "text-[#2563eb] hover:bg-[#f8fafc]"
+                    }`}
+                  >
+                    General
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCustomizeReportTab("columns")}
+                    className={`flex w-full items-center px-4 py-3 text-left text-sm ${
+                      customizeReportTab === "columns" ? "border-l-4 border-[#1b6f7b] bg-white font-medium text-[#0f172a]" : "text-[#2563eb] hover:bg-[#f8fafc]"
+                    }`}
+                  >
+                    Show / Hide Columns
+                  </button>
+                </aside>
 
-                    <div className="max-h-[330px] overflow-y-auto py-1">
-                      {filteredCustomizeGroups.length > 0 ? (
-                        filteredCustomizeGroups.map((group) => (
-                          <div key={group.label}>
-                            <div className="px-4 py-2 text-sm font-medium text-[#9aa3b2]">{group.label}</div>
-                            <div className="pb-1">
-                              {group.options.map((option) => {
-                                const isActive = customizeActiveAvailableColumn === option.key;
-                                return (
-                                  <button
-                                    key={option.key}
-                                    type="button"
-                                    onClick={() => setCustomizeActiveAvailableColumn(option.key)}
-                                    className={`flex w-full items-center px-4 py-2 text-left text-sm ${
-                                      isActive ? "bg-[#eef4ff] font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"
-                                    }`}
-                                  >
-                                    {option.label}
-                                  </button>
-                                );
-                              })}
+                <main className="min-w-0 flex-1 overflow-auto px-6 py-6">
+                  {customizeReportTab === "general" ? (
+                    <div className="space-y-6">
+                      <section>
+                        <div className="text-sm font-medium text-[#111827]">Date Range</div>
+                        <button
+                          type="button"
+                          onClick={() => setIsDateRangeOpen(true)}
+                          className="mt-2 inline-flex h-9 min-w-[250px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                        >
+                          <span className="inline-flex items-center gap-2 truncate">
+                            <CalendarDays size={14} className="text-[#64748b]" />
+                            <span>{dateRangeLabel}</span>
+                          </span>
+                          <ChevronDown size={14} className="text-[#64748b]" />
+                        </button>
+                      </section>
+
+                      <hr className="border-[#e5e7eb]" />
+
+                      <section className="grid gap-6 md:grid-cols-2">
+                        <div>
+                          <div className="text-sm font-medium text-[#111827]">Compare With</div>
+                          <button
+                            type="button"
+                            onClick={() => setIsCompareWithOpen(true)}
+                            className="mt-2 inline-flex h-9 w-full max-w-[260px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                          >
+                            <span className="truncate">{getCompareWithLabel(compareWithKey)}</span>
+                            <span className="ml-3 flex items-center gap-2">
+                              {compareWithKey !== "none" ? (
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setCompareWithKey("none");
+                                    setCompareWithDraftKey("none");
+                                    setCompareWithCount(1);
+                                    setCompareWithDraftCount(1);
+                                    setCompareWithArrangeLatest(false);
+                                    setCompareWithDraftArrangeLatest(false);
+                                  }}
+                                  className="inline-flex h-4 w-4 items-center justify-center text-[#ef4444]"
+                                  aria-label="Clear compare selection"
+                                >
+                                  <X size={12} />
+                                </button>
+                              ) : null}
+                              <ChevronDown size={14} className="text-[#64748b]" />
+                            </span>
+                          </button>
+
+                          {compareWithKey !== "none" ? (
+                            <>
+                              <div className="mt-4 text-sm font-medium text-[#111827]">
+                                {compareWithKey === "previous-years" ? "Number of Year(s)" : "Number of Period(s)"}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setIsCompareWithCountOpen(true)}
+                                className="mt-2 inline-flex h-9 w-full max-w-[260px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                              >
+                                <span>{compareWithCount}</span>
+                                <ChevronDown size={14} className="text-[#64748b]" />
+                              </button>
+
+                              <label className="mt-3 flex items-start gap-2 text-sm text-[#334155]">
+                                <input
+                                  type="checkbox"
+                                  checked={compareWithArrangeLatest}
+                                  onChange={(event) => setCompareWithArrangeLatest(event.target.checked)}
+                                  className="mt-1 h-4 w-4 rounded border-[#cfd6e4] text-[#1b6f7b] focus:ring-[#1b6f7b]"
+                                />
+                                <span>Arrange period/year from latest to oldest</span>
+                              </label>
+                            </>
+                          ) : null}
+                        </div>
+
+                        <div>
+                          <div className="text-sm font-medium text-[#111827]">Entities :</div>
+                          <button
+                            type="button"
+                            onClick={() => setIsEntityOpen(true)}
+                            className="mt-2 inline-flex h-9 w-full max-w-[260px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                          >
+                            <span className="truncate">{entityLabel === "None" ? "All" : entityLabel}</span>
+                            <ChevronDown size={14} className="text-[#64748b]" />
+                          </button>
+                        </div>
+                      </section>
+
+                      <hr className="border-[#e5e7eb]" />
+
+                      <section>
+                        <div className="text-base font-semibold text-[#111827]">Advanced Filters</div>
+                        <p className="mt-1 text-sm text-[#64748b]">
+                          Use advanced filters to filter the report based on the fields of Reports, Locations.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomizeReportTab("columns");
+                          }}
+                          className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-[#1b6f7b] hover:underline"
+                        >
+                          <Plus size={14} />
+                          Add Filters
+                        </button>
+                      </section>
+                    </div>
+                  ) : (
+                    <div className="flex min-h-0 flex-col gap-5">
+                      <div className="grid grid-cols-[minmax(0,1fr)_56px_minmax(0,1fr)] gap-4">
+                        <div>
+                          <div className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#64748b]">Available Columns</div>
+                          <div className="rounded-lg border border-[#d7dce7] bg-white">
+                            <div className="border-b border-[#eef2f7] p-2">
+                              <div className="relative">
+                                <input
+                                  value={customizeColumnsSearch}
+                                  onChange={(event) => setCustomizeColumnsSearch(event.target.value)}
+                                  placeholder="Search"
+                                  className="h-9 w-full rounded-md border border-[#d7dce7] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#1b6f7b]"
+                                />
+                                <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                              </div>
+                            </div>
+
+                            <div className="max-h-[440px] overflow-y-auto py-1">
+                              {filteredCustomizeGroups.length > 0 ? (
+                                filteredCustomizeGroups.map((group) => (
+                                  <div key={group.label}>
+                                    <div className="px-4 py-2 text-sm font-medium text-[#9aa3b2]">{group.label}</div>
+                                    <div className="pb-1">
+                                      {group.options.map((option) => {
+                                        const isActive = customizeActiveAvailableColumn === option.key;
+                                        return (
+                                          <button
+                                            key={option.key}
+                                            type="button"
+                                            onClick={() => setCustomizeActiveAvailableColumn(option.key)}
+                                            className={`flex w-full items-center px-4 py-2 text-left text-sm ${
+                                              isActive ? "bg-[#eef4ff] font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"
+                                            }`}
+                                          >
+                                            {option.label}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="px-4 py-3 text-sm text-[#64748b]">No results found</div>
+                              )}
                             </div>
                           </div>
-                        ))
-                      ) : (
-                        <div className="px-4 py-3 text-sm text-[#64748b]">No results found</div>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                        </div>
 
-                <div className="flex items-center justify-center">
+                        <div className="flex items-center justify-center">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (customizeActiveAvailableColumn) {
+                                addCustomizeColumn(customizeActiveAvailableColumn);
+                              }
+                            }}
+                            disabled={!customizeActiveAvailableColumn}
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#8a94c9] bg-white text-[#475569] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-50"
+                            aria-label="Add selected column"
+                          >
+                            <ChevronRight size={18} />
+                          </button>
+                        </div>
+
+                        <div>
+                          <div className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#64748b]">Selected Columns</div>
+                          <div className="rounded-lg border border-[#d7dce7] bg-white">
+                            <div className="max-h-[440px] overflow-y-auto p-3">
+                              <div className="space-y-1">
+                                {selectedCustomizeColumns.map((option) => (
+                                  <div key={option.key} className="flex items-center justify-between rounded px-3 py-2 text-sm text-[#334155] hover:bg-[#f8fafc]">
+                                    <div className="min-w-0">
+                                      <div className="truncate">{option.label}</div>
+                                      <div className="text-xs text-[#94a3b8]">({getReportColumnGroupLabel(option.key)})</div>
+                                    </div>
+                                    {option.locked ? null : (
+                                      <button
+                                        type="button"
+                                        onClick={() => removeCustomizeColumn(option.key)}
+                                        className="ml-2 inline-flex h-6 w-6 items-center justify-center rounded text-[#ef4444] hover:bg-[#fef2f2]"
+                                        aria-label={`Remove ${option.label}`}
+                                      >
+                                        <X size={13} />
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </main>
+              </div>
+
+              <div className="border-t border-[#eef2f7] px-6 py-4">
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => {
-                      if (customizeActiveAvailableColumn) {
-                        addCustomizeColumn(customizeActiveAvailableColumn);
-                      }
+                      applyCustomizeColumns();
+                      onRunReport();
                     }}
-                    disabled={!customizeActiveAvailableColumn}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#8a94c9] bg-white text-[#475569] hover:bg-[#f8fafc] disabled:cursor-not-allowed disabled:opacity-50"
-                    aria-label="Add selected column"
+                    className="inline-flex h-9 items-center rounded bg-[#1b6f7b] px-4 text-sm font-semibold text-white hover:bg-[#155963]"
                   >
-                    <ChevronRight size={18} />
+                    Run Report
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelCustomizeColumns}
+                    className="inline-flex h-9 items-center rounded border border-[#d4d9e4] bg-white px-4 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                  >
+                    Cancel
                   </button>
                 </div>
-
-                <div>
-                  <div className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#64748b]">Selected Columns</div>
-                  <div className="rounded-lg border border-[#d7dce7] bg-white">
-                    <div className="max-h-[382px] overflow-y-auto p-3">
-                      <div className="space-y-1">
-                        {selectedCustomizeColumns.map((option) => (
-                          <div key={option.key} className="flex items-center justify-between rounded px-3 py-2 text-sm text-[#334155] hover:bg-[#f8fafc]">
-                            <div className="min-w-0">
-                              <div className="truncate">{option.label}</div>
-                              <div className="text-xs text-[#94a3b8]">({getReportColumnGroupLabel(option.key)})</div>
-                            </div>
-                            {option.locked ? null : (
-                              <button
-                                type="button"
-                                onClick={() => removeCustomizeColumn(option.key)}
-                                className="ml-2 inline-flex h-6 w-6 items-center justify-center rounded text-[#ef4444] hover:bg-[#fef2f2]"
-                                aria-label={`Remove ${option.label}`}
-                              >
-                                <X size={13} />
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 border-t border-[#eef2f7] px-5 py-3">
-                <button
-                  type="button"
-                  onClick={applyCustomizeColumns}
-              className="inline-flex h-9 items-center rounded bg-[#1b6f7b] px-4 text-sm font-semibold text-white hover:bg-[#155963]"
-                >
-                  Apply
-                </button>
-                <button
-                  type="button"
-                  onClick={cancelCustomizeColumns}
-                  className="inline-flex h-9 items-center rounded border border-[#d4d9e4] bg-white px-4 text-sm text-[#334155] hover:bg-[#f8fafc]"
-                >
-                  Cancel
-                </button>
               </div>
             </div>
           </div>
