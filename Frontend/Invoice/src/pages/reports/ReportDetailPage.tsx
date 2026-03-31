@@ -691,6 +691,26 @@ function SalesByCustomerReportView({
     toast.success(`Export option selected: ${label}`);
   };
 
+  const openCompareWithDropdown = () => {
+    setCompareWithDraftKey(compareWithKey);
+    setCompareWithSearch("");
+    setIsCompareWithSelectOpen(false);
+    setIsCompareWithOpen((prev) => !prev);
+  };
+
+  const applyCompareWith = () => {
+    setCompareWithKey(compareWithDraftKey);
+    setIsCompareWithOpen(false);
+    setIsCompareWithSelectOpen(false);
+  };
+
+  const cancelCompareWith = () => {
+    setCompareWithDraftKey(compareWithKey);
+    setCompareWithSearch("");
+    setIsCompareWithOpen(false);
+    setIsCompareWithSelectOpen(false);
+  };
+
   const openMoreFilterDropdown = (rowId: string, kind: "field" | "comparator" | "value") => {
     setMoreFilterDropdown((prev) => (prev?.rowId === rowId && prev.kind === kind ? null : { rowId, kind, search: "" }));
   };
@@ -1271,9 +1291,99 @@ function SalesByCustomerReportView({
 
       <div className="rounded-lg border border-[#e5e7eb] bg-white">
         <div className="flex flex-wrap items-center justify-end gap-4 border-b border-[#eef2f7] px-4 py-3 text-sm text-[#475569]">
-          <button type="button" className="inline-flex items-center gap-1 hover:text-[#0f172a]">
-            Compare With : <span className="font-semibold text-[#0f172a]">None</span> <ChevronDown size={14} />
-          </button>
+          <div ref={compareWithRef} className="relative">
+            <button
+              type="button"
+              onClick={openCompareWithDropdown}
+              className={`inline-flex items-center gap-1 hover:text-[#0f172a] ${
+                isCompareWithOpen ? "text-[#0f172a]" : ""
+              }`}
+              aria-haspopup="menu"
+              aria-expanded={isCompareWithOpen}
+            >
+              Compare With : <span className="font-semibold text-[#0f172a]">{getCompareWithLabel(compareWithKey)}</span>
+              <ChevronDown size={14} className={`transition-transform duration-150 ${isCompareWithOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {isCompareWithOpen ? (
+              <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-[252px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                <div className="border-b border-[#eef2f7] px-4 py-3 text-sm font-medium text-[#0f172a]">Compare With</div>
+                <div className="p-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsCompareWithSelectOpen((prev) => !prev)}
+                    className="relative flex h-10 w-full items-center justify-between rounded border border-[#7aa7ff] bg-white px-3 pr-9 text-sm text-[#334155] outline-none hover:bg-[#f8fafc]"
+                    aria-haspopup="menu"
+                    aria-expanded={isCompareWithSelectOpen}
+                  >
+                    <span className="min-w-0 truncate">{getCompareWithLabel(compareWithDraftKey)}</span>
+                    <ChevronDown
+                      size={14}
+                      className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
+                        isCompareWithSelectOpen ? "rotate-180 text-[#2563eb]" : "text-[#64748b]"
+                      }`}
+                    />
+                  </button>
+
+                  {isCompareWithSelectOpen ? (
+                    <div className="mt-2 overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                      <div className="border-b border-[#eef2f7] p-2">
+                        <div className="relative">
+                          <input
+                            value={compareWithSearch}
+                            onChange={(event) => setCompareWithSearch(event.target.value)}
+                            placeholder="Search"
+                            className="h-9 w-full rounded-md border border-[#7aa7ff] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                          />
+                          <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                        </div>
+                      </div>
+
+                      <div className="max-h-[180px] overflow-y-auto py-1">
+                        {filteredCompareWithOptions.length > 0 ? (
+                          filteredCompareWithOptions.map((option) => {
+                            const isSelected = compareWithDraftKey === option.key;
+                            return (
+                              <button
+                                key={option.key}
+                                type="button"
+                                onClick={() => setCompareWithDraftKey(option.key)}
+                                className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
+                                  isSelected ? "bg-[#eef2f7] font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"
+                                }`}
+                              >
+                                <span>{option.label}</span>
+                                {isSelected ? <Check size={14} className="text-[#64748b]" /> : null}
+                              </button>
+                            );
+                          })
+                        ) : (
+                          <div className="px-3 py-3 text-sm uppercase tracking-[0.04em] text-[#64748b]">No results found</div>
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="flex items-center gap-2 border-t border-[#eef2f7] px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={applyCompareWith}
+                    className="inline-flex h-8 items-center rounded bg-[#7aa7ff] px-3 text-sm font-semibold text-white hover:bg-[#6498ff]"
+                  >
+                    Apply
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelCompareWith}
+                    className="inline-flex h-8 items-center rounded border border-[#d4d9e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
           <button type="button" className="inline-flex items-center gap-1 hover:text-[#0f172a]">
             <Columns3 size={14} />
             Customize Report Columns
