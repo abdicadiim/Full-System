@@ -697,6 +697,9 @@ function SalesByCustomerReportView({
   const [compareWithCountSearch, setCompareWithCountSearch] = useState("");
   const [isCustomizeColumnsOpen, setIsCustomizeColumnsOpen] = useState(false);
   const [customizeReportTab, setCustomizeReportTab] = useState<"general" | "columns">("general");
+  const customizeDateRangeRef = useRef<HTMLDivElement | null>(null);
+  const [customizeDateRangeDraftKey, setCustomizeDateRangeDraftKey] = useState<DateRangeKey>("this-week");
+  const [isCustomizeDateRangeOpen, setIsCustomizeDateRangeOpen] = useState(false);
   const [customizeColumnsSearch, setCustomizeColumnsSearch] = useState("");
   const customizeCompareRef = useRef<HTMLDivElement | null>(null);
   const customizeCompareCountRef = useRef<HTMLDivElement | null>(null);
@@ -729,6 +732,7 @@ function SalesByCustomerReportView({
   ]);
   const selectedDateRange = dateRangeKey === "custom" ? customDateRange : getDateRangeValue(dateRangeKey);
   const dateRangeLabel = DATE_RANGE_OPTIONS.find((option) => option.key === dateRangeKey)?.label ?? "Today";
+  const customizeDateRangeLabel = DATE_RANGE_OPTIONS.find((option) => option.key === customizeDateRangeDraftKey)?.label ?? "Today";
   const getEntitySelectionLabel = (keys: EntityKey[]) => {
     if (keys.length === 0) return "None";
     if (keys.length === ENTITY_OPTIONS.length) return "All";
@@ -930,6 +934,31 @@ function SalesByCustomerReportView({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isCustomizeColumnsOpen]);
+
+  useEffect(() => {
+    if (!isCustomizeDateRangeOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!customizeDateRangeRef.current?.contains(target)) {
+        setIsCustomizeDateRangeOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsCustomizeDateRangeOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isCustomizeDateRangeOpen]);
 
   useEffect(() => {
     if (!isCustomizeCompareOpen) return;
@@ -1137,6 +1166,8 @@ function SalesByCustomerReportView({
     setCustomizeDraftSelectedColumns(selectedReportColumns);
     setCustomizeColumnsSearch("");
     setCustomizeActiveAvailableColumn("");
+    setCustomizeDateRangeDraftKey(dateRangeKey);
+    setIsCustomizeDateRangeOpen(false);
     setCompareWithDraftKey(compareWithKey === "none" ? "previous-years" : compareWithKey);
     setCompareWithDraftCount(compareWithKey === "none" ? 1 : compareWithCount);
     setCompareWithDraftArrangeLatest(compareWithArrangeLatest);
@@ -1165,6 +1196,7 @@ function SalesByCustomerReportView({
       ? customizeDraftSelectedColumns
       : ["name", ...customizeDraftSelectedColumns];
     setSelectedReportColumns(nextColumns);
+    setDateRangeKey(customizeDateRangeDraftKey);
     setEntityKeys(customizeEntityDraftKeys);
     setCompareWithKey(compareWithDraftKey);
     setCompareWithCount(compareWithDraftCount);
@@ -1182,6 +1214,8 @@ function SalesByCustomerReportView({
     setCustomizeColumnsSearch("");
     setCustomizeActiveAvailableColumn("");
     setCustomizeReportTab("general");
+    setCustomizeDateRangeDraftKey(dateRangeKey);
+    setIsCustomizeDateRangeOpen(false);
     setCustomizeEntityDraftKeys(entityKeys.length > 0 ? entityKeys : ENTITY_OPTIONS.map((option) => option.key));
     setCustomizeEntitySearch("");
     setIsCustomizeEntityOpen(false);
@@ -2298,12 +2332,58 @@ function SalesByCustomerReportView({
                     <div className="space-y-6">
                       <section>
                         <div className="text-sm font-medium text-[#111827]">Date Range</div>
-                        <div className="mt-2 inline-flex h-9 min-w-[250px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155]">
-                          <span className="inline-flex items-center gap-2 truncate">
-                            <CalendarDays size={14} className="text-[#64748b]" />
-                            <span>{dateRangeLabel}</span>
-                          </span>
-                          <ChevronDown size={14} className="text-[#64748b]" />
+                        <div ref={customizeDateRangeRef} className="relative mt-2 inline-block">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsCustomizeCompareOpen(false);
+                              setIsCustomizeCompareCountOpen(false);
+                              setIsCustomizeEntityOpen(false);
+                              setIsCustomizeDateRangeOpen((prev) => !prev);
+                            }}
+                            className="inline-flex h-9 min-w-[250px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 pr-10 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                            aria-haspopup="menu"
+                            aria-expanded={isCustomizeDateRangeOpen}
+                          >
+                            <span className="inline-flex items-center gap-2 truncate">
+                              <CalendarDays size={14} className="text-[#64748b]" />
+                              <span>{customizeDateRangeLabel}</span>
+                            </span>
+                            <ChevronDown
+                              size={14}
+                              className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
+                                isCustomizeDateRangeOpen ? "rotate-180 text-[#1b6f7b]" : "text-[#64748b]"
+                              }`}
+                            />
+                          </button>
+
+                          {isCustomizeDateRangeOpen ? (
+                            <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-[165px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                              <div className="max-h-[280px] overflow-y-auto py-1">
+                                {DATE_RANGE_OPTIONS.map((option) => {
+                                  const isSelected = option.key === customizeDateRangeDraftKey;
+                                  return (
+                                    <button
+                                      key={option.key}
+                                      type="button"
+                                      onClick={() => {
+                                        setCustomizeDateRangeDraftKey(option.key);
+                                        if (option.key !== "custom") {
+                                          setIsCustomizeDateRangeOpen(false);
+                                        }
+                                      }}
+                                      className={`flex w-full items-center justify-between px-4 py-2 text-left text-sm ${
+                                        isSelected ? "font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"
+                                      }`}
+                                    >
+                                      <span>{option.label}</span>
+                                      {isSelected ? <Check size={14} className="text-[#0f172a]" /> : null}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
                       </section>
 
