@@ -1533,6 +1533,17 @@ function SalesByCustomerReportView({
         </button>
 
         {isMoreFiltersOpen ? (
+          <div
+            className="fixed inset-0 z-30 bg-transparent"
+            onMouseDown={() => {
+              closeMoreFilterDropdown();
+              setIsMoreFiltersOpen(false);
+            }}
+            aria-hidden="true"
+          />
+        ) : null}
+
+        {isMoreFiltersOpen ? (
           <div className="absolute left-0 top-[calc(100%+10px)] z-40 w-[720px] rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
             <div className="px-4 py-4">
               <div className="space-y-3">
@@ -1546,9 +1557,16 @@ function SalesByCustomerReportView({
                   const filteredFieldGroups = getFilteredFieldGroups(fieldMenuSearch);
                   const filteredComparatorOptions = getFilteredComparatorOptions(comparatorMenuSearch);
                   const valueOptions = row.field ? MORE_FILTER_VALUE_OPTIONS[row.field] : [];
+                  const valueMode: MoreFilterValueMode =
+                    row.comparator && MORE_FILTER_TEXT_COMPARATORS.includes(row.comparator) ? "text" : "dropdown";
                   const fieldLabel = getMoreFilterFieldLabel(row.field);
                   const comparatorLabel = getMoreFilterComparatorLabel(row.comparator);
-                  const valueLabel = row.value ? getMoreFilterValueLabel(row.field, row.value) : getMoreFilterValuePlaceholder(row.field);
+                  const valueLabel =
+                    valueMode === "text"
+                      ? row.value || "Enter a value"
+                      : row.value
+                        ? getMoreFilterValueLabel(row.field, row.value)
+                        : getMoreFilterValuePlaceholder(row.field);
 
                   return (
                     <div key={row.id} className="grid grid-cols-[42px_1fr_1fr_1.4fr_auto_auto] items-start gap-3">
@@ -1735,69 +1753,85 @@ function SalesByCustomerReportView({
                       </div>
 
                       <div className="relative">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!row.field) return;
-                            openMoreFilterDropdown(row.id, "value");
-                          }}
-                          disabled={!row.field}
-                          className={`relative flex h-10 w-full items-center overflow-hidden rounded border px-3 pr-9 text-sm outline-none ${
-                            row.field
-                                ? valueMenuOpen
-                                  ? "border-[#1b6f7b] bg-white text-[#334155]"
-                                  : "border-[#cfd6e4] bg-white text-[#334155] hover:bg-[#f8fafc]"
-                              : "cursor-not-allowed border-[#e2e8f0] bg-[#f8fafc] text-[#94a3b8]"
-                          }`}
-                          aria-haspopup="menu"
-                          aria-expanded={valueMenuOpen}
-                        >
-                          <span className={`min-w-0 flex-1 truncate text-left ${row.value ? "font-medium" : "text-[#94a3b8]"}`}>
-                            {valueLabel}
-                          </span>
-                          <ChevronDown
-                            size={14}
-                            className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
-                              valueMenuOpen ? "rotate-180 text-[#1b6f7b]" : row.field ? "text-[#64748b]" : "text-[#cbd5e1]"
-                            }`}
+                        {valueMode === "text" ? (
+                          <input
+                            type="text"
+                            value={row.value}
+                            onChange={(event) => {
+                              setMoreFilterRows((prev) =>
+                                prev.map((item) => (item.id === row.id ? { ...item, value: event.target.value } : item))
+                              );
+                            }}
+                            placeholder="Enter a value"
+                            className="h-10 w-full rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#1b6f7b]"
                           />
-                        </button>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!row.field) return;
+                                openMoreFilterDropdown(row.id, "value");
+                              }}
+                              disabled={!row.field}
+                              className={`relative flex h-10 w-full items-center overflow-hidden rounded border px-3 pr-9 text-sm outline-none ${
+                                row.field
+                                  ? valueMenuOpen
+                                    ? "border-[#1b6f7b] bg-white text-[#334155]"
+                                    : "border-[#cfd6e4] bg-white text-[#334155] hover:bg-[#f8fafc]"
+                                  : "cursor-not-allowed border-[#e2e8f0] bg-[#f8fafc] text-[#94a3b8]"
+                              }`}
+                              aria-haspopup="menu"
+                              aria-expanded={valueMenuOpen}
+                            >
+                              <span className={`min-w-0 flex-1 truncate text-left ${row.value ? "font-medium" : "text-[#94a3b8]"}`}>
+                                {valueLabel}
+                              </span>
+                              <ChevronDown
+                                size={14}
+                                className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
+                                  valueMenuOpen ? "rotate-180 text-[#1b6f7b]" : row.field ? "text-[#64748b]" : "text-[#cbd5e1]"
+                                }`}
+                              />
+                            </button>
 
-                        {valueMenuOpen && row.field ? (
-                          <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-[220px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
-                            <div className="max-h-[220px] overflow-y-auto py-1">
-                              {valueOptions.length > 0 ? (
-                                valueOptions.map((option) => {
-                                  const isSelected = row.value === option.key;
-                                  return (
-                                    <button
-                                      key={option.key}
-                                      type="button"
-                                      onClick={() => {
-                                        setMoreFilterRows((prev) =>
-                                          prev.map((item) =>
-                                            item.id === row.id
-                                              ? { ...item, value: option.key.startsWith("select-") ? "" : option.key }
-                                              : item
-                                          )
-                                        );
-                                        closeMoreFilterDropdown();
-                                      }}
-                                      className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
-                                        isSelected ? "bg-[#1b6f7b] font-medium text-white" : "text-[#334155] hover:bg-[#f8fafc]"
-                                      }`}
-                                    >
-                                      <span>{option.label}</span>
-                                      {isSelected ? <Check size={14} className="text-white" /> : null}
-                                    </button>
-                                  );
-                                })
-                              ) : (
-                                <div className="px-3 py-3 text-sm uppercase tracking-[0.04em] text-[#64748b]">No results found</div>
-                              )}
-                            </div>
-                          </div>
-                        ) : null}
+                            {valueMenuOpen && row.field ? (
+                              <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-[220px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                                <div className="max-h-[220px] overflow-y-auto py-1">
+                                  {valueOptions.length > 0 ? (
+                                    valueOptions.map((option) => {
+                                      const isSelected = row.value === option.key;
+                                      return (
+                                        <button
+                                          key={option.key}
+                                          type="button"
+                                          onClick={() => {
+                                            setMoreFilterRows((prev) =>
+                                              prev.map((item) =>
+                                                item.id === row.id
+                                                  ? { ...item, value: option.key.startsWith("select-") ? "" : option.key }
+                                                  : item
+                                              )
+                                            );
+                                            closeMoreFilterDropdown();
+                                          }}
+                                          className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
+                                            isSelected ? "bg-[#1b6f7b] font-medium text-white" : "text-[#334155] hover:bg-[#f8fafc]"
+                                          }`}
+                                        >
+                                          <span>{option.label}</span>
+                                          {isSelected ? <Check size={14} className="text-white" /> : null}
+                                        </button>
+                                      );
+                                    })
+                                  ) : (
+                                    <div className="px-3 py-3 text-sm uppercase tracking-[0.04em] text-[#64748b]">No results found</div>
+                                  )}
+                                </div>
+                              </div>
+                            ) : null}
+                          </>
+                        )}
                       </div>
 
                       <button
