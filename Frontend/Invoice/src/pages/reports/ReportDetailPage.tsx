@@ -1045,7 +1045,7 @@ function SalesByCustomerReportView({
             </button>
 
             {isExportOpen ? (
-              <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-[252px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+              <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-[252px] overflow-visible rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
                 <div className="border-b border-[#eef2f7] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">
                   Export As
                 </div>
@@ -1675,7 +1675,7 @@ function SalesByCustomerReportView({
                         </button>
 
                         {isCompareWithCountOpen ? (
-                          <div className="absolute left-0 top-[calc(100%+6px)] z-[60] w-[168px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                          <div className="absolute left-0 top-[calc(100%+6px)] z-[80] w-[168px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
                             <div className="border-b border-[#eef2f7] p-2">
                               <div className="relative">
                                 <input
