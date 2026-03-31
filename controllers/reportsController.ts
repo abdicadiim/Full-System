@@ -331,19 +331,367 @@ const matchesMoreFilters = (values: Record<string, unknown>, filters: MoreFilter
         ? String(values.name || "")
         : field === "customer-name"
           ? String(values.name || "")
-          : field === "item-name"
-            ? String(values["item-name"] || values.name || "")
-            : field === "sku"
-              ? String(values.sku || "")
-              : field === "usage-unit"
+          : field === "invoice-number"
+            ? String(values["invoice-number"] || values.invoiceNumber || values.transaction || "")
+            : field === "order-number"
+              ? String(values["order-number"] || values.orderNumber || "")
+              : field === "status"
+                ? String(values.status || "")
+                : field === "transaction"
+                  ? String(values.transaction || values["invoice-number"] || "")
+                  : field === "age"
+                    ? String(values.age || "")
+                : field === "amount"
+                      ? String(values.amount || "")
+                      : field === "balance-due"
+                        ? String(values["balance-due"] || values.balance || "")
+                        : field === "balance"
+                          ? String(values.balance || values["balance-due"] || "")
+                          : field === "invoice-date"
+                            ? String(values["invoice-date"] || values.date || "")
+                            : field === "due-date"
+                              ? String(values["due-date"] || values.dueDate || "")
+        : field === "item-name"
+          ? String(values["item-name"] || values.name || "")
+          : field === "sku"
+            ? String(values.sku || "")
+            : field === "usage-unit"
                 ? String(values["usage-unit"] || "")
                 : field === "currency"
                   ? String(values.currency || "")
-                  : field === "location"
-                    ? String(values.location || "")
-                    : String(values[field] ?? "");
+                : field === "location"
+                  ? String(values.location || "")
+                  : String(values[field] ?? "");
     return compareValue(left, comparator, rawValue);
   });
+
+const getBalanceDueValue = (row: any) => {
+  const total = asNumber(row?.total, 0);
+  const paidAmount = asNumber(row?.amountPaid ?? row?.paidAmount, 0);
+  const fallback = total - paidAmount;
+  const balanceRaw =
+    row?.balance !== undefined
+      ? asNumber(row.balance, fallback)
+      : row?.balanceDue !== undefined
+        ? asNumber(row.balanceDue, fallback)
+        : fallback;
+  return Math.max(0, balanceRaw);
+};
+
+const getDocumentDate = (row: any) => asDate(row?.date || row?.invoiceDate || row?.createdAt || row?.dueDate);
+
+const getDocumentDueDate = (row: any) => asDate(row?.dueDate || row?.expectedPaymentDate || row?.date || row?.invoiceDate || row?.createdAt);
+
+const getDocumentBalanceDue = (row: any) => {
+  const total = asNumber(row?.total, 0);
+  const paidAmount = asNumber(row?.amountPaid ?? row?.paidAmount, 0);
+  const fallback = total - paidAmount;
+  const balanceRaw =
+    row?.balance !== undefined
+      ? asNumber(row.balance, fallback)
+      : row?.balanceDue !== undefined
+        ? asNumber(row.balanceDue, fallback)
+        : fallback;
+  return Math.max(0, balanceRaw);
+};
+
+const getAgingBucketKey = (ageDays: number) => {
+  if (ageDays <= 0) return "current";
+  if (ageDays <= 15) return "1-15-days";
+  if (ageDays <= 30) return "16-30-days";
+  if (ageDays <= 45) return "31-45-days";
+  return "gt-45-days";
+};
+
+const getAgingBucketLabel = (bucketKey: string) => {
+  switch (bucketKey) {
+    case "current":
+      return "Current";
+    case "1-15-days":
+      return "1-15 Days";
+    case "16-30-days":
+      return "16-30 Days";
+    case "31-45-days":
+      return "31-45 Days";
+    default:
+      return "> 45 Days";
+  }
+};
+
+const getAgingAgeDays = (asOf: Date, dueDate: Date | null) => {
+  if (!dueDate) return 0;
+  const milliseconds = startOfDay(asOf).getTime() - startOfDay(dueDate).getTime();
+  return Math.floor(milliseconds / 86400000);
+};
+
+const getDocumentNumber = (row: any, source: ReportEntity) =>
+  String(
+    source === "credit-note"
+      ? row?.creditNoteNumber || row?.invoiceNumber || row?.transactionNumber || row?.number || ""
+      : row?.invoiceNumber || row?.transactionNumber || row?.number || ""
+  ).trim();
+
+const getDocumentTypeLabel = (source: ReportEntity) => {
+  if (source === "credit-note") return "Credit Note";
+  if (source === "sales-receipt") return "Sales Receipt";
+  return "Invoice";
+};
+
+const buildAgingSummaryRows = (rows: Array<{ source: ReportEntity; row: any }>, customers: any[], asOf: Date, moreFilters: MoreFilterRow[]) => {
+  const customerById = new Map<string, any>();
+  const customerByName = new Map<string, any>();
+  for (const customer of customers || []) {
+    const id = String(customer?._id || customer?.id || "").trim();
+    const name = resolveCustomerName(customer);
+    if (id) customerById.set(id, customer);
+    if (name) customerByName.set(normalizeText(name), customer);
+    const number = String(customer?.customerNumber || "").trim();
+    if (number) customerByName.set(normalizeText(number), customer);
+  }
+
+  const groupMap = new Map<string, any>();
+  let currency = "";
+  const asOf = startOfDay(asOf);
+
+  for (const item of rows || []) {
+    const source = item?.source || "invoice";
+    if (source !== "invoice") continue;
+    const row = item?.row || {};
+    const date = getDocumentDate(row);
+    const dueDate = getDocumentDueDate(row);
+    if (!date || !dueDate) continue;
+    if (date > asOf) continue;
+
+    const customerId = String(row?.customerId || row?.customer?._id || row?.customer?.id || "").trim();
+    const fallbackName = String(row?.customerName || row?.customer?.displayName || row?.customer?.name || row?.customer?.companyName || "").trim();
+    const customer = customerById.get(customerId) || customerByName.get(normalizeText(fallbackName)) || row?.customer || null;
+    const customerContext = buildCustomerContext(customer, fallbackName);
+    const rowCurrency = String(row?.currency || customer?.currency || "SOS").trim() || "SOS";
+    const balance = getBalanceDueValue(row);
+    if (balance <= 0) continue;
+
+    const ageDays = Math.max(0, Math.floor((asOf.getTime() - startOfDay(dueDate).getTime()) / 86400000));
+    const bucketKey = getAgingBucketKey(ageDays);
+    const baseValues = {
+      ...customerContext,
+      currency: rowCurrency,
+      age: ageDays,
+      bucket: bucketKey,
+      balance,
+      current: bucketKey === "current" ? balance : 0,
+      "1-15-days": bucketKey === "1-15-days" ? balance : 0,
+      "16-30-days": bucketKey === "16-30-days" ? balance : 0,
+      "31-45-days": bucketKey === "31-45-days" ? balance : 0,
+      "gt-45-days": bucketKey === "gt-45-days" ? balance : 0,
+      total: balance,
+      "total-fcy": balance,
+    };
+
+    if (!matchesMoreFilters(baseValues, moreFilters)) continue;
+
+    const key = String(customerContext["customer-id"] || customerContext.name || "unassigned").trim().toLowerCase();
+    if (!groupMap.has(key)) {
+      groupMap.set(key, {
+        values: {
+          ...baseValues,
+          current: 0,
+          "1-15-days": 0,
+          "16-30-days": 0,
+          "31-45-days": 0,
+          "gt-45-days": 0,
+          total: 0,
+          "total-fcy": 0,
+        },
+      });
+      if (!currency) currency = rowCurrency;
+    }
+
+    const target = groupMap.get(key);
+    target.values.current += baseValues.current;
+    target.values["1-15-days"] += baseValues["1-15-days"];
+    target.values["16-30-days"] += baseValues["16-30-days"];
+    target.values["31-45-days"] += baseValues["31-45-days"];
+    target.values["gt-45-days"] += baseValues["gt-45-days"];
+    target.values.total += balance;
+    target.values["total-fcy"] += balance;
+    target.values.currency = rowCurrency || String(target.values.currency || "");
+  }
+
+  const groupedRows = [...groupMap.values()].sort((left, right) => {
+    const totalDelta = asNumber(right.values.total, 0) - asNumber(left.values.total, 0);
+    if (totalDelta !== 0) return totalDelta;
+    return String(left.values.name || "").localeCompare(String(right.values.name || ""));
+  });
+
+  return {
+    rows: groupedRows,
+    currency: currency || "SOS",
+    totals: groupedRows.reduce(
+      (acc, row) => {
+        acc.current += asNumber(row.values.current, 0);
+        acc["1-15-days"] += asNumber(row.values["1-15-days"], 0);
+        acc["16-30-days"] += asNumber(row.values["16-30-days"], 0);
+        acc["31-45-days"] += asNumber(row.values["31-45-days"], 0);
+        acc["gt-45-days"] += asNumber(row.values["gt-45-days"], 0);
+        acc.total += asNumber(row.values.total, 0);
+        acc["total-fcy"] += asNumber(row.values["total-fcy"], 0);
+        return acc;
+      },
+      {
+        current: 0,
+        "1-15-days": 0,
+        "16-30-days": 0,
+        "31-45-days": 0,
+        "gt-45-days": 0,
+        total: 0,
+        "total-fcy": 0,
+      } as Record<string, number>
+    ),
+  };
+};
+
+const buildAgingDetailsRows = (rows: Array<{ source: ReportEntity; row: any }>, customers: any[], asOf: Date, moreFilters: MoreFilterRow[]) => {
+  const customerById = new Map<string, any>();
+  const customerByName = new Map<string, any>();
+  for (const customer of customers || []) {
+    const id = String(customer?._id || customer?.id || "").trim();
+    const name = resolveCustomerName(customer);
+    if (id) customerById.set(id, customer);
+    if (name) customerByName.set(normalizeText(name), customer);
+    const number = String(customer?.customerNumber || "").trim();
+    if (number) customerByName.set(normalizeText(number), customer);
+  }
+
+  const asOf = startOfDay(asOf);
+  const detailRows: Array<{ values: Record<string, any> }> = [];
+  let currency = "";
+
+  for (const item of rows || []) {
+    const source = item?.source || "invoice";
+    const row = item?.row || {};
+    const date = getDocumentDate(row);
+    const dueDate = getDocumentDueDate(row);
+    if (!date || !dueDate) continue;
+    if (date > asOf) continue;
+
+    const customerId = String(row?.customerId || row?.customer?._id || row?.customer?.id || "").trim();
+    const fallbackName = String(row?.customerName || row?.customer?.displayName || row?.customer?.name || row?.customer?.companyName || "").trim();
+    const customer = customerById.get(customerId) || customerByName.get(normalizeText(fallbackName)) || row?.customer || null;
+    const customerContext = buildCustomerContext(customer, fallbackName);
+    const rowCurrency = String(row?.currency || customer?.currency || "SOS").trim() || "SOS";
+    const balance = getBalanceDueValue(row);
+    if (balance <= 0) continue;
+
+    const ageDays = Math.max(0, Math.floor((asOf.getTime() - startOfDay(dueDate).getTime()) / 86400000));
+    const bucketKey = getAgingBucketKey(ageDays);
+    const transaction = source === "credit-note" ? String(row?.creditNoteNumber || row?.creditNoteNo || row?._id || "").trim() : String(row?.invoiceNumber || row?.invoiceNo || row?._id || "").trim();
+    const type = source === "credit-note" ? "Credit Note" : "Invoice";
+    const baseValues = {
+      date: date.toISOString(),
+      "due-date": dueDate.toISOString(),
+      transaction,
+      type,
+      status: String(row?.status || "").trim(),
+      "customer-name": customerContext.name,
+      age: ageDays,
+      amount: Math.abs(asNumber(row?.total, 0)),
+      "balance-due": balance,
+      bucket: bucketKey,
+      currency: rowCurrency,
+      location: String(row?.locationName || row?.location || customerContext["billing-city"] || "").trim(),
+    };
+
+    if (!matchesMoreFilters(baseValues, moreFilters)) continue;
+
+    detailRows.push({ values: baseValues });
+    if (!currency) currency = rowCurrency;
+  }
+
+  detailRows.sort((left, right) => {
+    const ageDelta = asNumber(right.values.age, 0) - asNumber(left.values.age, 0);
+    if (ageDelta !== 0) return ageDelta;
+    return String(right.values.date || "").localeCompare(String(left.values.date || ""));
+  });
+
+  return {
+    rows: detailRows,
+    currency: currency || "SOS",
+    totals: detailRows.reduce(
+      (acc, row) => {
+        acc.amount += asNumber(row.values.amount, 0);
+        acc["balance-due"] += asNumber(row.values["balance-due"], 0);
+        return acc;
+      },
+      { amount: 0, "balance-due": 0 } as Record<string, number>
+    ),
+  };
+};
+
+const buildInvoiceDetailsRows = (rows: Array<{ source: ReportEntity; row: any }>, customers: any[], moreFilters: MoreFilterRow[]) => {
+  const customerById = new Map<string, any>();
+  const customerByName = new Map<string, any>();
+  for (const customer of customers || []) {
+    const id = String(customer?._id || customer?.id || "").trim();
+    const name = resolveCustomerName(customer);
+    if (id) customerById.set(id, customer);
+    if (name) customerByName.set(normalizeText(name), customer);
+    const number = String(customer?.customerNumber || "").trim();
+    if (number) customerByName.set(normalizeText(number), customer);
+  }
+
+  const invoiceRows: Array<{ values: Record<string, any> }> = [];
+  let currency = "";
+
+  for (const item of rows || []) {
+    const source = item?.source || "invoice";
+    const row = item?.row || {};
+    const date = getDocumentDate(row);
+    if (!date) continue;
+
+    const customerId = String(row?.customerId || row?.customer?._id || row?.customer?.id || "").trim();
+    const fallbackName = String(row?.customerName || row?.customer?.displayName || row?.customer?.name || row?.customer?.companyName || "").trim();
+    const customer = customerById.get(customerId) || customerByName.get(normalizeText(fallbackName)) || row?.customer || null;
+    const customerContext = buildCustomerContext(customer, fallbackName);
+    const rowCurrency = String(row?.currency || customer?.currency || "SOS").trim() || "SOS";
+    const total = Math.abs(asNumber(row?.total, 0));
+    const balance = getBalanceDueValue(row);
+    const transaction = source === "credit-note" ? String(row?.creditNoteNumber || row?.creditNoteNo || row?._id || "").trim() : String(row?.invoiceNumber || row?.invoiceNo || row?._id || "").trim();
+    const orderNumber = String(row?.orderNumber || row?.orderNo || row?.referenceNumber || "").trim();
+    const type = source === "credit-note" ? "Credit Note" : "Invoice";
+    const values = {
+      status: String(row?.status || "").trim(),
+      "invoice-date": date.toISOString(),
+      "due-date": getDocumentDueDate(row)?.toISOString() || "",
+      "invoice#": transaction,
+      "order-number": orderNumber,
+      "customer-name": customerContext.name,
+      total,
+      balance,
+      type,
+      currency: rowCurrency,
+      location: String(row?.locationName || row?.location || customerContext["billing-city"] || "").trim(),
+    };
+
+    if (!matchesMoreFilters(values, moreFilters)) continue;
+    invoiceRows.push({ values });
+    if (!currency) currency = rowCurrency;
+  }
+
+  invoiceRows.sort((left, right) => String(right.values["invoice-date"] || "").localeCompare(String(left.values["invoice-date"] || "")));
+
+  return {
+    rows: invoiceRows,
+    currency: currency || "SOS",
+    totals: invoiceRows.reduce(
+      (acc, row) => {
+        acc.total += asNumber(row.values.total, 0);
+        acc.balance += asNumber(row.values.balance, 0);
+        return acc;
+      },
+      { total: 0, balance: 0 } as Record<string, number>
+    ),
+  };
+};
 
 const buildRows = (
   rows: Array<{ source: ReportEntity; row: any }>,
