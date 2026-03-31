@@ -2684,7 +2684,7 @@ export default function CustomerDetail() {
           <div style="padding: 15mm; background: white; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1a202c; line-height: 1.6; min-height: 297mm; box-sizing: border-box;">
             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px;">
               <div>
-                <h1 style="margin: 0; font-size: 28px; font-weight: 800; color: #156372; text-transform: uppercase; letter-spacing: -0.5px;">${organizationName}</h1>
+                <h1 style="margin: 0; font-size: 28px; font-weight: 800; color: #156372; text-transform: uppercase; letter-spacing: -0.5px;">${organizationNameHtml}</h1>
                 <div style="margin-top: 8px; font-size: 13px; color: #4a5568;">
                   <p style="margin: 2px 0;">${organizationProfile?.address?.country || "Aland Islands"}</p>
                   <p style="margin: 2px 0;">${ownerEmail?.email || organizationProfile?.email || ""}</p>
@@ -2771,7 +2771,7 @@ export default function CustomerDetail() {
             </div>
 
             <div style="position: absolute; bottom: 15mm; left: 15mm; right: 15mm; text-align: center; color: #a0aec0; border-top: 1px solid #edf2f7; padding-top: 20px; font-size: 10px;">
-              <p style="margin: 0; font-weight: 600;">Generated professionally by ${organizationName}</p>
+              <p style="margin: 0; font-weight: 600;">Generated professionally by ${organizationNameHtml}</p>
               <p style="margin: 4px 0 0 0;">Report Date: ${new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
             </div>
           </div>

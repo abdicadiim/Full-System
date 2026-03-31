@@ -388,8 +388,13 @@ function ReceivablesReportShell({ reportId }: { reportId: ReceivablesReportId })
   const [error, setError] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
 
-  const range = rangeKey === "custom" ? { start: parseInputDate(customStart), end: parseInputDate(customEnd) } : getRange(rangeKey);
-  const dateLabel = config.subtitleMode === "as-of" ? `As of ${formatDate(range.end)}` : `From ${formatDate(range.start)} To ${formatDate(range.end)}`;
+  const range = useMemo(() => {
+    return rangeKey === "custom" ? { start: parseInputDate(customStart), end: parseInputDate(customEnd) } : getRange(rangeKey);
+  }, [customEnd, customStart, rangeKey]);
+  const dateLabel = useMemo(
+    () => (config.subtitleMode === "as-of" ? `As of ${formatDate(range.end)}` : `From ${formatDate(range.start)} To ${formatDate(range.end)}`),
+    [config.subtitleMode, range.end, range.start]
+  );
   const visibleColumns = useMemo(
     () => selectedColumns.map((key) => columnLookup(reportId, key)).filter(Boolean) as ColumnOption[],
     [reportId, selectedColumns]
@@ -433,7 +438,19 @@ function ReceivablesReportShell({ reportId }: { reportId: ReceivablesReportId })
       }
     };
     load();
-  }, [agingBy, agingIntervals, config, entities, groupBy, moreFilters, range.start, range.end, refreshTick, reportBy, showBy]);
+  }, [
+    agingBy,
+    agingIntervals,
+    config,
+    entities,
+    groupBy,
+    moreFilters,
+    range.end.getTime(),
+    range.start.getTime(),
+    refreshTick,
+    reportBy,
+    showBy,
+  ]);
 
   const formatCell = (column: ColumnOption, value: any) => {
     if (value === null || value === undefined || value === "") return "—";

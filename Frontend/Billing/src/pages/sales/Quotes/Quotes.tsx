@@ -1686,6 +1686,11 @@ export default function Quotes() {
   };
 
   const exportQuotesToPdf = async (quotesToExport: Quote[], fileName: string) => {
+    if (quotesToExport.length > 5) {
+      downloadQuotesFallbackPdf(quotesToExport, fileName);
+      return;
+    }
+
     const pdf = new jsPDF('p', 'mm', 'a4');
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
@@ -1707,11 +1712,11 @@ export default function Quotes() {
       document.body.appendChild(tempDiv);
 
       try {
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
         const canvas = await html2canvas(tempDiv, {
-          scale: 2,
+          scale: 1.3,
           useCORS: true,
-          allowTaint: true,
+          allowTaint: false,
           backgroundColor: '#ffffff',
           scrollX: 0,
           scrollY: 0,
@@ -1725,18 +1730,18 @@ export default function Quotes() {
           pdf.addPage();
         }
 
-        const imgData = canvas.toDataURL('image/png');
+        const imgData = canvas.toDataURL('image/jpeg', 0.86);
         const imgHeight = (canvas.height * printableWidth) / canvas.width;
         let heightLeft = imgHeight;
         let positionY = margin;
 
-        pdf.addImage(imgData, 'PNG', margin, positionY, printableWidth, imgHeight);
+        pdf.addImage(imgData, 'JPEG', margin, positionY, printableWidth, imgHeight);
         heightLeft -= printableHeight;
 
         while (heightLeft > 0.01) {
           pdf.addPage();
           positionY = margin - (imgHeight - heightLeft);
-          pdf.addImage(imgData, 'PNG', margin, positionY, printableWidth, imgHeight);
+          pdf.addImage(imgData, 'JPEG', margin, positionY, printableWidth, imgHeight);
           heightLeft -= printableHeight;
         }
       } finally {
