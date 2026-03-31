@@ -2903,12 +2903,13 @@ function SalesByCustomerReportView({
                         <button
                           type="button"
                           onClick={() => {
-                            setCustomizeReportTab("columns");
+                            setIsCustomizeColumnsOpen(false);
+                            setIsMoreFiltersOpen(true);
                           }}
                           className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-[#1b6f7b] hover:underline"
                         >
                           <Plus size={14} />
-                          Add Filters
+                          Add More
                         </button>
                       </section>
                     </div>
