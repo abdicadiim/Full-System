@@ -1,10 +1,147 @@
 import React, { useMemo, useState } from "react";
 import { Navigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
+import { CalendarDays, ChevronDown, Columns3, Menu, Plus, RefreshCw, SlidersHorizontal, X } from "lucide-react";
 import ReportDetailHeader from "./ReportDetailHeader";
 import { getCategoryById, getReportById, REPORT_FUNCTION_LABELS } from "./reportsCatalog";
 
 const formatDate = (value: Date) => value.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+
+type SalesByCustomerRow = {
+  name: string;
+  invoiceCount: number;
+  sales: number;
+  salesWithTax: number;
+};
+
+const SALES_BY_CUSTOMER_ROWS: SalesByCustomerRow[] = [
+  { name: "ss", invoiceCount: 2, sales: 44, salesWithTax: 44 },
+];
+
+const formatCurrency = (value: number, currency = "SOS") => `${currency}${value.toFixed(2)}`;
+
+function SalesByCustomerReportView({
+  categoryName,
+  reportName,
+  onRunReport,
+}: {
+  categoryName: string;
+  reportName: string;
+  onRunReport: () => void;
+}) {
+  const todayLabel = formatDate(new Date());
+  const totalInvoiceCount = SALES_BY_CUSTOMER_ROWS.reduce((sum, row) => sum + row.invoiceCount, 0);
+  const totalSales = SALES_BY_CUSTOMER_ROWS.reduce((sum, row) => sum + row.sales, 0);
+  const totalSalesWithTax = SALES_BY_CUSTOMER_ROWS.reduce((sum, row) => sum + row.salesWithTax, 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#e5e7eb] pb-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <button type="button" className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] bg-white text-[#334155] hover:bg-[#f8fafc]">
+            <Menu size={15} />
+          </button>
+          <div>
+            <p className="text-sm font-medium text-[#2563eb]">{categoryName}</p>
+            <h1 className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[24px] font-semibold leading-tight text-[#0f172a]">
+              <span>{reportName}</span>
+              <span className="text-sm font-normal text-[#475569]">- From {todayLabel} To {todayLabel}</span>
+            </h1>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button type="button" className="inline-flex h-9 w-9 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]">
+            <SlidersHorizontal size={15} />
+          </button>
+          <button
+            type="button"
+            className="inline-flex h-9 items-center gap-1 rounded border border-[#d4d9e4] bg-white px-3 text-sm font-medium text-[#1e293b] hover:bg-[#f8fafc]"
+          >
+            Export <ChevronDown size={14} />
+          </button>
+          <button type="button" className="inline-flex h-9 w-9 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]">
+            <RefreshCw size={15} />
+          </button>
+          <button type="button" className="inline-flex h-9 w-9 items-center justify-center rounded border border-[#d4d9e4] text-[#ef4444] hover:bg-[#fef2f2]">
+            <X size={15} />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 border-b border-[#e6e9f0] pb-3 text-sm">
+        <span className="text-[#334155]">Filters :</span>
+        <button type="button" className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-[#f8fafc] px-3 text-sm text-[#334155] hover:bg-white">
+          <CalendarDays size={14} className="text-[#64748b]" />
+          Date Range : <span className="font-medium">Today</span> <ChevronDown size={14} />
+        </button>
+        <button type="button" className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-[#f8fafc] px-3 text-sm text-[#334155] hover:bg-white">
+          Entities : <span className="font-medium">Invoice</span> <ChevronDown size={14} />
+        </button>
+        <button type="button" className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]">
+          <Plus size={14} className="text-[#2563eb]" /> More Filters
+        </button>
+        <button
+          type="button"
+          onClick={onRunReport}
+          className="inline-flex h-8 items-center gap-1 rounded bg-[#7aa7ff] px-4 text-sm font-semibold text-white hover:bg-[#6498ff]"
+        >
+          <CalendarDays size={14} /> Run Report
+        </button>
+      </div>
+
+      <div className="rounded-lg border border-[#e5e7eb] bg-white">
+        <div className="flex flex-wrap items-center justify-end gap-4 border-b border-[#eef2f7] px-4 py-3 text-sm text-[#475569]">
+          <button type="button" className="inline-flex items-center gap-1 hover:text-[#0f172a]">
+            Compare With : <span className="font-semibold text-[#0f172a]">None</span> <ChevronDown size={14} />
+          </button>
+          <button type="button" className="inline-flex items-center gap-1 hover:text-[#0f172a]">
+            <Columns3 size={14} />
+            Customize Report Columns
+            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#dbeafe] px-1 text-[11px] font-semibold text-[#2563eb]">
+              4
+            </span>
+          </button>
+        </div>
+
+        <div className="border-b border-[#eef2f7] px-4 py-10 text-center">
+          <p className="text-sm text-[#94a3b8]">fdfv</p>
+          <h2 className="mt-2 text-[22px] font-semibold text-[#111827]">{reportName}</h2>
+          <p className="mt-1 text-sm text-[#475569]">From {todayLabel} To {todayLabel}</p>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[860px] border-collapse">
+            <thead>
+              <tr className="border-b border-[#e5e7eb] text-left text-[11px] uppercase tracking-[0.08em] text-[#64748b]">
+                <th className="px-4 py-3 font-semibold">Name</th>
+                <th className="px-4 py-3 text-center font-semibold">Invoice Count</th>
+                <th className="px-4 py-3 text-center font-semibold">Sales</th>
+                <th className="px-4 py-3 text-center font-semibold">Sales With Tax</th>
+              </tr>
+            </thead>
+            <tbody>
+              {SALES_BY_CUSTOMER_ROWS.map((row) => (
+                <tr key={row.name} className="border-b border-[#eef2f7]">
+                  <td className="px-4 py-3 text-sm font-medium text-[#2563eb]">{row.name}</td>
+                  <td className="px-4 py-3 text-center text-sm text-[#2563eb]">{row.invoiceCount}</td>
+                  <td className="px-4 py-3 text-center text-sm text-[#2563eb]">{formatCurrency(row.sales)}</td>
+                  <td className="px-4 py-3 text-center text-sm text-[#2563eb]">{formatCurrency(row.salesWithTax)}</td>
+                </tr>
+              ))}
+              <tr className="border-b border-[#e5e7eb]">
+                <td className="px-4 py-3 text-sm font-semibold text-[#111827]">Total</td>
+                <td className="px-4 py-3 text-center text-sm text-[#111827]">{totalInvoiceCount}</td>
+                <td className="px-4 py-3 text-center text-sm text-[#111827]">{formatCurrency(totalSales)}</td>
+                <td className="px-4 py-3 text-center text-sm text-[#111827]">{formatCurrency(totalSalesWithTax)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ReportDetailPage() {
   const { categoryId, reportId } = useParams();
@@ -32,6 +169,16 @@ export default function ReportDetailPage() {
 
   const calculatorResult = report.calculator ? report.calculator.calculate(calculatorInputs) : null;
   const calculatorPrecision = report.calculator?.precision ?? 2;
+
+  if (report.id === "sales-by-customer") {
+    return (
+      <SalesByCustomerReportView
+        categoryName={category.name}
+        reportName={report.name}
+        onRunReport={() => toast.success(`Report refreshed: ${report.name}`)}
+      />
+    );
+  }
 
   return (
     <div className="space-y-4">
