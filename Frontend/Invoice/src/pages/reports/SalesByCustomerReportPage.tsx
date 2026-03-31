@@ -1281,7 +1281,9 @@ function SalesByCustomerReportView({
     const fieldSpecificOptions =
       field === "currency"
         ? MORE_FILTER_COMPARATOR_OPTIONS.filter((option) => ["is-empty", "is-not-empty", "is-in", "is-not-in"].includes(option.key))
-        : MORE_FILTER_COMPARATOR_OPTIONS;
+        : field === "location"
+          ? MORE_FILTER_COMPARATOR_OPTIONS.filter((option) => ["is-in", "is-not-in"].includes(option.key))
+          : MORE_FILTER_COMPARATOR_OPTIONS;
     return fieldSpecificOptions.filter((option) => option.label.toLowerCase().includes(normalizedQuery));
   };
 
