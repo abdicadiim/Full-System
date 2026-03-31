@@ -781,11 +781,11 @@ const QuoteDetail = () => {
         }
 
         // Add image to PDF
-        const imgData = canvas.toDataURL('image/png');
+        const imgData = canvas.toDataURL('image/jpeg', 0.97);
         const imgWidth = 210; // A4 width in mm
         const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-        pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+        pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight, undefined, 'FAST');
       }
 
       // Download PDF
