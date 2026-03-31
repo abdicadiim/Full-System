@@ -490,9 +490,7 @@ function ReportsDrawer({
                       type="button"
                       onClick={() => {
                         if (isSearching) return;
-                        setExpandedSections((prev) =>
-                          prev.includes(section.id) ? prev.filter((id) => id !== section.id) : [...prev, section.id]
-                        );
+                        setExpandedSections((prev) => (prev.includes(section.id) ? [] : [section.id]));
                       }}
                       className="flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm text-[#111827] hover:bg-[#f8fafc]"
                     >
