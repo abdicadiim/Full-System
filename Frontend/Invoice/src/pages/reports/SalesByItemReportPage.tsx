@@ -4,7 +4,7 @@ import { toast } from "react-toastify";
 import { CalendarDays, Check, ChevronDown, ChevronRight, Columns3, Filter, Folder, Menu, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
 import { REPORTS_BY_CATEGORY } from "./reportsCatalog";
 import { useSettings } from "../../lib/settings/SettingsContext";
-import { reportsAPI } from "../../services/api";
+import { locationsAPI, reportsAPI, reportingTagsAPI } from "../../services/api";
 
 const formatDate = (value: Date) => value.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 
@@ -88,7 +88,13 @@ type EntityOption = {
 
 type CompareWithKey = "none" | "previous-years" | "previous-periods";
 
-type MoreFilterFieldKey = "item-name" | "sku" | "usage-unit" | "customer-name";
+type MoreFilterFieldKey =
+  | "item-name"
+  | "sku"
+  | "usage-unit"
+  | "customer-name"
+  | "location"
+  | `reporting-tag:${string}`;
 
 type MoreFilterComparatorKey = "is-empty" | "is-not-empty" | "is-in" | "is-not-in" | "starts-with" | "ends-with" | "contains" | "does-not-contain";
 
@@ -110,14 +116,20 @@ type MoreFilterDropdownState = {
 
 type MoreFilterValueMode = "dropdown" | "text" | "none";
 
-const MORE_FILTER_FIELD_OPTIONS: Array<{ key: MoreFilterFieldKey; label: string }> = [
+type FilterOption = { key: string; label: string };
+
+type ReportingTagFieldOption = FilterOption;
+type LocationFieldOption = FilterOption;
+
+const MORE_FILTER_FIELD_OPTIONS: Array<FilterOption> = [
   { key: "item-name", label: "Item Name" },
   { key: "sku", label: "SKU" },
   { key: "usage-unit", label: "Usage unit" },
   { key: "customer-name", label: "Customer Name" },
+  { key: "location", label: "Location" },
 ];
 
-const MORE_FILTER_FIELD_GROUPS: Array<{ label: string; options: Array<{ key: MoreFilterFieldKey; label: string }> }> = [
+const MORE_FILTER_FIELD_GROUPS: Array<{ label: string; options: FilterOption[] }> = [
   {
     label: "Items",
     options: [
@@ -129,6 +141,10 @@ const MORE_FILTER_FIELD_GROUPS: Array<{ label: string; options: Array<{ key: Mor
   {
     label: "Reports",
     options: [{ key: "customer-name", label: "Customer Name" }],
+  },
+  {
+    label: "Locations",
+    options: [{ key: "location", label: "Location" }],
   },
 ];
 
@@ -143,7 +159,7 @@ const MORE_FILTER_COMPARATOR_OPTIONS: Array<{ key: MoreFilterComparatorKey; labe
   { key: "does-not-contain", label: "doesn't contain" },
 ];
 
-const MORE_FILTER_VALUE_OPTIONS: Record<MoreFilterFieldKey, Array<{ key: string; label: string }>> = {
+const MORE_FILTER_VALUE_OPTIONS: Record<string, Array<{ key: string; label: string }>> = {
   "item-name": [{ key: "select-item", label: "Select Item" }],
   sku: [{ key: "select-sku", label: "Select SKU" }],
   "usage-unit": [{ key: "select-unit", label: "Enter a value" }],
@@ -153,18 +169,34 @@ const MORE_FILTER_VALUE_OPTIONS: Record<MoreFilterFieldKey, Array<{ key: string;
   ],
 };
 
-const getMoreFilterFieldLabel = (field: MoreFilterFieldKey | "") => MORE_FILTER_FIELD_OPTIONS.find((option) => option.key === field)?.label ?? "Select a field";
+const getMoreFilterFieldLabel = (field: MoreFilterFieldKey | "", reportingTagOptions: ReportingTagFieldOption[] = []) => {
+  const staticLabel = MORE_FILTER_FIELD_OPTIONS.find((option) => option.key === field)?.label;
+  if (staticLabel) return staticLabel;
+
+  if (typeof field === "string" && field.startsWith("reporting-tag:")) {
+    const tagId = field.slice("reporting-tag:".length);
+    return reportingTagOptions.find((option) => option.key === tagId)?.label ?? "Reporting Tag";
+  }
+
+  return "Select a field";
+};
 
 const getMoreFilterComparatorLabel = (comparator: MoreFilterComparatorKey | "") =>
   MORE_FILTER_COMPARATOR_OPTIONS.find((option) => option.key === comparator)?.label ?? "Select a comparator";
 
-const getMoreFilterValuePlaceholder = (field: MoreFilterFieldKey | "") => {
+const getMoreFilterValuePlaceholder = (field: MoreFilterFieldKey | "", locations: LocationFieldOption[] = []) => {
   if (!field) return "Select a value";
+  if (field === "location") return "Select Location";
+  if (typeof field === "string" && field.startsWith("reporting-tag:")) return "No value needed";
   return MORE_FILTER_VALUE_OPTIONS[field]?.[0]?.label ?? "Select a value";
 };
 
-const getMoreFilterValueLabel = (field: MoreFilterFieldKey | "", value: string) => {
+const getMoreFilterValueLabel = (field: MoreFilterFieldKey | "", value: string, locations: LocationFieldOption[] = []) => {
   if (!field) return "Select a value";
+  if (field === "location") {
+    return locations.find((option) => option.key === value)?.label ?? getMoreFilterValuePlaceholder(field, locations);
+  }
+  if (typeof field === "string" && field.startsWith("reporting-tag:")) return "No value needed";
   return MORE_FILTER_VALUE_OPTIONS[field].find((option) => option.key === value)?.label ?? getMoreFilterValuePlaceholder(field);
 };
 
