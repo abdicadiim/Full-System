@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { CalendarDays, Check, ChevronDown, Columns3, Filter, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
 import { getReportById } from "./reportsCatalog";
@@ -365,6 +365,7 @@ function ReceivablesReportShell({ reportId }: { reportId: ReceivablesReportId })
   const navigate = useNavigate();
   const { settings } = useSettings();
   const organizationName = String(settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "").trim();
+  const debugReceivables = typeof window !== "undefined" && (window.localStorage.getItem("reports_debug") === "1" || window.location.search.includes("debug=1"));
 
   const [rangeKey, setRangeKey] = useState<DateRangeKey>(config.defaultRange);
   const [customStart, setCustomStart] = useState(inputDate(getRange(config.defaultRange).start));
@@ -412,11 +413,20 @@ function ReceivablesReportShell({ reportId }: { reportId: ReceivablesReportId })
           agingIntervals,
         };
         if (config.showEntities) params.entities = entities;
-        if (config.showAgingBy) params.agingBy = agingBy;
-        if (config.showReportBy) params.reportBy = reportBy;
+          if (config.showAgingBy) params.agingBy = agingBy;
+          if (config.showReportBy) params.reportBy = reportBy;
+        if (debugReceivables) {
+          console.debug(`[receivables:${reportId}] request`, params);
+        }
         const response = await config.fetcher(params);
+        if (debugReceivables) {
+          console.debug(`[receivables:${reportId}] response`, response?.data);
+        }
         setPayload(response?.data ?? null);
       } catch (err: any) {
+        if (debugReceivables) {
+          console.debug(`[receivables:${reportId}] error`, err);
+        }
         setError(String(err?.message || "Failed to load report"));
       } finally {
         setLoading(false);
@@ -445,8 +455,6 @@ function ReceivablesReportShell({ reportId }: { reportId: ReceivablesReportId })
     setSelectedColumns(next.length ? next : config.defaultColumns);
     setColumnsOpen(false);
   };
-
-  if (!getReportById(reportId)) return <Navigate to="/reports" replace />;
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-white">
@@ -790,3 +798,4 @@ function ReceivablesReportShell({ reportId }: { reportId: ReceivablesReportId })
     </div>
   );
 }
+
