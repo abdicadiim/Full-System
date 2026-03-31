@@ -1,7 +1,7 @@
 import React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import ReportCategoryPage from "./ReportCategoryPage";
-import ReportDetailPage from "./ReportDetailPage";
+import ReportDetailPage from "./SalesByCustomerReportPage";
 import ReportsHomePage from "./ReportsHomePage";
 
 export default function ReportsRoutes() {
