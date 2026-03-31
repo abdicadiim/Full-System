@@ -356,7 +356,7 @@ const fieldLookup = (config: ReportConfig, key: string) => config.moreFilterGrou
 const makeFilterRow = (): FilterRow => ({ id: makeId(), field: "", comparator: "", value: "" });
 
 export default function ReceivablesReportPage({ reportId }: { reportId: ReceivablesReportId }) {
-  if (!getReportById(reportId)) return <Navigate to="/reports" replace />;
+  if (!getReportById("receivables", reportId)) return <Navigate to="/reports" replace />;
   return <ReceivablesReportShell reportId={reportId} />;
 }
 
@@ -393,6 +393,8 @@ function ReceivablesReportShell({ reportId }: { reportId: ReceivablesReportId })
     () => selectedColumns.map((key) => columnLookup(reportId, key)).filter(Boolean) as ColumnOption[],
     [reportId, selectedColumns]
   );
+  const rows = (payload?.rows ?? []) as ReportRow[];
+  const totals = payload?.totals ?? null;
 
   useEffect(() => {
     const load = async () => {
