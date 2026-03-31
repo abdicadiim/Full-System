@@ -446,7 +446,7 @@ function SalesByCustomerReportView({
                         setIsDateRangeOpen(false);
                       }}
                       className={`block w-full px-4 py-2 text-left text-sm ${
-                        isSelected ? "bg-[#2f80ed] text-white" : "text-[#334155] hover:bg-[#f8fafc]"
+                        isSelected ? "bg-[#f1f5f9] font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"
                       }`}
                     >
                       {option.label}
