@@ -741,6 +741,8 @@ const buildSalespersonRows = (
 
     const salespersonName = resolveSalespersonName(row, salespersonById, salespersonByName);
     const salespersonId = String(row?.salespersonId || row?.salesperson?._id || row?.salesperson?.id || row?.salesPersonId || "").trim();
+    const salesperson =
+      (salespersonId && salespersonById.get(salespersonId)) || salespersonByName.get(normalizeText(salespersonName)) || null;
     const key = salespersonId || normalizeText(salespersonName) || "others";
 
     const rowCurrency = String(row?.currency || "SOS").trim() || "SOS";
@@ -757,6 +759,10 @@ const buildSalespersonRows = (
     const baseValues = {
       name: salespersonName,
       "salesperson-id": salespersonId,
+      "balance-due": 0,
+      credits: 0,
+      email: String(salesperson?.email || salesperson?.mail || "").trim(),
+      status: String(salesperson?.status || "").trim(),
       currency: rowCurrency,
     };
 
@@ -766,6 +772,10 @@ const buildSalespersonRows = (
       groupMap.set(key, {
         values: {
           ...baseValues,
+          "balance-due": 0,
+          credits: 0,
+          email: String(baseValues.email || ""),
+          status: String(baseValues.status || ""),
           "invoice-count": 0,
           "invoice-sales": 0,
           "invoice-sales-with-tax": 0,
