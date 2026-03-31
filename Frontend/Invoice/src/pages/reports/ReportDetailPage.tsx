@@ -2215,7 +2215,7 @@ function SalesByCustomerReportView({
                       key={column.key}
                       className={`px-4 py-3 text-sm ${
                         column.kind === "text" ? "text-left" : "text-center"
-                      } ${column.key === "name" ? "font-medium text-[#1b6f7b]" : "text-[#1b6f7b]"}`}
+                      } ${column.key === "name" ? "font-medium text-[#2563eb]" : "text-[#2563eb]"}`}
                     >
                       {formatReportColumnValue(column.key, row.values[column.key])}
                     </td>
