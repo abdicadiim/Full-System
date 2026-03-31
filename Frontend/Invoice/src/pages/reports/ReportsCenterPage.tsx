@@ -240,7 +240,7 @@ export default function ReportsCenterPage() {
                         <Link
                           to={`/reports/${report.categoryId}/${report.id}`}
                           onClick={() => markVisited(report.id)}
-                          className="min-w-0 truncate text-[13px] text-[#2b6bf3] hover:underline"
+                          className="min-w-0 truncate text-[13px] text-[#111827] hover:underline hover:text-black"
                         >
                           {report.name}
                         </Link>
