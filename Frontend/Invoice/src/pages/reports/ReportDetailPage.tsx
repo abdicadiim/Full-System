@@ -844,17 +844,30 @@ function SalesByCustomerReportView({
                       <div className="relative">
                         <button
                           type="button"
-                          onClick={() => openMoreFilterDropdown(row.id, "comparator")}
+                          onClick={() => {
+                            if (!row.field) return;
+                            openMoreFilterDropdown(row.id, "comparator");
+                          }}
+                          disabled={!row.field}
                           className={`relative flex h-10 w-full items-center overflow-hidden rounded border px-3 pr-9 text-sm text-[#334155] outline-none ${
-                            comparatorMenuOpen ? "border-[#7aa7ff] bg-white" : "border-[#cfd6e4] bg-white hover:bg-[#f8fafc]"
+                            row.field
+                              ? comparatorMenuOpen
+                                ? "border-[#7aa7ff] bg-white"
+                                : "border-[#cfd6e4] bg-white hover:bg-[#f8fafc]"
+                              : "cursor-not-allowed border-[#e2e8f0] bg-[#f8fafc] text-[#94a3b8]"
                           }`}
                           aria-haspopup="menu"
                           aria-expanded={comparatorMenuOpen}
                         >
-                          <span className={`min-w-0 flex-1 truncate text-left ${row.comparator ? "font-medium" : "text-[#94a3b8]"}`}>
+                          <span className={`min-w-0 flex-1 truncate text-left ${row.field && row.comparator ? "font-medium" : "text-[#94a3b8]"}`}>
                             {comparatorLabel}
                           </span>
-                          <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#64748b]" />
+                          <ChevronDown
+                            size={14}
+                            className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 ${
+                              row.field ? "text-[#64748b]" : "text-[#cbd5e1]"
+                            }`}
+                          />
                         </button>
 
                         {comparatorMenuOpen ? (
@@ -967,12 +980,14 @@ function SalesByCustomerReportView({
 
                       <button
                         type="button"
-                        onClick={() =>
+                        onClick={() => {
+                          const newRowId = `more-filter-${Date.now()}-${Math.random().toString(16).slice(2)}`;
                           setMoreFilterRows((prev) => [
                             ...prev,
-                            { id: `more-filter-${Date.now()}-${Math.random().toString(16).slice(2)}`, field: "", comparator: "", value: "" },
-                          ])
-                        }
+                            { id: newRowId, field: "", comparator: "", value: "" },
+                          ]);
+                          openMoreFilterDropdown(newRowId, "field");
+                        }}
                         className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#cfd6e4] text-[#334155] hover:bg-[#f8fafc]"
                         aria-label="Add filter row"
                       >
