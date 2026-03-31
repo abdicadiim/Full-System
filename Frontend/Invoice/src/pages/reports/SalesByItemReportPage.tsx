@@ -118,8 +118,30 @@ type MoreFilterValueMode = "dropdown" | "text" | "none";
 
 type FilterOption = { key: string; label: string };
 
-type ReportingTagFieldOption = FilterOption & { appliesTo?: string[] };
+type ReportingTagFieldOption = FilterOption & { appliesTo?: string[]; options?: string[] };
 type LocationFieldOption = FilterOption;
+
+const normalizeReportingTagOptions = (tag: any): string[] => {
+  const raw = Array.isArray(tag?.options) ? tag.options : Array.isArray(tag?.values) ? tag.values : [];
+  return raw
+    .map((value: any) => String(value ?? "").trim())
+    .filter(Boolean);
+};
+
+const normalizeReportingTagAppliesTo = (tag: any): string[] => {
+  const direct = Array.isArray(tag?.appliesTo) ? tag.appliesTo : [];
+  const fromModulesObject =
+    tag?.modules && typeof tag.modules === "object"
+      ? Object.keys(tag.modules).filter((key) => Boolean(tag.modules[key]))
+      : [];
+  const fallback = String(tag?.moduleLevel || tag?.module || "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  return [...direct, ...fromModulesObject, ...fallback]
+    .map((entry) => String(entry || "").trim().toLowerCase())
+    .filter(Boolean);
+};
 
 const MORE_FILTER_FIELD_OPTIONS: Array<FilterOption> = [
   { key: "item-name", label: "Item Name" },
@@ -745,7 +767,8 @@ export default function SalesByItemReportView({
           .map((tag: any) => ({
             key: String(tag?._id || tag?.id || "").trim(),
             label: String(tag?.name || tag?.title || tag?.label || "").trim(),
-            appliesTo: Array.isArray(tag?.appliesTo) ? tag.appliesTo.map((entry: any) => String(entry || "").trim()).filter(Boolean) : [],
+            appliesTo: normalizeReportingTagAppliesTo(tag),
+            options: normalizeReportingTagOptions(tag),
           }))
           .filter((tag: any) => tag.key && tag.label);
 

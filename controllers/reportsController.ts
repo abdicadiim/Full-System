@@ -4,6 +4,7 @@ import { Customer } from "../models/Customer.js";
 import { CreditNote } from "../models/CreditNote.js";
 import { Invoice } from "../models/Invoice.js";
 import { Item } from "../models/Item.js";
+import { ReportingTag } from "../models/ReportingTag.js";
 import { SalesReceipt } from "../models/SalesReceipt.js";
 
 type ReportEntity = "invoice" | "credit-note" | "sales-receipt";
@@ -321,7 +322,8 @@ const matchesMoreFilters = (values: Record<string, unknown>, filters: MoreFilter
     const field = String(row.field || "").trim();
     const comparator = String(row.comparator || "").trim();
     const rawValue = String(row.value || "").trim();
-    if (!field || !comparator || !rawValue) return true;
+    if (!field || !comparator) return true;
+    if (!rawValue && !["is-empty", "is-not-empty"].includes(comparator)) return true;
 
     const left =
       field === "customer-name"
@@ -467,10 +469,36 @@ const resolveItemSku = (line: any, itemDoc: any) =>
 
 const getTransactionSign = (source: ReportEntity) => (source === "credit-note" ? -1 : 1);
 
+const extractReportingTagValue = (entry: any) => {
+  const value = [entry?.value, entry?.selectedValue, entry?.tagValue, entry?.option, entry?.label, entry?.name]
+    .map((item) => String(item ?? "").trim())
+    .find(Boolean);
+  return value || "";
+};
+
+const extractItemReportingTagSelections = (itemDoc: any) => {
+  const selections = new Map<string, string>();
+  const collections = [itemDoc?.tags, itemDoc?.reportingTags, itemDoc?.reporting_tags];
+
+  for (const collection of collections) {
+    if (!Array.isArray(collection)) continue;
+    for (const entry of collection) {
+      const tagId = String(entry?.groupId || entry?.tagId || entry?.id || entry?.reportingTagId || "").trim();
+      const tagName = String(entry?.groupName || entry?.tagName || entry?.group || entry?.name || "").trim();
+      const value = extractReportingTagValue(entry);
+      if (tagId && value) selections.set(normalizeText(tagId), value);
+      if (tagName && value) selections.set(normalizeText(tagName), value);
+    }
+  }
+
+  return selections;
+};
+
 const buildItemRows = (
   rows: Array<{ source: ReportEntity; row: any }>,
   customers: any[],
   items: any[],
+  reportingTags: any[],
   range: { start: Date; end: Date },
   moreFilters: MoreFilterRow[]
 ) => {
@@ -537,6 +565,23 @@ const buildItemRows = (
         line?.amount ?? line?.total ?? line?.lineTotal ?? line?.subtotal ?? quantity * asNumber(line?.rate ?? line?.unitPrice ?? line?.price, 0);
       const amount = Math.abs(asNumber(lineAmountRaw, 0)) * getTransactionSign(source);
       const averagePrice = quantity !== 0 ? amount / quantity : salesPrice;
+      const itemReportingTagSelections = extractItemReportingTagSelections(itemDoc);
+      const reportingTagValues: Record<string, string> = {};
+
+      for (const tag of reportingTags || []) {
+        const tagId = String(tag?._id || tag?.id || "").trim();
+        const tagName = String(tag?.name || tag?.title || tag?.label || "").trim();
+        const selectedValue =
+          (tagId && itemReportingTagSelections.get(normalizeText(tagId))) ||
+          (tagName && itemReportingTagSelections.get(normalizeText(tagName))) ||
+          "";
+        if (tagId) reportingTagValues[`reporting-tag:${tagId}`] = selectedValue;
+      }
+
+      const reportingTagsSummary = Object.values(reportingTagValues)
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .join(", ");
 
       const baseValues = {
         ...baseTransactionValues,
@@ -554,6 +599,8 @@ const buildItemRows = (
         "quantity-sold": quantity,
         amount,
         "average-price": averagePrice,
+        "reporting-tags": reportingTagsSummary,
+        ...reportingTagValues,
       };
 
       if (!matchesMoreFilters(baseValues, moreFilters)) continue;
@@ -591,6 +638,10 @@ const buildItemRows = (
       target.values.location = target.values.location || location;
       target.values.name = target.values["item-name"];
       target.values["average-price"] = target.values["quantity-sold"] !== 0 ? target.values.amount / target.values["quantity-sold"] : averagePrice;
+      target.values["reporting-tags"] = target.values["reporting-tags"] || reportingTagsSummary;
+      for (const [key, value] of Object.entries(reportingTagValues)) {
+        if (!target.values[key]) target.values[key] = value;
+      }
     }
   }
 
@@ -699,9 +750,10 @@ export const getSalesByItemReport: express.RequestHandler = async (req, res) => 
   const entities = parseEntities(req.query.entities ?? req.query.entity_list);
   const moreFilters = parseMoreFilters(req.query.moreFilters ?? req.query.more_filters ?? req.query.filter_rows);
 
-  const [customers, items, invoices, creditNotes, salesReceipts] = await Promise.all([
+  const [customers, items, reportingTags, invoices, creditNotes, salesReceipts] = await Promise.all([
     Customer.find({ organizationId: orgId }).lean(),
     Item.find({ organizationId: orgId }).lean(),
+    ReportingTag.find({ organizationId: orgId }).lean(),
     Invoice.find({ organizationId: orgId }).lean(),
     CreditNote.find({ organizationId: orgId }).lean(),
     SalesReceipt.find({ organizationId: orgId }).lean(),
@@ -721,11 +773,11 @@ export const getSalesByItemReport: express.RequestHandler = async (req, res) => 
   const normalizeRange = (value: { start: Date; end: Date } | null) =>
     value ? { start: startOfDay(value.start), end: endOfDay(value.end) } : null;
 
-  const main = buildItemRows(transactions, customers, items, normalizeRange(range)!, moreFilters);
+  const main = buildItemRows(transactions, customers, items, reportingTags, normalizeRange(range)!, moreFilters);
 
   const compareRange = compareWith && compareWith !== "none" ? shiftDateRange(range, compareWith, compareCount) : null;
   const comparison = compareRange
-    ? buildItemRows(transactions, customers, items, normalizeRange(compareRange)!, moreFilters)
+    ? buildItemRows(transactions, customers, items, reportingTags, normalizeRange(compareRange)!, moreFilters)
     : null;
 
   return res.json({
