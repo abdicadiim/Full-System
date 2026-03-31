@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import LoadingSpinner from "../../components/LoadingSpinner";
-import { getCreditNotes, getCustomViews, deleteCustomView, getCreditNoteById, updateCreditNote, getCustomers } from "../salesModel";
+import { getCreditNotes, getCustomViews, deleteCustomView, getCreditNoteById, updateCreditNote, getCustomers, deleteCreditNote } from "../salesModel";
 import FieldCustomization from "../shared/FieldCustomization";
 import CreditNotesCustomizeColumnsModal, { CreditNotesColumnOption } from "./CreditNotesCustomizeColumnsModal";
 import { settingsAPI, currenciesAPI } from "../../services/api";
@@ -110,6 +110,8 @@ export default function CreditNotes() {
   const [filteredCreditNotes, setFilteredCreditNotes] = useState<CreditNote[]>([]);
   const [selectedCreditNotes, setSelectedCreditNotes] = useState<string[]>([]);
   const [isBulkUpdateModalOpen, setIsBulkUpdateModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeletingCreditNotes, setIsDeletingCreditNotes] = useState(false);
   const [bulkUpdateField, setBulkUpdateField] = useState("");
   const [bulkUpdateValue, setBulkUpdateValue] = useState("");
   const [isBulkUpdateFieldDropdownOpen, setIsBulkUpdateFieldDropdownOpen] = useState(false);
@@ -861,6 +863,47 @@ export default function CreditNotes() {
     setBulkUpdateValue("");
   };
 
+  const handleOpenDeleteModal = () => {
+    if (selectedCreditNotes.length === 0) {
+      toast("Please select at least one credit note to delete.");
+      return;
+    }
+
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (selectedCreditNotes.length === 0) {
+      setIsDeleteModalOpen(false);
+      return;
+    }
+
+    setIsDeletingCreditNotes(true);
+    try {
+      const results = await Promise.allSettled(
+        selectedCreditNotes.map((creditNoteId) => deleteCreditNote(creditNoteId))
+      );
+
+      const successCount = results.filter((result) => result.status === "fulfilled").length;
+      const failedCount = results.length - successCount;
+
+      await refreshData();
+      setSelectedCreditNotes([]);
+      setIsDeleteModalOpen(false);
+
+      if (failedCount > 0) {
+        toast(`Deleted ${successCount} credit note(s). ${failedCount} could not be deleted.`);
+      } else {
+        toast(`Deleted ${successCount} credit note(s).`);
+      }
+    } catch (error: any) {
+      console.error("Error deleting credit notes:", error);
+      toast(error?.message || "Failed to delete credit notes.");
+    } finally {
+      setIsDeletingCreditNotes(false);
+    }
+  };
+
   const handleDownloadPDF = async () => {
     const selectedNotes = creditNotes.filter(note => selectedCreditNotes.includes(note.id));
     if (selectedNotes.length === 0) {
@@ -890,19 +933,7 @@ export default function CreditNotes() {
   };
 
   const handleDelete = () => {
-    if (selectedCreditNotes.length === 0) {
-      toast("Please select at least one credit note to delete.");
-      return;
-    }
-
-    if (window.confirm(`Are you sure you want to delete ${selectedCreditNotes.length} credit note(s)?`)) {
-      // TODO: Implement actual deletion logic
-      const remainingNotes = creditNotes.filter(note => !selectedCreditNotes.includes(note.id));
-      setCreditNotes(remainingNotes);
-      setFilteredCreditNotes(remainingNotes);
-      setSelectedCreditNotes([]);
-      toast("Credit notes deleted successfully.");
-    }
+    handleOpenDeleteModal();
   };
 
   const handleViewSelect = (view: string) => {
@@ -1202,42 +1233,44 @@ export default function CreditNotes() {
       {/* Bulk Update Modal */}
       {isBulkUpdateModalOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center"
+          className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16 overflow-y-auto"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               handleBulkUpdateCancel();
             }
           }}
         >
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Bulk Update Credit Notes</h2>
+          <div className="w-full max-w-md mx-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+              <h2 className="text-[15px] font-semibold text-slate-800">Bulk Update Credit Notes</h2>
               <button
-                className="p-2 hover:bg-gray-100 rounded-lg text-gray-600 transition-colors"
+                type="button"
+                className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
                 onClick={handleBulkUpdateCancel}
+                aria-label="Close bulk update modal"
               >
-                <X size={20} />
+                <X size={14} />
               </button>
             </div>
-            <div className="p-6">
-              <p className="text-sm text-gray-600 mb-4">
+            <div className="px-5 py-4">
+              <p className="mb-4 text-sm text-slate-600">
                 Choose a field from the dropdown and update with new information.
               </p>
               <div className="space-y-4">
                 <div className="relative" ref={bulkUpdateFieldDropdownRef}>
                   <button
-                    className="w-full flex items-center justify-between px-4 py-3 border-2 border-gray-200 rounded-lg bg-white text-gray-700 hover:border-blue-500 transition-colors"
+                    className="w-full flex items-center justify-between rounded-md border border-slate-300 bg-white px-4 py-3 text-left text-sm text-slate-700 transition-colors hover:border-slate-400"
                     onClick={() => setIsBulkUpdateFieldDropdownOpen(!isBulkUpdateFieldDropdownOpen)}
                   >
-                    <span className="text-sm font-medium">{selectedBulkFieldConfig?.label || "Select a field"}</span>
-                    <ChevronDown size={16} />
+                    <span className="font-medium">{selectedBulkFieldConfig?.label || "Select a field"}</span>
+                    <ChevronDown size={16} className="text-slate-500" />
                   </button>
                   {isBulkUpdateFieldDropdownOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-2 bg-white border-2 border-gray-200 rounded-xl shadow-xl z-50 max-h-60 overflow-y-auto">
+                    <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-60 overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg">
                       {bulkUpdateFieldOptions.map((option) => (
                         <div
                           key={option.value}
-                          className="p-3 cursor-pointer hover:bg-blue-50 text-sm text-gray-700 transition-colors"
+                          className="cursor-pointer px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50"
                           onClick={() => handleBulkUpdateFieldSelect(option.value)}
                         >
                           {option.label}
@@ -1248,7 +1281,7 @@ export default function CreditNotes() {
                 </div>
                 {selectedBulkFieldConfig?.type === "select" ? (
                   <select
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                    className="w-full rounded-md border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition-all focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
                     value={bulkUpdateValue}
                     onChange={(e) => setBulkUpdateValue(e.target.value)}
                   >
@@ -1261,7 +1294,7 @@ export default function CreditNotes() {
                   </select>
                 ) : selectedBulkFieldConfig?.type === "textarea" ? (
                   <textarea
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all resize-none"
+                    className="w-full resize-none rounded-md border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition-all focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
                     placeholder={selectedBulkFieldConfig?.placeholder || "Enter new value"}
                     value={bulkUpdateValue}
                     onChange={(e) => setBulkUpdateValue(e.target.value)}
@@ -1270,29 +1303,80 @@ export default function CreditNotes() {
                 ) : (
                   <input
                     type={selectedBulkFieldConfig?.type === "date" ? "date" : "text"}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                    className="w-full rounded-md border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition-all focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
                     placeholder={selectedBulkFieldConfig?.placeholder || "Enter new value"}
                     value={bulkUpdateValue}
                     onChange={(e) => setBulkUpdateValue(e.target.value)}
-                    onMouseEnter={(e) => (e.target as HTMLElement).style.backgroundColor = "#E5E7EB"}
-                    onMouseLeave={(e) => (e.target as HTMLElement).style.backgroundColor = "#F3F4F6"}
                   />
                 )}
               </div>
-              <p className="mt-4 text-xs text-gray-500">
-                <strong className="text-gray-700">Note:</strong> All the selected credit notes will be updated with the new information and you cannot undo this action.
+              <p className="mt-4 text-xs text-slate-500">
+                <strong className="text-slate-700">Note:</strong> All the selected credit notes will be updated with the new information and you cannot undo this action.
               </p>
             </div>
-            <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50">
+            <div className="flex items-center justify-end gap-2 border-t border-slate-100 px-5 py-3">
               <button
-                className="px-6 py-2 bg-gradient-to-r from-[#156372] to-[#0D4A52] text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-all shadow-sm"
+                className="rounded-md border border-slate-300 bg-white px-4 py-1.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                onClick={handleBulkUpdateCancel}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-md bg-[#156372] px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-[#0D4A52]"
                 onClick={handleBulkUpdateSubmit}
               >
                 Update
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Credit Notes Confirmation Modal */}
+      {isDeleteModalOpen && (
+        <div
+          className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isDeletingCreditNotes) {
+              setIsDeleteModalOpen(false);
+            }
+          }}
+        >
+          <div className="w-full max-w-md mx-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-red-100 text-[12px] font-bold text-red-600">
+                !
+              </div>
+              <h3 className="flex-1 text-[15px] font-semibold text-slate-800">
+                Delete {selectedCreditNotes.length > 1 ? `${selectedCreditNotes.length} credit notes?` : "credit note?"}
+              </h3>
               <button
-                className="px-6 py-2 bg-white border-2 border-gray-200 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-50 transition-colors"
-                onClick={handleBulkUpdateCancel}
+                type="button"
+                className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                onClick={() => setIsDeleteModalOpen(false)}
+                aria-label="Close delete modal"
+                disabled={isDeletingCreditNotes}
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="px-5 py-3 text-[13px] text-slate-600">
+              Are you sure you want to delete {selectedCreditNotes.length > 1 ? `these ${selectedCreditNotes.length} credit notes` : "this credit note"}? This action cannot be undone.
+            </div>
+            <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+              <button
+                type="button"
+                className="rounded-md bg-red-600 px-4 py-1.5 text-[12px] text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={handleConfirmDelete}
+                disabled={isDeletingCreditNotes}
+              >
+                {isDeletingCreditNotes ? "Deleting..." : "Delete"}
+              </button>
+              <button
+                type="button"
+                className="rounded-md border border-slate-300 px-4 py-1.5 text-[12px] text-slate-700 transition-colors hover:bg-slate-50"
+                onClick={() => setIsDeleteModalOpen(false)}
+                disabled={isDeletingCreditNotes}
               >
                 Cancel
               </button>
@@ -1304,10 +1388,10 @@ export default function CreditNotes() {
       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
       <div className="relative">
 
-        <div className="bg-white overflow-hidden">
-          <div className="overflow-x-auto">
+        <div className="w-full bg-white overflow-hidden">
+          <div className="w-full overflow-x-auto">
             <table className="w-full text-left border-collapse">
-              <thead className="bg-[#f6f7fb] sticky top-0 z-10 border-b border-[#e6e9f2]">
+              <thead className="sticky top-0 z-10 bg-[#f6f7fb] border-b border-[#e6e9f2]">
                 <tr className="text-[10px] font-semibold text-[#7b8494] uppercase tracking-wider">
                   <th className="px-4 py-3 w-16 min-w-[64px]">
                     <div className="flex items-center gap-2">

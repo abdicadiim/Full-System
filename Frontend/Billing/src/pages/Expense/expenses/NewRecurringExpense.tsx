@@ -10,46 +10,10 @@ import {
   FileText,
 } from "lucide-react";
 import { recurringExpensesAPI, customersAPI, accountantAPI, taxesAPI, reportingTagsAPI, currenciesAPI, projectsAPI } from "../../../services/api";
+import { buildRecurringExpensePayload, CATEGORY_OPTIONS, CUSTOM_REPEAT_UNITS, REPEAT_EVERY_OPTIONS } from "../shared/recurringExpenseModel";
 import { useCurrency } from "../../../hooks/useCurrency";
 import { filterActiveRecords } from "../shared/activeFilters";
 import NewCurrencyModal from "../../settings/organization-settings/setup-configurations/currencies/NewCurrencyModal";
-
-const REPEAT_EVERY_OPTIONS = [
-  "Week",
-  "2 Weeks",
-  "Month",
-  "2 Months",
-  "3 Months",
-  "6 Months",
-  "Year",
-  "2 Years",
-  "3 Years",
-  "Custom"
-];
-
-const CUSTOM_REPEAT_UNITS = ["Day(s)", "Week(s)", "Month(s)", "Year(s)"];
-const CATEGORY_OPTIONS = [
-  "Advertising And Marketing",
-  "Automobile Expense",
-  "Consultant Expense",
-  "Credit Card Charges",
-  "Depreciation Expense",
-  "IT and Internet Expenses",
-  "Janitorial Expense",
-  "Lodging",
-  "Meals and Entertainment",
-  "Office Supplies",
-  "Postage",
-  "Printing and Stationery",
-  "Purchase Discounts",
-  "Rent Expense",
-  "Repairs and Maintenance",
-  "Salaries and Employee Wages",
-  "Telephone Expense",
-  "Travel Expense",
-  "Goods In Transit",
-  "Prepaid Expenses",
-];
 
 const safeReadLocalArray = (keys: string[]) => {
   if (typeof window === "undefined") return [];
@@ -754,53 +718,20 @@ export default function NewRecurringExpense() {
 
   const handleSave = async () => {
     if (isSaving) return;
-    if (!formData.expenseAccount) { alert("Please select an Expense Account"); return; }
-    if (!formData.amount || parseFloat(formData.amount) <= 0) { alert("Please enter a valid Amount"); return; }
-    if (!formData.startDate) { alert("Please select a Start Date"); return; }
+    if (!formData.expenseAccount) { toast.error("Please select an Expense Account"); return; }
+    if (!formData.amount || parseFloat(formData.amount) <= 0) { toast.error("Please enter a valid Amount"); return; }
+    if (!formData.startDate) { toast.error("Please select a Start Date"); return; }
 
     try {
       setIsSaving(true);
-      const resolvedProfileName =
-        formData.profileName.trim() ||
-        `${formData.expenseAccount || "Recurring Expense"} - ${formData.startDate}`;
-      const repeatEveryValue = formData.repeatEvery === "Custom"
-        ? `${Math.max(1, Number(formData.customRepeatValue) || 1)} ${formData.customRepeatUnit}`
-        : formData.repeatEvery;
-
-      const recurringExpenseData = {
-        profile_name: resolvedProfileName,
-        repeat_every: repeatEveryValue,
-        start_date: formData.startDate,
-        end_date: formData.neverExpires ? null : formData.endsOn,
-        account_id: formData.expenseAccountId || null,
-        account_name: formData.expenseAccount,
-        amount: parseFloat(formData.amount),
-        currency_code: formData.currency,
-        currency_id: formData.currencyId,
-        vendor_id: formData.vendor_id || undefined,
-        vendor_name: formData.vendor || undefined,
-        description: formData.description || undefined,
-        customer_id: formData.customer_id || undefined,
-        customer_name: formData.customerName || undefined,
-        is_billable: Boolean(formData.isBillable && formData.customer_id),
-        project_id: formData.project_id || undefined,
-        project_name: formData.projectName || undefined,
-        status: "active",
-        never_expire: formData.neverExpires,
-        tax_id: formData.tax || formData.taxId || undefined,
-        location: formData.location,
-        location_id: formData.locationId,
-        reporting_tags: reportingTagDefinitions
-          .slice(0, 2)
-          .map((tag: any) => ({
-            tagId: tag.tagId,
-            name: tag.tagName,
-            value: reportingTagValues[tag.tagId] === "None" ? "" : String(reportingTagValues[tag.tagId] || ""),
-          })),
-      };
+      const recurringExpenseData = buildRecurringExpensePayload({
+        formData,
+        reportingTagDefinitions,
+        reportingTagValues,
+      });
 
       if (!recurringExpenseData.account_id) {
-        alert("Please select an expense account from the dropdown");
+        toast.error("Please select an expense account from the dropdown");
         return;
       }
 
@@ -828,11 +759,11 @@ export default function NewRecurringExpense() {
         toast.success(isEditMode ? "Recurring expense updated successfully." : "Recurring expense created successfully.");
         navigate("/expenses/recurring-expenses");
       } else {
-        alert((response as any)?.message || `Failed to ${isEditMode ? "update" : "create"} recurring expense`);
+        toast.error((response as any)?.message || `Failed to ${isEditMode ? "update" : "create"} recurring expense`);
       }
     } catch (error) {
       console.error("Error saving recurring expense:", error);
-      alert(`An error occurred while ${isEditMode ? "updating" : "creating"} the recurring expense.`);
+      toast.error(`An error occurred while ${isEditMode ? "updating" : "creating"} the recurring expense.`);
     } finally {
       setIsSaving(false);
     }
@@ -1233,9 +1164,11 @@ export default function NewRecurringExpense() {
               <button
                 type="button"
                 onClick={() => setTaxOpen((prev) => !prev)}
-                className="w-full h-9 px-3 py-2 bg-white border border-gray-300 rounded-md flex items-center justify-between hover:border-gray-400 focus:ring-1 focus:ring-blue-500 transition-all duration-200 group/btn"
+                className="h-[34px] w-full rounded border border-gray-300 px-3 text-left text-[13px] transition-colors hover:border-gray-400"
+                style={taxOpen ? { borderColor: "#156372" } : {}}
               >
-                <span className={`text-sm font-medium ${formData.tax ? "text-gray-900" : "text-gray-400"}`}>
+                <div className="flex items-center justify-between gap-2">
+                <span className={formData.tax ? "text-[#1f2937]" : "text-[#6b7280]"}>
                   {(() => {
                     const currentTaxValue = String(formData.tax || "").trim().toLowerCase();
                     const selectedTax = availableTaxes.find((tax: any) => {
@@ -1249,21 +1182,24 @@ export default function NewRecurringExpense() {
                     return rate ? `${taxName} [${rate}%]` : taxName;
                   })()}
                 </span>
-                <ChevronDown size={16} className={`text-gray-400 group-hover/btn:text-blue-500 transition-transform duration-200 ${taxOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown size={14} className={`transition-transform ${taxOpen ? "rotate-180" : ""}`} style={{ color: "#156372" }} />
+                </div>
               </button>
               {taxOpen && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-200 rounded-md shadow-lg z-[100] max-h-[300px] overflow-hidden flex flex-col animate-in fade-in slide-in-from-top-2 duration-200">
-                  <div className="p-3 border-b border-gray-100 flex items-center gap-2 bg-gray-50 sticky top-0">
-                    <Search size={14} className="text-gray-400" />
-                    <input
-                      value={taxSearch}
-                      onChange={(e) => setTaxSearch(e.target.value)}
-                      placeholder="Search taxes..."
-                      className="w-full bg-transparent border-none outline-none text-sm font-medium placeholder-gray-400"
-                      autoFocus
-                    />
+                <div className="absolute left-0 top-full z-[9999] mt-1 w-full rounded-xl border border-[#d6dbe8] bg-white p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-100 max-h-64 overflow-hidden flex flex-col">
+                  <div className="p-2">
+                    <div className="flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-all focus-within:bg-white" style={{ borderColor: "#156372" }}>
+                      <Search size={14} className="text-slate-400" />
+                      <input
+                        value={taxSearch}
+                        onChange={(e) => setTaxSearch(e.target.value)}
+                        placeholder="Search taxes..."
+                        className="w-full border-none bg-transparent text-[13px] text-slate-700 outline-none placeholder:text-slate-400"
+                        autoFocus
+                      />
+                    </div>
                   </div>
-                  <div className="p-2 overflow-y-auto custom-scrollbar">
+                  <div className="max-h-64 overflow-y-auto custom-scrollbar py-1">
                     <button
                       type="button"
                       onClick={() => {
@@ -1271,14 +1207,13 @@ export default function NewRecurringExpense() {
                         setTaxOpen(false);
                         setTaxSearch("");
                       }}
-                      className={`w-full px-4 py-2.5 rounded-lg text-sm text-left transition-all duration-200 mb-1 ${!formData.tax
-                          ? "bg-blue-50 text-blue-600 font-medium"
-                          : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
-                        }`}
+                      className="flex w-full items-center justify-between rounded-lg px-4 py-2 text-[13px] transition-colors"
+                      style={!formData.tax ? { backgroundColor: "#156372", color: "#ffffff", fontWeight: 500 } : undefined}
                     >
                       Non-Taxable
+                      {!formData.tax ? <Check size={14} className="text-white" /> : null}
                     </button>
-                    <div className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest border-t border-gray-50 mt-1 mb-1">Selectable Taxes</div>
+                    <div className="px-4 py-1.5 text-[10px] font-extrabold text-slate-700 uppercase tracking-widest">Selectable Taxes</div>
                     {filteredTaxes.map((tax: any) => {
                       const taxId = String(tax?._id || tax?.id);
                       const taxName = tax?.taxName || tax?.name || tax?.tax_name || "Tax";
@@ -1295,13 +1230,11 @@ export default function NewRecurringExpense() {
                             setTaxOpen(false);
                             setTaxSearch("");
                           }}
-                          className={`w-full px-4 py-2.5 rounded-lg text-sm text-left transition-all duration-200 flex items-center justify-between ${selected
-                              ? "bg-blue-50 text-blue-600 font-medium"
-                              : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
-                            }`}
+                          className="flex w-full items-center justify-between rounded-lg py-2 text-[13px] transition-colors px-4"
+                          style={selected ? { backgroundColor: "#156372", color: "#ffffff", fontWeight: 500 } : undefined}
                         >
                           {label}
-                          {selected && <Check size={14} className="text-blue-600" />}
+                          {selected ? <Check size={14} className="text-white" /> : null}
                         </button>
                       );
                     })}

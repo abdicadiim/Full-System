@@ -31,6 +31,7 @@ export default function InvoiceDetail() { // Start of component
   const [payments, setPayments] = useState<any[]>([]);
   const [selectedItems, setSelectedItems] = useState<Set<any>>(new Set());
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [isCloningInvoice, setIsCloningInvoice] = useState(false);
   const [isDeleteInvoiceModalOpen, setIsDeleteInvoiceModalOpen] = useState(false);
   const [isSendDropdownOpen, setIsSendDropdownOpen] = useState(false);
   const [isRemindersDropdownOpen, setIsRemindersDropdownOpen] = useState(false);
@@ -938,6 +939,8 @@ export default function InvoiceDetail() { // Start of component
   const buildClonedInvoicePayload = (sourceInvoice: any, nextInvoiceNumber: string) => {
     const customerId = toEntityId(sourceInvoice?.customerId || sourceInvoice?.customer);
     const salespersonId = toEntityId(sourceInvoice?.salespersonId || sourceInvoice?.salesperson);
+    const invoiceDate = sourceInvoice?.invoiceDate || sourceInvoice?.date || new Date().toISOString();
+    const dueDate = sourceInvoice?.dueDate || sourceInvoice?.expectedPaymentDate || invoiceDate;
 
     const clonedItems = Array.isArray(sourceInvoice?.items)
       ? sourceInvoice.items.map((line: any) => {
@@ -984,8 +987,10 @@ export default function InvoiceDetail() { // Start of component
           ? sourceInvoice?.customer?.displayName || sourceInvoice?.customer?.companyName || sourceInvoice?.customer?.name
           : sourceInvoice?.customer)
         || "",
-      date: sourceInvoice?.invoiceDate || sourceInvoice?.date || new Date().toISOString(),
-      dueDate: sourceInvoice?.dueDate || sourceInvoice?.invoiceDate || sourceInvoice?.date || new Date().toISOString(),
+      date: invoiceDate,
+      invoiceDate,
+      dueDate,
+      expectedPaymentDate: dueDate,
       orderNumber: sourceInvoice?.orderNumber || "",
       receipt: sourceInvoice?.receipt || sourceInvoice?.paymentTerms || "Due on Receipt",
       paymentTerms: sourceInvoice?.paymentTerms || sourceInvoice?.receipt || "Due on Receipt",
@@ -2555,6 +2560,7 @@ export default function InvoiceDetail() { // Start of component
   const handleClone = async () => {
     setIsMoreMenuOpen(false);
     if (!invoice) return;
+    if (isCloningInvoice) return;
 
     const customerId = toEntityId(invoice.customerId || invoice.customer);
     if (!customerId) {
@@ -2562,6 +2568,7 @@ export default function InvoiceDetail() { // Start of component
       return;
     }
 
+    setIsCloningInvoice(true);
     try {
       const prefix = getInvoiceNumberPrefix(invoice?.invoiceNumber);
       let nextInvoiceNumber = "";
@@ -2580,6 +2587,10 @@ export default function InvoiceDetail() { // Start of component
       if (!nextInvoiceNumber) {
         const freshInvoices = await getInvoices();
         nextInvoiceNumber = getNextInvoiceNumberFromExistingInvoices(freshInvoices as any[], prefix, invoice?.invoiceNumber);
+      }
+
+      if (!nextInvoiceNumber) {
+        throw new Error("Unable to generate the next invoice number.");
       }
 
       const clonePayload = buildClonedInvoicePayload(invoice, nextInvoiceNumber);
@@ -2612,17 +2623,29 @@ export default function InvoiceDetail() { // Start of component
         clonedInvoice = await saveInvoice({ ...clonePayload, invoiceNumber: retryInvoiceNumber } as any);
       }
 
-      const clonedInvoiceId = clonedInvoice?.id || clonedInvoice?._id;
+      let clonedInvoiceId = clonedInvoice?.id || clonedInvoice?._id || clonedInvoice?.invoice?.id || clonedInvoice?.invoice?._id;
+      if (!clonedInvoiceId) {
+        const freshInvoices = await getInvoices();
+        const matchedInvoice = (freshInvoices as any[]).find((row: any) => {
+          const rowNumber = String(row?.invoiceNumber || row?.number || "").trim();
+          const rowCustomerId = toEntityId(row?.customerId || row?.customer);
+          return rowNumber === nextInvoiceNumber && rowCustomerId === customerId;
+        });
+        clonedInvoiceId = matchedInvoice?.id || matchedInvoice?._id || "";
+      }
+
       if (clonedInvoiceId) {
-        toast.success("Invoice cloned successfully.");
+        toast.success(`Invoice cloned successfully as ${nextInvoiceNumber}.`);
         navigate(`/sales/invoices/${clonedInvoiceId}`);
         return;
       }
 
-      toast.success("Invoice cloned successfully, but it could not be opened automatically.");
+      toast.success(`Invoice cloned successfully as ${nextInvoiceNumber}, but it could not be opened automatically.`);
     } catch (error: any) {
       console.error("Error cloning invoice:", error);
       toast(error?.message || "Failed to clone invoice. Please try again.");
+    } finally {
+      setIsCloningInvoice(false);
     }
   };
 

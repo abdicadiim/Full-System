@@ -39,6 +39,8 @@ import salesReceiptsRoutes from "./routes/salesReceiptsRoutes.js";
 import debitNotesRoutes from "./routes/debitNotesRoutes.js";
 import subscriptionsRoutes from "./routes/subscriptionsRoutes.js";
 import { reportsRoutes } from "./routes/reportsRoutes.js";
+import activityLogsRoutes from "./routes/activityLogsRoutes.js";
+import refundsRoutes from "./routes/refundsRoutes.js";
 import { dashboardRoutes } from "./routes/dashboardRoutes.js";
 import { activityLogger } from "./midelwares/activityLogger.js";
 
@@ -118,6 +120,8 @@ app.use("/api/sales-receipts", salesReceiptsRoutes);
 app.use("/api/debit-notes", debitNotesRoutes);
 app.use("/api/subscriptions", subscriptionsRoutes);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/activity-logs", activityLogsRoutes);
+app.use("/api/refunds", refundsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 
 app.use("/api", (_req, res) => {

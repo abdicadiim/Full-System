@@ -33,8 +33,9 @@ import {
 import BulkUpdateModal from "../shared/BulkUpdateModal";
 import DeleteConfirmationModal from "../shared/DeleteConfirmationModal";
 import ExportRecurringExpenses from "./ExportRecurringExpenses";
+import { computeRecurringExpenseDisplayAmount } from "../shared/recurringExpenseModel";
 
-import { recurringExpensesAPI, currenciesAPI } from "../../../services/api";
+import { recurringExpensesAPI, currenciesAPI, taxesAPI } from "../../../services/api";
 import { useCurrency } from "../../../hooks/useCurrency";
 
 export default function RecurringExpenses() {
@@ -84,6 +85,7 @@ export default function RecurringExpenses() {
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [customizeColumnsSearch, setCustomizeColumnsSearch] = useState("");
   const [currencies, setCurrencies] = useState<any[]>([]);
+  const [taxRatesById, setTaxRatesById] = useState<Record<string, number>>({});
   const [searchModalData, setSearchModalData] = useState({
     expenseAccount: "",
     vendorName: "",
@@ -157,6 +159,15 @@ export default function RecurringExpenses() {
           repeatEvery: expense.repeat_every,
           startDate: expense.start_date,
           amount: expense.amount,
+          taxName: expense.tax_name || expense.taxName || "",
+          taxId: expense.tax_id || expense.taxId || "",
+          taxRate: Number(expense.tax_percentage ?? expense.taxPercentage ?? expense.rate ?? 0),
+          isInclusiveTax: Boolean(expense.is_inclusive_tax),
+          displayAmount: computeRecurringExpenseDisplayAmount(
+            expense.amount,
+            Number(expense.tax_percentage ?? expense.taxPercentage ?? expense.rate ?? 0),
+            Boolean(expense.is_inclusive_tax)
+          ),
           currency: baseCurrencyCode || expense.currency_code || "USD",
           status: (expense.status || "active").toUpperCase(),
           active: expense.status !== 'stopped' && expense.status !== 'expired',
@@ -181,6 +192,28 @@ export default function RecurringExpenses() {
       const cursResp = await currenciesAPI.getAll();
       const cursList = Array.isArray(cursResp) ? cursResp : (cursResp?.data || []);
       setCurrencies(cursList);
+
+      try {
+        const primary = await taxesAPI.getForTransactions().catch(() => null);
+        const fallback = await taxesAPI.getAll({ status: "active" }).catch(() => null);
+        const rows = [
+          ...(Array.isArray(primary?.data) ? primary.data : []),
+          ...(Array.isArray(primary?.taxes) ? primary.taxes : []),
+          ...(Array.isArray(fallback?.data) ? fallback.data : []),
+        ];
+        const next: Record<string, number> = {};
+        rows.forEach((tax: any) => {
+          const id = String(tax?._id || tax?.id || tax?.tax_id || tax?.taxId || "").trim();
+          const direct = Number(tax?.taxPercentage ?? tax?.rate ?? tax?.percentage ?? 0);
+          if (id && Number.isFinite(direct) && direct > 0) {
+            next[id] = direct;
+          }
+        });
+        setTaxRatesById(next);
+      } catch (error) {
+        console.error("Error loading tax rates:", error);
+        setTaxRatesById({});
+      }
     } catch (error) {
       console.error("Error loading recurring expenses:", error);
     } finally {
@@ -527,6 +560,19 @@ export default function RecurringExpenses() {
     return match ? match.symbol : code;
   };
 
+  const getRecurringExpenseAmount = (expense: any) => {
+    const resolvedTaxRate = Number(
+      expense?.taxRate ||
+      taxRatesById[String(expense?.taxId || "").trim()] ||
+      0
+    );
+    return computeRecurringExpenseDisplayAmount(
+      expense?.amount,
+      resolvedTaxRate,
+      Boolean(expense?.isInclusiveTax)
+    );
+  };
+
   // Sort options
   const sortOptions = [
     "Created Time",
@@ -588,8 +634,8 @@ export default function RecurringExpenses() {
           bValue = bNextDate.getTime();
           break;
         case "Amount":
-          aValue = parseFloat(a.amount || 0);
-          bValue = parseFloat(b.amount || 0);
+          aValue = parseFloat(String(getRecurringExpenseAmount(a) || 0));
+          bValue = parseFloat(String(getRecurringExpenseAmount(b) || 0));
           break;
         default:
           return 0;
@@ -797,18 +843,26 @@ export default function RecurringExpenses() {
   const styles = {
     container: {
       width: "100%",
+      minHeight: "calc(100vh - 72px)",
+      padding: "0",
       backgroundColor: "#ffffff",
       display: "flex",
       flexDirection: "column" as const as const,
     },
     listCard: {
       width: "100%",
-      border: "1px solid #e5e7eb",
+      flex: 1,
+      border: "none",
+      borderRadius: "0",
       backgroundColor: "#ffffff",
+      boxShadow: "none",
+      display: "flex",
+      flexDirection: "column" as const as const,
+      overflow: "hidden",
     },
     header: {
-      padding: "16px 24px",
-      borderBottom: "1px solid #e5e7eb",
+      padding: "24px 24px 20px",
+      borderBottom: "1px solid #eef1f6",
       backgroundColor: "#ffffff",
     },
     headerContent: {
@@ -820,7 +874,7 @@ export default function RecurringExpenses() {
     headerLeft: {
       display: "flex",
       alignItems: "center",
-      gap: "8px",
+      gap: "12px",
       flex: 1,
     },
     dropdownWrapper: {
@@ -828,7 +882,7 @@ export default function RecurringExpenses() {
       display: "inline-block",
     },
     headerTitle: {
-      fontSize: "36px",
+      fontSize: "15px",
       fontWeight: "700",
       color: "#111827",
       background: "none",
@@ -836,8 +890,10 @@ export default function RecurringExpenses() {
       cursor: "pointer",
       display: "flex",
       alignItems: "center",
-      gap: "4px",
-      padding: 0,
+      gap: "6px",
+      padding: "12px 0",
+      borderBottom: "2px solid #111827",
+      marginBottom: "-2px",
     },
     dropdown: {
       position: "absolute",
@@ -866,28 +922,29 @@ export default function RecurringExpenses() {
     headerRight: {
       display: "flex",
       alignItems: "center",
-      gap: "8px",
+      gap: "12px",
     },
     newButton: {
-      padding: "8px 16px",
-      backgroundColor: "#22c55e",
+      padding: "6px 16px",
+      background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)",
       color: "#ffffff",
       fontSize: "14px",
-      fontWeight: "500",
-      borderRadius: "6px",
-      border: "none",
+      fontWeight: "700",
+      borderRadius: "8px",
+      border: "1px solid #0D4A52",
       cursor: "pointer",
       display: "flex",
       alignItems: "center",
-      gap: "4px",
-      transition: "background-color 0.2s",
+      gap: "6px",
+      boxShadow: "0 2px 6px rgba(21, 99, 114, 0.22)",
+      transition: "all 0.2s",
     },
     moreButton: {
-      padding: "8px",
+      padding: "6px",
       color: "#111827",
       backgroundColor: "#ffffff",
       border: "1px solid #d1d5db",
-      borderRadius: "6px",
+      borderRadius: "8px",
       cursor: "pointer",
       display: "flex",
       alignItems: "center",
@@ -963,33 +1020,41 @@ export default function RecurringExpenses() {
     table: {
       width: "100%",
       borderCollapse: "collapse",
+      minWidth: "1200px",
     },
     tableWrap: {
-      overflowX: "auto" as const,
-      borderTop: "1px solid #e5e7eb",
+      flex: 1,
+      minHeight: 0,
+      overflow: "auto",
+      borderTop: "1px solid #eef1f6",
+      backgroundColor: "#ffffff",
     },
     tableHeader: {
-      backgroundColor: "#f9fafb",
-      borderBottom: "1px solid #e5e7eb",
+      backgroundColor: "#f6f7fb",
+      borderBottom: "1px solid #e6e9f2",
+      position: "sticky" as const,
+      top: 0,
+      zIndex: 10,
     },
     tableHeaderCell: {
       padding: "12px 16px",
       textAlign: "left" as const,
-      fontSize: "12px",
+      fontSize: "10px",
       fontWeight: "600",
-      color: "#6b7280",
+      color: "#7b8494",
       textTransform: "uppercase",
-      borderBottom: "1px solid #e5e7eb",
+      letterSpacing: "0.06em",
+      borderBottom: "1px solid #e6e9f2",
     },
     tableBody: {
       backgroundColor: "#ffffff",
     },
     tableRow: {
-      borderBottom: "1px solid #e5e7eb",
+      borderBottom: "1px solid #eef1f6",
     },
     tableCell: {
       padding: "12px 16px",
-      fontSize: "14px",
+      fontSize: "13px",
       color: "#111827",
     },
     checkbox: {
@@ -1003,10 +1068,11 @@ export default function RecurringExpenses() {
       fontSize: "14px",
     },
     emptyState: {
-      padding: "48px 24px",
+      padding: "60px 24px",
       textAlign: "center",
       color: "#6b7280",
       fontSize: "14px",
+      backgroundColor: "#ffffff",
     },
     skeletonCell: {
       height: "16px",
@@ -1035,6 +1101,13 @@ export default function RecurringExpenses() {
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.5; }
+        }
+        .recurring-expenses-scrollbar {
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .recurring-expenses-scrollbar::-webkit-scrollbar {
+          display: none;
         }
       `}} />
       {/* Notification */}
@@ -1083,9 +1156,9 @@ export default function RecurringExpenses() {
       <div style={styles.listCard}>
       {selectedItems.length > 0 && (
         <div style={{
-          padding: "12px 16px",
-          borderBottom: "1px solid #e5e7eb",
-          backgroundColor: "#f9fafb",
+          padding: "16px 24px",
+          borderBottom: "1px solid #eef1f6",
+          backgroundColor: "#ffffff",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between"
@@ -1601,7 +1674,7 @@ export default function RecurringExpenses() {
 
       {/* Table */}
       {isRefreshing || recurringExpenses.length > 0 ? (
-        <div style={styles.tableWrap}>
+        <div style={styles.tableWrap} className="recurring-expenses-scrollbar">
           <table style={styles.table}>
             <thead style={styles.tableHeader}>
               <tr>
@@ -1751,7 +1824,7 @@ export default function RecurringExpenses() {
                       </span>
                     </td>}
                     {isColumnVisible("amount") && <td style={styles.tableCell}>
-                      {getCurrencySymbol()} {expense.amount ? parseFloat(expense.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
+                      {getCurrencySymbol()} {Number(getRecurringExpenseAmount(expense) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>}
                     {isColumnVisible("wsq") && <td style={styles.tableCell}>{expense.wsq || ""}</td>}
                   </tr>

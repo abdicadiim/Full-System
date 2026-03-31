@@ -850,7 +850,7 @@ export default function RecurringInvoices() {
       : recurringInvoices;
 
     if (invoicesToExport.length === 0) {
-      alert("No recurring invoices to export.");
+      toast.error("No recurring invoices to export.");
       return;
     }
 
@@ -864,7 +864,7 @@ export default function RecurringInvoices() {
       }
     } catch (error) {
       console.error("Export error:", error);
-      alert(`Error exporting ${exportType.toLowerCase()}. Please try again.`);
+      toast.error(`Error exporting ${exportType.toLowerCase()}. Please try again.`);
     }
   };
 
@@ -924,18 +924,18 @@ export default function RecurringInvoices() {
 
   const handleBulkUpdateSubmit = async () => {
     if (!bulkUpdateField || !selectedBulkFieldConfig) {
-      alert("Please select a field.");
+      toast.error("Please select a field.");
       return;
     }
 
     const rawValue = String(bulkUpdateValue || "").trim();
     if (!rawValue) {
-      alert("Please enter a value.");
+      toast.error("Please enter a value.");
       return;
     }
 
     if (selectedInvoices.length === 0) {
-      alert("Please select at least one recurring invoice.");
+      toast.error("Please select at least one recurring invoice.");
       return;
     }
 
@@ -944,7 +944,7 @@ export default function RecurringInvoices() {
     if (selectedBulkFieldConfig.type === "number") {
       const normalizedNumber = Number(rawValue.replace(/,/g, ""));
       if (!Number.isFinite(normalizedNumber)) {
-        alert("Please enter a valid number.");
+        toast.error("Please enter a valid number.");
         return;
       }
       parsedValue = normalizedNumber;
@@ -953,7 +953,7 @@ export default function RecurringInvoices() {
     if (selectedBulkFieldConfig.type === "date") {
       const parsedDate = new Date(rawValue);
       if (Number.isNaN(parsedDate.getTime())) {
-        alert("Please select a valid date.");
+        toast.error("Please select a valid date.");
         return;
       }
       parsedValue = parsedDate.toISOString();
@@ -984,10 +984,10 @@ export default function RecurringInvoices() {
       applyFilters(allRecurringInvoices, selectedStatus);
       setSelectedInvoices([]);
       handleCloseBulkUpdateModal();
-      alert(`${count} recurring invoice(s) updated successfully.`);
+      toast.success(`${count} recurring invoice(s) updated successfully.`);
     } catch (error) {
       console.error("Error updating invoices:", error);
-      alert("Failed to update some invoices.");
+      toast.error("Failed to update some invoices.");
     }
   };
 
@@ -1064,7 +1064,7 @@ export default function RecurringInvoices() {
 
   const handleBulkResume = async () => {
     if (selectedInvoices.length === 0) {
-      alert("Please select at least one recurring invoice.");
+      toast.error("Please select at least one recurring invoice.");
       return;
     }
     try {
@@ -1076,16 +1076,16 @@ export default function RecurringInvoices() {
       setRecurringInvoices(allRecurringInvoices);
       applyFilters(allRecurringInvoices, selectedStatus);
       setSelectedInvoices([]);
-      alert(`${selectedInvoices.length} recurring invoice(s) resumed successfully.`);
+      toast.success(`${selectedInvoices.length} recurring invoice(s) resumed successfully.`);
     } catch (error) {
       console.error("Error resuming invoices:", error);
-      alert("Failed to resume some invoices.");
+      toast.error("Failed to resume some invoices.");
     }
   };
 
   const handleBulkStop = async () => {
     if (selectedInvoices.length === 0) {
-      alert("Please select at least one recurring invoice.");
+      toast.error("Please select at least one recurring invoice.");
       return;
     }
 
@@ -1098,16 +1098,16 @@ export default function RecurringInvoices() {
       setRecurringInvoices(allRecurringInvoices);
       applyFilters(allRecurringInvoices, selectedStatus);
       setSelectedInvoices([]);
-      alert(`${selectedInvoices.length} recurring invoice(s) stopped successfully.`);
+      toast.success(`${selectedInvoices.length} recurring invoice(s) stopped successfully.`);
     } catch (error) {
       console.error("Error stopping invoices:", error);
-      alert("Failed to stop some invoices.");
+      toast.error("Failed to stop some invoices.");
     }
   };
 
   const handleBulkDelete = async () => {
     if (selectedInvoices.length === 0) {
-      alert("Please select at least one recurring invoice.");
+      toast.error("Please select at least one recurring invoice.");
       return;
     }
 
@@ -1126,10 +1126,10 @@ export default function RecurringInvoices() {
         setRecurringInvoices(allRecurringInvoices);
         applyFilters(allRecurringInvoices, selectedStatus);
         setSelectedInvoices([]);
-        alert(`${count} recurring invoice(s) deleted successfully.`);
+        toast.success(`${count} recurring invoice(s) deleted successfully.`);
       } catch (error) {
         console.error("Error deleting invoices:", error);
-        alert("Failed to delete some invoices.");
+        toast.error("Failed to delete some invoices.");
       }
     }
   };

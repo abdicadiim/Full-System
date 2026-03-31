@@ -1194,7 +1194,7 @@ export default function PaymentDetail() {
         </div>
 
         {/* Payment List */}
-        <div className="divide-y divide-gray-200 flex-1 overflow-hidden">
+        <div className="divide-y divide-gray-200 flex-1 min-h-0 overflow-y-auto scrollbar-hide">
           {filteredPayments.length > 0 ? (
             filteredPayments.map((p) => (
               <div
@@ -1245,7 +1245,7 @@ export default function PaymentDetail() {
       {/* Main Content */}
       <div className="flex-1 bg-[#f3f4f6] h-full overflow-hidden flex flex-col">
         {/* Top Header with Number and Icons */}
-        <div className="bg-white border-b border-gray-200 px-4 py-1.5 z-10 print:hidden flex-shrink-0">
+        <div className="sticky top-0 z-20 bg-white border-b border-gray-200 px-4 py-1.5 print:hidden flex-shrink-0">
           <div className="flex items-center justify-between mb-1">
             <div className="flex flex-col leading-tight">
               <div className="text-sm text-gray-600">
@@ -1478,7 +1478,7 @@ export default function PaymentDetail() {
           )}
         </div>
 
-        <div className="flex-1 overflow-y-scroll px-4 pb-6">
+        <div className="flex-1 overflow-hidden px-4 pb-6 flex flex-col min-h-0">
           {(payment.status || "").toLowerCase() === "draft" && (
             <div className="max-w-[920px] mx-auto mt-4 mb-4 border border-gray-200 rounded-md bg-white px-6 py-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="text-gray-700">
@@ -1492,15 +1492,16 @@ export default function PaymentDetail() {
               </button>
             </div>
           )}
-          {/* Receipt Card */}
-          <div
-            ref={receiptPaperRef}
-            className="max-w-[920px] mx-auto bg-white border border-gray-300 shadow-[0_2px_8px_rgba(0,0,0,0.08)] relative mb-8 mt-6 print:shadow-none print:max-w-none print:m-0"
-          >
-          <div className="absolute left-0 top-0 w-0 h-0 border-l-[46px] border-l-[#156372] border-b-[46px] border-b-transparent" />
-          <div className="absolute top-[8px] left-[3px] -rotate-45 text-[10px] font-bold tracking-wide text-white uppercase">
-            Paid
-          </div>
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {/* Receipt Card */}
+            <div
+              ref={receiptPaperRef}
+              className="w-full max-w-[210mm] h-full min-h-[297mm] max-h-full mx-auto bg-white border border-gray-300 shadow-[0_2px_8px_rgba(0,0,0,0.08)] relative mt-6 overflow-y-auto scrollbar-hide print:shadow-none print:max-w-none print:w-[210mm] print:min-h-[297mm] print:max-h-none print:overflow-visible print:m-0"
+            >
+            <div className="absolute left-0 top-0 w-0 h-0 border-l-[46px] border-l-[#156372] border-b-[46px] border-b-transparent" />
+            <div className="absolute top-[8px] left-[3px] -rotate-45 text-[10px] font-bold tracking-wide text-white uppercase">
+              Paid
+            </div>
 
           <div className="px-8 py-9 sm:px-12 sm:py-10 text-[12px] text-gray-700">
             <div className="mb-8">
@@ -1616,9 +1617,9 @@ export default function PaymentDetail() {
             </div>
           </div>
 
-          <div className="px-7 pb-6 sm:px-10 text-[10px] text-gray-400">
-            PDF Template : Elite Template <span className="text-blue-600 cursor-pointer">Change</span>
-          </div>
+            <div className="px-7 pb-6 sm:px-10 text-[10px] text-gray-400">
+              PDF Template : Elite Template <span className="text-blue-600 cursor-pointer">Change</span>
+            </div>
 
             {/* Refund History Section - Displayed inside the paper after table if refunds exist */}
             {refunds.length > 0 && (
@@ -1650,6 +1651,7 @@ export default function PaymentDetail() {
               </div>
               </div>
             )}
+            </div>
           </div>
 
         </div>

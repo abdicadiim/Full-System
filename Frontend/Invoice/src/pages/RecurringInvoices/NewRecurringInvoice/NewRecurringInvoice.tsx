@@ -1954,12 +1954,12 @@ export default function NewRecurringInvoice() {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [] as File[]);
     if (formData.documents.length + files.length > 10) {
-      alert("You can upload a maximum of 10 files");
+      toast.error("You can upload a maximum of 10 files");
       return;
     }
     const invalidFiles = files.filter(file => file.size > 10 * 1024 * 1024);
     if (invalidFiles.length > 0) {
-      alert(`Some files exceed 10MB limit. Maximum file size is 10MB.`);
+      toast.error(`Some files exceed 10MB limit. Maximum file size is 10MB.`);
       return;
     }
     const newFiles = files.map(file => ({
@@ -2195,7 +2195,7 @@ export default function NewRecurringInvoice() {
       const customer = selectedCustomer || customers.find(c => c.name === formData.customerName);
 
       if (!formData.profileName || !customer || !formData.repeatEvery || !formData.startOn) {
-        alert("Please fill in all required fields: Profile Name, Customer, Repeat Every, and Start Date.");
+        toast.error("Please fill in all required fields: Profile Name, Customer, Repeat Every, and Start Date.");
         return;
       }
 

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Lock, ChevronDown, X, Loader2 } from "lucide-react";
 import { settingsAPI } from "../../services/api";
+import { toast } from "react-toastify";
 
 type RecurringInvoiceSettings = {
   invoiceMode: "draft" | "sent";
@@ -56,10 +57,10 @@ export default function RecurringInvoicesPage() {
       if (!resp?.success) {
         throw new Error(resp?.message || "Failed to save settings");
       }
-      alert("Recurring invoice preferences saved.");
+      toast.success("Recurring invoice preferences saved.");
     } catch (error) {
       console.error("Failed to save recurring invoice settings:", error);
-      alert("Failed to save recurring invoice preferences.");
+      toast.error("Failed to save recurring invoice preferences.");
     } finally {
       setSaving(false);
     }

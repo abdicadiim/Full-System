@@ -12,11 +12,11 @@ import {
   Plus,
   Repeat,
   Trash2,
-  Upload,
   X,
 } from "lucide-react";
 import { expensesAPI, recurringExpensesAPI, taxesAPI } from "../../../services/api";
 import { useCurrency } from "../../../hooks/useCurrency";
+import { computeRecurringExpenseDisplayAmount, computeRecurringExpenseTaxAmount } from "../shared/recurringExpenseModel";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -280,7 +280,8 @@ export default function RecurringExpenseDetail() {
     pdf.text(`Paid Through: ${expense.paidThrough || "-"}`, 14, 64);
     pdf.text(`Vendor: ${expense.vendor || "-"}`, 14, 70);
     pdf.text(`Customer: ${expense.customerName || "-"}`, 14, 76);
-    pdf.text(`Attachments: ${attachments.length}`, 14, 82);
+    pdf.text(`Project: ${expense.projectName || "-"}`, 14, 82);
+    pdf.text(`Tax: ${taxLabel}`, 14, 88);
     pdf.save(`${String(expense.profileName || "recurring-expense").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.pdf`);
   };
 
@@ -444,10 +445,12 @@ export default function RecurringExpenseDetail() {
     Number(expense.taxRate || 0) > 0
       ? Number(expense.taxRate || 0)
       : (taxRatesById[String(expense.taxId || "").trim()] || extractTaxRateFromLabel(String(expense.taxName || "")) || 0);
-  const combinedAmount = expense.isInclusiveTax ? baseAmount : baseAmount * (1 + resolvedTaxRate / 100);
-  const amountValue = (Number.isFinite(combinedAmount) ? combinedAmount : baseAmount).toFixed(2);
-  const taxLabel = expense.taxName
-    ? `${amountCode}${(baseAmount * (resolvedTaxRate / 100)).toFixed(2)} (${expense.taxName}${resolvedTaxRate ? ` - ${resolvedTaxRate}%` : ""}) (${expense.isInclusiveTax ? "Inclusive" : "Exclusive"})`
+  const taxAmount = computeRecurringExpenseTaxAmount(baseAmount, resolvedTaxRate, expense.isInclusiveTax);
+  const displayAmount = computeRecurringExpenseDisplayAmount(baseAmount, resolvedTaxRate, expense.isInclusiveTax);
+  const amountValue = (Number.isFinite(displayAmount) ? displayAmount : baseAmount).toFixed(2);
+  const taxName = String(expense.taxName || "").trim() || (resolvedTaxRate > 0 ? "Tax" : "");
+  const taxLabel = taxName
+    ? `${amountCode}${taxAmount.toFixed(2)} (${taxName}${resolvedTaxRate ? ` - ${resolvedTaxRate}%` : ""}) (${expense.isInclusiveTax ? "Inclusive" : "Exclusive"})`
     : "-";
 
   const profilesFilterOptions: Array<"All Profiles" | "Active" | "Stopped"> = ["All Profiles", "Active", "Stopped"];
@@ -459,8 +462,17 @@ export default function RecurringExpenseDetail() {
   });
 
   return (
-    <div className="min-h-screen bg-white grid grid-cols-1 xl:grid-cols-[280px_1fr] 2xl:grid-cols-[300px_1fr]">
-      <aside className="border-r border-gray-200 bg-white">
+    <div className="h-screen overflow-hidden bg-white grid grid-cols-1 xl:grid-cols-[280px_1fr] 2xl:grid-cols-[300px_1fr] min-h-0">
+      <style>{`
+        .recurring-detail-scrollbar {
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .recurring-detail-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+      `}</style>
+      <aside className="border-r border-gray-200 bg-white flex flex-col min-h-0">
         <div className="h-14 px-4 border-b border-gray-200 flex items-center justify-between">
           <div ref={dropdownRef} className="relative flex-1">
             <div
@@ -497,13 +509,13 @@ export default function RecurringExpenseDetail() {
             <div ref={sidebarCreateMenuRef} className="relative">
               <div className="inline-flex items-center overflow-hidden rounded-md border border-[#15803d] shadow-sm">
                 <button
-                  className="px-3 py-2 text-white bg-[#16a34a] hover:bg-[#15803d] cursor-pointer"
+                  className="px-3 py-2 text-white bg-[#156372] hover:bg-[#0D4A52] cursor-pointer"
                   onClick={() => navigate("/expenses/recurring-expenses/new")}
                 >
                   <Plus size={16} />
                 </button>
                 <button
-                  className="px-2.5 py-2 text-white bg-[#16a34a] border-l border-[#15803d] hover:bg-[#15803d] cursor-pointer"
+                  className="px-2.5 py-2 text-white bg-[#156372] border-l border-[#0D4A52] hover:bg-[#0D4A52] cursor-pointer"
                   onClick={() => {
                     setSidebarCreateMenuOpen((prev) => !prev);
                     setDropdownOpen(false);
@@ -573,10 +585,10 @@ export default function RecurringExpenseDetail() {
             </div>
           </div>
         </div>
-        <div className="overflow-y-auto h-[calc(100vh-56px)]">
+        <div className="flex-1 min-h-0 overflow-y-auto recurring-detail-scrollbar">
           {filteredProfiles.map((row) => {
             const active = row.id === expense.id;
-            const statusColor = row.status === "ACTIVE" ? "text-[#18a34a]" : "text-[#f97316]";
+            const statusColor = row.status === "ACTIVE" ? "text-[#156372]" : "text-[#f97316]";
             return (
               <button
                 key={row.id}
@@ -601,11 +613,11 @@ export default function RecurringExpenseDetail() {
         </div>
       </aside>
 
-      <main className="min-w-0 flex flex-col bg-white">
+      <main className="min-w-0 flex flex-col bg-white min-h-0">
         <div className="h-14 border-b border-gray-200 px-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h1 className="text-[18px] leading-none font-semibold text-gray-900">{expense.profileName || "-"}</h1>
-            <span className={`px-2 py-0.5 text-xs font-semibold rounded ${expense.status === "ACTIVE" ? "bg-[#1e9f4d] text-white" : "bg-gray-200 text-gray-700"}`}>
+            <span className={`px-2 py-0.5 text-xs font-semibold rounded ${expense.status === "ACTIVE" ? "bg-[#156372] text-white" : "bg-gray-200 text-gray-700"}`}>
               {expense.status || "ACTIVE"}
             </span>
           </div>
@@ -671,17 +683,17 @@ export default function RecurringExpenseDetail() {
           ))}
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 min-h-0 overflow-y-auto recurring-detail-scrollbar">
           {activeTab === "Overview" && (
             <div className="px-4 py-4 max-w-[880px]">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="flex items-center gap-2.5">
-                  <div className="h-8 w-8 rounded-full bg-[#e9f8f1] text-[#25b771] flex items-center justify-center">
+                  <div className="h-8 w-8 rounded-full bg-[#e6f2f3] text-[#156372] flex items-center justify-center">
                     <DollarSign size={16} />
                   </div>
                   <div>
                     <div className="text-[14px] leading-none font-semibold text-gray-900">{amountCode}{amountValue}</div>
-                    <div className="text-xs text-gray-500">Expense Amount</div>
+                    <div className="text-xs text-gray-500">{expense.isInclusiveTax ? "Net Expense Amount" : "Expense Amount"}</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2.5">
@@ -745,6 +757,10 @@ export default function RecurringExpenseDetail() {
                     <span className="text-gray-900">{taxLabel}</span>
                   </div>
                   <div className="grid grid-cols-[180px_1fr]">
+                    <span className="text-gray-500">Tax Mode</span>
+                    <span className="text-gray-900">{expense.isInclusiveTax ? "Inclusive" : "Exclusive"}</span>
+                  </div>
+                  <div className="grid grid-cols-[180px_1fr]">
                     <span className="text-gray-500">Notes</span>
                     <span className="text-gray-900">{expense.notes || "-"}</span>
                   </div>
@@ -787,30 +803,18 @@ export default function RecurringExpenseDetail() {
               </section>
 
               <section className="mt-6">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-semibold text-gray-800 uppercase tracking-wide">Attachments</h3>
-                  <button onClick={() => fileInputRef.current?.click()} disabled={savingAttachments} className="h-8 px-3 border border-gray-300 rounded bg-white hover:bg-gray-50 text-sm flex items-center gap-1">
-                    <Upload size={14} /> {savingAttachments ? "Saving..." : "Upload"}
-                  </button>
-                </div>
-                <input ref={fileInputRef} type="file" multiple className="hidden" onChange={onUploadFiles} />
-                <div className="border border-gray-200 rounded-md">
-                  {attachments.length === 0 ? (
-                    <div className="px-3 py-2 text-sm text-gray-500">No attachments uploaded.</div>
+                <h3 className="text-sm font-semibold text-gray-800 uppercase tracking-wide">Associated Tags</h3>
+                <div className="mt-2 pt-3 flex flex-wrap gap-2 border-t border-gray-200">
+                  {Array.isArray(expense.reportingTags) && expense.reportingTags.length > 0 ? (
+                    expense.reportingTags
+                      .filter((tag: any) => String(tag?.value || "").trim())
+                      .map((tag: any, idx: number) => (
+                        <span key={`${tag?.tagId || idx}`} className="px-2.5 py-1 rounded border border-gray-300 bg-gray-50 text-sm text-gray-700">
+                          {tag?.name || "Tag"}: {tag?.value}
+                        </span>
+                      ))
                   ) : (
-                    attachments.map((file: any, index: number) => (
-                      <div key={file.id} className={`px-3 py-2 flex items-center justify-between gap-3 ${index < attachments.length - 1 ? "border-b border-gray-100" : ""}`}>
-                        <button type="button" onClick={() => window.open(file.url, "_blank", "noopener,noreferrer")} className="text-sm text-[#156372] hover:underline text-left">
-                          {file.name}
-                        </button>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">{formatSize(file.size)}</span>
-                          <button onClick={() => void removeAttachment(file.id)} disabled={savingAttachments} className="text-gray-500 hover:text-red-600">
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    ))
+                    <span className="text-sm text-gray-500">No associated tags.</span>
                   )}
                 </div>
               </section>

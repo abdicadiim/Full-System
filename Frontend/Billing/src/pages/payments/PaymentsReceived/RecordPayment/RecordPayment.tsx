@@ -89,6 +89,7 @@ export default function RecordPayment() {
   const depositToDropdownRef = useRef<HTMLDivElement>(null);
   const paymentModeDropdownRef = useRef<HTMLDivElement>(null);
   const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
+  const [isLocationDropdownOpen, setIsLocationDropdownOpen] = useState(false);
   const [isAllInvoicesDropdownOpen, setIsAllInvoicesDropdownOpen] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
   const [isNewCustomerQuickActionOpen, setIsNewCustomerQuickActionOpen] = useState(false);
@@ -156,6 +157,7 @@ export default function RecordPayment() {
   const [selectedInbox, setSelectedInbox] = useState("files");
 
   const customerDropdownRef = useRef<HTMLDivElement>(null);
+  const locationDropdownRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const allInvoicesDropdownRef = useRef<HTMLDivElement>(null);
   const shareModalRef = useRef<HTMLDivElement>(null);
@@ -199,6 +201,34 @@ export default function RecordPayment() {
   const customerEndIndex = customerStartIndex + customerResultsPerPage;
   const customerPaginatedResults = customerSearchResults.slice(customerStartIndex, customerEndIndex);
   const customerTotalPages = Math.ceil(customerSearchResults.length / customerResultsPerPage);
+  const getCustomerDisplayName = (customer: any) => String(customer?.name || customer?.displayName || customer?.companyName || "").trim();
+  const getCustomerCode = (customer: any) => String(customer?.customerNumber || customer?.customerCode || customer?.code || customer?.id || customer?._id || "").trim();
+  const getCustomerEmail = (customer: any) => String(customer?.email || customer?.contactPersons?.[0]?.email || "").trim();
+  const getCustomerPhone = (customer: any) => String(customer?.workPhone || customer?.mobile || customer?.phone || "").trim();
+  const getCustomerInitials = (customer: any) => {
+    const source = getCustomerDisplayName(customer) || getCustomerCode(customer) || "C";
+    const initials = source
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() || "")
+      .join("");
+    return initials || "C";
+  };
+  const filteredCustomerDropdownOptions = customers.filter((customer) => {
+    const search = customerSearch.toLowerCase();
+    if (!search) return true;
+    const haystack = [
+      getCustomerDisplayName(customer),
+      getCustomerCode(customer),
+      getCustomerEmail(customer),
+      getCustomerPhone(customer),
+      String(customer?.companyName || ""),
+    ]
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(search);
+  });
   const normalizeReportingTagOptions = (tag: any): string[] => {
     const candidates = Array.isArray(tag?.options)
       ? tag.options
@@ -698,6 +728,9 @@ export default function RecordPayment() {
       if (customerDropdownRef.current && !customerDropdownRef.current.contains(e.target as Node)) {
         setIsCustomerDropdownOpen(false);
       }
+      if (locationDropdownRef.current && !locationDropdownRef.current.contains(e.target as Node)) {
+        setIsLocationDropdownOpen(false);
+      }
       if (allInvoicesDropdownRef.current && !allInvoicesDropdownRef.current.contains(e.target as Node)) {
         setIsAllInvoicesDropdownOpen(false);
       }
@@ -762,6 +795,26 @@ export default function RecordPayment() {
     return Math.max(0, calc || 0);
   };
 
+  const isRetainerInvoiceRecord = (invoice: any) => {
+    const rawType = String(
+      invoice?.invoiceType ||
+      invoice?.type ||
+      invoice?.documentType ||
+      invoice?.module ||
+      invoice?.source ||
+      ""
+    ).toLowerCase();
+    const rawNumber = String(invoice?.invoiceNumber || invoice?.number || "").toUpperCase();
+    return Boolean(
+      invoice?.isRetainerInvoice ||
+      invoice?.isRetainer ||
+      invoice?.is_retainer ||
+      invoice?.retainer ||
+      rawType.includes("retainer") ||
+      /^RET[-\d]/.test(rawNumber)
+    );
+  };
+
   const loadUnpaidInvoices = async (custId: string, customerName: string, targetInvoiceId: string | null = null, targetAmount: number = 0) => {
     try {
       // If we're asked to limit to a specific invoice, fetch that invoice only
@@ -801,6 +854,7 @@ export default function RecordPayment() {
       let invoices = (allInvoices || []).filter((inv: any) => {
         const invCustId = typeof inv.customer === 'object' ? (inv.customer?._id || inv.customer?.id) : inv.customerId;
         if (!(invCustId === targetCustId || inv.customerName === customerName || inv.customer === customerName)) return false;
+        if (!targetInvoiceId && isRetainerInvoiceRecord(inv)) return false;
         const status = (inv.status || '').toString().toLowerCase();
         // Exclude drafts, voids and paid invoices explicitly
         if (status === 'draft' || status === 'void' || status === 'paid') return false;
@@ -1433,25 +1487,8 @@ export default function RecordPayment() {
         return;
       }
 
-      // Ensure allocations are properly built. If none applied but amount exists, distribute now.
       let finalInvoicePayments = { ...invoicePayments };
-      const currentApplied = Object.values(finalInvoicePayments).reduce((sum, val) => sum + (parseFloat(val as any) || 0), 0);
       const totalToApply = parseFloat(formData.amountReceived) || 0;
-
-      if (currentApplied === 0 && totalToApply > 0 && unpaidInvoices.length > 0) {
-        let remaining = totalToApply;
-        unpaidInvoices.forEach(inv => {
-          const invId = inv.id || inv._id;
-          const due = parseFloat(computeInvoiceDue(inv) || 0);
-          if (remaining >= due) {
-            finalInvoicePayments[invId] = due;
-            remaining -= due;
-          } else if (remaining > 0) {
-            finalInvoicePayments[invId] = remaining;
-            remaining = 0;
-          }
-        });
-      }
 
       // Clean invoicePayments: ensure keys are strings and amounts are numbers, remove zero/invalid entries
       const cleanedInvoicePayments: { [key: string]: number } = {};
@@ -1584,7 +1621,7 @@ export default function RecordPayment() {
     });
   };
 
-  const formatCurrency = (amount: string | number, currency = "USD") => {
+  const formatCurrency = (amount: string | number, currency = baseCurrencyCode) => {
     return `${currency}${parseFloat(amount as string || '0').toLocaleString("en-US", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
@@ -1759,15 +1796,15 @@ export default function RecordPayment() {
         <div className="p-8 w-full">
           <div className="space-y-5">
             {/* Customer Name Row */}
-            <div className="bg-[#fafafa] -mx-8 px-8 py-4 mb-8">
-              <div className="grid grid-cols-[200px_1fr_auto] gap-4 items-center">
+        <div className="bg-[#fafafa] -mx-8 px-8 py-4 mb-8">
+              <div className="grid grid-cols-[200px_minmax(0,380px)_auto] gap-4 items-center">
                 <label className="text-sm font-medium text-red-500">
                   Customer Name*
                 </label>
-                <div className="relative" ref={customerDropdownRef}>
+                <div className="relative w-full max-w-[380px]" ref={customerDropdownRef}>
                   <div className="flex items-center">
                     <div
-                      className={`flex-1 border border-gray-300 rounded-l px-3 py-1.5 text-sm flex items-center justify-between bg-white min-h-[36px] ${
+                      className={`flex-1 border border-gray-300 rounded-l-md px-3 py-1.5 text-[13px] flex items-center justify-between bg-white min-h-[32px] ${
                         isSingleInvoiceMode ? "cursor-not-allowed opacity-80" : "cursor-pointer hover:border-gray-400"
                       }`}
                       onClick={() => {
@@ -1781,7 +1818,7 @@ export default function RecordPayment() {
                     </div>
                     <button
                       type="button"
-                      className={`h-[36px] px-3 text-white rounded-r border transition-colors flex items-center justify-center ${
+                      className={`h-[32px] px-3 text-white rounded-r-md border transition-colors flex items-center justify-center ${
                         isSingleInvoiceMode ? "opacity-60 cursor-not-allowed" : ""
                       }`}
                       style={{ backgroundColor: "#156372", borderColor: "#156372" }}
@@ -1798,38 +1835,70 @@ export default function RecordPayment() {
                   </div>
 
                 {isCustomerDropdownOpen && !isSingleInvoiceMode && (
-                  <div className="absolute top-full left-0 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg z-50 max-h-60 overflow-y-auto">
-                    <div className="p-2 sticky top-0 bg-white border-b border-gray-100">
-                      <div className="flex items-center gap-2 border border-gray-200 rounded px-2 py-1">
-                        <Search size={14} className="text-gray-400" />
+                  <div className="absolute top-full left-0 mt-2 w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl z-50">
+                    <div className="border-b border-gray-100 bg-white p-2">
+                      <div className="flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 focus-within:border-[#156372] focus-within:ring-2 focus-within:ring-[rgba(21,99,114,0.08)]">
+                        <Search size={14} className="text-gray-400 shrink-0" />
                         <input
                           autoFocus
-                          className="w-full outline-none text-sm p-1"
+                          className="w-full bg-transparent outline-none text-[13px] placeholder:text-gray-400"
                           placeholder="Search..."
                           value={customerSearch}
                           onChange={(e) => setCustomerSearch(e.target.value)}
                         />
                       </div>
                     </div>
-                    {customers
-                      .filter(c => c.name.toLowerCase().includes(customerSearch.toLowerCase()))
-                      .map(c => (
-                        <div
-                          key={c.id}
-                          className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-                          onClick={() => handleCustomerSelect(c)}
-                        >
-                          {c.name}
+                    <div className="max-h-[240px] overflow-y-auto py-1">
+                      {filteredCustomerDropdownOptions.length > 0 ? (
+                        filteredCustomerDropdownOptions.map((c) => {
+                          const displayName = getCustomerDisplayName(c);
+                          const customerCode = getCustomerCode(c);
+                          const customerEmail = getCustomerEmail(c);
+                          const customerPhone = getCustomerPhone(c);
+                          const isSelected = String(formData.customerId || "") === String(c.id || c._id || "");
+                          return (
+                            <button
+                              key={c.id || c._id || c.name}
+                              type="button"
+                              className={`w-full px-3 py-2.5 text-left transition-colors hover:bg-blue-50 ${isSelected ? "bg-blue-50" : ""}`}
+                              onClick={() => handleCustomerSelect(c)}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-[12px] font-semibold text-gray-500">
+                                  {getCustomerInitials(c)}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="truncate text-[13px] font-medium text-gray-900">
+                                      {displayName || customerCode || "Customer"}
+                                    </span>
+                                    {customerCode && <span className="truncate text-[12px] text-gray-500">| {customerCode}</span>}
+                                  </div>
+                                  {c.companyName && (
+                                    <div className="truncate text-[12px] text-gray-500">{c.companyName}</div>
+                                  )}
+                                  <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-gray-500">
+                                    {customerEmail && <span className="truncate">{customerEmail}</span>}
+                                    {customerPhone && <span className="truncate">{customerPhone}</span>}
+                                  </div>
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <div className="px-3 py-6 text-center text-sm text-gray-500">
+                          {customerSearch ? "No customers found" : "Start typing to search customers"}
                         </div>
-                      ))}
-                    <div
-                      className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-sm border-t border-gray-100 flex items-center gap-2"
-                      style={{ color: "#156372" }}
-                      onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => { (e.target as HTMLDivElement).style.color = "#0D4A52"; }}
-                      onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => { (e.target as HTMLDivElement).style.color = "#156372"; }}
-                      onClick={openCustomerQuickAction}
-                    >
-                      <Plus size={14} /> New Customer
+                      )}
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2 border-t border-gray-100 px-3 py-2.5 text-left text-[13px] font-medium text-[#156372] hover:bg-blue-50"
+                        onClick={openCustomerQuickAction}
+                      >
+                        <Plus size={14} />
+                        New Customer
+                      </button>
                     </div>
                   </div>
                 )}
@@ -1850,14 +1919,50 @@ export default function RecordPayment() {
               <label className="text-sm font-medium text-gray-700">
                 Location
               </label>
-              <div className="max-w-[400px]">
-                <ZohoSelect
-                  value={formData.location}
-                  options={locationOptions}
-                  onChange={(val) => setFormData(p => ({ ...p, location: val }))}
-                  placeholder="Select Location"
-                  className={!isCustomerSelected ? 'opacity-50 pointer-events-none bg-gray-100' : ''}
-                />
+              <div className="relative w-full max-w-[380px]" ref={locationDropdownRef}>
+                <button
+                  type="button"
+                  className={`w-full border border-gray-300 rounded-md px-3 py-1.5 text-[13px] min-h-[32px] flex items-center justify-between bg-white transition-colors ${
+                    !isCustomerSelected ? "opacity-50 cursor-not-allowed bg-gray-100" : "cursor-pointer hover:border-gray-400"
+                  }`}
+                  onClick={() => {
+                    if (!isCustomerSelected) return;
+                    setIsLocationDropdownOpen((prev) => !prev);
+                  }}
+                >
+                  <span className={formData.location ? "text-gray-900" : "text-gray-400"}>
+                    {formData.location || "Select Location"}
+                  </span>
+                  <ChevronDown size={14} className="text-gray-400 shrink-0" />
+                </button>
+
+                {isLocationDropdownOpen && isCustomerSelected && (
+                  <div className="absolute top-full left-0 mt-2 w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl z-50">
+                    <div className="max-h-[240px] overflow-y-auto py-1">
+                      {locationOptions.map((option) => {
+                        const isSelected = formData.location === option;
+                        return (
+                          <button
+                            key={option}
+                            type="button"
+                            className={`w-full px-3 py-2.5 text-left text-[13px] transition-colors hover:bg-blue-50 ${
+                              isSelected ? "bg-blue-50" : ""
+                            }`}
+                            onClick={() => {
+                              setFormData((p) => ({ ...p, location: option }));
+                              setIsLocationDropdownOpen(false);
+                            }}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="truncate text-gray-900">{option}</span>
+                              {isSelected && <span className="text-[11px] font-medium text-[#156372]">Selected</span>}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

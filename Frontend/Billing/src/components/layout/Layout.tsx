@@ -22,6 +22,7 @@ export default function Layout({ children }) {
     location.pathname === "/expenses" ||
     location.pathname === "/expenses/receipts" ||
     location.pathname === "/expenses/recurring-expenses" ||
+    location.pathname.startsWith("/reports") ||
     location.pathname.startsWith("/time-tracking") ||
     location.pathname.startsWith("/sales/subscriptions") ||
     location.pathname.startsWith("/sales/credit-notes") ||
@@ -44,7 +45,21 @@ export default function Layout({ children }) {
     /^\/(?:sales\/)?subscriptions\/[^/]+$/.test(location.pathname) &&
     !/^\/(?:sales\/)?subscriptions\/(new|preview)$/.test(location.pathname);
   const isCreditNotesPage = location.pathname === "/sales/credit-notes" || location.pathname === "/credit-notes";
-  const disablePageScroll = isSubscriptionListPage || isSubscriptionDetailPage || isCreditNotesPage;
+  const isCreditNotesDetailPage =
+    (location.pathname.startsWith("/sales/credit-notes/") || location.pathname.startsWith("/credit-notes/")) &&
+    ![
+      "/sales/credit-notes/new",
+      "/sales/credit-notes/import",
+      "/sales/credit-notes/import-applied",
+      "/sales/credit-notes/import-refunds",
+      "/sales/credit-notes/custom-view/new",
+      "/credit-notes/new",
+      "/credit-notes/import",
+      "/credit-notes/import-applied",
+      "/credit-notes/import-refunds",
+      "/credit-notes/custom-view/new"
+    ].includes(location.pathname);
+  const disablePageScroll = isSubscriptionListPage || isSubscriptionDetailPage || isCreditNotesPage || isCreditNotesDetailPage || location.pathname.startsWith("/reports");
 
   useEffect(() => {
     ensureTimerTicker();
@@ -53,6 +68,12 @@ export default function Layout({ children }) {
   useEffect(() => {
     transactionNumberSeriesAPI.getAll({ limit: 10000 }).catch(() => null);
   }, []);
+
+  useEffect(() => {
+    if (location.pathname.startsWith("/reports")) {
+      setSidebarCollapsed(true);
+    }
+  }, [location.pathname]);
 
   if (hideAppChrome) {
     return (

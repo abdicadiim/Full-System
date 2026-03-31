@@ -20,6 +20,8 @@ export default function Layout({ children }) {
     location.pathname === "/expenses" ||
     location.pathname === "/expenses/receipts" ||
     location.pathname === "/expenses/recurring-expenses" ||
+    location.pathname.startsWith("/sales/credit-notes") ||
+    location.pathname.startsWith("/credit-notes") ||
     location.pathname.startsWith("/sales/sales-receipts") ||
     location.pathname.startsWith("/sales/customers") ||
     location.pathname.startsWith("/sales/quotes") ||
@@ -36,6 +38,21 @@ export default function Layout({ children }) {
     location.pathname.startsWith("/items") ||
     location.pathname.startsWith("/products/items") ||
     location.pathname.startsWith("/reports");
+  const isCreditNotesDetailPage =
+    (location.pathname.startsWith("/sales/credit-notes/") || location.pathname.startsWith("/credit-notes/")) &&
+    ![
+      "/sales/credit-notes/new",
+      "/sales/credit-notes/import",
+      "/sales/credit-notes/import-applied",
+      "/sales/credit-notes/import-refunds",
+      "/sales/credit-notes/custom-view/new",
+      "/credit-notes/new",
+      "/credit-notes/import",
+      "/credit-notes/import-applied",
+      "/credit-notes/import-refunds",
+      "/credit-notes/custom-view/new"
+    ].includes(location.pathname);
+  const disablePageScroll = isCreditNotesDetailPage;
 
   useEffect(() => {
     transactionNumberSeriesAPI.getAll({ limit: 10000 }).catch(() => null);
@@ -80,7 +97,13 @@ export default function Layout({ children }) {
               <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Navigation Menu</div>
             </div>
 
-            <main className={`w-full min-w-0 flex-1 min-h-0 overflow-y-auto ${isFullWidthPage ? "p-0" : "p-4 md:p-6"}`}>{children}</main>
+            <main
+              className={`w-full min-w-0 flex-1 min-h-0 ${disablePageScroll ? "overflow-hidden" : "overflow-y-auto"} ${
+                isFullWidthPage ? "p-0" : "p-4 md:p-6"
+              }`}
+            >
+              {children}
+            </main>
           </div>
         </div>
       </div>

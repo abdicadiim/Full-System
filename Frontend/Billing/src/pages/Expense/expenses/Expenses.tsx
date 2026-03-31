@@ -1690,7 +1690,7 @@ export default function Expenses() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-72px)] w-full bg-white font-sans text-gray-800 antialiased relative overflow-hidden">
+      <div className="flex flex-col h-[calc(100vh-72px)] w-full bg-[#f6f7fb] font-sans text-gray-800 antialiased relative overflow-hidden">
       {/* Header */}
       {selectedExpenses.length === 0 && (
         <div className="flex-none border-b border-gray-100 bg-white px-6 py-6">
@@ -1962,7 +1962,7 @@ export default function Expenses() {
       )}
 
       {/* Main content area */}
-      <div className="flex-1 overflow-auto bg-white min-h-0 custom-scrollbar">
+      <div className="flex-1 overflow-auto bg-[#f6f7fb] min-h-0 custom-scrollbar">
         {/* Action Bar - Shows when items are selected */}
         {selectedExpenses.length > 0 && (
           <div className="flex items-center justify-between border-b border-gray-100 bg-white px-4 py-3">

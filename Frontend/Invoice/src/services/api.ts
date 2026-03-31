@@ -1957,6 +1957,8 @@ export const bankAccountsAPI = {
 
 export const refundsAPI = {
   ...resource("/refunds"),
+  getByPaymentId: (paymentId: string, params?: Record<string, any>) =>
+    request({ path: `/refunds/payment/${paymentId}`, params }),
   getByCreditNoteId: (creditNoteId: string, params?: Record<string, any>) =>
     request({ path: `/refunds/credit-note/${creditNoteId}`, params }),
 };

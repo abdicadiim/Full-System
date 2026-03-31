@@ -12,6 +12,7 @@ import SubscriptionsRoutes from '../pages/sales/subscriptions/SubscriptionsRoute
 import CustomersRoutes from '../pages/Customers/CustomersRoutes'
 import PaymentsRoutes from '../pages/payments/PaymentsRoutes'
 import ReportsRoutes from '../pages/reports/ReportsRoutes'
+import CreateCustomReportPage from '../pages/reports/CreateCustomReportPage'
 
 import TaxesRoutes from '../pages/taxes/TaxesRoutes'
 import OrgsRoutes from '../pages/orgs/OrgsRoutes'
@@ -177,6 +178,7 @@ export default function AppRoutes() {
 
       <Route path="/documents/*" element={<DocumentsPage />} />
       <Route path="/settings/*" element={<SettingsRoutes />} />
+      <Route path="/reports/custom/create" element={<CreateCustomReportPage />} />
       <Route path="/reports/*" element={<ReportsRoutes />} />
 
       <Route path="*" element={<div className="p-6">Not Found</div>} />

@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
 import LoadingSpinner from "../../../components/LoadingSpinner";
-import { getPayments, getPaymentById, getCustomViews, deleteCustomView, CustomView } from "../../salesModel";
+import { getPayments, getPaymentById, getCustomViews, deleteCustomView, updatePayment, deletePayment, CustomView } from "../../salesModel";
 import { useCurrency } from "../../../hooks/useCurrency";
-import { settingsAPI, paymentsReceivedAPI, bankAccountsAPI, paymentModesAPI } from "../../../services/api";
+import { settingsAPI, bankAccountsAPI, paymentModesAPI } from "../../../services/api";
 import { toast } from "react-toastify";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
@@ -141,6 +141,7 @@ export default function PaymentsReceived() {
   const [isExportSubmenuOpen, setIsExportSubmenuOpen] = useState(false);
   const [activeSortField, setActiveSortField] = useState("Date");
   const [isBulkUpdateModalOpen, setIsBulkUpdateModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [bulkUpdateField, setBulkUpdateField] = useState("");
   const [bulkUpdateValue, setBulkUpdateValue] = useState("");
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
@@ -858,7 +859,7 @@ export default function PaymentsReceived() {
     try {
       setIsBulkUpdating(true);
       const results = await Promise.allSettled(
-        selectedIds.map((id) => paymentsReceivedAPI.update(id, updatePayload))
+        selectedIds.map((id) => updatePayment(id, updatePayload))
       );
       const successCount = results.filter(
         (result) => result.status === "fulfilled" && result.value?.success
@@ -1149,40 +1150,42 @@ export default function PaymentsReceived() {
 
   const handleDelete = () => {
     if (selectedPayments.size === 0) return;
+    setIsDeleteModalOpen(true);
+  };
 
-    const count = selectedPayments.size;
-    if (window.confirm(`Are you sure you want to delete ${count} payment(s)?`)) {
-      (async () => {
-        try {
-          const selectedIds = filteredPayments
-            .filter((payment) => selectedPayments.has(payment.id))
-            .map((payment) => String(payment.id));
+  const handleDeleteConfirm = async () => {
+    const selectedIds = filteredPayments
+      .filter((payment) => selectedPayments.has(payment.id))
+      .map((payment) => String(payment.id));
 
-          const results = await Promise.allSettled(
-            selectedIds.map((id) => paymentsReceivedAPI.delete(id))
-          );
-          const successCount = results.filter(
-            (result) => result.status === "fulfilled" && result.value?.success
-          ).length;
-          const failedCount = selectedIds.length - successCount;
+    if (selectedIds.length === 0) {
+      toast.error("Please select at least one payment.");
+      return;
+    }
 
-          const allPayments = await getPayments();
-          setPayments(allPayments);
-          applyFilters(allPayments, selectedStatus);
-          setSelectedPayments(new Set());
+    try {
+      const results = await Promise.allSettled(
+        selectedIds.map((id) => deletePayment(id))
+      );
+      const successCount = results.filter((result) => result.status === "fulfilled").length;
+      const failedCount = selectedIds.length - successCount;
 
-          if (successCount > 0 && failedCount === 0) {
-            toast.success(`Deleted ${successCount} payment(s) successfully.`);
-          } else if (successCount > 0) {
-            toast.warn(`Deleted ${successCount} payment(s). ${failedCount} payment(s) could not be deleted.`);
-          } else {
-            toast.error("Failed to delete selected payments.");
-          }
-        } catch (error: any) {
-          console.error("Error deleting payments:", error);
-          toast.error(error?.message || "Failed to delete selected payments.");
-        }
-      })();
+      const allPayments = await getPayments();
+      setPayments(allPayments);
+      applyFilters(allPayments, selectedStatus);
+      setSelectedPayments(new Set());
+      setIsDeleteModalOpen(false);
+
+      if (successCount > 0 && failedCount === 0) {
+        toast.success(`Deleted ${successCount} payment(s) successfully.`);
+      } else if (successCount > 0) {
+        toast.warn(`Deleted ${successCount} payment(s). ${failedCount} payment(s) could not be deleted.`);
+      } else {
+        toast.error("Failed to delete selected payments.");
+      }
+    } catch (error: any) {
+      console.error("Error deleting payments:", error);
+      toast.error(error?.message || "Failed to delete selected payments.");
     }
   };
 
@@ -1224,10 +1227,10 @@ export default function PaymentsReceived() {
     <div className="flex flex-col h-full bg-white relative overflow-hidden -m-4 md:-m-6">
       {/* Header - Show Bulk Actions Bar when items are selected, otherwise show normal header */}
       {selectedPayments.size > 0 ? (
-        <div className="flex items-center justify-between px-6 py-6 border-b border-gray-100 bg-white relative overflow-visible z-[100]">
+        <div className={`flex items-center justify-between px-6 py-6 border-b border-gray-100 bg-white relative overflow-visible z-[100] ${isBulkUpdateModalOpen || isDeleteModalOpen ? "opacity-0 pointer-events-none" : ""}`}>
           <div className="flex items-center gap-2">
             <button
-              className="px-4 py-2 bg-gradient-to-r from-[#156372] to-[#0D4A52] border-none text-white rounded-md text-sm font-medium cursor-pointer hover:opacity-90 transition-all shadow-sm"
+              className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-md text-sm font-medium cursor-pointer hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm"
               onClick={handleBulkUpdate}
             >
               Bulk Update
@@ -1248,7 +1251,7 @@ export default function PaymentsReceived() {
             </button>
           </div>
           <div className="flex items-center gap-2">
-            <span className="flex items-center justify-center min-w-[24px] h-6 px-2 bg-gradient-to-r from-[#156372] to-[#0D4A52] rounded text-[13px] font-semibold text-white">
+            <span className="flex items-center justify-center min-w-[24px] h-6 px-2 bg-blue-600 rounded text-[13px] font-semibold text-white">
               {selectedPayments.size}
             </span>
             <span className="text-sm text-gray-700">Selected</span>
@@ -1520,7 +1523,7 @@ export default function PaymentsReceived() {
 
       <div className="flex-1 overflow-auto bg-white min-h-0 custom-scrollbar">
 
-        {filteredPayments.length === 0 ? (
+        {!isLoading && !isRefreshing && filteredPayments.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <h2 className="text-2xl font-bold text-gray-900 mb-3">No payments received, yet</h2>
             <p className="text-gray-600 mb-6 max-w-md">
@@ -1730,7 +1733,23 @@ export default function PaymentsReceived() {
                         {isColumnVisible("paymentMode") && <td className="px-4 py-3 text-gray-900">{payment.paymentMode || "-"}</td>}
                         {isColumnVisible("amountReceived") && <td className="px-4 py-3 text-gray-900">{formatCurrency(payment.amountReceived || 0, payment.currency)}</td>}
                         {isColumnVisible("unusedAmount") && <td className="px-4 py-3 text-gray-900">{formatCurrency(payment.unusedAmount || payment.amountReceived || 0, payment.currency)}</td>}
-                        {isColumnVisible("status") && <td className="px-4 py-3 text-gray-900">{payment.status || "-"}</td>}
+                        {isColumnVisible("status") && (
+                          <td className="px-4 py-3">
+                            {payment.status ? (
+                              <span
+                                className={`inline-flex items-center rounded-full px-2.5 py-1 text-[12px] font-medium ${
+                                  String(payment.status).toLowerCase() === "paid"
+                                    ? "bg-green-50 text-green-700"
+                                    : "bg-gray-100 text-gray-700"
+                                }`}
+                              >
+                                {payment.status}
+                              </span>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
+                        )}
                         {isColumnVisible("paymentType") && <td className="px-4 py-3 text-gray-900">{payment.paymentType || payment.type || "-"}</td>}
                         <td className="px-4 py-3"></td>
                       </tr>
@@ -1746,25 +1765,30 @@ export default function PaymentsReceived() {
       {/* Bulk Update Modal */}
       {isBulkUpdateModalOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center"
+          className="fixed inset-0 bg-black/40 z-[2100] flex items-start justify-center pt-16 px-4"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setIsBulkUpdateModalOpen(false);
             }
           }}
         >
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <div className="w-full max-w-md bg-white rounded-lg shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+              <div className="h-7 w-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[12px] font-bold">
+                !
+              </div>
               <h2 className="text-xl font-semibold text-gray-900">Bulk Update Payments Received</h2>
               <button
-                className="p-2 hover:bg-gray-100 rounded-lg text-gray-600 transition-colors"
+                type="button"
+                className="ml-auto h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
                 onClick={() => setIsBulkUpdateModalOpen(false)}
+                aria-label="Close"
               >
-                <X size={20} />
+                <X size={14} />
               </button>
             </div>
-            <div className="p-6">
-              <p className="text-sm text-gray-600 mb-4">
+            <div className="px-5 py-3 text-[13px] text-slate-600">
+              <p className="text-sm text-slate-600 mb-4">
                 Choose a field from the dropdown and update with new information.
               </p>
 
@@ -1836,21 +1860,63 @@ export default function PaymentsReceived() {
                 <strong className="text-gray-700">Note:</strong> All the selected customer payments will be updated with the new information and you cannot undo this action.
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50">
+            <div className="flex items-center justify-end gap-3 border-t border-slate-100 px-5 py-3">
               <button
-                className="px-6 py-2 bg-gradient-to-r from-[#156372] to-[#0D4A52] text-white rounded-lg text-sm font-semibold hover:opacity-90 shadow-sm transition-all"
+                className="px-4 py-1.5 rounded-md bg-blue-600 text-white text-[12px] hover:bg-blue-700 disabled:opacity-60"
                 onClick={handleBulkUpdateSubmit}
                 disabled={isBulkUpdating}
               >
                 {isBulkUpdating ? "Updating..." : "Update"}
               </button>
               <button
-                className="px-6 py-2 bg-white border-2 border-gray-200 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-50 transition-colors"
+                className="px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50"
                 onClick={() => {
                   setIsBulkUpdateModalOpen(false);
                   setBulkUpdateField("");
                   setBulkUpdateValue("");
                 }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16 px-4">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200">
+            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+              <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
+                !
+              </div>
+              <h3 className="text-[15px] font-semibold text-slate-800 flex-1">
+                Delete selected payments?
+              </h3>
+              <button
+                type="button"
+                className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                onClick={() => setIsDeleteModalOpen(false)}
+                aria-label="Close"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="px-5 py-3 text-[13px] text-slate-600">
+              You cannot retrieve the selected payments once they have been deleted.
+            </div>
+            <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
+              <button
+                type="button"
+                className="px-4 py-1.5 rounded-md bg-blue-600 text-white text-[12px] hover:bg-blue-700"
+                onClick={handleDeleteConfirm}
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                className="px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50"
+                onClick={() => setIsDeleteModalOpen(false)}
               >
                 Cancel
               </button>

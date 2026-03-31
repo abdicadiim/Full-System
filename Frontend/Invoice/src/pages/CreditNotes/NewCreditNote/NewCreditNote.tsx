@@ -1762,7 +1762,7 @@ export default function NewCreditNote() {
   };
 
   return (
-    <div className="w-full min-h-screen bg-white">
+    <div className="w-full h-full min-h-0 bg-white flex flex-col overflow-hidden">
       {/* Header */}
       <div className="border-b border-gray-200 bg-white">
         <div className="w-full px-6 py-4 flex justify-between items-center">
@@ -1777,7 +1777,7 @@ export default function NewCreditNote() {
       </div>
 
       {/* Content */}
-      <div className="w-full py-6 pb-28">
+      <div className="flex-1 min-h-0 w-full overflow-y-auto py-6 pb-28">
         <div className="bg-white overflow-visible">
           {/* Customer Row */}
           <div className="px-6 py-5 border-b border-gray-100 bg-[#fafafa]">
@@ -1788,7 +1788,7 @@ export default function NewCreditNote() {
                 <div className="relative flex items-stretch">
                   <input
                     type="text"
-                    className="flex-1 px-3 py-2 pr-10 border border-[#3b82f6] rounded-l text-sm text-gray-700 focus:outline-none focus:border-[#3b82f6] bg-white"
+                    className="flex-1 px-3 py-2 pr-10 border border-gray-300 rounded-l text-sm text-gray-700 focus:outline-none focus:border-gray-300 bg-white"
                     placeholder="Select or add a customer"
                     value={formData.customerName}
                     readOnly
@@ -1828,8 +1828,8 @@ export default function NewCreditNote() {
                 </div>
 
                 {isCustomerDropdownOpen && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#3b82f6] rounded-md shadow-lg z-50 overflow-hidden max-h-80">
-                    <div className="flex items-center gap-2 p-2 border-b border-[#bfdbfe] sticky top-0 bg-white">
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 overflow-hidden max-h-80">
+                    <div className="flex items-center gap-2 p-2 border-b border-gray-200 sticky top-0 bg-white">
                       <Search size={14} className="text-blue-500" />
                       <input
                         type="text"
@@ -2440,7 +2440,7 @@ export default function NewCreditNote() {
                               />
                             </div>
                             {openAccountDropdowns[item.id] && (
-                              <div className="absolute left-0 top-full z-50 mt-1 w-[260px] overflow-hidden rounded-md border border-[#3b82f6] bg-white shadow-lg">
+                    <div className="absolute left-0 top-full z-50 mt-1 w-[260px] overflow-hidden rounded-md border border-gray-300 bg-white shadow-lg">
                                 <div className="border-b border-gray-200 p-3">
                                   <div className="relative">
                                     <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -2450,7 +2450,7 @@ export default function NewCreditNote() {
                                       value={accountSearches[item.id] || ""}
                                       onChange={(e) => setAccountSearches(prev => ({ ...prev, [item.id]: e.target.value }))}
                                       onClick={(e) => e.stopPropagation()}
-                                      className="h-9 w-full rounded-md border border-[#3b82f6] pl-9 pr-3 text-sm focus:outline-none"
+                                      className="h-9 w-full rounded-md border border-gray-300 pl-9 pr-3 text-sm focus:outline-none"
                                       autoFocus
                                     />
                                   </div>

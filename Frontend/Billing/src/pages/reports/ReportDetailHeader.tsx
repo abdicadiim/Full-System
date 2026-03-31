@@ -1,5 +1,5 @@
 import React from "react";
-import { CalendarDays, ChevronDown, History, Plus, RefreshCw, Share2, SlidersHorizontal, X } from "lucide-react";
+import { CalendarDays, ChevronDown, History, Plus, Share2, SlidersHorizontal, X } from "lucide-react";
 
 interface ReportFilterChip {
   key: string;
@@ -48,9 +48,6 @@ export default function ReportDetailHeader({ categoryName, reportName, dateLabel
             className="inline-flex h-8 items-center gap-1 rounded border border-[#d4d9e4] bg-white px-3 text-sm font-medium text-[#1e293b] hover:bg-[#f8fafc]"
           >
             Export <ChevronDown size={14} />
-          </button>
-          <button type="button" className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]">
-            <RefreshCw size={15} />
           </button>
           <button type="button" className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] text-[#ef4444] hover:bg-[#fef2f2]">
             <X size={15} />
