@@ -37,6 +37,8 @@ type EntityOption = {
   label: string;
 };
 
+type CompareWithKey = "none" | "previous-years" | "previous-periods";
+
 type MoreFilterFieldKey = "customer-name" | "currency" | "location";
 
 type MoreFilterComparatorKey = "is-in" | "is-not-in" | "starts-with" | "ends-with" | "contains" | "does-not-contain";
@@ -115,6 +117,8 @@ const getMoreFilterValueLabel = (field: MoreFilterFieldKey | "", value: string) 
   return MORE_FILTER_VALUE_OPTIONS[field].find((option) => option.key === value)?.label ?? getMoreFilterValuePlaceholder(field);
 };
 
+const getCompareWithLabel = (key: CompareWithKey) => COMPARE_WITH_OPTIONS.find((option) => option.key === key)?.label ?? "None";
+
 const DATE_RANGE_OPTIONS: DateRangeOption[] = [
   { key: "today", label: "Today" },
   { key: "this-week", label: "This Week" },
@@ -133,6 +137,12 @@ const ENTITY_OPTIONS: EntityOption[] = [
   { key: "invoice", label: "Invoice" },
   { key: "credit-note", label: "Credit Note" },
   { key: "sales-receipt", label: "Sales Receipt" },
+];
+
+const COMPARE_WITH_OPTIONS: Array<{ key: CompareWithKey; label: string }> = [
+  { key: "none", label: "None" },
+  { key: "previous-years", label: "Previous Year(s)" },
+  { key: "previous-periods", label: "Previous Period(s)" },
 ];
 
 const getStartOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -417,21 +427,86 @@ function ReportsDrawer({
   );
 }
 
+function ReportActivityDrawer({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  const drawerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!drawerRef.current?.contains(target)) {
+        onClose();
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      ref={drawerRef}
+      className="absolute right-0 top-0 z-30 h-full w-[300px] overflow-hidden border-l border-[#e5e7eb] bg-white shadow-[-8px_0_20px_rgba(15,23,42,0.08)]"
+    >
+      <div className="flex h-full flex-col">
+        <div className="flex items-center justify-between border-b border-[#eef2f7] px-4 py-3">
+          <div className="text-[18px] font-semibold text-[#0f172a]">Report Activity</div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-7 w-7 items-center justify-center text-[#ef4444] hover:bg-[#fef2f2]"
+            aria-label="Close report activity"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flex flex-1 items-start justify-center px-6 pt-8">
+          <p className="text-sm text-[#64748b]">No comments yet.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SalesByCustomerReportView({
   categoryName,
   reportName,
   menuButtonRef,
   onMenuClick,
   onRunReport,
+  onActivityClick,
 }: {
   categoryName: string;
   reportName: string;
   menuButtonRef: React.RefObject<HTMLButtonElement | null>;
   onMenuClick: () => void;
   onRunReport: () => void;
+  onActivityClick: () => void;
 }) {
   const dateRangeRef = useRef<HTMLDivElement | null>(null);
   const entityRef = useRef<HTMLDivElement | null>(null);
+  const compareWithRef = useRef<HTMLDivElement | null>(null);
   const moreFiltersRef = useRef<HTMLDivElement | null>(null);
   const exportRef = useRef<HTMLDivElement | null>(null);
   const [dateRangeKey, setDateRangeKey] = useState<DateRangeKey>("this-week");
@@ -439,6 +514,11 @@ function SalesByCustomerReportView({
   const [entityKeys, setEntityKeys] = useState<EntityKey[]>([]);
   const [isEntityOpen, setIsEntityOpen] = useState(false);
   const [entitySearch, setEntitySearch] = useState("");
+  const [compareWithKey, setCompareWithKey] = useState<CompareWithKey>("none");
+  const [compareWithDraftKey, setCompareWithDraftKey] = useState<CompareWithKey>("none");
+  const [isCompareWithOpen, setIsCompareWithOpen] = useState(false);
+  const [isCompareWithSelectOpen, setIsCompareWithSelectOpen] = useState(false);
+  const [compareWithSearch, setCompareWithSearch] = useState("");
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isMoreFiltersOpen, setIsMoreFiltersOpen] = useState(false);
   const [moreFilterDropdown, setMoreFilterDropdown] = useState<MoreFilterDropdownState>(null);
@@ -502,6 +582,33 @@ function SalesByCustomerReportView({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isEntityOpen]);
+
+  useEffect(() => {
+    if (!isCompareWithOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!compareWithRef.current?.contains(target)) {
+        setIsCompareWithOpen(false);
+        setIsCompareWithSelectOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsCompareWithOpen(false);
+        setIsCompareWithSelectOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isCompareWithOpen]);
 
   useEffect(() => {
     if (!isExportOpen) return;
@@ -673,7 +780,12 @@ function SalesByCustomerReportView({
               </div>
             ) : null}
           </div>
-          <button type="button" className="inline-flex h-9 w-9 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]">
+          <button
+            type="button"
+            onClick={onActivityClick}
+            className="inline-flex h-9 w-9 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]"
+            aria-label="Open report activity"
+          >
             <RefreshCw size={15} />
           </button>
           <button type="button" className="inline-flex h-9 w-9 items-center justify-center rounded border border-[#d4d9e4] text-[#ef4444] hover:bg-[#fef2f2]">
@@ -1211,6 +1323,7 @@ export default function ReportDetailPage() {
   const category = getCategoryById(categoryId || "");
   const report = getReportById(categoryId || "", reportId || "");
   const [isReportsDrawerOpen, setIsReportsDrawerOpen] = useState(false);
+  const [isReportActivityOpen, setIsReportActivityOpen] = useState(false);
   const reportsMenuButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const dateLabel = useMemo(() => {
@@ -1245,12 +1358,18 @@ export default function ReportDetailPage() {
           triggerRef={reportsMenuButtonRef}
           onClose={() => setIsReportsDrawerOpen(false)}
         />
-        <div className={`pr-3 transition-[padding-left] duration-200 ${isReportsDrawerOpen ? "lg:pl-[260px]" : ""}`}>
+        <ReportActivityDrawer open={isReportActivityOpen} onClose={() => setIsReportActivityOpen(false)} />
+        <div
+          className={`pr-3 transition-[padding-left,padding-right] duration-200 ${
+            isReportsDrawerOpen ? "lg:pl-[260px]" : ""
+          } ${isReportActivityOpen ? "lg:pr-[300px]" : ""}`}
+        >
           <SalesByCustomerReportView
             categoryName={category.name}
             reportName={report.name}
             menuButtonRef={reportsMenuButtonRef}
             onMenuClick={() => setIsReportsDrawerOpen((prev) => !prev)}
+            onActivityClick={() => setIsReportActivityOpen((prev) => !prev)}
             onRunReport={() => toast.success(`Report refreshed: ${report.name}`)}
           />
         </div>
