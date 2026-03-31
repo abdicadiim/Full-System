@@ -1,7 +1,7 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
-import { CalendarDays, Check, ChevronDown, Columns3, Filter, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
-import { getReportById } from "./reportsCatalog";
+import { Link, Navigate, useNavigate } from "react-router-dom";
+import { CalendarDays, Check, ChevronDown, ChevronRight, Columns3, Filter, Folder, Menu, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
+import { getCategoryById, getReportById, REPORTS_BY_CATEGORY } from "./reportsCatalog";
 import { useSettings } from "../../lib/settings/SettingsContext";
 import { reportsAPI } from "../../services/api";
 

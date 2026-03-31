@@ -721,39 +721,6 @@ const QuoteDetail = () => {
     }
 
     try {
-      if (selectedQuoteData.length > 5) {
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const generatedAt = new Date().toLocaleString();
-        let y = 20;
-
-        pdf.setFontSize(16);
-        pdf.text("Quotes Export", 14, y);
-        y += 8;
-
-        pdf.setFontSize(10);
-        pdf.text(`Generated: ${generatedAt}`, 14, y);
-        y += 6;
-        pdf.text(`Total Quotes: ${selectedQuoteData.length}`, 14, y);
-        y += 10;
-
-        selectedQuoteData.forEach((quote, index) => {
-          if (y > 275) {
-            pdf.addPage();
-            y = 20;
-          }
-          const quoteNumber = quote.quoteNumber || quote.id || "-";
-          const customerName = quote.customerName || "-";
-          const amount = formatAmount(quote.total || quote.amount || 0, quote.currency || "AED");
-          const status = getStatusDisplay(quote.status || "draft");
-          pdf.text(`${index + 1}. ${quoteNumber} | ${customerName} | ${amount} | ${status}`, 14, y);
-          y += 7;
-        });
-
-        pdf.save(`Quotes-Export-${new Date().toISOString().split('T')[0]}.pdf`);
-        toast.success("Quotes exported successfully.");
-        return;
-      }
-
       const pdf = new jsPDF('p', 'mm', 'a4');
 
       for (let i = 0; i < selectedQuoteData.length; i++) {

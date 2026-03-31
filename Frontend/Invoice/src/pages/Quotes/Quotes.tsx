@@ -1686,11 +1686,6 @@ export default function Quotes() {
   };
 
   const exportQuotesToPdf = async (quotesToExport: Quote[], fileName: string) => {
-    if (quotesToExport.length > 5) {
-      downloadQuotesFallbackPdf(quotesToExport, fileName);
-      return;
-    }
-
     const pdf = new jsPDF('p', 'mm', 'a4');
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
