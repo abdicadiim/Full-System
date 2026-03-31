@@ -711,13 +711,16 @@ function SalesByCustomerReportView({
   const customizeCompareRef = useRef<HTMLDivElement | null>(null);
   const customizeCompareCountRef = useRef<HTMLDivElement | null>(null);
   const customizeEntityRef = useRef<HTMLDivElement | null>(null);
+  const customizeMoreFiltersRef = useRef<HTMLDivElement | null>(null);
   const [isCustomizeCompareOpen, setIsCustomizeCompareOpen] = useState(false);
   const [isCustomizeCompareCountOpen, setIsCustomizeCompareCountOpen] = useState(false);
   const [isCustomizeEntityOpen, setIsCustomizeEntityOpen] = useState(false);
+  const [customizeMoreFilterDropdown, setCustomizeMoreFilterDropdown] = useState<MoreFilterDropdownState>(null);
   const [customizeCompareSearch, setCustomizeCompareSearch] = useState("");
   const [customizeCompareCountSearch, setCustomizeCompareCountSearch] = useState("");
   const [customizeEntitySearch, setCustomizeEntitySearch] = useState("");
   const [customizeEntityDraftKeys, setCustomizeEntityDraftKeys] = useState<EntityKey[]>(ENTITY_OPTIONS.map((option) => option.key));
+  const [customizeMoreFilterRows, setCustomizeMoreFilterRows] = useState<MoreFilterRow[]>([]);
   const [selectedReportColumns, setSelectedReportColumns] = useState<ReportColumnKey[]>([
     "name",
     "invoice-count",
