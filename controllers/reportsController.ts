@@ -566,6 +566,11 @@ const buildItemRows = (
       const amount = Math.abs(asNumber(lineAmountRaw, 0)) * getTransactionSign(source);
       const averagePrice = quantity !== 0 ? amount / quantity : salesPrice;
       const itemReportingTagSelections = extractItemReportingTagSelections(itemDoc);
+      const itemTagIds = new Set(
+        Array.isArray(itemDoc?.tagIds)
+          ? itemDoc.tagIds.map((value: any) => normalizeText(String(value ?? "").trim())).filter(Boolean)
+          : []
+      );
       const reportingTagValues: Record<string, string> = {};
 
       for (const tag of reportingTags || []) {
@@ -574,6 +579,7 @@ const buildItemRows = (
         const selectedValue =
           (tagId && itemReportingTagSelections.get(normalizeText(tagId))) ||
           (tagName && itemReportingTagSelections.get(normalizeText(tagName))) ||
+          (tagId && itemTagIds.has(normalizeText(tagId)) ? tagName || tagId : "") ||
           "";
         if (tagId) reportingTagValues[`reporting-tag:${tagId}`] = selectedValue;
       }
