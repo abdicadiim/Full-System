@@ -981,7 +981,12 @@ function SalesByCustomerReportView({
 
                       <button
                         type="button"
-                        onClick={() => setMoreFilterRows((prev) => (prev.length > 1 ? prev.filter((item) => item.id !== row.id) : prev))}
+                        onClick={() => {
+                          setMoreFilterRows((prev) => (prev.length > 1 ? prev.filter((item) => item.id !== row.id) : prev));
+                          if (moreFilterDropdown?.rowId === row.id) {
+                            closeMoreFilterDropdown();
+                          }
+                        }}
                         className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#cfd6e4] text-[#334155] hover:bg-[#fef2f2]"
                         aria-label="Remove filter row"
                       >
