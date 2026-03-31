@@ -2184,56 +2184,62 @@ function SalesByCustomerReportView({
 
                       <hr className="border-[#e5e7eb]" />
 
-                      <section className="grid gap-6 md:grid-cols-2">
-                        <div>
-                          <div className="text-sm font-medium text-[#111827]">Compare With</div>
-                          <div className="mt-2 inline-flex h-9 w-full max-w-[260px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155]">
-                            <span className="truncate">{getCompareWithLabel(compareWithKey)}</span>
-                            <span className="ml-3 flex items-center gap-2">
-                              {compareWithKey !== "none" ? (
-                                <button
-                                  type="button"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    setCompareWithKey("none");
-                                    setCompareWithDraftKey("none");
-                                    setCompareWithCount(1);
-                                    setCompareWithDraftCount(1);
-                                    setCompareWithArrangeLatest(false);
-                                    setCompareWithDraftArrangeLatest(false);
-                                  }}
-                                  className="inline-flex h-4 w-4 items-center justify-center text-[#ef4444]"
-                                  aria-label="Clear compare selection"
-                                >
-                                  <X size={12} />
-                                </button>
-                              ) : null}
-                              <ChevronDown size={14} className="text-[#64748b]" />
-                            </span>
+                      <section className="space-y-6">
+                        <div className="grid gap-6 md:grid-cols-2">
+                          <div>
+                            <div className="text-sm font-medium text-[#111827]">Compare With</div>
+                            <div className="mt-2 inline-flex h-9 w-full max-w-[260px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155]">
+                              <span className="truncate">{getCompareWithLabel(compareWithKey)}</span>
+                              <span className="ml-3 flex items-center gap-2">
+                                {compareWithKey !== "none" ? (
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setCompareWithKey("none");
+                                      setCompareWithDraftKey("none");
+                                      setCompareWithCount(1);
+                                      setCompareWithDraftCount(1);
+                                      setCompareWithArrangeLatest(false);
+                                      setCompareWithDraftArrangeLatest(false);
+                                    }}
+                                    className="inline-flex h-4 w-4 items-center justify-center text-[#ef4444]"
+                                    aria-label="Clear compare selection"
+                                  >
+                                    <X size={12} />
+                                  </button>
+                                ) : null}
+                                <ChevronDown size={14} className="text-[#64748b]" />
+                              </span>
+                            </div>
                           </div>
 
-                          {compareWithKey !== "none" ? (
-                            <>
-                              <div className="mt-4 text-sm font-medium text-[#111827]">
-                                {compareWithKey === "previous-years" ? "Number of Year(s)" : "Number of Period(s)"}
-                              </div>
-                              <div className="mt-2 inline-flex h-9 w-full max-w-[260px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155]">
-                                <span>{compareWithCount}</span>
-                                <ChevronDown size={14} className="text-[#64748b]" />
-                              </div>
-
-                              <label className="mt-3 flex items-start gap-2 text-sm text-[#334155]">
-                                <input
-                                  type="checkbox"
-                                  checked={compareWithArrangeLatest}
-                                  onChange={(event) => setCompareWithArrangeLatest(event.target.checked)}
-                                  className="mt-1 h-4 w-4 rounded border-[#cfd6e4] text-[#1b6f7b] focus:ring-[#1b6f7b]"
-                                />
-                                <span>Arrange period/year from latest to oldest</span>
-                              </label>
-                            </>
-                          ) : null}
+                          <div>
+                            {compareWithKey !== "none" ? (
+                              <>
+                                <div className="text-sm font-medium text-[#111827]">
+                                  {compareWithKey === "previous-years" ? "Number of Year(s)" : "Number of Period(s)"}
+                                </div>
+                                <div className="mt-2 inline-flex h-9 w-full max-w-[260px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155]">
+                                  <span>{compareWithCount}</span>
+                                  <ChevronDown size={14} className="text-[#64748b]" />
+                                </div>
+                              </>
+                            ) : null}
+                          </div>
                         </div>
+
+                        {compareWithKey !== "none" ? (
+                          <label className="flex items-start gap-2 text-sm text-[#334155]">
+                            <input
+                              type="checkbox"
+                              checked={compareWithArrangeLatest}
+                              onChange={(event) => setCompareWithArrangeLatest(event.target.checked)}
+                              className="mt-1 h-4 w-4 rounded border-[#cfd6e4] text-[#1b6f7b] focus:ring-[#1b6f7b]"
+                            />
+                            <span>Arrange period/year from latest to oldest</span>
+                          </label>
+                        ) : null}
 
                         <div>
                           <div className="text-sm font-medium text-[#111827]">Entities :</div>
