@@ -37,9 +37,9 @@ type EntityOption = {
   label: string;
 };
 
-type MoreFilterFieldKey = "customer" | "item" | "status";
+type MoreFilterFieldKey = "customer-name" | "currency" | "location";
 
-type MoreFilterComparatorKey = "equals" | "contains" | "starts-with";
+type MoreFilterComparatorKey = "is-in" | "is-not-in" | "starts-with" | "ends-with" | "contains";
 
 type MoreFilterRow = {
   id: string;
@@ -49,16 +49,64 @@ type MoreFilterRow = {
 };
 
 const MORE_FILTER_FIELD_OPTIONS: Array<{ key: MoreFilterFieldKey; label: string }> = [
-  { key: "customer", label: "Customer" },
-  { key: "item", label: "Item" },
-  { key: "status", label: "Status" },
+  { key: "customer-name", label: "Customer Name" },
+  { key: "currency", label: "Currency" },
+  { key: "location", label: "Location" },
+];
+
+const MORE_FILTER_FIELD_GROUPS: Array<{ label: string; options: Array<{ key: MoreFilterFieldKey; label: string }> }> = [
+  {
+    label: "Reports",
+    options: [
+      { key: "customer-name", label: "Customer Name" },
+      { key: "currency", label: "Currency" },
+    ],
+  },
+  {
+    label: "Locations",
+    options: [{ key: "location", label: "Location" }],
+  },
 ];
 
 const MORE_FILTER_COMPARATOR_OPTIONS: Array<{ key: MoreFilterComparatorKey; label: string }> = [
-  { key: "equals", label: "Equals" },
-  { key: "contains", label: "Contains" },
-  { key: "starts-with", label: "Starts With" },
+  { key: "is-in", label: "is in" },
+  { key: "is-not-in", label: "is not in" },
+  { key: "starts-with", label: "starts with" },
+  { key: "ends-with", label: "ends with" },
+  { key: "contains", label: "contains" },
 ];
+
+const MORE_FILTER_VALUE_OPTIONS: Record<MoreFilterFieldKey, Array<{ key: string; label: string }>> = {
+  "customer-name": [
+    { key: "select-customer", label: "Select Customer" },
+    { key: "ss", label: "ss" },
+  ],
+  currency: [
+    { key: "select-currency", label: "Select Currency" },
+    { key: "SOS", label: "SOS" },
+    { key: "USD", label: "USD" },
+  ],
+  location: [
+    { key: "select-location", label: "Select Location" },
+    { key: "mogadishu", label: "Mogadishu" },
+    { key: "hargeisa", label: "Hargeisa" },
+  ],
+};
+
+const getMoreFilterFieldLabel = (field: MoreFilterFieldKey | "") => MORE_FILTER_FIELD_OPTIONS.find((option) => option.key === field)?.label ?? "Select a field";
+
+const getMoreFilterComparatorLabel = (comparator: MoreFilterComparatorKey | "") =>
+  MORE_FILTER_COMPARATOR_OPTIONS.find((option) => option.key === comparator)?.label ?? "Select a comparator";
+
+const getMoreFilterValuePlaceholder = (field: MoreFilterFieldKey | "") => {
+  if (!field) return "Select a value";
+  return MORE_FILTER_VALUE_OPTIONS[field]?.[0]?.label ?? "Select a value";
+};
+
+const getMoreFilterValueLabel = (field: MoreFilterFieldKey | "", value: string) => {
+  if (!field) return "Select a value";
+  return MORE_FILTER_VALUE_OPTIONS[field].find((option) => option.key === value)?.label ?? getMoreFilterValuePlaceholder(field);
+};
 
 const DATE_RANGE_OPTIONS: DateRangeOption[] = [
   { key: "today", label: "Today" },
