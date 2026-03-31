@@ -700,6 +700,13 @@ function SalesByCustomerReportView({
   const customizeDateRangeRef = useRef<HTMLDivElement | null>(null);
   const [customizeDateRangeDraftKey, setCustomizeDateRangeDraftKey] = useState<DateRangeKey>("this-week");
   const [isCustomizeDateRangeOpen, setIsCustomizeDateRangeOpen] = useState(false);
+  const [isCustomizeCustomDateRangeOpen, setIsCustomizeCustomDateRangeOpen] = useState(false);
+  const [customizeCustomDateRangeDraft, setCustomizeCustomDateRangeDraft] = useState<DateRangeValue>(() =>
+    getDateRangeValue("this-week")
+  );
+  const [customizeCustomDateRangeMonth, setCustomizeCustomDateRangeMonth] = useState<Date>(() =>
+    getStartOfMonth(getDateRangeValue("this-week").start)
+  );
   const [customizeColumnsSearch, setCustomizeColumnsSearch] = useState("");
   const customizeCompareRef = useRef<HTMLDivElement | null>(null);
   const customizeCompareCountRef = useRef<HTMLDivElement | null>(null);
@@ -733,12 +740,36 @@ function SalesByCustomerReportView({
   const selectedDateRange = dateRangeKey === "custom" ? customDateRange : getDateRangeValue(dateRangeKey);
   const dateRangeLabel = DATE_RANGE_OPTIONS.find((option) => option.key === dateRangeKey)?.label ?? "Today";
   const customizeDateRangeLabel = DATE_RANGE_OPTIONS.find((option) => option.key === customizeDateRangeDraftKey)?.label ?? "Today";
+  const customizeSelectedDateRange =
+    customizeDateRangeDraftKey === "custom" ? customizeCustomDateRangeDraft : getDateRangeValue(customizeDateRangeDraftKey);
   const getEntitySelectionLabel = (keys: EntityKey[]) => {
     if (keys.length === 0) return "None";
     if (keys.length === ENTITY_OPTIONS.length) return "All";
     return ENTITY_OPTIONS.filter((option) => keys.includes(option.key)).map((option) => option.label).join(", ");
   };
   const entityLabel = getEntitySelectionLabel(entityKeys);
+
+  const handleCustomizeCustomStartDateClick = (date: Date) => {
+    setCustomizeCustomDateRangeDraft((prev) => ({
+      start: date,
+      end: prev.end < date ? date : prev.end,
+    }));
+  };
+
+  const handleCustomizeCustomEndDateClick = (date: Date) => {
+    setCustomizeCustomDateRangeDraft((prev) => ({
+      start: prev.start > date ? date : prev.start,
+      end: date < prev.start ? prev.start : date,
+    }));
+  };
+
+  const setCustomizeLeftCalendarMonth = (monthIndex: number, year: number) => {
+    setCustomizeCustomDateRangeMonth(new Date(year, monthIndex, 1));
+  };
+
+  const setCustomizeRightCalendarMonth = (monthIndex: number, year: number) => {
+    setCustomizeCustomDateRangeMonth(addMonths(new Date(year, monthIndex, 1), -1));
+  };
   useEffect(() => {
     if (!isDateRangeOpen) return;
 
@@ -942,12 +973,14 @@ function SalesByCustomerReportView({
       const target = event.target as Node;
       if (!customizeDateRangeRef.current?.contains(target)) {
         setIsCustomizeDateRangeOpen(false);
+        setIsCustomizeCustomDateRangeOpen(false);
       }
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setIsCustomizeDateRangeOpen(false);
+        setIsCustomizeCustomDateRangeOpen(false);
       }
     };
 
@@ -1166,8 +1199,12 @@ function SalesByCustomerReportView({
     setCustomizeDraftSelectedColumns(selectedReportColumns);
     setCustomizeColumnsSearch("");
     setCustomizeActiveAvailableColumn("");
+    const currentCustomizeRange = dateRangeKey === "custom" ? customDateRange : selectedDateRange;
     setCustomizeDateRangeDraftKey(dateRangeKey);
+    setCustomizeCustomDateRangeDraft(currentCustomizeRange);
+    setCustomizeCustomDateRangeMonth(getStartOfMonth(currentCustomizeRange.start));
     setIsCustomizeDateRangeOpen(false);
+    setIsCustomizeCustomDateRangeOpen(dateRangeKey === "custom");
     setCompareWithDraftKey(compareWithKey === "none" ? "previous-years" : compareWithKey);
     setCompareWithDraftCount(compareWithKey === "none" ? 1 : compareWithCount);
     setCompareWithDraftArrangeLatest(compareWithArrangeLatest);
@@ -1196,6 +1233,9 @@ function SalesByCustomerReportView({
       ? customizeDraftSelectedColumns
       : ["name", ...customizeDraftSelectedColumns];
     setSelectedReportColumns(nextColumns);
+    if (customizeDateRangeDraftKey === "custom") {
+      setCustomDateRange(customizeCustomDateRangeDraft);
+    }
     setDateRangeKey(customizeDateRangeDraftKey);
     setEntityKeys(customizeEntityDraftKeys);
     setCompareWithKey(compareWithDraftKey);
@@ -1216,6 +1256,9 @@ function SalesByCustomerReportView({
     setCustomizeReportTab("general");
     setCustomizeDateRangeDraftKey(dateRangeKey);
     setIsCustomizeDateRangeOpen(false);
+    setCustomizeCustomDateRangeDraft(dateRangeKey === "custom" ? customDateRange : getDateRangeValue(dateRangeKey));
+    setCustomizeCustomDateRangeMonth(getStartOfMonth((dateRangeKey === "custom" ? customDateRange : getDateRangeValue(dateRangeKey)).start));
+    setIsCustomizeCustomDateRangeOpen(false);
     setCustomizeEntityDraftKeys(entityKeys.length > 0 ? entityKeys : ENTITY_OPTIONS.map((option) => option.key));
     setCustomizeEntitySearch("");
     setIsCustomizeEntityOpen(false);
@@ -2339,7 +2382,15 @@ function SalesByCustomerReportView({
                               setIsCustomizeCompareOpen(false);
                               setIsCustomizeCompareCountOpen(false);
                               setIsCustomizeEntityOpen(false);
-                              setIsCustomizeDateRangeOpen((prev) => !prev);
+                              setIsCustomizeDateRangeOpen((prev) => {
+                                const next = !prev;
+                                if (!next) {
+                                  setIsCustomizeCustomDateRangeOpen(false);
+                                } else {
+                                  setIsCustomizeCustomDateRangeOpen(customizeDateRangeDraftKey === "custom");
+                                }
+                                return next;
+                              });
                             }}
                             className="inline-flex h-9 min-w-[250px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 pr-10 text-sm text-[#334155] hover:bg-[#f8fafc]"
                             aria-haspopup="menu"
@@ -2358,27 +2409,232 @@ function SalesByCustomerReportView({
                           </button>
 
                           {isCustomizeDateRangeOpen ? (
-                            <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-[165px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
-                              <div className="max-h-[280px] overflow-y-auto py-1">
-                                {DATE_RANGE_OPTIONS.map((option) => {
-                                  const isSelected = option.key === customizeDateRangeDraftKey;
-                                  return (
-                                    <button
-                                      key={option.key}
-                                      type="button"
-                                      onClick={() => {
-                                        setCustomizeDateRangeDraftKey(option.key);
-                                        setIsCustomizeDateRangeOpen(false);
-                                      }}
-                                      className={`flex w-full items-center justify-between px-4 py-2 text-left text-sm ${
-                                        isSelected ? "font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"
-                                      }`}
-                                    >
-                                      <span>{option.label}</span>
-                                      {isSelected ? <Check size={14} className="text-[#0f172a]" /> : null}
-                                    </button>
-                                  );
-                                })}
+                            <div
+                              className={`absolute left-0 top-[calc(100%+6px)] z-50 overflow-visible rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)] ${
+                                isCustomizeCustomDateRangeOpen ? "w-[680px]" : "w-[165px]"
+                              }`}
+                            >
+                              <div className="flex">
+                                <div className="w-[165px] border-r border-[#eef2f7]">
+                                  <div className="max-h-[280px] overflow-y-auto py-1">
+                                    {DATE_RANGE_OPTIONS.map((option) => {
+                                      const isSelected = option.key === customizeDateRangeDraftKey;
+                                      return (
+                                        <button
+                                          key={option.key}
+                                          type="button"
+                                          onClick={() => {
+                                            if (option.key === "custom") {
+                                              const currentRange =
+                                                customizeDateRangeDraftKey === "custom"
+                                                  ? customizeCustomDateRangeDraft
+                                                  : getDateRangeValue(customizeDateRangeDraftKey);
+                                              setCustomizeDateRangeDraftKey("custom");
+                                              setCustomizeCustomDateRangeDraft(currentRange);
+                                              setCustomizeCustomDateRangeMonth(getStartOfMonth(currentRange.start));
+                                              setIsCustomizeCustomDateRangeOpen(true);
+                                              return;
+                                            }
+
+                                            setCustomizeDateRangeDraftKey(option.key);
+                                            setIsCustomizeCustomDateRangeOpen(false);
+                                            setIsCustomizeDateRangeOpen(false);
+                                          }}
+                                          className={`flex w-full items-center justify-between px-4 py-2 text-left text-sm ${
+                                            isSelected ? "font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"
+                                          }`}
+                                        >
+                                          <span>{option.label}</span>
+                                          {isSelected ? <Check size={14} className="text-[#0f172a]" /> : null}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+
+                                {isCustomizeCustomDateRangeOpen ? (
+                                  <div className="flex-1 p-3">
+                                    <div className="grid grid-cols-2 gap-3">
+                                      <div>
+                                        <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">
+                                          Start Date
+                                        </div>
+                                        <div className="relative">
+                                          <CalendarDays
+                                            size={14}
+                                            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#64748b]"
+                                          />
+                                          <input
+                                            type="text"
+                                            readOnly
+                                            value={formatPickerDate(customizeCustomDateRangeDraft.start)}
+                                            className="h-10 w-full rounded border border-[#1b6f7b] bg-white pl-9 pr-3 text-sm text-[#334155] outline-none"
+                                          />
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">
+                                          End Date
+                                        </div>
+                                        <div className="relative">
+                                          <CalendarDays
+                                            size={14}
+                                            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#64748b]"
+                                          />
+                                          <input
+                                            type="text"
+                                            readOnly
+                                            value={formatPickerDate(customizeCustomDateRangeDraft.end)}
+                                            className="h-10 w-full rounded border border-[#1b6f7b] bg-white pl-9 pr-3 text-sm text-[#334155] outline-none"
+                                          />
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="mt-3 grid grid-cols-[1fr_1fr] gap-3">
+                                      {[
+                                        { month: customizeCustomDateRangeMonth, side: "start" as const },
+                                        { month: addMonths(customizeCustomDateRangeMonth, 1), side: "end" as const },
+                                      ].map(({ month, side }) => {
+                                        const weeks = buildCalendarGrid(month);
+
+                                        return (
+                                          <div key={`${side}-${month.toISOString()}`} className="rounded-lg border border-[#eef2f7] bg-white p-2">
+                                            <div className="mb-2 flex items-center justify-between gap-2 px-1">
+                                              <button
+                                                type="button"
+                                                onClick={() => setCustomizeCustomDateRangeMonth((prev) => addMonths(prev, -1))}
+                                                className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-[#f8fafc]"
+                                                aria-label="Previous month"
+                                              >
+                                                <ChevronRight size={14} className="rotate-180 text-[#64748b]" />
+                                              </button>
+
+                                              <div className="flex items-center gap-1">
+                                                <select
+                                                  value={month.getMonth()}
+                                                  onChange={(event) =>
+                                                    side === "start"
+                                                      ? setCustomizeLeftCalendarMonth(Number(event.target.value), month.getFullYear())
+                                                      : setCustomizeRightCalendarMonth(Number(event.target.value), month.getFullYear())
+                                                  }
+                                                  className="h-6 rounded border border-[#cfd6e4] bg-white px-1 text-[11px] text-[#334155] outline-none"
+                                                >
+                                                  {MONTH_NAMES.map((monthName, index) => (
+                                                    <option key={monthName} value={index}>
+                                                      {monthName}
+                                                    </option>
+                                                  ))}
+                                                </select>
+                                                <select
+                                                  value={month.getFullYear()}
+                                                  onChange={(event) =>
+                                                    side === "start"
+                                                      ? setCustomizeLeftCalendarMonth(month.getMonth(), Number(event.target.value))
+                                                      : setCustomizeRightCalendarMonth(month.getMonth(), Number(event.target.value))
+                                                  }
+                                                  className="h-6 rounded border border-[#cfd6e4] bg-white px-1 text-[11px] text-[#334155] outline-none"
+                                                >
+                                                  {CALENDAR_YEAR_OPTIONS.map((year) => (
+                                                    <option key={year} value={year}>
+                                                      {year}
+                                                    </option>
+                                                  ))}
+                                                </select>
+                                              </div>
+
+                                              <button
+                                                type="button"
+                                                onClick={() => setCustomizeCustomDateRangeMonth((prev) => addMonths(prev, 1))}
+                                                className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-[#f8fafc]"
+                                                aria-label="Next month"
+                                              >
+                                                <ChevronRight size={14} className="text-[#64748b]" />
+                                              </button>
+                                            </div>
+
+                                            <table className="w-full table-fixed border-collapse text-center text-[11px]">
+                                              <thead>
+                                                <tr className="text-[#1b6f7b]">
+                                                  {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
+                                                    <th key={day} className="pb-1 font-semibold">
+                                                      {day}
+                                                    </th>
+                                                  ))}
+                                                </tr>
+                                              </thead>
+                                              <tbody>
+                                                {weeks.map((week, weekIndex) => (
+                                                  <tr key={`${side}-week-${weekIndex}`}>
+                                                    {week.map((day) => {
+                                                      const inCurrentMonth = isSameMonth(day, month);
+                                                      const isStart = isSameDay(day, customizeCustomDateRangeDraft.start);
+                                                      const isEnd = isSameDay(day, customizeCustomDateRangeDraft.end);
+                                                      const inRange = day >= customizeCustomDateRangeDraft.start && day <= customizeCustomDateRangeDraft.end;
+                                                      const isToday = isSameDay(day, new Date());
+
+                                                      return (
+                                                        <td key={day.toISOString()} className="p-0">
+                                                          <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                              side === "start"
+                                                                ? handleCustomizeCustomStartDateClick(day)
+                                                                : handleCustomizeCustomEndDateClick(day)
+                                                            }
+                                                            className={`m-[1px] flex h-7 w-full items-center justify-center rounded text-[11px] ${
+                                                              !inCurrentMonth
+                                                                ? "text-[#cbd5e1]"
+                                                                : isStart || isEnd
+                                                                  ? "bg-[#1b6f7b] font-semibold text-white"
+                                                                  : inRange
+                                                                    ? "bg-[#d9eff1] text-[#0f172a]"
+                                                                    : "text-[#334155] hover:bg-[#f8fafc]"
+                                                            } ${isToday && !isStart && !isEnd ? "ring-1 ring-inset ring-[#1b6f7b]/30" : ""}`}
+                                                          >
+                                                            {day.getDate()}
+                                                          </button>
+                                                        </td>
+                                                      );
+                                                    })}
+                                                  </tr>
+                                                ))}
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+
+                                    <div className="mt-3 flex items-center justify-between gap-2">
+                                      <div className="text-xs text-[#64748b]">
+                                        {formatPickerDate(customizeCustomDateRangeDraft.start)} - {formatPickerDate(customizeCustomDateRangeDraft.end)}
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setIsCustomizeCustomDateRangeOpen(false);
+                                            setIsCustomizeDateRangeOpen(false);
+                                          }}
+                                          className="inline-flex h-8 items-center rounded border border-[#d4d9e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                                        >
+                                          Cancel
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setIsCustomizeCustomDateRangeOpen(false);
+                                            setIsCustomizeDateRangeOpen(false);
+                                          }}
+                                          className="inline-flex h-8 items-center rounded bg-[#1b6f7b] px-3 text-sm font-semibold text-white hover:bg-[#155963]"
+                                        >
+                                          Apply
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : null}
                               </div>
                             </div>
                           ) : null}
