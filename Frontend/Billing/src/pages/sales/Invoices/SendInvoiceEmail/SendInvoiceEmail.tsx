@@ -752,7 +752,7 @@ export default function SendInvoiceEmail() {
       <div style="padding: 15mm; background: white; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1a202c; line-height: 1.6; min-height: 297mm; box-sizing: border-box;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px;">
           <div>
-            <h1 style="margin: 0; font-size: 28px; font-weight: 800; color: #156372; text-transform: uppercase;">TABAN BOOKS</h1>
+            <h1 style="margin: 0; font-size: 28px; font-weight: 800; color: #156372; text-transform: uppercase;">${escapeHtml(organizationName)}</h1>
             <div style="margin-top: 8px; font-size: 13px; color: #4a5568;">Customer Statement</div>
           </div>
           <div style="text-align: right;">
