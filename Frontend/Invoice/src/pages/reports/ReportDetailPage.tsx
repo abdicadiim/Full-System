@@ -433,11 +433,13 @@ function SalesByCustomerReportView({
   const dateRangeRef = useRef<HTMLDivElement | null>(null);
   const entityRef = useRef<HTMLDivElement | null>(null);
   const moreFiltersRef = useRef<HTMLDivElement | null>(null);
+  const exportRef = useRef<HTMLDivElement | null>(null);
   const [dateRangeKey, setDateRangeKey] = useState<DateRangeKey>("this-week");
   const [isDateRangeOpen, setIsDateRangeOpen] = useState(false);
   const [entityKeys, setEntityKeys] = useState<EntityKey[]>([]);
   const [isEntityOpen, setIsEntityOpen] = useState(false);
   const [entitySearch, setEntitySearch] = useState("");
+  const [isExportOpen, setIsExportOpen] = useState(false);
   const [isMoreFiltersOpen, setIsMoreFiltersOpen] = useState(false);
   const [moreFilterDropdown, setMoreFilterDropdown] = useState<MoreFilterDropdownState>(null);
   const [moreFilterRows, setMoreFilterRows] = useState<MoreFilterRow[]>([
@@ -502,6 +504,31 @@ function SalesByCustomerReportView({
   }, [isEntityOpen]);
 
   useEffect(() => {
+    if (!isExportOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!exportRef.current?.contains(target)) {
+        setIsExportOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsExportOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isExportOpen]);
+
+  useEffect(() => {
     if (!isMoreFiltersOpen) return;
 
     const handlePointerDown = (event: MouseEvent) => {
@@ -547,8 +574,13 @@ function SalesByCustomerReportView({
     return MORE_FILTER_COMPARATOR_OPTIONS.filter((option) => option.label.toLowerCase().includes(normalizedQuery));
   };
 
+  const handleExportAction = (label: string) => {
+    setIsExportOpen(false);
+    toast.success(`Export option selected: ${label}`);
+  };
+
   const openMoreFilterDropdown = (rowId: string, kind: "field" | "comparator" | "value") => {
-    setMoreFilterDropdown({ rowId, kind, search: "" });
+    setMoreFilterDropdown((prev) => (prev?.rowId === rowId && prev.kind === kind ? null : { rowId, kind, search: "" }));
   };
 
   const closeMoreFilterDropdown = () => setMoreFilterDropdown(null);
@@ -587,12 +619,60 @@ function SalesByCustomerReportView({
           <button type="button" className="inline-flex h-9 w-9 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]">
             <SlidersHorizontal size={15} />
           </button>
-          <button
-            type="button"
-            className="inline-flex h-9 items-center gap-1 rounded border border-[#d4d9e4] bg-white px-3 text-sm font-medium text-[#1e293b] hover:bg-[#f8fafc]"
-          >
-            Export <ChevronDown size={14} />
-          </button>
+          <div ref={exportRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setIsExportOpen((prev) => !prev)}
+              className={`inline-flex h-9 items-center gap-1 rounded border bg-white px-3 text-sm font-medium text-[#1e293b] hover:bg-[#f8fafc] ${
+                isExportOpen ? "border-[#7aa7ff]" : "border-[#d4d9e4]"
+              }`}
+              aria-haspopup="menu"
+              aria-expanded={isExportOpen}
+            >
+              Export <ChevronDown size={14} className={`transition-transform duration-150 ${isExportOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {isExportOpen ? (
+              <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-[252px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                <div className="border-b border-[#eef2f7] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">
+                  Export As
+                </div>
+                <div className="py-1">
+                  {[
+                    "PDF",
+                    "XLSX (Microsoft Excel)",
+                    "XLS (Microsoft Excel 1997-2004 Compatible)",
+                    "CSV (Comma Separated Value)",
+                    "Export to Zoho Sheet",
+                  ].map((label) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => handleExportAction(label)}
+                      className="flex w-full items-center px-4 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="border-t border-[#eef2f7] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">
+                  Print
+                </div>
+                <div className="py-1">
+                  {["Print", "Print Preference"].map((label) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => handleExportAction(label)}
+                      className="flex w-full items-center px-4 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
           <button type="button" className="inline-flex h-9 w-9 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]">
             <RefreshCw size={15} />
           </button>
@@ -768,7 +848,12 @@ function SalesByCustomerReportView({
                           <span className={`min-w-0 flex-1 truncate text-left ${row.field ? "font-medium" : "text-[#94a3b8]"}`}>
                             {fieldLabel}
                           </span>
-                          <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#64748b]" />
+                          <ChevronDown
+                            size={14}
+                            className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
+                              fieldMenuOpen ? "rotate-180 text-[#2563eb]" : "text-[#64748b]"
+                            }`}
+                          />
                         </button>
 
                         {row.field ? (
@@ -871,8 +956,12 @@ function SalesByCustomerReportView({
                           </span>
                           <ChevronDown
                             size={14}
-                            className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 ${
-                              row.field ? "text-[#64748b]" : "text-[#cbd5e1]"
+                            className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
+                              comparatorMenuOpen
+                                ? "rotate-180 text-[#2563eb]"
+                                : row.field
+                                  ? "text-[#64748b]"
+                                  : "text-[#cbd5e1]"
                             }`}
                           />
                         </button>
@@ -945,7 +1034,12 @@ function SalesByCustomerReportView({
                           <span className={`min-w-0 flex-1 truncate text-left ${row.value ? "font-medium" : "text-[#94a3b8]"}`}>
                             {valueLabel}
                           </span>
-                          <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#64748b]" />
+                          <ChevronDown
+                            size={14}
+                            className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
+                              valueMenuOpen ? "rotate-180 text-[#2563eb]" : row.field ? "text-[#64748b]" : "text-[#cbd5e1]"
+                            }`}
+                          />
                         </button>
 
                         {valueMenuOpen && row.field ? (
