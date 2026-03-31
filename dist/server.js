@@ -119,11 +119,15 @@ app.use((err, _req, res, _next) => {
     res.status(500).json({ success: false, message: "Server error", data: null });
 });
 const start = async () => {
+    const dbConnected = await connectDb();
     app.listen(PORT, () => {
         // eslint-disable-next-line no-console
         console.log(`API listening on http://localhost:${PORT}`);
     });
-    await connectDb();
+    if (!dbConnected && !AUTH_BYPASS) {
+        // eslint-disable-next-line no-console
+        console.warn("API started without a live MongoDB connection. Auth and database-backed routes will return 500 until DB is available.");
+    }
 };
 start().catch((err) => {
     // eslint-disable-next-line no-console
