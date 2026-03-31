@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import { CalendarDays, Check, ChevronDown, ChevronRight, Columns3, Filter, Folder, Menu, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
 import ReportDetailHeader from "./ReportDetailHeader";
 import SalesByItemReportView from "./SalesByItemReportPage";
+import { SalesBySalesPersonReportView } from "./SalesBySalesPersonReportPage";
 import { getCategoryById, getReportById, REPORT_FUNCTION_LABELS, REPORTS_BY_CATEGORY } from "./reportsCatalog";
 import { useSettings } from "../../lib/settings/SettingsContext";
 import { reportsAPI } from "../../services/api";
@@ -3732,6 +3733,36 @@ export default function ReportDetailPage() {
           } ${isReportActivityOpen ? "lg:pr-[300px]" : ""}`}
         >
           <SalesByItemReportView
+            categoryName={category.name}
+            reportName={report.name}
+            menuButtonRef={reportsMenuButtonRef}
+            onMenuClick={() => setIsReportsDrawerOpen((prev) => !prev)}
+            onActivityClick={() => setIsReportActivityOpen((prev) => !prev)}
+            onClosePage={() => navigate("/reports")}
+            onRunReport={() => toast.success(`Report refreshed: ${report.name}`)}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (report.id === "sales-by-sales-person") {
+    return (
+      <div className="relative min-h-[calc(100vh-64px)] pt-3">
+        <ReportsDrawer
+          open={isReportsDrawerOpen}
+          currentCategoryId={category.id}
+          currentReportId={report.id}
+          triggerRef={reportsMenuButtonRef}
+          onClose={() => setIsReportsDrawerOpen(false)}
+        />
+        <ReportActivityDrawer open={isReportActivityOpen} onClose={() => setIsReportActivityOpen(false)} />
+        <div
+          className={`pr-3 transition-[padding-left,padding-right] duration-200 ${
+            isReportsDrawerOpen ? "lg:pl-[260px]" : ""
+          } ${isReportActivityOpen ? "lg:pr-[300px]" : ""}`}
+        >
+          <SalesBySalesPersonReportView
             categoryName={category.name}
             reportName={report.name}
             menuButtonRef={reportsMenuButtonRef}

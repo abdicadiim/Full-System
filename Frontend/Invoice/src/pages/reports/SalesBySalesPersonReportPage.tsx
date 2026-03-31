@@ -81,7 +81,7 @@ type DateRangeValue = {
   end: Date;
 };
 
-type EntityKey = "invoice" | "credit-note" | "sales-receipt";
+type EntityKey = "invoice" | "credit-note";
 
 type EntityOption = {
   key: EntityKey;
@@ -203,7 +203,6 @@ const DATE_RANGE_OPTIONS: DateRangeOption[] = [
 const ENTITY_OPTIONS: EntityOption[] = [
   { key: "invoice", label: "Invoice" },
   { key: "credit-note", label: "Credit Note" },
-  { key: "sales-receipt", label: "Sales Receipt" },
 ];
 
 const COMPARE_WITH_OPTIONS: Array<{ key: CompareWithKey; label: string }> = [
