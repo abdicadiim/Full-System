@@ -1,9 +1,9 @@
-import React, { useMemo, useState } from "react";
-import { Navigate, useParams } from "react-router-dom";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Link, Navigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
-import { CalendarDays, ChevronDown, Columns3, Menu, Plus, RefreshCw, SlidersHorizontal, X } from "lucide-react";
+import { CalendarDays, ChevronDown, ChevronRight, Columns3, Folder, Menu, Plus, RefreshCw, SlidersHorizontal, X } from "lucide-react";
 import ReportDetailHeader from "./ReportDetailHeader";
-import { getCategoryById, getReportById, REPORT_FUNCTION_LABELS } from "./reportsCatalog";
+import { getCategoryById, getReportById, REPORT_FUNCTION_LABELS, REPORTS_BY_CATEGORY } from "./reportsCatalog";
 
 const formatDate = (value: Date) => value.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 
@@ -20,13 +20,212 @@ const SALES_BY_CUSTOMER_ROWS: SalesByCustomerRow[] = [
 
 const formatCurrency = (value: number, currency = "SOS") => `${currency}${value.toFixed(2)}`;
 
+type ReportsDrawerSection = {
+  id: string;
+  label: string;
+  reportIds: string[];
+};
+
+const REPORTS_DRAWER_SECTIONS: ReportsDrawerSection[] = [
+  { id: "sales", label: "Sales", reportIds: ["sales-by-customer", "sales-by-item", "sales-by-sales-person"] },
+  {
+    id: "receivables",
+    label: "Receivables",
+    reportIds: [
+      "ar-aging-summary",
+      "ar-aging-details",
+      "invoice-details",
+      "quote-details",
+      "bad-debts",
+      "bank-charges",
+      "customer-balance-summary",
+      "receivable-summary",
+      "receivable-details",
+    ],
+  },
+  {
+    id: "payments-received",
+    label: "Payments Received",
+    reportIds: ["payments-received", "time-to-get-paid", "credit-note-details", "refund-history", "withholding-tax"],
+  },
+  { id: "subscriptions", label: "Recurring Invoices", reportIds: ["subscription-details"] },
+  {
+    id: "purchases-expenses",
+    label: "Purchases and Expenses",
+    reportIds: ["expense-details", "expenses-by-category", "expenses-by-customer", "expenses-by-project", "billable-expense-details"],
+  },
+  { id: "taxes", label: "Taxes", reportIds: ["tax-summary", "tds-receivables"] },
+  {
+    id: "projects-timesheets",
+    label: "Projects and Timesheet",
+    reportIds: ["timesheet-details", "project-summary", "project-details", "projects-revenue-summary"],
+  },
+  {
+    id: "activity",
+    label: "Activity",
+    reportIds: ["system-mails", "activity-logs-audit-trail", "exception-report", "portal-activities", "customer-reviews"],
+  },
+];
+
+function ReportsDrawer({
+  open,
+  currentCategoryId,
+  currentReportId,
+  triggerRef,
+  onClose,
+}: {
+  open: boolean;
+  currentCategoryId: string;
+  currentReportId: string;
+  triggerRef: React.RefObject<HTMLButtonElement | null>;
+  onClose: () => void;
+}) {
+  const drawerRef = useRef<HTMLDivElement | null>(null);
+  const [search, setSearch] = useState("");
+  const [expandedSections, setExpandedSections] = useState<string[]>([currentCategoryId]);
+
+  useEffect(() => {
+    setExpandedSections((prev) => (prev.includes(currentCategoryId) ? prev : [currentCategoryId]));
+  }, [currentCategoryId]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!drawerRef.current?.contains(target) && !triggerRef.current?.contains(target)) {
+        onClose();
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose, open, triggerRef]);
+
+  const sections = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return REPORTS_DRAWER_SECTIONS.map((section) => {
+      const available = REPORTS_BY_CATEGORY[section.id] || [];
+      const reports = section.reportIds
+        .map((reportId) => available.find((report) => report.id === reportId))
+        .filter(Boolean) as typeof available;
+
+      const filteredReports = query
+        ? reports.filter((report) => report.name.toLowerCase().includes(query) || section.label.toLowerCase().includes(query))
+        : reports;
+
+      return { ...section, reports: filteredReports };
+    }).filter((section) => section.reports.length > 0);
+  }, [search]);
+
+  if (!open) return null;
+
+  const isSearching = search.trim().length > 0;
+
+  return (
+    <div ref={drawerRef} className="fixed left-0 top-0 z-50 h-screen w-[260px] overflow-hidden border-r border-[#e5e7eb] bg-white shadow-[8px_0_20px_rgba(15,23,42,0.08)]">
+      <div className="flex h-full flex-col">
+        <div className="flex items-center justify-between border-b border-[#eef2f7] px-4 py-3">
+          <div className="text-[18px] font-semibold text-[#0f172a]">Reports</div>
+          <button type="button" onClick={onClose} className="inline-flex h-7 w-7 items-center justify-center text-[#ef4444] hover:bg-[#fef2f2]" aria-label="Close reports drawer">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="border-b border-[#eef2f7] px-3 py-3">
+          <div className="relative">
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search reports"
+              className="h-9 w-full rounded-lg border border-[#d8dfea] bg-white pl-3 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#7da0ff]"
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-2 py-2">
+          <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">All Reports</div>
+
+          {sections.length > 0 ? (
+            <div className="space-y-1">
+              {sections.map((section) => {
+                const expanded = isSearching || expandedSections.includes(section.id);
+
+                return (
+                  <div key={section.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isSearching) return;
+                        setExpandedSections((prev) =>
+                          prev.includes(section.id) ? prev.filter((id) => id !== section.id) : [...prev, section.id]
+                        );
+                      }}
+                      className="flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm text-[#111827] hover:bg-[#f8fafc]"
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <Folder size={14} className="text-[#9aa3b2]" />
+                        <span className="truncate">{section.label}</span>
+                      </span>
+                      {expanded ? (
+                        <ChevronDown size={12} className="text-[#9aa3b2]" />
+                      ) : (
+                        <ChevronRight size={12} className="text-[#9aa3b2]" />
+                      )}
+                    </button>
+
+                    {expanded ? (
+                      <div className="ml-5 mt-1 space-y-0.5">
+                        {section.reports.map((report) => {
+                          const isActive = report.id === currentReportId;
+                          return (
+                            <Link
+                              key={report.id}
+                              to={`/reports/${report.categoryId}/${report.id}`}
+                              onClick={onClose}
+                              className={`block rounded px-2 py-1.5 text-sm hover:bg-[#eef4ff] ${
+                                isActive ? "bg-[#eef4ff] font-medium text-[#111827]" : "text-[#2563eb]"
+                              }`}
+                            >
+                              {report.name}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="px-2 py-4 text-sm text-[#64748b]">No reports found.</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SalesByCustomerReportView({
   categoryName,
   reportName,
+  menuButtonRef,
+  onMenuClick,
   onRunReport,
 }: {
   categoryName: string;
   reportName: string;
+  menuButtonRef: React.RefObject<HTMLButtonElement | null>;
+  onMenuClick: () => void;
   onRunReport: () => void;
 }) {
   const todayLabel = formatDate(new Date());
@@ -38,7 +237,13 @@ function SalesByCustomerReportView({
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#e5e7eb] pb-3">
         <div className="flex min-w-0 items-start gap-3">
-          <button type="button" className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] bg-white text-[#334155] hover:bg-[#f8fafc]">
+          <button
+            ref={menuButtonRef}
+            type="button"
+            onClick={onMenuClick}
+            className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] bg-white text-[#334155] hover:bg-[#f8fafc]"
+            aria-label="Toggle reports menu"
+          >
             <Menu size={15} />
           </button>
           <div>
@@ -105,7 +310,6 @@ function SalesByCustomerReportView({
         </div>
 
         <div className="border-b border-[#eef2f7] px-4 py-10 text-center">
-          <p className="text-sm text-[#94a3b8]">fdfv</p>
           <h2 className="mt-2 text-[22px] font-semibold text-[#111827]">{reportName}</h2>
           <p className="mt-1 text-sm text-[#475569]">From {todayLabel} To {todayLabel}</p>
         </div>
@@ -147,6 +351,8 @@ export default function ReportDetailPage() {
   const { categoryId, reportId } = useParams();
   const category = getCategoryById(categoryId || "");
   const report = getReportById(categoryId || "", reportId || "");
+  const [isReportsDrawerOpen, setIsReportsDrawerOpen] = useState(false);
+  const reportsMenuButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const dateLabel = useMemo(() => {
     const now = new Date();
@@ -172,11 +378,22 @@ export default function ReportDetailPage() {
 
   if (report.id === "sales-by-customer") {
     return (
-      <SalesByCustomerReportView
-        categoryName={category.name}
-        reportName={report.name}
-        onRunReport={() => toast.success(`Report refreshed: ${report.name}`)}
-      />
+      <>
+        <ReportsDrawer
+          open={isReportsDrawerOpen}
+          currentCategoryId={category.id}
+          currentReportId={report.id}
+          triggerRef={reportsMenuButtonRef}
+          onClose={() => setIsReportsDrawerOpen(false)}
+        />
+        <SalesByCustomerReportView
+          categoryName={category.name}
+          reportName={report.name}
+          menuButtonRef={reportsMenuButtonRef}
+          onMenuClick={() => setIsReportsDrawerOpen((prev) => !prev)}
+          onRunReport={() => toast.success(`Report refreshed: ${report.name}`)}
+        />
+      </>
     );
   }
 
