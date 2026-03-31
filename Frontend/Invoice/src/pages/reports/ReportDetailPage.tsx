@@ -891,6 +891,7 @@ function SalesByCustomerReportView({
   const closeAllOpenPanels = () => {
     setIsCompareWithOpen(false);
     setIsCompareWithSelectOpen(false);
+    setIsCompareWithCountOpen(false);
     setIsExportOpen(false);
     setIsCustomizeColumnsOpen(false);
     setIsMoreFiltersOpen(false);
