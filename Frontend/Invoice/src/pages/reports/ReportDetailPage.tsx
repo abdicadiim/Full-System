@@ -154,6 +154,8 @@ const COMPARE_WITH_OPTIONS: Array<{ key: CompareWithKey; label: string }> = [
   { key: "previous-periods", label: "Previous Period(s)" },
 ];
 
+const COMPARE_WITH_NUMBER_OPTIONS = Array.from({ length: 35 }, (_, index) => String(index + 1));
+
 type ReportColumnKey = string;
 type ReportColumnKind = "text" | "number" | "currency";
 
@@ -619,6 +621,7 @@ function SalesByCustomerReportView({
   const dateRangeRef = useRef<HTMLDivElement | null>(null);
   const entityRef = useRef<HTMLDivElement | null>(null);
   const compareWithRef = useRef<HTMLDivElement | null>(null);
+  const compareWithCountRef = useRef<HTMLDivElement | null>(null);
   const moreFiltersRef = useRef<HTMLDivElement | null>(null);
   const exportRef = useRef<HTMLDivElement | null>(null);
   const [dateRangeKey, setDateRangeKey] = useState<DateRangeKey>("this-week");
@@ -631,6 +634,12 @@ function SalesByCustomerReportView({
   const [isCompareWithOpen, setIsCompareWithOpen] = useState(false);
   const [isCompareWithSelectOpen, setIsCompareWithSelectOpen] = useState(false);
   const [compareWithSearch, setCompareWithSearch] = useState("");
+  const [compareWithCount, setCompareWithCount] = useState(1);
+  const [compareWithDraftCount, setCompareWithDraftCount] = useState(1);
+  const [compareWithArrangeLatest, setCompareWithArrangeLatest] = useState(false);
+  const [compareWithDraftArrangeLatest, setCompareWithDraftArrangeLatest] = useState(false);
+  const [isCompareWithCountOpen, setIsCompareWithCountOpen] = useState(false);
+  const [compareWithCountSearch, setCompareWithCountSearch] = useState("");
   const [isCustomizeColumnsOpen, setIsCustomizeColumnsOpen] = useState(false);
   const [customizeColumnsSearch, setCustomizeColumnsSearch] = useState("");
   const [selectedReportColumns, setSelectedReportColumns] = useState<ReportColumnKey[]>([
@@ -732,6 +741,31 @@ function SalesByCustomerReportView({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isCompareWithOpen]);
+
+  useEffect(() => {
+    if (!isCompareWithCountOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!compareWithCountRef.current?.contains(target)) {
+        setIsCompareWithCountOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsCompareWithCountOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isCompareWithCountOpen]);
 
   useEffect(() => {
     if (!isExportOpen) return;
