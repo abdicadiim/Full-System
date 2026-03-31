@@ -34,7 +34,8 @@ export default function Layout({ children }) {
     location.pathname.startsWith("/products/pricing-widgets") ||
     location.pathname.startsWith("/products/price-lists") ||
     location.pathname.startsWith("/items") ||
-    location.pathname.startsWith("/products/items");
+    location.pathname.startsWith("/products/items") ||
+    location.pathname.startsWith("/reports");
 
   useEffect(() => {
     transactionNumberSeriesAPI.getAll({ limit: 10000 }).catch(() => null);

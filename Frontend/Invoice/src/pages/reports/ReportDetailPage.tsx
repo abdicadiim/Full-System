@@ -378,7 +378,7 @@ export default function ReportDetailPage() {
 
   if (report.id === "sales-by-customer") {
     return (
-      <div className="relative min-h-[calc(100vh-64px)]">
+      <div className="relative min-h-[calc(100vh-64px)] pt-3">
         <ReportsDrawer
           open={isReportsDrawerOpen}
           currentCategoryId={category.id}
@@ -386,7 +386,7 @@ export default function ReportDetailPage() {
           triggerRef={reportsMenuButtonRef}
           onClose={() => setIsReportsDrawerOpen(false)}
         />
-        <div className={`transition-[padding-left] duration-200 ${isReportsDrawerOpen ? "lg:pl-[260px]" : ""}`}>
+        <div className={`pr-3 transition-[padding-left] duration-200 ${isReportsDrawerOpen ? "lg:pl-[260px]" : ""}`}>
           <SalesByCustomerReportView
             categoryName={category.name}
             reportName={report.name}
