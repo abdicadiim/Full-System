@@ -90,7 +90,7 @@ type EntityOption = {
 
 type CompareWithKey = "none" | "previous-years" | "previous-periods";
 
-type MoreFilterFieldKey = "customer-name" | "currency" | "location";
+type MoreFilterFieldKey = "salesperson-name" | "currency" | "location";
 
 type MoreFilterComparatorKey = "is-empty" | "is-not-empty" | "is-in" | "is-not-in" | "starts-with" | "ends-with" | "contains" | "does-not-contain";
 
@@ -113,7 +113,7 @@ type MoreFilterDropdownState = {
 type MoreFilterValueMode = "dropdown" | "text" | "none";
 
 const MORE_FILTER_FIELD_OPTIONS: Array<{ key: MoreFilterFieldKey; label: string }> = [
-  { key: "customer-name", label: "Customer Name" },
+  { key: "salesperson-name", label: "Sales Person Name" },
   { key: "currency", label: "Currency" },
   { key: "location", label: "Location" },
 ];
@@ -122,7 +122,7 @@ const MORE_FILTER_FIELD_GROUPS: Array<{ label: string; options: Array<{ key: Mor
   {
     label: "Reports",
     options: [
-      { key: "customer-name", label: "Customer Name" },
+      { key: "salesperson-name", label: "Sales Person Name" },
       { key: "currency", label: "Currency" },
     ],
   },
@@ -144,9 +144,9 @@ const MORE_FILTER_COMPARATOR_OPTIONS: Array<{ key: MoreFilterComparatorKey; labe
 ];
 
 const MORE_FILTER_VALUE_OPTIONS: Record<MoreFilterFieldKey, Array<{ key: string; label: string }>> = {
-  "customer-name": [
-    { key: "select-customer", label: "Select Customer" },
-    { key: "ss", label: "ss" },
+  "salesperson-name": [
+    { key: "select-sales-person", label: "Select Sales Person" },
+    { key: "others", label: "Others" },
   ],
   currency: [
     { key: "select-currency", label: "Select Currency" },
@@ -235,70 +235,13 @@ const REPORT_COLUMN_GROUPS: ReportColumnGroup[] = [
     options: [
       { key: "name", label: "Name", kind: "text", locked: true },
       { key: "invoice-count", label: "Invoice Count", kind: "number" },
-      { key: "sales", label: "Sales", kind: "currency" },
-      { key: "sales-with-tax", label: "Sales With Tax", kind: "currency" },
-      { key: "sales-without-discount", label: "Sales Without Discount", kind: "currency" },
-      { key: "sales-fcy", label: "Sales(FCY)", kind: "currency" },
-      { key: "sales-with-tax-fcy", label: "Sales With Tax(FCY)", kind: "currency" },
-      { key: "sales-without-discount-fcy", label: "Sales Without Discount (FCY)", kind: "currency" },
-      { key: "invoice-amount", label: "Invoice Amount", kind: "currency" },
-      { key: "invoice-amount-fcy", label: "Invoice Amount (FCY)", kind: "currency" },
-      { key: "credit-note-amount", label: "Credit Note Amount", kind: "currency" },
-      { key: "credit-note-amount-fcy", label: "Credit Note Amount (FCY)", kind: "currency" },
-      { key: "currency", label: "Currency", kind: "text" },
-    ],
-  },
-  {
-    label: "Locations",
-    options: [{ key: "location", label: "Location", kind: "text" }],
-  },
-  {
-    label: "Contacts",
-    options: [
-      { key: "customer-id", label: "Customer ID", kind: "text" },
-      { key: "company-name", label: "Company Name", kind: "text" },
-      { key: "customer-number", label: "Customer Number", kind: "text" },
-      { key: "first-name", label: "First Name", kind: "text" },
-      { key: "last-name", label: "Last Name", kind: "text" },
-      { key: "website", label: "Website", kind: "text" },
-      { key: "customer-email", label: "Customer Email", kind: "text" },
-      { key: "customer-type", label: "Customer Type", kind: "text" },
-      { key: "mobile-phone", label: "Mobile Phone", kind: "text" },
-      { key: "work-phone", label: "Work Phone", kind: "text" },
-      { key: "department", label: "Department", kind: "text" },
-      { key: "designation", label: "Designation", kind: "text" },
-      { key: "facebook", label: "Facebook", kind: "text" },
-      { key: "twitter", label: "Twitter", kind: "text" },
-      { key: "skype", label: "Skype", kind: "text" },
-      { key: "status", label: "Status", kind: "text" },
-      { key: "created-by", label: "Created By", kind: "text" },
-      { key: "created-time", label: "Created Time", kind: "text" },
-      { key: "last-modified-time", label: "Last Modified Time", kind: "text" },
-      { key: "credit-limit", label: "Credit Limit", kind: "currency" },
-      { key: "payment-terms", label: "Payment Terms", kind: "text" },
-      { key: "remarks", label: "Remarks", kind: "text" },
-      { key: "receivables", label: "Receivables", kind: "currency" },
-      { key: "receivables-fcy", label: "Receivables (FCY)", kind: "currency" },
-      { key: "unused-credits", label: "Unused Credits", kind: "currency" },
-      { key: "unused-credits-fcy", label: "Unused Credits (FCY)", kind: "currency" },
-      { key: "billing-name", label: "Billing Name", kind: "text" },
-      { key: "billing-street-1", label: "Billing Street 1", kind: "text" },
-      { key: "billing-street-2", label: "Billing Street 2", kind: "text" },
-      { key: "billing-city", label: "Billing City", kind: "text" },
-      { key: "billing-state", label: "Billing State", kind: "text" },
-      { key: "billing-code", label: "Billing Code", kind: "text" },
-      { key: "billing-country", label: "Billing Country", kind: "text" },
-      { key: "billing-phone", label: "Billing Phone", kind: "text" },
-      { key: "billing-fax", label: "Billing Fax", kind: "text" },
-      { key: "shipping-name", label: "Shipping Name", kind: "text" },
-      { key: "shipping-street-1", label: "Shipping Street 1", kind: "text" },
-      { key: "shipping-street-2", label: "Shipping Street 2", kind: "text" },
-      { key: "shipping-city", label: "Shipping City", kind: "text" },
-      { key: "shipping-state", label: "Shipping State", kind: "text" },
-      { key: "shipping-code", label: "Shipping Code", kind: "text" },
-      { key: "shipping-country", label: "Shipping Country", kind: "text" },
-      { key: "shipping-phone", label: "Shipping Phone", kind: "text" },
-      { key: "shipping-fax", label: "Shipping Fax", kind: "text" },
+      { key: "invoice-sales", label: "Invoice Sales", kind: "currency" },
+      { key: "invoice-sales-with-tax", label: "Invoice Sales With Tax", kind: "currency" },
+      { key: "credit-note-count", label: "Credit Note Count", kind: "number" },
+      { key: "credit-note-sales", label: "Credit Note Sales", kind: "currency" },
+      { key: "credit-note-sales-with-tax", label: "Credit Note Sales With Tax", kind: "currency" },
+      { key: "total-sales", label: "Total Sales", kind: "currency" },
+      { key: "total-sales-with-tax", label: "Total Sales With Tax", kind: "currency" },
     ],
   },
 ];
