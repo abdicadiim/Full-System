@@ -517,7 +517,7 @@ function ReportsDrawer({
                               to={`/reports/${report.categoryId}/${report.id}`}
                               onClick={onClose}
                               className={`block rounded px-2 py-1.5 text-sm hover:bg-[#eef4ff] ${
-                                isActive ? "bg-[#eef4ff] font-medium text-[#111827]" : "text-[#2563eb]"
+                                isActive ? "bg-[#eef4ff] font-medium text-[#111827]" : "text-[#111827] hover:text-black"
                               }`}
                             >
                               {report.name}
