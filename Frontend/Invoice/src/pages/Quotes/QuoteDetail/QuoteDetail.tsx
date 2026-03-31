@@ -735,13 +735,13 @@ const QuoteDetail = () => {
         document.body.appendChild(tempDiv);
 
         // Wait for content to render
-        await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+        await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 
         // Convert to canvas
         const canvas = await html2canvas(tempDiv, {
-          scale: 1.3,
+          scale: 2,
           useCORS: true,
-          allowTaint: false,
+          allowTaint: true,
           width: 794, // A4 width in pixels at 96 DPI
           windowWidth: 794
         });
@@ -755,11 +755,11 @@ const QuoteDetail = () => {
         }
 
         // Add image to PDF
-        const imgData = canvas.toDataURL('image/jpeg', 0.86);
+        const imgData = canvas.toDataURL('image/png');
         const imgWidth = 210; // A4 width in mm
         const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-        pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
+        pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
       }
 
       // Download PDF

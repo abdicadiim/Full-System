@@ -1,7 +1,7 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { CalendarDays, Check, ChevronDown, ChevronRight, Columns3, Filter, Folder, Menu, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
-import { getCategoryById, getReportById, REPORTS_BY_CATEGORY } from "./reportsCatalog";
+import { getReportById, REPORTS_BY_CATEGORY } from "./reportsCatalog";
 import { useSettings } from "../../lib/settings/SettingsContext";
 import { reportsAPI } from "../../services/api";
 
@@ -661,8 +661,8 @@ function ReceivablesReportShell({ reportId }: { reportId: ReceivablesReportId })
     <div className="relative min-h-[calc(100vh-64px)] pt-3">
       <ReportsDrawer
         open={isReportsDrawerOpen}
-        currentCategoryId={category.id}
-        currentReportId={report.id}
+        currentCategoryId="receivables"
+        currentReportId={reportId}
         triggerRef={reportsMenuButtonRef}
         onClose={() => setIsReportsDrawerOpen(false)}
       />
