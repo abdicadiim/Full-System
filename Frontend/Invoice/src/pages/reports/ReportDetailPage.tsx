@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
-import { CalendarDays, Check, ChevronDown, ChevronRight, Columns3, Folder, Menu, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
+import { CalendarDays, Check, ChevronDown, ChevronRight, Columns3, Filter, Folder, Menu, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
 import ReportDetailHeader from "./ReportDetailHeader";
 import { getCategoryById, getReportById, REPORT_FUNCTION_LABELS, REPORTS_BY_CATEGORY } from "./reportsCatalog";
 
@@ -91,6 +91,8 @@ type MoreFilterFieldKey = "customer-name" | "currency" | "location";
 
 type MoreFilterComparatorKey = "is-in" | "is-not-in" | "starts-with" | "ends-with" | "contains" | "does-not-contain";
 
+const MORE_FILTER_TEXT_COMPARATORS: MoreFilterComparatorKey[] = ["starts-with", "ends-with", "contains", "does-not-contain"];
+
 type MoreFilterRow = {
   id: string;
   field: MoreFilterFieldKey | "";
@@ -103,6 +105,8 @@ type MoreFilterDropdownState = {
   kind: "field" | "comparator" | "value";
   search: string;
 } | null;
+
+type MoreFilterValueMode = "dropdown" | "text";
 
 const MORE_FILTER_FIELD_OPTIONS: Array<{ key: MoreFilterFieldKey; label: string }> = [
   { key: "customer-name", label: "Customer Name" },
@@ -1210,7 +1214,10 @@ function SalesByCustomerReportView({
       </div>
 
       <div ref={moreFiltersRef} className="relative flex flex-wrap items-center gap-2 border-b border-[#e6e9f0] pb-3 text-sm">
-        <span className="text-[#334155]">Filters :</span>
+        <span className="inline-flex items-center gap-1 text-[#334155]">
+          <Filter size={14} className="text-[#64748b]" />
+          <span>Filters :</span>
+        </span>
         <div ref={dateRangeRef} className="relative">
           <button
             type="button"
