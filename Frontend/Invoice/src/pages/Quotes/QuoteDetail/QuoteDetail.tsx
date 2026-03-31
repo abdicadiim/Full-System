@@ -739,7 +739,7 @@ const QuoteDetail = () => {
 
         // Convert to canvas
         const canvas = await html2canvas(tempDiv, {
-          scale: 2,
+          scale: 1.5,
           useCORS: true,
           allowTaint: true,
           width: 794, // A4 width in pixels at 96 DPI
@@ -2106,7 +2106,7 @@ const QuoteDetail = () => {
       await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 
       const canvas = await html2canvas(wrapper, {
-        scale: 2,
+        scale: 1.5,
         useCORS: true,
         backgroundColor: "#ffffff",
         allowTaint: true,
