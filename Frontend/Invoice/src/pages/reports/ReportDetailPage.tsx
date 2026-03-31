@@ -48,6 +48,12 @@ type MoreFilterRow = {
   value: string;
 };
 
+type MoreFilterDropdownState = {
+  rowId: string;
+  kind: "field" | "comparator" | "value";
+  search: string;
+} | null;
+
 const MORE_FILTER_FIELD_OPTIONS: Array<{ key: MoreFilterFieldKey; label: string }> = [
   { key: "customer-name", label: "Customer Name" },
   { key: "currency", label: "Currency" },
@@ -432,6 +438,7 @@ function SalesByCustomerReportView({
   const [isEntityOpen, setIsEntityOpen] = useState(false);
   const [entitySearch, setEntitySearch] = useState("");
   const [isMoreFiltersOpen, setIsMoreFiltersOpen] = useState(false);
+  const [moreFilterDropdown, setMoreFilterDropdown] = useState<MoreFilterDropdownState>(null);
   const [moreFilterRows, setMoreFilterRows] = useState<MoreFilterRow[]>([
     { id: "more-filter-1", field: "", comparator: "", value: "" },
   ]);
@@ -524,6 +531,24 @@ function SalesByCustomerReportView({
   }, [entitySearch]);
 
   const hasMoreFilters = moreFilterRows.some((row) => row.field || row.comparator || row.value.trim());
+  const getFilteredFieldGroups = (query: string) => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return MORE_FILTER_FIELD_GROUPS.map((group) => {
+      const options = group.options.filter((option) => option.label.toLowerCase().includes(normalizedQuery));
+      return { ...group, options };
+    }).filter((group) => group.options.length > 0);
+  };
+
+  const getFilteredComparatorOptions = (query: string) => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return MORE_FILTER_COMPARATOR_OPTIONS.filter((option) => option.label.toLowerCase().includes(normalizedQuery));
+  };
+
+  const openMoreFilterDropdown = (rowId: string, kind: "field" | "comparator" | "value") => {
+    setMoreFilterDropdown({ rowId, kind, search: "" });
+  };
+
+  const closeMoreFilterDropdown = () => setMoreFilterDropdown(null);
 
   return (
     <div className="space-y-4">
