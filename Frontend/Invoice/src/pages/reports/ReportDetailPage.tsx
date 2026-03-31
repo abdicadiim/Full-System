@@ -1044,9 +1044,9 @@ function SalesByCustomerReportView({
           </button>
           <button
             type="button"
-            onClick={closeAllOpenPanels}
+            onClick={onClosePage}
             className="inline-flex h-9 w-9 items-center justify-center rounded border border-[#d4d9e4] text-[#ef4444] hover:bg-[#fef2f2]"
-            aria-label="Close report controls"
+            aria-label="Close report page"
           >
             <X size={15} />
           </button>
@@ -1823,6 +1823,7 @@ function SalesByCustomerReportView({
 }
 
 export default function ReportDetailPage() {
+  const navigate = useNavigate();
   const { categoryId, reportId } = useParams();
   const category = getCategoryById(categoryId || "");
   const report = getReportById(categoryId || "", reportId || "");
@@ -1874,6 +1875,7 @@ export default function ReportDetailPage() {
             menuButtonRef={reportsMenuButtonRef}
             onMenuClick={() => setIsReportsDrawerOpen((prev) => !prev)}
             onActivityClick={() => setIsReportActivityOpen((prev) => !prev)}
+            onClosePage={() => navigate("/reports")}
             onRunReport={() => toast.success(`Report refreshed: ${report.name}`)}
           />
         </div>
