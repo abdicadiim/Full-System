@@ -3606,6 +3606,9 @@ export function SalesBySalesPersonReportView({
   );
 }
 
+// Legacy alias for the copied wrapper below; the app uses the named salesperson export.
+const SalesByCustomerReportView = SalesBySalesPersonReportView;
+
 export default function ReportDetailPage() {
   const navigate = useNavigate();
   const { categoryId, reportId } = useParams();
