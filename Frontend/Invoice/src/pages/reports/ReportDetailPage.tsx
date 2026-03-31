@@ -7,6 +7,117 @@ import { getCategoryById, getReportById, REPORT_FUNCTION_LABELS, REPORTS_BY_CATE
 
 const formatDate = (value: Date) => value.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 
+type DateRangeKey =
+  | "today"
+  | "this-week"
+  | "this-month"
+  | "this-quarter"
+  | "this-year"
+  | "yesterday"
+  | "previous-week"
+  | "previous-month"
+  | "previous-quarter"
+  | "previous-year"
+  | "custom";
+
+type DateRangeOption = {
+  key: DateRangeKey;
+  label: string;
+};
+
+type DateRangeValue = {
+  start: Date;
+  end: Date;
+};
+
+const DATE_RANGE_OPTIONS: DateRangeOption[] = [
+  { key: "today", label: "Today" },
+  { key: "this-week", label: "This Week" },
+  { key: "this-month", label: "This Month" },
+  { key: "this-quarter", label: "This Quarter" },
+  { key: "this-year", label: "This Year" },
+  { key: "yesterday", label: "Yesterday" },
+  { key: "previous-week", label: "Previous Week" },
+  { key: "previous-month", label: "Previous Month" },
+  { key: "previous-quarter", label: "Previous Quarter" },
+  { key: "previous-year", label: "Previous Year" },
+  { key: "custom", label: "Custom" },
+];
+
+const getStartOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+const getEndOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+const getStartOfWeek = (date: Date) => {
+  const start = getStartOfDay(date);
+  const day = start.getDay();
+  start.setDate(start.getDate() - day);
+  return start;
+};
+
+const getEndOfWeek = (date: Date) => {
+  const end = getStartOfWeek(date);
+  end.setDate(end.getDate() + 6);
+  return end;
+};
+
+const getQuarterBounds = (year: number, quarterIndex: number) => {
+  const startMonth = quarterIndex * 3;
+  return {
+    start: new Date(year, startMonth, 1),
+    end: new Date(year, startMonth + 3, 0),
+  };
+};
+
+const getDateRangeValue = (key: DateRangeKey, referenceDate = new Date()): DateRangeValue => {
+  const today = getStartOfDay(referenceDate);
+
+  switch (key) {
+    case "today":
+      return { start: today, end: getEndOfDay(referenceDate) };
+    case "this-week":
+      return { start: getStartOfWeek(referenceDate), end: getEndOfWeek(referenceDate) };
+    case "this-month":
+      return { start: new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1), end: new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 0) };
+    case "this-quarter": {
+      const quarterIndex = Math.floor(referenceDate.getMonth() / 3);
+      return getQuarterBounds(referenceDate.getFullYear(), quarterIndex);
+    }
+    case "this-year":
+      return { start: new Date(referenceDate.getFullYear(), 0, 1), end: new Date(referenceDate.getFullYear(), 11, 31) };
+    case "yesterday": {
+      const yesterday = getStartOfDay(referenceDate);
+      yesterday.setDate(yesterday.getDate() - 1);
+      return { start: yesterday, end: yesterday };
+    }
+    case "previous-week": {
+      const currentWeekStart = getStartOfWeek(referenceDate);
+      const previousWeekStart = new Date(currentWeekStart);
+      previousWeekStart.setDate(previousWeekStart.getDate() - 7);
+      const previousWeekEnd = new Date(previousWeekStart);
+      previousWeekEnd.setDate(previousWeekEnd.getDate() + 6);
+      return { start: previousWeekStart, end: previousWeekEnd };
+    }
+    case "previous-month": {
+      const previousMonthEnd = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 0);
+      const previousMonthStart = new Date(previousMonthEnd.getFullYear(), previousMonthEnd.getMonth(), 1);
+      return { start: previousMonthStart, end: previousMonthEnd };
+    }
+    case "previous-quarter": {
+      const currentQuarterIndex = Math.floor(referenceDate.getMonth() / 3);
+      const previousQuarterIndex = (currentQuarterIndex + 3) % 4;
+      const previousQuarterYear = currentQuarterIndex === 0 ? referenceDate.getFullYear() - 1 : referenceDate.getFullYear();
+      return getQuarterBounds(previousQuarterYear, previousQuarterIndex);
+    }
+    case "previous-year":
+      return { start: new Date(referenceDate.getFullYear() - 1, 0, 1), end: new Date(referenceDate.getFullYear() - 1, 11, 31) };
+    case "custom":
+      return { start: today, end: today };
+    default:
+      return { start: today, end: today };
+  }
+};
+
 type SalesByCustomerRow = {
   name: string;
   invoiceCount: number;
@@ -228,10 +339,39 @@ function SalesByCustomerReportView({
   onMenuClick: () => void;
   onRunReport: () => void;
 }) {
-  const todayLabel = formatDate(new Date());
+  const dateRangeRef = useRef<HTMLDivElement | null>(null);
+  const [dateRangeKey, setDateRangeKey] = useState<DateRangeKey>("this-week");
+  const [isDateRangeOpen, setIsDateRangeOpen] = useState(false);
+  const selectedDateRange = getDateRangeValue(dateRangeKey);
+  const dateRangeLabel = DATE_RANGE_OPTIONS.find((option) => option.key === dateRangeKey)?.label ?? "Today";
   const totalInvoiceCount = SALES_BY_CUSTOMER_ROWS.reduce((sum, row) => sum + row.invoiceCount, 0);
   const totalSales = SALES_BY_CUSTOMER_ROWS.reduce((sum, row) => sum + row.sales, 0);
   const totalSalesWithTax = SALES_BY_CUSTOMER_ROWS.reduce((sum, row) => sum + row.salesWithTax, 0);
+
+  useEffect(() => {
+    if (!isDateRangeOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!dateRangeRef.current?.contains(target)) {
+        setIsDateRangeOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsDateRangeOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isDateRangeOpen]);
 
   return (
     <div className="space-y-4">
@@ -250,7 +390,9 @@ function SalesByCustomerReportView({
             <p className="text-sm font-medium text-[#2563eb]">{categoryName}</p>
             <h1 className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[24px] font-semibold leading-tight text-[#0f172a]">
               <span>{reportName}</span>
-              <span className="text-sm font-normal text-[#475569]">- From {todayLabel} To {todayLabel}</span>
+              <span className="text-sm font-normal text-[#475569]">
+                - From {formatDate(selectedDateRange.start)} To {formatDate(selectedDateRange.end)}
+              </span>
             </h1>
           </div>
         </div>
@@ -276,10 +418,45 @@ function SalesByCustomerReportView({
 
       <div className="flex flex-wrap items-center gap-2 border-b border-[#e6e9f0] pb-3 text-sm">
         <span className="text-[#334155]">Filters :</span>
-        <button type="button" className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-[#f8fafc] px-3 text-sm text-[#334155] hover:bg-white">
-          <CalendarDays size={14} className="text-[#64748b]" />
-          Date Range : <span className="font-medium">Today</span> <ChevronDown size={14} />
-        </button>
+        <div ref={dateRangeRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setIsDateRangeOpen((prev) => !prev)}
+            className={`inline-flex h-8 items-center gap-1 rounded border px-3 text-sm text-[#334155] hover:bg-white ${
+              isDateRangeOpen ? "border-[#7aa7ff] bg-white" : "border-[#cfd6e4] bg-[#f8fafc]"
+            }`}
+            aria-haspopup="menu"
+            aria-expanded={isDateRangeOpen}
+          >
+            <CalendarDays size={14} className="text-[#64748b]" />
+            Date Range : <span className="font-medium">{dateRangeLabel}</span> <ChevronDown size={14} />
+          </button>
+
+          {isDateRangeOpen ? (
+            <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-[165px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+              <div className="max-h-[280px] overflow-y-auto py-1">
+                {DATE_RANGE_OPTIONS.map((option) => {
+                  const isSelected = option.key === dateRangeKey;
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      onClick={() => {
+                        setDateRangeKey(option.key);
+                        setIsDateRangeOpen(false);
+                      }}
+                      className={`block w-full px-4 py-2 text-left text-sm ${
+                        isSelected ? "bg-[#2f80ed] text-white" : "text-[#334155] hover:bg-[#f8fafc]"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+        </div>
         <button type="button" className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-[#f8fafc] px-3 text-sm text-[#334155] hover:bg-white">
           Entities : <span className="font-medium">Invoice</span> <ChevronDown size={14} />
         </button>
@@ -311,7 +488,9 @@ function SalesByCustomerReportView({
 
         <div className="border-b border-[#eef2f7] px-4 py-10 text-center">
           <h2 className="mt-2 text-[22px] font-semibold text-[#111827]">{reportName}</h2>
-          <p className="mt-1 text-sm text-[#475569]">From {todayLabel} To {todayLabel}</p>
+          <p className="mt-1 text-sm text-[#475569]">
+            From {formatDate(selectedDateRange.start)} To {formatDate(selectedDateRange.end)}
+          </p>
         </div>
 
         <div className="overflow-x-auto">
