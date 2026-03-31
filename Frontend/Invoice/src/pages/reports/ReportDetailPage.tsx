@@ -2265,43 +2265,42 @@ function SalesByCustomerReportView({
                         <div className="grid gap-6 md:grid-cols-2">
                           <div ref={customizeCompareRef} className="relative">
                             <div className="text-sm font-medium text-[#111827]">Compare With</div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIsCustomizeCompareCountOpen(false);
-                                setIsCustomizeCompareOpen((prev) => !prev);
-                              }}
-                              className="mt-2 inline-flex h-9 w-full max-w-[260px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
-                              aria-haspopup="menu"
-                              aria-expanded={isCustomizeCompareOpen}
-                            >
-                              <span className="truncate">{getCompareWithLabel(compareWithDraftKey)}</span>
-                              <span className="ml-3 flex items-center gap-2">
-                                {compareWithDraftKey !== "none" ? (
-                                  <button
-                                    type="button"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      setCompareWithDraftKey("none");
-                                      setCompareWithDraftCount(1);
-                                      setCompareWithDraftArrangeLatest(false);
-                                      setIsCustomizeCompareOpen(false);
-                                      setIsCustomizeCompareCountOpen(false);
-                                    }}
-                                    className="inline-flex h-4 w-4 items-center justify-center text-[#ef4444]"
-                                    aria-label="Clear compare selection"
-                                  >
-                                    <X size={12} />
-                                  </button>
-                                ) : null}
+                            <div className="relative mt-2 w-full max-w-[260px]">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsCustomizeCompareCountOpen(false);
+                                  setIsCustomizeCompareOpen((prev) => !prev);
+                                }}
+                                className="inline-flex h-9 w-full items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 pr-12 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                                aria-haspopup="menu"
+                                aria-expanded={isCustomizeCompareOpen}
+                              >
+                                <span className="truncate">{getCompareWithLabel(compareWithDraftKey)}</span>
                                 <ChevronDown
                                   size={14}
-                                  className={`transition-transform duration-150 ${
+                                  className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
                                     isCustomizeCompareOpen ? "rotate-180 text-[#1b6f7b]" : "text-[#64748b]"
                                   }`}
                                 />
-                              </span>
-                            </button>
+                              </button>
+                              {compareWithDraftKey !== "none" ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCompareWithDraftKey("none");
+                                    setCompareWithDraftCount(1);
+                                    setCompareWithDraftArrangeLatest(false);
+                                    setIsCustomizeCompareOpen(false);
+                                    setIsCustomizeCompareCountOpen(false);
+                                  }}
+                                  className="absolute right-8 top-1/2 inline-flex h-4 w-4 -translate-y-1/2 items-center justify-center text-[#ef4444]"
+                                  aria-label="Clear compare selection"
+                                >
+                                  <X size={12} />
+                                </button>
+                              ) : null}
+                            </div>
 
                             {isCustomizeCompareOpen ? (
                               <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-[260px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
