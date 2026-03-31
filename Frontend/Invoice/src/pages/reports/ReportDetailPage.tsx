@@ -667,6 +667,11 @@ function SalesByCustomerReportView({
     return ENTITY_OPTIONS.filter((option) => option.label.toLowerCase().includes(query));
   }, [entitySearch]);
 
+  const filteredCompareWithOptions = useMemo(() => {
+    const query = compareWithSearch.trim().toLowerCase();
+    return COMPARE_WITH_OPTIONS.filter((option) => option.label.toLowerCase().includes(query));
+  }, [compareWithSearch]);
+
   const hasMoreFilters = moreFilterRows.some((row) => row.field || row.comparator || row.value.trim());
   const getFilteredFieldGroups = (query: string) => {
     const normalizedQuery = query.trim().toLowerCase();
