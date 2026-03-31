@@ -356,12 +356,13 @@ function SalesByCustomerReportView({
   const entityRef = useRef<HTMLDivElement | null>(null);
   const [dateRangeKey, setDateRangeKey] = useState<DateRangeKey>("this-week");
   const [isDateRangeOpen, setIsDateRangeOpen] = useState(false);
-  const [entityKey, setEntityKey] = useState<EntityKey | null>(null);
+  const [entityKeys, setEntityKeys] = useState<EntityKey[]>([]);
   const [isEntityOpen, setIsEntityOpen] = useState(false);
   const [entitySearch, setEntitySearch] = useState("");
   const selectedDateRange = getDateRangeValue(dateRangeKey);
   const dateRangeLabel = DATE_RANGE_OPTIONS.find((option) => option.key === dateRangeKey)?.label ?? "Today";
-  const entityLabel = entityKey ? ENTITY_OPTIONS.find((option) => option.key === entityKey)?.label ?? "None" : "None";
+  const selectedEntityLabels = ENTITY_OPTIONS.filter((option) => entityKeys.includes(option.key)).map((option) => option.label);
+  const entityLabel = selectedEntityLabels.length > 0 ? selectedEntityLabels.join(", ") : "None";
   const totalInvoiceCount = SALES_BY_CUSTOMER_ROWS.reduce((sum, row) => sum + row.invoiceCount, 0);
   const totalSales = SALES_BY_CUSTOMER_ROWS.reduce((sum, row) => sum + row.sales, 0);
   const totalSalesWithTax = SALES_BY_CUSTOMER_ROWS.reduce((sum, row) => sum + row.salesWithTax, 0);
@@ -510,13 +511,15 @@ function SalesByCustomerReportView({
           <button
             type="button"
             onClick={() => setIsEntityOpen((prev) => !prev)}
-            className={`inline-flex h-8 items-center gap-1 rounded border px-3 text-sm text-[#334155] hover:bg-white ${
+            className={`inline-flex h-8 max-w-[170px] items-center gap-1 rounded border px-3 text-sm text-[#334155] hover:bg-white ${
               isEntityOpen ? "border-[#7aa7ff] bg-white" : "border-[#cfd6e4] bg-[#f8fafc]"
             }`}
             aria-haspopup="menu"
             aria-expanded={isEntityOpen}
           >
-            Entities : <span className="font-medium">{entityLabel}</span> <ChevronDown size={14} />
+            <span>Entities :</span>
+            <span className="min-w-0 max-w-[92px] truncate font-medium">{entityLabel}</span>
+            <ChevronDown size={14} className="flex-none" />
           </button>
 
           {isEntityOpen ? (
@@ -536,15 +539,15 @@ function SalesByCustomerReportView({
               <div className="max-h-[220px] overflow-y-auto py-1">
                 {filteredEntityOptions.length > 0 ? (
                   filteredEntityOptions.map((option) => {
-                    const isSelected = option.key === entityKey;
+                    const isSelected = entityKeys.includes(option.key);
                     return (
                       <button
                         key={option.key}
                         type="button"
                         onClick={() => {
-                          setEntityKey(option.key);
-                          setEntitySearch("");
-                          setIsEntityOpen(false);
+                          setEntityKeys((prev) =>
+                            prev.includes(option.key) ? prev.filter((key) => key !== option.key) : [...prev, option.key]
+                          );
                         }}
                         className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm ${
                           isSelected ? "bg-[#f1f5f9] font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"
