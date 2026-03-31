@@ -90,9 +90,10 @@ type CompareWithKey = "none" | "previous-years" | "previous-periods";
 
 type MoreFilterFieldKey = "customer-name" | "currency" | "location";
 
-type MoreFilterComparatorKey = "is-in" | "is-not-in" | "starts-with" | "ends-with" | "contains" | "does-not-contain";
+type MoreFilterComparatorKey = "is-empty" | "is-not-empty" | "is-in" | "is-not-in" | "starts-with" | "ends-with" | "contains" | "does-not-contain";
 
 const MORE_FILTER_TEXT_COMPARATORS: MoreFilterComparatorKey[] = ["starts-with", "ends-with", "contains", "does-not-contain"];
+const MORE_FILTER_NO_VALUE_COMPARATORS: MoreFilterComparatorKey[] = ["is-empty", "is-not-empty"];
 
 type MoreFilterRow = {
   id: string;
@@ -107,7 +108,7 @@ type MoreFilterDropdownState = {
   search: string;
 } | null;
 
-type MoreFilterValueMode = "dropdown" | "text";
+type MoreFilterValueMode = "dropdown" | "text" | "none";
 
 const MORE_FILTER_FIELD_OPTIONS: Array<{ key: MoreFilterFieldKey; label: string }> = [
   { key: "customer-name", label: "Customer Name" },
@@ -130,6 +131,8 @@ const MORE_FILTER_FIELD_GROUPS: Array<{ label: string; options: Array<{ key: Mor
 ];
 
 const MORE_FILTER_COMPARATOR_OPTIONS: Array<{ key: MoreFilterComparatorKey; label: string }> = [
+  { key: "is-empty", label: "is empty" },
+  { key: "is-not-empty", label: "is not empty" },
   { key: "is-in", label: "is in" },
   { key: "is-not-in", label: "is not in" },
   { key: "starts-with", label: "starts with" },
@@ -1273,9 +1276,13 @@ function SalesByCustomerReportView({
     }).filter((group) => group.options.length > 0);
   };
 
-  const getFilteredComparatorOptions = (query: string) => {
+  const getFilteredComparatorOptions = (query: string, field?: MoreFilterFieldKey | "") => {
     const normalizedQuery = query.trim().toLowerCase();
-    return MORE_FILTER_COMPARATOR_OPTIONS.filter((option) => option.label.toLowerCase().includes(normalizedQuery));
+    const fieldSpecificOptions =
+      field === "currency"
+        ? MORE_FILTER_COMPARATOR_OPTIONS.filter((option) => ["is-empty", "is-not-empty", "is-in", "is-not-in"].includes(option.key))
+        : MORE_FILTER_COMPARATOR_OPTIONS;
+    return fieldSpecificOptions.filter((option) => option.label.toLowerCase().includes(normalizedQuery));
   };
 
   const filteredCompareWithNumberOptions = useMemo(() => {
@@ -1937,10 +1944,14 @@ function SalesByCustomerReportView({
                   const fieldMenuSearch = fieldMenuOpen ? activeDropdown.search : "";
                   const comparatorMenuSearch = comparatorMenuOpen ? activeDropdown.search : "";
                   const filteredFieldGroups = getFilteredFieldGroups(fieldMenuSearch);
-                  const filteredComparatorOptions = getFilteredComparatorOptions(comparatorMenuSearch);
+                  const filteredComparatorOptions = getFilteredComparatorOptions(comparatorMenuSearch, row.field);
                   const valueOptions = row.field ? MORE_FILTER_VALUE_OPTIONS[row.field] : [];
                   const valueMode: MoreFilterValueMode =
-                    row.comparator && MORE_FILTER_TEXT_COMPARATORS.includes(row.comparator) ? "text" : "dropdown";
+                    row.comparator && MORE_FILTER_NO_VALUE_COMPARATORS.includes(row.comparator)
+                      ? "none"
+                      : row.comparator && MORE_FILTER_TEXT_COMPARATORS.includes(row.comparator)
+                        ? "text"
+                        : "dropdown";
                   const fieldLabel = getMoreFilterFieldLabel(row.field);
                   const comparatorLabel = getMoreFilterComparatorLabel(row.comparator);
                   const valueLabel =
@@ -2035,11 +2046,11 @@ function SalesByCustomerReportView({
                                               closeMoreFilterDropdown();
                                             }}
                                             className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
-                                              isSelected ? "bg-[#1b6f7b] font-medium text-white" : "text-[#334155] hover:bg-[#f8fafc]"
+                                              isSelected ? "bg-white font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"
                                             }`}
                                           >
                                             <span>{option.label}</span>
-                                            {isSelected ? <Check size={14} className="text-white" /> : null}
+                                            {isSelected ? <Check size={14} className="text-[#64748b]" /> : null}
                                           </button>
                                         );
                                       })}
@@ -2118,11 +2129,11 @@ function SalesByCustomerReportView({
                                         closeMoreFilterDropdown();
                                       }}
                                       className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
-                                        isSelected ? "bg-[#1b6f7b] font-medium text-white" : "text-[#334155] hover:bg-[#f8fafc]"
+                                        isSelected ? "bg-white font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"
                                       }`}
                                     >
                                       <span>{option.label}</span>
-                                      {isSelected ? <Check size={14} className="text-white" /> : null}
+                                      {isSelected ? <Check size={14} className="text-[#64748b]" /> : null}
                                     </button>
                                   );
                                 })
@@ -2135,7 +2146,11 @@ function SalesByCustomerReportView({
                       </div>
 
                       <div className="relative">
-                        {valueMode === "text" ? (
+                        {valueMode === "none" ? (
+                          <div className="flex h-8 items-center rounded border border-[#e2e8f0] bg-[#f8fafc] px-3 text-sm text-[#94a3b8]">
+                            No value needed
+                          </div>
+                        ) : valueMode === "text" ? (
                           <input
                             type="text"
                             value={row.value}
@@ -2180,8 +2195,8 @@ function SalesByCustomerReportView({
                             {valueMenuOpen && row.field ? (
                               <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-[220px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
                                 <div className="max-h-[220px] overflow-y-auto py-1">
-                                  {valueOptions.length > 0 ? (
-                                    valueOptions.map((option) => {
+                                          {valueOptions.length > 0 ? (
+                                            valueOptions.map((option) => {
                                       const isSelected = row.value === option.key;
                                       return (
                                         <button
@@ -2198,11 +2213,11 @@ function SalesByCustomerReportView({
                                             closeMoreFilterDropdown();
                                           }}
                                           className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
-                                            isSelected ? "bg-[#1b6f7b] font-medium text-white" : "text-[#334155] hover:bg-[#f8fafc]"
+                                            isSelected ? "bg-white font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"
                                           }`}
                                         >
                                           <span>{option.label}</span>
-                                          {isSelected ? <Check size={14} className="text-white" /> : null}
+                                          {isSelected ? <Check size={14} className="text-[#64748b]" /> : null}
                                         </button>
                                       );
                                     })
@@ -3094,10 +3109,14 @@ function SalesByCustomerReportView({
                               const fieldMenuSearch = fieldMenuOpen ? activeDropdown.search : "";
                               const comparatorMenuSearch = comparatorMenuOpen ? activeDropdown.search : "";
                               const filteredFieldGroups = getFilteredFieldGroups(fieldMenuSearch);
-                              const filteredComparatorOptions = getFilteredComparatorOptions(comparatorMenuSearch);
+                              const filteredComparatorOptions = getFilteredComparatorOptions(comparatorMenuSearch, row.field);
                               const valueOptions = row.field ? MORE_FILTER_VALUE_OPTIONS[row.field] : [];
                               const valueMode: MoreFilterValueMode =
-                                row.comparator && MORE_FILTER_TEXT_COMPARATORS.includes(row.comparator) ? "text" : "dropdown";
+                                row.comparator && MORE_FILTER_NO_VALUE_COMPARATORS.includes(row.comparator)
+                                  ? "none"
+                                  : row.comparator && MORE_FILTER_TEXT_COMPARATORS.includes(row.comparator)
+                                    ? "text"
+                                    : "dropdown";
                               const fieldLabel = getMoreFilterFieldLabel(row.field);
                               const comparatorLabel = getMoreFilterComparatorLabel(row.comparator);
                               const valueLabel =
@@ -3196,14 +3215,14 @@ function SalesByCustomerReportView({
                                                           closeCustomizeMoreFilterDropdown();
                                                         }}
                                                         className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
-                                                          isSelected ? "font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"
+                                                          isSelected ? "bg-white font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"
                                                         }`}
                                                       >
                                                         <span>{option.label}</span>
-                                                        {isSelected ? <Check size={14} className="text-[#64748b]" /> : null}
-                                                      </button>
-                                                    );
-                                                  })}
+                                      {isSelected ? <Check size={14} className="text-[#64748b]" /> : null}
+                                    </button>
+                                  );
+                                })}
                                                 </div>
                                               </div>
                                             ))
@@ -3344,9 +3363,9 @@ function SalesByCustomerReportView({
                                         {valueMenuOpen && row.field ? (
                                           <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-[220px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
                                             <div className="max-h-[220px] overflow-y-auto py-1">
-                                              {valueOptions.length > 0 ? (
-                                                valueOptions.map((option) => {
-                                                  const isSelected = row.value === option.key;
+                                  {valueOptions.length > 0 ? (
+                                    valueOptions.map((option) => {
+                                      const isSelected = row.value === option.key;
                                                   return (
                                                     <button
                                                       key={option.key}

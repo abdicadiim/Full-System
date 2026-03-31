@@ -6,7 +6,7 @@ import { Invoice } from "../models/Invoice.js";
 import { SalesReceipt } from "../models/SalesReceipt.js";
 
 type ReportEntity = "invoice" | "credit-note" | "sales-receipt";
-type MoreFilterComparator = "is-in" | "is-not-in" | "starts-with" | "ends-with" | "contains" | "does-not-contain";
+type MoreFilterComparator = "is-empty" | "is-not-empty" | "is-in" | "is-not-in" | "starts-with" | "ends-with" | "contains" | "does-not-contain";
 type MoreFilterRow = {
   field?: string;
   comparator?: MoreFilterComparator | string;
@@ -93,8 +93,13 @@ const compareValue = (left: string, comparator: string, right: string) => {
     .map((item) => item.trim())
     .filter(Boolean);
 
-  if (!comparator || !rhs) return true;
   switch (comparator) {
+    case "is-empty":
+      return lhs.length === 0;
+    case "is-not-empty":
+      return lhs.length > 0;
+    case "":
+      return true;
     case "is-in":
       return tokens.length > 0 ? tokens.includes(lhs) : lhs === rhs;
     case "is-not-in":
