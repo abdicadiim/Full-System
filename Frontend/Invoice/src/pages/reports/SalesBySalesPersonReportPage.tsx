@@ -320,7 +320,7 @@ const getDateRangeValue = (key: DateRangeKey, referenceDate = new Date()): DateR
   }
 };
 
-type SalesByCustomerRow = {
+type SalesBySalesPersonRow = {
   values: Partial<Record<ReportColumnKey, string | number>>;
 };
 
@@ -581,7 +581,7 @@ function ReportActivityDrawer({
   );
 }
 
-function SalesByCustomerReportView({
+export function SalesBySalesPersonReportView({
   categoryName,
   reportName,
   menuButtonRef,
@@ -654,14 +654,24 @@ function SalesByCustomerReportView({
   const [selectedReportColumns, setSelectedReportColumns] = useState<ReportColumnKey[]>([
     "name",
     "invoice-count",
-    "sales",
-    "sales-with-tax",
+    "invoice-sales",
+    "invoice-sales-with-tax",
+    "credit-note-count",
+    "credit-note-sales",
+    "credit-note-sales-with-tax",
+    "total-sales",
+    "total-sales-with-tax",
   ]);
   const [customizeDraftSelectedColumns, setCustomizeDraftSelectedColumns] = useState<ReportColumnKey[]>([
     "name",
     "invoice-count",
-    "sales",
-    "sales-with-tax",
+    "invoice-sales",
+    "invoice-sales-with-tax",
+    "credit-note-count",
+    "credit-note-sales",
+    "credit-note-sales-with-tax",
+    "total-sales",
+    "total-sales-with-tax",
   ]);
   const { settings } = useSettings();
   const organizationName = String(settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "").trim();
@@ -672,7 +682,7 @@ function SalesByCustomerReportView({
   const [moreFilterRows, setMoreFilterRows] = useState<MoreFilterRow[]>([
     { id: "more-filter-1", field: "", comparator: "", value: "" },
   ]);
-  const [reportRows, setReportRows] = useState<SalesByCustomerRow[]>([]);
+  const [reportRows, setReportRows] = useState<SalesBySalesPersonRow[]>([]);
   const [reportCurrency, setReportCurrency] = useState("SOS");
   const [isReportLoading, setIsReportLoading] = useState(true);
   const [reportError, setReportError] = useState("");
@@ -1125,7 +1135,7 @@ function SalesByCustomerReportView({
     [reportCurrency, reportRows, visibleReportColumns]
   );
 
-  const buildSalesByCustomerQuery = () => {
+  const buildSalesBySalesPersonQuery = () => {
     const query: Record<string, string> = {
       filter_by: dateRangeKey,
       compare_with: compareWithKey,
@@ -1169,7 +1179,7 @@ function SalesByCustomerReportView({
       setReportError("");
 
       try {
-        const response = await reportsAPI.getSalesByCustomer(buildSalesByCustomerQuery());
+        const response = await reportsAPI.getSalesBySalesPerson(buildSalesBySalesPersonQuery());
         if (cancelled) return;
 
         const data = response?.data || {};
