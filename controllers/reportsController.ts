@@ -1365,3 +1365,342 @@ export const getSalesBySalesPersonReport: express.RequestHandler = async (req, r
     },
   });
 };
+
+const buildARAgingSummaryRows = (invoices: any[], customers: any[], asOf: Date, moreFilters: MoreFilterRow[]) => {
+  const customerById = new Map<string, any>();
+  const customerByName = new Map<string, any>();
+  for (const customer of customers || []) {
+    const id = String(customer?._id || customer?.id || "").trim();
+    const name = resolveCustomerName(customer);
+    if (id) customerById.set(id, customer);
+    if (name) customerByName.set(normalizeText(name), customer);
+    const number = String(customer?.customerNumber || "").trim();
+    if (number) customerByName.set(normalizeText(number), customer);
+  }
+
+  const groupMap = new Map<string, any>();
+  let currency = "";
+
+  for (const row of invoices || []) {
+    const balance = getDocumentBalanceDue(row);
+    if (balance <= 0) continue;
+    const customer = customerById.get(String(row?.customerId || "").trim()) || customerByName.get(normalizeText(row?.customerName || ""));
+    const customerName = resolveCustomerName(customer, String(row?.customerName || ""));
+    const customerKey = getCustomerKey({ customer, customerName, customerId: row?.customerId });
+    const dueDate = getDocumentDueDate(row);
+    const ageDays = getAgingAgeDays(asOf, dueDate);
+    const bucketKey = getAgingBucketKey(ageDays);
+    const rowCurrency = String(row?.currency || currency || "SOS");
+    if (!groupMap.has(customerKey)) {
+      groupMap.set(customerKey, {
+        values: {
+          name: customerName,
+          "customer-id": String(row?.customerId || customer?.id || customer?._id || "").trim(),
+          currency: rowCurrency,
+          current: 0,
+          "1-15-days": 0,
+          "16-30-days": 0,
+          "31-45-days": 0,
+          "gt-45-days": 0,
+          total: 0,
+          "total-fcy": 0,
+        },
+      });
+      if (!currency) currency = rowCurrency;
+    }
+
+    const target = groupMap.get(customerKey);
+    target.values.currency = rowCurrency || String(target.values.currency || "");
+    target.values[bucketKey] = asNumber(target.values[bucketKey], 0) + balance;
+    target.values.total = asNumber(target.values.total, 0) + balance;
+    target.values["total-fcy"] = asNumber(target.values["total-fcy"], 0) + balance;
+  }
+
+  const groupedRows = [...groupMap.values()].sort((left, right) => {
+    const delta = asNumber(right.values.total, 0) - asNumber(left.values.total, 0);
+    if (delta !== 0) return delta;
+    return String(left.values.name || "").localeCompare(String(right.values.name || ""));
+  });
+
+  const filteredRows = groupedRows.filter((item) =>
+    matchesMoreFilters(
+      {
+        name: item.values.name,
+        currency: item.values.currency,
+        total: item.values.total,
+        balance: item.values.total,
+      },
+      moreFilters
+    )
+  );
+
+  return {
+    rows: filteredRows,
+    currency: currency || "SOS",
+    totals: filteredRows.reduce(
+      (acc, row) => {
+        acc.current += asNumber(row.values.current, 0);
+        acc["1-15-days"] += asNumber(row.values["1-15-days"], 0);
+        acc["16-30-days"] += asNumber(row.values["16-30-days"], 0);
+        acc["31-45-days"] += asNumber(row.values["31-45-days"], 0);
+        acc["gt-45-days"] += asNumber(row.values["gt-45-days"], 0);
+        acc.total += asNumber(row.values.total, 0);
+        acc["total-fcy"] += asNumber(row.values["total-fcy"], 0);
+        return acc;
+      },
+      { current: 0, "1-15-days": 0, "16-30-days": 0, "31-45-days": 0, "gt-45-days": 0, total: 0, "total-fcy": 0 } as Record<string, number>
+    ),
+  };
+};
+
+const buildARAgingDetailsRows = (invoices: any[], customers: any[], asOf: Date, moreFilters: MoreFilterRow[]) => {
+  const customerById = new Map<string, any>();
+  const customerByName = new Map<string, any>();
+  for (const customer of customers || []) {
+    const id = String(customer?._id || customer?.id || "").trim();
+    const name = resolveCustomerName(customer);
+    if (id) customerById.set(id, customer);
+    if (name) customerByName.set(normalizeText(name), customer);
+    const number = String(customer?.customerNumber || "").trim();
+    if (number) customerByName.set(normalizeText(number), customer);
+  }
+
+  const rows = (invoices || [])
+    .map((row) => {
+      const balance = getDocumentBalanceDue(row);
+      if (balance <= 0) return null;
+      const customer = customerById.get(String(row?.customerId || "").trim()) || customerByName.get(normalizeText(row?.customerName || ""));
+      const customerName = resolveCustomerName(customer, String(row?.customerName || ""));
+      const dueDate = getDocumentDueDate(row);
+      const invoiceDate = getDocumentDate(row);
+      const ageDays = getAgingAgeDays(asOf, dueDate);
+      const rowCurrency = String(row?.currency || "SOS");
+      return {
+        source: "invoice" as const,
+        values: {
+          name: customerName,
+          status: String(row?.status || "Open").trim(),
+          "invoice-date": invoiceDate ? invoiceDate.toISOString() : "",
+          "due-date": dueDate ? dueDate.toISOString() : "",
+          transaction: String(row?.invoiceNumber || row?.orderNumber || "").trim(),
+          type: "Invoice",
+          age: ageDays <= 0 ? "Current" : `${ageDays} Days`,
+          amount: Math.abs(asNumber(row?.total, 0)),
+          balance: balance,
+          "balance-due": balance,
+          currency: rowCurrency,
+        },
+      };
+    })
+    .filter(Boolean) as Array<{ source: ReportEntity; values: Record<string, unknown> }>;
+
+  const filteredRows = rows.filter((item) =>
+    matchesMoreFilters(
+      {
+        name: item.values.name,
+        status: item.values.status,
+        "invoice-number": item.values.transaction,
+        transaction: item.values.transaction,
+        "invoice-date": item.values["invoice-date"],
+        "due-date": item.values["due-date"],
+        age: item.values.age,
+        amount: item.values.amount,
+        balance: item.values.balance,
+        "balance-due": item.values["balance-due"],
+        currency: item.values.currency,
+      },
+      moreFilters
+    )
+  );
+
+  const currency = String(filteredRows[0]?.values.currency || "SOS");
+  return {
+    rows: filteredRows.sort((left, right) => String(right.values["due-date"] || "").localeCompare(String(left.values["due-date"] || ""))),
+    currency,
+    totals: filteredRows.reduce(
+      (acc, row) => {
+        acc.amount += asNumber(row.values.amount, 0);
+        acc.balance += asNumber(row.values.balance, 0);
+        return acc;
+      },
+      { amount: 0, balance: 0 } as Record<string, number>
+    ),
+  };
+};
+
+const buildInvoiceDetailsRows = (invoices: any[], creditNotes: any[], customers: any[], range: { start: Date; end: Date }, moreFilters: MoreFilterRow[]) => {
+  const customerById = new Map<string, any>();
+  const customerByName = new Map<string, any>();
+  for (const customer of customers || []) {
+    const id = String(customer?._id || customer?.id || "").trim();
+    const name = resolveCustomerName(customer);
+    if (id) customerById.set(id, customer);
+    if (name) customerByName.set(normalizeText(name), customer);
+    const number = String(customer?.customerNumber || "").trim();
+    if (number) customerByName.set(normalizeText(number), customer);
+  }
+
+  const transactionRows = [
+    ...(invoices || []).map((row) => ({ source: "invoice" as const, row })),
+    ...(creditNotes || []).map((row) => ({ source: "credit-note" as const, row })),
+  ];
+
+  const rows = transactionRows
+    .map(({ source, row }) => {
+      const documentDate = getDocumentDate(row);
+      if (!documentDate || documentDate < startOfDay(range.start) || documentDate > endOfDay(range.end)) return null;
+      const customer = customerById.get(String(row?.customerId || "").trim()) || customerByName.get(normalizeText(row?.customerName || ""));
+      const customerName = resolveCustomerName(customer, String(row?.customerName || ""));
+      const dueDate = getDocumentDueDate(row);
+      const rowCurrency = String(row?.currency || "SOS");
+      const amount = source === "credit-note" ? Math.abs(asNumber(row?.total, 0)) : Math.abs(asNumber(row?.total, 0));
+      const balance = source === "credit-note" ? Math.abs(asNumber(row?.balance, amount)) : getDocumentBalanceDue(row);
+      return {
+        source,
+        values: {
+          name: customerName,
+          status: String(row?.status || "Open").trim(),
+          "invoice-date": documentDate ? documentDate.toISOString() : "",
+          "due-date": dueDate ? dueDate.toISOString() : "",
+          "invoice-number": getDocumentNumber(row, source),
+          "order-number": String(row?.orderNumber || row?.salesOrderNumber || "").trim(),
+          type: getDocumentTypeLabel(source),
+          total: amount,
+          balance,
+          currency: rowCurrency,
+        },
+      };
+    })
+    .filter(Boolean) as Array<{ source: ReportEntity; values: Record<string, unknown> }>;
+
+  const filteredRows = rows.filter((item) =>
+    matchesMoreFilters(
+      {
+        name: item.values.name,
+        status: item.values.status,
+        "invoice-number": item.values["invoice-number"],
+        transaction: item.values["invoice-number"],
+        "order-number": item.values["order-number"],
+        "invoice-date": item.values["invoice-date"],
+        "due-date": item.values["due-date"],
+        amount: item.values.total,
+        balance: item.values.balance,
+        "balance-due": item.values.balance,
+        currency: item.values.currency,
+      },
+      moreFilters
+    )
+  );
+
+  const currency = String(filteredRows[0]?.values.currency || "SOS");
+  return {
+    rows: filteredRows.sort((left, right) => String(right.values["invoice-date"] || "").localeCompare(String(left.values["invoice-date"] || ""))),
+    currency,
+    totals: filteredRows.reduce(
+      (acc, row) => {
+        acc.total += asNumber(row.values.total, 0);
+        acc.balance += asNumber(row.values.balance, 0);
+        return acc;
+      },
+      { total: 0, balance: 0 } as Record<string, number>
+    ),
+  };
+};
+
+export const getARAgingSummaryReport: express.RequestHandler = async (req, res) => {
+  const orgId = requireOrgId(req, res);
+  if (!orgId) return;
+
+  const range = getDateRangeFromQuery(req);
+  const moreFilters = parseMoreFilters(req.query.moreFilters ?? req.query.more_filters ?? req.query.filter_rows);
+  const [customers, invoices] = await Promise.all([Customer.find({ organizationId: orgId }).lean(), Invoice.find({ organizationId: orgId }).lean()]);
+  const asOf = range.end;
+  const main = buildARAgingSummaryRows(invoices || [], customers || [], asOf, moreFilters);
+
+  return res.json({
+    success: true,
+    data: {
+      rows: main.rows,
+      currency: main.currency,
+      totals: main.totals,
+      appliedFilters: {
+        fromDate: range.start.toISOString(),
+        toDate: range.end.toISOString(),
+        moreFilters,
+      },
+    },
+  });
+};
+
+export const getARAgingDetailsReport: express.RequestHandler = async (req, res) => {
+  const orgId = requireOrgId(req, res);
+  if (!orgId) return;
+
+  const range = getDateRangeFromQuery(req);
+  const compareWith = String(req.query.compareWith ?? req.query.compare_with ?? "none").trim();
+  const compareCount = Math.max(1, Number(req.query.compareCount ?? req.query.compare_count ?? 1) || 1);
+  const moreFilters = parseMoreFilters(req.query.moreFilters ?? req.query.more_filters ?? req.query.filter_rows);
+  const [customers, invoices] = await Promise.all([Customer.find({ organizationId: orgId }).lean(), Invoice.find({ organizationId: orgId }).lean()]);
+  const asOf = range.end;
+  const main = buildARAgingDetailsRows(invoices || [], customers || [], asOf, moreFilters);
+  const compareRange = compareWith && compareWith !== "none" ? shiftDateRange(range, compareWith, compareCount) : null;
+  const comparison = compareRange ? buildARAgingDetailsRows(invoices || [], customers || [], compareRange.end, moreFilters) : null;
+
+  return res.json({
+    success: true,
+    data: {
+      rows: main.rows,
+      currency: main.currency,
+      totals: main.totals,
+      comparison,
+      appliedFilters: {
+        fromDate: range.start.toISOString(),
+        toDate: range.end.toISOString(),
+        compareWith,
+        compareCount,
+        moreFilters,
+      },
+    },
+  });
+};
+
+export const getInvoiceDetailsReport: express.RequestHandler = async (req, res) => {
+  const orgId = requireOrgId(req, res);
+  if (!orgId) return;
+
+  const range = getDateRangeFromQuery(req);
+  const compareWith = String(req.query.compareWith ?? req.query.compare_with ?? "none").trim();
+  const compareCount = Math.max(1, Number(req.query.compareCount ?? req.query.compare_count ?? 1) || 1);
+  const entities = parseEntities(req.query.entities ?? req.query.entity_list);
+  const moreFilters = parseMoreFilters(req.query.moreFilters ?? req.query.more_filters ?? req.query.filter_rows);
+
+  const [customers, invoices, creditNotes] = await Promise.all([
+    Customer.find({ organizationId: orgId }).lean(),
+    Invoice.find({ organizationId: orgId }).lean(),
+    CreditNote.find({ organizationId: orgId }).lean(),
+  ]);
+
+  const filteredInvoices = entities.includes("invoice") ? invoices || [] : [];
+  const filteredCreditNotes = entities.includes("credit-note") ? creditNotes || [] : [];
+  const main = buildInvoiceDetailsRows(filteredInvoices, filteredCreditNotes, customers || [], range, moreFilters);
+  const compareRange = compareWith && compareWith !== "none" ? shiftDateRange(range, compareWith, compareCount) : null;
+  const comparison = compareRange ? buildInvoiceDetailsRows(filteredInvoices, filteredCreditNotes, customers || [], compareRange, moreFilters) : null;
+
+  return res.json({
+    success: true,
+    data: {
+      rows: main.rows,
+      currency: main.currency,
+      totals: main.totals,
+      comparison,
+      appliedFilters: {
+        fromDate: range.start.toISOString(),
+        toDate: range.end.toISOString(),
+        compareWith,
+        compareCount,
+        entities,
+        moreFilters,
+      },
+    },
+  });
+};

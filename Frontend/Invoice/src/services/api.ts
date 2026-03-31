@@ -2241,6 +2241,27 @@ export const reportsAPI = {
     }
     return res as any;
   },
+  getARAgingSummary: async (params?: Record<string, any>) => {
+    const res = await request({ path: "/reports/ar-aging-summary", params });
+    if (!res?.success) {
+      throw new Error(res?.message || "Failed to fetch AR aging summary report");
+    }
+    return res as any;
+  },
+  getARAgingDetails: async (params?: Record<string, any>) => {
+    const res = await request({ path: "/reports/ar-aging-details", params });
+    if (!res?.success) {
+      throw new Error(res?.message || "Failed to fetch AR aging details report");
+    }
+    return res as any;
+  },
+  getInvoiceDetails: async (params?: Record<string, any>) => {
+    const res = await request({ path: "/reports/invoice-details", params });
+    if (!res?.success) {
+      throw new Error(res?.message || "Failed to fetch invoice details report");
+    }
+    return res as any;
+  },
 };
 
 export const locationsAPI = {
