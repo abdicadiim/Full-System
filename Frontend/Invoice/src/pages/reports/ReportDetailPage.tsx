@@ -30,6 +30,13 @@ type DateRangeValue = {
   end: Date;
 };
 
+type EntityKey = "invoice" | "credit-note" | "sales-receipt";
+
+type EntityOption = {
+  key: EntityKey;
+  label: string;
+};
+
 const DATE_RANGE_OPTIONS: DateRangeOption[] = [
   { key: "today", label: "Today" },
   { key: "this-week", label: "This Week" },
@@ -42,6 +49,12 @@ const DATE_RANGE_OPTIONS: DateRangeOption[] = [
   { key: "previous-quarter", label: "Previous Quarter" },
   { key: "previous-year", label: "Previous Year" },
   { key: "custom", label: "Custom" },
+];
+
+const ENTITY_OPTIONS: EntityOption[] = [
+  { key: "invoice", label: "Invoice" },
+  { key: "credit-note", label: "Credit Note" },
+  { key: "sales-receipt", label: "Sales Receipt" },
 ];
 
 const getStartOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -340,10 +353,15 @@ function SalesByCustomerReportView({
   onRunReport: () => void;
 }) {
   const dateRangeRef = useRef<HTMLDivElement | null>(null);
+  const entityRef = useRef<HTMLDivElement | null>(null);
   const [dateRangeKey, setDateRangeKey] = useState<DateRangeKey>("this-week");
   const [isDateRangeOpen, setIsDateRangeOpen] = useState(false);
+  const [entityKey, setEntityKey] = useState<EntityKey | null>(null);
+  const [isEntityOpen, setIsEntityOpen] = useState(false);
+  const [entitySearch, setEntitySearch] = useState("");
   const selectedDateRange = getDateRangeValue(dateRangeKey);
   const dateRangeLabel = DATE_RANGE_OPTIONS.find((option) => option.key === dateRangeKey)?.label ?? "Today";
+  const entityLabel = entityKey ? ENTITY_OPTIONS.find((option) => option.key === entityKey)?.label ?? "None" : "None";
   const totalInvoiceCount = SALES_BY_CUSTOMER_ROWS.reduce((sum, row) => sum + row.invoiceCount, 0);
   const totalSales = SALES_BY_CUSTOMER_ROWS.reduce((sum, row) => sum + row.sales, 0);
   const totalSalesWithTax = SALES_BY_CUSTOMER_ROWS.reduce((sum, row) => sum + row.salesWithTax, 0);
@@ -372,6 +390,36 @@ function SalesByCustomerReportView({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isDateRangeOpen]);
+
+  useEffect(() => {
+    if (!isEntityOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!entityRef.current?.contains(target)) {
+        setIsEntityOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsEntityOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isEntityOpen]);
+
+  const filteredEntityOptions = useMemo(() => {
+    const query = entitySearch.trim().toLowerCase();
+    return ENTITY_OPTIONS.filter((option) => option.label.toLowerCase().includes(query));
+  }, [entitySearch]);
 
   return (
     <div className="space-y-4">
@@ -458,9 +506,64 @@ function SalesByCustomerReportView({
             </div>
           ) : null}
         </div>
-        <button type="button" className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-[#f8fafc] px-3 text-sm text-[#334155] hover:bg-white">
-          Entities : <span className="font-medium">Invoice</span> <ChevronDown size={14} />
-        </button>
+        <div ref={entityRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setIsEntityOpen((prev) => !prev)}
+            className={`inline-flex h-8 items-center gap-1 rounded border px-3 text-sm text-[#334155] hover:bg-white ${
+              isEntityOpen ? "border-[#7aa7ff] bg-white" : "border-[#cfd6e4] bg-[#f8fafc]"
+            }`}
+            aria-haspopup="menu"
+            aria-expanded={isEntityOpen}
+          >
+            Entities : <span className="font-medium">{entityLabel}</span> <ChevronDown size={14} />
+          </button>
+
+          {isEntityOpen ? (
+            <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-[168px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+              <div className="border-b border-[#eef2f7] p-2">
+                <div className="relative">
+                  <input
+                    value={entitySearch}
+                    onChange={(event) => setEntitySearch(event.target.value)}
+                    placeholder="Search"
+                    className="h-9 w-full rounded-md border border-[#7aa7ff] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                  />
+                  <CalendarDays size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                </div>
+              </div>
+
+              <div className="max-h-[220px] overflow-y-auto py-1">
+                {filteredEntityOptions.length > 0 ? (
+                  filteredEntityOptions.map((option) => {
+                    const isSelected = option.key === entityKey;
+                    return (
+                      <button
+                        key={option.key}
+                        type="button"
+                        onClick={() => {
+                          setEntityKey(option.key);
+                          setEntitySearch("");
+                          setIsEntityOpen(false);
+                        }}
+                        className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm ${
+                          isSelected ? "font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"
+                        }`}
+                      >
+                        <span className="inline-flex h-4 w-4 items-center justify-center rounded border border-[#c7d0de] bg-white">
+                          {isSelected ? <Check size={12} className="text-[#0f172a]" /> : null}
+                        </span>
+                        <span>{option.label}</span>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div className="px-4 py-3 text-sm text-[#64748b]">No results.</div>
+                )}
+              </div>
+            </div>
+          ) : null}
+        </div>
         <button type="button" className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]">
           <Plus size={14} className="text-[#2563eb]" /> More Filters
         </button>
