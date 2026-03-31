@@ -700,10 +700,14 @@ function SalesByCustomerReportView({
   const [customizeColumnsSearch, setCustomizeColumnsSearch] = useState("");
   const customizeCompareRef = useRef<HTMLDivElement | null>(null);
   const customizeCompareCountRef = useRef<HTMLDivElement | null>(null);
+  const customizeEntityRef = useRef<HTMLDivElement | null>(null);
   const [isCustomizeCompareOpen, setIsCustomizeCompareOpen] = useState(false);
   const [isCustomizeCompareCountOpen, setIsCustomizeCompareCountOpen] = useState(false);
+  const [isCustomizeEntityOpen, setIsCustomizeEntityOpen] = useState(false);
   const [customizeCompareSearch, setCustomizeCompareSearch] = useState("");
   const [customizeCompareCountSearch, setCustomizeCompareCountSearch] = useState("");
+  const [customizeEntitySearch, setCustomizeEntitySearch] = useState("");
+  const [customizeEntityDraftKeys, setCustomizeEntityDraftKeys] = useState<EntityKey[]>(ENTITY_OPTIONS.map((option) => option.key));
   const [selectedReportColumns, setSelectedReportColumns] = useState<ReportColumnKey[]>([
     "name",
     "invoice-count",
@@ -725,8 +729,12 @@ function SalesByCustomerReportView({
   ]);
   const selectedDateRange = dateRangeKey === "custom" ? customDateRange : getDateRangeValue(dateRangeKey);
   const dateRangeLabel = DATE_RANGE_OPTIONS.find((option) => option.key === dateRangeKey)?.label ?? "Today";
-  const selectedEntityLabels = ENTITY_OPTIONS.filter((option) => entityKeys.includes(option.key)).map((option) => option.label);
-  const entityLabel = selectedEntityLabels.length > 0 ? selectedEntityLabels.join(", ") : "None";
+  const getEntitySelectionLabel = (keys: EntityKey[]) => {
+    if (keys.length === 0) return "None";
+    if (keys.length === ENTITY_OPTIONS.length) return "All";
+    return ENTITY_OPTIONS.filter((option) => keys.includes(option.key)).map((option) => option.label).join(", ");
+  };
+  const entityLabel = getEntitySelectionLabel(entityKeys);
   useEffect(() => {
     if (!isDateRangeOpen) return;
 
@@ -974,6 +982,31 @@ function SalesByCustomerReportView({
   }, [isCustomizeCompareCountOpen]);
 
   useEffect(() => {
+    if (!isCustomizeEntityOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!customizeEntityRef.current?.contains(target)) {
+        setIsCustomizeEntityOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsCustomizeEntityOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isCustomizeEntityOpen]);
+
+  useEffect(() => {
     if (!isMoreFiltersOpen) return;
 
     const handlePointerDown = (event: MouseEvent) => {
@@ -1107,10 +1140,13 @@ function SalesByCustomerReportView({
     setCompareWithDraftKey(compareWithKey === "none" ? "previous-years" : compareWithKey);
     setCompareWithDraftCount(compareWithKey === "none" ? 1 : compareWithCount);
     setCompareWithDraftArrangeLatest(compareWithArrangeLatest);
+    setCustomizeEntityDraftKeys(entityKeys.length > 0 ? entityKeys : ENTITY_OPTIONS.map((option) => option.key));
+    setCustomizeEntitySearch("");
     setCustomizeCompareSearch("");
     setCustomizeCompareCountSearch("");
     setIsCustomizeCompareOpen(false);
     setIsCustomizeCompareCountOpen(false);
+    setIsCustomizeEntityOpen(false);
     setIsCompareWithOpen(false);
     setIsCompareWithSelectOpen(false);
     setIsCompareWithCountOpen(false);
@@ -1129,6 +1165,15 @@ function SalesByCustomerReportView({
       ? customizeDraftSelectedColumns
       : ["name", ...customizeDraftSelectedColumns];
     setSelectedReportColumns(nextColumns);
+    setEntityKeys(customizeEntityDraftKeys);
+    setCompareWithKey(compareWithDraftKey);
+    setCompareWithCount(compareWithDraftCount);
+    setCompareWithArrangeLatest(compareWithDraftArrangeLatest);
+    if (compareWithDraftKey === "none") {
+      setIsCompareWithOpen(false);
+      setIsCompareWithSelectOpen(false);
+      setIsCompareWithCountOpen(false);
+    }
     setIsCustomizeColumnsOpen(false);
   };
 
@@ -1137,6 +1182,9 @@ function SalesByCustomerReportView({
     setCustomizeColumnsSearch("");
     setCustomizeActiveAvailableColumn("");
     setCustomizeReportTab("general");
+    setCustomizeEntityDraftKeys(entityKeys.length > 0 ? entityKeys : ENTITY_OPTIONS.map((option) => option.key));
+    setCustomizeEntitySearch("");
+    setIsCustomizeEntityOpen(false);
     setCustomizeCompareSearch("");
     setCustomizeCompareCountSearch("");
     setIsCustomizeCompareOpen(false);
@@ -2439,12 +2487,75 @@ function SalesByCustomerReportView({
                           </label>
                         ) : null}
 
-                        <div>
+                        <div ref={customizeEntityRef} className="relative">
                           <div className="text-sm font-medium text-[#111827]">Entities :</div>
-                          <div className="mt-2 inline-flex h-9 w-full max-w-[260px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155]">
-                            <span className="truncate">{entityLabel === "None" ? "All" : entityLabel}</span>
-                            <ChevronDown size={14} className="text-[#64748b]" />
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsCustomizeCompareOpen(false);
+                              setIsCustomizeCompareCountOpen(false);
+                              setIsCustomizeEntityOpen((prev) => !prev);
+                            }}
+                            className="mt-2 inline-flex h-9 w-full max-w-[260px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                            aria-haspopup="menu"
+                            aria-expanded={isCustomizeEntityOpen}
+                          >
+                            <span className="truncate">{getEntitySelectionLabel(customizeEntityDraftKeys)}</span>
+                            <ChevronDown
+                              size={14}
+                              className={`transition-transform duration-150 ${
+                                isCustomizeEntityOpen ? "rotate-180 text-[#1b6f7b]" : "text-[#64748b]"
+                              }`}
+                            />
+                          </button>
+
+                          {isCustomizeEntityOpen ? (
+                            <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-[260px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                              <div className="border-b border-[#eef2f7] p-2">
+                                <div className="relative">
+                                  <input
+                                    value={customizeEntitySearch}
+                                    onChange={(event) => setCustomizeEntitySearch(event.target.value)}
+                                    placeholder="Search"
+                                    className="h-9 w-full rounded-md border border-[#1b6f7b] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                                  />
+                                  <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                                </div>
+                              </div>
+
+                              <div className="max-h-[220px] overflow-y-auto py-1">
+                                {ENTITY_OPTIONS.filter((option) => option.label.toLowerCase().includes(customizeEntitySearch.trim().toLowerCase())).length >
+                                0 ? (
+                                  ENTITY_OPTIONS.filter((option) => option.label.toLowerCase().includes(customizeEntitySearch.trim().toLowerCase())).map((option) => {
+                                    const isSelected = customizeEntityDraftKeys.includes(option.key);
+                                    return (
+                                      <button
+                                        key={option.key}
+                                        type="button"
+                                        onClick={() => {
+                                          setCustomizeEntityDraftKeys((prev) =>
+                                            prev.includes(option.key)
+                                              ? prev.filter((key) => key !== option.key)
+                                              : [...prev, option.key]
+                                          );
+                                        }}
+                                        className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm ${
+                                          isSelected ? "bg-[#f1f5f9] font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"
+                                        }`}
+                                      >
+                                        <span className="inline-flex h-4 w-4 items-center justify-center rounded border border-[#c7d0de] bg-white">
+                                          {isSelected ? <Check size={12} className="text-[#0f172a]" /> : null}
+                                        </span>
+                                        <span>{option.label}</span>
+                                      </button>
+                                    );
+                                  })
+                                ) : (
+                                  <div className="px-4 py-3 text-sm text-[#64748b]">No results.</div>
+                                )}
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
                       </section>
 
