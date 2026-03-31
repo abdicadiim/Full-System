@@ -132,7 +132,7 @@ function ReportsDrawer({
   const isSearching = search.trim().length > 0;
 
   return (
-    <div ref={drawerRef} className="fixed left-0 top-0 z-50 h-screen w-[260px] overflow-hidden border-r border-[#e5e7eb] bg-white shadow-[8px_0_20px_rgba(15,23,42,0.08)]">
+    <div ref={drawerRef} className="absolute left-0 top-0 z-30 h-full w-[260px] overflow-hidden border-r border-[#e5e7eb] bg-white shadow-[8px_0_20px_rgba(15,23,42,0.08)]">
       <div className="flex h-full flex-col">
         <div className="flex items-center justify-between border-b border-[#eef2f7] px-4 py-3">
           <div className="text-[18px] font-semibold text-[#0f172a]">Reports</div>
@@ -378,7 +378,7 @@ export default function ReportDetailPage() {
 
   if (report.id === "sales-by-customer") {
     return (
-      <>
+      <div className="relative min-h-[calc(100vh-64px)]">
         <ReportsDrawer
           open={isReportsDrawerOpen}
           currentCategoryId={category.id}
@@ -386,14 +386,16 @@ export default function ReportDetailPage() {
           triggerRef={reportsMenuButtonRef}
           onClose={() => setIsReportsDrawerOpen(false)}
         />
-        <SalesByCustomerReportView
-          categoryName={category.name}
-          reportName={report.name}
-          menuButtonRef={reportsMenuButtonRef}
-          onMenuClick={() => setIsReportsDrawerOpen((prev) => !prev)}
-          onRunReport={() => toast.success(`Report refreshed: ${report.name}`)}
-        />
-      </>
+        <div className={`transition-[padding-left] duration-200 ${isReportsDrawerOpen ? "lg:pl-[260px]" : ""}`}>
+          <SalesByCustomerReportView
+            categoryName={category.name}
+            reportName={report.name}
+            menuButtonRef={reportsMenuButtonRef}
+            onMenuClick={() => setIsReportsDrawerOpen((prev) => !prev)}
+            onRunReport={() => toast.success(`Report refreshed: ${report.name}`)}
+          />
+        </div>
+      </div>
     );
   }
 
