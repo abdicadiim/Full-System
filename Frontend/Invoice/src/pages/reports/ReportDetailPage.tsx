@@ -698,6 +698,12 @@ function SalesByCustomerReportView({
   const [isCustomizeColumnsOpen, setIsCustomizeColumnsOpen] = useState(false);
   const [customizeReportTab, setCustomizeReportTab] = useState<"general" | "columns">("general");
   const [customizeColumnsSearch, setCustomizeColumnsSearch] = useState("");
+  const customizeCompareRef = useRef<HTMLDivElement | null>(null);
+  const customizeCompareCountRef = useRef<HTMLDivElement | null>(null);
+  const [isCustomizeCompareOpen, setIsCustomizeCompareOpen] = useState(false);
+  const [isCustomizeCompareCountOpen, setIsCustomizeCompareCountOpen] = useState(false);
+  const [customizeCompareSearch, setCustomizeCompareSearch] = useState("");
+  const [customizeCompareCountSearch, setCustomizeCompareCountSearch] = useState("");
   const [selectedReportColumns, setSelectedReportColumns] = useState<ReportColumnKey[]>([
     "name",
     "invoice-count",
@@ -918,6 +924,56 @@ function SalesByCustomerReportView({
   }, [isCustomizeColumnsOpen]);
 
   useEffect(() => {
+    if (!isCustomizeCompareOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!customizeCompareRef.current?.contains(target)) {
+        setIsCustomizeCompareOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsCustomizeCompareOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isCustomizeCompareOpen]);
+
+  useEffect(() => {
+    if (!isCustomizeCompareCountOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!customizeCompareCountRef.current?.contains(target)) {
+        setIsCustomizeCompareCountOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsCustomizeCompareCountOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isCustomizeCompareCountOpen]);
+
+  useEffect(() => {
     if (!isMoreFiltersOpen) return;
 
     const handlePointerDown = (event: MouseEvent) => {
@@ -1029,6 +1085,16 @@ function SalesByCustomerReportView({
     return COMPARE_WITH_NUMBER_OPTIONS.filter((option) => option.includes(query));
   }, [compareWithCountSearch]);
 
+  const filteredCustomizeCompareOptions = useMemo(() => {
+    const query = customizeCompareSearch.trim().toLowerCase();
+    return COMPARE_WITH_OPTIONS.filter((option) => option.key !== "none" && option.label.toLowerCase().includes(query));
+  }, [customizeCompareSearch]);
+
+  const filteredCustomizeCompareNumberOptions = useMemo(() => {
+    const query = customizeCompareCountSearch.trim().toLowerCase();
+    return COMPARE_WITH_NUMBER_OPTIONS.filter((option) => option.includes(query));
+  }, [customizeCompareCountSearch]);
+
   const handleExportAction = (label: string) => {
     setIsExportOpen(false);
     toast.success(`Export option selected: ${label}`);
@@ -1038,6 +1104,13 @@ function SalesByCustomerReportView({
     setCustomizeDraftSelectedColumns(selectedReportColumns);
     setCustomizeColumnsSearch("");
     setCustomizeActiveAvailableColumn("");
+    setCompareWithDraftKey(compareWithKey === "none" ? "previous-years" : compareWithKey);
+    setCompareWithDraftCount(compareWithKey === "none" ? 1 : compareWithCount);
+    setCompareWithDraftArrangeLatest(compareWithArrangeLatest);
+    setCustomizeCompareSearch("");
+    setCustomizeCompareCountSearch("");
+    setIsCustomizeCompareOpen(false);
+    setIsCustomizeCompareCountOpen(false);
     setIsCompareWithOpen(false);
     setIsCompareWithSelectOpen(false);
     setIsCompareWithCountOpen(false);
@@ -1064,6 +1137,10 @@ function SalesByCustomerReportView({
     setCustomizeColumnsSearch("");
     setCustomizeActiveAvailableColumn("");
     setCustomizeReportTab("general");
+    setCustomizeCompareSearch("");
+    setCustomizeCompareCountSearch("");
+    setIsCustomizeCompareOpen(false);
+    setIsCustomizeCompareCountOpen(false);
     setIsCompareWithOpen(false);
     setIsCompareWithSelectOpen(false);
     setIsCompareWithCountOpen(false);
@@ -2189,18 +2266,15 @@ function SalesByCustomerReportView({
                           <div>
                             <div className="text-sm font-medium text-[#111827]">Compare With</div>
                             <div className="mt-2 inline-flex h-9 w-full max-w-[260px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155]">
-                              <span className="truncate">{getCompareWithLabel(compareWithKey)}</span>
+                              <span className="truncate">{getCompareWithLabel(compareWithDraftKey)}</span>
                               <span className="ml-3 flex items-center gap-2">
-                                {compareWithKey !== "none" ? (
+                                {compareWithDraftKey !== "none" ? (
                                   <button
                                     type="button"
                                     onClick={(event) => {
                                       event.stopPropagation();
-                                      setCompareWithKey("none");
                                       setCompareWithDraftKey("none");
-                                      setCompareWithCount(1);
                                       setCompareWithDraftCount(1);
-                                      setCompareWithArrangeLatest(false);
                                       setCompareWithDraftArrangeLatest(false);
                                     }}
                                     className="inline-flex h-4 w-4 items-center justify-center text-[#ef4444]"
@@ -2215,13 +2289,13 @@ function SalesByCustomerReportView({
                           </div>
 
                           <div>
-                            {compareWithKey !== "none" ? (
+                            {compareWithDraftKey !== "none" ? (
                               <>
                                 <div className="text-sm font-medium text-[#111827]">
-                                  {compareWithKey === "previous-years" ? "Number of Year(s)" : "Number of Period(s)"}
+                                  {compareWithDraftKey === "previous-years" ? "Number of Year(s)" : "Number of Period(s)"}
                                 </div>
                                 <div className="mt-2 inline-flex h-9 w-full max-w-[260px] items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155]">
-                                  <span>{compareWithCount}</span>
+                                  <span>{compareWithDraftCount}</span>
                                   <ChevronDown size={14} className="text-[#64748b]" />
                                 </div>
                               </>
@@ -2229,12 +2303,12 @@ function SalesByCustomerReportView({
                           </div>
                         </div>
 
-                        {compareWithKey !== "none" ? (
+                        {compareWithDraftKey !== "none" ? (
                           <label className="flex items-start gap-2 text-sm text-[#334155]">
                             <input
                               type="checkbox"
-                              checked={compareWithArrangeLatest}
-                              onChange={(event) => setCompareWithArrangeLatest(event.target.checked)}
+                              checked={compareWithDraftArrangeLatest}
+                              onChange={(event) => setCompareWithDraftArrangeLatest(event.target.checked)}
                               className="mt-1 h-4 w-4 rounded border-[#cfd6e4] text-[#1b6f7b] focus:ring-[#1b6f7b]"
                             />
                             <span>Arrange period/year from latest to oldest</span>
