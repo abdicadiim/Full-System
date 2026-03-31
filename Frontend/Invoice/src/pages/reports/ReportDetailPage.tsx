@@ -1795,8 +1795,8 @@ function SalesByCustomerReportView({
                         : getMoreFilterValuePlaceholder(row.field);
 
                   return (
-                    <div key={row.id} className="grid grid-cols-[42px_1fr_1fr_1.4fr_auto_auto] items-start gap-3">
-                      <div className="flex h-10 items-center justify-center rounded border border-[#d7dce7] bg-[#f8fafc] text-sm text-[#475569]">
+                    <div key={row.id} className="grid grid-cols-[34px_minmax(0,240px)_minmax(0,170px)_minmax(0,1fr)_auto_auto] items-center gap-3">
+                      <div className="flex h-8 items-center justify-center rounded border border-[#d7dce7] bg-white text-xs text-[#475569]">
                         {index + 1}
                       </div>
 
@@ -1804,7 +1804,7 @@ function SalesByCustomerReportView({
                         <button
                           type="button"
                           onClick={() => openMoreFilterDropdown(row.id, "field")}
-                          className={`relative flex h-10 w-full items-center overflow-hidden rounded border px-3 pr-10 text-sm text-[#334155] outline-none ${
+                          className={`relative flex h-8 w-full items-center overflow-hidden rounded border px-3 pr-10 text-sm text-[#334155] outline-none ${
                             fieldMenuOpen ? "border-[#1b6f7b] bg-white" : "border-[#cfd6e4] bg-white hover:bg-[#f8fafc]"
                           }`}
                           aria-haspopup="menu"
@@ -1906,7 +1906,7 @@ function SalesByCustomerReportView({
                             openMoreFilterDropdown(row.id, "comparator");
                           }}
                           disabled={!row.field}
-                          className={`relative flex h-10 w-full items-center overflow-hidden rounded border px-3 pr-9 text-sm text-[#334155] outline-none ${
+                          className={`relative flex h-8 w-full items-center overflow-hidden rounded border px-3 pr-9 text-sm text-[#334155] outline-none ${
                             row.field
                                 ? comparatorMenuOpen
                                   ? "border-[#1b6f7b] bg-white"
@@ -1989,7 +1989,7 @@ function SalesByCustomerReportView({
                               );
                             }}
                             placeholder="Enter a value"
-                            className="h-10 w-full rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#1b6f7b]"
+                            className="h-8 w-full rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#1b6f7b]"
                           />
                         ) : (
                           <>
@@ -2000,7 +2000,7 @@ function SalesByCustomerReportView({
                                 openMoreFilterDropdown(row.id, "value");
                               }}
                               disabled={!row.field}
-                              className={`relative flex h-10 w-full items-center overflow-hidden rounded border px-3 pr-9 text-sm outline-none ${
+                              className={`relative flex h-8 w-full items-center overflow-hidden rounded border px-3 pr-9 text-sm outline-none ${
                                 row.field
                                   ? valueMenuOpen
                                     ? "border-[#1b6f7b] bg-white text-[#334155]"
