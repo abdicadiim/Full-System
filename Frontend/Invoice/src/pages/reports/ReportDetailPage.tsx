@@ -751,6 +751,7 @@ function SalesByCustomerReportView({
     return ENTITY_OPTIONS.filter((option) => keys.includes(option.key)).map((option) => option.label).join(", ");
   };
   const entityLabel = getEntitySelectionLabel(entityKeys);
+  const customizeHasMoreFilters = customizeMoreFilterRows.some((row) => row.field || row.comparator || row.value.trim());
 
   const handleCustomizeCustomStartDateClick = (date: Date) => {
     setCustomizeCustomDateRangeDraft((prev) => ({
@@ -772,6 +773,18 @@ function SalesByCustomerReportView({
 
   const setCustomizeRightCalendarMonth = (monthIndex: number, year: number) => {
     setCustomizeCustomDateRangeMonth(addMonths(new Date(year, monthIndex, 1), -1));
+  };
+
+  const openCustomizeMoreFilterDropdown = (rowId: string, kind: "field" | "comparator" | "value") => {
+    setCustomizeMoreFilterDropdown((prev) => (prev?.rowId === rowId && prev.kind === kind ? null : { rowId, kind, search: "" }));
+  };
+
+  const closeCustomizeMoreFilterDropdown = () => setCustomizeMoreFilterDropdown(null);
+
+  const addCustomizeMoreFilterRow = () => {
+    const newRowId = `customize-more-filter-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    setCustomizeMoreFilterRows((prev) => [...prev, { id: newRowId, field: "", comparator: "", value: "" }]);
+    openCustomizeMoreFilterDropdown(newRowId, "field");
   };
   useEffect(() => {
     if (!isDateRangeOpen) return;
@@ -1072,6 +1085,31 @@ function SalesByCustomerReportView({
   }, [isCustomizeEntityOpen]);
 
   useEffect(() => {
+    if (!customizeMoreFilterDropdown) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!customizeMoreFiltersRef.current?.contains(target)) {
+        closeCustomizeMoreFilterDropdown();
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeCustomizeMoreFilterDropdown();
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [customizeMoreFilterDropdown]);
+
+  useEffect(() => {
     if (!isMoreFiltersOpen) return;
 
     const handlePointerDown = (event: MouseEvent) => {
@@ -1213,6 +1251,10 @@ function SalesByCustomerReportView({
     setCompareWithDraftArrangeLatest(compareWithArrangeLatest);
     setCustomizeEntityDraftKeys(entityKeys.length > 0 ? entityKeys : ENTITY_OPTIONS.map((option) => option.key));
     setCustomizeEntitySearch("");
+    setCustomizeMoreFilterRows(
+      moreFilterRows.filter((row) => row.field || row.comparator || row.value.trim()).map((row) => ({ ...row }))
+    );
+    setCustomizeMoreFilterDropdown(null);
     setCustomizeCompareSearch("");
     setCustomizeCompareCountSearch("");
     setIsCustomizeCompareOpen(false);
@@ -1241,6 +1283,11 @@ function SalesByCustomerReportView({
     }
     setDateRangeKey(customizeDateRangeDraftKey);
     setEntityKeys(customizeEntityDraftKeys);
+    setMoreFilterRows(
+      customizeMoreFilterRows.length > 0
+        ? customizeMoreFilterRows
+        : [{ id: "more-filter-1", field: "", comparator: "", value: "" }]
+    );
     setCompareWithKey(compareWithDraftKey);
     setCompareWithCount(compareWithDraftCount);
     setCompareWithArrangeLatest(compareWithDraftArrangeLatest);
@@ -1265,6 +1312,8 @@ function SalesByCustomerReportView({
     setCustomizeEntityDraftKeys(entityKeys.length > 0 ? entityKeys : ENTITY_OPTIONS.map((option) => option.key));
     setCustomizeEntitySearch("");
     setIsCustomizeEntityOpen(false);
+    setCustomizeMoreFilterRows(moreFilterRows.filter((row) => row.field || row.comparator || row.value.trim()).map((row) => ({ ...row })));
+    setCustomizeMoreFilterDropdown(null);
     setCustomizeCompareSearch("");
     setCustomizeCompareCountSearch("");
     setIsCustomizeCompareOpen(false);
