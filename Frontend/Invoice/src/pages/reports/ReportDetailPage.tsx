@@ -1349,7 +1349,7 @@ function SalesByCustomerReportView({
                                 type="button"
                                 onClick={() => setCompareWithDraftKey(option.key)}
                                 className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
-                                  isSelected ? "bg-[#eef2f7] font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"
+                                  isSelected ? "font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"
                                 }`}
                               >
                                 <span>{option.label}</span>
