@@ -305,18 +305,10 @@ const buildPreview = (
     const paymentDate = parseReportDate(payment.paymentDate || payment.date);
     if (!paymentDate || paymentDate < bounds.start || paymentDate > bounds.end) return;
 
-    const allocations =
-      Array.isArray(payment.allocations) && payment.allocations.length > 0
-        ? payment.allocations
-        : payment.invoiceId || payment.invoiceNumber
-          ? [
-              {
-                invoiceId: payment.invoiceId || "",
-                invoiceNumber: payment.invoiceNumber || "",
-                amount: payment.amountReceived ?? payment.amount ?? 0,
-              },
-            ]
-          : [];
+    stats.paymentsInRange += 1;
+
+    const allocations = getPaymentAllocations(payment as PaymentWithInvoicePayments);
+    stats.allocationsExpanded += allocations.length;
 
     allocations.forEach((allocation: any) => {
       const invoice = resolveInvoice(allocation, payment);
@@ -328,7 +320,10 @@ const buildPreview = (
           invoice?.date ||
           invoice?.dueDate,
       );
-      if (!invoiceDate) return;
+      if (!invoiceDate) {
+        stats.skippedMissingInvoiceDate += 1;
+        return;
+      }
 
       const amount = Number(
         allocation?.amount ??
@@ -338,7 +333,10 @@ const buildPreview = (
           payment.amount ??
           0,
       );
-      if (!Number.isFinite(amount) || amount <= 0) return;
+      if (!Number.isFinite(amount) || amount <= 0) {
+        stats.skippedMissingAmount += 1;
+        return;
+      }
 
       const customerName =
         String(
@@ -352,6 +350,7 @@ const buildPreview = (
 
       const days = Math.max(0, Math.round((paymentDate.getTime() - invoiceDate.getTime()) / (1000 * 60 * 60 * 24)));
       const bucket = getTimeToGetPaidBucketLabel(days);
+      stats.invoiceMatches += 1;
       const current = grouped.get(customerName) || {
         bucket0to15: 0,
         bucket16to30: 0,
@@ -379,6 +378,18 @@ const buildPreview = (
 
   const grandTotal = entries.reduce((sum, [, item]) => sum + item.total, 0);
   if (grandTotal <= 0) return null;
+
+  if (debugEnabled) {
+    console.debug("[reports][time-to-get-paid] preview built", {
+      stats,
+      groupedCustomers: entries.length,
+      grandTotal,
+      bounds: {
+        start: bounds.start.toISOString(),
+        end: bounds.end.toISOString(),
+      },
+    });
+  }
 
   const total0to15 = entries.reduce((sum, [, item]) => sum + item.bucket0to15, 0);
   const total16to30 = entries.reduce((sum, [, item]) => sum + item.bucket16to30, 0);
@@ -502,7 +513,16 @@ export default function TimeToGetPaidReportPage() {
             },
           });
         }
-        setPreview(buildPreview(payments, invoices, selectedRangeBounds, selectedDateRange));
+        const nextPreview = buildPreview(payments, invoices, selectedRangeBounds, selectedDateRange, debugEnabled);
+        if (debugEnabled) {
+          console.debug("[reports][time-to-get-paid] load result", {
+            hasPreview: Boolean(nextPreview),
+            rows: nextPreview?.rows.length || 0,
+            columns: nextPreview?.columns.length || 0,
+            range: selectedDateRange,
+          });
+        }
+        setPreview(nextPreview);
       } catch (error) {
         if (cancelled) return;
         setPreview(null);
