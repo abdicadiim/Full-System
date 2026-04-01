@@ -27,6 +27,7 @@ type DateRangeKey =
   | "previous-quarter"
   | "previous-year"
   | "custom";
+type CompareWithKey = "none" | "previous-years" | "previous-periods";
 type ReportPayload = { rows: ReportRow[]; totals?: Record<string, any>; currency?: string };
 
 type ReportConfig = {
@@ -57,6 +58,16 @@ const DATE_RANGE_OPTIONS = [
   { key: "previous-year", label: "Previous Year" },
   { key: "custom", label: "Custom" },
 ] as const;
+
+const COMPARE_WITH_OPTIONS: Array<{ key: CompareWithKey; label: string }> = [
+  { key: "none", label: "None" },
+  { key: "previous-years", label: "Previous Year(s)" },
+  { key: "previous-periods", label: "Previous Period(s)" },
+];
+
+const COMPARE_WITH_NUMBER_OPTIONS = Array.from({ length: 35 }, (_, index) => String(index + 1));
+
+const getCompareWithLabel = (key: CompareWithKey) => COMPARE_WITH_OPTIONS.find((option) => option.key === key)?.label ?? "None";
 
 const COMPARATORS = [
   { key: "is-empty", label: "is empty" },
@@ -569,8 +580,18 @@ function ReceivablesReportShell({ reportId }: { reportId: ReceivablesReportId })
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
+  const [compareWithOpen, setCompareWithOpen] = useState(false);
+  const [compareWithCountOpen, setCompareWithCountOpen] = useState(false);
+  const [compareWithKey, setCompareWithKey] = useState<CompareWithKey>("none");
+  const [compareWithDraftKey, setCompareWithDraftKey] = useState<CompareWithKey>("none");
+  const [compareWithCount, setCompareWithCount] = useState(1);
+  const [compareWithDraftCount, setCompareWithDraftCount] = useState(1);
+  const [compareWithArrangeLatest, setCompareWithArrangeLatest] = useState(false);
+  const [compareWithDraftArrangeLatest, setCompareWithDraftArrangeLatest] = useState(false);
   const [isReportsDrawerOpen, setIsReportsDrawerOpen] = useState(false);
   const reportsMenuButtonRef = React.useRef<HTMLButtonElement | null>(null);
+  const compareWithRef = React.useRef<HTMLDivElement | null>(null);
+  const compareWithCountRef = React.useRef<HTMLDivElement | null>(null);
 
   const range = useMemo(() => {
     return rangeKey === "custom" ? { start: parseInputDate(customStart), end: parseInputDate(customEnd) } : getRange(rangeKey);
@@ -594,8 +615,8 @@ function ReceivablesReportShell({ reportId }: { reportId: ReceivablesReportId })
         const params: Record<string, any> = {
           fromDate: range.start.toISOString(),
           toDate: range.end.toISOString(),
-          compareWith: "none",
-          compareCount: 1,
+          compareWith: compareWithKey,
+          compareCount: String(compareWithCount),
           moreFilters: JSON.stringify(moreFilters.filter((row) => row.field && row.comparator)),
           groupBy,
           showBy,
@@ -634,7 +655,35 @@ function ReceivablesReportShell({ reportId }: { reportId: ReceivablesReportId })
     refreshTick,
     reportBy,
     showBy,
+    compareWithCount,
+    compareWithKey,
   ]);
+
+  useEffect(() => {
+    if (!compareWithOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!compareWithRef.current?.contains(target) && !compareWithCountRef.current?.contains(target)) {
+        setCompareWithOpen(false);
+        setCompareWithCountOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setCompareWithOpen(false);
+        setCompareWithCountOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [compareWithOpen]);
 
   const formatCell = (column: ColumnOption, value: any) => {
     if (value === null || value === undefined || value === "") return "—";
@@ -650,11 +699,37 @@ function ReceivablesReportShell({ reportId }: { reportId: ReceivablesReportId })
   const openColumns = () => {
     setColumnDraft(selectedColumns);
     setColumnsOpen(true);
+    setCompareWithOpen(false);
+    setCompareWithCountOpen(false);
   };
   const applyColumns = () => {
     const next = columnDraft.filter((key) => columnLookup(reportId, key));
     setSelectedColumns(next.length ? next : config.defaultColumns);
     setColumnsOpen(false);
+  };
+
+  const openCompareWithDropdown = () => {
+    setCompareWithDraftKey(compareWithKey);
+    setCompareWithDraftCount(compareWithKey === "none" ? 1 : compareWithCount);
+    setCompareWithDraftArrangeLatest(compareWithArrangeLatest);
+    setCompareWithCountOpen(false);
+    setCompareWithOpen((prev) => !prev);
+  };
+
+  const applyCompareWith = () => {
+    setCompareWithKey(compareWithDraftKey);
+    setCompareWithCount(compareWithDraftKey === "none" ? 1 : compareWithDraftCount);
+    setCompareWithArrangeLatest(compareWithDraftArrangeLatest);
+    setCompareWithOpen(false);
+    setCompareWithCountOpen(false);
+  };
+
+  const cancelCompareWith = () => {
+    setCompareWithDraftKey(compareWithKey);
+    setCompareWithDraftCount(compareWithCount);
+    setCompareWithDraftArrangeLatest(compareWithArrangeLatest);
+    setCompareWithOpen(false);
+    setCompareWithCountOpen(false);
   };
 
   return (
@@ -861,6 +936,133 @@ function ReceivablesReportShell({ reportId }: { reportId: ReceivablesReportId })
               </label>
             );
           })}
+
+          <div ref={compareWithRef} className="relative">
+            <button
+              type="button"
+              onClick={openCompareWithDropdown}
+              className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
+              aria-haspopup="menu"
+              aria-expanded={compareWithOpen}
+            >
+              Compare With : <span className="font-medium text-[#0f172a]">{getCompareWithLabel(compareWithKey)}</span>
+              <ChevronDown size={14} className={`transition-transform duration-150 ${compareWithOpen ? "rotate-180 text-[#1f6f7a]" : "text-[#64748b]"}`} />
+            </button>
+
+            {compareWithOpen ? (
+              <div className="absolute right-0 top-[calc(100%+6px)] z-40 w-[300px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                <div className="border-b border-[#eef2f7] px-4 py-3 text-sm font-medium text-[#0f172a]">Compare With</div>
+                <div className="p-3">
+                  <div className="max-h-[180px] overflow-y-auto rounded-lg border border-[#d7dce7] bg-white">
+                    {COMPARE_WITH_OPTIONS.map((option) => {
+                      const isSelected = compareWithDraftKey === option.key;
+                      return (
+                        <button
+                          key={option.key}
+                          type="button"
+                          onClick={() => {
+                            setCompareWithDraftKey(option.key);
+                            if (option.key === "none") {
+                              setCompareWithDraftCount(1);
+                              setCompareWithDraftArrangeLatest(false);
+                              setCompareWithCountOpen(false);
+                            } else {
+                              setCompareWithDraftCount((current) => (current < 1 ? 1 : current));
+                              setCompareWithCountOpen(true);
+                            }
+                          }}
+                          className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
+                            isSelected ? "font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"
+                          }`}
+                        >
+                          <span>{option.label}</span>
+                          {isSelected ? <Check size={14} className="text-[#64748b]" /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {compareWithDraftKey !== "none" ? (
+                    <div className="mt-3">
+                      <div className="mb-2 text-sm text-[#334155]">
+                        {compareWithDraftKey === "previous-years" ? "Number of Year(s)" : "Number of Period(s)"}
+                      </div>
+                      <div ref={compareWithCountRef} className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setCompareWithCountOpen((prev) => !prev)}
+                          className="relative flex h-10 w-full items-center justify-between rounded border border-[#1f6f7a] bg-white px-3 pr-9 text-sm text-[#334155] outline-none hover:bg-[#f8fafc]"
+                          aria-haspopup="menu"
+                          aria-expanded={compareWithCountOpen}
+                        >
+                          <span className="min-w-0 truncate">{compareWithDraftCount}</span>
+                          <ChevronDown
+                            size={14}
+                            className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
+                              compareWithCountOpen ? "rotate-180 text-[#1f6f7a]" : "text-[#64748b]"
+                            }`}
+                          />
+                        </button>
+
+                        {compareWithCountOpen ? (
+                          <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-[168px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                            <div className="max-h-[220px] overflow-y-auto py-1">
+                              {COMPARE_WITH_NUMBER_OPTIONS.map((option) => {
+                                const isSelected = String(compareWithDraftCount) === option;
+                                return (
+                                  <button
+                                    key={option}
+                                    type="button"
+                                    onClick={() => {
+                                      setCompareWithDraftCount(Number(option));
+                                      setCompareWithCountOpen(false);
+                                    }}
+                                    className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
+                                      isSelected ? "font-medium text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"
+                                    }`}
+                                  >
+                                    <span>{option}</span>
+                                    {isSelected ? <Check size={14} className="text-[#64748b]" /> : null}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <label className="mt-3 flex items-start gap-2 text-sm text-[#334155]">
+                        <input
+                          type="checkbox"
+                          checked={compareWithDraftArrangeLatest}
+                          onChange={(event) => setCompareWithDraftArrangeLatest(event.target.checked)}
+                          className="mt-1 h-4 w-4 rounded border-[#cfd6e4] text-[#1f6f7a] focus:ring-[#1f6f7a]"
+                        />
+                        <span>Arrange period/year from latest to oldest</span>
+                      </label>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="flex items-center gap-2 border-t border-[#eef2f7] px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={applyCompareWith}
+                    className="inline-flex h-8 items-center rounded bg-[#1f6f7a] px-3 text-sm font-semibold text-white hover:bg-[#185a63]"
+                  >
+                    Apply
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelCompareWith}
+                    className="inline-flex h-8 items-center rounded border border-[#d4d9e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
 
           <button type="button" onClick={openColumns} className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]">
             <Columns3 size={14} />

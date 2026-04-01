@@ -1612,10 +1612,14 @@ export const getARAgingSummaryReport: express.RequestHandler = async (req, res) 
   if (!orgId) return;
 
   const range = getDateRangeFromQuery(req);
+  const compareWith = String(req.query.compareWith ?? req.query.compare_with ?? "none").trim();
+  const compareCount = Math.max(1, Number(req.query.compareCount ?? req.query.compare_count ?? 1) || 1);
   const moreFilters = parseMoreFilters(req.query.moreFilters ?? req.query.more_filters ?? req.query.filter_rows);
   const [customers, invoices] = await Promise.all([Customer.find({ organizationId: orgId }).lean(), Invoice.find({ organizationId: orgId }).lean()]);
   const asOf = range.end;
   const main = buildARAgingSummaryRows(invoices || [], customers || [], asOf, moreFilters);
+  const compareRange = compareWith && compareWith !== "none" ? shiftDateRange(range, compareWith, compareCount) : null;
+  const comparison = compareRange ? buildARAgingSummaryRows(invoices || [], customers || [], compareRange.end, moreFilters) : null;
 
   return res.json({
     success: true,
@@ -1623,9 +1627,12 @@ export const getARAgingSummaryReport: express.RequestHandler = async (req, res) 
       rows: main.rows,
       currency: main.currency,
       totals: main.totals,
+      comparison,
       appliedFilters: {
         fromDate: range.start.toISOString(),
         toDate: range.end.toISOString(),
+        compareWith,
+        compareCount,
         moreFilters,
       },
     },

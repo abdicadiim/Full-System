@@ -174,7 +174,7 @@ const ALL_REPORTS: ReportDefinition[] = [
     summary: "Customer-level outstanding amounts segmented by aging buckets.",
     howItHelps: "Prioritize collections by risk and overdue duration.",
     source: "Outstanding Invoices and Open Credit Notes",
-    functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support("filter", "compare", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
   },
   {
     id: "ar-aging-details",
@@ -183,7 +183,7 @@ const ALL_REPORTS: ReportDefinition[] = [
     summary: "Transaction-level overdue details across aging intervals.",
     howItHelps: "Drive targeted follow-up at invoice level.",
     source: "Outstanding Invoices and Open Credit Notes",
-    functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support("filter", "compare", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
   },
   {
     id: "invoice-details",
@@ -191,7 +191,7 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Invoice Details",
     summary: "Comprehensive invoice list for the selected period.",
     howItHelps: "Useful for audits, billing reviews, and customer or product-level analysis.",
-    functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support("filter", "compare", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
   },
   {
     id: "retainer-invoice-details",
