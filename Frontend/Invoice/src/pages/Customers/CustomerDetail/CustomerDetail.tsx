@@ -306,30 +306,23 @@ export default function CustomerDetail() {
     const subscriptionDropdownRef = useRef<HTMLDivElement>(null);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const formatFileSize = (bytes: number) => {
-        if (!Number.isFinite(bytes) || bytes <= 0) return "Unknown";
-        const k = 1024;
-        const sizes = ["Bytes", "KB", "MB", "GB"];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
-    };
-    const readFileAsDataUrl = (file: File) =>
-        new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(String(reader.result || ""));
-            reader.onerror = () => reject(reader.error || new Error("Failed to read attachment."));
-            reader.readAsDataURL(file);
-        });
     const mapDocumentsToAttachments = (documents: any[] = []) => {
         if (!Array.isArray(documents)) return [];
-        return documents.map((doc: any, index: number) => ({
-            id: index + 1,
-            documentId: doc.documentId || doc.id || doc._id || null,
-            name: doc.name || 'Unnamed Document',
-            size: doc.size || 'Unknown',
-            url: doc.contentUrl || doc.url || doc.previewUrl || '',
-            uploadedAt: doc.uploadedAt
-        }));
+        return documents.map((doc: any, index: number) => {
+            const documentId = String(doc.documentId || doc.id || doc._id || index + 1).trim() || String(index + 1);
+            const url = doc.viewUrl || doc.url || doc.contentUrl || doc.previewUrl || "";
+            return {
+                id: documentId,
+                documentId,
+                name: doc.name || "Unnamed Document",
+                size: typeof doc.size === "number" ? doc.size : Number(doc.size) || doc.size || 0,
+                mimeType: doc.mimeType || doc.type || "",
+                url,
+                viewUrl: doc.viewUrl || url,
+                downloadUrl: doc.downloadUrl || doc.url || doc.contentUrl || "",
+                uploadedAt: doc.uploadedAt
+            };
+        });
     };
 
     // More dropdown state
@@ -2968,6 +2961,7 @@ export default function CustomerDetail() {
             }
 
             const uploadedDocuments: any[] = [];
+            let persistedDocuments: any[] | null = null;
             for (const file of filesArray) {
                 const uploadResponse = await documentsAPI.upload(file, {
                     name: file.name,
@@ -2978,15 +2972,21 @@ export default function CustomerDetail() {
                 });
 
                 if (uploadResponse?.success && uploadResponse?.data) {
-                    const dataUrl = await readFileAsDataUrl(file);
+                    const document = uploadResponse.data as any;
                     uploadedDocuments.push({
-                        documentId: uploadResponse.data._id || uploadResponse.data.id,
-                        name: file.name,
-                        size: formatFileSize(file.size),
-                        url: dataUrl || uploadResponse.data.url || "",
-                        contentUrl: dataUrl || uploadResponse.data.url || "",
-                        uploadedAt: uploadResponse.data.uploadedAt || new Date().toISOString()
+                        id: String(document.documentId || document.id || document._id || file.name),
+                        documentId: String(document.documentId || document.id || document._id || "").trim() || String(document.id || document._id || ""),
+                        name: document.name || file.name,
+                        size: Number(document.size || file.size || 0),
+                        mimeType: document.mimeType || file.type || "application/octet-stream",
+                        url: document.viewUrl || document.url || document.contentUrl || document.previewUrl || "",
+                        viewUrl: document.viewUrl || document.url || document.contentUrl || document.previewUrl || "",
+                        downloadUrl: document.downloadUrl || document.url || document.contentUrl || "",
+                        uploadedAt: document.uploadedAt || new Date().toISOString()
                     });
+                    if (Array.isArray(document.documents)) {
+                        persistedDocuments = document.documents;
+                    }
                 }
             }
 
@@ -2995,12 +2995,12 @@ export default function CustomerDetail() {
                 return;
             }
 
-            const updatedDocuments = [...currentDocuments, ...uploadedDocuments];
-            const updateResponse = await customersAPI.update(id, { documents: updatedDocuments });
-            const persistedDocuments = updateResponse?.data?.documents || updatedDocuments;
+            const nextDocuments = Array.isArray(persistedDocuments) && persistedDocuments.length > 0
+                ? persistedDocuments
+                : [...currentDocuments, ...uploadedDocuments];
 
-            setCustomer(prev => prev ? ({ ...prev, documents: persistedDocuments }) : prev);
-            setAttachments(mapDocumentsToAttachments(persistedDocuments));
+            setCustomer(prev => prev ? ({ ...prev, documents: nextDocuments }) : prev);
+            setAttachments(mapDocumentsToAttachments(nextDocuments));
 
             toast.success(`${uploadedDocuments.length} file(s) uploaded successfully`);
         } catch (error) {
@@ -3015,27 +3015,28 @@ export default function CustomerDetail() {
         }
     };
 
-    const handleRemoveAttachment = async (attachmentId: number) => {
+    const handleRemoveAttachment = async (attachmentId: string | number) => {
         if (!customer || !id) return;
 
         try {
-            // Find the attachment to remove (attachmentId is 1-indexed)
-            const attachmentIndex = attachmentId - 1;
+            const targetId = String(attachmentId || "").trim();
             const currentDocuments = Array.isArray(customer.documents) ? customer.documents : [];
-            const removedDocument = currentDocuments[attachmentIndex];
-            const updatedDocuments = currentDocuments.filter((_, index) => index !== attachmentIndex);
+            const removedDocument = currentDocuments.find((doc: any, index: number) => {
+                const docId = String(doc.documentId || doc.id || doc._id || index + 1).trim();
+                return docId === targetId || String(index + 1) === targetId;
+            });
+            const removedDocumentId = String(removedDocument?.documentId || removedDocument?.id || removedDocument?._id || targetId).trim();
+            const updatedDocuments = currentDocuments.filter((doc: any, index: number) => {
+                const docId = String(doc.documentId || doc.id || doc._id || index + 1).trim();
+                return docId !== targetId && String(index + 1) !== targetId;
+            });
 
-            const removedDocumentId = removedDocument?.documentId || removedDocument?.id || removedDocument?._id;
-            if (removedDocumentId) {
-                try {
-                    await documentsAPI.delete(String(removedDocumentId));
-                } catch (_) {
-                    // Keep customer update flow even if deleting source file fails
-                }
+            if (!removedDocumentId) {
+                throw new Error("Attachment not found.");
             }
 
-            const updateResponse = await customersAPI.update(id, { documents: updatedDocuments });
-            const persistedDocuments = updateResponse?.data?.documents || updatedDocuments;
+            const deleteResponse = await documentsAPI.delete(String(removedDocumentId));
+            const persistedDocuments = deleteResponse?.data?.documents || updatedDocuments;
 
             setCustomer(prev => prev ? ({ ...prev, documents: persistedDocuments }) : prev);
             setAttachments(mapDocumentsToAttachments(persistedDocuments));
