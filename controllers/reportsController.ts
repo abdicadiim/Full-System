@@ -1402,6 +1402,197 @@ const buildCustomerBalanceSummaryRows = (
   };
 };
 
+const getReceivableSummaryReferenceNumber = (
+  row: any,
+  source: ReportEntity,
+) => {
+  if (source === "credit-note") {
+    return String(
+      row?.invoiceNumber ||
+        row?.referenceNumber ||
+        row?.orderNumber ||
+        row?.transactionNumber ||
+        row?.number ||
+        row?.receiptNumber ||
+        "",
+    ).trim();
+  }
+
+  return String(
+    row?.referenceNumber ||
+      row?.orderNumber ||
+      row?.invoiceNumber ||
+      row?.transactionNumber ||
+      row?.number ||
+      row?.receiptNumber ||
+      "",
+  ).trim();
+};
+
+const getReceivableSummaryBaseAmount = (
+  row: any,
+  amount: number,
+  baseCurrency: string,
+) => {
+  const rowCurrency = String(row?.currency || baseCurrency || "").trim();
+  if (!rowCurrency || rowCurrency.toUpperCase() === baseCurrency.toUpperCase()) {
+    return amount;
+  }
+
+  const exchangeRate = asNumber(
+    row?.exchangeRate ?? row?.exchange_rate ?? row?.fxRate ?? row?.rate,
+    0,
+  );
+  if (exchangeRate > 0) {
+    return amount * exchangeRate;
+  }
+  return amount;
+};
+
+const buildReceivableSummaryRows = (
+  rows: Array<{ source: ReportEntity; row: any }>,
+  customers: any[],
+  range: { start: Date; end: Date },
+  moreFilters: MoreFilterRow[],
+  groupBy: string,
+  baseCurrency: string,
+) => {
+  const customerById = new Map<string, any>();
+  const customerByName = new Map<string, any>();
+  for (const customer of customers || []) {
+    const id = String(customer?._id || customer?.id || "").trim();
+    const name = resolveCustomerName(customer);
+    if (id) customerById.set(id, customer);
+    if (name) customerByName.set(normalizeText(name), customer);
+    const number = String(customer?.customerNumber || "").trim();
+    if (number) customerByName.set(normalizeText(number), customer);
+  }
+
+  const normalizedRangeStart = startOfDay(range.start);
+  const normalizedRangeEnd = endOfDay(range.end);
+  const normalizedGroupBy = normalizeText(groupBy || "none");
+  const detailRows: Array<{ values: Record<string, any> }> = [];
+  let currency = baseCurrency || "SOS";
+
+  for (const item of rows || []) {
+    const source = item?.source || "invoice";
+    const row = item?.row || {};
+    const documentDate = getDocumentDate(row);
+    if (
+      !documentDate ||
+      documentDate < normalizedRangeStart ||
+      documentDate > normalizedRangeEnd
+    ) {
+      continue;
+    }
+
+    const customerId = String(
+      row?.customerId || row?.customer?._id || row?.customer?.id || "",
+    ).trim();
+    const fallbackName = String(
+      row?.customerName ||
+        row?.customer?.displayName ||
+        row?.customer?.name ||
+        row?.customer?.companyName ||
+        "",
+    ).trim();
+    const customer =
+      customerById.get(customerId) ||
+      customerByName.get(normalizeText(fallbackName)) ||
+      row?.customer ||
+      null;
+    const customerContext = buildCustomerContext(customer, fallbackName);
+    const customerName = customerContext.name || fallbackName || "Unassigned";
+    const location = String(
+      row?.locationName ||
+        row?.location ||
+        customerContext["billing-city"] ||
+        customerContext["shipping-city"] ||
+        customerContext["billing-state"] ||
+        "",
+    ).trim();
+    const rowCurrency =
+      String(row?.currency || customer?.currency || baseCurrency || "SOS")
+        .trim() || baseCurrency || "SOS";
+    const amount = Math.abs(asNumber(row?.total, 0));
+    const balance =
+      source === "sales-receipt" ? 0 : getDocumentBalanceDue(row);
+    const transaction = getDocumentNumber(row, source);
+    const referenceNumber = getReceivableSummaryReferenceNumber(row, source);
+    const transactionType = getDocumentTypeLabel(source);
+    const convertedAmount = getReceivableSummaryBaseAmount(
+      row,
+      amount,
+      baseCurrency || rowCurrency || "SOS",
+    );
+    const convertedBalance = getReceivableSummaryBaseAmount(
+      row,
+      balance,
+      baseCurrency || rowCurrency || "SOS",
+    );
+
+    const values = {
+      name: customerName,
+      "customer-name": customerName,
+      date: documentDate.toISOString(),
+      "report-date": documentDate.toISOString(),
+      transaction,
+      "reference-number": referenceNumber,
+      status: String(row?.status || "").trim(),
+      "transaction-type": transactionType,
+      type: transactionType,
+      "total-fcy": amount,
+      "total-bcy": convertedAmount,
+      "balance-fcy": balance,
+      "balance-bcy": convertedBalance,
+      currency: rowCurrency,
+      location,
+    };
+
+    if (!matchesMoreFilters(values, moreFilters)) continue;
+    detailRows.push({ values });
+    if (!currency) currency = rowCurrency;
+  }
+
+  detailRows.sort((left, right) => {
+    if (normalizedGroupBy !== "none") {
+      const leftGroup = String(left.values[normalizedGroupBy] || "").trim();
+      const rightGroup = String(right.values[normalizedGroupBy] || "").trim();
+      const groupDelta = rightGroup.localeCompare(leftGroup);
+      if (groupDelta !== 0) return groupDelta;
+    }
+
+    const dateDelta = String(right.values.date || "").localeCompare(
+      String(left.values.date || ""),
+    );
+    if (dateDelta !== 0) return dateDelta;
+
+    return String(right.values.transaction || "").localeCompare(
+      String(left.values.transaction || ""),
+    );
+  });
+
+  return {
+    rows: detailRows,
+    currency: currency || baseCurrency || "SOS",
+    totals: detailRows.reduce(
+      (acc, row) => {
+        acc["total-bcy"] += asNumber(row.values["total-bcy"], 0);
+        acc["total-fcy"] += asNumber(row.values["total-fcy"], 0);
+        acc["balance-bcy"] += asNumber(row.values["balance-bcy"], 0);
+        acc["balance-fcy"] += asNumber(row.values["balance-fcy"], 0);
+        return acc;
+      },
+      {
+        "total-bcy": 0,
+        "total-fcy": 0,
+        "balance-bcy": 0,
+        "balance-fcy": 0,
+      } as Record<string, number>,
+    ),
+  };
+};
+
 const getInvoiceWriteOffDate = (row: any) =>
   asDate(
     row?.writeOffDate ||
