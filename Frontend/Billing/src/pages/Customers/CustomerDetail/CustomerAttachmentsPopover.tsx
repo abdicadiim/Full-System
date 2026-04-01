@@ -16,6 +16,7 @@ type CustomerAttachment = {
   name?: string;
   size?: string | number;
   url?: string;
+  contentUrl?: string;
 };
 
 type CustomerAttachmentsPopoverProps = {
@@ -52,6 +53,37 @@ const resolveAttachmentUrl = (rawUrl?: string) => {
   }
 };
 
+const createObjectUrlFromDataUrl = (dataUrl?: string) => {
+  const url = String(dataUrl || "").trim();
+  const match = url.match(/^data:([^;,]*)(;base64)?,(.*)$/i);
+  if (!match) return "";
+
+  const mimeType = match[1] || "application/octet-stream";
+  const isBase64 = Boolean(match[2]);
+  const payload = match[3] || "";
+
+  try {
+    const binary = isBase64 ? atob(payload) : decodeURIComponent(payload);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+  } catch {
+    return "";
+  }
+};
+
+const triggerDownload = (href: string, fileName: string) => {
+  const link = document.createElement("a");
+  link.href = href;
+  link.download = fileName;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
 export default function CustomerAttachmentsPopover({
   open,
   onClose,
@@ -77,6 +109,41 @@ export default function CustomerAttachmentsPopover({
     await onUpload(event);
     if (event.currentTarget) {
       event.currentTarget.value = "";
+    }
+  };
+
+  const openAttachmentInNewTab = (file: CustomerAttachment) => {
+    const resolvedUrl = resolveAttachmentUrl(file.contentUrl || file.url);
+    if (!resolvedUrl) return;
+
+    const href = resolvedUrl.startsWith("data:") ? createObjectUrlFromDataUrl(resolvedUrl) || resolvedUrl : resolvedUrl;
+    const openedWindow = window.open(href, "_blank", "noopener,noreferrer");
+
+    if (!openedWindow) {
+      const link = document.createElement("a");
+      link.href = href;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    if (href.startsWith("blob:")) {
+      window.setTimeout(() => URL.revokeObjectURL(href), 5000);
+    }
+  };
+
+  const downloadAttachment = (file: CustomerAttachment) => {
+    const resolvedUrl = resolveAttachmentUrl(file.contentUrl || file.url);
+    if (!resolvedUrl) return;
+
+    const href = resolvedUrl.startsWith("data:") ? createObjectUrlFromDataUrl(resolvedUrl) || resolvedUrl : resolvedUrl;
+    triggerDownload(href, String(file.name || "attachment"));
+
+    if (href.startsWith("blob:")) {
+      window.setTimeout(() => URL.revokeObjectURL(href), 5000);
     }
   };
 
@@ -108,11 +175,10 @@ export default function CustomerAttachmentsPopover({
             <div className="py-3 text-center text-[14px] text-slate-700">No Files Attached</div>
           ) : (
             <div className="space-y-2">
-              {attachments.map((file, index) => (
+              {attachments.map((file, index) => {
+                const attachmentUrl = resolveAttachmentUrl(file.contentUrl || file.url);
+                return (
                 <div key={`${file.id}-${index}`}>
-                  {(() => {
-                    const attachmentUrl = resolveAttachmentUrl(file.url);
-                    return (
                   <div
                     className={`group relative cursor-pointer rounded-md px-3 py-2 pr-16 text-[13px] transition-colors ${
                       attachmentMenuIndex === index
@@ -154,15 +220,17 @@ export default function CustomerAttachmentsPopover({
                     {attachmentMenuIndex === index && (
                       <div className="mt-2 flex items-center gap-5 px-8 text-[12px] font-medium text-blue-600">
                         {attachmentUrl ? (
-                          <a
-                            href={attachmentUrl}
-                            download={String(file.name || "attachment")}
-                            onClick={() => setAttachmentMenuIndex(null)}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              downloadAttachment(file);
+                              setAttachmentMenuIndex(null);
+                            }}
                             className="flex items-center gap-1 hover:text-blue-700"
                           >
                             <Download size={13} />
                             Download
-                          </a>
+                          </button>
                         ) : (
                           <span className="flex items-center gap-1 text-slate-400">
                             <Download size={13} />
@@ -177,17 +245,18 @@ export default function CustomerAttachmentsPopover({
                           Remove
                         </button>
                         {attachmentUrl ? (
-                          <a
-                            href={attachmentUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={() => setAttachmentMenuIndex(null)}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              openAttachmentInNewTab(file);
+                              setAttachmentMenuIndex(null);
+                            }}
                             className="rounded p-1 text-blue-600 hover:bg-blue-50"
                             aria-label="Open attachment"
                             title="Open"
                           >
                             <ExternalLink size={13} />
-                          </a>
+                          </button>
                         ) : (
                           <span className="rounded p-1 text-slate-400" aria-label="Open attachment" title="Open">
                             <ExternalLink size={13} />
@@ -196,10 +265,9 @@ export default function CustomerAttachmentsPopover({
                       </div>
                     )}
                   </div>
-                    );
-                  })()}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
           <div className="mt-4 text-center">
