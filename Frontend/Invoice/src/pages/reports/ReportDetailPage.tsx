@@ -5,6 +5,7 @@ import BadDebtsReportPage from "./BadDebtsReportPage";
 import ReceivableDetailsReportPage from "./ReceivableDetailsReportPage";
 import ReceivableSummaryReportPage from "./ReceivableSummaryReportPage";
 import SalesByCustomerReportPage from "./SalesByCustomerReportPage";
+import TimeToGetPaidReportPage from "./TimeToGetPaidReportPage";
 
 export default function ReportDetailPage() {
   const { reportId } = useParams();
@@ -20,6 +21,9 @@ export default function ReportDetailPage() {
   }
   if (reportId === "receivable-details") {
     return <ReceivableDetailsReportPage />;
+  }
+  if (reportId === "time-to-get-paid") {
+    return <TimeToGetPaidReportPage />;
   }
 
   return <SalesByCustomerReportPage />;

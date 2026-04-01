@@ -37,7 +37,7 @@ const REPORT_SECTIONS: ReportSection[] = [
   {
     id: "payments-received",
     label: "Payments Received",
-    reportIds: ["payments-received", "time-to-get-paid", "credit-note-details", "refund-history", "withholding-tax"],
+    reportIds: ["time-to-get-paid"],
   },
   { id: "subscriptions", label: "Recurring Invoices", reportIds: ["subscription-details"] },
   {

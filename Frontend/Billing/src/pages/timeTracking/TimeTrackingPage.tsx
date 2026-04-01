@@ -2732,7 +2732,7 @@ function TimesheetTable() {
               </div>
             )}
 
-            {activeTab === 'comments' && (
+            {false && (
               <div className="space-y-4">
                 <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
                   <div className="flex items-center gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3">
@@ -2851,6 +2851,17 @@ function TimesheetTable() {
           </div>
         </div>
       )}
+
+            {activeTab === 'comments' && selectedEntry && (
+              <TimeEntryCommentsPanel
+                open={activeTab === "comments" && Boolean(selectedEntry)}
+                onClose={() => setActiveTab("otherDetails")}
+                entryId={String(selectedEntry.id)}
+                comments={comments}
+                onCommentsChange={handleTimeEntryCommentsChange}
+                updateEntry={updateTimeEntryComments}
+              />
+            )}
 
       {showDeleteCommentModal && commentToDelete && (
         <div className="fixed inset-0 z-[2200] flex items-center justify-center bg-black/40 p-4" onClick={closeDeleteCommentModal}>
