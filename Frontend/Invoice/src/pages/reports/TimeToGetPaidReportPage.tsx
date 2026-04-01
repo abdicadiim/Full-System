@@ -54,6 +54,10 @@ type PreviewTableConfig = {
   totals?: string[];
 };
 
+type PaymentWithInvoicePayments = Payment & {
+  invoicePayments?: Record<string, unknown>;
+};
+
 const REPORT_COLUMNS = [
   "Customer Name",
   "0 - 15 Days",
@@ -196,14 +200,76 @@ const parseReportDate = (value: unknown) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
+const getPaymentAllocations = (payment: PaymentWithInvoicePayments) => {
+  const invoicePayments = payment.invoicePayments;
+  if (invoicePayments && typeof invoicePayments === "object" && !Array.isArray(invoicePayments)) {
+    const normalized = Object.entries(invoicePayments)
+      .map(([invoiceId, amount]) => ({
+        invoiceId: String(invoiceId || "").trim(),
+        amount: Number(amount || 0),
+      }))
+      .filter((allocation) => allocation.invoiceId && Number.isFinite(allocation.amount) && allocation.amount > 0);
+
+    if (normalized.length > 0) return normalized;
+  }
+
+  if (Array.isArray(payment.allocations) && payment.allocations.length > 0) {
+    return payment.allocations
+      .map((allocation: any) => ({
+        invoiceId: String(
+          allocation?.invoiceId ||
+            allocation?.invoice?._id ||
+            allocation?.invoice?.id ||
+            allocation?.invoice ||
+            "",
+        ).trim(),
+        invoiceNumber: String(
+          allocation?.invoiceNumber ||
+            allocation?.invoice?.invoiceNumber ||
+            "",
+        ).trim(),
+        amount: Number(
+          allocation?.amount ??
+            allocation?.appliedAmount ??
+            allocation?.amountReceived ??
+            payment.amountReceived ??
+            payment.amount ??
+            0,
+        ),
+        invoice: allocation?.invoice || null,
+      }))
+      .filter((allocation) => allocation.invoiceId || allocation.invoiceNumber);
+  }
+
+  if (payment.invoiceId || payment.invoiceNumber) {
+    return [
+      {
+        invoiceId: String(payment.invoiceId || "").trim(),
+        invoiceNumber: String(payment.invoiceNumber || "").trim(),
+        amount: Number(payment.amountReceived ?? payment.amount ?? 0),
+      },
+    ];
+  }
+
+  return [];
+};
+
 const buildPreview = (
   payments: Payment[],
   invoices: Invoice[],
   bounds: { start: Date; end: Date },
   selectedDateRange: DateRangePreset,
+  debugEnabled = false,
 ): PreviewTableConfig | null => {
   const invoiceById = new Map<string, Invoice>();
   const invoiceByNumber = new Map<string, Invoice>();
+  const stats = {
+    paymentsInRange: 0,
+    allocationsExpanded: 0,
+    invoiceMatches: 0,
+    skippedMissingInvoiceDate: 0,
+    skippedMissingAmount: 0,
+  };
 
   invoices.forEach((invoice) => {
     const invoiceId = String(invoice._id || invoice.id || "").trim();
