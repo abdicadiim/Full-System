@@ -1039,14 +1039,15 @@ function ReceivablesReportShell({
   const [customDateRangeMonth, setCustomDateRangeMonth] = useState<Date>(() =>
     getStartOfMonth(getRange(config.defaultRange).start),
   );
-  const reportByOptions =
-    config.reportByOptions ?? [
-      { key: "invoice-date", label: "Invoice Date" },
-      { key: "due-date", label: "Due Date" },
-    ];
+  const reportByOptions = config.reportByOptions ?? [
+    { key: "invoice-date", label: "Invoice Date" },
+    { key: "due-date", label: "Due Date" },
+  ];
   const [entities, setEntities] = useState("invoice");
   const [agingBy, setAgingBy] = useState("invoice-due-date");
-  const [reportBy, setReportBy] = useState(config.defaultReportBy ?? reportByOptions[0]?.key ?? "invoice-date");
+  const [reportBy, setReportBy] = useState(
+    config.defaultReportBy ?? reportByOptions[0]?.key ?? "invoice-date",
+  );
   const [groupBy, setGroupBy] = useState(
     config.rightControls[0]?.options[0]?.key || "none",
   );

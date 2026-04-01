@@ -1,14 +1,25 @@
-import type { ReportCategory, ReportDefinition, ReportFunctionKey } from "./types";
+import type {
+  ReportCategory,
+  ReportDefinition,
+  ReportFunctionKey,
+} from "./types";
 
 const support = (...keys: ReportFunctionKey[]) =>
-  keys.reduce((acc, key) => {
-    acc[key] = true;
-    return acc;
-  }, {} as Partial<Record<ReportFunctionKey, boolean>>);
+  keys.reduce(
+    (acc, key) => {
+      acc[key] = true;
+      return acc;
+    },
+    {} as Partial<Record<ReportFunctionKey, boolean>>,
+  );
 
-const safeDivide = (numerator: number, denominator: number) => (denominator === 0 ? 0 : numerator / denominator);
+const safeDivide = (numerator: number, denominator: number) =>
+  denominator === 0 ? 0 : numerator / denominator;
 
-export const REPORT_FUNCTION_LABELS: { key: ReportFunctionKey; label: string }[] = [
+export const REPORT_FUNCTION_LABELS: {
+  key: ReportFunctionKey;
+  label: string;
+}[] = [
   { key: "filter", label: "Filter Report" },
   { key: "compare", label: "Compare Report" },
   { key: "group", label: "Group Report" },
@@ -26,22 +37,26 @@ const ALL_REPORT_CATEGORIES: ReportCategory[] = [
   {
     id: "sales",
     name: "Sales",
-    description: "Track sales across customers, items, plans, addons, coupons, salespersons, and daily summary.",
+    description:
+      "Track sales across customers, items, plans, addons, coupons, salespersons, and daily summary.",
   },
   {
     id: "receivables",
     name: "Receivables",
-    description: "Monitor outstanding amounts, aging intervals, receivable transactions, and bad debts.",
+    description:
+      "Monitor outstanding amounts, aging intervals, receivable transactions, and bad debts.",
   },
   {
     id: "acquisition-insights",
     name: "Acquisition Insights",
-    description: "Analyze trial pipeline, conversions, sales cycle, and opportunities lost during onboarding.",
+    description:
+      "Analyze trial pipeline, conversions, sales cycle, and opportunities lost during onboarding.",
   },
   {
     id: "signups-activations",
     name: "Signups and Activations",
-    description: "Understand subscription signups, activations, and active user distribution by country.",
+    description:
+      "Understand subscription signups, activations, and active user distribution by country.",
   },
   {
     id: "revenue",
@@ -51,47 +66,56 @@ const ALL_REPORT_CATEGORIES: ReportCategory[] = [
   {
     id: "subscriptions",
     name: "Recurring Invoices",
-    description: "Track active subscriptions, net customers, upgrades, downgrades, ARPU, and LTV.",
+    description:
+      "Track active subscriptions, net customers, upgrades, downgrades, ARPU, and LTV.",
   },
   {
     id: "churn",
     name: "Churn Reports",
-    description: "Track at-risk profiles, non-renewals, post-dunning churn, and expiry cohorts.",
+    description:
+      "Track at-risk profiles, non-renewals, post-dunning churn, and expiry cohorts.",
   },
   {
     id: "churn-insights",
     name: "Churn Insights",
-    description: "Measure net cancellations, churn rate, and revenue churn trends.",
+    description:
+      "Measure net cancellations, churn rate, and revenue churn trends.",
   },
   {
     id: "payments-received",
     name: "Payments Received",
-    description: "Review payments, due intervals, credit notes, refunds, failures, and card expiry.",
+    description:
+      "Review payments, due intervals, credit notes, refunds, failures, and card expiry.",
   },
   {
     id: "taxes",
     name: "Taxes",
-    description: "Track tax summaries, withholding taxes, and receivable tax balances.",
+    description:
+      "Track tax summaries, withholding taxes, and receivable tax balances.",
   },
   {
     id: "purchases-expenses",
     name: "Purchases and Expenses",
-    description: "Track expense totals, categories, customer/project split, and billable expenses.",
+    description:
+      "Track expense totals, categories, customer/project split, and billable expenses.",
   },
   {
     id: "projects-timesheets",
     name: "Projects and Timesheet",
-    description: "Inspect timesheet details, project summaries, and project revenue performance.",
+    description:
+      "Inspect timesheet details, project summaries, and project revenue performance.",
   },
   {
     id: "activity",
     name: "Activity",
-    description: "Audit mails, user actions, portal activity, and customer reviews.",
+    description:
+      "Audit mails, user actions, portal activity, and customer reviews.",
   },
   {
     id: "mrr-arr",
     name: "MRR and ARR",
-    description: "Measure recurring revenue health using MRR, ARR, and MRR Quick Ratio.",
+    description:
+      "Measure recurring revenue health using MRR, ARR, and MRR Quick Ratio.",
   },
 ];
 
@@ -101,30 +125,63 @@ const ALL_REPORTS: ReportDefinition[] = [
     categoryId: "sales",
     name: "Sales by Customer",
     summary: "Breakdown of customers with total sales for each customer.",
-    howItHelps: "Identify top customers and build retention or loyalty actions around high-value accounts.",
+    howItHelps:
+      "Identify top customers and build retention or loyalty actions around high-value accounts.",
     basis: "Accrual",
     source: "Invoices, Credit Notes, Sales Receipts (configurable view)",
-    functionSupport: support("filter", "compare", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support(
+      "filter",
+      "compare",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "sales-by-item",
     categoryId: "sales",
     name: "Sales by Item",
     summary: "Item-wise sales values to identify top-selling products.",
-    howItHelps: "Improve pricing, inventory, and campaigns based on item-level performance.",
+    howItHelps:
+      "Improve pricing, inventory, and campaigns based on item-level performance.",
     basis: "Accrual",
     source: "Invoices and Credit Notes",
-    functionSupport: support("filter", "compare", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support(
+      "filter",
+      "compare",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "sales-by-plan",
     categoryId: "sales",
     name: "Sales by Plan",
     summary: "Plan-level sales breakdown for subscription businesses.",
-    howItHelps: "Find best-selling plans and optimize packaging and pricing decisions.",
+    howItHelps:
+      "Find best-selling plans and optimize packaging and pricing decisions.",
     basis: "Accrual",
     source: "Invoices and Credit Notes",
-    functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support(
+      "filter",
+      "group",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "sales-by-addon",
@@ -134,7 +191,16 @@ const ALL_REPORTS: ReportDefinition[] = [
     howItHelps: "Find cross-sell opportunities and optimize addon bundles.",
     basis: "Accrual",
     source: "Invoices and Credit Notes",
-    functionSupport: support("filter", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support(
+      "filter",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "sales-by-coupon",
@@ -144,27 +210,59 @@ const ALL_REPORTS: ReportDefinition[] = [
     howItHelps: "Measure coupon impact and optimize promotional strategy.",
     basis: "Accrual",
     source: "Invoices",
-    functionSupport: support("filter", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support(
+      "filter",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "sales-by-sales-person",
     categoryId: "sales",
     name: "Sales by Sales Person",
     summary: "Sales summary by salesperson.",
-    howItHelps: "Measure sales team contribution and drive target-based incentives.",
+    howItHelps:
+      "Measure sales team contribution and drive target-based incentives.",
     basis: "Accrual",
     source: "Invoices and Credit Notes",
-    functionSupport: support("filter", "compare", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support(
+      "filter",
+      "compare",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "sales-summary",
     categoryId: "sales",
     name: "Sales Summary",
-    summary: "Daily summary of invoices, credit notes, receipts, and total sales.",
-    howItHelps: "Monitor daily trend movement and detect peaks or dips quickly.",
+    summary:
+      "Daily summary of invoices, credit notes, receipts, and total sales.",
+    howItHelps:
+      "Monitor daily trend movement and detect peaks or dips quickly.",
     basis: "Accrual",
     source: "Invoices, Credit Notes, Sales Receipts",
-    functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support(
+      "filter",
+      "group",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
 
   {
@@ -174,7 +272,18 @@ const ALL_REPORTS: ReportDefinition[] = [
     summary: "Customer-level outstanding amounts segmented by aging buckets.",
     howItHelps: "Prioritize collections by risk and overdue duration.",
     source: "Outstanding Invoices and Open Credit Notes",
-    functionSupport: support("filter", "compare", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support(
+      "filter",
+      "compare",
+      "group",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "ar-aging-details",
@@ -183,15 +292,38 @@ const ALL_REPORTS: ReportDefinition[] = [
     summary: "Transaction-level overdue details across aging intervals.",
     howItHelps: "Drive targeted follow-up at invoice level.",
     source: "Outstanding Invoices and Open Credit Notes",
-    functionSupport: support("filter", "compare", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support(
+      "filter",
+      "compare",
+      "group",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "invoice-details",
     categoryId: "receivables",
     name: "Invoice Details",
     summary: "Comprehensive invoice list for the selected period.",
-    howItHelps: "Useful for audits, billing reviews, and customer or product-level analysis.",
-    functionSupport: support("filter", "compare", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    howItHelps:
+      "Useful for audits, billing reviews, and customer or product-level analysis.",
+    functionSupport: support(
+      "filter",
+      "compare",
+      "group",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "retainer-invoice-details",
@@ -199,7 +331,17 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Retainer Invoice Details",
     summary: "Retainer invoices and advanced payment tracking.",
     howItHelps: "Track liability-linked payments for future delivery.",
-    functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support(
+      "filter",
+      "group",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "quote-details",
@@ -207,14 +349,26 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Quote Details",
     summary: "Quote-level listing for follow-up and conversion workflows.",
     howItHelps: "Target unaccepted quotes for conversion recovery.",
-    functionSupport: support("filter", "compare", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support(
+      "filter",
+      "compare",
+      "group",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "bank-charges",
     categoryId: "receivables",
     name: "Bank Charges",
     summary: "Bank charges related to receivable transactions and collections.",
-    howItHelps: "Track deductions and reconciliation adjustments from payment processing.",
+    howItHelps:
+      "Track deductions and reconciliation adjustments from payment processing.",
     functionSupport: support("filter", "sort", "share", "export", "print"),
   },
   {
@@ -223,15 +377,33 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Bad Debts",
     summary: "Invoices written off as uncollectible within period.",
     howItHelps: "Measure credit risk impact and improve credit policy.",
-    functionSupport: support("filter", "sort", "schedule", "share", "export", "print"),
+    functionSupport: support(
+      "filter",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+    ),
   },
   {
     id: "customer-balance-summary",
     categoryId: "receivables",
     name: "Customer Balance Summary",
     summary: "Consolidated receivable snapshot by customer.",
-    howItHelps: "Quick account-level visibility without opening each transaction.",
-    functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    howItHelps:
+      "Quick account-level visibility without opening each transaction.",
+    functionSupport: support(
+      "filter",
+      "group",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "receivable-summary",
@@ -239,7 +411,17 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Receivable Summary",
     summary: "Summarized list of receivable transactions.",
     howItHelps: "Single view for status checks and audit readiness.",
-    functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support(
+      "filter",
+      "group",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "receivable-details",
@@ -247,38 +429,79 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Receivable Details",
     summary: "Item-level breakdown of receivable transactions.",
     howItHelps: "Drill into product-wise performance and receivable exposure.",
-    functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support(
+      "filter",
+      "group",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "progress-invoice-summary",
     categoryId: "receivables",
     name: "Progress Invoice Summary",
-    summary: "Milestone billing status for estimates with progress invoices enabled.",
+    summary:
+      "Milestone billing status for estimates with progress invoices enabled.",
     howItHelps: "Track invoiced vs pending amount across project milestones.",
-    functionSupport: support("filter", "group", "customizeColumns", "sort", "share", "export", "print"),
+    functionSupport: support(
+      "filter",
+      "group",
+      "customizeColumns",
+      "sort",
+      "share",
+      "export",
+      "print",
+    ),
   },
   {
     id: "active-trials",
     categoryId: "acquisition-insights",
     name: "Active Trials",
     summary: "Subscriptions currently in trial state with trial state filters.",
-    howItHelps: "Find trials about to expire and improve onboarding follow-up timing.",
-    functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    howItHelps:
+      "Find trials about to expire and improve onboarding follow-up timing.",
+    functionSupport: support(
+      "filter",
+      "group",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "inactive-trials",
     categoryId: "acquisition-insights",
     name: "Inactive Trials",
     summary: "Trials that expired or were canceled in the selected period.",
-    howItHelps: "Identify failed conversion cohorts and recover them with targeted action.",
-    functionSupport: support("filter", "group", "sort", "schedule", "share", "export", "print", "custom"),
+    howItHelps:
+      "Identify failed conversion cohorts and recover them with targeted action.",
+    functionSupport: support(
+      "filter",
+      "group",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "trial-to-live-conversions",
     categoryId: "acquisition-insights",
     name: "Trial to Live Conversions",
     summary: "Conversion movement from trial to live for the chosen period.",
-    howItHelps: "Measure conversion efficiency and bottlenecks in the trial funnel.",
+    howItHelps:
+      "Measure conversion efficiency and bottlenecks in the trial funnel.",
     formula: "Conversion Rate = (Trial Conversions / Eligible Trials) x 100",
     logicNotes: [
       "Eligible Trials should be the denominator for the same reporting frame.",
@@ -288,27 +511,51 @@ const ALL_REPORTS: ReportDefinition[] = [
       resultLabel: "Conversion Rate (%)",
       precision: 2,
       fields: [
-        { key: "trial_conversions", label: "Trial Conversions", defaultValue: 24 },
+        {
+          key: "trial_conversions",
+          label: "Trial Conversions",
+          defaultValue: 24,
+        },
         { key: "eligible_trials", label: "Eligible Trials", defaultValue: 80 },
       ],
-      calculate: (inputs) => safeDivide(inputs.trial_conversions, inputs.eligible_trials) * 100,
+      calculate: (inputs) =>
+        safeDivide(inputs.trial_conversions, inputs.eligible_trials) * 100,
     },
-    functionSupport: support("filter", "group", "compare", "performance", "schedule", "share", "export"),
+    functionSupport: support(
+      "filter",
+      "group",
+      "compare",
+      "performance",
+      "schedule",
+      "share",
+      "export",
+    ),
   },
   {
     id: "average-sales-cycle-length",
     categoryId: "acquisition-insights",
     name: "Average Sales Cycle Length",
     summary: "Average days from trial start to first payment.",
-    howItHelps: "Reduce time-to-convert by refining onboarding and sales touchpoints.",
-    functionSupport: support("filter", "group", "compare", "performance", "schedule", "share", "export"),
+    howItHelps:
+      "Reduce time-to-convert by refining onboarding and sales touchpoints.",
+    functionSupport: support(
+      "filter",
+      "group",
+      "compare",
+      "performance",
+      "schedule",
+      "share",
+      "export",
+    ),
   },
   {
     id: "lost-opportunities",
     categoryId: "acquisition-insights",
     name: "Lost Opportunities",
-    summary: "Potential customers who failed to sign up due to payment failures.",
-    howItHelps: "Recover failed signups and fix gateway or payment journey issues.",
+    summary:
+      "Potential customers who failed to sign up due to payment failures.",
+    howItHelps:
+      "Recover failed signups and fix gateway or payment journey issues.",
     functionSupport: support("filter", "schedule", "share", "export"),
   },
 
@@ -319,7 +566,15 @@ const ALL_REPORTS: ReportDefinition[] = [
     summary: "Total new subscriptions created (including trial/free/future).",
     howItHelps: "Track acquisition momentum over time.",
     formula: "Signups = Total new subscriptions created in the period",
-    functionSupport: support("filter", "group", "performance", "compare", "schedule", "share", "export"),
+    functionSupport: support(
+      "filter",
+      "group",
+      "performance",
+      "compare",
+      "schedule",
+      "share",
+      "export",
+    ),
   },
   {
     id: "activations",
@@ -327,7 +582,15 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Activations",
     summary: "Total subscriptions moved to active status.",
     howItHelps: "Track real usage conversion, not just interest.",
-    functionSupport: support("filter", "group", "performance", "compare", "schedule", "share", "export"),
+    functionSupport: support(
+      "filter",
+      "group",
+      "performance",
+      "compare",
+      "schedule",
+      "share",
+      "export",
+    ),
   },
   {
     id: "activations-by-country",
@@ -349,12 +612,24 @@ const ALL_REPORTS: ReportDefinition[] = [
       resultLabel: "Net Revenue",
       precision: 2,
       fields: [
-        { key: "payments_received", label: "Payments Received", defaultValue: 120000 },
+        {
+          key: "payments_received",
+          label: "Payments Received",
+          defaultValue: 120000,
+        },
         { key: "refunds", label: "Refunds", defaultValue: 8500 },
       ],
       calculate: (inputs) => inputs.payments_received - inputs.refunds,
     },
-    functionSupport: support("filter", "group", "compare", "performance", "schedule", "share", "export"),
+    functionSupport: support(
+      "filter",
+      "group",
+      "compare",
+      "performance",
+      "schedule",
+      "share",
+      "export",
+    ),
   },
   {
     id: "revenue-by-country",
@@ -369,9 +644,11 @@ const ALL_REPORTS: ReportDefinition[] = [
     id: "active-subscriptions",
     categoryId: "subscriptions",
     name: "Active Subscriptions",
-    summary: "Active subscription count movement including activations/reactivations/cancellations.",
+    summary:
+      "Active subscription count movement including activations/reactivations/cancellations.",
     howItHelps: "Monitor stability and growth of active base over time.",
-    formula: "Active Subscriptions = Previous Active + Activations + Reactivations - Cancellations",
+    formula:
+      "Active Subscriptions = Previous Active + Activations + Reactivations - Cancellations",
     calculator: {
       resultLabel: "Active Subscriptions",
       precision: 0,
@@ -381,15 +658,27 @@ const ALL_REPORTS: ReportDefinition[] = [
         { key: "reactivations", label: "Reactivations", defaultValue: 6 },
         { key: "cancellations", label: "Cancellations", defaultValue: 22 },
       ],
-      calculate: (inputs) => inputs.previous_active + inputs.activations + inputs.reactivations - inputs.cancellations,
+      calculate: (inputs) =>
+        inputs.previous_active +
+        inputs.activations +
+        inputs.reactivations -
+        inputs.cancellations,
     },
-    functionSupport: support("filter", "compare", "group", "schedule", "share", "export"),
+    functionSupport: support(
+      "filter",
+      "compare",
+      "group",
+      "schedule",
+      "share",
+      "export",
+    ),
   },
   {
     id: "net-customers",
     categoryId: "subscriptions",
     name: "Net Customers",
-    summary: "Net subscription change from activations/reactivations/cancellations.",
+    summary:
+      "Net subscription change from activations/reactivations/cancellations.",
     howItHelps: "Quick signal for subscription growth or decline.",
     formula: "Net Customers = Activations + Reactivations - Cancellations",
     calculator: {
@@ -400,17 +689,35 @@ const ALL_REPORTS: ReportDefinition[] = [
         { key: "reactivations", label: "Reactivations", defaultValue: 14 },
         { key: "cancellations", label: "Cancellations", defaultValue: 59 },
       ],
-      calculate: (inputs) => inputs.activations + inputs.reactivations - inputs.cancellations,
+      calculate: (inputs) =>
+        inputs.activations + inputs.reactivations - inputs.cancellations,
     },
-    functionSupport: support("filter", "compare", "group", "schedule", "share", "export"),
+    functionSupport: support(
+      "filter",
+      "compare",
+      "group",
+      "schedule",
+      "share",
+      "export",
+    ),
   },
   {
     id: "subscription-details",
     categoryId: "subscriptions",
     name: "Recurring Invoice Details",
     summary: "Detailed subscription listing by selected date type.",
-    howItHelps: "Audit subscriptions, billing milestones, and lifecycle state quickly.",
-    functionSupport: support("filter", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    howItHelps:
+      "Audit subscriptions, billing milestones, and lifecycle state quickly.",
+    functionSupport: support(
+      "filter",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "upgrades",
@@ -433,7 +740,8 @@ const ALL_REPORTS: ReportDefinition[] = [
     categoryId: "subscriptions",
     name: "Summary",
     summary: "Consolidated subscription movement metrics by period.",
-    howItHelps: "One-screen tracking for acquisition, churn, upgrades, and net movement.",
+    howItHelps:
+      "One-screen tracking for acquisition, churn, upgrades, and net movement.",
     functionSupport: support("filter", "group", "schedule", "share", "export"),
   },
   {
@@ -448,30 +756,59 @@ const ALL_REPORTS: ReportDefinition[] = [
       precision: 2,
       fields: [
         { key: "net_mrr", label: "Net MRR", defaultValue: 84500 },
-        { key: "active_subscriptions", label: "Active Subscriptions", defaultValue: 520 },
+        {
+          key: "active_subscriptions",
+          label: "Active Subscriptions",
+          defaultValue: 520,
+        },
       ],
-      calculate: (inputs) => safeDivide(inputs.net_mrr, inputs.active_subscriptions),
+      calculate: (inputs) =>
+        safeDivide(inputs.net_mrr, inputs.active_subscriptions),
     },
-    functionSupport: support("filter", "compare", "schedule", "share", "export"),
+    functionSupport: support(
+      "filter",
+      "compare",
+      "schedule",
+      "share",
+      "export",
+    ),
   },
   {
     id: "ltv",
     categoryId: "subscriptions",
     name: "LTV",
-    summary: "Estimated long-term value of subscriptions based on ARPU and churn.",
-    howItHelps: "Assess long-term revenue potential and acquisition affordability.",
-    formula: "LTV = ARPU / Churn Rate (decimal). If churn is entered as %, LTV = (ARPU / Churn%) x 100",
-    logicNotes: ["When churn is 0%, LTV is treated as 0 in Zoho Billing to avoid infinite projection."],
+    summary:
+      "Estimated long-term value of subscriptions based on ARPU and churn.",
+    howItHelps:
+      "Assess long-term revenue potential and acquisition affordability.",
+    formula:
+      "LTV = ARPU / Churn Rate (decimal). If churn is entered as %, LTV = (ARPU / Churn%) x 100",
+    logicNotes: [
+      "When churn is 0%, LTV is treated as 0 in Zoho Billing to avoid infinite projection.",
+    ],
     calculator: {
       resultLabel: "LTV",
       precision: 2,
       fields: [
         { key: "arpu", label: "ARPU", defaultValue: 165.5 },
-        { key: "churn_rate_percent", label: "Churn Rate (%)", defaultValue: 4.5 },
+        {
+          key: "churn_rate_percent",
+          label: "Churn Rate (%)",
+          defaultValue: 4.5,
+        },
       ],
-      calculate: (inputs) => (inputs.churn_rate_percent <= 0 ? 0 : (inputs.arpu / inputs.churn_rate_percent) * 100),
+      calculate: (inputs) =>
+        inputs.churn_rate_percent <= 0
+          ? 0
+          : (inputs.arpu / inputs.churn_rate_percent) * 100,
     },
-    functionSupport: support("filter", "compare", "schedule", "share", "export"),
+    functionSupport: support(
+      "filter",
+      "compare",
+      "schedule",
+      "share",
+      "export",
+    ),
   },
   {
     id: "under-risk",
@@ -479,7 +816,16 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Under Risk",
     summary: "Subscriptions in dunning due to payment failures.",
     howItHelps: "Fix payment failure causes before involuntary churn occurs.",
-    functionSupport: support("filter", "customizeColumns", "sort", "schedule", "share", "export", "custom", "print"),
+    functionSupport: support(
+      "filter",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "custom",
+      "print",
+    ),
   },
   {
     id: "non-renewing-profiles",
@@ -487,7 +833,16 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Non Renewing Profiles",
     summary: "Subscriptions scheduled to cancel in future dates.",
     howItHelps: "Run proactive save campaigns before cancellation date.",
-    functionSupport: support("filter", "customizeColumns", "sort", "schedule", "share", "export", "custom", "print"),
+    functionSupport: support(
+      "filter",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "custom",
+      "print",
+    ),
   },
   {
     id: "churned-after-retries",
@@ -495,23 +850,52 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Churned After Retries",
     summary: "Subscriptions canceled after dunning retries.",
     howItHelps: "Find retry failure patterns and fix payment operations.",
-    functionSupport: support("filter", "customizeColumns", "sort", "schedule", "share", "export", "custom", "print"),
+    functionSupport: support(
+      "filter",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "custom",
+      "print",
+    ),
   },
   {
     id: "churned-subscriptions",
     categoryId: "churn",
     name: "Churned Subscriptions",
     summary: "Canceled subscriptions with reason and lifetime impact context.",
-    howItHelps: "Understand causes of churn and prioritize win-back opportunities.",
-    functionSupport: support("filter", "customizeColumns", "sort", "schedule", "share", "export", "custom", "print"),
+    howItHelps:
+      "Understand causes of churn and prioritize win-back opportunities.",
+    functionSupport: support(
+      "filter",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "custom",
+      "print",
+    ),
   },
   {
     id: "subscription-expiry",
     categoryId: "churn",
     name: "Subscription Expiry",
     summary: "Subscriptions that expired or are expected to expire.",
-    howItHelps: "Prepare renewal outreach and expiry-based retention workflows.",
-    functionSupport: support("filter", "customizeColumns", "sort", "schedule", "share", "export", "custom", "print"),
+    howItHelps:
+      "Prepare renewal outreach and expiry-based retention workflows.",
+    functionSupport: support(
+      "filter",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "custom",
+      "print",
+    ),
   },
 
   {
@@ -530,7 +914,14 @@ const ALL_REPORTS: ReportDefinition[] = [
       ],
       calculate: (inputs) => inputs.cancellations - inputs.reactivations,
     },
-    functionSupport: support("filter", "compare", "group", "schedule", "share", "export"),
+    functionSupport: support(
+      "filter",
+      "compare",
+      "group",
+      "schedule",
+      "share",
+      "export",
+    ),
   },
   {
     id: "churn-rate",
@@ -538,17 +929,37 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Churn Rate",
     summary: "Percentage of subscriptions canceled in a period.",
     howItHelps: "Track cancellation pressure and period-level churn trends.",
-    formula: "Churn Rate = (Canceled Subscriptions / Subscriptions at Period Start) x 100",
+    formula:
+      "Churn Rate = (Canceled Subscriptions / Subscriptions at Period Start) x 100",
     calculator: {
       resultLabel: "Churn Rate (%)",
       precision: 2,
       fields: [
-        { key: "canceled_subscriptions", label: "Canceled Subscriptions", defaultValue: 43 },
-        { key: "starting_subscriptions", label: "Starting Subscriptions", defaultValue: 680 },
+        {
+          key: "canceled_subscriptions",
+          label: "Canceled Subscriptions",
+          defaultValue: 43,
+        },
+        {
+          key: "starting_subscriptions",
+          label: "Starting Subscriptions",
+          defaultValue: 680,
+        },
       ],
-      calculate: (inputs) => safeDivide(inputs.canceled_subscriptions, inputs.starting_subscriptions) * 100,
+      calculate: (inputs) =>
+        safeDivide(
+          inputs.canceled_subscriptions,
+          inputs.starting_subscriptions,
+        ) * 100,
     },
-    functionSupport: support("filter", "compare", "group", "schedule", "share", "export"),
+    functionSupport: support(
+      "filter",
+      "compare",
+      "group",
+      "schedule",
+      "share",
+      "export",
+    ),
   },
   {
     id: "revenue-churn",
@@ -556,7 +967,8 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Revenue Churn",
     summary: "Percentage of MRR lost due to churn (gross or net view).",
     howItHelps: "Measure recurring revenue leakage and recovery effectiveness.",
-    formula: "Gross Revenue Churn = (Churn MRR / Previous MRR) x 100; Net Revenue Churn = ((Churn MRR - Expansion MRR) / Previous MRR) x 100",
+    formula:
+      "Gross Revenue Churn = (Churn MRR / Previous MRR) x 100; Net Revenue Churn = ((Churn MRR - Expansion MRR) / Previous MRR) x 100",
     calculator: {
       resultLabel: "Net Revenue Churn (%)",
       precision: 2,
@@ -565,10 +977,20 @@ const ALL_REPORTS: ReportDefinition[] = [
         { key: "expansion_mrr", label: "Expansion MRR", defaultValue: 3400 },
         { key: "previous_mrr", label: "Previous MRR", defaultValue: 110000 },
       ],
-      calculate: (inputs) => safeDivide(inputs.churn_mrr - inputs.expansion_mrr, inputs.previous_mrr) * 100,
+      calculate: (inputs) =>
+        safeDivide(
+          inputs.churn_mrr - inputs.expansion_mrr,
+          inputs.previous_mrr,
+        ) * 100,
       helpText: "Use Gross mode by setting Expansion MRR to 0.",
     },
-    functionSupport: support("filter", "compare", "schedule", "share", "export"),
+    functionSupport: support(
+      "filter",
+      "compare",
+      "schedule",
+      "share",
+      "export",
+    ),
   },
 
   {
@@ -576,8 +998,19 @@ const ALL_REPORTS: ReportDefinition[] = [
     categoryId: "payments-received",
     name: "Payments Received",
     summary: "List of all customer payments by transaction type and product.",
-    howItHelps: "Track realized cash inflow and validate payment status quickly.",
-    functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    howItHelps:
+      "Track realized cash inflow and validate payment status quickly.",
+    functionSupport: support(
+      "filter",
+      "group",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "time-to-get-paid",
@@ -585,15 +1018,35 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Time to Get Paid",
     summary: "Receivables expected by upcoming aging intervals.",
     howItHelps: "Plan collection efforts based on near-term due windows.",
-    functionSupport: support("filter", "group", "customizeColumns", "sort", "share", "export", "print", "custom"),
+    functionSupport: support(
+      "filter",
+      "group",
+      "customizeColumns",
+      "sort",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "credit-note-details",
     categoryId: "payments-received",
     name: "Credit Note Details",
     summary: "Credit notes raised with status and filter options.",
-    howItHelps: "Monitor credit issuance and prevent unnoticed revenue leakage.",
-    functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    howItHelps:
+      "Monitor credit issuance and prevent unnoticed revenue leakage.",
+    functionSupport: support(
+      "filter",
+      "group",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "refund-history",
@@ -601,7 +1054,17 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Refund History",
     summary: "Refund and credit-note refund transactions in one view.",
     howItHelps: "Audit refund flows and investigate anomalies faster.",
-    functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support(
+      "filter",
+      "group",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "withholding-tax",
@@ -616,8 +1079,16 @@ const ALL_REPORTS: ReportDefinition[] = [
     categoryId: "payments-received",
     name: "Payment Failures",
     summary: "Failure count trend and detailed failed renewal attempts.",
-    howItHelps: "Reduce failed renewals through gateway and customer remediation.",
-    functionSupport: support("filter", "group", "sort", "schedule", "share", "export"),
+    howItHelps:
+      "Reduce failed renewals through gateway and customer remediation.",
+    functionSupport: support(
+      "filter",
+      "group",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+    ),
   },
   {
     id: "card-expiry",
@@ -625,7 +1096,17 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Card Expiry",
     summary: "Cards already expired or expiring soon.",
     howItHelps: "Trigger card update reminders before renewal failures occur.",
-    functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support(
+      "filter",
+      "group",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
 
   {
@@ -634,7 +1115,15 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Expense Details",
     summary: "Detailed list of expenses and total incurred amount.",
     howItHelps: "Track spend directly and validate each expense line.",
-    functionSupport: support("filter", "group", "customizeColumns", "sort", "share", "export", "print"),
+    functionSupport: support(
+      "filter",
+      "group",
+      "customizeColumns",
+      "sort",
+      "share",
+      "export",
+      "print",
+    ),
   },
   {
     id: "expenses-by-category",
@@ -650,7 +1139,16 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Expenses by Customer",
     summary: "Expense distribution and totals by customer.",
     howItHelps: "Understand customer-level profitability pressure.",
-    functionSupport: support("filter", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support(
+      "filter",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "expenses-by-project",
@@ -658,7 +1156,17 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Expenses by Project",
     summary: "Project-wise expense totals and contribution.",
     howItHelps: "Track project profitability and budget pressure.",
-    functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support(
+      "filter",
+      "group",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "billable-expense-details",
@@ -666,16 +1174,33 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Billable Expense Details",
     summary: "Billable expenses with invoiced amount and status context.",
     howItHelps: "Reduce missed billing and improve expense recovery.",
-    functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print"),
+    functionSupport: support(
+      "filter",
+      "group",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+    ),
   },
 
   {
     id: "timesheet-details",
     categoryId: "projects-timesheets",
     name: "Timesheet Details",
-    summary: "Timesheet entries with billed/unbilled and billable/non-billable split.",
+    summary:
+      "Timesheet entries with billed/unbilled and billable/non-billable split.",
     howItHelps: "Improve utilization visibility and billing completeness.",
-    functionSupport: support("filter", "group", "schedule", "share", "export", "print"),
+    functionSupport: support(
+      "filter",
+      "group",
+      "schedule",
+      "share",
+      "export",
+      "print",
+    ),
   },
   {
     id: "project-summary",
@@ -683,7 +1208,16 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Project Summary",
     summary: "Project-level summary including logged and billed context.",
     howItHelps: "Fast operational review of ongoing and completed projects.",
-    functionSupport: support("filter", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support(
+      "filter",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "projects-revenue-summary",
@@ -691,7 +1225,16 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Projects Revenue Summary",
     summary: "Project budget amount vs actual earned revenue.",
     howItHelps: "Compare budget expectations against realized revenue.",
-    functionSupport: support("filter", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support(
+      "filter",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "project-details",
@@ -699,7 +1242,16 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Project Details",
     summary: "Project-level detail view with billing and time context.",
     howItHelps: "Drill into project performance and project-specific activity.",
-    functionSupport: support("filter", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support(
+      "filter",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
 
   {
@@ -708,7 +1260,14 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "System Mails",
     summary: "Organization email activity across mail types.",
     howItHelps: "Audit outbound communication and operational consistency.",
-    functionSupport: support("filter", "customizeColumns", "sort", "share", "export", "print"),
+    functionSupport: support(
+      "filter",
+      "customizeColumns",
+      "sort",
+      "share",
+      "export",
+      "print",
+    ),
   },
   {
     id: "activity-logs-audit-trail",
@@ -716,7 +1275,15 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Activity Logs",
     summary: "System activity with versioned audit comparisons.",
     howItHelps: "Track who changed what and when for compliance and debugging.",
-    functionSupport: support("filter", "customizeColumns", "sort", "schedule", "share", "export", "print"),
+    functionSupport: support(
+      "filter",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+    ),
   },
   {
     id: "portal-activities",
@@ -724,7 +1291,14 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Portal Activities",
     summary: "Customer portal usage and behavior logs.",
     howItHelps: "Understand portal engagement and self-service behavior.",
-    functionSupport: support("filter", "customizeColumns", "sort", "share", "export", "print"),
+    functionSupport: support(
+      "filter",
+      "customizeColumns",
+      "sort",
+      "share",
+      "export",
+      "print",
+    ),
   },
   {
     id: "customer-reviews",
@@ -732,14 +1306,23 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Customer Reviews",
     summary: "Ratings summary and review-level listing.",
     howItHelps: "Identify detractor cohorts and improve customer experience.",
-    functionSupport: support("filter", "customizeColumns", "sort", "schedule", "share", "export", "print"),
+    functionSupport: support(
+      "filter",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+    ),
   },
   {
     id: "exception-report",
     categoryId: "activity",
     name: "Exception Report",
     summary: "Failed actions and exception events captured across the system.",
-    howItHelps: "Spot issues in workflows and investigate operational anomalies quickly.",
+    howItHelps:
+      "Spot issues in workflows and investigate operational anomalies quickly.",
     functionSupport: support("filter", "sort", "share", "export", "print"),
   },
   {
@@ -748,7 +1331,14 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Tax Summary",
     summary: "Tax totals and summary values for the selected period.",
     howItHelps: "Review tax output and keep filing preparation simple.",
-    functionSupport: support("filter", "group", "sort", "share", "export", "print"),
+    functionSupport: support(
+      "filter",
+      "group",
+      "sort",
+      "share",
+      "export",
+      "print",
+    ),
   },
   {
     id: "tds-receivables",
@@ -756,16 +1346,25 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "TDS Receivables",
     summary: "Receivable tax balances and withholding-related amounts.",
     howItHelps: "Track tax receivables due from deductions and collections.",
-    functionSupport: support("filter", "group", "sort", "share", "export", "print"),
+    functionSupport: support(
+      "filter",
+      "group",
+      "sort",
+      "share",
+      "export",
+      "print",
+    ),
   },
 
   {
     id: "mrr",
     categoryId: "mrr-arr",
     name: "Monthly Recurring Revenue (MRR)",
-    summary: "Recurring monthly revenue with expansion, contraction, and churn components.",
+    summary:
+      "Recurring monthly revenue with expansion, contraction, and churn components.",
     howItHelps: "Core SaaS growth metric for recurring revenue trajectory.",
-    formula: "Net MRR = Previous MRR + (New MRR + Expansion MRR + Reactivation MRR - Contraction MRR - Churn MRR)",
+    formula:
+      "Net MRR = Previous MRR + (New MRR + Expansion MRR + Reactivation MRR - Contraction MRR - Churn MRR)",
     calculator: {
       resultLabel: "Net MRR",
       precision: 2,
@@ -773,14 +1372,33 @@ const ALL_REPORTS: ReportDefinition[] = [
         { key: "previous_mrr", label: "Previous MRR", defaultValue: 132000 },
         { key: "new_mrr", label: "New MRR", defaultValue: 14500 },
         { key: "expansion_mrr", label: "Expansion MRR", defaultValue: 6200 },
-        { key: "reactivation_mrr", label: "Reactivation MRR", defaultValue: 1800 },
-        { key: "contraction_mrr", label: "Contraction MRR", defaultValue: 2400 },
+        {
+          key: "reactivation_mrr",
+          label: "Reactivation MRR",
+          defaultValue: 1800,
+        },
+        {
+          key: "contraction_mrr",
+          label: "Contraction MRR",
+          defaultValue: 2400,
+        },
         { key: "churn_mrr", label: "Churn MRR", defaultValue: 5300 },
       ],
       calculate: (inputs) =>
-        inputs.previous_mrr + (inputs.new_mrr + inputs.expansion_mrr + inputs.reactivation_mrr - inputs.contraction_mrr - inputs.churn_mrr),
+        inputs.previous_mrr +
+        (inputs.new_mrr +
+          inputs.expansion_mrr +
+          inputs.reactivation_mrr -
+          inputs.contraction_mrr -
+          inputs.churn_mrr),
     },
-    functionSupport: support("filter", "compare", "schedule", "share", "export"),
+    functionSupport: support(
+      "filter",
+      "compare",
+      "schedule",
+      "share",
+      "export",
+    ),
   },
   {
     id: "arr",
@@ -795,7 +1413,13 @@ const ALL_REPORTS: ReportDefinition[] = [
       fields: [{ key: "mrr", label: "MRR", defaultValue: 146800 }],
       calculate: (inputs) => inputs.mrr * 12,
     },
-    functionSupport: support("filter", "compare", "schedule", "share", "export"),
+    functionSupport: support(
+      "filter",
+      "compare",
+      "schedule",
+      "share",
+      "export",
+    ),
   },
   {
     id: "mrr-quick-ratio",
@@ -803,17 +1427,26 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "MRR Quick Ratio",
     summary: "Growth MRR relative to lost MRR.",
     howItHelps: "Quick test of whether recurring growth outpaces losses.",
-    formula: "MRR Quick Ratio = (New MRR + Expansion MRR) / (Contraction MRR + Churn MRR)",
+    formula:
+      "MRR Quick Ratio = (New MRR + Expansion MRR) / (Contraction MRR + Churn MRR)",
     calculator: {
       resultLabel: "MRR Quick Ratio",
       precision: 2,
       fields: [
         { key: "new_mrr", label: "New MRR", defaultValue: 12000 },
         { key: "expansion_mrr", label: "Expansion MRR", defaultValue: 3900 },
-        { key: "contraction_mrr", label: "Contraction MRR", defaultValue: 2400 },
+        {
+          key: "contraction_mrr",
+          label: "Contraction MRR",
+          defaultValue: 2400,
+        },
         { key: "churn_mrr", label: "Churn MRR", defaultValue: 2900 },
       ],
-      calculate: (inputs) => safeDivide(inputs.new_mrr + inputs.expansion_mrr, inputs.contraction_mrr + inputs.churn_mrr),
+      calculate: (inputs) =>
+        safeDivide(
+          inputs.new_mrr + inputs.expansion_mrr,
+          inputs.contraction_mrr + inputs.churn_mrr,
+        ),
       helpText: "Values > 1 mean growth MRR is greater than loss MRR.",
     },
     functionSupport: support("filter", "compare", "share"),
@@ -831,16 +1464,28 @@ const ALLOWED_REPORT_CATEGORY_IDS = new Set([
   "activity",
 ]);
 
-export const REPORT_CATEGORIES = ALL_REPORT_CATEGORIES.filter((category) => ALLOWED_REPORT_CATEGORY_IDS.has(category.id));
+export const REPORT_CATEGORIES = ALL_REPORT_CATEGORIES.filter((category) =>
+  ALLOWED_REPORT_CATEGORY_IDS.has(category.id),
+);
 
-export const REPORTS = ALL_REPORTS.filter((report) => ALLOWED_REPORT_CATEGORY_IDS.has(report.categoryId));
+export const REPORTS = ALL_REPORTS.filter((report) =>
+  ALLOWED_REPORT_CATEGORY_IDS.has(report.categoryId),
+);
 
-export const REPORTS_BY_CATEGORY = REPORT_CATEGORIES.reduce((acc, category) => {
-  acc[category.id] = REPORTS.filter((report) => report.categoryId === category.id);
-  return acc;
-}, {} as Record<string, ReportDefinition[]>);
+export const REPORTS_BY_CATEGORY = REPORT_CATEGORIES.reduce(
+  (acc, category) => {
+    acc[category.id] = REPORTS.filter(
+      (report) => report.categoryId === category.id,
+    );
+    return acc;
+  },
+  {} as Record<string, ReportDefinition[]>,
+);
 
-export const getCategoryById = (id: string) => REPORT_CATEGORIES.find((category) => category.id === id);
+export const getCategoryById = (id: string) =>
+  REPORT_CATEGORIES.find((category) => category.id === id);
 
 export const getReportById = (categoryId: string, reportId: string) =>
-  REPORTS.find((report) => report.categoryId === categoryId && report.id === reportId);
+  REPORTS.find(
+    (report) => report.categoryId === categoryId && report.id === reportId,
+  );

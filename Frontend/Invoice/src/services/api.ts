@@ -3,7 +3,8 @@ import { db } from "../store/db";
 import { readTaxesLocal } from "../pages/settings/organization-settings/taxes-compliance/TAX/storage";
 
 export const API_BASE_URL =
-  (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_API_URL) ||
+  (typeof import.meta !== "undefined" &&
+    (import.meta as any).env?.VITE_API_URL) ||
   "/api";
 
 const getStoredToken = () => {
@@ -48,7 +49,13 @@ type RequestOptions = {
   headers?: Record<string, string>;
 };
 
-const request = async ({ method = "GET", path, params, data, headers = {} }: RequestOptions) => {
+const request = async ({
+  method = "GET",
+  path,
+  params,
+  data,
+  headers = {},
+}: RequestOptions) => {
   const url = `${withBase(path)}${toQuery(params)}`;
   const token = getStoredToken();
   const mergedHeaders: Record<string, string> = { ...headers };
@@ -65,7 +72,12 @@ const request = async ({ method = "GET", path, params, data, headers = {} }: Req
       method,
       headers: mergedHeaders,
       credentials: "include",
-      body: method === "GET" ? undefined : data !== undefined ? JSON.stringify(data) : undefined,
+      body:
+        method === "GET"
+          ? undefined
+          : data !== undefined
+            ? JSON.stringify(data)
+            : undefined,
     });
 
     const contentType = response.headers.get("content-type") || "";
@@ -78,10 +90,15 @@ const request = async ({ method = "GET", path, params, data, headers = {} }: Req
         success: false,
         status: response.status,
         message:
-          (payload && typeof payload === "object" && (payload as any).message) ||
+          (payload &&
+            typeof payload === "object" &&
+            (payload as any).message) ||
           response.statusText ||
           "Request failed",
-        data: payload && typeof payload === "object" ? (payload as any).data ?? null : payload,
+        data:
+          payload && typeof payload === "object"
+            ? ((payload as any).data ?? null)
+            : payload,
       };
     }
 
@@ -135,29 +152,43 @@ const parseCustomerNumberValue = (customerNumber: any, prefix: string) => {
 
 const getNextCustomerNumberFromCustomers = (
   customers: any[],
-  options?: { prefix?: string; start?: string | number }
+  options?: { prefix?: string; start?: string | number },
 ) => {
   const cleanedCustomers = Array.isArray(customers) ? customers : [];
 
   const startDigits = String(options?.start ?? "").match(/\d+/)?.[0] || "";
   const startNumeric = Number(startDigits || 1);
-  const parsedStart = Number.isFinite(startNumeric) && startNumeric > 0 ? startNumeric : 1;
+  const parsedStart =
+    Number.isFinite(startNumeric) && startNumeric > 0 ? startNumeric : 1;
 
   const existingNumbers = new Set(
-    cleanedCustomers.map((c: any) => String(c?.customerNumber ?? "").trim()).filter(Boolean)
+    cleanedCustomers
+      .map((c: any) => String(c?.customerNumber ?? "").trim())
+      .filter(Boolean),
   );
 
   const inferredPrefix =
     String(options?.prefix ?? "").trim() ||
-    detectCustomerNumberPrefix(cleanedCustomers.find((c: any) => c?.customerNumber)?.customerNumber) ||
+    detectCustomerNumberPrefix(
+      cleanedCustomers.find((c: any) => c?.customerNumber)?.customerNumber,
+    ) ||
     "CUS-";
 
   const parsed = cleanedCustomers
-    .map((c: any) => parseCustomerNumberValue(c?.customerNumber, inferredPrefix))
+    .map((c: any) =>
+      parseCustomerNumberValue(c?.customerNumber, inferredPrefix),
+    )
     .filter(Boolean) as Array<{ numeric: number; digits: number }>;
 
-  const maxExisting = parsed.reduce((max, entry) => Math.max(max, entry.numeric), parsedStart - 1);
-  const width = Math.max(5, startDigits.length, parsed.reduce((max, entry) => Math.max(max, entry.digits), 0));
+  const maxExisting = parsed.reduce(
+    (max, entry) => Math.max(max, entry.numeric),
+    parsedStart - 1,
+  );
+  const width = Math.max(
+    5,
+    startDigits.length,
+    parsed.reduce((max, entry) => Math.max(max, entry.digits), 0),
+  );
 
   let next = maxExisting + 1;
   let candidate = `${inferredPrefix}${String(next).padStart(width, "0")}`;
@@ -180,7 +211,9 @@ const buildCustomerName = (customer: any) =>
     .trim();
 
 const normalizeCustomer = (input: any, fallbackId?: string) => {
-  const id = toCustomerId(input?._id || input?.id || fallbackId || db.utils.uid("cus"));
+  const id = toCustomerId(
+    input?._id || input?.id || fallbackId || db.utils.uid("cus"),
+  );
   const name = buildCustomerName(input);
   return {
     ...input,
@@ -194,7 +227,9 @@ const normalizeCustomer = (input: any, fallbackId?: string) => {
 };
 
 const readAllCustomersLocal = () =>
-  (db.customers.list({}) || []).map((customer: any) => normalizeCustomer(customer, customer?.id));
+  (db.customers.list({}) || []).map((customer: any) =>
+    normalizeCustomer(customer, customer?.id),
+  );
 
 const writeCustomerLocal = (customer: any) => {
   const normalized = normalizeCustomer(customer);
@@ -221,7 +256,7 @@ const updateCustomerLocal = (id: string, patch: any) => {
         ...(patch?.shippingAddress || {}),
       },
     },
-    id
+    id,
   );
 
   db.customers.update(id, merged);
@@ -237,10 +272,14 @@ const customerMatchesQuery = (customer: any, query: string) =>
   Object.values(customer || {}).some((value) =>
     String(value ?? "")
       .toLowerCase()
-      .includes(query)
+      .includes(query),
   );
 
-const logCustomerMailAction = (customerId: string, type: string, payload: any) => {
+const logCustomerMailAction = (
+  customerId: string,
+  type: string,
+  payload: any,
+) => {
   try {
     const key = "taban_customer_mail_log";
     const raw = localStorage.getItem(key);
@@ -276,7 +315,10 @@ const writeLocalCollection = (key: string, rows: any[]) => {
 };
 
 const normalizeId = (value: any, prefix = "id") =>
-  String(value || `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
+  String(
+    value ||
+      `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+  );
 
 const ITEMS_STORAGE_KEY = "inv_items_v1";
 const UNITS_STORAGE_KEY = "taban_units_v1";
@@ -321,8 +363,22 @@ const DEFAULT_QUOTE_SETTINGS = {
   notifySubmitter: true,
   approvalLevels: [] as unknown[],
   customFields: [
-    { name: "Sales person", dataType: "Text Box (Single Line)", mandatory: "No", showInAllPDFs: "Yes", status: "Active", locked: true },
-    { name: "Description", dataType: "Text Box (Single Line)", mandatory: "No", showInAllPDFs: "Yes", status: "Active", locked: true },
+    {
+      name: "Sales person",
+      dataType: "Text Box (Single Line)",
+      mandatory: "No",
+      showInAllPDFs: "Yes",
+      status: "Active",
+      locked: true,
+    },
+    {
+      name: "Description",
+      dataType: "Text Box (Single Line)",
+      mandatory: "No",
+      showInAllPDFs: "Yes",
+      status: "Active",
+      locked: true,
+    },
   ],
   customButtons: [] as unknown[],
   relatedLists: [] as unknown[],
@@ -336,8 +392,6 @@ const LOCAL_LOCATIONS_KEY = "taban_locations_cache";
 const PLANS_STORAGE_KEY = "inv_plans_v1";
 const LOCAL_EVENTS_KEY = "taban_books_events";
 
-
-
 const ensureSeedRows = (key: string, seed: any[]) => {
   const rows = readLocalCollection(key);
   if (rows.length > 0 || seed.length === 0) return rows;
@@ -349,21 +403,27 @@ const getEntityId = (row: any) => String(row?._id || row?.id || "").trim();
 
 const filterRowsByParams = (rows: any[], params?: Record<string, any>) => {
   let next = [...rows];
-  const search = String(params?.search || params?.q || "").trim().toLowerCase();
-  const status = String(params?.status || "").trim().toLowerCase();
+  const search = String(params?.search || params?.q || "")
+    .trim()
+    .toLowerCase();
+  const status = String(params?.status || "")
+    .trim()
+    .toLowerCase();
 
   if (search) {
     next = next.filter((row) =>
       Object.values(row || {}).some((value) =>
         String(value ?? "")
           .toLowerCase()
-          .includes(search)
-      )
+          .includes(search),
+      ),
     );
   }
 
   if (status && status !== "all") {
-    next = next.filter((row) => String(row?.status || "").toLowerCase() === status);
+    next = next.filter(
+      (row) => String(row?.status || "").toLowerCase() === status,
+    );
   }
 
   return next;
@@ -394,7 +454,11 @@ const byNewest = (a: any, b: any) => {
   return bt - at;
 };
 
-const localResource = (storageKey: string, idPrefix: string, seed: any[] = []) => ({
+const localResource = (
+  storageKey: string,
+  idPrefix: string,
+  seed: any[] = [],
+) => ({
   getAll: async (params?: Record<string, any>) => {
     const seeded = ensureSeedRows(storageKey, seed);
     const filtered = filterRowsByParams(seeded, params).sort(byNewest);
@@ -402,7 +466,9 @@ const localResource = (storageKey: string, idPrefix: string, seed: any[] = []) =
     return { success: true, data, pagination };
   },
   list: async (params?: Record<string, any>) => {
-    const response = await localResource(storageKey, idPrefix, seed).getAll(params);
+    const response = await localResource(storageKey, idPrefix, seed).getAll(
+      params,
+    );
     return response;
   },
   getById: async (id: string) => {
@@ -453,8 +519,22 @@ const localResource = (storageKey: string, idPrefix: string, seed: any[] = []) =
 });
 
 const defaultTaxes = [
-  { id: "tax-vat-20", _id: "tax-vat-20", name: "VAT 20%", rate: 20, status: "Active", type: "tax" },
-  { id: "tax-gst-10", _id: "tax-gst-10", name: "GST 10%", rate: 10, status: "Active", type: "tax" },
+  {
+    id: "tax-vat-20",
+    _id: "tax-vat-20",
+    name: "VAT 20%",
+    rate: 20,
+    status: "Active",
+    type: "tax",
+  },
+  {
+    id: "tax-gst-10",
+    _id: "tax-gst-10",
+    name: "GST 10%",
+    rate: 10,
+    status: "Active",
+    type: "tax",
+  },
 ];
 
 const defaultCurrencies = [
@@ -470,11 +550,23 @@ const defaultCurrencies = [
 ];
 
 const defaultSalespersons = [
-  { id: "sp-001", _id: "sp-001", name: "Default Salesperson", email: "sales@local.app", status: "Active" },
+  {
+    id: "sp-001",
+    _id: "sp-001",
+    name: "Default Salesperson",
+    email: "sales@local.app",
+    status: "Active",
+  },
 ];
 
 const defaultProjects = [
-  { id: "prj-001", _id: "prj-001", name: "General Project", status: "Active", customerName: "General Customer" },
+  {
+    id: "prj-001",
+    _id: "prj-001",
+    name: "General Project",
+    status: "Active",
+    customerName: "General Customer",
+  },
 ];
 
 const defaultPaymentModes = [
@@ -484,24 +576,86 @@ const defaultPaymentModes = [
 ];
 
 const defaultBankAccounts = [
-  { id: "ba-001", _id: "ba-001", accountName: "Main Bank", accountNumber: "****1234", status: "Active" },
+  {
+    id: "ba-001",
+    _id: "ba-001",
+    accountName: "Main Bank",
+    accountNumber: "****1234",
+    status: "Active",
+  },
 ];
 
 const defaultChartAccounts = [
-  { id: "coa-sales", _id: "coa-sales", name: "Sales", accountType: "income", status: "active" },
-  { id: "coa-ar", _id: "coa-ar", name: "Accounts Receivable", accountType: "asset", status: "active" },
-  { id: "coa-tax", _id: "coa-tax", name: "Tax Payable", accountType: "liability", status: "active" },
-  { id: "coa-cash", _id: "coa-cash", name: "Cash", accountType: "asset", status: "active" },
+  {
+    id: "coa-sales",
+    _id: "coa-sales",
+    name: "Sales",
+    accountType: "income",
+    status: "active",
+  },
+  {
+    id: "coa-ar",
+    _id: "coa-ar",
+    name: "Accounts Receivable",
+    accountType: "asset",
+    status: "active",
+  },
+  {
+    id: "coa-tax",
+    _id: "coa-tax",
+    name: "Tax Payable",
+    accountType: "liability",
+    status: "active",
+  },
+  {
+    id: "coa-cash",
+    _id: "coa-cash",
+    name: "Cash",
+    accountType: "asset",
+    status: "active",
+  },
 ];
 
 const defaultTxSeries = [
-  { id: "series-inv", _id: "series-inv", module: "invoices", prefix: "INV-", nextNumber: 1, status: "Active" },
-  { id: "series-quote", _id: "series-quote", module: "quotes", prefix: "QT-", nextNumber: 1, status: "Active" },
-  { id: "series-sr", _id: "series-sr", module: "sales-receipts", prefix: "SR-", nextNumber: 1, status: "Active" },
-  { id: "series-cn", _id: "series-cn", module: "credit-notes", prefix: "CN-", nextNumber: 1, status: "Active" },
+  {
+    id: "series-inv",
+    _id: "series-inv",
+    module: "invoices",
+    prefix: "INV-",
+    nextNumber: 1,
+    status: "Active",
+  },
+  {
+    id: "series-quote",
+    _id: "series-quote",
+    module: "quotes",
+    prefix: "QT-",
+    nextNumber: 1,
+    status: "Active",
+  },
+  {
+    id: "series-sr",
+    _id: "series-sr",
+    module: "sales-receipts",
+    prefix: "SR-",
+    nextNumber: 1,
+    status: "Active",
+  },
+  {
+    id: "series-cn",
+    _id: "series-cn",
+    module: "credit-notes",
+    prefix: "CN-",
+    nextNumber: 1,
+    status: "Active",
+  },
 ];
 
-export const recordEvent = async (type: string, data: any, source: string = "user") => {
+export const recordEvent = async (
+  type: string,
+  data: any,
+  source: string = "user",
+) => {
   try {
     const events = readLocalCollection(LOCAL_EVENTS_KEY);
     const now = new Date();
@@ -512,11 +666,15 @@ export const recordEvent = async (type: string, data: any, source: string = "use
       event_type: type,
       created_time: now.toISOString(),
       occurred_at: now.toISOString(), // For backward compatibility with previous mock
-      event_time: now.toISOString().split('T')[0],
-      event_time_formatted: new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(now),
+      event_time: now.toISOString().split("T")[0],
+      event_time_formatted: new Intl.DateTimeFormat("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }).format(now),
       event_source: source,
       source: source, // For backward compatibility
-      data: data
+      data: data,
     };
     events.unshift(newEvent);
     writeLocalCollection(LOCAL_EVENTS_KEY, events);
@@ -550,11 +708,11 @@ const defaultEvents = [
         billing_address: {
           country: "Algeria",
           city: "Mogadishu",
-          street: "Main Rd, Mogadishu"
-        }
-      }
-    }
-  }
+          street: "Main Rd, Mogadishu",
+        },
+      },
+    },
+  },
 ];
 
 const eventsLocal = localResource(LOCAL_EVENTS_KEY, "evt", defaultEvents);
@@ -563,14 +721,24 @@ export const eventsAPI = {
   ...eventsLocal,
 };
 
-
 const defaultVendors = [
-  { id: "ven-001", _id: "ven-001", name: "Default Vendor", email: "vendor@local.app", status: "Active" },
+  {
+    id: "ven-001",
+    _id: "ven-001",
+    name: "Default Vendor",
+    email: "vendor@local.app",
+    status: "Active",
+  },
 ];
 
 export const apiRequest = async (
   path: string,
-  options: { method?: string; data?: any; params?: Record<string, any>; headers?: Record<string, string> } = {}
+  options: {
+    method?: string;
+    data?: any;
+    params?: Record<string, any>;
+    headers?: Record<string, string>;
+  } = {},
 ) => {
   const [rawPath, rawQuery = ""] = String(path || "").split("?");
   const queryParams: Record<string, any> = {};
@@ -594,8 +762,10 @@ const resource = (basePath: string) => ({
   list: (params?: Record<string, any>) => request({ path: basePath, params }),
   getById: (id: string) => request({ path: `${basePath}/${id}` }),
   create: (data: any) => request({ method: "POST", path: basePath, data }),
-  update: (id: string, data: any) => request({ method: "PUT", path: `${basePath}/${id}`, data }),
-  delete: (id: string) => request({ method: "DELETE", path: `${basePath}/${id}` }),
+  update: (id: string, data: any) =>
+    request({ method: "PUT", path: `${basePath}/${id}`, data }),
+  delete: (id: string) =>
+    request({ method: "DELETE", path: `${basePath}/${id}` }),
 });
 
 const customersBase = resource("/customers");
@@ -605,7 +775,10 @@ export const customersAPI = {
     return (await customersBase.getAll(params)) as any;
   },
   list: async (params?: Record<string, any>) => customersAPI.getAll(params),
-  getNextCustomerNumber: async (options?: { prefix?: string; start?: string | number }) => {
+  getNextCustomerNumber: async (options?: {
+    prefix?: string;
+    start?: string | number;
+  }) => {
     const remote = await request({
       path: "/customers/next-number",
       params: {
@@ -629,10 +802,18 @@ export const customersAPI = {
     return (await customersBase.delete(String(id))) as any;
   },
   bulkUpdate: async (ids: string[], data: any) => {
-    return (await request({ method: "POST", path: "/customers/bulk-update", data: { ids, data } })) as any;
+    return (await request({
+      method: "POST",
+      path: "/customers/bulk-update",
+      data: { ids, data },
+    })) as any;
   },
   bulkDelete: async (ids: string[]) => {
-    return (await request({ method: "POST", path: "/customers/bulk-delete", data: { ids } })) as any;
+    return (await request({
+      method: "POST",
+      path: "/customers/bulk-delete",
+      data: { ids },
+    })) as any;
   },
   merge: async (targetCustomerId: string, sourceCustomerIds: string[]) => {
     return (await request({
@@ -642,13 +823,25 @@ export const customersAPI = {
     })) as any;
   },
   sendInvitation: async (id: string, data: any) => {
-    return { success: false, message: "Not implemented for DB-backed customers yet", data: null };
+    return {
+      success: false,
+      message: "Not implemented for DB-backed customers yet",
+      data: null,
+    };
   },
   sendReviewRequest: async (id: string, data: any) => {
-    return { success: false, message: "Not implemented for DB-backed customers yet", data: null };
+    return {
+      success: false,
+      message: "Not implemented for DB-backed customers yet",
+      data: null,
+    };
   },
   sendStatement: async (id: string, data: any) => {
-    return { success: false, message: "Not implemented for DB-backed customers yet", data: null };
+    return {
+      success: false,
+      message: "Not implemented for DB-backed customers yet",
+      data: null,
+    };
   },
 };
 
@@ -664,15 +857,17 @@ export const itemsAPI = {
 
 export const plansAPI = {
   getAll: async (params?: Record<string, any>) => {
-    const query = String(params?.search || params?.q || "").trim().toLowerCase();
+    const query = String(params?.search || params?.q || "")
+      .trim()
+      .toLowerCase();
     let plans = readLocalCollection(PLANS_STORAGE_KEY);
     if (query) {
       plans = plans.filter((plan: any) =>
         Object.values(plan || {}).some((value) =>
           String(value ?? "")
             .toLowerCase()
-            .includes(query)
-        )
+            .includes(query),
+        ),
       );
     }
     return { success: true, data: plans };
@@ -681,14 +876,17 @@ export const plansAPI = {
   getById: async (id: string) => {
     const plans = readLocalCollection(PLANS_STORAGE_KEY);
     const found = plans.find((p: any) => String(p.id || p._id) === String(id));
-    if (!found) return { success: false, message: "Plan not found", data: null };
+    if (!found)
+      return { success: false, message: "Plan not found", data: null };
     return { success: true, data: found };
   },
 };
 
-
 export const unitsAPI = {
-  getAll: async () => ({ success: true, data: readLocalCollection(UNITS_STORAGE_KEY) }),
+  getAll: async () => ({
+    success: true,
+    data: readLocalCollection(UNITS_STORAGE_KEY),
+  }),
   create: async (data: any) => {
     const rows = readLocalCollection(UNITS_STORAGE_KEY);
     const id = normalizeId(data?.id || data?._id, "unit");
@@ -700,7 +898,7 @@ export const unitsAPI = {
   delete: async (id: string) => {
     const unitId = normalizeId(id, "unit");
     const rows = readLocalCollection(UNITS_STORAGE_KEY).filter(
-      (row: any) => String(row?.id || row?._id) !== unitId
+      (row: any) => String(row?.id || row?._id) !== unitId,
     );
     writeLocalCollection(UNITS_STORAGE_KEY, rows);
     return { success: true, data: { id: unitId } };
@@ -737,24 +935,50 @@ export const vendorsAPI = {
 };
 
 const taxesLocal = localResource(LOCAL_TAXES_KEY, "tax", defaultTaxes);
-const currenciesLocal = localResource(LOCAL_CURRENCIES_KEY, "cur", defaultCurrencies);
+const currenciesLocal = localResource(
+  LOCAL_CURRENCIES_KEY,
+  "cur",
+  defaultCurrencies,
+);
 const invoicesLocal = localResource(LOCAL_INVOICES_KEY, "inv");
 const paymentsReceivedLocal = localResource(LOCAL_PAYMENTS_RECEIVED_KEY, "pay");
 const subscriptionsLocal = localResource(LOCAL_SUBSCRIPTIONS_KEY, "sub");
 const creditNotesLocal = localResource(LOCAL_CREDIT_NOTES_KEY, "cn");
 const quotesLocal = localResource(LOCAL_QUOTES_KEY, "quote");
-const recurringInvoicesLocal = localResource(LOCAL_RECURRING_INVOICES_KEY, "ri");
+const recurringInvoicesLocal = localResource(
+  LOCAL_RECURRING_INVOICES_KEY,
+  "ri",
+);
 const expensesLocal = localResource(LOCAL_EXPENSES_KEY, "exp");
-const recurringExpensesLocal = localResource(LOCAL_RECURRING_EXPENSES_KEY, "rexp");
+const recurringExpensesLocal = localResource(
+  LOCAL_RECURRING_EXPENSES_KEY,
+  "rexp",
+);
 const projectsLocal = localResource(LOCAL_PROJECTS_KEY, "prj", defaultProjects);
 const timeEntriesLocal = localResource(LOCAL_TIME_ENTRIES_KEY, "te");
 const salesReceiptsLocal = localResource(LOCAL_SALES_RECEIPTS_KEY, "sr");
-const salespersonsLocal = localResource(LOCAL_SALESPERSONS_KEY, "sp", defaultSalespersons);
+const salespersonsLocal = localResource(
+  LOCAL_SALESPERSONS_KEY,
+  "sp",
+  defaultSalespersons,
+);
 const salespersonsResource = resource("/salespersons");
 const contactPersonsLocal = localResource(LOCAL_CONTACT_PERSONS_KEY, "cp");
-const bankAccountsLocal = localResource(LOCAL_BANK_ACCOUNTS_KEY, "ba", defaultBankAccounts);
-const paymentModesLocal = localResource(LOCAL_PAYMENT_MODES_KEY, "pm", defaultPaymentModes);
-const chartAccountsLocal = localResource(LOCAL_CHART_ACCOUNTS_KEY, "coa", defaultChartAccounts);
+const bankAccountsLocal = localResource(
+  LOCAL_BANK_ACCOUNTS_KEY,
+  "ba",
+  defaultBankAccounts,
+);
+const paymentModesLocal = localResource(
+  LOCAL_PAYMENT_MODES_KEY,
+  "pm",
+  defaultPaymentModes,
+);
+const chartAccountsLocal = localResource(
+  LOCAL_CHART_ACCOUNTS_KEY,
+  "coa",
+  defaultChartAccounts,
+);
 const txSeriesLocal = localResource(LOCAL_TX_SERIES_KEY, "series");
 const reportingTagsResource = resource("/reporting-tags");
 const currenciesResource = resource("/currencies");
@@ -762,17 +986,19 @@ const txSeriesResource = resource("/transaction-number-series");
 const locationsResource = resource("/locations");
 const locationsLocal = localResource(LOCAL_LOCATIONS_KEY, "loc");
 
-type TransactionSeriesLookup = string | {
-  seriesId?: string;
-  id?: string;
-  module?: string;
-  moduleKey?: string;
-  seriesName?: string;
-  locationId?: string;
-  locationName?: string;
-  reserve?: boolean;
-  allowFallbackToFirst?: boolean;
-};
+type TransactionSeriesLookup =
+  | string
+  | {
+      seriesId?: string;
+      id?: string;
+      module?: string;
+      moduleKey?: string;
+      seriesName?: string;
+      locationId?: string;
+      locationName?: string;
+      reserve?: boolean;
+      allowFallbackToFirst?: boolean;
+    };
 
 const toTxSeriesKey = (value: any) =>
   String(value || "")
@@ -782,7 +1008,11 @@ const toTxSeriesKey = (value: any) =>
 
 const normalizeTxSeriesLookup = (lookup?: TransactionSeriesLookup) => {
   if (typeof lookup === "string") {
-    return { seriesId: lookup.trim(), reserve: true, allowFallbackToFirst: false };
+    return {
+      seriesId: lookup.trim(),
+      reserve: true,
+      allowFallbackToFirst: false,
+    };
   }
 
   const hasExplicitLookup = Boolean(
@@ -791,7 +1021,7 @@ const normalizeTxSeriesLookup = (lookup?: TransactionSeriesLookup) => {
     String(lookup?.moduleKey || "").trim() ||
     String(lookup?.seriesName || "").trim() ||
     String(lookup?.locationId || "").trim() ||
-    String(lookup?.locationName || "").trim()
+    String(lookup?.locationName || "").trim(),
   );
 
   return {
@@ -802,26 +1032,46 @@ const normalizeTxSeriesLookup = (lookup?: TransactionSeriesLookup) => {
     locationId: String(lookup?.locationId || "").trim(),
     locationName: String(lookup?.locationName || "").trim(),
     reserve: lookup?.reserve !== false,
-    allowFallbackToFirst: lookup?.allowFallbackToFirst === true || !hasExplicitLookup,
+    allowFallbackToFirst:
+      lookup?.allowFallbackToFirst === true || !hasExplicitLookup,
   };
 };
 
-const isActiveTxSeriesRow = (row: any) => String(row?.status || "active").toLowerCase() !== "inactive";
+const isActiveTxSeriesRow = (row: any) =>
+  String(row?.status || "active").toLowerCase() !== "inactive";
 
-const resolveTxSeriesRow = (rows: any[], lookup: ReturnType<typeof normalizeTxSeriesLookup>) => {
+const resolveTxSeriesRow = (
+  rows: any[],
+  lookup: ReturnType<typeof normalizeTxSeriesLookup>,
+) => {
   const activeRows = (rows || []).filter(isActiveTxSeriesRow);
   const targetSeriesId = String(lookup?.seriesId || "").trim();
   if (targetSeriesId) {
-    return activeRows.find((row: any) => String(getEntityId(row)) === targetSeriesId) || rows.find((row: any) => String(getEntityId(row)) === targetSeriesId) || null;
+    return (
+      activeRows.find(
+        (row: any) => String(getEntityId(row)) === targetSeriesId,
+      ) ||
+      rows.find((row: any) => String(getEntityId(row)) === targetSeriesId) ||
+      null
+    );
   }
 
-  const targetSeriesName = String(lookup?.seriesName || "").trim().toLowerCase();
+  const targetSeriesName = String(lookup?.seriesName || "")
+    .trim()
+    .toLowerCase();
   if (targetSeriesName) {
-    const exactSeriesName = activeRows.find((row: any) => String(row?.seriesName || row?.name || "").trim().toLowerCase() === targetSeriesName);
+    const exactSeriesName = activeRows.find(
+      (row: any) =>
+        String(row?.seriesName || row?.name || "")
+          .trim()
+          .toLowerCase() === targetSeriesName,
+    );
     if (exactSeriesName) return exactSeriesName;
   }
 
-  const targetKey = toTxSeriesKey(lookup?.moduleKey || lookup?.module || lookup?.seriesName);
+  const targetKey = toTxSeriesKey(
+    lookup?.moduleKey || lookup?.module || lookup?.seriesName,
+  );
   if (targetKey) {
     const matched = activeRows.filter((row: any) => {
       const rowKeys = [
@@ -833,14 +1083,21 @@ const resolveTxSeriesRow = (rows: any[], lookup: ReturnType<typeof normalizeTxSe
       return rowKeys.some((key) => key === targetKey);
     });
     if (matched.length > 0) {
-      const lookupLocationIds = resolveLocationIdsFromCache(lookup?.locationId, lookup?.locationName);
+      const lookupLocationIds = resolveLocationIdsFromCache(
+        lookup?.locationId,
+        lookup?.locationName,
+      );
       const scoreRow = (row: any) => {
         const rowLocationIds = Array.isArray(row?.locationIds)
-          ? row.locationIds.map((id: any) => String(id || "").trim()).filter(Boolean)
+          ? row.locationIds
+              .map((id: any) => String(id || "").trim())
+              .filter(Boolean)
           : [];
         let score = 0;
         if (lookupLocationIds.length) {
-          const matchesLocation = rowLocationIds.some((id) => lookupLocationIds.includes(id));
+          const matchesLocation = rowLocationIds.some((id) =>
+            lookupLocationIds.includes(id),
+          );
           if (matchesLocation) score += 100;
           else if (!rowLocationIds.length) score += 10;
         }
@@ -848,22 +1105,37 @@ const resolveTxSeriesRow = (rows: any[], lookup: ReturnType<typeof normalizeTxSe
         if (rowLocationIds.length) score += 5;
         return score;
       };
-      return matched.slice().sort((a: any, b: any) => scoreRow(b) - scoreRow(a))[0] || null;
+      return (
+        matched
+          .slice()
+          .sort((a: any, b: any) => scoreRow(b) - scoreRow(a))[0] || null
+      );
     }
   }
 
   if (lookup?.allowFallbackToFirst) {
-    return activeRows.find((row: any) => Boolean(row?.isDefault)) || activeRows[0] || rows.find((row: any) => Boolean(row?.isDefault)) || rows[0] || null;
+    return (
+      activeRows.find((row: any) => Boolean(row?.isDefault)) ||
+      activeRows[0] ||
+      rows.find((row: any) => Boolean(row?.isDefault)) ||
+      rows[0] ||
+      null
+    );
   }
 
   return null;
 };
 
-const resolveLocationIdsFromCache = (locationId?: string, locationName?: string) => {
+const resolveLocationIdsFromCache = (
+  locationId?: string,
+  locationName?: string,
+) => {
   const ids = new Set<string>();
   const direct = String(locationId || "").trim();
   if (direct) ids.add(direct);
-  const targetName = String(locationName || "").trim().toLowerCase();
+  const targetName = String(locationName || "")
+    .trim()
+    .toLowerCase();
   if (!targetName || typeof window === "undefined") return Array.from(ids);
 
   try {
@@ -871,7 +1143,12 @@ const resolveLocationIdsFromCache = (locationId?: string, locationName?: string)
     const parsed = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(parsed)) return Array.from(ids);
     parsed
-      .filter((row: any) => String(row?.name || row?.locationName || "").trim().toLowerCase() === targetName)
+      .filter(
+        (row: any) =>
+          String(row?.name || row?.locationName || "")
+            .trim()
+            .toLowerCase() === targetName,
+      )
       .forEach((row: any) => {
         const id = String(row?._id || row?.id || "").trim();
         if (id) ids.add(id);
@@ -985,7 +1262,13 @@ export const currenciesAPI = {
     const response = await currenciesAPI.getAll({ limit: 1000 });
     const list = Array.isArray(response.data) ? response.data : [];
     const base =
-      list.find((currency: any) => Boolean(currency?.isBaseCurrency || currency?.is_base_currency || currency?.isBase)) ||
+      list.find((currency: any) =>
+        Boolean(
+          currency?.isBaseCurrency ||
+          currency?.is_base_currency ||
+          currency?.isBase,
+        ),
+      ) ||
       list[0] ||
       defaultCurrencies[0];
     return { success: true, data: base };
@@ -1029,17 +1312,27 @@ export const invoicesAPI = {
         "";
       return String(ref) === String(customerId);
     });
-    const { data, pagination } = paginateRows(filterRowsByParams(filtered, params), params);
+    const { data, pagination } = paginateRows(
+      filterRowsByParams(filtered, params),
+      params,
+    );
     return { success: true, data, pagination };
   },
   getNextNumber: async (prefixOrLookup?: string | Record<string, any>) => {
-    const prefix = typeof prefixOrLookup === "string" ? prefixOrLookup : String((prefixOrLookup as any)?.prefix || "");
+    const prefix =
+      typeof prefixOrLookup === "string"
+        ? prefixOrLookup
+        : String((prefixOrLookup as any)?.prefix || "");
     const txModule =
-      typeof prefixOrLookup === "string" && prefixOrLookup.toUpperCase().startsWith("RET-")
+      typeof prefixOrLookup === "string" &&
+      prefixOrLookup.toUpperCase().startsWith("RET-")
         ? "Retainer Invoice"
         : "Invoice";
     try {
-      const txRes: any = await transactionNumberSeriesAPI.getNextNumber({ module: txModule, reserve: false });
+      const txRes: any = await transactionNumberSeriesAPI.getNextNumber({
+        module: txModule,
+        reserve: false,
+      });
       const nextNumber =
         txRes?.data?.nextNumber ||
         txRes?.data?.next_number ||
@@ -1061,7 +1354,10 @@ export const invoicesAPI = {
       // fall back
     }
     try {
-      const res: any = await request({ path: "/invoices/next-number", params: { prefix: prefix || "INV-" } });
+      const res: any = await request({
+        path: "/invoices/next-number",
+        params: { prefix: prefix || "INV-" },
+      });
       if (res?.success) return res as any;
       if (typeof res?.status === "number") return res as any;
     } catch {
@@ -1121,7 +1417,11 @@ export const invoicesAPI = {
     return res;
   },
   sendEmail: async (id: string, data: any) => {
-    const res: any = await request({ method: "POST", path: `/invoices/${encodeURIComponent(id)}/send-email`, data });
+    const res: any = await request({
+      method: "POST",
+      path: `/invoices/${encodeURIComponent(id)}/send-email`,
+      data,
+    });
     if (!res?.success) {
       throw new Error(res?.message || "Failed to send email");
     }
@@ -1159,15 +1459,26 @@ export const paymentsReceivedAPI = {
   },
   getByInvoice: async (invoiceId: string, params?: Record<string, any>) => {
     try {
-      const res = await request({ path: "/payments-received/invoice/" + invoiceId, params }); // Wait, I didn't create this endpoint yet. Actually, let's stick to filtering if not.
+      const res = await request({
+        path: "/payments-received/invoice/" + invoiceId,
+        params,
+      }); // Wait, I didn't create this endpoint yet. Actually, let's stick to filtering if not.
       if (res?.success) return res as any;
     } catch {}
     const all = await paymentsReceivedAPI.getAll({ limit: 10000 });
     const filtered = (all.data || []).filter((payment: any) => {
-      const ref = payment?.invoiceId || payment?.invoice?._id || payment?.invoice?.id || payment?.invoice || "";
+      const ref =
+        payment?.invoiceId ||
+        payment?.invoice?._id ||
+        payment?.invoice?.id ||
+        payment?.invoice ||
+        "";
       return String(ref) === String(invoiceId);
     });
-    const { data, pagination } = paginateRows(filterRowsByParams(filtered, params), params);
+    const { data, pagination } = paginateRows(
+      filterRowsByParams(filtered, params),
+      params,
+    );
     return { success: true, data, pagination };
   },
   create: async (data: any) => {
@@ -1221,7 +1532,9 @@ export const paymentsReceivedAPI = {
       const message = String(error?.message || "");
       const isNetworkLike =
         !message ||
-        /network|failed to fetch|load failed|networkerror|timeout|offline/i.test(message);
+        /network|failed to fetch|load failed|networkerror|timeout|offline/i.test(
+          message,
+        );
       if (!isNetworkLike) throw error;
     }
     return {
@@ -1311,7 +1624,11 @@ export const creditNotesAPI = {
     return creditNotesLocal.getById(id);
   },
   getByCustomer: async (customerId: string, params?: Record<string, any>) => {
-    const all = await creditNotesAPI.getAll({ ...params, customerId, limit: 10000 });
+    const all = await creditNotesAPI.getAll({
+      ...params,
+      customerId,
+      limit: 10000,
+    });
     const filtered = (all.data || []).filter((creditNote: any) => {
       const ref =
         creditNote?.customerId ||
@@ -1321,21 +1638,35 @@ export const creditNotesAPI = {
         "";
       return String(ref) === String(customerId);
     });
-    const { data, pagination } = paginateRows(filterRowsByParams(filtered, params), params);
+    const { data, pagination } = paginateRows(
+      filterRowsByParams(filtered, params),
+      params,
+    );
     return { success: true, data, pagination };
   },
   getByInvoice: async (invoiceId: string, params?: Record<string, any>) => {
     const all = await creditNotesAPI.getAll({ ...params, limit: 10000 });
     const filtered = (all.data || []).filter((creditNote: any) => {
-      const ref = creditNote?.invoiceId || creditNote?.invoice?._id || creditNote?.invoice?.id || creditNote?.invoice || "";
+      const ref =
+        creditNote?.invoiceId ||
+        creditNote?.invoice?._id ||
+        creditNote?.invoice?.id ||
+        creditNote?.invoice ||
+        "";
       return String(ref) === String(invoiceId);
     });
-    const { data, pagination } = paginateRows(filterRowsByParams(filtered, params), params);
+    const { data, pagination } = paginateRows(
+      filterRowsByParams(filtered, params),
+      params,
+    );
     return { success: true, data, pagination };
   },
   getNextNumber: async () => {
     try {
-      const txRes: any = await transactionNumberSeriesAPI.getNextNumber({ module: "Credit Note", reserve: false });
+      const txRes: any = await transactionNumberSeriesAPI.getNextNumber({
+        module: "Credit Note",
+        reserve: false,
+      });
       const nextNumber =
         txRes?.data?.nextNumber ||
         txRes?.data?.next_number ||
@@ -1362,7 +1693,10 @@ export const creditNotesAPI = {
     } catch {}
     const all = await creditNotesLocal.getAll({ limit: 100000 });
     const next = (all.pagination?.total || 0) + 1;
-    return { success: true, data: { nextNumber: `CN-${String(next).padStart(5, "0")}` } };
+    return {
+      success: true,
+      data: { nextNumber: `CN-${String(next).padStart(5, "0")}` },
+    };
   },
   create: async (data: any) => {
     try {
@@ -1386,7 +1720,11 @@ export const creditNotesAPI = {
     return creditNotesLocal.delete(id);
   },
   sendEmail: async (id: string, data: any) => {
-    const res: any = await request({ method: "POST", path: `/credit-notes/${encodeURIComponent(id)}/send-email`, data });
+    const res: any = await request({
+      method: "POST",
+      path: `/credit-notes/${encodeURIComponent(id)}/send-email`,
+      data,
+    });
     if (!res?.success) {
       throw new Error(res?.message || "Failed to send email");
     }
@@ -1410,7 +1748,10 @@ export const quotesAPI = {
   delete: (id: string) => quotesBase.delete(id),
   getNextNumber: async (prefixOrLookup?: string | Record<string, any>) => {
     try {
-      const txRes: any = await transactionNumberSeriesAPI.getNextNumber({ module: "Quote", reserve: false });
+      const txRes: any = await transactionNumberSeriesAPI.getNextNumber({
+        module: "Quote",
+        reserve: false,
+      });
       const nextNumber =
         txRes?.data?.nextNumber ||
         txRes?.data?.next_number ||
@@ -1431,12 +1772,20 @@ export const quotesAPI = {
     } catch {
       // fall back
     }
-    const prefix = typeof prefixOrLookup === "string" ? prefixOrLookup : String((prefixOrLookup as any)?.prefix || "");
+    const prefix =
+      typeof prefixOrLookup === "string"
+        ? prefixOrLookup
+        : String((prefixOrLookup as any)?.prefix || "");
     return request({ path: "/quotes/next-number", params: { prefix } });
   },
-  bulkDelete: (ids: string[]) => request({ method: "POST", path: "/quotes/bulk-delete", data: { ids } }),
+  bulkDelete: (ids: string[]) =>
+    request({ method: "POST", path: "/quotes/bulk-delete", data: { ids } }),
   sendEmail: async (id: string, data: any) => {
-    const res: any = await request({ method: "POST", path: `/quotes/${encodeURIComponent(id)}/send-email`, data });
+    const res: any = await request({
+      method: "POST",
+      path: `/quotes/${encodeURIComponent(id)}/send-email`,
+      data,
+    });
     if (!res?.success) {
       throw new Error(res?.message || "Failed to send email");
     }
@@ -1483,7 +1832,11 @@ export const recurringInvoicesAPI = {
   generateInvoice: async (id: string) => {
     const source = await recurringInvoicesAPI.getById(id);
     if (!source.success || !source.data) {
-      return { success: false, message: "Recurring invoice not found", data: null };
+      return {
+        success: false,
+        message: "Recurring invoice not found",
+        data: null,
+      };
     }
 
     const base = source.data;
@@ -1506,13 +1859,19 @@ export const recurringInvoicesAPI = {
 
     const res = await invoicesAPI.create(createdInvoice);
     if (res.success) {
-      await recurringInvoicesAPI.update(id, { lastGenerated: now, lastGeneratedInvoiceId: res.data?.id || res.data?._id || invId });
+      await recurringInvoicesAPI.update(id, {
+        lastGenerated: now,
+        lastGeneratedInvoiceId: res.data?.id || res.data?._id || invId,
+      });
     } else {
       // Fallback if API fails
       const invoicesRows = readLocalCollection(LOCAL_INVOICES_KEY);
       invoicesRows.unshift(createdInvoice);
       writeLocalCollection(LOCAL_INVOICES_KEY, invoicesRows);
-      await recurringInvoicesLocal.update(id, { lastGenerated: now, lastGeneratedInvoiceId: invId });
+      await recurringInvoicesLocal.update(id, {
+        lastGenerated: now,
+        lastGeneratedInvoiceId: invId,
+      });
       return { success: true, data: createdInvoice };
     }
 
@@ -1531,10 +1890,14 @@ export const expensesAPI = {
     const response = await expensesLocal.getAll(params);
     let rows = Array.isArray(response?.data) ? response.data : [];
 
-    const recurringId = String(params?.recurring_expense_id || params?.recurringExpenseId || "").trim();
+    const recurringId = String(
+      params?.recurring_expense_id || params?.recurringExpenseId || "",
+    ).trim();
     if (recurringId) {
       rows = rows.filter((row: any) => {
-        const ref = String(row?.recurring_expense_id || row?.recurringExpenseId || "").trim();
+        const ref = String(
+          row?.recurring_expense_id || row?.recurringExpenseId || "",
+        ).trim();
         return ref === recurringId;
       });
     }
@@ -1573,7 +1936,8 @@ export const expensesAPI = {
       expense_id: data?.expense_id || data?._id || data?.id,
     };
     const response = await expensesLocal.create(payload);
-    if (response.success) recordEvent("expense_created", { expense: response.data });
+    if (response.success)
+      recordEvent("expense_created", { expense: response.data });
     return {
       ...response,
       code: response?.success ? 0 : 1,
@@ -1589,7 +1953,8 @@ export const expensesAPI = {
       }
     } catch {}
     const response = await expensesLocal.update(id, data);
-    if (response.success) recordEvent("expense_updated", { expense: response.data });
+    if (response.success)
+      recordEvent("expense_updated", { expense: response.data });
     return {
       ...response,
       code: response?.success ? 0 : 1,
@@ -1619,14 +1984,22 @@ const addRepeatInterval = (baseDate: Date, repeatEvery: string) => {
     .replace(/[^a-z0-9]/g, "");
 
   const next = new Date(baseDate);
-  if (normalized === "week" || normalized === "weekly") next.setDate(next.getDate() + 7);
-  else if (normalized === "2weeks" || normalized === "2week") next.setDate(next.getDate() + 14);
-  else if (normalized === "2months" || normalized === "2month") next.setMonth(next.getMonth() + 2);
-  else if (normalized === "3months" || normalized === "3month") next.setMonth(next.getMonth() + 3);
-  else if (normalized === "6months" || normalized === "6month") next.setMonth(next.getMonth() + 6);
-  else if (normalized === "year" || normalized === "yearly") next.setFullYear(next.getFullYear() + 1);
-  else if (normalized === "2years" || normalized === "2year") next.setFullYear(next.getFullYear() + 2);
-  else if (normalized === "3years" || normalized === "3year") next.setFullYear(next.getFullYear() + 3);
+  if (normalized === "week" || normalized === "weekly")
+    next.setDate(next.getDate() + 7);
+  else if (normalized === "2weeks" || normalized === "2week")
+    next.setDate(next.getDate() + 14);
+  else if (normalized === "2months" || normalized === "2month")
+    next.setMonth(next.getMonth() + 2);
+  else if (normalized === "3months" || normalized === "3month")
+    next.setMonth(next.getMonth() + 3);
+  else if (normalized === "6months" || normalized === "6month")
+    next.setMonth(next.getMonth() + 6);
+  else if (normalized === "year" || normalized === "yearly")
+    next.setFullYear(next.getFullYear() + 1);
+  else if (normalized === "2years" || normalized === "2year")
+    next.setFullYear(next.getFullYear() + 2);
+  else if (normalized === "3years" || normalized === "3year")
+    next.setFullYear(next.getFullYear() + 3);
   else next.setMonth(next.getMonth() + 1);
   return next;
 };
@@ -1681,7 +2054,8 @@ export const recurringExpensesAPI = {
       recurring_expense_id: data?.recurring_expense_id || data?._id || data?.id,
       status: String(data?.status || "active").toLowerCase(),
       created_time: data?.created_time || nowIso,
-      next_expense_date: data?.next_expense_date || data?.start_date || nowIso.slice(0, 10),
+      next_expense_date:
+        data?.next_expense_date || data?.start_date || nowIso.slice(0, 10),
     };
     try {
       const res: any = await recurringExpensesBase.create(payload);
@@ -1737,7 +2111,9 @@ export const recurringExpensesAPI = {
   updateStatus: async (id: string, status: string) => {
     const normalizedStatus = String(status || "").toLowerCase();
     try {
-      const res: any = await recurringExpensesBase.update(id, { status: normalizedStatus });
+      const res: any = await recurringExpensesBase.update(id, {
+        status: normalizedStatus,
+      });
       if (res?.success) {
         return {
           ...res,
@@ -1746,7 +2122,9 @@ export const recurringExpensesAPI = {
         };
       }
     } catch {}
-    const response = await recurringExpensesLocal.update(id, { status: normalizedStatus });
+    const response = await recurringExpensesLocal.update(id, {
+      status: normalizedStatus,
+    });
     return {
       ...response,
       code: response?.success ? 0 : 1,
@@ -1756,13 +2134,20 @@ export const recurringExpensesAPI = {
   generateExpense: async (id: string) => {
     const source = await recurringExpensesLocal.getById(id);
     if (!source?.success || !source?.data) {
-      return { success: false, code: 1, message: "Recurring expense not found", data: null };
+      return {
+        success: false,
+        code: 1,
+        message: "Recurring expense not found",
+        data: null,
+      };
     }
 
     const recurring = source.data as any;
     const now = new Date();
     const dateIso = now.toISOString().slice(0, 10);
-    const amount = Number(recurring?.amount || recurring?.total || recurring?.sub_total || 0);
+    const amount = Number(
+      recurring?.amount || recurring?.total || recurring?.sub_total || 0,
+    );
 
     const createdExpense = await expensesLocal.create({
       date: dateIso,
@@ -1780,12 +2165,18 @@ export const recurringExpensesAPI = {
       description: recurring?.description || "",
       currency_code: recurring?.currency_code || "",
       status: "unbilled",
-      recurring_expense_id: recurring?.recurring_expense_id || recurring?._id || recurring?.id,
+      recurring_expense_id:
+        recurring?.recurring_expense_id || recurring?._id || recurring?.id,
       source: "recurring",
     });
 
-    const nextFrom = recurring?.next_expense_date ? new Date(recurring.next_expense_date) : now;
-    const nextDate = addRepeatInterval(nextFrom, recurring?.repeat_every || "month");
+    const nextFrom = recurring?.next_expense_date
+      ? new Date(recurring.next_expense_date)
+      : now;
+    const nextDate = addRepeatInterval(
+      nextFrom,
+      recurring?.repeat_every || "month",
+    );
     const updatedRecurring = await recurringExpensesLocal.update(id, {
       last_expense_date: dateIso,
       next_expense_date: nextDate.toISOString().slice(0, 10),
@@ -1823,10 +2214,18 @@ export const projectsAPI = {
     return (await projectsBase.delete(String(id))) as any;
   },
   bulkUpdate: async (ids: string[], data: any) => {
-    return (await request({ method: "POST", path: "/projects/bulk-update", data: { ids, data } })) as any;
+    return (await request({
+      method: "POST",
+      path: "/projects/bulk-update",
+      data: { ids, data },
+    })) as any;
   },
   bulkDelete: async (ids: string[]) => {
-    return (await request({ method: "POST", path: "/projects/bulk-delete", data: { ids } })) as any;
+    return (await request({
+      method: "POST",
+      path: "/projects/bulk-delete",
+      data: { ids },
+    })) as any;
   },
   getByCustomer: async (customerId: string, params?: Record<string, any>) => {
     return await projectsAPI.getAll({ ...params, customerId });
@@ -1884,7 +2283,10 @@ export const salesReceiptsAPI = {
   delete: (id: string) => salesReceiptsBase.delete(id),
   getNextNumber: async () => {
     try {
-      const txRes: any = await transactionNumberSeriesAPI.getNextNumber({ module: "Sales Receipt", reserve: false });
+      const txRes: any = await transactionNumberSeriesAPI.getNextNumber({
+        module: "Sales Receipt",
+        reserve: false,
+      });
       const nextNumber =
         txRes?.data?.nextNumber ||
         txRes?.data?.next_number ||
@@ -1913,10 +2315,22 @@ export const salesReceiptsAPI = {
     const all = await salesReceiptsLocal.getAll({ limit: 100000 });
     const next = (all.pagination?.total || 0) + 1;
     const nextNumber = `SR-${String(next).padStart(5, "0")}`;
-    return { success: true, data: { nextNumber, next_number: nextNumber, receiptNumber: nextNumber, nextReceiptNumber: nextNumber } };
+    return {
+      success: true,
+      data: {
+        nextNumber,
+        next_number: nextNumber,
+        receiptNumber: nextNumber,
+        nextReceiptNumber: nextNumber,
+      },
+    };
   },
   sendEmail: async (id: string, data: any) => {
-    const res: any = await request({ method: "POST", path: `/sales-receipts/${encodeURIComponent(id)}/send-email`, data });
+    const res: any = await request({
+      method: "POST",
+      path: `/sales-receipts/${encodeURIComponent(id)}/send-email`,
+      data,
+    });
     if (!res?.success) {
       throw new Error(res?.message || "Failed to send email");
     }
@@ -1946,9 +2360,12 @@ export const contactPersonsAPI = {
       });
       return { success: true, data };
     }
-    return contactPersonsLocal.getAll(customerIdOrParams as Record<string, any> | undefined);
+    return contactPersonsLocal.getAll(
+      customerIdOrParams as Record<string, any> | undefined,
+    );
   },
-  list: (customerIdOrParams?: string | Record<string, any>) => contactPersonsAPI.getAll(customerIdOrParams),
+  list: (customerIdOrParams?: string | Record<string, any>) =>
+    contactPersonsAPI.getAll(customerIdOrParams),
 };
 
 export const bankAccountsAPI = {
@@ -2006,13 +2423,19 @@ export const documentsAPI = {
       writeLocalCollection(LOCAL_DOCUMENTS_KEY, rows);
       return { success: true, data: created };
     } catch (error: any) {
-      return { success: false, message: error?.message || "Upload failed", data: null };
+      return {
+        success: false,
+        message: error?.message || "Upload failed",
+        data: null,
+      };
     }
   },
   delete: async (id: string) => {
     const docId = String(id || "").trim();
     const rows = readLocalCollection(LOCAL_DOCUMENTS_KEY);
-    const filtered = rows.filter((row: any) => String(row?.id || row?._id || row?.documentId) !== docId);
+    const filtered = rows.filter(
+      (row: any) => String(row?.id || row?._id || row?.documentId) !== docId,
+    );
     writeLocalCollection(LOCAL_DOCUMENTS_KEY, filtered);
     return { success: true, data: { id: docId } };
   },
@@ -2020,36 +2443,69 @@ export const documentsAPI = {
 
 export const emailTemplatesAPI = {
   ...resource("/settings/email-templates"),
-  getByKey: (key: string) => request({ path: `/settings/email-templates/${encodeURIComponent(key)}` }),
+  getByKey: (key: string) =>
+    request({ path: `/settings/email-templates/${encodeURIComponent(key)}` }),
   upsert: (key: string, data: any) =>
-    request({ method: "PUT", path: `/settings/email-templates/${encodeURIComponent(key)}`, data }),
+    request({
+      method: "PUT",
+      path: `/settings/email-templates/${encodeURIComponent(key)}`,
+      data,
+    }),
 };
 
 export const senderEmailsAPI = {
   ...resource("/settings/sender-emails"),
   getPrimary: () => request({ path: "/settings/sender-emails/primary" }),
-  resendVerification: (id: string) => request({ method: "POST", path: `/settings/sender-emails/${encodeURIComponent(id)}/resend-verification` }),
+  resendVerification: (id: string) =>
+    request({
+      method: "POST",
+      path: `/settings/sender-emails/${encodeURIComponent(id)}/resend-verification`,
+    }),
   getInvitation: (senderId: string, token: string) =>
-    request({ path: `/public/sender-emails/invitations/${encodeURIComponent(senderId)}`, params: { token } }),
+    request({
+      path: `/public/sender-emails/invitations/${encodeURIComponent(senderId)}`,
+      params: { token },
+    }),
   acceptInvitation: (senderId: string, token: string) =>
-    request({ method: "POST", path: `/public/sender-emails/invitations/${encodeURIComponent(senderId)}/accept`, data: { token } }),
+    request({
+      method: "POST",
+      path: `/public/sender-emails/invitations/${encodeURIComponent(senderId)}/accept`,
+      data: { token },
+    }),
   rejectInvitation: (senderId: string, token: string) =>
-    request({ method: "POST", path: `/public/sender-emails/invitations/${encodeURIComponent(senderId)}/reject`, data: { token } }),
+    request({
+      method: "POST",
+      path: `/public/sender-emails/invitations/${encodeURIComponent(senderId)}/reject`,
+      data: { token },
+    }),
   resendInvitationOtp: (senderId: string, token: string) =>
-    request({ method: "POST", path: `/public/sender-emails/invitations/${encodeURIComponent(senderId)}/resend-otp`, data: { token } }),
+    request({
+      method: "POST",
+      path: `/public/sender-emails/invitations/${encodeURIComponent(senderId)}/resend-otp`,
+      data: { token },
+    }),
   verifyInvitationOtp: (senderId: string, token: string, otp: string) =>
-    request({ method: "POST", path: `/public/sender-emails/invitations/${encodeURIComponent(senderId)}/verify-otp`, data: { token, otp } }),
+    request({
+      method: "POST",
+      path: `/public/sender-emails/invitations/${encodeURIComponent(senderId)}/verify-otp`,
+      data: { token, otp },
+    }),
 };
 
 export const emailNotificationPreferencesAPI = {
   get: () => request({ path: "/settings/email-notification-preferences" }),
   update: (data: any) =>
-    request({ method: "PUT", path: "/settings/email-notification-preferences", data }),
+    request({
+      method: "PUT",
+      path: "/settings/email-notification-preferences",
+      data,
+    }),
 };
 
 export const emailRelayAPI = {
   ...resource("/settings/email-relay"),
-  toggle: (id: string) => request({ method: "POST", path: `/settings/email-relay/${id}/toggle` }),
+  toggle: (id: string) =>
+    request({ method: "POST", path: `/settings/email-relay/${id}/toggle` }),
 };
 
 export const approvalRulesAPI = {
@@ -2098,7 +2554,11 @@ export const transactionNumberSeriesAPI = {
   },
   createMultiple: async (data: any) => {
     try {
-      const res = await request({ method: "POST", path: "/transaction-number-series/bulk", data });
+      const res = await request({
+        method: "POST",
+        path: "/transaction-number-series/bulk",
+        data,
+      });
       if (res?.success) return res as any;
       if (typeof (res as any)?.status === "number") return res as any;
     } catch {
@@ -2107,7 +2567,9 @@ export const transactionNumberSeriesAPI = {
 
     const seriesName = data?.seriesName || "Standard";
     const locationIds = data?.locationIds || [];
-    const modules = data?.modules || (Array.isArray(data) ? data : data?.series || data?.rows || []);
+    const modules =
+      data?.modules ||
+      (Array.isArray(data) ? data : data?.series || data?.rows || []);
 
     const created: any[] = [];
     for (const mod of modules) {
@@ -2115,7 +2577,7 @@ export const transactionNumberSeriesAPI = {
         ...mod,
         seriesName,
         locationIds,
-        status: "Active"
+        status: "Active",
       };
       const response = await txSeriesLocal.create(row);
       if (response.success && response.data) created.push(response.data);
@@ -2124,7 +2586,11 @@ export const transactionNumberSeriesAPI = {
   },
   updateMultiple: async (data: any) => {
     try {
-      const res = await request({ method: "PUT", path: "/transaction-number-series/bulk", data });
+      const res = await request({
+        method: "PUT",
+        path: "/transaction-number-series/bulk",
+        data,
+      });
       if (res?.success) return res as any;
       if (typeof (res as any)?.status === "number") return res as any;
     } catch {
@@ -2138,8 +2604,10 @@ export const transactionNumberSeriesAPI = {
 
     // Get all existing rows for this series
     const all = await txSeriesLocal.getAll({ limit: 10000 });
-    const existingRows = (all.data || []).filter((row: any) =>
-      String(row.seriesName || "").toLowerCase() === originalName.toLowerCase()
+    const existingRows = (all.data || []).filter(
+      (row: any) =>
+        String(row.seriesName || "").toLowerCase() ===
+        originalName.toLowerCase(),
     );
 
     // Delete existing rows
@@ -2154,7 +2622,7 @@ export const transactionNumberSeriesAPI = {
         ...mod,
         seriesName,
         locationIds,
-        status: "Active"
+        status: "Active",
       };
       const response = await txSeriesLocal.create(row);
       if (response.success && response.data) created.push(response.data);
@@ -2165,17 +2633,25 @@ export const transactionNumberSeriesAPI = {
     const normalized = normalizeTxSeriesLookup(lookup);
     try {
       const params: Record<string, any> = {};
-      if (!normalized.seriesId && normalized.module) params.module = normalized.module;
-      if (!normalized.seriesId && normalized.moduleKey) params.moduleKey = normalized.moduleKey;
-      if (!normalized.seriesId && normalized.seriesName) params.seriesName = normalized.seriesName;
-      if (!normalized.seriesId && normalized.locationId) params.locationId = normalized.locationId;
-      if (!normalized.seriesId && normalized.locationName) params.locationName = normalized.locationName;
+      if (!normalized.seriesId && normalized.module)
+        params.module = normalized.module;
+      if (!normalized.seriesId && normalized.moduleKey)
+        params.moduleKey = normalized.moduleKey;
+      if (!normalized.seriesId && normalized.seriesName)
+        params.seriesName = normalized.seriesName;
+      if (!normalized.seriesId && normalized.locationId)
+        params.locationId = normalized.locationId;
+      if (!normalized.seriesId && normalized.locationName)
+        params.locationName = normalized.locationName;
       if (normalized.reserve === false) params.reserve = "false";
 
       const path = normalized.seriesId
         ? `/transaction-number-series/${encodeURIComponent(normalized.seriesId)}/next-number`
         : "/transaction-number-series/next-number";
-      const res = await request({ path, params: Object.keys(params).length ? params : undefined });
+      const res = await request({
+        path,
+        params: Object.keys(params).length ? params : undefined,
+      });
       if (res?.success) return res as any;
       if (typeof (res as any)?.status === "number") return res as any;
     } catch {
@@ -2184,12 +2660,25 @@ export const transactionNumberSeriesAPI = {
 
     const all = await txSeriesLocal.getAll({ limit: 10000 });
     const rows = all.data || [];
-    const selected = resolveTxSeriesRow(rows, normalized) || (!normalized.seriesId && !normalized.module && !normalized.moduleKey && !normalized.seriesName ? rows[0] : null);
+    const selected =
+      resolveTxSeriesRow(rows, normalized) ||
+      (!normalized.seriesId &&
+      !normalized.module &&
+      !normalized.moduleKey &&
+      !normalized.seriesName
+        ? rows[0]
+        : null);
     if (!selected) {
-      return { success: false, message: "Transaction series not found", data: null };
+      return {
+        success: false,
+        message: "Transaction series not found",
+        data: null,
+      };
     }
 
-    const starting = String(selected?.startingNumber || selected?.nextNumber || "1");
+    const starting = String(
+      selected?.startingNumber || selected?.nextNumber || "1",
+    );
     const parsed = parseInt(starting, 10);
     const current =
       Number(selected?.nextNumber) > 0
@@ -2198,25 +2687,52 @@ export const transactionNumberSeriesAPI = {
           ? parsed
           : 1;
     const width = /^\d+$/.test(starting) ? starting.length : 5;
-    const padded = width > 1 ? String(current).padStart(width, "0") : String(current);
+    const padded =
+      width > 1 ? String(current).padStart(width, "0") : String(current);
     const nextNumber = `${selected?.prefix || ""}${padded}`;
     if (normalized.reserve !== false) {
-      await txSeriesLocal.update(getEntityId(selected), { ...selected, nextNumber: current + 1 });
+      await txSeriesLocal.update(getEntityId(selected), {
+        ...selected,
+        nextNumber: current + 1,
+      });
     }
-    return { success: true, data: { seriesId: getEntityId(selected), nextNumber, next_number: nextNumber, reserved: normalized.reserve !== false } };
+    return {
+      success: true,
+      data: {
+        seriesId: getEntityId(selected),
+        nextNumber,
+        next_number: nextNumber,
+        reserved: normalized.reserve !== false,
+      },
+    };
   },
   getCachedNextNumber: (lookup?: TransactionSeriesLookup) => {
     const normalized = normalizeTxSeriesLookup(lookup);
     const cachedRows = readLocalCollection(LOCAL_TX_SERIES_KEY);
     const rows = cachedRows;
-    const selected = resolveTxSeriesRow(rows, normalized) || (!normalized.seriesId && !normalized.module && !normalized.moduleKey && !normalized.seriesName ? rows[0] : null);
+    const selected =
+      resolveTxSeriesRow(rows, normalized) ||
+      (!normalized.seriesId &&
+      !normalized.module &&
+      !normalized.moduleKey &&
+      !normalized.seriesName
+        ? rows[0]
+        : null);
     if (!selected) return "";
 
-    const starting = String(selected?.startingNumber || selected?.nextNumber || "1");
+    const starting = String(
+      selected?.startingNumber || selected?.nextNumber || "1",
+    );
     const parsed = parseInt(starting, 10);
-    const current = Number(selected?.nextNumber) > 0 ? Number(selected.nextNumber) : Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+    const current =
+      Number(selected?.nextNumber) > 0
+        ? Number(selected.nextNumber)
+        : Number.isFinite(parsed) && parsed > 0
+          ? parsed
+          : 1;
     const width = /^\d+$/.test(starting) ? starting.length : 5;
-    const padded = width > 1 ? String(current).padStart(width, "0") : String(current);
+    const padded =
+      width > 1 ? String(current).padStart(width, "0") : String(current);
     return `${selected?.prefix || ""}${padded}`;
   },
 };
@@ -2225,7 +2741,9 @@ export const reportsAPI = {
   getSalesByCustomer: async (params?: Record<string, any>) => {
     const res = await request({ path: "/reports/sales-by-customer", params });
     if (!res?.success) {
-      throw new Error(res?.message || "Failed to fetch sales by customer report");
+      throw new Error(
+        res?.message || "Failed to fetch sales by customer report",
+      );
     }
     return res as any;
   },
@@ -2237,23 +2755,32 @@ export const reportsAPI = {
     return res as any;
   },
   getSalesBySalesPerson: async (params?: Record<string, any>) => {
-    const res = await request({ path: "/reports/sales-by-sales-person", params });
+    const res = await request({
+      path: "/reports/sales-by-sales-person",
+      params,
+    });
     if (!res?.success) {
-      throw new Error(res?.message || "Failed to fetch sales by sales person report");
+      throw new Error(
+        res?.message || "Failed to fetch sales by sales person report",
+      );
     }
     return res as any;
   },
   getARAgingSummary: async (params?: Record<string, any>) => {
     const res = await request({ path: "/reports/ar-aging-summary", params });
     if (!res?.success) {
-      throw new Error(res?.message || "Failed to fetch AR aging summary report");
+      throw new Error(
+        res?.message || "Failed to fetch AR aging summary report",
+      );
     }
     return res as any;
   },
   getARAgingDetails: async (params?: Record<string, any>) => {
     const res = await request({ path: "/reports/ar-aging-details", params });
     if (!res?.success) {
-      throw new Error(res?.message || "Failed to fetch AR aging details report");
+      throw new Error(
+        res?.message || "Failed to fetch AR aging details report",
+      );
     }
     return res as any;
   },
@@ -2334,14 +2861,16 @@ export const locationsAPI = {
 export const settingsAPI = {
   getOwnerEmail: async () => {
     const profile = readSettingsObject("organization_profile", {});
-    const ownerEmail = profile?.email || profile?.ownerEmail || "owner@local.app";
+    const ownerEmail =
+      profile?.email || profile?.ownerEmail || "owner@local.app";
     return { success: true, data: { ownerEmail } };
   },
   getOrganizationProfile: async () => {
     try {
       const res = await request({ path: "/settings/organization/profile" });
       if (res?.success) {
-        const normalized = res.data && typeof res.data === "object" ? res.data : {};
+        const normalized =
+          res.data && typeof res.data === "object" ? res.data : {};
         writeSettingsObject("organization_profile", normalized);
         return { success: true, data: normalized };
       }
@@ -2363,11 +2892,28 @@ export const settingsAPI = {
   },
   updateOrganizationProfile: async (data: any) => {
     try {
-      const res = await request({ method: "PUT", path: "/settings/organization/profile", data });
+      const res = await request({
+        method: "PUT",
+        path: "/settings/organization/profile",
+        data,
+      });
       if (res?.success) {
-        const responseData = res.data && typeof res.data === "object" ? res.data : {};
-        const responseKeys = Object.keys(responseData).filter((key) => key !== "ok");
-        const updated = responseKeys.length > 0 ? { ...readSettingsObject("organization_profile", {}), ...(data || {}), ...responseData } : { ...readSettingsObject("organization_profile", {}), ...(data || {}) };
+        const responseData =
+          res.data && typeof res.data === "object" ? res.data : {};
+        const responseKeys = Object.keys(responseData).filter(
+          (key) => key !== "ok",
+        );
+        const updated =
+          responseKeys.length > 0
+            ? {
+                ...readSettingsObject("organization_profile", {}),
+                ...(data || {}),
+                ...responseData,
+              }
+            : {
+                ...readSettingsObject("organization_profile", {}),
+                ...(data || {}),
+              };
         writeSettingsObject("organization_profile", updated);
         return { success: true, data: updated };
       }
@@ -2385,9 +2931,10 @@ export const settingsAPI = {
     try {
       const res = await request({ path: "/settings/quotes" });
       if (res?.success) {
-        const data = res.data && typeof res.data === "object"
-          ? { ...DEFAULT_QUOTE_SETTINGS, ...(res.data as any) }
-          : DEFAULT_QUOTE_SETTINGS;
+        const data =
+          res.data && typeof res.data === "object"
+            ? { ...DEFAULT_QUOTE_SETTINGS, ...(res.data as any) }
+            : DEFAULT_QUOTE_SETTINGS;
         writeSettingsObject(LOCAL_QUOTES_SETTINGS_KEY, data);
         return { success: true, data };
       }
@@ -2395,19 +2942,31 @@ export const settingsAPI = {
       // fall back to local cache
     }
 
-    const data = readSettingsObject(LOCAL_QUOTES_SETTINGS_KEY, DEFAULT_QUOTE_SETTINGS);
+    const data = readSettingsObject(
+      LOCAL_QUOTES_SETTINGS_KEY,
+      DEFAULT_QUOTE_SETTINGS,
+    );
     writeSettingsObject(LOCAL_QUOTES_SETTINGS_KEY, data);
     return { success: true, data };
   },
   updateQuotesSettings: async (data: any) => {
     try {
-      const res = await request({ method: "PUT", path: "/settings/quotes", data });
+      const res = await request({
+        method: "PUT",
+        path: "/settings/quotes",
+        data,
+      });
       if (res?.success) {
-        const current = readSettingsObject(LOCAL_QUOTES_SETTINGS_KEY, DEFAULT_QUOTE_SETTINGS);
+        const current = readSettingsObject(
+          LOCAL_QUOTES_SETTINGS_KEY,
+          DEFAULT_QUOTE_SETTINGS,
+        );
         const updated = {
           ...current,
           ...(data || {}),
-          ...(res.data && typeof res.data === "object" ? (res.data as any) : {}),
+          ...(res.data && typeof res.data === "object"
+            ? (res.data as any)
+            : {}),
         };
         writeSettingsObject(LOCAL_QUOTES_SETTINGS_KEY, updated);
         return { success: true, data: updated };
@@ -2417,16 +2976,22 @@ export const settingsAPI = {
       // fall back to local cache
     }
 
-    const current = readSettingsObject(LOCAL_QUOTES_SETTINGS_KEY, DEFAULT_QUOTE_SETTINGS);
+    const current = readSettingsObject(
+      LOCAL_QUOTES_SETTINGS_KEY,
+      DEFAULT_QUOTE_SETTINGS,
+    );
     const updated = { ...current, ...(data || {}) };
     writeSettingsObject(LOCAL_QUOTES_SETTINGS_KEY, updated);
     return { success: true, data: updated };
   },
   getGeneralSettings: async () => {
     const defaults = {
-      discountSettings: { discountType: "transaction", discountBeforeTax: true },
+      discountSettings: {
+        discountType: "transaction",
+        discountBeforeTax: true,
+      },
       taxSettings: { taxBasis: "exclusive" },
-      roundingSettings: { roundingType: "none", precision: 2 }
+      roundingSettings: { roundingType: "none", precision: 2 },
     };
     const data = readSettingsObject(LOCAL_GENERAL_SETTINGS_KEY, defaults);
     return { success: true, data };
@@ -2458,9 +3023,16 @@ export const authAPI = {
 export const usersAPI = {
   ...resource("/users"),
   sendInvitation: (id: string, data?: any) =>
-    request({ method: "POST", path: `/users/${encodeURIComponent(String(id || ""))}/send-invitation`, data }),
+    request({
+      method: "POST",
+      path: `/users/${encodeURIComponent(String(id || ""))}/send-invitation`,
+      data,
+    }),
   getActivityLogs: (id: string, params?: Record<string, any>) =>
-    request({ path: `/users/${encodeURIComponent(String(id || ""))}/activities`, params }),
+    request({
+      path: `/users/${encodeURIComponent(String(id || ""))}/activities`,
+      params,
+    }),
 };
 
 export const rolesAPI = {
@@ -2490,23 +3062,40 @@ export const chartOfAccountsAPI = {
 
 export const openingBalancesAPI = {
   get: () => request({ path: "/settings/opening-balances" }),
-  save: (data: any) => request({ method: "POST", path: "/settings/opening-balances", data }),
+  save: (data: any) =>
+    request({ method: "POST", path: "/settings/opening-balances", data }),
 };
 
 export const priceListsAPI = {
   list: (params?: any) => request({ path: "/price-lists", params }),
   getById: (id: string) => request({ path: `/price-lists/${id}` }),
-  create: (data: any) => request({ method: "POST", path: "/price-lists", data }),
-  update: (id: string, data: any) => request({ method: "PUT", path: `/price-lists/${id}`, data }),
-  delete: (id: string) => request({ method: "DELETE", path: `/price-lists/${id}` }),
+  create: (data: any) =>
+    request({ method: "POST", path: "/price-lists", data }),
+  update: (id: string, data: any) =>
+    request({ method: "PUT", path: `/price-lists/${id}`, data }),
+  delete: (id: string) =>
+    request({ method: "DELETE", path: `/price-lists/${id}` }),
 };
 
 const automationResource = (segment: string) => ({
   ...resource(`/settings/automation/${segment}`),
   getStats: () => request({ path: `/settings/automation/${segment}/stats` }),
-  clone: (id: string) => request({ method: "POST", path: `/settings/automation/${segment}/${id}/clone` }),
-  reorder: (data: any) => request({ method: "POST", path: `/settings/automation/${segment}/reorder`, data }),
-  toggle: (id: string) => request({ method: "POST", path: `/settings/automation/${segment}/${id}/toggle` }),
+  clone: (id: string) =>
+    request({
+      method: "POST",
+      path: `/settings/automation/${segment}/${id}/clone`,
+    }),
+  reorder: (data: any) =>
+    request({
+      method: "POST",
+      path: `/settings/automation/${segment}/reorder`,
+      data,
+    }),
+  toggle: (id: string) =>
+    request({
+      method: "POST",
+      path: `/settings/automation/${segment}/${id}/toggle`,
+    }),
 });
 
 export const automationAPI = {
@@ -2515,7 +3104,11 @@ export const automationAPI = {
     getNotificationPreferences: () =>
       request({ path: "/settings/automation/rules/notification-preferences" }),
     updateNotificationPreferences: (data: any) =>
-      request({ method: "PUT", path: "/settings/automation/rules/notification-preferences", data }),
+      request({
+        method: "PUT",
+        path: "/settings/automation/rules/notification-preferences",
+        data,
+      }),
   },
   actions: automationResource("actions"),
   logs: automationResource("logs"),
