@@ -585,21 +585,21 @@ export default function PaymentsReceivedReportView({
   return (
     <div className="relative min-h-[calc(100vh-64px)] pt-3">
       <div className="mx-auto w-full px-3 pb-6">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#e6e9f0] pb-3">
           <div className="min-w-0">
-            <div className="mb-1 text-sm font-medium text-[#0f172a]">{categoryName}</div>
+            <div className="mb-1 text-sm font-medium text-[#2563eb]">{categoryName}</div>
             <div className="flex items-baseline gap-2">
               <button
                 type="button"
                 ref={menuButtonRef}
                 onClick={onMenuClick}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#d7dce7] bg-white text-[#475569] hover:bg-[#f8fafc]"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-[#d4d9e4] bg-white text-[#334155] hover:bg-[#f8fafc]"
                 aria-label="Open reports menu"
               >
-                <Menu size={18} />
+                <Menu size={15} />
               </button>
               <div className="flex min-w-0 items-baseline gap-2">
-                <h1 className="truncate text-[28px] font-semibold text-[#0f172a]">{reportName}</h1>
+                <h1 className="truncate text-[24px] font-semibold leading-tight text-[#0f172a]">{reportName}</h1>
                 <span className="whitespace-nowrap text-sm text-[#475569]">- As of {formatDate(dateRange.end)}</span>
               </div>
             </div>
@@ -609,31 +609,31 @@ export default function PaymentsReceivedReportView({
             <button
               type="button"
               onClick={onActivityClick}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#d7dce7] bg-white text-[#475569] hover:bg-[#f8fafc]"
+              className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]"
               aria-label="Open report activity"
             >
-              <RefreshCw size={18} />
+              <RefreshCw size={15} />
             </button>
             <button
               type="button"
               onClick={() => setExportOpen((prev) => !prev)}
-              className="inline-flex h-10 items-center gap-2 rounded-md border border-[#d7dce7] bg-white px-3 text-sm text-[#0f172a] hover:bg-[#f8fafc]"
+              className="inline-flex h-8 items-center gap-1 rounded border border-[#d4d9e4] bg-white px-3 text-sm font-medium text-[#1e293b] hover:bg-[#f8fafc]"
             >
-              Export <ChevronDown size={16} />
+              Export <ChevronDown size={14} />
             </button>
             <button
               type="button"
               onClick={onClosePage}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#d7dce7] bg-white text-[#ef4444] hover:bg-[#fef2f2]"
+              className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] text-[#ef4444] hover:bg-[#fef2f2]"
               aria-label="Close report"
             >
-              <X size={18} />
+              <X size={15} />
             </button>
           </div>
         </div>
 
-        <div className="mt-4 flex items-center gap-2 overflow-x-auto border-t border-b border-[#e5e7eb] bg-white py-3">
-          <div className="flex items-center gap-2 text-sm text-[#475569]">
+        <div className="mt-4 flex flex-wrap items-center gap-2 overflow-x-auto border-t border-b border-[#e5e7eb] bg-white py-3">
+          <div className="flex items-center gap-2 text-sm text-[#334155]">
             <Filter size={14} />
             <span>Filters :</span>
           </div>
@@ -646,14 +646,14 @@ export default function PaymentsReceivedReportView({
                 setCustomDateRangeDraft(customDateRange);
                 setDateRangeOpen((prev) => !prev);
               }}
-              className="inline-flex h-10 min-w-[170px] items-center justify-between gap-3 rounded-md border border-[#cbd5e1] bg-white px-3 text-sm text-[#0f172a] hover:border-[#94a3b8]"
+              className="inline-flex h-8 min-w-[170px] items-center justify-between gap-3 rounded border border-[#cfd6e4] bg-[#f8fafc] px-3 text-sm text-[#334155] hover:bg-white"
             >
               <span className="inline-flex items-center gap-2">
-                <CalendarDays size={14} />
+                <CalendarDays size={14} className="text-[#64748b]" />
                 <span>Date Range :</span>
                 <strong>{getDateRangeLabel(dateRangeKey)}</strong>
               </span>
-              <ChevronDown size={16} />
+              <ChevronDown size={14} />
             </button>
             {dateRangeOpen ? (
               <div className="absolute left-0 top-[calc(100%+6px)] z-30 w-[280px] rounded-lg border border-[#d7dce7] bg-white p-2 shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
@@ -734,9 +734,9 @@ export default function PaymentsReceivedReportView({
           <button
             type="button"
             onClick={() => setMoreFiltersOpen((prev) => !prev)}
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-[#cbd5e1] bg-white px-3 text-sm text-[#0f172a] hover:border-[#94a3b8]"
+            className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
           >
-            <Plus size={14} className="text-[#1f6f7a]" />
+            <Plus size={14} className="text-[#2563eb]" />
             More Filters
           </button>
 
@@ -747,7 +747,7 @@ export default function PaymentsReceivedReportView({
               setRefreshTick((tick) => tick + 1);
               onRunReport();
             }}
-            className="inline-flex h-10 items-center gap-2 rounded-md bg-[#1f6f7a] px-3 text-sm font-medium text-white hover:bg-[#185a63]"
+            className="inline-flex h-8 items-center gap-1 rounded bg-[#1b6f7b] px-4 text-sm font-semibold text-white hover:bg-[#155963]"
           >
             <CalendarDays size={14} />
             Run Report
@@ -848,19 +848,19 @@ export default function PaymentsReceivedReportView({
           </div>
         ) : null}
 
-        <div className="mt-4 flex items-center justify-end gap-3">
+        <div className="mt-3 flex flex-wrap items-center justify-end gap-2 text-sm text-[#475569]">
           <div className="relative">
             <button
               type="button"
               onClick={() => setGroupByOpen((prev) => !prev)}
-              className="inline-flex h-10 items-center gap-2 rounded-md border border-[#cbd5e1] bg-white px-3 text-sm text-[#0f172a] hover:border-[#94a3b8]"
+              className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
             >
               <span className="inline-flex items-center gap-2">
-                <Columns3 size={14} />
+                <Columns3 size={14} className="text-[#64748b]" />
                 Group By :
-                <strong>{getGroupByLabel(groupByKey)}</strong>
+                <strong className="text-[#0f172a]">{getGroupByLabel(groupByKey)}</strong>
               </span>
-              <ChevronDown size={16} />
+              <ChevronDown size={14} />
             </button>
             {groupByOpen ? (
               <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-[220px] rounded-lg border border-[#d7dce7] bg-white p-2 shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
@@ -885,31 +885,31 @@ export default function PaymentsReceivedReportView({
           <button
             type="button"
             onClick={openCustomize}
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-[#cbd5e1] bg-white px-3 text-sm text-[#0f172a] hover:border-[#94a3b8]"
+            className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
           >
-            <SlidersHorizontal size={14} />
+            <SlidersHorizontal size={14} className="text-[#64748b]" />
             Customize Report Columns
-            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#dbeafe] px-1.5 text-[11px] font-medium text-[#2563eb]">
+            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#d9eff1] px-1 text-[11px] font-semibold text-[#1b6f7b]">
               {selectedColumns.length}
             </span>
           </button>
         </div>
 
-        <div className="mt-4 rounded-lg border border-[#d7dce7] bg-white">
-          <div className="border-b border-[#eef2f7] px-4 py-3 text-center">
-            <div className="text-[16px] text-[#64748b]">{organizationName || " "}</div>
-            <h2 className="mt-1 text-[20px] font-semibold text-[#0f172a]">{reportName}</h2>
-            <p className="mt-1 text-sm text-[#2563eb]">
+        <div className="mt-3 rounded-xl border border-[#d7dce7] bg-white">
+          <div className="border-b border-[#eef2f7] px-4 py-10 text-center">
+            <div className="mb-1 text-sm text-[#64748b]">{organizationName || " "}</div>
+            <div className="text-[20px] font-semibold text-[#0f172a]">{reportName}</div>
+            <div className="mt-1 text-sm text-[#2563eb]">
               From {formatDate(dateRange.start)} To {formatDate(dateRange.end)}
-            </p>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="min-w-full border-collapse">
+            <table className="min-w-full border-collapse text-left">
               <thead>
-                <tr className="border-b border-[#eef2f7] text-[11px] uppercase tracking-[0.06em] text-[#64748b]">
+                <tr className="border-b border-[#eef2f7]">
                   {visibleColumns.map((column) => (
-                    <th key={column.key} className={`px-4 py-3 ${column.kind === "text" ? "text-left" : "text-center"}`}>
+                    <th key={column.key} className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#475569]">
                       {column.label}
                     </th>
                   ))}
@@ -917,23 +917,23 @@ export default function PaymentsReceivedReportView({
               </thead>
               <tbody>
                 {isLoading ? (
-                  <tr>
-                    <td className="px-4 py-8 text-center text-sm text-[#64748b]" colSpan={visibleColumns.length}>
-                      Loading report data...
-                    </td>
-                  </tr>
-                ) : error ? (
-                  <tr>
-                    <td className="px-4 py-8 text-center text-sm text-[#b91c1c]" colSpan={visibleColumns.length}>
-                      {error}
-                    </td>
-                  </tr>
-                ) : groupedPayments.length === 0 ? (
-                  <tr>
-                    <td className="px-4 py-8 text-center text-sm text-[#64748b]" colSpan={visibleColumns.length}>
-                      No payments found for the selected filters.
-                    </td>
-                  </tr>
+                    <tr>
+                      <td className="px-4 py-10 text-center text-sm text-[#64748b]" colSpan={visibleColumns.length}>
+                        Loading report data...
+                      </td>
+                    </tr>
+                  ) : error ? (
+                    <tr>
+                      <td className="px-4 py-10 text-center text-sm text-[#b91c1c]" colSpan={visibleColumns.length}>
+                        {error}
+                      </td>
+                    </tr>
+                  ) : groupedPayments.length === 0 ? (
+                    <tr>
+                      <td className="px-4 py-10 text-center text-sm text-[#64748b]" colSpan={visibleColumns.length}>
+                        No payments found for the selected filters.
+                      </td>
+                    </tr>
                 ) : (
                   <>
                     {groupedPayments.map((group) => {
