@@ -1039,9 +1039,14 @@ function ReceivablesReportShell({
   const [customDateRangeMonth, setCustomDateRangeMonth] = useState<Date>(() =>
     getStartOfMonth(getRange(config.defaultRange).start),
   );
+  const reportByOptions =
+    config.reportByOptions ?? [
+      { key: "invoice-date", label: "Invoice Date" },
+      { key: "due-date", label: "Due Date" },
+    ];
   const [entities, setEntities] = useState("invoice");
   const [agingBy, setAgingBy] = useState("invoice-due-date");
-  const [reportBy, setReportBy] = useState("invoice-date");
+  const [reportBy, setReportBy] = useState(config.defaultReportBy ?? reportByOptions[0]?.key ?? "invoice-date");
   const [groupBy, setGroupBy] = useState(
     config.rightControls[0]?.options[0]?.key || "none",
   );
@@ -1754,8 +1759,11 @@ function ReceivablesReportShell({
                   onChange={(event) => setReportBy(event.target.value)}
                   className="bg-transparent outline-none"
                 >
-                  <option value="invoice-date">Invoice Date</option>
-                  <option value="due-date">Due Date</option>
+                  {reportByOptions.map((option) => (
+                    <option key={option.key} value={option.key}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </label>
             ) : null}
