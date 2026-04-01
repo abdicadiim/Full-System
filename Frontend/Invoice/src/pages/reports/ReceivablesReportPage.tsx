@@ -23,7 +23,9 @@ type ReceivablesReportId =
   | "ar-aging-summary"
   | "ar-aging-details"
   | "invoice-details"
-  | "quote-details";
+  | "quote-details"
+  | "receivable-summary"
+  | "receivable-details";
 
 type ReportRow = { values: Record<string, any> };
 
@@ -535,6 +537,88 @@ function ReportsDrawer({
   );
 }
 
+const RECEIVABLE_TRANSACTION_TYPE_OPTIONS: FilterOption[] = [
+  { key: "invoice", label: "Invoice" },
+  { key: "credit-note", label: "Credit Note" },
+  { key: "sales-receipt", label: "Sales Receipt" },
+];
+
+const RECEIVABLE_SUMMARY_COLUMN_GROUPS: ColumnGroup[] = [
+  {
+    label: "Reports",
+    options: [
+      {
+        key: "customer-name",
+        label: "Customer Name",
+        kind: "text",
+        locked: true,
+      },
+      { key: "date", label: "Date", kind: "date" },
+      { key: "transaction", label: "Transaction#", kind: "text" },
+      { key: "reference-number", label: "Reference#", kind: "text" },
+      { key: "status", label: "Status", kind: "text" },
+      {
+        key: "transaction-type",
+        label: "Transaction Type",
+        kind: "text",
+      },
+      { key: "total-bcy", label: "Total (BCY)", kind: "currency" },
+      { key: "total-fcy", label: "Total (FCY)", kind: "currency" },
+      { key: "balance-bcy", label: "Balance (BCY)", kind: "currency" },
+      { key: "balance-fcy", label: "Balance (FCY)", kind: "currency" },
+    ],
+  },
+];
+
+const RECEIVABLE_SUMMARY_MORE_FILTER_GROUPS: FilterGroup[] = [
+  {
+    label: "Reports",
+    options: [
+      { key: "customer-name", label: "Customer Name" },
+      { key: "date", label: "Date" },
+      { key: "transaction", label: "Transaction#" },
+      { key: "reference-number", label: "Reference#" },
+      { key: "status", label: "Status" },
+      {
+        key: "transaction-type",
+        label: "Transaction Type",
+        values: RECEIVABLE_TRANSACTION_TYPE_OPTIONS,
+      },
+      { key: "total-bcy", label: "Total (BCY)" },
+      { key: "total-fcy", label: "Total (FCY)" },
+      { key: "balance-bcy", label: "Balance (BCY)" },
+      { key: "balance-fcy", label: "Balance (FCY)" },
+      {
+        key: "currency",
+        label: "Currency",
+        values: CURRENCY_CODES.map((value) => ({ key: value, label: value })),
+      },
+    ],
+  },
+  {
+    label: "Locations",
+    options: [
+      {
+        key: "location",
+        label: "Location",
+        values: [
+          { key: "mogadishu", label: "Mogadishu" },
+          { key: "hargeisa", label: "Hargeisa" },
+        ],
+      },
+    ],
+  },
+];
+
+const RECEIVABLE_SUMMARY_MORE_FILTER_VALUES: Record<string, FilterOption[]> = {
+  "transaction-type": RECEIVABLE_TRANSACTION_TYPE_OPTIONS,
+  currency: CURRENCY_CODES.map((value) => ({ key: value, label: value })),
+  location: [
+    { key: "mogadishu", label: "Mogadishu" },
+    { key: "hargeisa", label: "Hargeisa" },
+  ],
+};
+
 const RECEIVABLES_CONFIG: Record<ReceivablesReportId, ReportConfig> = {
   "ar-aging-summary": {
     fetcher: reportsAPI.getARAgingSummary,
@@ -993,6 +1077,82 @@ const RECEIVABLES_CONFIG: Record<ReceivablesReportId, ReportConfig> = {
       "quote-amount",
     ],
   },
+  "receivable-summary": {
+    fetcher: reportsAPI.getReceivableSummary,
+    title: "Receivable Summary",
+    subtitleMode: "from-to",
+    defaultRange: "this-month",
+    showEntities: true,
+    showReportBy: false,
+    showAgingBy: false,
+    rightControls: [
+      {
+        label: "Group By",
+        state: "groupBy",
+        options: [
+          { key: "none", label: "None" },
+          { key: "customer-name", label: "Customer Name" },
+          { key: "status", label: "Status" },
+          { key: "transaction-type", label: "Transaction Type" },
+          { key: "currency", label: "Currency" },
+          { key: "location", label: "Location" },
+        ],
+      },
+    ],
+    moreFilterGroups: RECEIVABLE_SUMMARY_MORE_FILTER_GROUPS,
+    moreFilterValues: RECEIVABLE_SUMMARY_MORE_FILTER_VALUES,
+    columns: RECEIVABLE_SUMMARY_COLUMN_GROUPS,
+    defaultColumns: [
+      "customer-name",
+      "date",
+      "transaction",
+      "reference-number",
+      "status",
+      "transaction-type",
+      "total-bcy",
+      "total-fcy",
+      "balance-bcy",
+      "balance-fcy",
+    ],
+  },
+  "receivable-details": {
+    fetcher: reportsAPI.getReceivableSummary,
+    title: "Receivable Details",
+    subtitleMode: "from-to",
+    defaultRange: "this-month",
+    showEntities: true,
+    showReportBy: false,
+    showAgingBy: false,
+    rightControls: [
+      {
+        label: "Group By",
+        state: "groupBy",
+        options: [
+          { key: "none", label: "None" },
+          { key: "customer-name", label: "Customer Name" },
+          { key: "status", label: "Status" },
+          { key: "transaction-type", label: "Transaction Type" },
+          { key: "currency", label: "Currency" },
+          { key: "location", label: "Location" },
+        ],
+      },
+    ],
+    moreFilterGroups: RECEIVABLE_SUMMARY_MORE_FILTER_GROUPS,
+    moreFilterValues: RECEIVABLE_SUMMARY_MORE_FILTER_VALUES,
+    columns: RECEIVABLE_SUMMARY_COLUMN_GROUPS,
+    defaultColumns: [
+      "customer-name",
+      "date",
+      "transaction",
+      "reference-number",
+      "status",
+      "transaction-type",
+      "total-bcy",
+      "total-fcy",
+      "balance-bcy",
+      "balance-fcy",
+    ],
+  },
 };
 
 const columnLookup = (reportId: ReceivablesReportId, key: string) =>
@@ -1062,7 +1222,11 @@ function ReceivablesReportShell({
     { key: "invoice-date", label: "Invoice Date" },
     { key: "due-date", label: "Due Date" },
   ];
-  const [entityKeys, setEntityKeys] = useState<EntityKey[]>(["invoice"]);
+  const [entityKeys, setEntityKeys] = useState<EntityKey[]>(() =>
+    reportId === "receivable-summary" || reportId === "receivable-details"
+      ? ENTITY_OPTIONS.map((option) => option.key)
+      : ["invoice"],
+  );
   const [isEntityOpen, setIsEntityOpen] = useState(false);
   const [entitySearch, setEntitySearch] = useState("");
   const agingByRef = useRef<HTMLDivElement | null>(null);
