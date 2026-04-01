@@ -114,6 +114,21 @@ const normalizeCustomerPatch = (payload: Record<string, unknown>) => {
   return patch;
 };
 
+const getDocumentIds = (documents: unknown) =>
+  (Array.isArray(documents) ? documents : [])
+    .map((doc: any) => String(doc?.documentId || doc?.id || doc?._id || "").trim())
+    .filter(Boolean);
+
+const linkCustomerDocuments = async (orgId: string, customerId: string, documents: unknown) => {
+  const documentIds = getDocumentIds(documents);
+  if (!documentIds.length) return;
+
+  await StoredDocument.updateMany(
+    { organizationId: orgId, _id: { $in: documentIds } },
+    { $set: { relatedToType: "customer", relatedToId: customerId } }
+  ).catch(() => null);
+};
+
 export const listCustomers: express.RequestHandler = async (req, res, next) => {
   try {
     const orgId = getOrgId(req);
@@ -223,6 +238,7 @@ export const createCustomer: express.RequestHandler = async (req, res, next) => 
     }
 
     const created = await Customer.create({ ...normalizeCustomerPatch(payload), customerNumber, organizationId: orgId });
+    await linkCustomerDocuments(orgId, String(created._id), (payload as Record<string, unknown>).documents);
     res.status(201).json({ success: true, data: normalizeCustomerRecord(created.toObject()) });
   } catch (err) {
     next(err);
@@ -257,6 +273,7 @@ export const updateCustomer: express.RequestHandler = async (req, res, next) => 
       { new: true }
     ).lean();
     if (!updated) return res.status(404).json({ success: false, message: "Customer not found", data: null });
+    await linkCustomerDocuments(orgId, String(req.params.id), (payload as Record<string, unknown>).documents);
     res.json({ success: true, data: normalizeCustomerRecord(updated) });
   } catch (err) {
     next(err);
