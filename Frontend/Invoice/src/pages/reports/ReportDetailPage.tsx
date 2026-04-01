@@ -2,6 +2,7 @@ import React from "react";
 import { useParams } from "react-router-dom";
 import BankChargesReportPage from "./BankChargesReportPage";
 import BadDebtsReportPage from "./BadDebtsReportPage";
+import CreditNoteDetailsReportPage from "./CreditNoteDetailsReportPage";
 import ReceivableDetailsReportPage from "./ReceivableDetailsReportPage";
 import ReceivableSummaryReportPage from "./ReceivableSummaryReportPage";
 import SalesByCustomerReportPage from "./SalesByCustomerReportPage";
@@ -21,6 +22,9 @@ export default function ReportDetailPage() {
   }
   if (reportId === "receivable-details") {
     return <ReceivableDetailsReportPage />;
+  }
+  if (reportId === "credit-note-details") {
+    return <CreditNoteDetailsReportPage />;
   }
   if (reportId === "time-to-get-paid") {
     return <TimeToGetPaidReportPage />;

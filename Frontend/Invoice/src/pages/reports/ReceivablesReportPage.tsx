@@ -23,6 +23,7 @@ type ReceivablesReportId =
   | "ar-aging-summary"
   | "ar-aging-details"
   | "invoice-details"
+  | "credit-note-details"
   | "quote-details"
   | "receivable-summary"
   | "receivable-details";
@@ -619,6 +620,62 @@ const RECEIVABLE_SUMMARY_MORE_FILTER_VALUES: Record<string, FilterOption[]> = {
   ],
 };
 
+const CREDIT_NOTE_DETAILS_MORE_FILTER_GROUPS: FilterGroup[] = [
+  {
+    label: "Reports",
+    options: [
+      { key: "status", label: "Status" },
+      { key: "invoice-date", label: "Credit Date" },
+      { key: "invoice-number", label: "Credit Note#" },
+      { key: "order-number", label: "Reference#" },
+      { key: "customer-name", label: "Customer Name" },
+      { key: "total", label: "Credit Note Amount" },
+      { key: "balance", label: "Balance Amount" },
+      {
+        key: "currency",
+        label: "Currency",
+        values: CURRENCY_CODES.map((value) => ({ key: value, label: value })),
+      },
+    ],
+  },
+  {
+    label: "Locations",
+    options: [
+      {
+        key: "location",
+        label: "Location",
+        values: [
+          { key: "mogadishu", label: "Mogadishu" },
+          { key: "hargeisa", label: "Hargeisa" },
+        ],
+      },
+    ],
+  },
+];
+
+const CREDIT_NOTE_DETAILS_MORE_FILTER_VALUES: Record<string, FilterOption[]> = {
+  currency: CURRENCY_CODES.map((value) => ({ key: value, label: value })),
+  location: [
+    { key: "mogadishu", label: "Mogadishu" },
+    { key: "hargeisa", label: "Hargeisa" },
+  ],
+};
+
+const CREDIT_NOTE_DETAILS_COLUMN_GROUPS: ColumnGroup[] = [
+  {
+    label: "Reports",
+    options: [
+      { key: "status", label: "Status", kind: "text", locked: true },
+      { key: "invoice-date", label: "Credit Date", kind: "date" },
+      { key: "invoice-number", label: "Credit Note#", kind: "text" },
+      { key: "order-number", label: "Reference#", kind: "text" },
+      { key: "customer-name", label: "Customer Name", kind: "text" },
+      { key: "total", label: "Credit Note Amount", kind: "currency" },
+      { key: "balance", label: "Balance Amount", kind: "currency" },
+    ],
+  },
+];
+
 const RECEIVABLES_CONFIG: Record<ReceivablesReportId, ReportConfig> = {
   "ar-aging-summary": {
     fetcher: reportsAPI.getARAgingSummary,
@@ -958,6 +1015,40 @@ const RECEIVABLES_CONFIG: Record<ReceivablesReportId, ReportConfig> = {
       "balance",
     ],
   },
+  "credit-note-details": {
+    fetcher: reportsAPI.getCreditNoteDetails,
+    title: "Credit Note Details",
+    subtitleMode: "from-to",
+    defaultRange: "this-month",
+    showEntities: false,
+    showReportBy: false,
+    showAgingBy: false,
+    rightControls: [
+      {
+        label: "Group By",
+        state: "groupBy",
+        options: [
+          { key: "none", label: "None" },
+          { key: "customer-name", label: "Customer Name" },
+          { key: "status", label: "Status" },
+          { key: "currency", label: "Currency" },
+          { key: "location", label: "Location" },
+        ],
+      },
+    ],
+    moreFilterGroups: CREDIT_NOTE_DETAILS_MORE_FILTER_GROUPS,
+    moreFilterValues: CREDIT_NOTE_DETAILS_MORE_FILTER_VALUES,
+    columns: CREDIT_NOTE_DETAILS_COLUMN_GROUPS,
+    defaultColumns: [
+      "status",
+      "invoice-date",
+      "invoice-number",
+      "order-number",
+      "customer-name",
+      "total",
+      "balance",
+    ],
+  },
   "quote-details": {
     fetcher: reportsAPI.getQuoteDetails,
     title: "Quote Details",
@@ -1174,10 +1265,12 @@ const makeFilterRow = (): FilterRow => ({
 
 export default function ReceivablesReportPage({
   reportId,
+  categoryId = "receivables",
 }: {
   reportId: ReceivablesReportId;
+  categoryId?: string;
 }) {
-  if (!getReportById("receivables", reportId))
+  if (!getReportById(categoryId, reportId))
     return <Navigate to="/reports" replace />;
   return <ReceivablesReportShell reportId={reportId} />;
 }

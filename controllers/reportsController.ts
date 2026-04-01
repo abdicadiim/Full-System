@@ -3775,6 +3775,69 @@ export const getInvoiceDetailsReport: express.RequestHandler = async (
   });
 };
 
+export const getCreditNoteDetailsReport: express.RequestHandler = async (
+  req,
+  res,
+) => {
+  const orgId = requireOrgId(req, res);
+  if (!orgId) return;
+
+  const range = getDateRangeFromQuery(req);
+  const compareWith = String(
+    req.query.compareWith ?? req.query.compare_with ?? "none",
+  ).trim();
+  const compareCount = Math.max(
+    1,
+    Number(req.query.compareCount ?? req.query.compare_count ?? 1) || 1,
+  );
+  const moreFilters = parseMoreFilters(
+    req.query.moreFilters ?? req.query.more_filters ?? req.query.filter_rows,
+  );
+
+  const [customers, creditNotes] = await Promise.all([
+    Customer.find({ organizationId: orgId }).lean(),
+    CreditNote.find({ organizationId: orgId }).lean(),
+  ]);
+
+  const main = buildInvoiceDetailsRows(
+    [],
+    creditNotes || [],
+    customers || [],
+    range,
+    moreFilters,
+  );
+  const compareRange =
+    compareWith && compareWith !== "none"
+      ? shiftDateRange(range, compareWith, compareCount)
+      : null;
+  const comparison = compareRange
+    ? buildInvoiceDetailsRows(
+        [],
+        creditNotes || [],
+        customers || [],
+        compareRange,
+        moreFilters,
+      )
+    : null;
+
+  return res.json({
+    success: true,
+    data: {
+      rows: main.rows,
+      currency: main.currency,
+      totals: main.totals,
+      comparison,
+      appliedFilters: {
+        fromDate: range.start.toISOString(),
+        toDate: range.end.toISOString(),
+        compareWith,
+        compareCount,
+        moreFilters,
+      },
+    },
+  });
+};
+
 export const getQuoteDetailsReport: express.RequestHandler = async (
   req,
   res,

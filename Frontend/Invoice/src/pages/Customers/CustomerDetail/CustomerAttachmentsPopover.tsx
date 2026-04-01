@@ -90,28 +90,11 @@ export default function CustomerAttachmentsPopover({
     }
   };
 
-  const handleDownloadAttachment = async (file: CustomerAttachment) => {
+  const handleDownloadAttachment = (file: CustomerAttachment) => {
     const resolvedUrl = resolveAttachmentUrl(file?.url);
     if (!resolvedUrl) return;
 
-    const fileName = String(file?.name || "attachment");
-
-    if (/^https?:\/\//i.test(resolvedUrl)) {
-      try {
-        const response = await fetch(resolvedUrl, { credentials: "include" });
-        if (response.ok) {
-          const blob = await response.blob();
-          const objectUrl = URL.createObjectURL(blob);
-          triggerDownload(objectUrl, fileName);
-          window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-          return;
-        }
-      } catch {
-        // Fall back to the direct link below.
-      }
-    }
-
-    triggerDownload(resolvedUrl, fileName);
+    triggerDownload(resolvedUrl, String(file?.name || "attachment"));
   };
 
   const handleOpenAttachmentInNewTab = (file: CustomerAttachment) => {
@@ -204,7 +187,7 @@ export default function CustomerAttachmentsPopover({
                         <button
                           type="button"
                           onClick={() => {
-                            void handleDownloadAttachment(file);
+                            handleDownloadAttachment(file);
                             setAttachmentMenuIndex(null);
                           }}
                           className="flex items-center gap-1 hover:text-blue-700"

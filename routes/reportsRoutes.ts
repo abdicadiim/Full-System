@@ -3,6 +3,7 @@ import { requireAuth } from "../midelwares/requireAuth.js";
 import {
   getARAgingDetailsReport,
   getARAgingSummaryReport,
+  getCreditNoteDetailsReport,
   getBadDebtsReport,
   getBankChargesReport,
   getCustomerBalanceSummaryReport,
@@ -23,6 +24,7 @@ reportsRoutes.get("/sales-by-sales-person", getSalesBySalesPersonReport);
 reportsRoutes.get("/ar-aging-summary", getARAgingSummaryReport);
 reportsRoutes.get("/ar-aging-details", getARAgingDetailsReport);
 reportsRoutes.get("/invoice-details", getInvoiceDetailsReport);
+reportsRoutes.get("/credit-note-details", getCreditNoteDetailsReport);
 reportsRoutes.get("/quote-details", getQuoteDetailsReport);
 reportsRoutes.get("/customer-balance-summary", getCustomerBalanceSummaryReport);
 reportsRoutes.get("/receivable-summary", getReceivableSummaryReport);
