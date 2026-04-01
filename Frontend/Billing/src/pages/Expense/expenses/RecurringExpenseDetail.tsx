@@ -7,6 +7,7 @@ import {
   ChevronUp,
   DollarSign,
   FileText,
+  MessageCircle,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -17,6 +18,7 @@ import {
 import { expensesAPI, recurringExpensesAPI, taxesAPI } from "../../../services/api";
 import { useCurrency } from "../../../hooks/useCurrency";
 import { computeRecurringExpenseDisplayAmount, computeRecurringExpenseTaxAmount } from "../shared/recurringExpenseModel";
+import RecurringExpenseCommentsPanel from "./RecurringExpenseCommentsPanel";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -81,6 +83,7 @@ export default function RecurringExpenseDetail() {
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [sidebarCreateMenuOpen, setSidebarCreateMenuOpen] = useState(false);
   const [sidebarMoreMenuOpen, setSidebarMoreMenuOpen] = useState(false);
+  const [showCommentsSidebar, setShowCommentsSidebar] = useState(false);
   const [savingAttachments, setSavingAttachments] = useState(false);
   const [showAssociatedTags, setShowAssociatedTags] = useState(false);
   const [taxRatesById, setTaxRatesById] = useState<Record<string, number>>({});
@@ -210,6 +213,7 @@ export default function RecurringExpenseDetail() {
               currencyCode: row?.currency_code || row?.currency || "",
               vendor_id: row?.vendor_id || row?.vendor?._id || row?.vendor?.id || "",
               customer_id: row?.customer_id || row?.customer?._id || row?.customer?.id || "",
+              comments: Array.isArray(row?.comments) ? row.comments : [],
               attachments: normalizeAttachments(row?.attachments || []),
             };
             break;
@@ -307,6 +311,43 @@ export default function RecurringExpenseDetail() {
     }
     setAttachments(payload);
     setExpense((prev: any) => (prev ? { ...prev, attachments: payload } : prev));
+    window.dispatchEvent(new Event("recurringExpensesUpdated"));
+  };
+
+  const updateRecurringExpenseComments = async (recurringExpenseId: string, data: any) => {
+    const candidates = Array.from(
+      new Set([String(recurringExpenseId || "").trim(), ...getIdCandidates(expense)].filter(Boolean))
+    );
+
+    let lastError: any = null;
+    for (const candidate of candidates) {
+      try {
+        const response = await recurringExpensesAPI.update(candidate, data);
+        const responseExpense = response?.recurring_expense || response?.expense || response?.data || response;
+        const responseComments = Array.isArray(responseExpense?.comments)
+          ? responseExpense.comments
+          : Array.isArray(data?.comments)
+            ? data.comments
+            : [];
+
+        return {
+          ...response,
+          data: response?.data ?? responseExpense,
+          recurring_expense: responseExpense,
+          expense: responseExpense,
+          comments: responseComments,
+        };
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError || new Error("Failed to save recurring expense comments.");
+  };
+
+  const handleRecurringExpenseCommentsChange = (nextComments: any[]) => {
+    const normalizedComments = Array.isArray(nextComments) ? nextComments : [];
+    setExpense((prev: any) => (prev ? { ...prev, comments: normalizedComments } : prev));
     window.dispatchEvent(new Event("recurringExpensesUpdated"));
   };
 
@@ -628,6 +669,13 @@ export default function RecurringExpenseDetail() {
             >
               <Pencil size={13} />
             </button>
+            <button
+              onClick={() => setShowCommentsSidebar(true)}
+              className="h-7 px-3 border border-gray-300 rounded bg-white text-gray-700 hover:bg-gray-50 text-xs flex items-center gap-1.5"
+            >
+              <MessageCircle size={13} />
+              Comments
+            </button>
             <div ref={moreMenuRef} className="relative">
               <button onClick={() => setMoreMenuOpen((prev) => !prev)} className="h-7 px-2.5 border border-gray-300 rounded bg-white text-gray-700 hover:bg-gray-50 text-xs flex items-center gap-1">
                 More <ChevronDown size={14} />
@@ -852,6 +900,14 @@ export default function RecurringExpenseDetail() {
             </div>
           )}
         </div>
+        <RecurringExpenseCommentsPanel
+          open={showCommentsSidebar}
+          onClose={() => setShowCommentsSidebar(false)}
+          recurringExpenseId={String(expense?.recurringExpenseId || expense?.id || expense?._id || id || "")}
+          comments={Array.isArray(expense?.comments) ? expense.comments : []}
+          onCommentsChange={handleRecurringExpenseCommentsChange}
+          updateRecurringExpense={updateRecurringExpenseComments}
+        />
       </main>
     </div>
   );

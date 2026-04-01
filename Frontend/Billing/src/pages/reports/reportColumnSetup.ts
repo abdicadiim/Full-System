@@ -74,6 +74,9 @@ const COLUMN_GROUPS_BY_REPORT: Record<string, ColumnGroup[]> = {
     { label: "Reports", items: ["Date", "Name", "Invoices", "Credit Notes", "Sales Receipts", "Sales", "Sales With Tax"] },
     { label: "Locations", items: ["Location"] },
   ],
+  "time-to-get-paid": [
+    { label: "Reports", items: ["Customer Name", "0 - 15 Days", "16 - 30 Days", "31 - 45 Days", "Above 45 Days"] },
+  ],
   "ar-aging-summary": [
     {
       label: "Reports",
@@ -128,8 +131,7 @@ const COLUMN_GROUPS_BY_CATEGORY: Record<string, ColumnGroup[]> = {
     { label: "Locations", items: ["Location", "Country"] },
   ],
   "payments-received": [
-    { label: "Reports", items: ["Invoice", "Credit Note", "Payment", "Refund", "Customer", "Date", "Amount"] },
-    { label: "Locations", items: ["Location", "Country"] },
+    { label: "Reports", items: ["Customer Name", "0 - 15 Days", "16 - 30 Days", "31 - 45 Days", "Above 45 Days"] },
   ],
   "purchases-expenses": [
     { label: "Reports", items: ["Purchase", "Expense", "Bill", "Vendor", "Project", "Date", "Amount"] },

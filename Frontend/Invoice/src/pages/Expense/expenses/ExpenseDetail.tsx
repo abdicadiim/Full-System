@@ -10,7 +10,6 @@ import {
   X,
   MessageCircle,
   Trash2,
-  FileText,
   ChevronRight,
   Paperclip,
   Plus,
@@ -18,6 +17,7 @@ import {
 } from "lucide-react";
 import { expensesAPI, chartOfAccountsAPI, currenciesAPI, taxesAPI, customersAPI } from "../../../services/api";
 import { useCurrency } from "../../../hooks/useCurrency";
+import ExpenseCommentsPanel from "./ExpenseCommentsPanel";
 
 const EXPENSES_KEY = "expenses_v1";
 
@@ -44,8 +44,6 @@ export default function ExpenseDetail() {
   const [showHistory, setShowHistory] = useState(false);
   const [showAssociatedTags, setShowAssociatedTags] = useState(true);
   const [currencies, setCurrencies] = useState<any[]>([]);
-  const [commentText, setCommentText] = useState("");
-  const [isSavingComment, setIsSavingComment] = useState(false);
   const moreMenuRef = useRef(null);
   const uploadMenuRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -726,91 +724,44 @@ export default function ExpenseDetail() {
     });
   };
 
-  const getCurrentUserLabel = () => {
-    try {
-      const storedUser = localStorage.getItem("user");
-      const parsedUser = storedUser ? JSON.parse(storedUser) : null;
-      const fullName = String(parsedUser?.name || "").trim();
-      if (fullName) return fullName;
-      const emailName = String(parsedUser?.email || "").trim();
-      if (emailName) return emailName;
-    } catch (error) {
-      console.error("Failed to parse current user:", error);
-    }
-    return "User";
-  };
+  const updateExpenseComments = async (expenseId: string, data: any) => {
+    const response = await expensesAPI.update(expenseId, data);
+    const responseExpense = response?.expense || response?.data || response;
+    const responseComments = Array.isArray(responseExpense?.comments)
+      ? responseExpense.comments
+      : Array.isArray(data?.comments)
+        ? data.comments
+        : [];
 
-  const formatCommentDate = (value: any) => {
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return "";
-    return parsed.toLocaleString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
-  };
-
-  const handleAddComment = async () => {
-    const content = String(commentText || "").trim();
-    if (!content || !expense) return;
-
-    const expenseId = String(expense.expense_id || expense.id || id || "").trim();
-    if (!expenseId) {
-      alert("Unable to save comment because this expense has no ID.");
-      return;
-    }
-
-    const newComment = {
-      id: `comment-${Date.now()}`,
-      text: content,
-      author: getCurrentUserLabel(),
-      createdAt: new Date().toISOString(),
+    return {
+      ...response,
+      data: response?.data ?? responseExpense,
+      expense: responseExpense,
+      comments: responseComments,
     };
+  };
 
-    const previousExpense = expense;
-    const previousText = commentText;
-    const previousComments = Array.isArray(expense.comments) ? expense.comments : [];
-    const nextComments = [...previousComments, newComment];
+  const handleExpenseCommentsChange = (nextComments: any[]) => {
+    const normalizedComments = Array.isArray(nextComments) ? nextComments : [];
+    const expenseId = String(expense?.expense_id || expense?.id || id || "").trim();
 
-    setIsSavingComment(true);
-    setCommentText("");
-    setExpense({ ...expense, comments: nextComments });
+    setExpense((prev: any) => {
+      if (!prev) return prev;
+      return { ...prev, comments: normalizedComments };
+    });
 
-    try {
-      const response = await expensesAPI.update(expenseId, { comments: nextComments });
-      const persistedExpense = response?.expense || response?.data;
-      const persistedComments = Array.isArray(persistedExpense?.comments)
-        ? persistedExpense.comments
-        : nextComments;
-
-      setExpense((prev: any) => {
-        if (!prev) return prev;
-        return { ...prev, comments: persistedComments };
+    setExpenses((prev: any[]) => {
+      const updated = (Array.isArray(prev) ? prev : []).map((item: any) => {
+        const itemId = String(item?.id || item?.expense_id || item?._id || "").trim();
+        if (itemId !== expenseId) return item;
+        return { ...item, comments: normalizedComments };
       });
+      localStorage.setItem(EXPENSES_KEY, JSON.stringify(updated));
+      return updated;
+    });
 
-      setExpenses((prev: any[]) => {
-        const updated = (Array.isArray(prev) ? prev : []).map((item: any) => {
-          const itemId = String(item?.id || item?.expense_id || item?._id || "");
-          if (itemId !== expenseId) return item;
-          return { ...item, comments: persistedComments };
-        });
-        localStorage.setItem(EXPENSES_KEY, JSON.stringify(updated));
-        return updated;
-      });
-
-      window.dispatchEvent(new Event("expensesUpdated"));
-      window.dispatchEvent(new Event("storage"));
-    } catch (error: any) {
-      console.error("Failed to save comment:", error);
-      setExpense(previousExpense);
-      setCommentText(previousText);
-      alert(error?.message || "Failed to save comment.");
-    } finally {
-      setIsSavingComment(false);
-    }
+    window.dispatchEvent(new Event("expensesUpdated"));
+    window.dispatchEvent(new Event("storage"));
   };
 
   const handleDelete = () => {
@@ -1161,10 +1112,6 @@ export default function ExpenseDetail() {
   ).toFixed(2);
   const taxModeLabel = expense?.is_inclusive_tax === false ? "Exclusive" : "Inclusive";
   const projectName = expense?.project_name || expense?.project || "-";
-  const expenseCreatedAtLabel =
-    formatCommentDate(expense?.raw_date || expense?.created_time || expense?.createdAt)
-    || formatCommentDate(new Date().toISOString());
-
   return (
     <div className="relative flex h-screen w-full overflow-hidden bg-white">
       <style>{sidebarScrollHide}</style>
@@ -1419,90 +1366,14 @@ export default function ExpenseDetail() {
             </div>
           </div>
 
-          {/* History Sidebar */}
-          {showHistory && (
-            <div className="w-[300px] border-l border-gray-200 bg-white flex flex-col flex-shrink-0">
-              <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-                <span className="text-[15px] font-semibold text-gray-900">Comments & History</span>
-                <button
-                  onClick={() => setShowHistory(false)}
-                  className="bg-transparent border border-[#156372] rounded p-0.5 cursor-pointer text-[#156372] flex items-center justify-center"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto py-4">
-                <div className="px-5 py-3 flex gap-3 border-l-2 border-transparent">
-                  <div className="w-7 h-7 rounded-full bg-white border border-gray-200 flex items-center justify-center flex-shrink-0">
-                    <FileText size={14} className="text-amber-400" />
-                  </div>
-                  <div className="flex flex-col gap-2 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[13px] font-bold text-gray-900">{getCurrentUserLabel()}</span>
-                      <span className="text-gray-400">|</span>
-                      <span className="text-[11px] text-gray-400 uppercase">{expenseCreatedAtLabel}</span>
-                    </div>
-                    <div className="px-3.5 py-2.5 bg-gray-50 rounded-md text-[13px] text-gray-700 w-fit max-w-full">
-                      Expense Created for {getCurrencySymbol()} {parseFloat(expense.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="px-5 py-1 pt-1 pb-4 border-t border-gray-50">
-                  <div className="text-[11px] font-bold tracking-wider text-gray-500 mb-2">
-                    COMMENTS
-                  </div>
-                  <textarea
-                    value={commentText}
-                    onChange={(e) => setCommentText(e.target.value)}
-                    placeholder="Add a comment..."
-                    rows={3}
-                    className="w-full border border-gray-300 rounded-md px-2.5 py-2 text-[13px] resize-y outline-none"
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && !event.shiftKey) {
-                        event.preventDefault();
-                        handleAddComment();
-                      }
-                    }}
-                  />
-                  <div className="mt-2 flex justify-end">
-                    <button
-                      onClick={handleAddComment}
-                      disabled={isSavingComment || !String(commentText || "").trim()}
-                      className={`px-2.5 py-1.5 text-xs font-semibold text-white border-none rounded-md cursor-pointer ${isSavingComment || !String(commentText || "").trim() ? "bg-gray-400 cursor-not-allowed" : "bg-[#156372]"}`}
-                    >
-                      {isSavingComment ? "Saving..." : "Add Comment"}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="px-5 py-4 pt-0">
-                  {(Array.isArray(expense.comments) ? expense.comments : []).length === 0 ? (
-                    <div className="text-sm text-gray-400">No comments yet.</div>
-                  ) : (
-                    [...(Array.isArray(expense.comments) ? expense.comments : [])]
-                      .reverse()
-                      .map((comment: any, idx: number) => (
-                        <div
-                          key={String(comment?.id || comment?._id || idx)}
-                          className="border border-gray-200 rounded-lg p-2.5 mb-2.5 bg-white"
-                        >
-                          <div className="text-xs font-semibold text-gray-900 mb-1">
-                            {String(comment?.author || "User")}
-                          </div>
-                          <div className="text-xs text-gray-500 mb-1.5">
-                            {formatCommentDate(comment?.createdAt || comment?.date)}
-                          </div>
-                          <div className="text-[13px] text-gray-800 whitespace-pre-wrap">
-                            {String(comment?.text || "")}
-                          </div>
-                        </div>
-                      ))
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+          <ExpenseCommentsPanel
+            open={showHistory}
+            onClose={() => setShowHistory(false)}
+            expenseId={String(expense?.expense_id || expense?.id || id || "")}
+            comments={Array.isArray(expense?.comments) ? expense.comments : []}
+            onCommentsChange={handleExpenseCommentsChange}
+            updateExpense={updateExpenseComments}
+          />
         </div>
       </div>
 

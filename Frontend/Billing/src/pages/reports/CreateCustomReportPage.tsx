@@ -66,7 +66,7 @@ const GROUP_BY_OPTIONS_BY_CATEGORY: Record<string, string[]> = {
   subscriptions: ["Customer", "Plan", "Status", "Date"],
   retention: ["Customer", "Cohort", "Renewal", "Date"],
   churn: ["Customer", "Subscription", "Retry Count", "Date"],
-  "payments-received": ["Customer", "Payment Method", "Date", "Status"],
+  "payments-received": ["Customer"],
   "purchases-expenses": ["Customer", "Project", "Expense Type", "Date"],
   "projects-timesheets": ["Project", "Customer", "Employee", "Date"],
   activity: ["User", "Activity Type", "Date"],
@@ -280,6 +280,12 @@ const COLUMN_SETUP_BY_REPORT: Record<string, ColumnSetup> = {
     ],
     selectedColumns: ["Date", "Invoices", "Credit Notes", "Sales Receipts", "Sales"],
   },
+  "time-to-get-paid": {
+    availableGroups: [
+      { label: "Reports", items: ["Customer Name", "0 - 15 Days", "16 - 30 Days", "31 - 45 Days", "Above 45 Days"] },
+    ],
+    selectedColumns: ["Customer Name", "0 - 15 Days", "16 - 30 Days", "31 - 45 Days", "Above 45 Days"],
+  },
 };
 
 const COLUMN_SETUP_BY_CATEGORY: Record<string, ColumnSetup> = {
@@ -320,10 +326,9 @@ const COLUMN_SETUP_BY_CATEGORY: Record<string, ColumnSetup> = {
   },
   "payments-received": {
     availableGroups: [
-      { label: "Reports", items: ["Invoice", "Credit Note", "Payment", "Refund", "Customer", "Date", "Amount"] },
-      { label: "Locations", items: ["Location", "Country"] },
+      { label: "Reports", items: ["Customer Name", "0 - 15 Days", "16 - 30 Days", "31 - 45 Days", "Above 45 Days"] },
     ],
-    selectedColumns: ["Invoice", "Customer", "Date", "Amount", "Status"],
+    selectedColumns: ["Customer Name", "0 - 15 Days", "16 - 30 Days", "31 - 45 Days", "Above 45 Days"],
   },
   "purchases-expenses": {
     availableGroups: [

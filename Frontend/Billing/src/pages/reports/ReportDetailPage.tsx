@@ -23,6 +23,7 @@ import ReportCustomizeColumnsModal from "./ReportCustomizeColumnsModal";
 import ReportCompareWithPopover from "./ReportCompareWithPopover";
 import { getReportColumnGroups } from "./reportColumnSetup";
 import { getCategoryById, getReportById, REPORTS, REPORT_CATEGORIES } from "./reportsCatalog";
+import { getPayments } from "../sales/salesModel";
 import { API_BASE_URL, getToken } from "../../services/auth";
 
 type CellValue = string | number;
@@ -170,6 +171,21 @@ const getAgingBucketLabel = (days: number) => {
   if (days <= 45) return "31-45 Days";
   return "> 45 Days";
 };
+
+const parseReportDate = (value: unknown) => {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const getTimeToGetPaidBucketLabel = (days: number) => {
+  if (days <= 15) return "0 - 15 Days";
+  if (days <= 30) return "16 - 30 Days";
+  if (days <= 45) return "31 - 45 Days";
+  return "Above 45 Days";
+};
+
+const formatPercent = (value: number) => `${Math.round(value)}%`;
 
 const normalizeAgingDetailColumns = (columns: string[], agingBy: AgingByOption) =>
   columns.map((column) => {
@@ -1585,7 +1601,150 @@ const buildDatabasePreview = async (
     };
   }
 
-  if (reportId === "payments-received" || reportId === "time-to-get-paid" || reportId === "credit-note-details" || reportId === "refund-history" || reportId === "card-expiry" || reportId === "payment-failures") {
+  if (reportId === "time-to-get-paid") {
+    const [payments, invoices] = await Promise.all([getPayments(), fetchCollectionRows("/invoices")]);
+    const invoiceById = new Map<string, any>();
+    const invoiceByNumber = new Map<string, any>();
+
+    invoices.forEach((invoice: any) => {
+      const invoiceId = String(invoice._id || invoice.id || "").trim();
+      const invoiceNumber = String(invoice.invoiceNumber || "").trim().toLowerCase();
+      if (invoiceId) invoiceById.set(invoiceId, invoice);
+      if (invoiceNumber) invoiceByNumber.set(invoiceNumber, invoice);
+    });
+
+    type TimeToGetPaidRow = {
+      bucket0to15: number;
+      bucket16to30: number;
+      bucket31to45: number;
+      bucketAbove45: number;
+      total: number;
+      currency: string;
+    };
+
+    const grouped = new Map<string, TimeToGetPaidRow>();
+
+    const resolveInvoice = (allocation: any, payment: any) => {
+      const invoiceId = String(
+        allocation?.invoiceId ||
+          allocation?.invoice?._id ||
+          allocation?.invoice?.id ||
+          allocation?.invoice ||
+          payment?.invoiceId ||
+          ""
+      ).trim();
+      const invoiceNumber = String(
+        allocation?.invoiceNumber ||
+          allocation?.invoice?.invoiceNumber ||
+          payment?.invoiceNumber ||
+          ""
+      )
+        .trim()
+        .toLowerCase();
+
+      return invoiceById.get(invoiceId) || invoiceByNumber.get(invoiceNumber) || allocation?.invoice || null;
+    };
+
+    payments.forEach((payment: any) => {
+      const paymentDate = parseReportDate(payment.paymentDate || payment.date || payment.createdAt || payment.updatedAt);
+      if (!paymentDate) return;
+
+      const allocations = Array.isArray(payment.allocations) && payment.allocations.length > 0
+        ? payment.allocations
+        : payment.invoiceId || payment.invoiceNumber
+          ? [
+              {
+                invoiceId: payment.invoiceId || payment.invoice?._id || payment.invoice?.id || payment.invoice || "",
+                invoiceNumber: payment.invoiceNumber || payment.invoice?.invoiceNumber || "",
+                amount: payment.amountReceived ?? payment.amount ?? 0,
+              },
+            ]
+          : [];
+
+      allocations.forEach((allocation: any) => {
+        const invoice = resolveInvoice(allocation, payment);
+        const invoiceDate = parseReportDate(
+          allocation?.invoiceDate ||
+            allocation?.date ||
+            allocation?.appliedAt ||
+            invoice?.invoiceDate ||
+            invoice?.date ||
+            invoice?.createdAt ||
+            invoice?.dueDate
+        );
+        if (!invoiceDate) return;
+
+        const amount = Number(allocation?.amount ?? allocation?.appliedAmount ?? allocation?.amountReceived ?? payment.amountReceived ?? payment.amount ?? 0);
+        if (!Number.isFinite(amount) || amount <= 0) return;
+
+        const customerName = String(
+          invoice?.customerName ||
+            invoice?.customer?.displayName ||
+            invoice?.customer?.companyName ||
+            invoice?.customer?.name ||
+            payment.customerName ||
+            "Unknown Customer"
+        ).trim() || "Unknown Customer";
+        const currency = String(invoice?.currency || payment.currency || "SOS");
+        const days = Math.max(0, Math.round((paymentDate.getTime() - invoiceDate.getTime()) / (1000 * 60 * 60 * 24)));
+        const bucket = getTimeToGetPaidBucketLabel(days);
+        const current = grouped.get(customerName) || {
+          bucket0to15: 0,
+          bucket16to30: 0,
+          bucket31to45: 0,
+          bucketAbove45: 0,
+          total: 0,
+          currency,
+        };
+
+        current.currency = currency;
+        current.total += amount;
+
+        if (bucket === "0 - 15 Days") current.bucket0to15 += amount;
+        else if (bucket === "16 - 30 Days") current.bucket16to30 += amount;
+        else if (bucket === "31 - 45 Days") current.bucket31to45 += amount;
+        else current.bucketAbove45 += amount;
+
+        grouped.set(customerName, current);
+      });
+    });
+
+    const entries = [...grouped.entries()].filter(([, item]) => item.total > 0).sort((a, b) => b[1].total - a[1].total || a[0].localeCompare(b[0]));
+    if (entries.length === 0) return null;
+
+    const grandTotal = entries.reduce((sum, [, item]) => sum + item.total, 0);
+    if (grandTotal <= 0) return null;
+
+    const total0to15 = entries.reduce((sum, [, item]) => sum + item.bucket0to15, 0);
+    const total16to30 = entries.reduce((sum, [, item]) => sum + item.bucket16to30, 0);
+    const total31to45 = entries.reduce((sum, [, item]) => sum + item.bucket31to45, 0);
+    const totalAbove45 = entries.reduce((sum, [, item]) => sum + item.bucketAbove45, 0);
+
+    return {
+      title: reportName,
+      subtitle: `As of ${formatDate(new Date())}`,
+      columns: ["Customer Name", "0 - 15 Days", "16 - 30 Days", "31 - 45 Days", "Above 45 Days"],
+      rows: entries.map(([customerName, item]) => {
+        const customerTotal = item.total || 0;
+        return [
+          customerName,
+          formatPercent(customerTotal ? (item.bucket0to15 / customerTotal) * 100 : 0),
+          formatPercent(customerTotal ? (item.bucket16to30 / customerTotal) * 100 : 0),
+          formatPercent(customerTotal ? (item.bucket31to45 / customerTotal) * 100 : 0),
+          formatPercent(customerTotal ? (item.bucketAbove45 / customerTotal) * 100 : 0),
+        ];
+      }),
+      totals: [
+        "Total",
+        formatPercent((total0to15 / grandTotal) * 100),
+        formatPercent((total16to30 / grandTotal) * 100),
+        formatPercent((total31to45 / grandTotal) * 100),
+        formatPercent((totalAbove45 / grandTotal) * 100),
+      ],
+    };
+  }
+
+  if (reportId === "payments-received" || reportId === "credit-note-details" || reportId === "refund-history" || reportId === "card-expiry" || reportId === "payment-failures") {
     const payments = await fetchCollectionRows("/payments-received");
     const liveRows =
       reportId === "payment-failures"
@@ -1769,7 +1928,13 @@ const buildDatabasePreview = async (
 };
 
 const renderCell = (value: CellValue) => (
-  <span className={typeof value === "number" ? "font-medium text-[#0f172a]" : "text-[#2563eb]"}>
+  <span
+    className={
+      typeof value === "number" || (typeof value === "string" && value.trim().endsWith("%"))
+        ? "font-medium text-[#0f172a]"
+        : "text-[#2563eb]"
+    }
+  >
     {value}
   </span>
 );
@@ -1782,6 +1947,7 @@ export default function ReportDetailPage() {
   const resolvedCategoryId = customReport?.categoryId || categoryId || "";
   const resolvedReportId = customReport?.sourceReportId || reportId || "";
   const isAgingReport = resolvedReportId === "ar-aging-summary" || resolvedReportId === "ar-aging-details";
+  const isTimeToGetPaidReport = resolvedReportId === "time-to-get-paid";
   const category = getCategoryById(resolvedCategoryId);
   const report = getReportById(resolvedCategoryId, resolvedReportId);
   const filterDropdownRef = useRef<HTMLDivElement>(null);
@@ -1803,7 +1969,9 @@ export default function ReportDetailPage() {
   const [moreFilterRows, setMoreFilterRows] = useState<MoreFilterRow[]>([{ id: 1, field: "", comparator: "", value: "" }]);
   const [openMoreFilterFieldRowId, setOpenMoreFilterFieldRowId] = useState<number | null>(null);
   const [openMoreFilterComparatorRowId, setOpenMoreFilterComparatorRowId] = useState<number | null>(null);
-  const [selectedDateRange, setSelectedDateRange] = useState<DateRangePreset>(isAgingReport ? "Today" : "This Month");
+  const [selectedDateRange, setSelectedDateRange] = useState<DateRangePreset>(
+    isAgingReport || isTimeToGetPaidReport ? "Today" : "This Month"
+  );
   const [agingBy, setAgingBy] = useState<AgingByOption>("invoice-due-date");
   const [selectedEntities, setSelectedEntities] = useState<string[]>(() =>
     getDefaultSelectedEntitiesForReport(resolvedReportId, getEntityOptionsForCategory(resolvedCategoryId))
@@ -1873,8 +2041,8 @@ export default function ReportDetailPage() {
   }, [resolvedCategoryId]);
 
   useEffect(() => {
-    setSelectedDateRange(isAgingReport ? "Today" : "This Month");
-  }, [isAgingReport]);
+    setSelectedDateRange(isAgingReport || isTimeToGetPaidReport ? "Today" : "This Month");
+  }, [isAgingReport, isTimeToGetPaidReport]);
 
   useEffect(() => {
     setMoreFilterRows([{ id: 1, field: "", comparator: "", value: "" }]);
@@ -1888,6 +2056,9 @@ export default function ReportDetailPage() {
     setCompareWith("None");
     setCompareCount("1");
     setCompareLatestToOldest(false);
+    setActiveFilterDropdown(null);
+    setMoreFiltersOpen(false);
+    setScheduleModalOpen(false);
   }, [resolvedReportId]);
 
   useEffect(() => {
@@ -2006,6 +2177,7 @@ export default function ReportDetailPage() {
   const isDateRangeOpen = activeFilterDropdown === "date-range";
   const isEntitiesOpen = activeFilterDropdown === "entities";
   const isMoreFiltersOpen = moreFiltersOpen;
+  const filterButtonLabel = isTimeToGetPaidReport ? "Apply Filter" : "More Filters";
   const filteredEntityOptions = entityOptions.filter((entity) => entity.toLowerCase().includes(entitySearch.trim().toLowerCase()));
   const selectedEntityLabel = useMemo(() => {
     if (selectedEntities.length === 0) return "None";
@@ -2223,19 +2395,21 @@ export default function ReportDetailPage() {
           >
             Date Range : <span className="font-medium">{selectedDateRange === "Custom" ? "Custom" : selectedDateRange}</span> <ChevronDown size={14} />
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setOpenMoreFilterFieldRowId(null);
-              setOpenMoreFilterComparatorRowId(null);
-              setActiveFilterDropdown((prev) => (prev === "entities" ? null : "entities"));
-            }}
-            className={`inline-flex h-8 items-center gap-1 rounded border px-3 text-sm transition-colors ${
-              isEntitiesOpen ? "border-[#156372] bg-[#156372] text-white" : "border-[#cfd6e4] bg-white text-[#334155] hover:border-[#156372] hover:text-[#156372]"
-            }`}
-          >
-            Entities : <span className="font-medium">{selectedEntityLabel}</span> <ChevronDown size={14} />
-          </button>
+          {!isTimeToGetPaidReport ? (
+            <button
+              type="button"
+              onClick={() => {
+                setOpenMoreFilterFieldRowId(null);
+                setOpenMoreFilterComparatorRowId(null);
+                setActiveFilterDropdown((prev) => (prev === "entities" ? null : "entities"));
+              }}
+              className={`inline-flex h-8 items-center gap-1 rounded border px-3 text-sm transition-colors ${
+                isEntitiesOpen ? "border-[#156372] bg-[#156372] text-white" : "border-[#cfd6e4] bg-white text-[#334155] hover:border-[#156372] hover:text-[#156372]"
+              }`}
+            >
+              Entities : <span className="font-medium">{selectedEntityLabel}</span> <ChevronDown size={14} />
+            </button>
+          ) : null}
           {isAgingReport ? (
             <label className="inline-flex h-8 items-center gap-2 rounded border border-[#cfd6e4] bg-[#f8fafc] px-3 text-sm text-[#334155]">
               <span>Aging By :</span>
@@ -2264,7 +2438,12 @@ export default function ReportDetailPage() {
               isMoreFiltersOpen ? "border-[#156372] bg-[#156372] text-white" : "border-[#cfd6e4] bg-white text-[#334155] hover:border-[#156372] hover:text-[#156372]"
             }`}
           >
-            <Plus size={14} className={isMoreFiltersOpen ? "text-white" : "text-[#156372]"} /> More Filters
+            {isTimeToGetPaidReport ? (
+              <Filter size={14} className={isMoreFiltersOpen ? "text-white" : "text-[#156372]"} />
+            ) : (
+              <Plus size={14} className={isMoreFiltersOpen ? "text-white" : "text-[#156372]"} />
+            )}
+            {filterButtonLabel}
           </button>
           <button
             type="button"
@@ -2391,7 +2570,7 @@ export default function ReportDetailPage() {
             </div>
           ) : null}
 
-          {isEntitiesOpen ? (
+          {!isTimeToGetPaidReport && isEntitiesOpen ? (
             <div className="absolute left-[238px] top-[calc(100%+8px)] z-30 w-[200px] rounded-[10px] border border-[#d7dce7] bg-white p-2 shadow-[0_10px_30px_rgba(15,23,42,0.18)]">
               <div className="relative">
                 <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#9aa5b7]" />

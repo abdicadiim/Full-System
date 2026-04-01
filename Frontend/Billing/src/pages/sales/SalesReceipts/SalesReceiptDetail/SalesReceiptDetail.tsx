@@ -5,6 +5,7 @@ import { getSalesReceiptById, getSalesReceipts, deleteSalesReceipt, updateSalesR
 import { currenciesAPI, salesReceiptsAPI, senderEmailsAPI } from "../../../../services/api";
 import { getCurrentUser } from "../../../../services/auth";
 import { resolveVerifiedPrimarySender } from "../../../../utils/emailSenderDisplay";
+import SalesReceiptCommentsPanel from "./SalesReceiptCommentsPanel";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import {
@@ -1188,49 +1189,14 @@ ${sellerInfo.name}`
         </div>
       </div>
       </section>
-      {showCommentsSidebar && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          <div
-            className="absolute inset-0 bg-black bg-opacity-10"
-            onClick={() => setShowCommentsSidebar(false)}
-          />
-          <div className="relative h-full w-[420px] bg-white shadow-2xl border-l border-gray-200 flex flex-col">
-            <div className="h-14 px-5 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-[15px] font-semibold text-gray-900">Comments &amp; History</h2>
-              <button
-                className="h-7 w-7 rounded border border-blue-200 text-blue-500 flex items-center justify-center hover:bg-blue-50"
-                onClick={() => setShowCommentsSidebar(false)}
-                title="Close"
-              >
-                <X size={14} />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-5">
-              {receiptComments.length === 0 ? (
-                <div className="text-sm text-gray-500 italic">No comments yet.</div>
-              ) : (
-                receiptComments.map((comment) => (
-                  <div key={comment.id} className="flex gap-3 mb-4">
-                    <div className="h-8 w-8 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 text-xs font-bold">
-                      {comment.author?.charAt(0) || "U"}
-                    </div>
-                    <div className="flex-1">
-                      <div className="text-[12px] text-gray-600 mb-1">
-                        <span className="font-semibold text-gray-900">{comment.author || "User"}</span>
-                        <span className="mx-2 text-gray-300">•</span>
-                        {formatDate(comment.timestamp)}
-                      </div>
-                      <div className="text-[13px] text-gray-700 bg-[#f6f7fb] border border-gray-100 rounded-md px-3 py-2">
-                        {comment.text}
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <SalesReceiptCommentsPanel
+        open={showCommentsSidebar}
+        onClose={() => setShowCommentsSidebar(false)}
+        receiptId={String(receipt?.id || id || "")}
+        comments={receiptComments}
+        onCommentsChange={(nextComments) => setReceiptComments(nextComments)}
+        updateSalesReceipt={updateSalesReceipt}
+      />
       {isVoidModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div

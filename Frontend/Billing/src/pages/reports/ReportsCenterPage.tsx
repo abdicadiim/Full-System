@@ -141,11 +141,7 @@ const CUSTOM_REPORT_PICKER_GROUPS: ReportPickerGroup[] = [
   {
     label: "Payments Received",
     items: [
-      { id: "payments-received", label: "Payments Received" },
       { id: "time-to-get-paid", label: "Time to Get Paid" },
-      { id: "credit-note-details", label: "Credit Note Details" },
-      { id: "refund-history", label: "Refund History" },
-      { id: "card-expiry", label: "Card Expiry" },
     ],
   },
   {
