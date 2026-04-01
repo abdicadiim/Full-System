@@ -1282,13 +1282,13 @@ function ReceivablesReportShell({
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-2 overflow-x-auto border-t border-b border-[#e5e7eb] bg-white py-3">
+          <div className="relative z-20 mt-4 flex flex-wrap items-center gap-2 overflow-visible border-t border-b border-[#e5e7eb] bg-white py-3">
             <div className="flex items-center gap-2 text-sm text-[#334155]">
               <Filter size={14} />
               <span>Filters :</span>
             </div>
 
-            <div ref={dateRangeRef} className="relative">
+            <div ref={dateRangeRef} className="relative z-50">
               <button
                 type="button"
                 onClick={openDateRangeDropdown}
