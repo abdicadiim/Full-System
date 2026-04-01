@@ -64,6 +64,55 @@ const computeNextNumber = (existing: string[], opts: { prefix: string; start: st
   return `${prefix}${nextPadded}`;
 };
 
+const normalizeCustomerComment = (comment: any, index = 0) => {
+  if (!comment || typeof comment !== "object") return null;
+  const id = String(comment.id || comment._id || `cm-${index}-${Date.now()}`).trim();
+  if (!id) return null;
+
+  const rawContent = String(comment.content ?? "").trim();
+  const legacyText = String(comment.text ?? "").trim();
+  const authorName = String(comment.authorName || comment.author || "You").trim() || "You";
+  const createdAt = String(comment.createdAt || comment.timestamp || new Date().toISOString()).trim() || new Date().toISOString();
+  const content = rawContent || legacyText;
+
+  return {
+    id,
+    text: legacyText || content.replace(/<[^>]*>/g, ""),
+    content,
+    authorName,
+    authorInitial: String(comment.authorInitial || authorName.charAt(0).toUpperCase() || "Y").trim() || "Y",
+    createdAt,
+    bold: Boolean(comment.bold),
+    italic: Boolean(comment.italic),
+    underline: Boolean(comment.underline),
+    author: String(comment.author || authorName).trim() || "You",
+    timestamp: createdAt,
+  };
+};
+
+const normalizeCustomerComments = (comments: any) =>
+  Array.isArray(comments)
+    ? comments.map((comment, index) => normalizeCustomerComment(comment, index)).filter(Boolean)
+    : [];
+
+const normalizeCustomerRecord = (row: any) =>
+  row
+    ? {
+        ...row,
+        id: String(row._id || row.id || ""),
+        _id: String(row._id || row.id || ""),
+        comments: normalizeCustomerComments(row.comments),
+      }
+    : row;
+
+const normalizeCustomerPatch = (payload: Record<string, unknown>) => {
+  const patch = { ...payload };
+  if (Object.prototype.hasOwnProperty.call(payload, "comments")) {
+    patch.comments = normalizeCustomerComments((payload as any).comments);
+  }
+  return patch;
+};
+
 export const listCustomers: express.RequestHandler = async (req, res, next) => {
   try {
     const orgId = getOrgId(req);
@@ -95,7 +144,7 @@ export const listCustomers: express.RequestHandler = async (req, res, next) => {
 
     res.json({
       success: true,
-      data: rows,
+      data: rows.map(normalizeCustomerRecord),
       total,
       page,
       limit: limit || total,
@@ -113,7 +162,7 @@ export const getCustomerById: express.RequestHandler = async (req, res, next) =>
 
     const row = await Customer.findOne({ _id: req.params.id, organizationId: orgId }).lean();
     if (!row) return res.status(404).json({ success: false, message: "Customer not found", data: null });
-    res.json({ success: true, data: row });
+    res.json({ success: true, data: normalizeCustomerRecord(row) });
   } catch (err) {
     next(err);
   }
@@ -172,8 +221,8 @@ export const createCustomer: express.RequestHandler = async (req, res, next) => 
       }
     }
 
-    const created = await Customer.create({ ...payload, customerNumber, organizationId: orgId });
-    res.status(201).json({ success: true, data: created });
+    const created = await Customer.create({ ...normalizeCustomerPatch(payload), customerNumber, organizationId: orgId });
+    res.status(201).json({ success: true, data: normalizeCustomerRecord(created.toObject()) });
   } catch (err) {
     next(err);
   }
@@ -188,6 +237,7 @@ export const updateCustomer: express.RequestHandler = async (req, res, next) => 
     const settings = await CustomersVendorsSettings.findOne({ organizationId: orgId }).lean();
     const allowDuplicates = settings?.allowDuplicates !== undefined ? settings.allowDuplicates : true;
     const displayName = asString(payload.displayName).trim() || asString(payload.name).trim();
+    const normalizedPayload = normalizeCustomerPatch(payload);
 
     if (!allowDuplicates && displayName) {
       const duplicateDisplayName = await findDuplicateCustomerDisplayName(orgId, displayName, String(req.params.id));
@@ -202,11 +252,11 @@ export const updateCustomer: express.RequestHandler = async (req, res, next) => 
 
     const updated = await Customer.findOneAndUpdate(
       { _id: req.params.id, organizationId: orgId },
-      { $set: { ...payload } },
+      { $set: { ...normalizedPayload } },
       { new: true }
     ).lean();
     if (!updated) return res.status(404).json({ success: false, message: "Customer not found", data: null });
-    res.json({ success: true, data: updated });
+    res.json({ success: true, data: normalizeCustomerRecord(updated) });
   } catch (err) {
     next(err);
   }
@@ -231,13 +281,13 @@ export const bulkUpdateCustomers: express.RequestHandler = async (req, res, next
     if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
 
     const ids = Array.isArray(req.body?.ids) ? (req.body.ids as unknown[]) : [];
-    const data = (req.body?.data || {}) as Record<string, unknown>;
+    const data = normalizeCustomerPatch((req.body?.data || {}) as Record<string, unknown>);
     const objectIds = ids.filter((id) => mongoose.isValidObjectId(id)).map((id) => new mongoose.Types.ObjectId(String(id)));
     if (!objectIds.length) return res.json({ success: true, data: [] });
 
     await Customer.updateMany({ organizationId: orgId, _id: { $in: objectIds } }, { $set: data });
     const rows = await Customer.find({ organizationId: orgId, _id: { $in: objectIds } }).lean();
-    res.json({ success: true, data: rows });
+    res.json({ success: true, data: rows.map(normalizeCustomerRecord) });
   } catch (err) {
     next(err);
   }
@@ -298,7 +348,7 @@ export const mergeCustomers: express.RequestHandler = async (req, res, next) => 
       patch.unusedCredits = (Number((target as any).unusedCredits) || 0) + sumNumber("unusedCredits");
 
     const updated = await Customer.findOneAndUpdate({ _id: targetId, organizationId: orgId }, { $set: patch }, { new: true }).lean();
-    res.json({ success: true, data: updated });
+    res.json({ success: true, data: normalizeCustomerRecord(updated) });
   } catch (err) {
     next(err);
   }
