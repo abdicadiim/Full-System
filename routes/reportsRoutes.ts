@@ -4,6 +4,7 @@ import {
   getARAgingDetailsReport,
   getARAgingSummaryReport,
   getBadDebtsReport,
+  getBankChargesReport,
   getInvoiceDetailsReport,
   getQuoteDetailsReport,
   getSalesByCustomerReport,
@@ -22,3 +23,4 @@ reportsRoutes.get("/ar-aging-details", getARAgingDetailsReport);
 reportsRoutes.get("/invoice-details", getInvoiceDetailsReport);
 reportsRoutes.get("/quote-details", getQuoteDetailsReport);
 reportsRoutes.get("/bad-debts", getBadDebtsReport);
+reportsRoutes.get("/bank-charges", getBankChargesReport);
