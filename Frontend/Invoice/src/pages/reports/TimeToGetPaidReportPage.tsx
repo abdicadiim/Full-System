@@ -353,7 +353,7 @@ const getDefaultCustomRange = (): RangeDate => {
 
 export default function TimeToGetPaidReportPage() {
   const navigate = useNavigate();
-  const { categoryId, reportId } = useParams();
+  const { categoryId } = useParams();
   const resolvedCategoryId = categoryId || "payments-received";
   const category = getCategoryById(resolvedCategoryId);
   const report = getReportById(resolvedCategoryId, "time-to-get-paid");
@@ -454,7 +454,7 @@ export default function TimeToGetPaidReportPage() {
     };
   }, [refreshTick, selectedRangeBounds.end.getTime(), selectedRangeBounds.start.getTime(), selectedDateRange]);
 
-    if (!category || !report || reportId !== "time-to-get-paid") {
+  if (!category || !report) {
     return <Navigate to="/reports" replace />;
   }
 
