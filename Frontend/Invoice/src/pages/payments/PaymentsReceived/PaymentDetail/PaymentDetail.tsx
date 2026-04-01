@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { getPaymentById, getPayments, updatePayment, deletePayment, getInvoiceById, updateInvoice, Payment } from "../../../salesModel";
 import { settingsAPI, bankAccountsAPI, refundsAPI, chartOfAccountsAPI } from "../../../../services/api";
 import { useCurrency } from "../../../../hooks/useCurrency";
+import PaymentCommentsPanel from "./PaymentCommentsPanel";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import { toast } from "react-toastify";
@@ -11,7 +12,7 @@ import {
   ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Plus, Filter,
   ArrowUpDown, CheckSquare, Square, Search, Star, Link2, Mail,
   User, Calendar, ChevronDown as ChevronDownIcon, Paperclip, MessageCircle, RotateCcw,
-  FileUp, Bold, Italic, Underline, Download, Upload, Layers, Monitor, RefreshCw
+  FileUp, Download, Upload, Layers, Monitor, RefreshCw
 } from "lucide-react";
 
 export default function PaymentDetail() {
@@ -58,10 +59,6 @@ export default function PaymentDetail() {
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [showCommentsSidebar, setShowCommentsSidebar] = useState(false);
   const [comments, setComments] = useState<any[]>([]);
-  const [newComment, setNewComment] = useState("");
-  const [commentBold, setCommentBold] = useState(false);
-  const [commentItalic, setCommentItalic] = useState(false);
-  const [commentUnderline, setCommentUnderline] = useState(false);
   const [isSidebarMoreMenuOpen, setIsSidebarMoreMenuOpen] = useState(false);
   const [isSidebarSortBySubmenuOpen, setIsSidebarSortBySubmenuOpen] = useState(false);
   const [isSidebarImportMenuOpen, setIsSidebarImportMenuOpen] = useState(false);
@@ -801,6 +798,31 @@ export default function PaymentDetail() {
     }
   };
 
+  const updatePaymentComments = async (paymentId: string, data: any) => {
+    const currentPaymentId = String(paymentId || id || payment?.id || (payment as any)?._id || "").trim();
+    if (!currentPaymentId) {
+      throw new Error("Unable to save comments: payment id is missing.");
+    }
+
+    const nextComments = Array.isArray(data?.comments) ? data.comments : [];
+    const updatedPayment = await updatePayment(currentPaymentId, { comments: nextComments } as any);
+    setPayment((prev) => (prev ? ({ ...prev, ...(updatedPayment || {}), comments: nextComments } as any) : prev));
+    setComments(nextComments);
+
+    return {
+      success: true,
+      data: updatedPayment,
+      payment: updatedPayment,
+      comments: nextComments,
+    };
+  };
+
+  const handlePaymentCommentsChange = (nextComments: any[]) => {
+    const normalizedComments = Array.isArray(nextComments) ? nextComments : [];
+    setComments(normalizedComments);
+    setPayment((prev) => (prev ? ({ ...prev, comments: normalizedComments } as any) : prev));
+  };
+
   const fileToDataUrl = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -889,29 +911,6 @@ export default function PaymentDetail() {
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-  };
-
-  // Comments Handlers
-  const handleAddComment = async () => {
-    if (!newComment.trim()) return;
-
-    const comment = {
-      id: `com_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      text: newComment,
-      author: "You",
-      timestamp: new Date().toISOString(),
-      bold: commentBold,
-      italic: commentItalic,
-      underline: commentUnderline
-    };
-
-    const updated = [...comments, comment];
-    setComments(updated);
-    await persistPaymentMeta(paymentAttachments, updated);
-    setNewComment("");
-    setCommentBold(false);
-    setCommentItalic(false);
-    setCommentUnderline(false);
   };
 
   // More Menu Handlers
@@ -2203,106 +2202,14 @@ export default function PaymentDetail() {
         </div>
       )}
 
-      {/* Comments Sidebar */}
-      {showCommentsSidebar && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-end">
-          <div
-            className="bg-white w-full max-w-md h-full shadow-xl flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">Comments</h2>
-              <button
-                className="p-1 border border-blue-600 rounded text-red-600 hover:bg-red-50"
-                onClick={() => setShowCommentsSidebar(false)}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Comment Input */}
-            <div className="p-4 border-b border-gray-200">
-              <div className="flex gap-1 mb-2">
-                <button
-                  className={`p-1.5 rounded ${commentBold ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
-                  onClick={() => setCommentBold(!commentBold)}
-                >
-                  <Bold size={14} />
-                </button>
-                <button
-                  className={`p-1.5 rounded ${commentItalic ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
-                  onClick={() => setCommentItalic(!commentItalic)}
-                >
-                  <Italic size={14} />
-                </button>
-                <button
-                  className={`p-1.5 rounded ${commentUnderline ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
-                  onClick={() => setCommentUnderline(!commentUnderline)}
-                >
-                  <Underline size={14} />
-                </button>
-              </div>
-              <textarea
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Add a comment..."
-                className="w-full p-3 border border-gray-300 rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-                rows={4}
-                style={{
-                  fontWeight: commentBold ? 'bold' : 'normal',
-                  fontStyle: commentItalic ? 'italic' : 'normal',
-                  textDecoration: commentUnderline ? 'underline' : 'none'
-                }}
-              />
-              <button
-                className="mt-2 w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 text-sm font-medium"
-                onClick={handleAddComment}
-              >
-                Add Comment
-              </button>
-            </div>
-
-            {/* Comments List */}
-            <div className="flex-1 overflow-y-auto p-4">
-              <h3 className="text-sm font-semibold text-gray-700 mb-4 uppercase">All Comments</h3>
-              {comments.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <p>No comments yet.</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {comments.map((comment) => (
-                    <div key={comment.id} className="border-b border-gray-200 pb-4 last:border-0">
-                      <div className="flex items-start gap-2 mb-2">
-                        <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-semibold">
-                          {(comment.author || "U").charAt(0)}
-                        </div>
-                        <div className="flex-1">
-                          <div className="text-sm font-medium text-gray-900">{comment.author || "User"}</div>
-                          <div className="text-xs text-gray-500">
-                            {new Date(comment.timestamp).toLocaleString()}
-                          </div>
-                        </div>
-                      </div>
-                      <div
-                        className="text-sm text-gray-700 ml-10"
-                        style={{
-                          fontWeight: comment.bold ? 'bold' : 'normal',
-                          fontStyle: comment.italic ? 'italic' : 'normal',
-                          textDecoration: comment.underline ? 'underline' : 'none'
-                        }}
-                      >
-                        {comment.text}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <PaymentCommentsPanel
+        open={showCommentsSidebar}
+        onClose={() => setShowCommentsSidebar(false)}
+        paymentId={String(id || payment?.id || (payment as any)?._id || "")}
+        comments={comments}
+        onCommentsChange={handlePaymentCommentsChange}
+        updatePaymentRecord={updatePaymentComments}
+      />
     </div>
   );
 }
