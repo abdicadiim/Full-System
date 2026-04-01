@@ -6,6 +6,7 @@ import CreditNoteDetailsReportPage from "./CreditNoteDetailsReportPage";
 import ReceivableDetailsReportPage from "./ReceivableDetailsReportPage";
 import ReceivableSummaryReportPage from "./ReceivableSummaryReportPage";
 import RefundHistoryReportPage from "./RefundHistoryReportPage";
+import WithholdingTaxReportPage from "./WithholdingTaxReportPage";
 import SalesByCustomerReportPage from "./SalesByCustomerReportPage";
 import TimeToGetPaidReportPage from "./TimeToGetPaidReportPage";
 
@@ -29,6 +30,9 @@ export default function ReportDetailPage() {
   }
   if (reportId === "refund-history") {
     return <RefundHistoryReportPage />;
+  }
+  if (reportId === "withholding-tax") {
+    return <WithholdingTaxReportPage />;
   }
   if (reportId === "time-to-get-paid") {
     return <TimeToGetPaidReportPage />;
