@@ -13,10 +13,13 @@ import {
 
 type CustomerAttachment = {
   id: string | number;
+  documentId?: string;
   name?: string;
   size?: string | number;
   url?: string;
   contentUrl?: string;
+  viewUrl?: string;
+  downloadUrl?: string;
 };
 
 type CustomerAttachmentsPopoverProps = {
@@ -25,7 +28,7 @@ type CustomerAttachmentsPopoverProps = {
   attachments?: CustomerAttachment[];
   isUploading?: boolean;
   onUpload: (event: React.ChangeEvent<HTMLInputElement>) => Promise<void> | void;
-  onRemoveAttachment: (attachmentId: number) => Promise<void> | void;
+  onRemoveAttachment: (attachmentId: string | number) => Promise<void> | void;
 };
 
 const formatAttachmentSize = (size: string | number | undefined) => {
@@ -94,12 +97,12 @@ export default function CustomerAttachmentsPopover({
 }: CustomerAttachmentsPopoverProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [attachmentMenuIndex, setAttachmentMenuIndex] = useState<number | null>(null);
-  const [attachmentDeleteConfirmIndex, setAttachmentDeleteConfirmIndex] = useState<number | null>(null);
+  const [attachmentDeleteConfirmId, setAttachmentDeleteConfirmId] = useState<string | number | null>(null);
 
   useEffect(() => {
     if (!open) {
       setAttachmentMenuIndex(null);
-      setAttachmentDeleteConfirmIndex(null);
+      setAttachmentDeleteConfirmId(null);
     }
   }, [open]);
 
@@ -113,7 +116,7 @@ export default function CustomerAttachmentsPopover({
   };
 
   const openAttachmentInNewTab = (file: CustomerAttachment) => {
-    const resolvedUrl = resolveAttachmentUrl(file.contentUrl || file.url);
+    const resolvedUrl = resolveAttachmentUrl(file.viewUrl || file.contentUrl || file.url || file.downloadUrl);
     if (!resolvedUrl) return;
 
     const href = resolvedUrl.startsWith("data:") ? createObjectUrlFromDataUrl(resolvedUrl) || resolvedUrl : resolvedUrl;
@@ -136,7 +139,7 @@ export default function CustomerAttachmentsPopover({
   };
 
   const downloadAttachment = (file: CustomerAttachment) => {
-    const resolvedUrl = resolveAttachmentUrl(file.contentUrl || file.url);
+    const resolvedUrl = resolveAttachmentUrl(file.downloadUrl || file.url || file.viewUrl || file.contentUrl);
     if (!resolvedUrl) return;
 
     const href = resolvedUrl.startsWith("data:") ? createObjectUrlFromDataUrl(resolvedUrl) || resolvedUrl : resolvedUrl;
@@ -147,13 +150,13 @@ export default function CustomerAttachmentsPopover({
     }
   };
 
-  const handleRequestRemoveAttachment = (index: number) => {
-    setAttachmentMenuIndex(index);
-    setAttachmentDeleteConfirmIndex(index);
+  const handleRequestRemoveAttachment = (attachmentId: string | number) => {
+    setAttachmentMenuIndex(null);
+    setAttachmentDeleteConfirmId(attachmentId);
   };
 
   const handleCancelRemoveAttachment = () => {
-    setAttachmentDeleteConfirmIndex(null);
+    setAttachmentDeleteConfirmId(null);
   };
 
   return (
@@ -176,9 +179,10 @@ export default function CustomerAttachmentsPopover({
           ) : (
             <div className="space-y-2">
               {attachments.map((file, index) => {
-                const attachmentUrl = resolveAttachmentUrl(file.contentUrl || file.url);
+                const attachmentUrl = resolveAttachmentUrl(file.viewUrl || file.contentUrl || file.url || file.downloadUrl);
+                const attachmentId = file.documentId || file.id || index + 1;
                 return (
-                <div key={`${file.id}-${index}`}>
+                <div key={`${String(attachmentId)}-${index}`}>
                   <div
                     className={`group relative cursor-pointer rounded-md px-3 py-2 pr-16 text-[13px] transition-colors ${
                       attachmentMenuIndex === index
@@ -201,7 +205,7 @@ export default function CustomerAttachmentsPopover({
                     </div>
                     <button
                       type="button"
-                      onClick={() => handleRequestRemoveAttachment(index)}
+                      onClick={() => handleRequestRemoveAttachment(attachmentId)}
                       className="absolute right-8 top-1/2 -translate-y-1/2 rounded p-1 text-red-500 opacity-0 transition-opacity hover:bg-red-50 group-hover:opacity-100"
                       aria-label="Remove attachment"
                       title="Remove"
@@ -239,7 +243,7 @@ export default function CustomerAttachmentsPopover({
                         )}
                         <button
                           type="button"
-                          onClick={() => handleRequestRemoveAttachment(index)}
+                          onClick={() => handleRequestRemoveAttachment(attachmentId)}
                           className="hover:text-blue-700"
                         >
                           Remove
@@ -294,7 +298,7 @@ export default function CustomerAttachmentsPopover({
         </div>
       </div>
 
-      {attachmentDeleteConfirmIndex !== null && (
+      {attachmentDeleteConfirmId !== null && (
         <div
           className="fixed inset-0 z-[10000] flex items-start justify-center bg-black/40 px-4 pt-4"
           onClick={handleCancelRemoveAttachment}
@@ -316,8 +320,8 @@ export default function CustomerAttachmentsPopover({
                 <button
                   type="button"
                   onClick={() => {
-                    if (attachmentDeleteConfirmIndex !== null) {
-                      void onRemoveAttachment(attachmentDeleteConfirmIndex + 1);
+                    if (attachmentDeleteConfirmId !== null) {
+                      void onRemoveAttachment(attachmentDeleteConfirmId);
                     }
                   }}
                   className="rounded-md bg-blue-500 px-4 py-2 text-[14px] font-medium text-white hover:bg-blue-600"
