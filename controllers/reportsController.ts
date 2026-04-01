@@ -1717,6 +1717,7 @@ const buildQuoteDetailsRows = (
       status: String(quote?.status || "").trim(),
       "quote-date": quoteDate ? quoteDate.toISOString() : "",
       "expiry-date": expiryDate ? expiryDate.toISOString() : "",
+      "report-date": selectedDate.toISOString(),
       "quote-number": quoteNumber,
       "reference-number": String(quote?.referenceNumber || "").trim(),
       "customer-name": customerName,
@@ -1734,7 +1735,7 @@ const buildQuoteDetailsRows = (
     if (!currency) currency = rowCurrency;
   }
 
-  detailRows.sort((left, right) => String(right.values["quote-date"] || "").localeCompare(String(left.values["quote-date"] || "")));
+  detailRows.sort((left, right) => String(right.values["report-date"] || "").localeCompare(String(left.values["report-date"] || "")));
 
   return {
     rows: detailRows,

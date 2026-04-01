@@ -6,6 +6,7 @@ import ReportDetailHeader from "./ReportDetailHeader";
 import ARAgingSummaryReportPage from "./ARAgingSummaryReportPage";
 import ARAgingDetailsReportPage from "./ARAgingDetailsReportPage";
 import InvoiceDetailsReportPage from "./InvoiceDetailsReportPage";
+import QuoteDetailsReportPage from "./QuoteDetailsReportPage";
 import PaymentsReceivedReportView from "./PaymentsReceivedReportPage";
 import SalesByItemReportView from "./SalesByItemReportPage";
 import { SalesBySalesPersonReportView } from "./SalesBySalesPersonReportPage";
@@ -3820,6 +3821,10 @@ export default function ReportDetailPage() {
 
   if (report.id === "invoice-details") {
     return <InvoiceDetailsReportPage />;
+  }
+
+  if (report.id === "quote-details") {
+    return <QuoteDetailsReportPage />;
   }
 
   return (
