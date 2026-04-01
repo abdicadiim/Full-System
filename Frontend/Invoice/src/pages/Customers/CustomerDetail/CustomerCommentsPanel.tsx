@@ -14,8 +14,8 @@ export type CustomerComment = {
   bold?: boolean;
   italic?: boolean;
   underline?: boolean;
-  author?: string;
-  timestamp?: string;
+  author: string;
+  timestamp: string;
 };
 
 type CustomerCommentsPanelProps = {
