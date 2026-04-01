@@ -124,6 +124,11 @@ const COMPARATORS = [
 const NO_VALUE = new Set(["is-empty", "is-not-empty"]);
 const CURRENCY_CODES = ["SOS", "USD", "EUR", "GBP", "KES"];
 const ENTITY_OPTIONS = [{ key: "invoice", label: "Invoice" }];
+type AgingByKey = "invoice-due-date" | "invoice-date";
+const AGING_BY_OPTIONS: Array<{ key: AgingByKey; label: string }> = [
+  { key: "invoice-due-date", label: "Invoice Due Date" },
+  { key: "invoice-date", label: "Invoice Date" },
+];
 
 const formatDate = (d: Date) =>
   d.toLocaleDateString("en-GB", {
@@ -1044,7 +1049,9 @@ function ReceivablesReportShell({
     { key: "due-date", label: "Due Date" },
   ];
   const [entities, setEntities] = useState("invoice");
-  const [agingBy, setAgingBy] = useState("invoice-due-date");
+  const agingByRef = useRef<HTMLDivElement | null>(null);
+  const [agingByOpen, setAgingByOpen] = useState(false);
+  const [agingBy, setAgingBy] = useState<AgingByKey>("invoice-due-date");
   const [reportBy, setReportBy] = useState(
     config.defaultReportBy ?? reportByOptions[0]?.key ?? "invoice-date",
   );
@@ -1220,6 +1227,7 @@ function ReceivablesReportShell({
     setColumnsOpen(true);
     setDateRangeOpen(false);
     setIsCustomDateRangeOpen(false);
+    setAgingByOpen(false);
     setCompareWithOpen(false);
     setCompareWithCountOpen(false);
   };
@@ -1235,8 +1243,18 @@ function ReceivablesReportShell({
     setCompareWithDraftArrangeLatest(compareWithArrangeLatest);
     setDateRangeOpen(false);
     setIsCustomDateRangeOpen(false);
+    setAgingByOpen(false);
     setCompareWithCountOpen(false);
     setCompareWithOpen((prev) => !prev);
+  };
+
+  const openAgingByDropdown = () => {
+    setDateRangeOpen(false);
+    setIsCustomDateRangeOpen(false);
+    setColumnsOpen(false);
+    setCompareWithOpen(false);
+    setCompareWithCountOpen(false);
+    setAgingByOpen((prev) => !prev);
   };
 
   const applyCompareWith = () => {
@@ -1261,6 +1279,7 @@ function ReceivablesReportShell({
     if (dateRangeOpen) {
       setDateRangeOpen(false);
       setIsCustomDateRangeOpen(false);
+      setAgingByOpen(false);
       return;
     }
 
@@ -1270,6 +1289,7 @@ function ReceivablesReportShell({
     setCustomDateRangeDraft(currentRange);
     setCustomDateRangeMonth(getStartOfMonth(currentRange.start));
     setIsCustomDateRangeOpen(dateRangeKey === "custom");
+    setAgingByOpen(false);
     setDateRangeOpen(true);
   };
 
@@ -1337,6 +1357,31 @@ function ReceivablesReportShell({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [dateRangeOpen, cancelDateRangeSelection]);
+
+  useEffect(() => {
+    if (!agingByOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!agingByRef.current?.contains(target)) {
+        setAgingByOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setAgingByOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [agingByOpen]);
+
   const setRightCalendarMonth = (monthIndex: number, year: number) => {
     setCustomDateRangeMonth(addMonths(new Date(year, monthIndex, 1), -1));
   };
@@ -1770,17 +1815,67 @@ function ReceivablesReportShell({
             ) : null}
 
             {config.showAgingBy ? (
-              <label className="inline-flex h-8 items-center gap-2 rounded border border-[#cfd6e4] bg-[#f8fafc] px-3 text-sm text-[#334155]">
-                <span>Aging By :</span>
-                <select
-                  value={agingBy}
-                  onChange={(event) => setAgingBy(event.target.value)}
-                  className="bg-transparent outline-none"
+              <div ref={agingByRef} className="relative z-50">
+                <button
+                  type="button"
+                  onClick={openAgingByDropdown}
+                  className={`inline-flex h-8 w-[210px] items-center justify-between gap-3 rounded border px-3 text-sm text-[#334155] hover:bg-white ${
+                    agingByOpen
+                      ? "border-[#1b6f7b] bg-white"
+                      : "border-[#cfd6e4] bg-[#f8fafc]"
+                  }`}
+                  aria-haspopup="menu"
+                  aria-expanded={agingByOpen}
                 >
-                  <option value="invoice-due-date">Invoice Due Date</option>
-                  <option value="invoice-date">Invoice Date</option>
-                </select>
-              </label>
+                  <span className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap">
+                    <span>Aging By :</span>
+                    <strong className="truncate">
+                      {AGING_BY_OPTIONS.find((option) => option.key === agingBy)
+                        ?.label ?? "Invoice Due Date"}
+                    </strong>
+                  </span>
+                  <ChevronDown
+                    size={14}
+                    className={`transition-transform duration-150 ${
+                      agingByOpen
+                        ? "rotate-180 text-[#1f6f7a]"
+                        : "text-[#64748b]"
+                    }`}
+                  />
+                </button>
+
+                {agingByOpen ? (
+                  <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-[210px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                    <div className="py-1">
+                      {AGING_BY_OPTIONS.map((option) => {
+                        const isSelected = agingBy === option.key;
+                        return (
+                          <button
+                            key={option.key}
+                            type="button"
+                            onClick={() => {
+                              setAgingBy(option.key);
+                              setAgingByOpen(false);
+                            }}
+                            role="menuitemradio"
+                            aria-checked={isSelected}
+                            className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
+                              isSelected
+                                ? "font-medium text-[#0f172a]"
+                                : "text-[#334155]"
+                            }`}
+                          >
+                            <span>{option.label}</span>
+                            {isSelected ? (
+                              <Check size={14} className="text-[#1f6f7a]" />
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             ) : null}
 
             {config.showEntities ? (

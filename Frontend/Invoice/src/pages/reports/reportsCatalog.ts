@@ -379,6 +379,8 @@ const ALL_REPORTS: ReportDefinition[] = [
     howItHelps: "Measure credit risk impact and improve credit policy.",
     functionSupport: support(
       "filter",
+      "compare",
+      "customizeColumns",
       "sort",
       "schedule",
       "share",

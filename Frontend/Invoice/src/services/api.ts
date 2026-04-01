@@ -2798,6 +2798,13 @@ export const reportsAPI = {
     }
     return res as any;
   },
+  getBadDebts: async (params?: Record<string, any>) => {
+    const res = await request({ path: "/reports/bad-debts", params });
+    if (!res?.success) {
+      throw new Error(res?.message || "Failed to fetch bad debts report");
+    }
+    return res as any;
+  },
 };
 
 export const locationsAPI = {
