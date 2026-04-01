@@ -5008,6 +5008,7 @@ export default function ReportDetailPage() {
 
   if (
     report.id === "sales-by-customer" ||
+    report.id === "customer-balance-summary" ||
     report.id === "bad-debts" ||
     report.id === "bank-charges"
   ) {
