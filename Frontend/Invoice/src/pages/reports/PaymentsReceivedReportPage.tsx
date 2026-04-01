@@ -1211,8 +1211,28 @@ export default function PaymentsReceivedReportView({
                     {groupedPayments.map((group) => {
                       const groupTotals = group.items.reduce(
                         (acc, payment) => {
-                          acc.amount += Number(payment.amountReceived ?? payment.amount ?? 0) || 0;
-                          acc.unused += Number(payment.unusedAmount ?? 0) || 0;
+                          if (isRefundMode) {
+                            const refund = payment as RefundRecord;
+                            const amount = Number(refund.amount ?? 0) || 0;
+                            const currency = String(refund.currency || baseCurrencyCode || "USD").trim().toUpperCase() || baseCurrencyCode;
+                            const exchangeRate = Number(
+                              refund.exchangeRate ??
+                                refund.exchange_rate ??
+                                refund.fxRate ??
+                                refund.rate ??
+                                0,
+                            );
+                            const baseAmount =
+                              currency === baseCurrencyCode || exchangeRate <= 0
+                                ? amount
+                                : amount * exchangeRate;
+                            acc.amount += amount;
+                            acc.unused += baseAmount;
+                            return acc;
+                          }
+
+                          acc.amount += Number((payment as Payment).amountReceived ?? (payment as Payment).amount ?? 0) || 0;
+                          acc.unused += Number((payment as Payment).unusedAmount ?? 0) || 0;
                           return acc;
                         },
                         { amount: 0, unused: 0 }
@@ -1226,8 +1246,12 @@ export default function PaymentsReceivedReportView({
                               </td>
                             </tr>
                           ) : null}
-                          {group.items.map((payment) => (
-                            <tr key={payment.id} className="border-b border-[#eef2f7]">
+                          {group.items.map((payment) => {
+                            const rowKey = isRefundMode
+                              ? String((payment as RefundRecord).id || (payment as RefundRecord)._id || (payment as RefundRecord).refundNumber || "")
+                              : String((payment as Payment).id || "");
+                            return (
+                            <tr key={rowKey} className="border-b border-[#eef2f7]">
                               {visibleColumns.map((column) => (
                                 <td
                                   key={column.key}
@@ -1236,8 +1260,8 @@ export default function PaymentsReceivedReportView({
                                       ? "font-medium text-[#2563eb]"
                                       : "text-[#0f172a]"
                                   }`}
-                                >
-                                  {column.key === "payment-number" ? (
+                                  >
+                                  {column.key === "payment-number" && !isRefundMode ? (
                                     <Link to={`/payments/payments-received/${payment.id}`} className="text-[#2563eb] hover:underline">
                                       {formatColumnValue(column, payment)}
                                     </Link>
@@ -1247,7 +1271,7 @@ export default function PaymentsReceivedReportView({
                                 </td>
                               ))}
                             </tr>
-                          ))}
+                          )})}
                           {groupByKey !== "none" ? (
                             <tr className="border-b border-[#e5e7eb] bg-[#fcfcfd]">
                               {visibleColumns.map((column, index) => {
@@ -1261,14 +1285,20 @@ export default function PaymentsReceivedReportView({
                                 if (column.key === "amount") {
                                   return (
                                     <td key={`${group.label}-amount`} className="px-4 py-3 text-center text-sm font-semibold text-[#0f172a]">
-                                      {formatMoney(groupTotals.amount, filteredPayments[0]?.currency || "SOS")}
+                                      {formatMoney(
+                                        groupTotals.amount,
+                                        isRefundMode ? String(filteredPayments[0]?.currency || baseCurrencyCode || "SOS") : String(filteredPayments[0]?.currency || "SOS"),
+                                      )}
                                     </td>
                                   );
                                 }
                                 if (column.key === "unused-amount") {
                                   return (
                                     <td key={`${group.label}-unused`} className="px-4 py-3 text-center text-sm font-semibold text-[#0f172a]">
-                                      {formatMoney(groupTotals.unused, filteredPayments[0]?.currency || "SOS")}
+                                      {formatMoney(
+                                        groupTotals.unused,
+                                        isRefundMode ? baseCurrencyCode : String(filteredPayments[0]?.currency || "SOS"),
+                                      )}
                                     </td>
                                   );
                                 }
@@ -1292,14 +1322,20 @@ export default function PaymentsReceivedReportView({
                           if (column.key === "amount") {
                             return (
                               <td key="payments-amount" className="px-4 py-3 text-center text-sm font-semibold text-[#0f172a]">
-                                {formatMoney(totals.amount, filteredPayments[0]?.currency || "SOS")}
+                                {formatMoney(
+                                  totals.amount,
+                                  isRefundMode ? String(filteredPayments[0]?.currency || baseCurrencyCode || "SOS") : String(filteredPayments[0]?.currency || "SOS"),
+                                )}
                               </td>
                             );
                           }
                           if (column.key === "unused-amount") {
                             return (
                               <td key="payments-unused" className="px-4 py-3 text-center text-sm font-semibold text-[#0f172a]">
-                                {formatMoney(totals.unused, filteredPayments[0]?.currency || "SOS")}
+                                {formatMoney(
+                                  totals.unused,
+                                  isRefundMode ? baseCurrencyCode : String(filteredPayments[0]?.currency || "SOS"),
+                                )}
                               </td>
                             );
                           }
