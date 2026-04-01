@@ -16,6 +16,7 @@ import {
 import { Customer, Invoice, CreditNote, AttachedFile, Quote, RecurringInvoice, Expense, RecurringExpense, Project, Bill, SalesReceipt } from "../../salesModel";
 import { resolveVerifiedPrimarySender } from "../../../utils/emailSenderDisplay";
 import CustomerCommentsPanel from "./CustomerCommentsPanel";
+import CustomerAttachmentsPopover from "./CustomerAttachmentsPopover";
 
 interface ExtendedCustomer extends Customer {
     billingAttention: string;
@@ -292,6 +293,7 @@ export default function CustomerDetail() {
 
     // Attachments dropdown state
     const [isAttachmentsDropdownOpen, setIsAttachmentsDropdownOpen] = useState(false);
+    const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
 
     const attachmentsDropdownRef = useRef<HTMLDivElement>(null);
     const [attachments, setAttachments] = useState<any[]>([
@@ -2942,6 +2944,7 @@ export default function CustomerDetail() {
         const files = event.target.files;
         if (!files || files.length === 0 || !customer || !id) return;
 
+        setIsUploadingAttachments(true);
         try {
             const currentDocuments = Array.isArray(customer.documents) ? customer.documents : [];
             const filesArray = Array.from(files);
@@ -2993,6 +2996,8 @@ export default function CustomerDetail() {
             toast.success(`${uploadedDocuments.length} file(s) uploaded successfully`);
         } catch (error) {
             toast.error('Failed to upload files: ' + (error instanceof Error ? error.message : 'Unknown error'));
+        } finally {
+            setIsUploadingAttachments(false);
         }
 
         // Reset input
@@ -3884,68 +3889,22 @@ export default function CustomerDetail() {
                             </button>
                             <div className="relative" ref={attachmentsDropdownRef}>
                                 <button
-                                    className="h-[38px] flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 border-b-[4px] text-gray-700 rounded-lg text-sm font-semibold cursor-pointer transition-all hover:bg-gray-50 hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:translate-y-[1px] shadow-sm"
-                                    onClick={() => setIsAttachmentsDropdownOpen(!isAttachmentsDropdownOpen)}
+                                    className="h-8 min-w-8 rounded border border-gray-200 bg-white px-2 cursor-pointer flex items-center justify-center gap-1 text-gray-600 hover:bg-gray-50"
+                                    onClick={() => setIsAttachmentsDropdownOpen((prev) => !prev)}
+                                    aria-label="Attachments"
+                                    title="Attachments"
                                 >
-                                    <Paperclip size={16} />
-                                    {attachments.length}
+                                    <Paperclip size={14} strokeWidth={2} />
+                                    <span className="text-[12px] font-medium leading-none">{attachments.length}</span>
                                 </button>
-                                {isAttachmentsDropdownOpen && (
-                                    <div className="absolute top-full right-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
-                                        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                                            <span className="text-sm font-semibold text-gray-900">Attachments</span>
-                                            <button
-                                                className="p-1 text-gray-500 hover:text-gray-700 cursor-pointer"
-                                                onClick={() => setIsAttachmentsDropdownOpen(false)}
-                                            >
-                                                <X size={16} />
-                                            </button>
-                                        </div>
-                                        <div className="max-h-64 overflow-y-auto p-2">
-                                            {attachments.map(attachment => (
-                                                <div key={attachment.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-md group">
-                                                    <div className="flex items-center justify-center w-10 h-10 bg-gray-100 rounded-md text-gray-600">
-                                                        <FileText size={20} />
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <span className="block text-sm font-medium text-gray-900 truncate">{attachment.name}</span>
-                                                        <span className="block text-xs text-gray-500">File Size: {attachment.size}</span>
-                                                    </div>
-                                                    <button
-                                                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors opacity-0 group-hover:opacity-100"
-                                                        onClick={() => handleRemoveAttachment(attachment.id)}
-                                                        title="Remove attachment"
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                        <div className="p-4 border-t border-gray-200">
-                                            <input
-                                                type="file"
-                                                ref={fileInputRef}
-                                                onChange={handleFileUpload}
-                                                multiple
-                                                style={{ display: "none" }}
-                                            />
-                                            <button
-                                                className="w-full flex items-center justify-center gap-2 px-4 py-2 text-white rounded-md text-sm font-medium cursor-pointer"
-                                                style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                                                onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => (e.currentTarget as HTMLElement).style.opacity = "0.9"}
-                                                onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => (e.currentTarget as HTMLElement).style.opacity = "1"}
-                                                onClick={() => fileInputRef.current?.click()}
-                                            >
-                                                <Upload size={18} />
-                                                Upload your Files
-                                                <ChevronDown size={16} />
-                                            </button>
-                                        </div>
-                                        <p className="px-4 pb-4 text-xs text-gray-500">
-                                            You can upload a maximum of 10 files, 10MB each
-                                        </p>
-                                    </div>
-                                )}
+                                <CustomerAttachmentsPopover
+                                    open={isAttachmentsDropdownOpen}
+                                    onClose={() => setIsAttachmentsDropdownOpen(false)}
+                                    attachments={attachments}
+                                    isUploading={isUploadingAttachments}
+                                    onUpload={handleFileUpload}
+                                    onRemoveAttachment={handleRemoveAttachment}
+                                />
                             </div>
                             <div className="relative inline-flex" ref={newTransactionDropdownRef}>
                                 <div className="flex items-center">

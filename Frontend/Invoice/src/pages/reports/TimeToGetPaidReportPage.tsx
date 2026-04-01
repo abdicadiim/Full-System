@@ -358,6 +358,14 @@ export default function TimeToGetPaidReportPage() {
   const category = getCategoryById(resolvedCategoryId);
   const report = getReportById(resolvedCategoryId, "time-to-get-paid");
   const filtersRef = useRef<HTMLDivElement>(null);
+  const debugEnabled = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return new URLSearchParams(window.location.search).has("debug") || localStorage.getItem("reports_debug") === "1";
+    } catch {
+      return false;
+    }
+  }, []);
 
   const [selectedDateRange, setSelectedDateRange] = useState<DateRangePreset>("This Month");
   const [isDateRangeOpen, setIsDateRangeOpen] = useState(false);
@@ -382,6 +390,21 @@ export default function TimeToGetPaidReportPage() {
   const reportDisplayName = report?.name || "Time to Get Paid";
   const categoryDisplayName = category?.name.replace(" Reports", "") || "Payments Received";
 
+  const syncDateRangeDraft = () => {
+    setDateRangeDraftKey(selectedDateRange);
+    setCustomDateRangeDraft(customDateRange);
+  };
+
+  const openDateRangePicker = () => {
+    syncDateRangeDraft();
+    setIsDateRangeOpen((current) => !current);
+  };
+
+  const closeDateRangePicker = () => {
+    syncDateRangeDraft();
+    setIsDateRangeOpen(false);
+  };
+
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target as Node | null;
@@ -402,6 +425,17 @@ export default function TimeToGetPaidReportPage() {
       try {
         const [payments, invoices] = await Promise.all([getPayments(), getInvoices()]);
         if (cancelled) return;
+        if (debugEnabled) {
+          console.debug("[reports][time-to-get-paid] load", {
+            payments: payments.length,
+            invoices: invoices.length,
+            range: selectedDateRange,
+            bounds: {
+              start: selectedRangeBounds.start.toISOString(),
+              end: selectedRangeBounds.end.toISOString(),
+            },
+          });
+        }
         setPreview(buildPreview(payments, invoices, selectedRangeBounds, selectedDateRange));
       } catch (error) {
         if (cancelled) return;
@@ -420,7 +454,7 @@ export default function TimeToGetPaidReportPage() {
     };
   }, [refreshTick, selectedRangeBounds.end.getTime(), selectedRangeBounds.start.getTime(), selectedDateRange]);
 
-  if (!category || !report || reportId !== "time-to-get-paid") {
+    if (!category || !report || reportId !== "time-to-get-paid") {
     return <Navigate to="/reports" replace />;
   }
 
@@ -500,7 +534,7 @@ export default function TimeToGetPaidReportPage() {
 
             <button
               type="button"
-              onClick={() => setIsDateRangeOpen((current) => !current)}
+              onClick={openDateRangePicker}
               className={`inline-flex h-8 items-center gap-1 rounded border px-3 text-sm transition-colors ${
                 isDateRangeOpen
                   ? "border-[#156372] bg-white text-[#156372] shadow-sm"
@@ -574,7 +608,7 @@ export default function TimeToGetPaidReportPage() {
                     <div className="mt-3 flex items-center justify-end gap-2">
                       <button
                         type="button"
-                        onClick={() => setIsDateRangeOpen(false)}
+                        onClick={closeDateRangePicker}
                         className="rounded-[8px] px-3 py-1.5 text-[#334155] hover:bg-[#f3f7f9]"
                       >
                         Close
@@ -584,7 +618,11 @@ export default function TimeToGetPaidReportPage() {
                         onClick={() => {
                           setCustomDateRange(customDateRangeDraft);
                           setSelectedDateRange("Custom");
+                          setDateRangeDraftKey("Custom");
                           setIsDateRangeOpen(false);
+                          if (debugEnabled) {
+                            console.debug("[reports][time-to-get-paid] apply custom range", customDateRangeDraft);
+                          }
                         }}
                         className="rounded-[8px] bg-[#156372] px-4 py-1.5 font-semibold text-white hover:bg-[#0f4f5b]"
                       >
@@ -599,7 +637,12 @@ export default function TimeToGetPaidReportPage() {
                         type="button"
                         onClick={() => {
                           setSelectedDateRange(dateRangeDraftKey);
+                          setDateRangeDraftKey(dateRangeDraftKey);
+                          setCustomDateRangeDraft(customDateRange);
                           setIsDateRangeOpen(false);
+                          if (debugEnabled) {
+                            console.debug("[reports][time-to-get-paid] apply preset range", dateRangeDraftKey);
+                          }
                         }}
                         className="rounded-[8px] bg-[#156372] px-4 py-1.5 font-semibold text-white hover:bg-[#0f4f5b]"
                       >
