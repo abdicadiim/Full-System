@@ -4,6 +4,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { getCreditNoteById, getCreditNotes, deleteCreditNote, CreditNote, AttachedFile, updateCreditNote } from "../../salesModel";
 import { currenciesAPI, bankAccountsAPI, chartOfAccountsAPI, refundsAPI, creditNotesAPI, invoicesAPI, settingsAPI, customersAPI } from "../../../services/api";
 import ApplyToInvoices from "./ApplyToInvoices";
+import CreditNoteCommentsPanel from "./CreditNoteCommentsPanel";
 import CreditNotePreview from "./CreditNotePreview";
 import { downloadCreditNotesPdf } from "../creditNotePdf";
 import {
@@ -1738,115 +1739,14 @@ Best regards`,
           </div>
         )}
 
-        {/* Comments Sidebar */}
-        {showCommentsSidebar && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-end">
-            <div
-              className="bg-white w-full max-w-md h-full shadow-xl flex flex-col"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">Comments</h2>
-                <button
-                  className="p-1 border rounded transition-colors"
-                  style={{ borderColor: "#156372", color: "#dc2626" }}
-                  onMouseEnter={(e) => {
-                    (e.target as HTMLElement).style.borderColor = "#0D4A52";
-                    (e.target as HTMLElement).style.backgroundColor = "rgba(220, 38, 38, 0.1)";
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.target as HTMLElement).style.borderColor = "#156372";
-                    (e.target as HTMLElement).style.backgroundColor = "transparent";
-                  }}
-                  onClick={() => setShowCommentsSidebar(false)}
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              {/* Comment Input */}
-              <div className="p-4 border-b border-gray-200">
-                <div className="flex gap-1 mb-2">
-                  <button
-                    className={`p-1.5 rounded ${commentBold ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
-                    onClick={() => setCommentBold(!commentBold)}
-                  >
-                    <Bold size={14} />
-                  </button>
-                  <button
-                    className={`p-1.5 rounded ${commentItalic ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
-                    onClick={() => setCommentItalic(!commentItalic)}
-                  >
-                    <Italic size={14} />
-                  </button>
-                  <button
-                    className={`p-1.5 rounded ${commentUnderline ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
-                    onClick={() => setCommentUnderline(!commentUnderline)}
-                  >
-                    <Underline size={14} />
-                  </button>
-                </div>
-                <textarea
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  placeholder="Add a comment..."
-                  className="w-full p-3 border border-gray-300 rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  rows={4}
-                  style={{
-                    fontWeight: commentBold ? 'bold' : 'normal',
-                    fontStyle: commentItalic ? 'italic' : 'normal',
-                    textDecoration: commentUnderline ? 'underline' : 'none'
-                  }}
-                />
-                <button
-                  className="mt-2 w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 text-sm font-medium"
-                  onClick={handleAddComment}
-                >
-                  Add Comment
-                </button>
-              </div>
-
-              {/* Comments List */}
-              <div className="flex-1 overflow-y-auto p-4">
-                <h3 className="text-sm font-semibold text-gray-700 mb-4 uppercase">All Comments</h3>
-                {comments.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <p>No comments yet.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {comments.map((comment) => (
-                      <div key={comment.id} className="border-b border-gray-200 pb-4 last:border-0">
-                        <div className="flex items-start gap-2 mb-2">
-                          <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold" style={{ backgroundColor: "#156372" }}>
-                            {comment.author.charAt(0)}
-                          </div>
-                          <div className="flex-1">
-                            <div className="text-sm font-medium text-gray-900">{comment.author}</div>
-                            <div className="text-xs text-gray-500">
-                              {new Date(comment.timestamp).toLocaleString()}
-                            </div>
-                          </div>
-                        </div>
-                        <div
-                          className="text-sm text-gray-700 ml-10"
-                          style={{
-                            fontWeight: comment.bold ? 'bold' : 'normal',
-                            fontStyle: comment.italic ? 'italic' : 'normal',
-                            textDecoration: comment.underline ? 'underline' : 'none'
-                          }}
-                        >
-                          {comment.text}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+        <CreditNoteCommentsPanel
+          open={showCommentsSidebar}
+          onClose={() => setShowCommentsSidebar(false)}
+          creditNoteId={String(creditNote?.id || id || "")}
+          comments={comments}
+          onCommentsChange={(nextComments) => setComments(nextComments)}
+          updateCreditNote={updateCreditNote}
+        />
 
         {/* Choose Template Modal */}
         {isChooseTemplateModalOpen && (

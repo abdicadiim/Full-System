@@ -232,14 +232,6 @@ export const REPORTS: ReportDefinition[] = [
     functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
   },
   {
-    id: "receivable-summary",
-    categoryId: "receivables",
-    name: "Receivable Summary",
-    summary: "Summarized list of receivable transactions.",
-    howItHelps: "Single view for status checks and audit readiness.",
-    functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
-  },
-  {
     id: "receivable-details",
     categoryId: "receivables",
     name: "Receivable Details",

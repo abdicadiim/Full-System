@@ -86,6 +86,24 @@ const COLUMN_GROUPS_BY_REPORT: Record<string, ColumnGroup[]> = {
       items: ["Invoice", "Customer", "Invoice Date", "Due Date", "Aging Bucket", "Amount", "Status"],
     },
   ],
+  "receivable-details": [
+    {
+      label: "Reports",
+      items: [
+        "Customer Name",
+        "Date",
+        "Transaction#",
+        "Reference#",
+        "Status",
+        "Transaction Type",
+        "Item Name",
+        "Quantity Ordered",
+        "Item Price (BCY)",
+        "Total (BCY)",
+      ],
+    },
+    { label: "Transaction", items: ["Invoice", "Credit Note"] },
+  ],
 };
 
 const COLUMN_GROUPS_BY_CATEGORY: Record<string, ColumnGroup[]> = {

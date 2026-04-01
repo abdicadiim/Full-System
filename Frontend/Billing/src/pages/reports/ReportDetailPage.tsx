@@ -129,6 +129,19 @@ const ENTITY_OPTIONS_BY_CATEGORY: Record<string, string[]> = {
 
 const getEntityOptionsForCategory = (categoryId: string) => ENTITY_OPTIONS_BY_CATEGORY[categoryId] || ["All"];
 
+const DEFAULT_SELECTED_ENTITIES_BY_REPORT: Record<string, string[]> = {
+  "receivable-details": ["Invoice", "Credit Note"],
+};
+
+const getDefaultSelectedEntitiesForReport = (reportId: string, entityOptions: string[]) => {
+  const defaults = DEFAULT_SELECTED_ENTITIES_BY_REPORT[reportId];
+  if (!defaults) return entityOptions;
+
+  const normalizedDefaults = new Set(defaults.map((entity) => entity.toLowerCase()));
+  const matched = entityOptions.filter((entity) => normalizedDefaults.has(entity.toLowerCase()));
+  return matched.length > 0 ? matched : entityOptions;
+};
+
 const AGING_BY_OPTIONS: Array<{ key: AgingByOption; label: string }> = [
   { key: "invoice-due-date", label: "Invoice Due Date" },
   { key: "invoice-date", label: "Invoice Date" },
@@ -216,7 +229,7 @@ const MORE_FILTER_FIELDS_BY_REPORT: Record<string, string[]> = {
   "bad-debts": ["Invoice", "Customer", "Written Off Date", "Amount", "Reason"],
   "customer-balance-summary": ["Customer Name", "Opening", "Invoiced", "Receipts", "Closing Balance"],
   "receivable-summary": ["Document", "Customer", "Type", "Amount", "Status"],
-  "receivable-details": ["Item", "Customer", "Qty", "Amount", "Balance"],
+  "receivable-details": ["Customer Name", "Date", "Transaction#", "Reference#", "Status", "Transaction Type", "Item Name", "Quantity Ordered", "Item Price (BCY)", "Total (BCY)"],
   "progress-invoice-summary": ["Project", "Milestone", "Invoiced", "Pending", "Status"],
 };
 
@@ -232,6 +245,25 @@ const MORE_FILTER_FIELD_GROUPS_BY_REPORT: Record<string, MoreFilterFieldGroup[]>
   "sales-by-customer": [
     { label: "Reports", items: ["Customer Name", "Invoice", "Credit Note", "Sales Receipt"] },
     { label: "Locations", items: ["Location"] },
+    { label: "Reporting Tag", items: ["dffg", "dedfe"] },
+  ],
+  "receivable-details": [
+    {
+      label: "Reports",
+      items: [
+        "Customer Name",
+        "Date",
+        "Transaction#",
+        "Reference#",
+        "Status",
+        "Transaction Type",
+        "Item Name",
+        "Quantity Ordered",
+        "Item Price (BCY)",
+        "Total (BCY)",
+      ],
+    },
+    { label: "Transaction", items: ["Invoice", "Credit Note"] },
     { label: "Reporting Tag", items: ["dffg", "dedfe"] },
   ],
   "sales-by-plan": [
@@ -549,12 +581,12 @@ const getPreviewTable = (reportId: string, reportName: string, categoryName: str
       return {
         title: "Receivable Details",
         subtitle: "From 01 Mar 2026 To 31 Mar 2026",
-        columns: ["Item", "Customer", "Qty", "Amount", "Balance"],
+        columns: ["Customer Name", "Date", "Transaction#", "Reference#", "Status", "Transaction Type", "Item Name", "Quantity Ordered", "Item Price (BCY)", "Total (BCY)"],
         rows: [
-          ["Starter Plan", "ss", 1, "SOS17.00", "SOS17.00"],
-          ["Pro Addon", "Northwind", 2, "SOS14.00", "SOS14.00"],
+          ["ss", "01 Mar 2026", "INV-001", "REF-001", "Open", "Invoice", "Starter Plan", 1, "SOS17.00", "SOS17.00"],
+          ["Northwind", "12 Mar 2026", "CN-002", "REF-002", "Applied", "Credit Note", "Pro Addon", 1, "SOS-4.00", "SOS-4.00"],
         ],
-        totals: ["Total", "-", 3, "SOS31.00", "SOS31.00"],
+        totals: ["Total", "-", "-", "-", "-", "-", "-", 2, "-", "SOS13.00"],
       };
     case "progress-invoice-summary":
       return {
@@ -681,6 +713,7 @@ const buildDatabasePreview = async (
   reportName: string,
   categoryName: string,
   agingBy: AgingByOption = "invoice-due-date",
+  selectedEntities: string[] = [],
 ): Promise<PreviewTableConfig | null> => {
   const liveSubtitle = `Live data from ${categoryName}`;
 
@@ -973,9 +1006,83 @@ const buildDatabasePreview = async (
     }
 
     if (reportId === "receivable-details") {
-      const rows = invoices.slice(0, 20).map((row: any) => [row.invoiceNumber || "-", row.customerName || "-", 1, formatMoney(row.total ?? 0, row.currency), formatMoney(row.balance ?? row.balanceDue ?? 0, row.currency)]);
+      const selectedEntitySet = new Set(selectedEntities.map((entity) => entity.toLowerCase()));
+      const rows: Array<{
+        sortKey: number;
+        customerSort: string;
+        transactionSort: string;
+        quantity: number;
+        total: number;
+        currency: string;
+        cells: CellValue[];
+      }> = [];
+
+      const pushTransactionRows = (sourceRows: any[], transactionType: "Invoice" | "Credit Note") => {
+        sourceRows.forEach((row: any) => {
+          const customerName = String(row.customerName || row.customer?.displayName || row.customer?.companyName || row.customer?.name || "Unknown Customer");
+          const rawDate = row.date || row.invoiceDate || row.creditNoteDate || row.createdAt;
+          const parsedDate = rawDate ? new Date(rawDate) : null;
+          const sortKey = parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate.getTime() : 0;
+          const dateLabel = sortKey ? formatDate(parsedDate as Date) : "-";
+          const transactionNumber = String(
+            transactionType === "Credit Note"
+              ? row.creditNoteNumber || row.number || row.id || row._id || "-"
+              : row.invoiceNumber || row.number || row.id || row._id || "-"
+          ).trim() || "-";
+          const referenceNumber = String(row.referenceNumber || row.reference || row.referenceNo || row.salesOrderNumber || row.purchaseOrderNumber || row.invoiceNumber || row.creditNoteNumber || "-").trim() || "-";
+          const status = String(row.status || "-");
+          const currency = String(row.currency || "SOS");
+          const transactionItems = Array.isArray(row.items) && row.items.length > 0 ? row.items : [null];
+
+          transactionItems.forEach((item: any) => {
+            const quantity = Number(item?.quantity ?? item?.qty ?? item?.units ?? 1) || 1;
+            const rawLineTotal = Number(item?.total ?? item?.amount ?? item?.lineTotal ?? row.total ?? 0);
+            const rawUnitPrice = Number(item?.rate ?? item?.price ?? item?.unitPrice ?? (quantity ? rawLineTotal / quantity : rawLineTotal));
+            const sign = transactionType === "Credit Note" ? -1 : 1;
+            const itemName = String(item?.name || item?.itemName || item?.description || row.itemName || row.description || transactionNumber || "-").trim() || "-";
+            const unitPrice = sign * Math.abs(Number.isFinite(rawUnitPrice) ? rawUnitPrice : rawLineTotal);
+            const lineTotal = sign * Math.abs(Number.isFinite(rawLineTotal) ? rawLineTotal : 0);
+
+            rows.push({
+              sortKey,
+              customerSort: customerName,
+              transactionSort: transactionNumber,
+              quantity,
+              total: lineTotal,
+              currency,
+              cells: [
+                customerName,
+                dateLabel,
+                transactionNumber,
+                referenceNumber,
+                status,
+                transactionType,
+                itemName,
+                quantity,
+                formatMoney(unitPrice, currency),
+                formatMoney(lineTotal, currency),
+              ],
+            });
+          });
+        });
+      };
+
+      if (selectedEntitySet.has("invoice")) pushTransactionRows(invoices, "Invoice");
+      if (selectedEntitySet.has("credit note")) pushTransactionRows(creditNotes, "Credit Note");
       if (rows.length === 0) return null;
-      return { title: "Receivable Details", subtitle: liveSubtitle, columns: ["Item", "Customer", "Qty", "Amount", "Balance"], rows, totals: ["Total", "-", rows.length, formatMoney(invoices.reduce((sum: number, row: any) => sum + Number(row.total ?? 0), 0), invoices[0]?.currency || "SOS"), formatMoney(invoices.reduce((sum: number, row: any) => sum + Number(row.balance ?? row.balanceDue ?? 0), 0), invoices[0]?.currency || "SOS")] };
+
+      rows.sort((a, b) => b.sortKey - a.sortKey || a.customerSort.localeCompare(b.customerSort) || a.transactionSort.localeCompare(b.transactionSort));
+      const currency = rows[0]?.currency || invoices[0]?.currency || creditNotes[0]?.currency || "SOS";
+      const totalQuantity = rows.reduce((sum, row) => sum + row.quantity, 0);
+      const totalAmount = rows.reduce((sum, row) => sum + row.total, 0);
+
+      return {
+        title: "Receivable Details",
+        subtitle: liveSubtitle,
+        columns: ["Customer Name", "Date", "Transaction#", "Reference#", "Status", "Transaction Type", "Item Name", "Quantity Ordered", "Item Price (BCY)", "Total (BCY)"],
+        rows: rows.slice(0, 20).map((row) => row.cells),
+        totals: ["Total", "-", "-", "-", "-", "-", "-", totalQuantity, "-", formatMoney(totalAmount, currency)],
+      };
     }
   }
 
@@ -1698,7 +1805,9 @@ export default function ReportDetailPage() {
   const [openMoreFilterComparatorRowId, setOpenMoreFilterComparatorRowId] = useState<number | null>(null);
   const [selectedDateRange, setSelectedDateRange] = useState<DateRangePreset>(isAgingReport ? "Today" : "This Month");
   const [agingBy, setAgingBy] = useState<AgingByOption>("invoice-due-date");
-  const [selectedEntities, setSelectedEntities] = useState<string[]>([]);
+  const [selectedEntities, setSelectedEntities] = useState<string[]>(() =>
+    getDefaultSelectedEntitiesForReport(resolvedReportId, getEntityOptionsForCategory(resolvedCategoryId))
+  );
   const [entitySearch, setEntitySearch] = useState("");
   const [customRange, setCustomRange] = useState<RangeDate>(() => DEFAULT_CUSTOM_RANGE);
   const [livePreview, setLivePreview] = useState<PreviewTableConfig | null>(null);
@@ -1744,6 +1853,7 @@ export default function ReportDetailPage() {
   }, [customRange.end, customRange.start, selectedDateRange]);
 
   const entityOptions = useMemo(() => getEntityOptionsForCategory(resolvedCategoryId), [resolvedCategoryId]);
+  const defaultSelectedEntities = useMemo(() => getDefaultSelectedEntitiesForReport(resolvedReportId, entityOptions), [entityOptions, resolvedReportId]);
   const moreFilterFieldGroups = useMemo(() => getMoreFilterFieldGroupsForReport(resolvedReportId, resolvedCategoryId), [resolvedReportId, resolvedCategoryId]);
   const reportColumnGroups = useMemo(() => getReportColumnGroups(resolvedReportId, resolvedCategoryId), [resolvedReportId, resolvedCategoryId]);
   const customStart = parseDate(customRange.start) || new Date();
@@ -1754,9 +1864,9 @@ export default function ReportDetailPage() {
   const nextMonthGrid = useMemo(() => buildMonthGrid(nextMonthStart.getFullYear(), nextMonthStart.getMonth()), [nextMonthStart.getFullYear(), nextMonthStart.getMonth()]);
 
   useEffect(() => {
-    setSelectedEntities(entityOptions);
+    setSelectedEntities(defaultSelectedEntities);
     setEntitySearch("");
-  }, [entityOptions, resolvedCategoryId]);
+  }, [defaultSelectedEntities, resolvedCategoryId, resolvedReportId]);
 
   useEffect(() => {
     setExpandedCategoryId(resolvedCategoryId || "sales");
@@ -1786,7 +1896,7 @@ export default function ReportDetailPage() {
     const loadPreview = async () => {
       setLivePreviewLoading(true);
       try {
-        const nextPreview = await buildDatabasePreview(resolvedReportId, reportDisplayName, category.name, agingBy);
+        const nextPreview = await buildDatabasePreview(resolvedReportId, reportDisplayName, category.name, agingBy, selectedEntities);
         if (!cancelled) {
           const useCustomSubtitle = Boolean(customReport) && !isAgingReport;
           const nextColumns =
@@ -1820,7 +1930,7 @@ export default function ReportDetailPage() {
       return () => {
         cancelled = true;
       };
-  }, [agingBy, category.name, customReport, reportDisplayName, resolvedReportId]);
+  }, [agingBy, category.name, customReport, reportDisplayName, resolvedReportId, selectedEntities]);
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {

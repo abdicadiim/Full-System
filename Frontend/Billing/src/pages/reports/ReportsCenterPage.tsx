@@ -109,7 +109,6 @@ const CUSTOM_REPORT_PICKER_GROUPS: ReportPickerGroup[] = [
       { id: "retainer-invoice-details", label: "Retainer Invoice Details" },
       { id: "quote-details", label: "Quote Details" },
       { id: "customer-balance-summary", label: "Customer Balance Summary" },
-      { id: "receivable-summary", label: "Receivable Summary" },
       { id: "receivable-details", label: "Receivable Details" },
       { id: "progress-invoice-summary", label: "Progress Invoice Summary" },
     ],
