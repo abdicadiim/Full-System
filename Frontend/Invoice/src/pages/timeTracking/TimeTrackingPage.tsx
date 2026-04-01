@@ -19,6 +19,7 @@ import TimeTrackingProject from "./TimeTrackingProject";
 import Aptouvals from "./aprovals/aptouvals";
 import CustomerApproval from "./CustomerApproval/CustomerApproval";
 import NewCustomerApproval from "./CustomerApproval/NewCustomerApproval";
+import TimeEntryCommentsPanel from "./TimeEntryCommentsPanel";
 
 const getUserDisplayName = (user) => {
   if (!user || typeof user !== "object") return "";
@@ -633,6 +634,34 @@ function TimesheetTable() {
       setComments([]);
     }
   }, [selectedEntry]);
+
+  const updateTimeEntryComments = async (entryId: string, data: any) => {
+    try {
+      const response = await timeEntriesAPI.update(entryId, data);
+      const updatedEntry = response?.data || response;
+      return {
+        success: true,
+        data: updatedEntry,
+        timeEntry: updatedEntry,
+        comments: Array.isArray(updatedEntry?.comments) ? updatedEntry.comments : Array.isArray(data?.comments) ? data.comments : [],
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error?.message || "Failed to update time entry",
+      };
+    }
+  };
+
+  const handleTimeEntryCommentsChange = (nextComments: any[]) => {
+    const entryId = String(selectedEntry?.id || "");
+    setComments(nextComments);
+    if (!entryId) return;
+    setSelectedEntry((prev) => (prev ? { ...prev, comments: nextComments } : prev));
+    setTimeEntries((prev) =>
+      prev.map((entry) => (String(entry.id) === entryId ? { ...entry, comments: nextComments } : entry))
+    );
+  };
 
   const sanitizeCommentHtml = (html: string) => {
     if (!html) return "";
