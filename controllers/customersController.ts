@@ -239,7 +239,8 @@ export const createCustomer: express.RequestHandler = async (req, res, next) => 
 
     const created = await Customer.create({ ...normalizeCustomerPatch(payload), customerNumber, organizationId: orgId });
     await linkCustomerDocuments(orgId, String(created._id), (payload as Record<string, unknown>).documents);
-    res.status(201).json({ success: true, data: normalizeCustomerRecord(created.toObject()) });
+    const refreshed = await Customer.findById(created._id).lean();
+    res.status(201).json({ success: true, data: normalizeCustomerRecord(refreshed || created.toObject()) });
   } catch (err) {
     next(err);
   }
@@ -274,7 +275,8 @@ export const updateCustomer: express.RequestHandler = async (req, res, next) => 
     ).lean();
     if (!updated) return res.status(404).json({ success: false, message: "Customer not found", data: null });
     await linkCustomerDocuments(orgId, String(req.params.id), (payload as Record<string, unknown>).documents);
-    res.json({ success: true, data: normalizeCustomerRecord(updated) });
+    const refreshed = await Customer.findOne({ _id: req.params.id, organizationId: orgId }).lean();
+    res.json({ success: true, data: normalizeCustomerRecord(refreshed || updated) });
   } catch (err) {
     next(err);
   }

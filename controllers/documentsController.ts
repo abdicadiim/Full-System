@@ -80,8 +80,16 @@ const syncCustomerDocuments = async (customerId: string, orgId: string) => {
     .sort({ uploadedAt: -1, createdAt: -1 })
     .lean();
   const normalized = docs.map(normalizeDocument).filter(Boolean);
-  await Customer.updateOne({ _id: customerId, organizationId: orgId }, { $set: { documents: normalized } });
-  return normalized;
+  const existing = Array.isArray((customer as any).documents) ? (customer as any).documents : [];
+  const storedIds = new Set(normalized.map((doc: any) => String(doc?.documentId || doc?.id || doc?._id || "").trim()).filter(Boolean));
+  const preservedExisting = existing.filter((doc: any) => {
+    const docId = String(doc?.documentId || doc?.id || doc?._id || "").trim();
+    if (!docId) return true;
+    return !storedIds.has(docId);
+  });
+  const merged = [...preservedExisting, ...normalized];
+  await Customer.updateOne({ _id: customerId, organizationId: orgId }, { $set: { documents: merged } });
+  return merged;
 };
 
 export const listDocuments: express.RequestHandler = async (req, res, next) => {
@@ -214,6 +222,27 @@ export const deleteDocument: express.RequestHandler = async (req, res, next) => 
 
     const doc = await StoredDocument.findOne({ _id: req.params.id, organizationId: orgId }).lean();
     if (!doc) {
+      const legacyCustomers = await Customer.find({
+        organizationId: orgId,
+        documents: { $exists: true, $ne: [] },
+      }).lean();
+      const targetId = String(req.params.id || "").trim();
+      let matchedLegacy = false;
+      for (const customer of legacyCustomers as any[]) {
+        const current = Array.isArray(customer.documents) ? customer.documents : [];
+        const filtered = current.filter((item: any) => {
+          const itemId = String(item?.documentId || item?.id || item?._id || "").trim();
+          if (!itemId) return true;
+          return itemId !== targetId;
+        });
+        if (filtered.length !== current.length) {
+          matchedLegacy = true;
+          await Customer.updateOne({ _id: customer._id, organizationId: orgId }, { $set: { documents: filtered } });
+        }
+      }
+      if (matchedLegacy) {
+        return res.json({ success: true, data: { id: String(req.params.id), documents: null } });
+      }
       return res.status(404).json({ success: false, message: "Document not found", data: null });
     }
 

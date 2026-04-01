@@ -893,22 +893,28 @@ export default function NewCustomer() {
     try {
       // Process file uploads
       const processedDocuments = [];
-      if (formData.documents && formData.documents.length > 0) {
-        for (const doc of formData.documents) {
-          if (doc.file) {
-            // New file upload
-            try {
-              const uploadResponse = await documentsAPI.upload(doc.file);
-              if (uploadResponse.success && uploadResponse.data) {
-                processedDocuments.push({
-                  name: doc.name,
-                  url: uploadResponse.data.url,
-                  uploadedAt: new Date()
-                });
-              }
-            } catch (error) {
-              // Optimistically continue or alert? Continuing for now.
-            }
+            if (formData.documents && formData.documents.length > 0) {
+              for (const doc of formData.documents) {
+                if (doc.file) {
+                  // New file upload
+                  try {
+                    const uploadResponse = await documentsAPI.upload(doc.file);
+                    if (uploadResponse.success && uploadResponse.data) {
+                      const document = uploadResponse.data as any;
+                      processedDocuments.push({
+                        documentId: document.documentId || document.id || document._id,
+                        name: doc.name,
+                        size: document.size || doc.file.size,
+                        mimeType: document.mimeType || doc.file.type || "application/octet-stream",
+                        url: document.viewUrl || document.url || document.contentUrl || document.previewUrl || "",
+                        viewUrl: document.viewUrl || document.url || document.contentUrl || document.previewUrl || "",
+                        downloadUrl: document.downloadUrl || document.url || document.contentUrl || "",
+                        uploadedAt: document.uploadedAt || new Date().toISOString()
+                      });
+                    }
+                  } catch (error) {
+                    // Optimistically continue or alert? Continuing for now.
+                  }
           } else {
             // Existing file
             processedDocuments.push({
