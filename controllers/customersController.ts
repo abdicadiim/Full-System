@@ -107,7 +107,7 @@ const normalizeCustomerRecord = (row: any) =>
 
 const normalizeCustomerPatch = (payload: Record<string, unknown>) => {
   const patch = { ...payload };
-  if (Object.prototype.hasOwnProperty.call(payload, "comments")) {
+  if (Object.prototype.hasOwnProperty.call(payload, "comments") && (payload as any).comments !== undefined) {
     patch.comments = normalizeCustomerComments((payload as any).comments);
   }
   return patch;
