@@ -3032,12 +3032,8 @@ export default function CustomerDetail() {
                 return docId !== targetId && String(index + 1) !== targetId;
             });
 
-            if (removedDocumentId) {
-                try {
-                    await documentsAPI.delete(String(removedDocumentId));
-                } catch (_) {
-                    // Keep customer update flow even if deleting source file fails
-                }
+            if (!removedDocumentId) {
+                throw new Error("Attachment not found.");
             }
 
             const deleteResponse = await documentsAPI.delete(String(removedDocumentId));
