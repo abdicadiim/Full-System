@@ -2,6 +2,7 @@ import "dotenv/config";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import express from "express";
+import type { Server } from "node:http";
 import mongoose from "mongoose";
 
 import { connectDb } from "./config/db.js";
@@ -59,6 +60,39 @@ if (AUTH_BYPASS) {
 }
 
 const app = express();
+let server: Server | null = null;
+
+const shutdownServer = async (signal: string) => {
+  // eslint-disable-next-line no-console
+  console.log(`Received ${signal}. Shutting down API server...`);
+
+  await new Promise<void>((resolve) => {
+    if (!server) {
+      resolve();
+      return;
+    }
+
+    server.close(() => resolve());
+  });
+
+  try {
+    if (mongoose.connection.readyState !== 0) {
+      await mongoose.connection.close(false);
+    }
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error("Error while closing Mongo connection:", error);
+  }
+};
+
+process.once("SIGINT", () => {
+  void shutdownServer("SIGINT").finally(() => process.exit(0));
+});
+
+process.once("SIGTERM", () => {
+  void shutdownServer("SIGTERM").finally(() => process.exit(0));
+});
+
 app.disable("x-powered-by");
 app.use(express.json({ limit: "20mb" }));
 app.use(cookieParser());
@@ -136,9 +170,14 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 
 const start = async () => {
   const dbConnected = await connectDb();
-  app.listen(PORT, () => {
+  server = app.listen(PORT, () => {
     // eslint-disable-next-line no-console
     console.log(`API listening on http://localhost:${PORT}`);
+  });
+  server.on("error", (error: NodeJS.ErrnoException) => {
+    // eslint-disable-next-line no-console
+    console.error(`Failed to listen on port ${PORT}:`, error);
+    process.exitCode = 1;
   });
   if (!dbConnected && !AUTH_BYPASS) {
     // eslint-disable-next-line no-console

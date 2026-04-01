@@ -7,7 +7,7 @@
     "install:all": "npm install && npm --prefix Frontend/Auth install && npm --prefix Frontend/Billing install && npm --prefix Frontend/Invoice install",
     "dev": "npm run dev:all",
     "dev:backend-only": "tsx watch server.ts",
-    "dev:backend": "powershell -NoProfile -Command \"$c=Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1; if($c){ try{ Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue }catch{} }; tsx watch server.ts\"",
+    "dev:backend": "powershell -NoProfile -Command \"$pids = Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique; if($pids){ foreach($pid in $pids){ try{ Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue }catch{} }; Start-Sleep -Milliseconds 500 }; tsx watch server.ts\"",
     "dev:auth": "npm --prefix Frontend/Auth run dev -- --open",
     "dev:billing": "npm --prefix Frontend/Billing run dev -- --open",
     "dev:invoice": "npm --prefix Frontend/Invoice run dev -- --open",
