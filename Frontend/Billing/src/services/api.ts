@@ -2126,39 +2126,48 @@ export const vendorCreditsAPI = {
   ...resource("/vendor-credits"),
 };
 
+const readFileAsDataUrl = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("Failed to read file."));
+    reader.readAsDataURL(file);
+  });
+
 export const documentsAPI = {
   upload: async (file: File, extra?: Record<string, any>) => {
     try {
-      const rows = readLocalCollection(LOCAL_DOCUMENTS_KEY);
-      const id = normalizeId(undefined, "doc");
-      const uploadedAt = new Date().toISOString();
-      const previewUrl = URL.createObjectURL(file);
-      const created = {
-        id,
-        _id: id,
-        documentId: id,
-        name: file.name,
-        size: file.size,
-        mimeType: file.type || "application/octet-stream",
-        type: file.type || "application/octet-stream",
-        url: previewUrl,
-        uploadedAt,
-        ...(extra || {}),
-      };
-      rows.unshift(created);
-      writeLocalCollection(LOCAL_DOCUMENTS_KEY, rows);
-      return { success: true, data: created };
+      const contentUrl = await readFileAsDataUrl(file);
+      return await request({
+        method: "POST",
+        path: "/documents",
+        data: {
+          name: file.name,
+          size: file.size,
+          mimeType: file.type || "application/octet-stream",
+          contentUrl,
+          ...(extra || {}),
+        },
+      });
     } catch (error: any) {
       return { success: false, message: error?.message || "Upload failed", data: null };
     }
   },
   delete: async (id: string) => {
     const docId = String(id || "").trim();
-    const rows = readLocalCollection(LOCAL_DOCUMENTS_KEY);
-    const filtered = rows.filter((row: any) => String(row?.id || row?._id || row?.documentId) !== docId);
-    writeLocalCollection(LOCAL_DOCUMENTS_KEY, filtered);
-    return { success: true, data: { id: docId } };
+    if (!docId) {
+      return { success: false, message: "Document id is required", data: null };
+    }
+    return (await request({ method: "DELETE", path: `/documents/${encodeURIComponent(docId)}` })) as any;
   },
+  getById: async (id: string) => {
+    const docId = String(id || "").trim();
+    if (!docId) {
+      return { success: false, message: "Document id is required", data: null };
+    }
+    return (await request({ path: `/documents/${encodeURIComponent(docId)}` })) as any;
+  },
+  list: async (params?: Record<string, any>) => request({ path: "/documents", params }),
 };
 
 export const emailTemplatesAPI = {
