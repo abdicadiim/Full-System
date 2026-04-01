@@ -465,7 +465,22 @@ const matchesMoreFilters = (
                               values["quote-number"] ||
                               "",
                           )
-                        : field === "quote-date"
+                        : field === "transaction-type"
+                          ? String(
+                              values["transaction-type"] ||
+                                values.type ||
+                                values.transactionType ||
+                                "",
+                            )
+                          : field === "date"
+                            ? String(
+                                values.date ||
+                                  values["report-date"] ||
+                                  values["invoice-date"] ||
+                                  values["quote-date"] ||
+                                  "",
+                              )
+                          : field === "quote-date"
                           ? String(
                               values["quote-date"] ||
                                 values.quoteDate ||
@@ -615,6 +630,13 @@ const getDocumentNumber = (row: any, source: ReportEntity) =>
     source === "credit-note"
       ? row?.creditNoteNumber ||
           row?.invoiceNumber ||
+          row?.transactionNumber ||
+          row?.number ||
+          row?.receiptNumber ||
+          ""
+      : source === "sales-receipt"
+        ? row?.receiptNumber ||
+          row?.receiptNo ||
           row?.transactionNumber ||
           row?.number ||
           ""
