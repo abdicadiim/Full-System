@@ -2377,24 +2377,28 @@ export default function ReportDetailPage() {
         </div>
 
         <div ref={filterDropdownRef} className="relative flex flex-wrap items-center gap-2 border-t border-[#e6e9f0] px-4 py-2">
-          <span className="inline-flex items-center gap-1 text-sm text-[#334155]">
-            <Filter size={14} />
-            Filters :
-          </span>
-          <button
-            type="button"
-            onClick={() => {
-              setDateRangeView("menu");
-              setOpenMoreFilterFieldRowId(null);
-              setOpenMoreFilterComparatorRowId(null);
-              setActiveFilterDropdown((prev) => (prev === "date-range" ? null : "date-range"));
-            }}
-            className={`inline-flex h-8 items-center gap-1 rounded border px-3 text-sm transition-colors ${
-              isDateRangeOpen ? "border-[#156372] bg-white text-[#156372] shadow-sm" : "border-[#cfd6e4] bg-white text-[#334155] hover:border-[#156372] hover:text-[#156372]"
-            }`}
-          >
-            Date Range : <span className="font-medium">{selectedDateRange === "Custom" ? "Custom" : selectedDateRange}</span> <ChevronDown size={14} />
-          </button>
+          {!isTimeToGetPaidReport ? (
+            <span className="inline-flex items-center gap-1 text-sm text-[#334155]">
+              <Filter size={14} />
+              Filters :
+            </span>
+          ) : null}
+          {!isTimeToGetPaidReport ? (
+            <button
+              type="button"
+              onClick={() => {
+                setDateRangeView("menu");
+                setOpenMoreFilterFieldRowId(null);
+                setOpenMoreFilterComparatorRowId(null);
+                setActiveFilterDropdown((prev) => (prev === "date-range" ? null : "date-range"));
+              }}
+              className={`inline-flex h-8 items-center gap-1 rounded border px-3 text-sm transition-colors ${
+                isDateRangeOpen ? "border-[#156372] bg-white text-[#156372] shadow-sm" : "border-[#cfd6e4] bg-white text-[#334155] hover:border-[#156372] hover:text-[#156372]"
+              }`}
+            >
+              Date Range : <span className="font-medium">{selectedDateRange === "Custom" ? "Custom" : selectedDateRange}</span> <ChevronDown size={14} />
+            </button>
+          ) : null}
           {!isTimeToGetPaidReport ? (
             <button
               type="button"
@@ -2445,15 +2449,17 @@ export default function ReportDetailPage() {
             )}
             {filterButtonLabel}
           </button>
-          <button
-            type="button"
-            onClick={() => toast.success(`Report refreshed: ${reportDisplayName}`)}
-            className="inline-flex h-8 items-center gap-1 rounded bg-[#156372] px-4 text-sm font-semibold text-white hover:bg-[#0f4f5b]"
-          >
-            <CalendarDays size={14} /> Run Report <ChevronDown size={14} />
-          </button>
+          {!isTimeToGetPaidReport ? (
+            <button
+              type="button"
+              onClick={() => toast.success(`Report refreshed: ${reportDisplayName}`)}
+              className="inline-flex h-8 items-center gap-1 rounded bg-[#156372] px-4 text-sm font-semibold text-white hover:bg-[#0f4f5b]"
+            >
+              <CalendarDays size={14} /> Run Report <ChevronDown size={14} />
+            </button>
+          ) : null}
 
-          {isDateRangeOpen ? (
+          {!isTimeToGetPaidReport && isDateRangeOpen ? (
             <div
               className={`absolute left-12 top-[calc(100%+8px)] z-30 overflow-hidden rounded-[10px] border border-[#d7dce7] bg-white shadow-[0_10px_30px_rgba(15,23,42,0.18)] ${
                 dateRangeView === "custom" ? "flex w-[640px] max-w-[calc(100vw-48px)]" : "w-[150px]"
