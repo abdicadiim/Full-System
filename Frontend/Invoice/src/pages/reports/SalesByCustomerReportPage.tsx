@@ -651,7 +651,6 @@ const REPORTS_DRAWER_SECTIONS: ReportsDrawerSection[] = [
     label: "Payments Received",
     reportIds: [
       "payments-received",
-      "time-to-get-paid",
       "credit-note-details",
       "refund-history",
       "withholding-tax",
