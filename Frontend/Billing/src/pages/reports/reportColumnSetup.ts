@@ -74,6 +74,18 @@ const COLUMN_GROUPS_BY_REPORT: Record<string, ColumnGroup[]> = {
     { label: "Reports", items: ["Date", "Name", "Invoices", "Credit Notes", "Sales Receipts", "Sales", "Sales With Tax"] },
     { label: "Locations", items: ["Location"] },
   ],
+  "ar-aging-summary": [
+    {
+      label: "Reports",
+      items: ["Customer Name", "Current", "1-15 Days", "16-30 Days", "31-45 Days", "> 45 Days", "Total", "Total (FCY)"],
+    },
+  ],
+  "ar-aging-details": [
+    {
+      label: "Reports",
+      items: ["Invoice", "Customer", "Invoice Date", "Due Date", "Aging Bucket", "Amount", "Status"],
+    },
+  ],
 };
 
 const COLUMN_GROUPS_BY_CATEGORY: Record<string, ColumnGroup[]> = {

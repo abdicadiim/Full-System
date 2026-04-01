@@ -46,6 +46,8 @@ type RangeDate = {
   end: string;
 };
 
+type AgingByOption = "invoice-due-date" | "invoice-date";
+
 type MoreFilterRow = {
   id: number;
   field: string;
@@ -126,6 +128,35 @@ const ENTITY_OPTIONS_BY_CATEGORY: Record<string, string[]> = {
 };
 
 const getEntityOptionsForCategory = (categoryId: string) => ENTITY_OPTIONS_BY_CATEGORY[categoryId] || ["All"];
+
+const AGING_BY_OPTIONS: Array<{ key: AgingByOption; label: string }> = [
+  { key: "invoice-due-date", label: "Invoice Due Date" },
+  { key: "invoice-date", label: "Invoice Date" },
+];
+
+const getAgingByLabel = (value: AgingByOption) => AGING_BY_OPTIONS.find((option) => option.key === value)?.label || AGING_BY_OPTIONS[0].label;
+
+const getAgingReferenceDate = (row: any, agingBy: AgingByOption) => {
+  const rawDate =
+    agingBy === "invoice-date"
+      ? row.invoiceDate || row.date || row.createdAt
+      : row.dueDate || row.invoiceDate || row.date || row.createdAt;
+
+  if (!rawDate) {
+    return null;
+  }
+
+  const parsed = new Date(rawDate);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const getAgingBucketLabel = (days: number) => {
+  if (days <= 0) return "Current";
+  if (days <= 15) return "1-15 Days";
+  if (days <= 30) return "16-30 Days";
+  if (days <= 45) return "31-45 Days";
+  return "> 45 Days";
+};
 
 const MORE_FILTER_FIELDS_BY_CATEGORY: Record<string, string[]> = {
   sales: ["Invoice", "Credit Note", "Sales Receipt", "Customer", "Item", "Plan", "Addon", "Coupon", "Sales Person", "Date", "Amount"],
@@ -632,7 +663,12 @@ const fetchCollectionRows = async (path: string) => {
   }
 };
 
-const buildDatabasePreview = async (reportId: string, reportName: string, categoryName: string): Promise<PreviewTableConfig | null> => {
+const buildDatabasePreview = async (
+  reportId: string,
+  reportName: string,
+  categoryName: string,
+  agingBy: AgingByOption = "invoice-due-date",
+): Promise<PreviewTableConfig | null> => {
   const liveSubtitle = `Live data from ${categoryName}`;
 
   if (reportId === "sales-by-customer") {
@@ -748,6 +784,90 @@ const buildDatabasePreview = async (reportId: string, reportName: string, catego
     };
   }
 
+  if (reportId === "ar-aging-summary") {
+    const invoices = await fetchCollectionRows("/invoices");
+    const today = new Date();
+    const grouped = new Map<
+      string,
+      {
+        current: number;
+        days1to15: number;
+        days16to30: number;
+        days31to45: number;
+        over45: number;
+        total: number;
+        currency: string;
+      }
+    >();
+
+    invoices.forEach((row: any) => {
+      const key = String(row.customerName || row.customer?.displayName || row.customer?.companyName || row.customer?.name || "Unknown Customer");
+      const amount = Number(row.balance ?? row.balanceDue ?? row.total ?? 0);
+      const currency = String(row.currency || "SOS");
+      const referenceDate = getAgingReferenceDate(row, agingBy);
+      const days = referenceDate ? Math.max(0, Math.floor((today.getTime() - referenceDate.getTime()) / (1000 * 60 * 60 * 24))) : 0;
+      const bucket = getAgingBucketLabel(days);
+      const current =
+        grouped.get(key) || {
+          current: 0,
+          days1to15: 0,
+          days16to30: 0,
+          days31to45: 0,
+          over45: 0,
+          total: 0,
+          currency,
+        };
+
+      current.total += amount;
+      current.currency = currency;
+
+      if (bucket === "Current") current.current += amount;
+      else if (bucket === "1-15 Days") current.days1to15 += amount;
+      else if (bucket === "16-30 Days") current.days16to30 += amount;
+      else if (bucket === "31-45 Days") current.days31to45 += amount;
+      else current.over45 += amount;
+
+      grouped.set(key, current);
+    });
+
+    const entries = [...grouped.entries()].sort((a, b) => b[1].total - a[1].total);
+    if (entries.length === 0) return null;
+
+    const currency = entries[0][1].currency;
+    const totalCurrent = entries.reduce((sum, [, item]) => sum + item.current, 0);
+    const total1to15 = entries.reduce((sum, [, item]) => sum + item.days1to15, 0);
+    const total16to30 = entries.reduce((sum, [, item]) => sum + item.days16to30, 0);
+    const total31to45 = entries.reduce((sum, [, item]) => sum + item.days31to45, 0);
+    const totalOver45 = entries.reduce((sum, [, item]) => sum + item.over45, 0);
+    const totalAmount = entries.reduce((sum, [, item]) => sum + item.total, 0);
+
+    return {
+      title: reportName,
+      subtitle: "",
+      columns: ["Customer Name", "Current", "1-15 Days", "16-30 Days", "31-45 Days", "> 45 Days", "Total", "Total (FCY)"],
+      rows: entries.map(([name, item]) => [
+        name,
+        formatMoney(item.current, item.currency),
+        formatMoney(item.days1to15, item.currency),
+        formatMoney(item.days16to30, item.currency),
+        formatMoney(item.days31to45, item.currency),
+        formatMoney(item.over45, item.currency),
+        formatMoney(item.total, item.currency),
+        formatMoney(item.total, item.currency),
+      ]),
+      totals: [
+        "Total",
+        formatMoney(totalCurrent, currency),
+        formatMoney(total1to15, currency),
+        formatMoney(total16to30, currency),
+        formatMoney(total31to45, currency),
+        formatMoney(totalOver45, currency),
+        formatMoney(totalAmount, currency),
+        formatMoney(totalAmount, currency),
+      ],
+    };
+  }
+
   if (reportId === "invoice-details" || reportId === "ar-aging-details" || reportId === "customer-balance-summary" || reportId === "receivable-summary" || reportId === "receivable-details") {
     const [invoices, creditNotes, receipts] = await Promise.all([
       fetchCollectionRows("/invoices"),
@@ -802,14 +922,27 @@ const buildDatabasePreview = async (reportId: string, reportName: string, catego
 
     if (reportId === "ar-aging-details") {
       const today = new Date();
-      const rows = invoices.slice(0, 20).map((row: any) => {
-        const due = row.dueDate ? new Date(row.dueDate) : null;
-        const days = due ? Math.max(0, Math.floor((today.getTime() - due.getTime()) / (1000 * 60 * 60 * 24))) : 0;
-        const bucket = days <= 0 ? "Current" : days <= 15 ? "1-15 Days" : days <= 30 ? "16-30 Days" : days <= 45 ? "31-45 Days" : "> 45 Days";
-        return [row.invoiceNumber || "-", row.customerName || "-", due ? formatDate(due) : "-", bucket, formatMoney(row.total ?? 0, row.currency), row.status || "-"];
-      });
+      const basisColumnLabel = agingBy === "invoice-date" ? "Invoice Date" : "Due Date";
+      const rows = invoices
+        .map((row: any) => {
+          const basisDate = getAgingReferenceDate(row, agingBy);
+          const days = basisDate ? Math.max(0, Math.floor((today.getTime() - basisDate.getTime()) / (1000 * 60 * 60 * 24))) : 0;
+          const bucket = getAgingBucketLabel(days);
+          return {
+            invoice: row.invoiceNumber || "-",
+            customer: row.customerName || row.customer?.displayName || row.customer?.companyName || row.customer?.name || "-",
+            basisDate: basisDate ? formatDate(basisDate) : "-",
+            bucket,
+            amount: formatMoney(row.balance ?? row.balanceDue ?? row.total ?? 0, row.currency),
+            status: row.status || "-",
+            days,
+          };
+        })
+        .sort((a, b) => b.days - a.days)
+        .slice(0, 20)
+        .map((row) => [row.invoice, row.customer, row.basisDate, row.bucket, row.amount, row.status]);
       if (rows.length === 0) return null;
-      return { title: "AR Aging Details", subtitle: liveSubtitle, columns: ["Invoice", "Customer", "Due Date", "Aging Bucket", "Amount", "Status"], rows, totals: ["Total", "-", "-", "-", "-", "-"] };
+      return { title: reportName, subtitle: "", columns: ["Invoice", "Customer", basisColumnLabel, "Aging Bucket", "Amount", "Status"], rows, totals: ["Total", "-", "-", "-", "-", "-"] };
     }
 
     if (reportId === "invoice-details") {
@@ -1528,9 +1661,9 @@ export default function ReportDetailPage() {
   const customReport = useMemo(() => savedCustomReports.find((item) => item.id === reportId), [savedCustomReports, reportId]);
   const resolvedCategoryId = customReport?.categoryId || categoryId || "";
   const resolvedReportId = customReport?.sourceReportId || reportId || "";
+  const isAgingReport = resolvedReportId === "ar-aging-summary" || resolvedReportId === "ar-aging-details";
   const category = getCategoryById(resolvedCategoryId);
   const report = getReportById(resolvedCategoryId, resolvedReportId);
-  const reportDisplayName = customReport?.name || report?.name || "Report";
   const filterDropdownRef = useRef<HTMLDivElement>(null);
   const compareButtonRef = useRef<HTMLButtonElement>(null);
   const nextMoreFilterRowId = useRef(2);
@@ -1550,12 +1683,15 @@ export default function ReportDetailPage() {
   const [moreFilterRows, setMoreFilterRows] = useState<MoreFilterRow[]>([{ id: 1, field: "", comparator: "", value: "" }]);
   const [openMoreFilterFieldRowId, setOpenMoreFilterFieldRowId] = useState<number | null>(null);
   const [openMoreFilterComparatorRowId, setOpenMoreFilterComparatorRowId] = useState<number | null>(null);
-  const [selectedDateRange, setSelectedDateRange] = useState<DateRangePreset>("This Month");
+  const [selectedDateRange, setSelectedDateRange] = useState<DateRangePreset>(isAgingReport ? "Today" : "This Month");
+  const [agingBy, setAgingBy] = useState<AgingByOption>("invoice-due-date");
   const [selectedEntities, setSelectedEntities] = useState<string[]>([]);
   const [entitySearch, setEntitySearch] = useState("");
   const [customRange, setCustomRange] = useState<RangeDate>(() => DEFAULT_CUSTOM_RANGE);
   const [livePreview, setLivePreview] = useState<PreviewTableConfig | null>(null);
   const [livePreviewLoading, setLivePreviewLoading] = useState(false);
+  const agingByLabel = getAgingByLabel(agingBy);
+  const reportDisplayName = customReport?.name || (isAgingReport ? `${report?.name || (resolvedReportId === "ar-aging-details" ? "AR Aging Details" : "AR Aging Summary")} By ${agingByLabel}` : report?.name || "Report");
 
   const dateLabel = useMemo(() => {
     if (selectedDateRange === "Custom") {
@@ -1614,6 +1750,10 @@ export default function ReportDetailPage() {
   }, [resolvedCategoryId]);
 
   useEffect(() => {
+    setSelectedDateRange(isAgingReport ? "Today" : "This Month");
+  }, [isAgingReport]);
+
+  useEffect(() => {
     setMoreFilterRows([{ id: 1, field: "", comparator: "", value: "" }]);
     setOpenMoreFilterFieldRowId(null);
     setOpenMoreFilterComparatorRowId(null);
@@ -1633,14 +1773,15 @@ export default function ReportDetailPage() {
     const loadPreview = async () => {
       setLivePreviewLoading(true);
       try {
-        const nextPreview = await buildDatabasePreview(resolvedReportId, reportDisplayName, category.name);
+        const nextPreview = await buildDatabasePreview(resolvedReportId, reportDisplayName, category.name, agingBy);
         if (!cancelled) {
+          const useCustomSubtitle = Boolean(customReport) && !isAgingReport;
           setLivePreview(
             nextPreview && customReport
               ? {
                   ...nextPreview,
                   title: reportDisplayName,
-                  subtitle: nextPreview.subtitle || `Custom report based on ${customReport.sourceReportName}`,
+                  subtitle: nextPreview.subtitle || (useCustomSubtitle ? `Custom report based on ${customReport.sourceReportName}` : ""),
                 }
               : nextPreview
           );
@@ -1657,10 +1798,10 @@ export default function ReportDetailPage() {
     setVisibleColumns(customReport?.selectedColumns?.length ? customReport.selectedColumns : []);
     void loadPreview();
 
-    return () => {
-      cancelled = true;
-    };
-  }, [category.name, customReport, reportDisplayName, resolvedReportId]);
+      return () => {
+        cancelled = true;
+      };
+  }, [agingBy, category.name, customReport, reportDisplayName, resolvedReportId]);
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
@@ -1966,6 +2107,22 @@ export default function ReportDetailPage() {
           >
             Entities : <span className="font-medium">{selectedEntityLabel}</span> <ChevronDown size={14} />
           </button>
+          {isAgingReport ? (
+            <label className="inline-flex h-8 items-center gap-2 rounded border border-[#cfd6e4] bg-[#f8fafc] px-3 text-sm text-[#334155]">
+              <span>Aging By :</span>
+              <select
+                value={agingBy}
+                onChange={(event) => setAgingBy(event.target.value as AgingByOption)}
+                className="bg-transparent outline-none"
+              >
+                {AGING_BY_OPTIONS.map((option) => (
+                  <option key={option.key} value={option.key}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <button
             type="button"
             onClick={() => {
