@@ -1,5 +1,34 @@
 import mongoose from "mongoose";
 
+const QuoteCommentSchema = new mongoose.Schema(
+  {
+    id: { type: String, default: "" },
+    text: { type: String, default: "" },
+    content: { type: String, default: "" },
+    author: { type: String, default: "User" },
+    authorName: { type: String, default: "User" },
+    authorInitial: { type: String, default: "U" },
+    timestamp: { type: String, default: "" },
+    createdAt: { type: String, default: "" },
+    bold: { type: Boolean, default: false },
+    italic: { type: Boolean, default: false },
+    underline: { type: Boolean, default: false },
+  },
+  { _id: false }
+);
+
+const QuoteActivityLogSchema = new mongoose.Schema(
+  {
+    id: { type: String, default: "" },
+    action: { type: String, default: "" },
+    description: { type: String, default: "" },
+    actor: { type: String, default: "User" },
+    timestamp: { type: String, default: "" },
+    level: { type: String, default: "info" },
+  },
+  { _id: false }
+);
+
 const QuoteSchema = new mongoose.Schema(
   {
     organizationId: { type: mongoose.Schema.Types.ObjectId, ref: "Organization", required: true, index: true },
@@ -69,6 +98,8 @@ const QuoteSchema = new mongoose.Schema(
     customerNotes: { type: String, default: "" },
     termsAndConditions: { type: String, default: "" },
     attachedFiles: { type: Array, default: [] },
+    comments: { type: [QuoteCommentSchema], default: [] },
+    activityLogs: { type: [QuoteActivityLogSchema], default: [] },
     customerEmail: { type: String, default: "" },
 
     // Tracking for Billing vs Invoice system if needed

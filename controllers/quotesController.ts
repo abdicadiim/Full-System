@@ -30,7 +30,12 @@ const requireOrgId = (req: express.Request, res: express.Response) => {
 
 const normalizeRow = (row: any) => {
   if (!row) return row;
-  return { ...row, id: String(row._id) };
+  return {
+    ...row,
+    id: String(row._id),
+    comments: Array.isArray(row.comments) ? row.comments : [],
+    activityLogs: Array.isArray(row.activityLogs) ? row.activityLogs : [],
+  };
 };
 
 const pickSmtpSender = async (organizationId: any) => {

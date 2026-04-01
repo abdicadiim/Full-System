@@ -2707,6 +2707,98 @@ export const getCustomerBalanceSummaryReport: express.RequestHandler = async (
   });
 };
 
+export const getReceivableSummaryReport: express.RequestHandler = async (
+  req,
+  res,
+) => {
+  const orgId = requireOrgId(req, res);
+  if (!orgId) return;
+
+  const range = getDateRangeFromQuery(req);
+  const compareWith = String(
+    req.query.compareWith ?? req.query.compare_with ?? "none",
+  ).trim();
+  const compareCount = Math.max(
+    1,
+    Number(req.query.compareCount ?? req.query.compare_count ?? 1) || 1,
+  );
+  const groupBy =
+    String(req.query.groupBy ?? req.query.group_by ?? "none").trim() || "none";
+  const entities = parseEntities(req.query.entities ?? req.query.entity_list);
+  const moreFilters = parseMoreFilters(
+    req.query.moreFilters ?? req.query.more_filters ?? req.query.filter_rows,
+  );
+
+  const [customers, invoices, creditNotes, salesReceipts, organization] =
+    await Promise.all([
+      Customer.find({ organizationId: orgId }).lean(),
+      Invoice.find({ organizationId: orgId }).lean(),
+      CreditNote.find({ organizationId: orgId }).lean(),
+      SalesReceipt.find({ organizationId: orgId }).lean(),
+      Organization.findOne({ _id: orgId }).lean(),
+    ]);
+
+  const baseCurrency = String(
+    (organization as any)?.baseCurrency || "SOS",
+  ).trim();
+  const transactions: Array<{ source: ReportEntity; row: any }> = [];
+  if (entities.includes("invoice")) {
+    for (const row of invoices || [])
+      transactions.push({ source: "invoice", row });
+  }
+  if (entities.includes("credit-note")) {
+    for (const row of creditNotes || [])
+      transactions.push({ source: "credit-note", row });
+  }
+  if (entities.includes("sales-receipt")) {
+    for (const row of salesReceipts || [])
+      transactions.push({ source: "sales-receipt", row });
+  }
+
+  const main = buildReceivableSummaryRows(
+    transactions,
+    customers || [],
+    range,
+    moreFilters,
+    groupBy,
+    baseCurrency,
+  );
+
+  const compareRange =
+    compareWith && compareWith !== "none"
+      ? shiftDateRange(range, compareWith, compareCount)
+      : null;
+  const comparison = compareRange
+    ? buildReceivableSummaryRows(
+        transactions,
+        customers || [],
+        compareRange,
+        moreFilters,
+        groupBy,
+        baseCurrency,
+      )
+    : null;
+
+  return res.json({
+    success: true,
+    data: {
+      rows: main.rows,
+      currency: main.currency,
+      totals: main.totals,
+      comparison,
+      appliedFilters: {
+        fromDate: range.start.toISOString(),
+        toDate: range.end.toISOString(),
+        compareWith,
+        compareCount,
+        groupBy,
+        entities,
+        moreFilters,
+      },
+    },
+  });
+};
+
 export const getSalesByItemReport: express.RequestHandler = async (
   req,
   res,

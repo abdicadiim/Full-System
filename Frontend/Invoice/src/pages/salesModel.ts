@@ -1589,8 +1589,12 @@ export interface Quote {
 export interface QuoteComment {
   id: string | number;
   text: string;
+  content: string;
   author: string;
+  authorName?: string;
+  authorInitial?: string;
   timestamp: string;
+  createdAt?: string;
   bold?: boolean;
   italic?: boolean;
   underline?: boolean;
@@ -1618,12 +1622,16 @@ const mapQuoteAttachedFiles = (quote: any): AttachedFile[] => {
 const mapQuoteComments = (quote: any): QuoteComment[] => {
   if (!Array.isArray(quote?.comments)) return [];
   return quote.comments
-    .filter((comment: any) => comment && String(comment.text || "").trim())
+    .filter((comment: any) => comment && String(comment.text || comment.content || "").trim())
     .map((comment: any, index: number) => ({
       id: comment?._id || comment?.id || `${quote?._id || quote?.id || 'quote'}-comment-${index}`,
       text: String(comment?.text || ""),
-      author: comment?.author || "User",
+      content: String(comment?.content || comment?.text || ""),
+      author: comment?.author || comment?.authorName || "User",
+      authorName: String(comment?.authorName || comment?.author || "User"),
+      authorInitial: String(comment?.authorInitial || String(comment?.authorName || comment?.author || "User").charAt(0).toUpperCase() || "U").trim() || "U",
       timestamp: comment?.timestamp || comment?.createdAt || new Date().toISOString(),
+      createdAt: comment?.createdAt || comment?.timestamp || new Date().toISOString(),
       bold: Boolean(comment?.bold),
       italic: Boolean(comment?.italic),
       underline: Boolean(comment?.underline)
