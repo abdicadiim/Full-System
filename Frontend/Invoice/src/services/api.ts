@@ -3030,6 +3030,10 @@ export const settingsAPI = {
   },
 };
 
+export const dashboardAPI = {
+  getSummary: (params?: Record<string, any>) => request({ path: "/dashboard/summary", params }),
+};
+
 export const authAPI = {
   getMe: () => request({ path: "/auth/me" }),
 };
@@ -3173,6 +3177,7 @@ export default {
   transactionNumberSeriesAPI,
   locationsAPI,
   settingsAPI,
+  dashboardAPI,
   authAPI,
   usersAPI,
   rolesAPI,
