@@ -22,7 +22,8 @@ import { reportsAPI } from "../../services/api";
 type ReceivablesReportId =
   | "ar-aging-summary"
   | "ar-aging-details"
-  | "invoice-details";
+  | "invoice-details"
+  | "quote-details";
 
 type ReportRow = { values: Record<string, any> };
 
