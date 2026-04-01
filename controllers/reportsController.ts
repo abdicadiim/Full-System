@@ -1290,7 +1290,7 @@ const buildBadDebtRows = (
 
   const groupMap = new Map<string, any>();
   let currency = baseCurrency || "SOS";
-  const reportByKey = String(reportBy || "written-off-date").trim();
+  const reportByKey = String(reportBy || "invoice-date").trim();
 
   for (const item of rows || []) {
     const row = item?.row || {};
@@ -1357,6 +1357,8 @@ const buildBadDebtRows = (
       "invoice-date": issueDate ? issueDate.toISOString() : "",
       "written-off-date": writeOffDate ? writeOffDate.toISOString() : "",
       reason: getBadDebtReason(row),
+      sales: writeOffAmount,
+      "sales-with-tax": writeOffAmountBase,
       "write-off-amount-fcy": writeOffAmount,
       "write-off-amount-bcy": writeOffAmountBase,
     };
@@ -1374,6 +1376,8 @@ const buildBadDebtRows = (
         values: {
           ...baseValues,
           "invoice-count": 0,
+          sales: 0,
+          "sales-with-tax": 0,
           "write-off-amount-fcy": 0,
           "write-off-amount-bcy": 0,
         },
@@ -1384,6 +1388,9 @@ const buildBadDebtRows = (
     const target = groupMap.get(key);
     target.values["invoice-count"] =
       asNumber(target.values["invoice-count"], 0) + 1;
+    target.values.sales = asNumber(target.values.sales, 0) + writeOffAmount;
+    target.values["sales-with-tax"] =
+      asNumber(target.values["sales-with-tax"], 0) + writeOffAmountBase;
     target.values["write-off-amount-fcy"] =
       asNumber(target.values["write-off-amount-fcy"], 0) + writeOffAmount;
     target.values["write-off-amount-bcy"] =
@@ -1416,6 +1423,8 @@ const buildBadDebtRows = (
     totals: groupedRows.reduce(
       (acc, row) => {
         acc["invoice-count"] += asNumber(row.values["invoice-count"], 0);
+        acc.sales += asNumber(row.values.sales, 0);
+        acc["sales-with-tax"] += asNumber(row.values["sales-with-tax"], 0);
         acc["write-off-amount-fcy"] += asNumber(
           row.values["write-off-amount-fcy"],
           0,
@@ -1428,6 +1437,8 @@ const buildBadDebtRows = (
       },
       {
         "invoice-count": 0,
+        sales: 0,
+        "sales-with-tax": 0,
         "write-off-amount-fcy": 0,
         "write-off-amount-bcy": 0,
       } as Record<string, number>,
@@ -2366,7 +2377,7 @@ export const getBadDebtsReport: express.RequestHandler = async (
     Number(req.query.compareCount ?? req.query.compare_count ?? 1) || 1,
   );
   const reportBy = String(
-    req.query.reportBy ?? req.query.report_by ?? "written-off-date",
+    req.query.reportBy ?? req.query.report_by ?? "invoice-date",
   ).trim();
   const moreFilters = parseMoreFilters(
     req.query.moreFilters ?? req.query.more_filters ?? req.query.filter_rows,
@@ -2390,9 +2401,11 @@ export const getBadDebtsReport: express.RequestHandler = async (
       Boolean(row?.isWriteOff)
     );
   });
+  const entities = parseEntities(req.query.entities);
+  const eligibleInvoices = entities.includes("invoice") ? writeOffInvoices : [];
 
   const main = buildBadDebtRows(
-    writeOffInvoices.map((row: any) => ({ row })),
+    eligibleInvoices.map((row: any) => ({ row })),
     customers,
     range,
     moreFilters,
@@ -2406,7 +2419,7 @@ export const getBadDebtsReport: express.RequestHandler = async (
       : null;
   const comparison = compareRange
     ? buildBadDebtRows(
-        writeOffInvoices.map((row: any) => ({ row })),
+        eligibleInvoices.map((row: any) => ({ row })),
         customers,
         compareRange,
         moreFilters,

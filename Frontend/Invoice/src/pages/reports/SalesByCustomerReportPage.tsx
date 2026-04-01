@@ -287,6 +287,20 @@ const getReportColumnGroupLabel = (key: ReportColumnKey) => {
   return group?.label ?? "Reports";
 };
 
+const getReportColumnOptionForReport = (
+  key: ReportColumnKey,
+  reportId: SalesReportId,
+) => {
+  const option = getReportColumnOption(key);
+  if (reportId !== "bad-debts") {
+    return option;
+  }
+  return {
+    ...option,
+    label: BAD_DEBT_COLUMN_LABEL_OVERRIDES[key] ?? option.label,
+  };
+};
+
 const DATE_RANGE_OPTIONS: DateRangeOption[] = [
   { key: "today", label: "Today" },
   { key: "this-week", label: "This Week" },
@@ -318,6 +332,7 @@ const COMPARE_WITH_NUMBER_OPTIONS = Array.from({ length: 35 }, (_, index) =>
 );
 
 type ReportColumnKey = string;
+type SalesReportId = "sales-by-customer" | "bad-debts";
 type ReportColumnKind = "text" | "number" | "currency";
 
 type ReportColumnOption = {
@@ -331,6 +346,12 @@ type ReportColumnGroup = {
   label: string;
   options: ReportColumnOption[];
 };
+
+const BAD_DEBT_COLUMN_LABEL_OVERRIDES: Partial<Record<ReportColumnKey, string>> =
+  {
+    sales: "Write Off Amount (FCY)",
+    "sales-with-tax": "Write Off Amount (BCY)",
+  };
 
 const REPORT_COLUMN_GROUPS: ReportColumnGroup[] = [
   {
@@ -876,6 +897,7 @@ function ReportActivityDrawer({
 function SalesByCustomerReportView({
   categoryName,
   reportName,
+  reportId,
   menuButtonRef,
   onMenuClick,
   onRunReport,
@@ -884,6 +906,7 @@ function SalesByCustomerReportView({
 }: {
   categoryName: string;
   reportName: string;
+  reportId: SalesReportId;
   menuButtonRef: React.RefObject<HTMLButtonElement | null>;
   onMenuClick: () => void;
   onRunReport: () => void;
@@ -896,18 +919,23 @@ function SalesByCustomerReportView({
   const compareWithCountRef = useRef<HTMLDivElement | null>(null);
   const moreFiltersRef = useRef<HTMLDivElement | null>(null);
   const exportRef = useRef<HTMLDivElement | null>(null);
-  const [dateRangeKey, setDateRangeKey] = useState<DateRangeKey>("this-week");
+  const isBadDebtsReport = reportId === "bad-debts";
+  const defaultDateRangeKey: DateRangeKey = isBadDebtsReport
+    ? "this-month"
+    : "this-week";
+  const [dateRangeKey, setDateRangeKey] =
+    useState<DateRangeKey>(defaultDateRangeKey);
   const [dateRangeDraftKey, setDateRangeDraftKey] =
-    useState<DateRangeKey>("this-week");
+    useState<DateRangeKey>(defaultDateRangeKey);
   const [isDateRangeOpen, setIsDateRangeOpen] = useState(false);
   const [isCustomDateRangeOpen, setIsCustomDateRangeOpen] = useState(false);
   const [customDateRange, setCustomDateRange] = useState<DateRangeValue>(() =>
-    getDateRangeValue("this-week"),
+    getDateRangeValue(defaultDateRangeKey),
   );
   const [customDateRangeDraft, setCustomDateRangeDraft] =
-    useState<DateRangeValue>(() => getDateRangeValue("this-week"));
+    useState<DateRangeValue>(() => getDateRangeValue(defaultDateRangeKey));
   const [customDateRangeMonth, setCustomDateRangeMonth] = useState<Date>(() =>
-    getStartOfMonth(getDateRangeValue("this-week").start),
+    getStartOfMonth(getDateRangeValue(defaultDateRangeKey).start),
   );
   const [entityKeys, setEntityKeys] = useState<EntityKey[]>([]);
   const [isEntityOpen, setIsEntityOpen] = useState(false);
@@ -932,15 +960,17 @@ function SalesByCustomerReportView({
   >("general");
   const customizeDateRangeRef = useRef<HTMLDivElement | null>(null);
   const [customizeDateRangeDraftKey, setCustomizeDateRangeDraftKey] =
-    useState<DateRangeKey>("this-week");
+    useState<DateRangeKey>(defaultDateRangeKey);
   const [isCustomizeDateRangeOpen, setIsCustomizeDateRangeOpen] =
     useState(false);
   const [isCustomizeCustomDateRangeOpen, setIsCustomizeCustomDateRangeOpen] =
     useState(false);
   const [customizeCustomDateRangeDraft, setCustomizeCustomDateRangeDraft] =
-    useState<DateRangeValue>(() => getDateRangeValue("this-week"));
+    useState<DateRangeValue>(() => getDateRangeValue(defaultDateRangeKey));
   const [customizeCustomDateRangeMonth, setCustomizeCustomDateRangeMonth] =
-    useState<Date>(() => getStartOfMonth(getDateRangeValue("this-week").start));
+    useState<Date>(() =>
+      getStartOfMonth(getDateRangeValue(defaultDateRangeKey).start),
+    );
   const [customizeColumnsSearch, setCustomizeColumnsSearch] = useState("");
   const customizeCompareRef = useRef<HTMLDivElement | null>(null);
   const customizeCompareCountRef = useRef<HTMLDivElement | null>(null);
@@ -964,14 +994,15 @@ function SalesByCustomerReportView({
   >([]);
   const [selectedReportColumns, setSelectedReportColumns] = useState<
     ReportColumnKey[]
-  >(["name", "invoice-count", "sales", "sales-with-tax"]);
+  >(isBadDebtsReport
+    ? ["name", "sales", "sales-with-tax"]
+    : ["name", "invoice-count", "sales", "sales-with-tax"]);
   const [customizeDraftSelectedColumns, setCustomizeDraftSelectedColumns] =
-    useState<ReportColumnKey[]>([
-      "name",
-      "invoice-count",
-      "sales",
-      "sales-with-tax",
-    ]);
+    useState<ReportColumnKey[]>(
+      isBadDebtsReport
+        ? ["name", "sales", "sales-with-tax"]
+        : ["name", "invoice-count", "sales", "sales-with-tax"],
+    );
   const { settings } = useSettings();
   const organizationName = String(
     settings?.general?.companyDisplayName ||
@@ -1439,28 +1470,35 @@ function SalesByCustomerReportView({
 
   const selectedCustomizeColumns = useMemo(
     () =>
-      customizeDraftSelectedColumns.map((key) => getReportColumnOption(key)),
-    [customizeDraftSelectedColumns],
+      customizeDraftSelectedColumns.map((key) =>
+        getReportColumnOptionForReport(key, reportId),
+      ),
+    [customizeDraftSelectedColumns, reportId],
   );
 
   const filteredCustomizeGroups = useMemo(() => {
     const query = customizeColumnsSearch.trim().toLowerCase();
-    return REPORT_COLUMN_GROUPS.map((group) => ({
-      label: group.label,
-      options: group.options.filter((option) => {
-        if (customizeDraftSelectedColumns.includes(option.key)) return false;
-        if (!query) return true;
-        return (
-          option.label.toLowerCase().includes(query) ||
-          group.label.toLowerCase().includes(query)
-        );
-      }),
-    })).filter((group) => group.options.length > 0);
-  }, [customizeColumnsSearch, customizeDraftSelectedColumns]);
+    return REPORT_COLUMN_GROUPS.map((group) => {
+      const options = group.options
+        .map((option) => getReportColumnOptionForReport(option.key, reportId))
+        .filter((option) => {
+          if (customizeDraftSelectedColumns.includes(option.key)) return false;
+          if (!query) return true;
+          return (
+            option.label.toLowerCase().includes(query) ||
+            group.label.toLowerCase().includes(query)
+          );
+        });
+      return { label: group.label, options };
+    }).filter((group) => group.options.length > 0);
+  }, [customizeColumnsSearch, customizeDraftSelectedColumns, reportId]);
 
   const visibleReportColumns = useMemo(
-    () => selectedReportColumns.map((key) => getReportColumnOption(key)),
-    [selectedReportColumns],
+    () =>
+      selectedReportColumns.map((key) =>
+        getReportColumnOptionForReport(key, reportId),
+      ),
+    [selectedReportColumns, reportId],
   );
 
   const formatReportColumnValue = (
@@ -1534,9 +1572,9 @@ function SalesByCustomerReportView({
       setReportError("");
 
       try {
-        const response = await reportsAPI.getSalesByCustomer(
-          buildSalesByCustomerQuery(),
-        );
+        const response = isBadDebtsReport
+          ? await reportsAPI.getBadDebts(buildSalesByCustomerQuery())
+          : await reportsAPI.getSalesByCustomer(buildSalesByCustomerQuery());
         if (cancelled) return;
 
         const data = response?.data || {};
@@ -1567,7 +1605,7 @@ function SalesByCustomerReportView({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reportRefreshTick]);
+  }, [isBadDebtsReport, reportRefreshTick]);
 
   const closeAllOpenPanels = () => {
     setIsCompareWithOpen(false);
@@ -4889,7 +4927,7 @@ export default function ReportDetailPage() {
     : null;
   const calculatorPrecision = report.calculator?.precision ?? 2;
 
-  if (report.id === "sales-by-customer") {
+  if (report.id === "sales-by-customer" || report.id === "bad-debts") {
     return (
       <div className="relative min-h-[calc(100vh-64px)] pt-3">
         <ReportsDrawer
@@ -4909,8 +4947,10 @@ export default function ReportDetailPage() {
           } ${isReportActivityOpen ? "lg:pr-[300px]" : ""}`}
         >
           <SalesByCustomerReportView
+            key={report.id}
             categoryName={category.name}
             reportName={report.name}
+            reportId={report.id as SalesReportId}
             menuButtonRef={reportsMenuButtonRef}
             onMenuClick={() => setIsReportsDrawerOpen((prev) => !prev)}
             onActivityClick={() => setIsReportActivityOpen((prev) => !prev)}

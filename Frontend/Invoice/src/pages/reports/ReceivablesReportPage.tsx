@@ -55,6 +55,10 @@ type DateRangeKey =
   | "previous-quarter"
   | "previous-year"
   | "custom";
+type DateRangeValue = {
+  start: Date;
+  end: Date;
+};
 type CompareWithKey = "none" | "previous-years" | "previous-periods";
 type ReportPayload = {
   rows: ReportRow[];
@@ -1862,7 +1866,7 @@ function ReceivablesReportShell({
                             className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
                               isSelected
                                 ? "font-medium text-[#0f172a]"
-                                : "text-[#334155]"
+                                : "text-[#334155] hover:bg-[#f8fafc]"
                             }`}
                           >
                             <span>{option.label}</span>

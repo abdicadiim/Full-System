@@ -386,6 +386,7 @@ const ALL_REPORTS: ReportDefinition[] = [
       "share",
       "export",
       "print",
+      "custom",
     ),
   },
   {
