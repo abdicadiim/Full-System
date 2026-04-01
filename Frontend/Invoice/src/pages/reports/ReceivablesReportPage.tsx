@@ -69,6 +69,8 @@ type ReportConfig = {
   showEntities: boolean;
   showReportBy: boolean;
   showAgingBy: boolean;
+  defaultReportBy?: string;
+  reportByOptions?: Array<{ key: string; label: string }>;
   rightControls: Array<{
     label: string;
     state: "groupBy" | "showBy" | "agingIntervals";

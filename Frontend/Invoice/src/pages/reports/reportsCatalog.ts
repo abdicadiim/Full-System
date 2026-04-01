@@ -207,7 +207,7 @@ const ALL_REPORTS: ReportDefinition[] = [
     name: "Quote Details",
     summary: "Quote-level listing for follow-up and conversion workflows.",
     howItHelps: "Target unaccepted quotes for conversion recovery.",
-    functionSupport: support("filter", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support("filter", "compare", "group", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
   },
   {
     id: "bank-charges",
