@@ -977,9 +977,14 @@ export default function NewCustomer() {
           } else {
             // Existing file
             processedDocuments.push({
+              documentId: doc.documentId || doc.id || doc._id,
               name: doc.name,
-              url: doc.url || doc.base64 || '',
-              uploadedAt: doc.uploadedAt || new Date()
+              size: doc.size || 0,
+              mimeType: doc.mimeType || doc.type || "application/octet-stream",
+              url: doc.viewUrl || doc.url || doc.contentUrl || doc.previewUrl || doc.base64 || '',
+              viewUrl: doc.viewUrl || doc.url || doc.contentUrl || doc.previewUrl || doc.base64 || '',
+              downloadUrl: doc.downloadUrl || doc.url || doc.contentUrl || '',
+              uploadedAt: doc.uploadedAt || new Date().toISOString()
             });
           }
         }
