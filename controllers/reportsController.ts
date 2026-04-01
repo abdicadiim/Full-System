@@ -2338,6 +2338,7 @@ const buildQuoteDetailsRows = (
   customers: any[],
   range: { start: Date; end: Date },
   reportBy: string,
+  groupBy: string,
   moreFilters: MoreFilterRow[],
 ) => {
   const customerById = new Map<string, any>();
@@ -2354,6 +2355,7 @@ const buildQuoteDetailsRows = (
   const normalizedRangeStart = startOfDay(range.start);
   const normalizedRangeEnd = endOfDay(range.end);
   const normalizedReportBy = normalizeText(reportBy || "quote-date");
+  const normalizedGroupBy = normalizeText(groupBy || "none");
   const detailRows: Array<{ values: Record<string, any> }> = [];
   let currency = "";
 
@@ -2425,11 +2427,18 @@ const buildQuoteDetailsRows = (
     if (!currency) currency = rowCurrency;
   }
 
-  detailRows.sort((left, right) =>
-    String(right.values["report-date"] || "").localeCompare(
+  detailRows.sort((left, right) => {
+    if (normalizedGroupBy !== "none") {
+      const leftGroup = String(left.values[normalizedGroupBy] || "").trim();
+      const rightGroup = String(right.values[normalizedGroupBy] || "").trim();
+      const groupDelta = rightGroup.localeCompare(leftGroup);
+      if (groupDelta !== 0) return groupDelta;
+    }
+
+    return String(right.values["report-date"] || "").localeCompare(
       String(left.values["report-date"] || ""),
-    ),
-  );
+    );
+  });
 
   return {
     rows: detailRows,
@@ -2670,6 +2679,7 @@ export const getQuoteDetailsReport: express.RequestHandler = async (
     customers || [],
     range,
     reportBy,
+    groupBy,
     moreFilters,
   );
   const compareRange =
@@ -2683,6 +2693,7 @@ export const getQuoteDetailsReport: express.RequestHandler = async (
         customers || [],
         compareRange,
         reportBy,
+        groupBy,
         moreFilters,
       )
     : null;
