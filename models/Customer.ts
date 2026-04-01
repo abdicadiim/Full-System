@@ -15,6 +15,23 @@ const AddressSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const CustomerCommentSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true },
+    text: { type: String, default: "" },
+    content: { type: String, default: "" },
+    authorName: { type: String, default: "You" },
+    authorInitial: { type: String, default: "Y" },
+    createdAt: { type: String, default: () => new Date().toISOString() },
+    bold: { type: Boolean, default: false },
+    italic: { type: Boolean, default: false },
+    underline: { type: Boolean, default: false },
+    author: { type: String, default: "You" },
+    timestamp: { type: String, default: () => new Date().toISOString() },
+  },
+  { _id: false, strict: false }
+);
+
 const CustomerSchema = new mongoose.Schema(
   {
     organizationId: { type: mongoose.Schema.Types.ObjectId, ref: "Organization", required: true, index: true },
@@ -31,6 +48,7 @@ const CustomerSchema = new mongoose.Schema(
     billingAddress: { type: AddressSchema, default: () => ({}) },
     shippingAddress: { type: AddressSchema, default: () => ({}) },
 
+    comments: { type: [CustomerCommentSchema], default: [] },
     contactPersons: { type: Array, default: [] },
     documents: { type: Array, default: [] },
     customFields: { type: mongoose.Schema.Types.Mixed, default: {} },

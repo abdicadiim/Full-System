@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Customer, Invoice, CreditNote, AttachedFile, Quote, RecurringInvoice, Expense, RecurringExpense, Project, Bill, SalesReceipt } from "../../salesModel";
 import { resolveVerifiedPrimarySender } from "../../../utils/emailSenderDisplay";
+import CustomerCommentsPanel from "./CustomerCommentsPanel";
 
 interface ExtendedCustomer extends Customer {
     billingAttention: string;
@@ -5799,94 +5800,15 @@ export default function CustomerDetail() {
                     </div>
                 )}
 
-                                {activeTab === "comments" && (
-                    <div className="flex-1 min-h-0 bg-white p-8 overflow-y-auto">
-                        {/* Comment Editor */}
-                        <div className="mb-10 bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm max-w-5xl mx-auto">
-                            <div className="flex gap-4 p-3 bg-gray-50/80 border-b border-gray-200">
-                                <button
-                                    className="p-1.5 text-gray-500 hover:bg-gray-200 rounded cursor-pointer transition-colors flex items-center justify-center border-none bg-transparent"
-                                    onClick={() => applyFormatting("bold")}
-                                    title="Bold"
-                                >
-                                    <Bold size={15} />
-                                </button>
-                                <button
-                                    className="p-1.5 text-gray-500 hover:bg-gray-200 rounded cursor-pointer transition-colors flex items-center justify-center border-none bg-transparent"
-                                    onClick={() => applyFormatting("italic")}
-                                    title="Italic"
-                                >
-                                    <Italic size={15} />
-                                </button>
-                                <button
-                                    className="p-1.5 text-gray-500 hover:bg-gray-200 rounded cursor-pointer transition-colors flex items-center justify-center border-none bg-transparent"
-                                    onClick={() => applyFormatting("underline")}
-                                    title="Underline"
-                                >
-                                    <Underline size={15} />
-                                </button>
-                            </div>
-                            <div className="p-0">
-                                <textarea
-                                    id="comment-textarea"
-                                    className="w-full h-40 px-5 py-4 text-sm text-gray-700 outline-none resize-none placeholder:text-gray-400 leading-relaxed border-none"
-                                    placeholder="Add a comment..."
-                                    value={commentText}
-                                    onChange={(e) => setCommentText(e.target.value)}
-                                />
-                            </div>
-                            <div className="px-5 pb-5">
-                                <button
-                                    className="px-5 py-2 bg-[#156372] text-white rounded text-[13px] font-bold cursor-pointer hover:opacity-90 active:scale-95 transition-all shadow-sm border-none"
-                                    onClick={handleAddComment}
-                                >
-                                    Add Comment
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Comments List */}
-                        <div className="max-w-5xl mx-auto">
-                            <div className="flex items-center gap-4 mb-8">
-                                <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-[0.2em] whitespace-nowrap">ALL COMMENTS</h3>
-                                <div className="h-px w-full bg-gray-100"></div>
-                            </div>
-                            
-                            {comments.length === 0 ? (
-                                <div className="text-center py-20 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
-                                    <p className="text-sm text-gray-400 font-medium italic">No comments yet.</p>
-                                </div>
-                            ) : (
-                                <div className="space-y-6 pb-20">
-                                    {comments.map((comment) => (
-                                        <div key={comment.id} className="group flex flex-col bg-white rounded-lg border border-gray-100 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
-                                            <div className="p-6">
-                                                <div className="text-[15px] leading-relaxed text-[#156372] whitespace-pre-wrap font-semibold">
-                                                    {comment.text}
-                                                </div>
-                                            </div>
-                                            <div className="px-6 py-4 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between mt-auto">
-                                                <div className="flex items-center gap-4">
-                                                    <span className="text-sm font-bold text-gray-700">{comment.author === 'You' ? 'You' : comment.author}</span>
-                                                    <div className="w-1.5 h-1.5 rounded-full bg-gray-200"></div>
-                                                    <span className="text-[11px] text-gray-400 font-bold uppercase tracking-wider">
-                                                        {new Date(String(comment.timestamp)).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                                                    </span>
-                                                </div>
-                                                <button
-                                                    className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all cursor-pointer border-none bg-transparent opacity-0 group-hover:opacity-100"
-                                                    onClick={() => handleDeleteComment(comment.id)}
-                                                    title="Delete comment"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                {activeTab === "comments" && (
+                    <CustomerCommentsPanel
+                        customerId={String((customer as any)?._id || (customer as any)?.id || id || "")}
+                        comments={comments}
+                        onCommentsChange={(nextComments) => {
+                            setComments(nextComments as any);
+                            setCustomer((prev) => (prev ? { ...prev, comments: nextComments } : prev));
+                        }}
+                    />
                 )}
 
                 {activeTab === "transactions" && (
