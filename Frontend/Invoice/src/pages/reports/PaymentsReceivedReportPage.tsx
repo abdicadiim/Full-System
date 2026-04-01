@@ -844,6 +844,8 @@ export default function PaymentsReceivedReportView({
     }
   };
 
+  const getGroupByLabelLocal = (key: GroupByKey) =>
+    groupByOptions.find((option) => option.key === key)?.label ?? "None";
   const groupBySelections = groupByOptions.filter((option) => option.key !== "none");
   const rangeLabel =
     subtitleMode === "as-of"
@@ -1126,7 +1128,7 @@ export default function PaymentsReceivedReportView({
               <span className="inline-flex items-center gap-2">
                 <Columns3 size={14} className="text-[#64748b]" />
                 Group By :
-                <strong className="text-[#0f172a]">{getGroupByLabel(groupByKey)}</strong>
+                <strong className="text-[#0f172a]">{getGroupByLabelLocal(groupByKey)}</strong>
               </span>
               <ChevronDown size={14} />
             </button>
