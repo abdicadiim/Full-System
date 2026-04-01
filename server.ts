@@ -8,6 +8,7 @@ import mongoose from "mongoose";
 import { connectDb } from "./config/db.js";
 import { AUTH_BYPASS, FRONTEND_URL, JWT_SECRET, MONGO_URI, PORT } from "./config/env.js";
 import { authRoutes } from "./routes/authRoutes.js";
+import { documentsRoutes } from "./routes/documentsRoutes.js";
 import { organizationRoutes } from "./routes/organizationRoutes.js";
 import { settingsRoutes } from "./routes/settingsRoutes.js";
 import { publicVerificationRoutes } from "./routes/publicVerificationRoutes.js";
@@ -122,6 +123,7 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/documents", documentsRoutes);
 app.use("/api/public", publicVerificationRoutes);
 app.use("/api/public", publicUserInvitationRoutes);
 app.use("/api/organizations", organizationRoutes);

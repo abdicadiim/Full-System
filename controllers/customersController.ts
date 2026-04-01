@@ -2,6 +2,7 @@ import type express from "express";
 import mongoose from "mongoose";
 import { Customer } from "../models/Customer.js";
 import { CustomersVendorsSettings } from "../models/CustomersVendorsSettings.js";
+import { StoredDocument } from "../models/StoredDocument.js";
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -269,6 +270,11 @@ export const deleteCustomer: express.RequestHandler = async (req, res, next) => 
 
     const deleted = await Customer.findOneAndDelete({ _id: req.params.id, organizationId: orgId }).lean();
     if (!deleted) return res.status(404).json({ success: false, message: "Customer not found", data: null });
+    await StoredDocument.deleteMany({
+      organizationId: orgId,
+      relatedToType: "customer",
+      relatedToId: String(deleted._id),
+    }).catch(() => null);
     res.json({ success: true, data: { id: String(deleted._id) } });
   } catch (err) {
     next(err);
@@ -303,6 +309,11 @@ export const bulkDeleteCustomers: express.RequestHandler = async (req, res, next
     if (!objectIds.length) return res.json({ success: true, data: { ids: [] } });
 
     await Customer.deleteMany({ organizationId: orgId, _id: { $in: objectIds } });
+    await StoredDocument.deleteMany({
+      organizationId: orgId,
+      relatedToType: "customer",
+      relatedToId: { $in: objectIds.map((id) => String(id)) },
+    }).catch(() => null);
     res.json({ success: true, data: { ids: objectIds.map((id) => String(id)) } });
   } catch (err) {
     next(err);

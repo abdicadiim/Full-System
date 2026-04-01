@@ -1,0 +1,231 @@
+import type express from "express";
+import mongoose from "mongoose";
+import { Customer } from "../models/Customer.js";
+import { StoredDocument } from "../models/StoredDocument.js";
+
+const getOrgId = (req: express.Request) => {
+  const orgId = req.user?.organizationId;
+  if (!orgId) return null;
+  if (!mongoose.isValidObjectId(orgId)) return null;
+  return orgId;
+};
+
+const asString = (value: unknown) => (typeof value === "string" ? value : "");
+
+const parseDataUrl = (value: unknown) => {
+  const input = String(value || "").trim();
+  if (!input) return null;
+
+  const match = input.match(/^data:([^;,]*)(;base64)?,(.*)$/i);
+  if (!match) return null;
+
+  const mimeType = String(match[1] || "application/octet-stream").trim() || "application/octet-stream";
+  const isBase64 = Boolean(match[2]);
+  const payload = String(match[3] || "");
+  if (!payload) return null;
+
+  let base64 = payload;
+  if (!isBase64) {
+    try {
+      base64 = Buffer.from(decodeURIComponent(payload), "utf8").toString("base64");
+    } catch {
+      return null;
+    }
+  }
+
+  return { mimeType, base64 };
+};
+
+const sanitizeFileName = (name: string) =>
+  String(name || "attachment")
+    .replace(/[\r\n"]/g, "_")
+    .trim() || "attachment";
+
+const buildDocumentUrls = (id: string) => ({
+  url: `/api/documents/${encodeURIComponent(id)}/content`,
+  viewUrl: `/api/documents/${encodeURIComponent(id)}/content`,
+  downloadUrl: `/api/documents/${encodeURIComponent(id)}/download`,
+});
+
+const normalizeDocument = (doc: any) => {
+  if (!doc) return null;
+  const id = String(doc._id || doc.id || doc.documentId || "").trim();
+  if (!id) return null;
+  const uploadedAt = String(doc.uploadedAt || doc.createdAt || new Date().toISOString()).trim() || new Date().toISOString();
+  const urls = buildDocumentUrls(id);
+  return {
+    id,
+    _id: id,
+    documentId: id,
+    organizationId: String(doc.organizationId || ""),
+    relatedToType: String(doc.relatedToType || ""),
+    relatedToId: String(doc.relatedToId || ""),
+    module: String(doc.module || ""),
+    type: String(doc.type || ""),
+    name: String(doc.name || "attachment").trim() || "attachment",
+    size: Number(doc.size || 0),
+    mimeType: String(doc.mimeType || "application/octet-stream").trim() || "application/octet-stream",
+    uploadedAt,
+    ...urls,
+    contentUrl: urls.url,
+    previewUrl: urls.url,
+  };
+};
+
+const syncCustomerDocuments = async (customerId: string, orgId: string) => {
+  const customer = await Customer.findOne({ _id: customerId, organizationId: orgId }).lean();
+  if (!customer) return null;
+
+  const docs = await StoredDocument.find({ organizationId: orgId, relatedToType: "customer", relatedToId: customerId })
+    .sort({ uploadedAt: -1, createdAt: -1 })
+    .lean();
+  const normalized = docs.map(normalizeDocument).filter(Boolean);
+  await Customer.updateOne({ _id: customerId, organizationId: orgId }, { $set: { documents: normalized } });
+  return normalized;
+};
+
+export const listDocuments: express.RequestHandler = async (req, res, next) => {
+  try {
+    const orgId = getOrgId(req);
+    if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
+
+    const filter: Record<string, unknown> = { organizationId: orgId };
+    const relatedToType = asString(req.query.relatedToType).trim();
+    const relatedToId = asString(req.query.relatedToId).trim();
+    const module = asString(req.query.module).trim();
+    const type = asString(req.query.type).trim();
+    const search = asString(req.query.search ?? req.query.q).trim();
+
+    if (relatedToType) filter.relatedToType = relatedToType;
+    if (relatedToId) filter.relatedToId = relatedToId;
+    if (module) filter.module = module;
+    if (type) filter.type = type;
+    if (search) filter.name = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+
+    const rows = await StoredDocument.find(filter).sort({ uploadedAt: -1, createdAt: -1 }).lean();
+    return res.json({ success: true, data: rows.map(normalizeDocument).filter(Boolean) });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getDocumentById: express.RequestHandler = async (req, res, next) => {
+  try {
+    const orgId = getOrgId(req);
+    if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
+
+    const doc = await StoredDocument.findOne({ _id: req.params.id, organizationId: orgId }).lean();
+    if (!doc) return res.status(404).json({ success: false, message: "Document not found", data: null });
+    return res.json({ success: true, data: normalizeDocument(doc) });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const sendDocumentContent = async (req: express.Request, res: express.Response, mode: "inline" | "attachment") => {
+  const orgId = getOrgId(req);
+  if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
+
+  const doc = await StoredDocument.findOne({ _id: req.params.id, organizationId: orgId }).lean();
+  if (!doc) return res.status(404).json({ success: false, message: "Document not found", data: null });
+
+  const base64 = String(doc.contentBase64 || "").trim();
+  if (!base64) return res.status(404).json({ success: false, message: "Document content not available", data: null });
+
+  const buffer = Buffer.from(base64, "base64");
+  const fileName = sanitizeFileName(String(doc.name || "attachment"));
+  const mimeType = String(doc.mimeType || "application/octet-stream").trim() || "application/octet-stream";
+  res.setHeader("Content-Type", mimeType);
+  res.setHeader("Content-Disposition", `${mode}; filename="${fileName}"`);
+  return res.send(buffer);
+};
+
+export const viewDocumentContent: express.RequestHandler = async (req, res, next) => {
+  try {
+    await sendDocumentContent(req, res, "inline");
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const downloadDocumentContent: express.RequestHandler = async (req, res, next) => {
+  try {
+    await sendDocumentContent(req, res, "attachment");
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const uploadDocument: express.RequestHandler = async (req, res, next) => {
+  try {
+    const orgId = getOrgId(req);
+    if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
+
+    const payload = (req.body || {}) as Record<string, unknown>;
+    const name = String(payload.name || "attachment").trim() || "attachment";
+    const relatedToType = String(payload.relatedToType || "").trim().toLowerCase();
+    const relatedToId = String(payload.relatedToId || "").trim();
+    const module = String(payload.module || "").trim();
+    const type = String(payload.type || "").trim();
+    const size = Number(payload.size || 0);
+    const dataUrl = String(payload.contentUrl || payload.contentDataUrl || "").trim();
+    const parsed = parseDataUrl(dataUrl);
+
+    if (!parsed) {
+      return res.status(400).json({ success: false, message: "Attachment content is required", data: null });
+    }
+
+    if (relatedToType === "customer" && relatedToId) {
+      const customerExists = await Customer.exists({ _id: relatedToId, organizationId: orgId });
+      if (!customerExists) {
+        return res.status(404).json({ success: false, message: "Customer not found", data: null });
+      }
+    }
+
+    const created = await StoredDocument.create({
+      organizationId: orgId,
+      relatedToType,
+      relatedToId,
+      module,
+      type,
+      name,
+      size: Number.isFinite(size) && size > 0 ? size : Buffer.byteLength(parsed.base64, "base64"),
+      mimeType: parsed.mimeType,
+      contentBase64: parsed.base64,
+      uploadedAt: new Date().toISOString(),
+    });
+
+    const normalized = normalizeDocument(created.toObject()) as any;
+    if (relatedToType === "customer" && relatedToId) {
+      const documents = await syncCustomerDocuments(relatedToId, orgId);
+      if (documents) normalized.documents = documents;
+    }
+
+    return res.status(201).json({ success: true, data: normalized });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const deleteDocument: express.RequestHandler = async (req, res, next) => {
+  try {
+    const orgId = getOrgId(req);
+    if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
+
+    const doc = await StoredDocument.findOne({ _id: req.params.id, organizationId: orgId }).lean();
+    if (!doc) {
+      return res.status(404).json({ success: false, message: "Document not found", data: null });
+    }
+
+    await StoredDocument.deleteOne({ _id: req.params.id, organizationId: orgId });
+
+    let documents: unknown[] | null = null;
+    if (String(doc.relatedToType || "").toLowerCase() === "customer" && String(doc.relatedToId || "").trim()) {
+      documents = await syncCustomerDocuments(String(doc.relatedToId), orgId);
+    }
+
+    return res.json({ success: true, data: { id: String(doc._id), documents } });
+  } catch (err) {
+    next(err);
+  }
+};
