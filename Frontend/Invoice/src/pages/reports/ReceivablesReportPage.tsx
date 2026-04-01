@@ -670,65 +670,67 @@ function ReceivablesReportShell({ reportId }: { reportId: ReceivablesReportId })
       <div className={`pr-3 transition-[padding-left] duration-200 ${isReportsDrawerOpen ? "lg:pl-[260px]" : ""}`}>
         <div className="min-h-[calc(100vh-64px)] bg-white">
           <div className="px-4 pt-3">
-            <div className="flex items-start justify-between gap-4 border-b border-[#e6e9f0] pb-3">
-          <div>
-            <div className="text-sm font-medium text-[#0f172a]">Receivables</div>
-            <div className="mt-1 flex items-center gap-2">
-              <h1 className="text-[24px] font-semibold leading-tight text-[#0f172a]">{config.title}</h1>
-              <span className="text-sm text-[#475569]">- {dateLabel}</span>
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#e6e9f0] pb-3">
+              <div className="flex min-w-0 items-start gap-3">
+                <button
+                  ref={reportsMenuButtonRef}
+                  type="button"
+                  onClick={() => setIsReportsDrawerOpen((prev) => !prev)}
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-[#d4d9e4] bg-white text-[#334155] hover:bg-[#f8fafc]"
+                  aria-label="Toggle reports menu"
+                >
+                  <Menu size={15} />
+                </button>
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-[#0f172a]">Receivables</div>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <h1 className="text-[24px] font-semibold leading-tight text-[#0f172a]">{config.title}</h1>
+                    <span className="text-sm text-[#475569]">- {dateLabel}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" onClick={openColumns} className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]" title="Customize report columns">
+                  <SlidersHorizontal size={15} />
+                </button>
+                <button type="button" className="inline-flex h-8 items-center gap-1 rounded border border-[#d4d9e4] bg-white px-3 text-sm font-medium text-[#1e293b] hover:bg-[#f8fafc]">
+                  Export <ChevronDown size={14} />
+                </button>
+                <button type="button" onClick={() => setRefreshTick((value) => value + 1)} className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]">
+                  <RefreshCw size={15} />
+                </button>
+                <button type="button" onClick={() => navigate("/reports")} className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] text-[#ef4444] hover:bg-[#fef2f2]">
+                  <X size={15} />
+                </button>
+              </div>
             </div>
           </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              ref={reportsMenuButtonRef}
-              type="button"
-              onClick={() => setIsReportsDrawerOpen((prev) => !prev)}
-              className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]"
-              aria-label="Toggle reports menu"
-            >
-              <Menu size={15} />
-            </button>
-            <button type="button" onClick={openColumns} className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]" title="Customize report columns">
-              <SlidersHorizontal size={15} />
-            </button>
-            <button type="button" className="inline-flex h-8 items-center gap-1 rounded border border-[#d4d9e4] bg-white px-3 text-sm font-medium text-[#1e293b] hover:bg-[#f8fafc]">
-              Export <ChevronDown size={14} />
-            </button>
-            <button type="button" onClick={() => setRefreshTick((value) => value + 1)} className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]">
-              <RefreshCw size={15} />
-            </button>
-            <button type="button" onClick={() => navigate("/reports")} className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] text-[#ef4444] hover:bg-[#fef2f2]">
-              <X size={15} />
-            </button>
-          </div>
-        </div>
-      </div>
 
           <div className="px-4 py-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1 text-sm text-[#334155]">
-            <Filter size={14} />
-            Filters :
-          </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1 text-sm text-[#334155]">
+                <Filter size={14} />
+                Filters :
+              </span>
 
-          <label className="inline-flex h-9 items-center gap-2 rounded border border-[#cfd6e4] bg-[#f8fafc] px-3 text-sm text-[#334155]">
-            <span>{config.subtitleMode === "as-of" ? "As of" : "Date Range"} :</span>
-            <select value={rangeKey} onChange={(event) => setRangeKey(event.target.value as DateRangeKey)} className="bg-transparent outline-none">
-              {DATE_RANGE_OPTIONS.map((option) => (
-                <option key={option.key} value={option.key}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+              <label className="inline-flex h-9 items-center gap-2 rounded border border-[#cfd6e4] bg-[#f8fafc] px-3 text-sm text-[#334155]">
+                <span>{config.subtitleMode === "as-of" ? "As of" : "Date Range"} :</span>
+                <select value={rangeKey} onChange={(event) => setRangeKey(event.target.value as DateRangeKey)} className="bg-transparent outline-none">
+                  {DATE_RANGE_OPTIONS.map((option) => (
+                    <option key={option.key} value={option.key}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-          {rangeKey === "custom" ? (
-            <div className="flex items-center gap-2">
-              <input value={customStart} onChange={(event) => setCustomStart(event.target.value)} type="date" className="h-9 rounded border border-[#cfd6e4] px-3 text-sm outline-none" />
-              <input value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} type="date" className="h-9 rounded border border-[#cfd6e4] px-3 text-sm outline-none" />
-            </div>
-          ) : null}
+              {rangeKey === "custom" ? (
+                <div className="flex items-center gap-2">
+                  <input value={customStart} onChange={(event) => setCustomStart(event.target.value)} type="date" className="h-9 rounded border border-[#cfd6e4] px-3 text-sm outline-none" />
+                  <input value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} type="date" className="h-9 rounded border border-[#cfd6e4] px-3 text-sm outline-none" />
+                </div>
+              ) : null}
 
           {config.showReportBy ? (
             <label className="inline-flex h-9 items-center gap-2 rounded border border-[#cfd6e4] bg-[#f8fafc] px-3 text-sm text-[#334155]">
