@@ -52,16 +52,6 @@ const resolveAttachmentUrl = (rawUrl?: string) => {
   }
 };
 
-const triggerDownload = (href: string, fileName: string) => {
-  const link = document.createElement("a");
-  link.href = href;
-  link.download = fileName;
-  link.style.display = "none";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-};
-
 export default function CustomerAttachmentsPopover({
   open,
   onClose,
@@ -87,30 +77,6 @@ export default function CustomerAttachmentsPopover({
     await onUpload(event);
     if (event.currentTarget) {
       event.currentTarget.value = "";
-    }
-  };
-
-  const handleDownloadAttachment = (file: CustomerAttachment) => {
-    const resolvedUrl = resolveAttachmentUrl(file?.url);
-    if (!resolvedUrl) return;
-
-    triggerDownload(resolvedUrl, String(file?.name || "attachment"));
-  };
-
-  const handleOpenAttachmentInNewTab = (file: CustomerAttachment) => {
-    const resolvedUrl = resolveAttachmentUrl(file?.url);
-    if (!resolvedUrl) return;
-
-    const openedWindow = window.open(resolvedUrl, "_blank", "noopener,noreferrer");
-    if (!openedWindow) {
-      const link = document.createElement("a");
-      link.href = resolvedUrl;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-      link.style.display = "none";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
     }
   };
 
@@ -144,6 +110,9 @@ export default function CustomerAttachmentsPopover({
             <div className="space-y-2">
               {attachments.map((file, index) => (
                 <div key={`${file.id}-${index}`}>
+                  {(() => {
+                    const attachmentUrl = resolveAttachmentUrl(file.url);
+                    return (
                   <div
                     className={`group relative cursor-pointer rounded-md px-3 py-2 pr-16 text-[13px] transition-colors ${
                       attachmentMenuIndex === index
@@ -184,17 +153,22 @@ export default function CustomerAttachmentsPopover({
                     </button>
                     {attachmentMenuIndex === index && (
                       <div className="mt-2 flex items-center gap-5 px-8 text-[12px] font-medium text-blue-600">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            handleDownloadAttachment(file);
-                            setAttachmentMenuIndex(null);
-                          }}
-                          className="flex items-center gap-1 hover:text-blue-700"
-                        >
-                          <Download size={13} />
-                          Download
-                        </button>
+                        {attachmentUrl ? (
+                          <a
+                            href={attachmentUrl}
+                            download={String(file.name || "attachment")}
+                            onClick={() => setAttachmentMenuIndex(null)}
+                            className="flex items-center gap-1 hover:text-blue-700"
+                          >
+                            <Download size={13} />
+                            Download
+                          </a>
+                        ) : (
+                          <span className="flex items-center gap-1 text-slate-400">
+                            <Download size={13} />
+                            Download
+                          </span>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleRequestRemoveAttachment(index)}
@@ -202,21 +176,28 @@ export default function CustomerAttachmentsPopover({
                         >
                           Remove
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            handleOpenAttachmentInNewTab(file);
-                            setAttachmentMenuIndex(null);
-                          }}
-                          className="rounded p-1 text-blue-600 hover:bg-blue-50"
-                          aria-label="Open attachment"
-                          title="Open"
-                        >
-                          <ExternalLink size={13} />
-                        </button>
+                        {attachmentUrl ? (
+                          <a
+                            href={attachmentUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => setAttachmentMenuIndex(null)}
+                            className="rounded p-1 text-blue-600 hover:bg-blue-50"
+                            aria-label="Open attachment"
+                            title="Open"
+                          >
+                            <ExternalLink size={13} />
+                          </a>
+                        ) : (
+                          <span className="rounded p-1 text-slate-400" aria-label="Open attachment" title="Open">
+                            <ExternalLink size={13} />
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
+                    );
+                  })()}
                 </div>
               ))}
             </div>

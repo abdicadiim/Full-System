@@ -14,8 +14,12 @@ import {
   SlidersHorizontal,
   X,
 } from "lucide-react";
+import { useCurrency } from "../../hooks/useCurrency";
 import { useSettings } from "../../lib/settings/SettingsContext";
+import { refundsAPI } from "../../services/api";
 import { getPayments, type Payment } from "../salesModel";
+
+type ReportMode = "payments" | "refund-history";
 
 type DateRangeKey =
   | "today"
@@ -83,6 +87,31 @@ type ColumnGroup = {
 
 type Option = { key: string; label: string };
 
+type RefundRecord = {
+  id?: string;
+  _id?: string;
+  refundNumber?: string;
+  refundDate?: string;
+  createdAt?: string;
+  referenceNumber?: string;
+  customerName?: string;
+  paymentMethod?: string;
+  paymentMode?: string;
+  description?: string;
+  notes?: string;
+  amount?: number;
+  currency?: string;
+  fromAccount?: string;
+  status?: string;
+  invoiceNumber?: string;
+  paymentId?: string;
+  creditNoteId?: string;
+  exchangeRate?: number;
+  exchange_rate?: number;
+  fxRate?: number;
+  rate?: number;
+};
+
 const DATE_RANGE_OPTIONS: Array<{ key: DateRangeKey; label: string }> = [
   { key: "today", label: "Today" },
   { key: "this-week", label: "This Week" },
@@ -103,6 +132,14 @@ const GROUP_BY_OPTIONS: Array<{ key: GroupByKey; label: string }> = [
   { key: "payment-mode", label: "Payment Mode" },
   { key: "status", label: "Status" },
   { key: "deposit-to", label: "Deposit To" },
+];
+
+const REFUND_GROUP_BY_OPTIONS: Array<{ key: GroupByKey; label: string }> = [
+  { key: "none", label: "None" },
+  { key: "customer-name", label: "Customer Name" },
+  { key: "payment-mode", label: "Mode" },
+  { key: "status", label: "Status" },
+  { key: "deposit-to", label: "From Account" },
 ];
 
 const MORE_FILTER_COMPARATORS: Array<{ key: MoreFilterComparatorKey; label: string }> = [
@@ -127,6 +164,17 @@ const MORE_FILTER_FIELD_OPTIONS: Array<{ key: MoreFilterFieldKey; label: string 
   { key: "notes", label: "Notes" },
 ];
 
+const REFUND_MORE_FILTER_FIELD_OPTIONS: Array<{ key: MoreFilterFieldKey; label: string }> = [
+  { key: "payment-number", label: "Transaction#" },
+  { key: "reference-number", label: "Reference#" },
+  { key: "customer-name", label: "Customer Name" },
+  { key: "payment-mode", label: "Mode" },
+  { key: "status", label: "Status" },
+  { key: "invoice-number", label: "Invoice#" },
+  { key: "deposit-to", label: "From Account" },
+  { key: "notes", label: "Notes" },
+];
+
 const PAYMENT_COLUMN_GROUPS: ColumnGroup[] = [
   {
     label: "Payments",
@@ -146,6 +194,22 @@ const PAYMENT_COLUMN_GROUPS: ColumnGroup[] = [
   },
 ];
 
+const REFUND_COLUMN_GROUPS: ColumnGroup[] = [
+  {
+    label: "Refunds",
+    options: [
+      { key: "payment-number", label: "Transaction#", kind: "text", locked: true },
+      { key: "date", label: "Date", kind: "text", locked: true },
+      { key: "reference-number", label: "Reference#", kind: "text" },
+      { key: "customer-name", label: "Customer Name", kind: "text" },
+      { key: "payment-mode", label: "Mode", kind: "text" },
+      { key: "notes", label: "Notes", kind: "text" },
+      { key: "amount", label: "Amount (FCY)", kind: "currency" },
+      { key: "unused-amount", label: "Amount (BCY)", kind: "currency" },
+    ],
+  },
+];
+
 const DEFAULT_SELECTED_COLUMNS: PaymentColumnKey[] = [
   "payment-number",
   "date",
@@ -155,6 +219,17 @@ const DEFAULT_SELECTED_COLUMNS: PaymentColumnKey[] = [
   "payment-mode",
   "invoice-number",
   "deposit-to",
+  "amount",
+  "unused-amount",
+];
+
+const REFUND_DEFAULT_SELECTED_COLUMNS: PaymentColumnKey[] = [
+  "payment-number",
+  "date",
+  "reference-number",
+  "customer-name",
+  "payment-mode",
+  "notes",
   "amount",
   "unused-amount",
 ];
@@ -179,7 +254,8 @@ const formatMoney = (value: unknown, currency = "SOS") => {
 };
 
 const getDateRangeLabel = (key: DateRangeKey) => DATE_RANGE_OPTIONS.find((option) => option.key === key)?.label ?? "Today";
-const getGroupByLabel = (key: GroupByKey) => GROUP_BY_OPTIONS.find((option) => option.key === key)?.label ?? "None";
+const getGroupByLabel = (key: GroupByKey) =>
+  GROUP_BY_OPTIONS.find((option) => option.key === key)?.label ?? "None";
 
 const getDateRangeValue = (key: DateRangeKey, customRange?: DateRangeValue): DateRangeValue => {
   const now = new Date();
@@ -354,6 +430,8 @@ export default function PaymentsReceivedReportView({
   onRunReport,
   onActivityClick,
   onClosePage,
+  mode = "payments",
+  subtitleMode = "as-of",
 }: {
   categoryName: string;
   reportName: string;
@@ -362,10 +440,15 @@ export default function PaymentsReceivedReportView({
   onRunReport: () => void;
   onActivityClick: () => void;
   onClosePage: () => void;
+  mode?: ReportMode;
+  subtitleMode?: "as-of" | "from-to";
 }) {
   const { settings } = useSettings();
+  const { baseCurrency } = useCurrency();
   const organizationName = String(settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "").trim();
-  const [payments, setPayments] = useState<Payment[]>([]);
+  const baseCurrencyCode = String(baseCurrency?.code || "USD").trim().toUpperCase();
+  const isRefundMode = mode === "refund-history";
+  const [payments, setPayments] = useState<Array<Payment | RefundRecord>>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
@@ -381,8 +464,12 @@ export default function PaymentsReceivedReportView({
   const [moreFilterRows, setMoreFilterRows] = useState<MoreFilterRow[]>([{ id: "payment-filter-1", field: "", comparator: "", value: "" }]);
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [customizeSearch, setCustomizeSearch] = useState("");
-  const [selectedColumns, setSelectedColumns] = useState<PaymentColumnKey[]>(DEFAULT_SELECTED_COLUMNS);
-  const [draftColumns, setDraftColumns] = useState<PaymentColumnKey[]>(DEFAULT_SELECTED_COLUMNS);
+  const defaultColumns = isRefundMode ? REFUND_DEFAULT_SELECTED_COLUMNS : DEFAULT_SELECTED_COLUMNS;
+  const columnGroups = isRefundMode ? REFUND_COLUMN_GROUPS : PAYMENT_COLUMN_GROUPS;
+  const groupByOptions = isRefundMode ? REFUND_GROUP_BY_OPTIONS : GROUP_BY_OPTIONS;
+  const moreFilterFieldOptions = isRefundMode ? REFUND_MORE_FILTER_FIELD_OPTIONS : MORE_FILTER_FIELD_OPTIONS;
+  const [selectedColumns, setSelectedColumns] = useState<PaymentColumnKey[]>(defaultColumns);
+  const [draftColumns, setDraftColumns] = useState<PaymentColumnKey[]>(defaultColumns);
   const [activeAvailableColumn, setActiveAvailableColumn] = useState<PaymentColumnKey | "">("");
   const [activeSelectedColumn, setActiveSelectedColumn] = useState<PaymentColumnKey | "">("");
 
@@ -390,47 +477,166 @@ export default function PaymentsReceivedReportView({
     () => (dateRangeKey === "custom" ? customDateRange : getDateRangeValue(dateRangeKey)),
     [customDateRange, dateRangeKey]
   );
+  const getColumnByKey = (key: PaymentColumnKey) =>
+    columnGroups.flatMap((group) => group.options).find((option) => option.key === key);
+  const getColumnGroup = (key: PaymentColumnKey) => {
+    const group = columnGroups.find((section) => section.options.some((option) => option.key === key));
+    return group?.label ?? (isRefundMode ? "Refunds" : "Payments");
+  };
   const visibleColumns = useMemo(
     () => selectedColumns.map((key) => getColumnByKey(key)).filter(Boolean) as ColumnOption[],
-    [selectedColumns]
+    [selectedColumns, columnGroups]
   );
+  const getRecordFieldValue = (payment: Payment | RefundRecord, field: MoreFilterFieldKey | "") => {
+    if (!field) return "";
+    if (isRefundMode) {
+      const refund = payment as RefundRecord;
+      switch (field) {
+        case "payment-number":
+          return refund.refundNumber || refund.id || refund._id || "";
+        case "reference-number":
+          return refund.referenceNumber || refund.invoiceNumber || refund.paymentId || refund.creditNoteId || "";
+        case "customer-name":
+          return refund.customerName || "";
+        case "payment-mode":
+          return refund.paymentMethod || refund.paymentMode || "";
+        case "status":
+          return refund.status || "";
+        case "invoice-number":
+          return refund.invoiceNumber || "";
+        case "deposit-to":
+          return refund.fromAccount || "";
+        case "notes":
+          return refund.description || refund.notes || "";
+        default:
+          return "";
+      }
+    }
+    return getPaymentFieldValue(payment as Payment, field);
+  };
+  const getRecordGroupValue = (payment: Payment | RefundRecord, currentGroupBy: GroupByKey) => {
+    if (isRefundMode) {
+      const refund = payment as RefundRecord;
+      switch (currentGroupBy) {
+        case "customer-name":
+          return refund.customerName || "Unassigned";
+        case "payment-mode":
+          return refund.paymentMethod || refund.paymentMode || "Other";
+        case "status":
+          return refund.status || "Unknown";
+        case "deposit-to":
+          return refund.fromAccount || "Unassigned";
+        default:
+          return "All Refunds";
+      }
+    }
+
+    switch (currentGroupBy) {
+      case "customer-name":
+        return (payment as Payment).customerName || "Unassigned";
+      case "payment-mode":
+        return (payment as Payment).paymentMode || (payment as Payment).paymentMethod || "Other";
+      case "status":
+        return (payment as Payment).status || "Unknown";
+      case "deposit-to":
+        return (payment as Payment).depositTo || "Unassigned";
+      default:
+        return "All Payments";
+    }
+  };
+  const getValueOptions = (field: MoreFilterFieldKey | "", records: Array<Payment | RefundRecord>): Option[] => {
+    if (!field) return [];
+    if (isRefundMode) {
+      if (field === "payment-mode") {
+        return [
+          { key: "cash", label: "Cash" },
+          { key: "check", label: "Check" },
+          { key: "credit-card", label: "Credit Card" },
+          { key: "debit-card", label: "Debit Card" },
+          { key: "bank-transfer", label: "Bank Transfer" },
+          { key: "bank-remittance", label: "Bank Remittance" },
+          { key: "mobile-money", label: "Mobile Money" },
+          { key: "other", label: "Other" },
+        ];
+      }
+      if (field === "status") {
+        return [
+          { key: "processed", label: "Processed" },
+          { key: "pending", label: "Pending" },
+          { key: "failed", label: "Failed" },
+          { key: "void", label: "Void" },
+        ];
+      }
+      if (field === "customer-name") {
+        return Array.from(new Set(records.map((payment) => String((payment as RefundRecord).customerName || "").trim()).filter(Boolean))).map((label) => ({ key: label, label }));
+      }
+      if (field === "deposit-to") {
+        return Array.from(new Set(records.map((payment) => String((payment as RefundRecord).fromAccount || "").trim()).filter(Boolean))).map((label) => ({ key: label, label }));
+      }
+      return [];
+    }
+
+    return getPaymentValueOptions(field, records as Payment[]);
+  };
   const filteredPayments = useMemo(() => {
     const start = dateRange.start.getTime();
     const end = dateRange.end.getTime();
     return payments.filter((payment) => {
-      const rawDate = payment.paymentDate || payment.date;
+      const rawDate = isRefundMode
+        ? (payment as RefundRecord).refundDate || (payment as RefundRecord).createdAt
+        : (payment as Payment).paymentDate || (payment as Payment).date;
       const timestamp = new Date(rawDate || "").getTime();
       if (Number.isNaN(timestamp) || timestamp < start || timestamp > end) return false;
       return moreFilterRows.every((row) => {
         if (!row.field || !row.comparator) return true;
-        return compareText(getPaymentFieldValue(payment, row.field), row.comparator, row.value);
+        return compareText(getRecordFieldValue(payment, row.field), row.comparator, row.value);
       });
     });
-  }, [dateRange.end, dateRange.start, moreFilterRows, payments]);
+  }, [dateRange.end, dateRange.start, moreFilterRows, payments, isRefundMode]);
 
   const groupedPayments = useMemo(() => {
-    if (groupByKey === "none") return [{ label: "All Payments", items: filteredPayments }];
-    const map = new Map<string, Payment[]>();
+    if (groupByKey === "none") return [{ label: isRefundMode ? "All Refunds" : "All Payments", items: filteredPayments }];
+    const map = new Map<string, Array<Payment | RefundRecord>>();
     filteredPayments.forEach((payment) => {
-      const key = getGroupValue(payment, groupByKey);
+      const key = getRecordGroupValue(payment, groupByKey);
       const existing = map.get(key) || [];
       existing.push(payment);
       map.set(key, existing);
     });
     return Array.from(map.entries()).map(([label, items]) => ({ label, items }));
-  }, [filteredPayments, groupByKey]);
+  }, [filteredPayments, groupByKey, isRefundMode]);
 
   const totals = useMemo(
     () =>
       filteredPayments.reduce(
         (acc, payment) => {
-          acc.amount += Number(payment.amountReceived ?? payment.amount ?? 0) || 0;
-          acc.unused += Number(payment.unusedAmount ?? 0) || 0;
+          if (isRefundMode) {
+            const refund = payment as RefundRecord;
+            const amount = Number(refund.amount ?? 0) || 0;
+            const currency = String(refund.currency || baseCurrencyCode || "USD").trim().toUpperCase();
+            const exchangeRate = Number(
+              refund.exchangeRate ??
+                refund.exchange_rate ??
+                refund.fxRate ??
+                refund.rate ??
+                0,
+            );
+            const baseAmount =
+              currency === baseCurrencyCode || exchangeRate <= 0
+                ? amount
+                : amount * exchangeRate;
+            acc.amount += amount;
+            acc.unused += baseAmount;
+            return acc;
+          }
+
+          acc.amount += Number((payment as Payment).amountReceived ?? (payment as Payment).amount ?? 0) || 0;
+          acc.unused += Number((payment as Payment).unusedAmount ?? 0) || 0;
           return acc;
         },
         { amount: 0, unused: 0 }
       ),
-    [filteredPayments]
+    [filteredPayments, isRefundMode, baseCurrencyCode]
   );
 
   const debugEnabled = useMemo(() => {
@@ -448,15 +654,33 @@ export default function PaymentsReceivedReportView({
       setIsLoading(true);
       setError("");
       try {
-        const result = await getPayments();
+        const result = isRefundMode
+          ? await refundsAPI.getAll({ limit: 10000 })
+          : await getPayments();
         if (cancelled) return;
-        setPayments(result);
+        const rows = isRefundMode
+          ? Array.isArray(result?.data)
+            ? result.data
+            : []
+          : Array.isArray(result)
+            ? result
+            : [];
+        setPayments(rows);
         if (debugEnabled) {
-          console.debug("[PaymentsReceivedReport] loaded", { count: result.length });
+          console.debug("[PaymentsReceivedReport] loaded", {
+            mode,
+            count: rows.length,
+          });
         }
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Failed to load payment report");
+        setError(
+          err instanceof Error
+            ? err.message
+            : isRefundMode
+              ? "Failed to load refund report"
+              : "Failed to load payment report",
+        );
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -465,7 +689,7 @@ export default function PaymentsReceivedReportView({
     return () => {
       cancelled = true;
     };
-  }, [debugEnabled, refreshTick]);
+  }, [debugEnabled, isRefundMode, mode, refreshTick]);
 
   const applyDateRange = () => {
     if (dateRangeDraftKey === "custom") {
@@ -520,7 +744,7 @@ export default function PaymentsReceivedReportView({
     setCustomizeOpen(true);
   };
 
-  const availableColumns = PAYMENT_COLUMN_GROUPS.flatMap((group) => group.options).filter((option) => !draftColumns.includes(option.key));
+  const availableColumns = columnGroups.flatMap((group) => group.options).filter((option) => !draftColumns.includes(option.key));
   const selectedDraftColumns = draftColumns.map((key) => getColumnByKey(key)).filter(Boolean) as ColumnOption[];
   const filteredAvailableColumns = availableColumns.filter((option) => {
     const query = customizeSearch.trim().toLowerCase();
@@ -552,6 +776,46 @@ export default function PaymentsReceivedReportView({
   };
 
   const formatColumnValue = (column: ColumnOption, payment: Payment) => {
+    if (isRefundMode) {
+      const refund = payment as RefundRecord;
+      const amount = Number(refund.amount ?? 0) || 0;
+      const currency = String(refund.currency || baseCurrencyCode || "USD").trim().toUpperCase() || baseCurrencyCode;
+      const exchangeRate = Number(
+        refund.exchangeRate ?? refund.exchange_rate ?? refund.fxRate ?? refund.rate ?? 0,
+      );
+      const baseAmount =
+        currency === baseCurrencyCode || exchangeRate <= 0
+          ? amount
+          : amount * exchangeRate;
+
+      switch (column.key) {
+        case "payment-number":
+          return refund.refundNumber || refund.id || refund._id || "";
+        case "date":
+          return formatDate(refund.refundDate || refund.createdAt || "");
+        case "status":
+          return refund.status || "Processed";
+        case "reference-number":
+          return refund.referenceNumber || refund.invoiceNumber || refund.paymentId || refund.creditNoteId || "";
+        case "customer-name":
+          return refund.customerName || "";
+        case "payment-mode":
+          return refund.paymentMethod || refund.paymentMode || "";
+        case "notes":
+          return refund.description || refund.notes || "";
+        case "invoice-number":
+          return refund.invoiceNumber || "";
+        case "deposit-to":
+          return refund.fromAccount || "";
+        case "amount":
+          return formatMoney(amount, currency);
+        case "unused-amount":
+          return formatMoney(baseAmount, baseCurrencyCode);
+        default:
+          return "";
+      }
+    }
+
     switch (column.key) {
       case "payment-number":
         return payment.paymentNumber || payment.id || "";
@@ -580,7 +844,11 @@ export default function PaymentsReceivedReportView({
     }
   };
 
-  const groupBySelections = GROUP_BY_OPTIONS.filter((option) => option.key !== "none");
+  const groupBySelections = groupByOptions.filter((option) => option.key !== "none");
+  const rangeLabel =
+    subtitleMode === "as-of"
+      ? `As of ${formatDate(dateRange.end)}`
+      : `From ${formatDate(dateRange.start)} To ${formatDate(dateRange.end)}`;
 
   return (
     <div className="relative min-h-[calc(100vh-64px)] pt-3">
@@ -600,7 +868,7 @@ export default function PaymentsReceivedReportView({
               </button>
               <div className="flex min-w-0 items-baseline gap-2">
                 <h1 className="truncate text-[24px] font-semibold leading-tight text-[#0f172a]">{reportName}</h1>
-                <span className="whitespace-nowrap text-sm text-[#475569]">- As of {formatDate(dateRange.end)}</span>
+                <span className="whitespace-nowrap text-sm text-[#475569]">- {rangeLabel}</span>
               </div>
             </div>
           </div>
@@ -758,7 +1026,7 @@ export default function PaymentsReceivedReportView({
           <div className="mt-2 rounded-lg border border-[#d7dce7] bg-white p-4 shadow-sm">
             <div className="space-y-3">
               {moreFilterRows.map((row, index) => {
-                const valueOptions = getPaymentValueOptions(row.field, payments);
+                const valueOptions = getValueOptions(row.field, payments);
                 const valueMode = row.comparator === "is-empty" || row.comparator === "is-not-empty" ? "none" : valueOptions.length > 0 ? "dropdown" : "text";
                 return (
                   <div key={row.id} className="flex flex-wrap items-center gap-3">
@@ -771,7 +1039,7 @@ export default function PaymentsReceivedReportView({
                       className="h-10 w-[230px] rounded-md border border-[#cbd5e1] bg-white px-3 text-sm text-[#0f172a]"
                     >
                       <option value="">Select a field</option>
-                      {MORE_FILTER_FIELD_OPTIONS.map((option) => (
+                      {moreFilterFieldOptions.map((option) => (
                         <option key={option.key} value={option.key}>
                           {option.label}
                         </option>
@@ -931,7 +1199,9 @@ export default function PaymentsReceivedReportView({
                   ) : groupedPayments.length === 0 ? (
                     <tr>
                       <td className="px-4 py-10 text-center text-sm text-[#64748b]" colSpan={visibleColumns.length}>
-                        No payments found for the selected filters.
+                        {isRefundMode
+                          ? "No refunds found for the selected filters."
+                          : "No payments found for the selected filters."}
                       </td>
                     </tr>
                 ) : (
@@ -1091,7 +1361,7 @@ export default function PaymentsReceivedReportView({
                     </div>
                   </div>
                   <div className="max-h-[420px] overflow-y-auto p-2">
-                    {PAYMENT_COLUMN_GROUPS.map((group) => {
+                    {columnGroups.map((group) => {
                       const items = filteredAvailableColumns.filter((option) => getColumnGroup(option.key) === group.label);
                       if (items.length === 0) return null;
                       return (

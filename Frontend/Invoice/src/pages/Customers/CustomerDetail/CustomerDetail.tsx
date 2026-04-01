@@ -313,6 +313,13 @@ export default function CustomerDetail() {
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
     };
+    const readFileAsDataUrl = (file: File) =>
+        new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ""));
+            reader.onerror = () => reject(reader.error || new Error("Failed to read attachment."));
+            reader.readAsDataURL(file);
+        });
     const mapDocumentsToAttachments = (documents: any[] = []) => {
         if (!Array.isArray(documents)) return [];
         return documents.map((doc: any, index: number) => ({
@@ -320,7 +327,7 @@ export default function CustomerDetail() {
             documentId: doc.documentId || doc.id || doc._id || null,
             name: doc.name || 'Unnamed Document',
             size: doc.size || 'Unknown',
-            url: doc.url || '',
+            url: doc.contentUrl || doc.url || doc.previewUrl || '',
             uploadedAt: doc.uploadedAt
         }));
     };
@@ -2971,12 +2978,14 @@ export default function CustomerDetail() {
                 });
 
                 if (uploadResponse?.success && uploadResponse?.data) {
+                    const dataUrl = await readFileAsDataUrl(file);
                     uploadedDocuments.push({
                         documentId: uploadResponse.data._id || uploadResponse.data.id,
                         name: file.name,
                         size: formatFileSize(file.size),
-                        url: uploadResponse.data.url || "",
-                        uploadedAt: uploadResponse.data.createdAt || new Date()
+                        url: dataUrl || uploadResponse.data.url || "",
+                        contentUrl: dataUrl || uploadResponse.data.url || "",
+                        uploadedAt: uploadResponse.data.uploadedAt || new Date().toISOString()
                     });
                 }
             }
