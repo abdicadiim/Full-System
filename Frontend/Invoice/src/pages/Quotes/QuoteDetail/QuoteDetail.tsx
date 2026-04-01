@@ -51,6 +51,7 @@ import { getQuoteById, getQuotes, updateQuote, deleteQuotes, getCustomers, getSa
 import { currenciesAPI, documentsAPI, quotesAPI, senderEmailsAPI } from "../../../services/api";
 import { toast } from "react-toastify";
 import { resolveVerifiedPrimarySender } from "../../../utils/emailSenderDisplay";
+import QuoteCommentsPanel from "./QuoteCommentsPanel";
 
 const QuoteDetail = () => {
   const { quoteId } = useParams();
@@ -5207,8 +5208,22 @@ const QuoteDetail = () => {
           </div>
         )}
 
-        {/* Comments Sidebar */}
         {showCommentsSidebar && (
+          <QuoteCommentsPanel
+            open={showCommentsSidebar}
+            onClose={() => setShowCommentsSidebar(false)}
+            quoteId={String(quoteId || quote?.id || quote?._id || "")}
+            comments={comments}
+            onCommentsChange={(nextComments) => {
+              setComments(nextComments as any);
+              setQuote((prev: any) => (prev ? { ...prev, comments: nextComments } : prev));
+            }}
+            updateQuote={updateQuote}
+          />
+        )}
+
+        {/* Comments Sidebar */}
+        {false && showCommentsSidebar && (
           <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-end">
             <div
               className="bg-white w-full max-w-md h-full shadow-xl flex flex-col"
