@@ -757,6 +757,11 @@ const RECEIVABLES_CONFIG: Record<ReceivablesReportId, ReportConfig> = {
     showEntities: false,
     showReportBy: true,
     showAgingBy: false,
+    defaultReportBy: "invoice-date",
+    reportByOptions: [
+      { key: "invoice-date", label: "Invoice Date" },
+      { key: "due-date", label: "Due Date" },
+    ],
     rightControls: [
       {
         label: "Group By",
@@ -848,6 +853,125 @@ const RECEIVABLES_CONFIG: Record<ReceivablesReportId, ReportConfig> = {
       "customer-name",
       "total",
       "balance",
+    ],
+  },
+  "quote-details": {
+    fetcher: reportsAPI.getQuoteDetails,
+    title: "Quote Details",
+    subtitleMode: "from-to",
+    defaultRange: "this-month",
+    showEntities: false,
+    showReportBy: true,
+    showAgingBy: false,
+    defaultReportBy: "quote-date",
+    reportByOptions: [
+      { key: "quote-date", label: "Quote Date" },
+      { key: "expiry-date", label: "Expiry Date" },
+    ],
+    rightControls: [
+      {
+        label: "Group By",
+        state: "groupBy",
+        options: [
+          { key: "none", label: "None" },
+          { key: "customer-name", label: "Customer Name" },
+          { key: "status", label: "Status" },
+          { key: "project-name", label: "Project Name" },
+          { key: "currency", label: "Currency" },
+        ],
+      },
+    ],
+    moreFilterGroups: [
+      {
+        label: "Reports",
+        options: [
+          {
+            key: "status",
+            label: "Status",
+            values: [
+              { key: "draft", label: "Draft" },
+              { key: "sent", label: "Sent" },
+              { key: "accepted", label: "Accepted" },
+              { key: "declined", label: "Declined" },
+              { key: "approved", label: "Approved" },
+              { key: "invoiced", label: "Invoiced" },
+              { key: "converted", label: "Converted" },
+            ],
+          },
+          { key: "quote-date", label: "Quote Date" },
+          { key: "expiry-date", label: "Expiry Date" },
+          { key: "quote-number", label: "Quote Number" },
+          { key: "reference-number", label: "Reference Number" },
+          { key: "customer-name", label: "Customer Name" },
+          { key: "project-name", label: "Project Name" },
+          { key: "invoice-number", label: "Invoice#" },
+          { key: "quote-amount", label: "Quote Amount" },
+          {
+            key: "currency",
+            label: "Currency",
+            values: CURRENCY_CODES.map((value) => ({
+              key: value,
+              label: value,
+            })),
+          },
+        ],
+      },
+      {
+        label: "Locations",
+        options: [
+          {
+            key: "location",
+            label: "Location",
+            values: [
+              { key: "mogadishu", label: "Mogadishu" },
+              { key: "hargeisa", label: "Hargeisa" },
+            ],
+          },
+        ],
+      },
+    ],
+    moreFilterValues: {
+      status: [
+        { key: "draft", label: "Draft" },
+        { key: "sent", label: "Sent" },
+        { key: "accepted", label: "Accepted" },
+        { key: "declined", label: "Declined" },
+        { key: "approved", label: "Approved" },
+        { key: "invoiced", label: "Invoiced" },
+        { key: "converted", label: "Converted" },
+      ],
+      currency: CURRENCY_CODES.map((value) => ({ key: value, label: value })),
+      location: [
+        { key: "mogadishu", label: "Mogadishu" },
+        { key: "hargeisa", label: "Hargeisa" },
+      ],
+    },
+    columns: [
+      {
+        label: "Reports",
+        options: [
+          { key: "name", label: "Quote#", kind: "text", locked: true },
+          { key: "status", label: "Status", kind: "text" },
+          { key: "quote-date", label: "Quote Date", kind: "date" },
+          { key: "expiry-date", label: "Expiry Date", kind: "date" },
+          { key: "reference-number", label: "Reference#", kind: "text" },
+          { key: "customer-name", label: "Customer Name", kind: "text" },
+          { key: "invoice-number", label: "Invoice#", kind: "text" },
+          { key: "project-name", label: "Project Name", kind: "text" },
+          { key: "quote-amount", label: "Quote Amount", kind: "currency" },
+        ],
+      },
+    ],
+    defaultColumns: [
+      "name",
+      "status",
+      "quote-date",
+      "expiry-date",
+      "reference-number",
+      "customer-name",
+      "invoice-number",
+      "project-name",
+      "quote-amount",
     ],
   },
 };
