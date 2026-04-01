@@ -403,11 +403,14 @@ const ALL_REPORTS: ReportDefinition[] = [
     id: "customer-balance-summary",
     categoryId: "receivables",
     name: "Customer Balance Summary",
-    summary: "Consolidated receivable snapshot by customer.",
+    summary:
+      "Consolidated receivable snapshot by customer with invoiced, received, and closing balance values.",
     howItHelps:
-      "Quick account-level visibility without opening each transaction.",
+      "Track customer balances, receipts, and exposure from one summary view.",
+    source: "Invoices, Credit Notes, Sales Receipts",
     functionSupport: support(
       "filter",
+      "compare",
       "group",
       "customizeColumns",
       "sort",

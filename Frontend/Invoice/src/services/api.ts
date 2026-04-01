@@ -2747,6 +2747,18 @@ export const reportsAPI = {
     }
     return res as any;
   },
+  getCustomerBalanceSummary: async (params?: Record<string, any>) => {
+    const res = await request({
+      path: "/reports/customer-balance-summary",
+      params,
+    });
+    if (!res?.success) {
+      throw new Error(
+        res?.message || "Failed to fetch customer balance summary report",
+      );
+    }
+    return res as any;
+  },
   getSalesByItem: async (params?: Record<string, any>) => {
     const res = await request({ path: "/reports/sales-by-item", params });
     if (!res?.success) {

@@ -1212,6 +1212,174 @@ const buildRows = (
   };
 };
 
+const buildCustomerBalanceSummaryRows = (
+  rows: Array<{ source: ReportEntity; row: any }>,
+  customers: any[],
+  range: { start: Date; end: Date },
+  moreFilters: MoreFilterRow[],
+) => {
+  const customerById = new Map<string, any>();
+  const customerByName = new Map<string, any>();
+  for (const customer of customers || []) {
+    const id = String(customer?._id || customer?.id || "").trim();
+    const name = resolveCustomerName(customer);
+    if (id) customerById.set(id, customer);
+    if (name) customerByName.set(normalizeText(name), customer);
+    const number = String(customer?.customerNumber || "").trim();
+    if (number) customerByName.set(normalizeText(number), customer);
+  }
+
+  const periodStart = startOfDay(range.start);
+  const periodEnd = endOfDay(range.end);
+  const groupMap = new Map<string, any>();
+  let currency = "";
+
+  for (const item of rows || []) {
+    const source = item?.source || "invoice";
+    const row = item?.row || {};
+    const activeDate = getDocumentDate(row);
+    if (!activeDate || activeDate > periodEnd) continue;
+
+    const customerId = String(
+      row?.customerId || row?.customer?._id || row?.customer?.id || "",
+    ).trim();
+    const fallbackName = String(
+      row?.customerName ||
+        row?.customer?.displayName ||
+        row?.customer?.name ||
+        row?.customer?.companyName ||
+        "",
+    ).trim();
+    const customer =
+      customerById.get(customerId) ||
+      customerByName.get(normalizeText(fallbackName)) ||
+      row?.customer ||
+      null;
+    const customerContext = buildCustomerContext(customer, fallbackName);
+    const customerName = customerContext.name || fallbackName || "Unassigned";
+    const location = String(
+      row?.locationName ||
+        row?.location ||
+        customerContext["billing-city"] ||
+        customerContext["shipping-city"] ||
+        customerContext["billing-state"] ||
+        "",
+    ).trim();
+    const rowCurrency =
+      String(row?.currency || customer?.currency || "SOS").trim() || "SOS";
+    const customerKey = getCustomerKey({
+      customer,
+      customerName,
+      customerId,
+    });
+    const amount = Math.abs(asNumber(row?.total, 0));
+    const inPeriod = activeDate >= periodStart && activeDate <= periodEnd;
+
+    if (!groupMap.has(customerKey)) {
+      groupMap.set(customerKey, {
+        values: {
+          ...customerContext,
+          name: customerName,
+          location,
+          currency: rowCurrency,
+          "invoice-amount": 0,
+          "invoice-amount-fcy": 0,
+          "amount-received": 0,
+          "amount-received-fcy": 0,
+          "closing-balance": 0,
+          "closing-balance-fcy": 0,
+        },
+      });
+      if (!currency) currency = rowCurrency;
+    }
+
+    const target = groupMap.get(customerKey);
+    target.values.currency =
+      rowCurrency || String(target.values.currency || "");
+    target.values.location =
+      location || String(target.values.location || "");
+
+    if (source === "invoice") {
+      if (inPeriod) {
+        target.values["invoice-amount"] =
+          asNumber(target.values["invoice-amount"], 0) + amount;
+        target.values["invoice-amount-fcy"] =
+          asNumber(target.values["invoice-amount-fcy"], 0) + amount;
+      }
+      target.values["closing-balance"] =
+        asNumber(target.values["closing-balance"], 0) + amount;
+      target.values["closing-balance-fcy"] =
+        asNumber(target.values["closing-balance-fcy"], 0) + amount;
+    } else if (source === "credit-note") {
+      target.values["closing-balance"] =
+        asNumber(target.values["closing-balance"], 0) - amount;
+      target.values["closing-balance-fcy"] =
+        asNumber(target.values["closing-balance-fcy"], 0) - amount;
+    } else if (source === "sales-receipt") {
+      if (inPeriod) {
+        target.values["amount-received"] =
+          asNumber(target.values["amount-received"], 0) + amount;
+        target.values["amount-received-fcy"] =
+          asNumber(target.values["amount-received-fcy"], 0) + amount;
+      }
+      target.values["closing-balance"] =
+        asNumber(target.values["closing-balance"], 0) - amount;
+      target.values["closing-balance-fcy"] =
+        asNumber(target.values["closing-balance-fcy"], 0) - amount;
+    }
+  }
+
+  const groupedRows = [...groupMap.values()].filter((item) =>
+    [
+      "invoice-amount",
+      "amount-received",
+      "closing-balance",
+    ].some((key) => asNumber(item.values[key], 0) !== 0),
+  );
+
+  groupedRows.sort((left, right) => {
+    const balanceDelta =
+      Math.abs(asNumber(right.values["closing-balance"], 0)) -
+      Math.abs(asNumber(left.values["closing-balance"], 0));
+    if (balanceDelta !== 0) return balanceDelta;
+    return String(left.values.name || "").localeCompare(
+      String(right.values.name || ""),
+    );
+  });
+
+  const filteredRows = groupedRows.filter((item) =>
+    matchesMoreFilters(
+      {
+        name: item.values.name,
+        currency: item.values.currency,
+        location: item.values.location,
+        "invoice-amount": item.values["invoice-amount"],
+        "amount-received": item.values["amount-received"],
+        "closing-balance": item.values["closing-balance"],
+      },
+      moreFilters,
+    ),
+  );
+
+  return {
+    rows: filteredRows,
+    currency: currency || "SOS",
+    totals: filteredRows.reduce(
+      (acc, row) => {
+        acc["invoice-amount"] += asNumber(row.values["invoice-amount"], 0);
+        acc["amount-received"] += asNumber(row.values["amount-received"], 0);
+        acc["closing-balance"] += asNumber(row.values["closing-balance"], 0);
+        return acc;
+      },
+      {
+        "invoice-amount": 0,
+        "amount-received": 0,
+        "closing-balance": 0,
+      } as Record<string, number>,
+    ),
+  };
+};
+
 const getInvoiceWriteOffDate = (row: any) =>
   asDate(
     row?.writeOffDate ||
@@ -2223,6 +2391,86 @@ export const getSalesByCustomerReport: express.RequestHandler = async (
         transactions,
         customers,
         normalizeRange(compareRange)!,
+        moreFilters,
+      )
+    : null;
+
+  return res.json({
+    success: true,
+    data: {
+      rows: main.rows,
+      currency: main.currency,
+      totals: main.totals,
+      comparison,
+      appliedFilters: {
+        fromDate: range.start.toISOString(),
+        toDate: range.end.toISOString(),
+        compareWith,
+        compareCount,
+        entities,
+        moreFilters,
+      },
+    },
+  });
+};
+
+export const getCustomerBalanceSummaryReport: express.RequestHandler = async (
+  req,
+  res,
+) => {
+  const orgId = requireOrgId(req, res);
+  if (!orgId) return;
+
+  const range = getDateRangeFromQuery(req);
+  const compareWith = String(
+    req.query.compareWith ?? req.query.compare_with ?? "none",
+  ).trim();
+  const compareCount = Math.max(
+    1,
+    Number(req.query.compareCount ?? req.query.compare_count ?? 1) || 1,
+  );
+  const entities = parseEntities(req.query.entities ?? req.query.entity_list);
+  const moreFilters = parseMoreFilters(
+    req.query.moreFilters ?? req.query.more_filters ?? req.query.filter_rows,
+  );
+
+  const [customers, invoices, creditNotes, salesReceipts] = await Promise.all([
+    Customer.find({ organizationId: orgId }).lean(),
+    Invoice.find({ organizationId: orgId }).lean(),
+    CreditNote.find({ organizationId: orgId }).lean(),
+    SalesReceipt.find({ organizationId: orgId }).lean(),
+  ]);
+
+  const transactions: Array<{ source: ReportEntity; row: any }> = [];
+  if (entities.includes("invoice")) {
+    for (const row of invoices || [])
+      transactions.push({ source: "invoice", row });
+  }
+  if (entities.includes("credit-note")) {
+    for (const row of creditNotes || [])
+      transactions.push({ source: "credit-note", row });
+  }
+  if (entities.includes("sales-receipt")) {
+    for (const row of salesReceipts || [])
+      transactions.push({ source: "sales-receipt", row });
+  }
+
+  const main = buildCustomerBalanceSummaryRows(
+    transactions,
+    customers || [],
+    range,
+    moreFilters,
+  );
+
+  const compareRange =
+    compareWith && compareWith !== "none"
+      ? shiftDateRange(range, compareWith, compareCount)
+      : null;
+  const comparison = compareRange
+    ? buildCustomerBalanceSummaryRows(
+        transactions,
+        customers || [],
+        compareRange,
         moreFilters,
       )
     : null;

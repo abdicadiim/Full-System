@@ -331,7 +331,11 @@ const COMPARE_WITH_NUMBER_OPTIONS = Array.from({ length: 35 }, (_, index) =>
 );
 
 type ReportColumnKey = string;
-type SalesReportId = "sales-by-customer" | "bad-debts" | "bank-charges";
+type SalesReportId =
+  | "sales-by-customer"
+  | "customer-balance-summary"
+  | "bad-debts"
+  | "bank-charges";
 type ReportColumnKind = "text" | "number" | "currency";
 
 type ReportColumnOption = {
@@ -351,6 +355,14 @@ const REPORT_MODE_COLUMN_LABEL_OVERRIDES: Record<
   Partial<Record<ReportColumnKey, string>>
 > = {
   "sales-by-customer": {},
+  "customer-balance-summary": {
+    "invoice-amount": "Invoiced Amount",
+    "invoice-amount-fcy": "Invoiced Amount (FCY)",
+    "amount-received": "Amount Received",
+    "amount-received-fcy": "Amount Received (FCY)",
+    "closing-balance": "Closing Balance",
+    "closing-balance-fcy": "Closing Balance (FCY)",
+  },
   "bad-debts": {
     sales: "Write Off Amount (FCY)",
     "sales-with-tax": "Write Off Amount (BCY)",
@@ -390,6 +402,26 @@ const REPORT_COLUMN_GROUPS: ReportColumnGroup[] = [
       {
         key: "invoice-amount-fcy",
         label: "Invoice Amount (FCY)",
+        kind: "currency",
+      },
+      {
+        key: "amount-received",
+        label: "Amount Received",
+        kind: "currency",
+      },
+      {
+        key: "amount-received-fcy",
+        label: "Amount Received (FCY)",
+        kind: "currency",
+      },
+      {
+        key: "closing-balance",
+        label: "Closing Balance",
+        kind: "currency",
+      },
+      {
+        key: "closing-balance-fcy",
+        label: "Closing Balance (FCY)",
         kind: "currency",
       },
       {
@@ -580,6 +612,12 @@ type SalesByCustomerRow = {
 
 const formatCurrency = (value: number, currency = "SOS") =>
   `${currency}${value.toFixed(2)}`;
+
+const formatBalanceCurrency = (value: number, currency = "SOS") => {
+  const absolute = Math.abs(value).toFixed(2);
+  if (value === 0) return `${currency}${absolute}`;
+  return `${currency}${absolute} ${value < 0 ? "Cr" : "Dr"}`;
+};
 
 type ReportsDrawerSection = {
   id: string;
@@ -929,6 +967,8 @@ function SalesByCustomerReportView({
   const moreFiltersRef = useRef<HTMLDivElement | null>(null);
   const exportRef = useRef<HTMLDivElement | null>(null);
   const isSalesByCustomerReport = reportId === "sales-by-customer";
+  const isCustomerBalanceSummaryReport =
+    reportId === "customer-balance-summary";
   const isBadDebtsReport = reportId === "bad-debts";
   const isBankChargesReport = reportId === "bank-charges";
   const defaultDateRangeKey: DateRangeKey = isSalesByCustomerReport
@@ -948,7 +988,11 @@ function SalesByCustomerReportView({
   const [customDateRangeMonth, setCustomDateRangeMonth] = useState<Date>(() =>
     getStartOfMonth(getDateRangeValue(defaultDateRangeKey).start),
   );
-  const [entityKeys, setEntityKeys] = useState<EntityKey[]>([]);
+  const [entityKeys, setEntityKeys] = useState<EntityKey[]>(
+    isCustomerBalanceSummaryReport
+      ? ENTITY_OPTIONS.map((option) => option.key)
+      : [],
+  );
   const [isEntityOpen, setIsEntityOpen] = useState(false);
   const [entitySearch, setEntitySearch] = useState("");
   const [compareWithKey, setCompareWithKey] = useState<CompareWithKey>("none");
@@ -1007,12 +1051,16 @@ function SalesByCustomerReportView({
     ReportColumnKey[]
   >(isSalesByCustomerReport
     ? ["name", "invoice-count", "sales", "sales-with-tax"]
-    : ["name", "sales", "sales-with-tax"]);
+    : isCustomerBalanceSummaryReport
+      ? ["name", "invoice-amount", "amount-received", "closing-balance"]
+      : ["name", "sales", "sales-with-tax"]);
   const [customizeDraftSelectedColumns, setCustomizeDraftSelectedColumns] =
     useState<ReportColumnKey[]>(
       isSalesByCustomerReport
         ? ["name", "invoice-count", "sales", "sales-with-tax"]
-        : ["name", "sales", "sales-with-tax"],
+        : isCustomerBalanceSummaryReport
+          ? ["name", "invoice-amount", "amount-received", "closing-balance"]
+          : ["name", "sales", "sales-with-tax"],
     );
   const { settings } = useSettings();
   const organizationName = String(
@@ -1518,6 +1566,11 @@ function SalesByCustomerReportView({
   ) => {
     if (value === undefined || value === null || value === "") return "—";
     const option = getReportColumnOption(key);
+    if (
+      (key === "closing-balance" || key === "closing-balance-fcy") &&
+      typeof value === "number"
+    )
+      return formatBalanceCurrency(value, reportCurrency || "SOS");
     if (option.kind === "currency" && typeof value === "number")
       return formatCurrency(value, reportCurrency || "SOS");
     return String(value);
@@ -1532,6 +1585,11 @@ function SalesByCustomerReportView({
           return typeof value === "number" ? sum + value : sum;
         }, 0);
         if (option.kind === "number") return total;
+        if (
+          option.key === "closing-balance" ||
+          option.key === "closing-balance-fcy"
+        )
+          return formatBalanceCurrency(total, reportCurrency || "SOS");
         if (option.kind === "currency")
           return formatCurrency(total, reportCurrency || "SOS");
         return "";
@@ -1584,11 +1642,13 @@ function SalesByCustomerReportView({
 
       try {
         const query = buildSalesByCustomerQuery();
-        const response = isBankChargesReport
-          ? await reportsAPI.getBankCharges(query)
-          : isBadDebtsReport
-            ? await reportsAPI.getBadDebts(query)
-            : await reportsAPI.getSalesByCustomer(query);
+        const response = isCustomerBalanceSummaryReport
+          ? await reportsAPI.getCustomerBalanceSummary(query)
+          : isBankChargesReport
+            ? await reportsAPI.getBankCharges(query)
+            : isBadDebtsReport
+              ? await reportsAPI.getBadDebts(query)
+              : await reportsAPI.getSalesByCustomer(query);
         if (cancelled) return;
 
         const data = response?.data || {};
@@ -1619,7 +1679,12 @@ function SalesByCustomerReportView({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isBadDebtsReport, isBankChargesReport, reportRefreshTick]);
+  }, [
+    isBadDebtsReport,
+    isBankChargesReport,
+    isCustomerBalanceSummaryReport,
+    reportRefreshTick,
+  ]);
 
   const closeAllOpenPanels = () => {
     setIsCompareWithOpen(false);
