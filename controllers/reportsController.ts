@@ -1853,3 +1853,44 @@ export const getInvoiceDetailsReport: express.RequestHandler = async (req, res) 
     },
   });
 };
+
+export const getQuoteDetailsReport: express.RequestHandler = async (req, res) => {
+  const orgId = requireOrgId(req, res);
+  if (!orgId) return;
+
+  const range = getDateRangeFromQuery(req);
+  const compareWith = String(req.query.compareWith ?? req.query.compare_with ?? "none").trim();
+  const compareCount = Math.max(1, Number(req.query.compareCount ?? req.query.compare_count ?? 1) || 1);
+  const reportBy = String(req.query.reportBy ?? req.query.report_by ?? "quote-date").trim() || "quote-date";
+  const groupBy = String(req.query.groupBy ?? req.query.group_by ?? "none").trim() || "none";
+  const moreFilters = parseMoreFilters(req.query.moreFilters ?? req.query.more_filters ?? req.query.filter_rows);
+
+  const [customers, quotes, invoices] = await Promise.all([
+    Customer.find({ organizationId: orgId }).lean(),
+    Quote.find({ organizationId: orgId }).lean(),
+    Invoice.find({ organizationId: orgId }).lean(),
+  ]);
+
+  const main = buildQuoteDetailsRows(quotes || [], invoices || [], customers || [], range, reportBy, moreFilters);
+  const compareRange = compareWith && compareWith !== "none" ? shiftDateRange(range, compareWith, compareCount) : null;
+  const comparison = compareRange ? buildQuoteDetailsRows(quotes || [], invoices || [], customers || [], compareRange, reportBy, moreFilters) : null;
+
+  return res.json({
+    success: true,
+    data: {
+      rows: main.rows,
+      currency: main.currency,
+      totals: main.totals,
+      comparison,
+      appliedFilters: {
+        fromDate: range.start.toISOString(),
+        toDate: range.end.toISOString(),
+        compareWith,
+        compareCount,
+        reportBy,
+        groupBy,
+        moreFilters,
+      },
+    },
+  });
+};

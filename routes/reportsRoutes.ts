@@ -4,6 +4,7 @@ import {
   getARAgingDetailsReport,
   getARAgingSummaryReport,
   getInvoiceDetailsReport,
+  getQuoteDetailsReport,
   getSalesByCustomerReport,
   getSalesByItemReport,
   getSalesBySalesPersonReport,
@@ -18,3 +19,4 @@ reportsRoutes.get("/sales-by-sales-person", getSalesBySalesPersonReport);
 reportsRoutes.get("/ar-aging-summary", getARAgingSummaryReport);
 reportsRoutes.get("/ar-aging-details", getARAgingDetailsReport);
 reportsRoutes.get("/invoice-details", getInvoiceDetailsReport);
+reportsRoutes.get("/quote-details", getQuoteDetailsReport);
