@@ -4,6 +4,7 @@ import { Customer } from "../models/Customer.js";
 import { CreditNote } from "../models/CreditNote.js";
 import { Invoice } from "../models/Invoice.js";
 import { Item } from "../models/Item.js";
+import { Organization } from "../models/Organization.js";
 import { Quote } from "../models/Quote.js";
 import { Salesperson } from "../models/Salesperson.js";
 import { ReportingTag } from "../models/ReportingTag.js";
@@ -1210,6 +1211,230 @@ const buildRows = (
   };
 };
 
+const getInvoiceWriteOffDate = (row: any) =>
+  asDate(
+    row?.writeOffDate ||
+      row?.writtenOffDate ||
+      row?.write_off_date ||
+      row?.updatedAt ||
+      row?.createdAt ||
+      row?.date ||
+      row?.invoiceDate,
+  );
+
+const getInvoiceIssueDate = (row: any) =>
+  asDate(row?.date || row?.invoiceDate || row?.createdAt);
+
+const getInvoiceWriteOffAmount = (row: any) => {
+  const manualSource =
+    row?.writeOffAmount ??
+    row?.writtenOffAmount ??
+    row?.writeOffBalance ??
+    row?.badDebtAmount ??
+    row?.badDebt;
+  const manualAmount = Number(manualSource);
+  if (Number.isFinite(manualAmount) && manualAmount > 0) {
+    return manualAmount;
+  }
+  return getDocumentBalanceDue(row);
+};
+
+const getInvoiceWriteOffAmountBase = (
+  row: any,
+  amount: number,
+  baseCurrency: string,
+) => {
+  const rowCurrency = String(row?.currency || baseCurrency || "").trim();
+  if (!rowCurrency || rowCurrency.toUpperCase() === baseCurrency.toUpperCase()) {
+    return amount;
+  }
+
+  const exchangeRate = asNumber(
+    row?.exchangeRate ?? row?.exchange_rate ?? row?.fxRate ?? row?.rate,
+    0,
+  );
+  if (exchangeRate > 0) {
+    return amount * exchangeRate;
+  }
+  return amount;
+};
+
+const getBadDebtReason = (row: any) =>
+  String(
+    row?.writeOffReason ||
+      row?.writtenOffReason ||
+      row?.badDebtReason ||
+      row?.reason ||
+      row?.notes ||
+      "",
+  ).trim();
+
+const buildBadDebtRows = (
+  rows: Array<{ row: any }>,
+  customers: any[],
+  range: { start: Date; end: Date },
+  moreFilters: MoreFilterRow[],
+  reportBy: string,
+  baseCurrency: string,
+) => {
+  const customerById = new Map<string, any>();
+  const customerByName = new Map<string, any>();
+  for (const customer of customers || []) {
+    const id = String(customer?._id || customer?.id || "").trim();
+    const name = resolveCustomerName(customer);
+    if (id) customerById.set(id, customer);
+    if (name) customerByName.set(normalizeText(name), customer);
+    const number = String(customer?.customerNumber || "").trim();
+    if (number) customerByName.set(normalizeText(number), customer);
+  }
+
+  const groupMap = new Map<string, any>();
+  let currency = baseCurrency || "SOS";
+  const reportByKey = String(reportBy || "written-off-date").trim();
+
+  for (const item of rows || []) {
+    const row = item?.row || {};
+    const status = normalizeText(row?.status);
+    const isWriteOff =
+      status === "write_off" ||
+      status === "write off" ||
+      Boolean(row?.writeOff) ||
+      Boolean(row?.isWriteOff);
+
+    if (!isWriteOff) continue;
+
+    const issueDate = getInvoiceIssueDate(row);
+    const writeOffDate = getInvoiceWriteOffDate(row);
+    const activeDate =
+      reportByKey === "invoice-date" ? issueDate : writeOffDate || issueDate;
+
+    if (!activeDate || activeDate < range.start || activeDate > range.end) {
+      continue;
+    }
+
+    const customerId = String(
+      row?.customerId || row?.customer?._id || row?.customer?.id || "",
+    ).trim();
+    const fallbackName = String(
+      row?.customerName ||
+        row?.customer?.displayName ||
+        row?.customer?.name ||
+        row?.customer?.companyName ||
+        "",
+    ).trim();
+    const customer =
+      customerById.get(customerId) ||
+      customerByName.get(normalizeText(fallbackName)) ||
+      row?.customer ||
+      null;
+
+    const customerContext = buildCustomerContext(customer, fallbackName);
+    const location = String(
+      row?.locationName ||
+        row?.location ||
+        customerContext["billing-city"] ||
+        customerContext["shipping-city"] ||
+        customerContext["billing-state"] ||
+        "",
+    ).trim();
+    const rowCurrency =
+      String(row?.currency || customer?.currency || baseCurrency || "SOS")
+        .trim() || baseCurrency || "SOS";
+    const writeOffAmount = getInvoiceWriteOffAmount(row);
+    const writeOffAmountBase = getInvoiceWriteOffAmountBase(
+      row,
+      writeOffAmount,
+      baseCurrency || rowCurrency || "SOS",
+    );
+
+    const baseValues = {
+      ...customerContext,
+      location,
+      currency: rowCurrency,
+      "invoice-number": String(
+        row?.invoiceNumber || row?.number || row?.transactionNumber || "",
+      ).trim(),
+      "invoice-date": issueDate ? issueDate.toISOString() : "",
+      "written-off-date": writeOffDate ? writeOffDate.toISOString() : "",
+      reason: getBadDebtReason(row),
+      "write-off-amount-fcy": writeOffAmount,
+      "write-off-amount-bcy": writeOffAmountBase,
+    };
+
+    if (!matchesMoreFilters(baseValues, moreFilters)) continue;
+
+    const key = String(
+      baseValues["customer-id"] || baseValues.name || "unassigned",
+    )
+      .trim()
+      .toLowerCase();
+
+    if (!groupMap.has(key)) {
+      groupMap.set(key, {
+        values: {
+          ...baseValues,
+          "invoice-count": 0,
+          "write-off-amount-fcy": 0,
+          "write-off-amount-bcy": 0,
+        },
+      });
+      if (!currency) currency = rowCurrency;
+    }
+
+    const target = groupMap.get(key);
+    target.values["invoice-count"] =
+      asNumber(target.values["invoice-count"], 0) + 1;
+    target.values["write-off-amount-fcy"] =
+      asNumber(target.values["write-off-amount-fcy"], 0) + writeOffAmount;
+    target.values["write-off-amount-bcy"] =
+      asNumber(target.values["write-off-amount-bcy"], 0) + writeOffAmountBase;
+    target.values["invoice-number"] =
+      target.values["invoice-number"] || baseValues["invoice-number"];
+    target.values.reason = target.values.reason || baseValues.reason;
+    target.values["written-off-date"] =
+      !target.values["written-off-date"] ||
+      String(baseValues["written-off-date"]) >
+        String(target.values["written-off-date"])
+        ? baseValues["written-off-date"]
+        : target.values["written-off-date"];
+    target.values.currency = rowCurrency || String(target.values.currency || "");
+  }
+
+  const groupedRows = [...groupMap.values()].sort((left, right) => {
+    const amountDelta =
+      asNumber(right.values["write-off-amount-fcy"], 0) -
+      asNumber(left.values["write-off-amount-fcy"], 0);
+    if (amountDelta !== 0) return amountDelta;
+    return String(left.values.name || "").localeCompare(
+      String(right.values.name || ""),
+    );
+  });
+
+  return {
+    rows: groupedRows,
+    currency: currency || baseCurrency || "SOS",
+    totals: groupedRows.reduce(
+      (acc, row) => {
+        acc["invoice-count"] += asNumber(row.values["invoice-count"], 0);
+        acc["write-off-amount-fcy"] += asNumber(
+          row.values["write-off-amount-fcy"],
+          0,
+        );
+        acc["write-off-amount-bcy"] += asNumber(
+          row.values["write-off-amount-bcy"],
+          0,
+        );
+        return acc;
+      },
+      {
+        "invoice-count": 0,
+        "write-off-amount-fcy": 0,
+        "write-off-amount-bcy": 0,
+      } as Record<string, number>,
+    ),
+  };
+};
+
 const resolveItemName = (line: any, itemDoc: any, fallback = "") => {
   const values = [
     line?.itemDetails,
@@ -2123,6 +2348,90 @@ const buildARAgingSummaryRows = (
       } as Record<string, number>,
     ),
   };
+};
+
+export const getBadDebtsReport: express.RequestHandler = async (
+  req,
+  res,
+) => {
+  const orgId = requireOrgId(req, res);
+  if (!orgId) return;
+
+  const range = getDateRangeFromQuery(req);
+  const compareWith = String(
+    req.query.compareWith ?? req.query.compare_with ?? "none",
+  ).trim();
+  const compareCount = Math.max(
+    1,
+    Number(req.query.compareCount ?? req.query.compare_count ?? 1) || 1,
+  );
+  const reportBy = String(
+    req.query.reportBy ?? req.query.report_by ?? "written-off-date",
+  ).trim();
+  const moreFilters = parseMoreFilters(
+    req.query.moreFilters ?? req.query.more_filters ?? req.query.filter_rows,
+  );
+
+  const [customers, invoices, organization] = await Promise.all([
+    Customer.find({ organizationId: orgId }).lean(),
+    Invoice.find({ organizationId: orgId }).lean(),
+    Organization.findOne({ _id: orgId }).lean(),
+  ]);
+
+  const baseCurrency = String(
+    (organization as any)?.baseCurrency || "SOS",
+  ).trim();
+  const writeOffInvoices = (invoices || []).filter((row: any) => {
+    const status = normalizeText(row?.status);
+    return (
+      status === "write_off" ||
+      status === "write off" ||
+      Boolean(row?.writeOff) ||
+      Boolean(row?.isWriteOff)
+    );
+  });
+
+  const main = buildBadDebtRows(
+    writeOffInvoices.map((row: any) => ({ row })),
+    customers,
+    range,
+    moreFilters,
+    reportBy,
+    baseCurrency,
+  );
+
+  const compareRange =
+    compareWith && compareWith !== "none"
+      ? shiftDateRange(range, compareWith, compareCount)
+      : null;
+  const comparison = compareRange
+    ? buildBadDebtRows(
+        writeOffInvoices.map((row: any) => ({ row })),
+        customers,
+        compareRange,
+        moreFilters,
+        reportBy,
+        baseCurrency,
+      )
+    : null;
+
+  return res.json({
+    success: true,
+    data: {
+      rows: main.rows,
+      currency: main.currency,
+      totals: main.totals,
+      comparison,
+      appliedFilters: {
+        fromDate: range.start.toISOString(),
+        toDate: range.end.toISOString(),
+        compareWith,
+        compareCount,
+        reportBy,
+        moreFilters,
+      },
+    },
+  });
 };
 
 const buildARAgingDetailsRows = (
