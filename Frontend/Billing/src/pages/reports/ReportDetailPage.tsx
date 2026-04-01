@@ -35,7 +35,7 @@ type PreviewTableConfig = {
   totals?: CellValue[];
 };
 
-type FilterDropdown = "date-range" | "entities" | null;
+type FilterDropdown = "date-range" | "entities" | "aging-by" | null;
 
 type DateRangePreset = "Today" | "This Week" | "This Month" | "This Quarter" | "This Year" | "Yesterday" | "Previous Week" | "Previous Month" | "Previous Quarter" | "Previous Year" | "Custom";
 
@@ -1895,6 +1895,7 @@ export default function ReportDetailPage() {
   const closeTarget = resolvedCategoryId ? `/reports/${resolvedCategoryId}` : "/reports";
   const isDateRangeOpen = activeFilterDropdown === "date-range";
   const isEntitiesOpen = activeFilterDropdown === "entities";
+  const isAgingByOpen = activeFilterDropdown === "aging-by";
   const isMoreFiltersOpen = moreFiltersOpen;
   const filteredEntityOptions = entityOptions.filter((entity) => entity.toLowerCase().includes(entitySearch.trim().toLowerCase()));
   const selectedEntityLabel = useMemo(() => {
@@ -2127,20 +2128,49 @@ export default function ReportDetailPage() {
             Entities : <span className="font-medium">{selectedEntityLabel}</span> <ChevronDown size={14} />
           </button>
           {isAgingReport ? (
-            <label className="inline-flex h-8 items-center gap-2 rounded border border-[#cfd6e4] bg-[#f8fafc] px-3 text-sm text-[#334155]">
-              <span>Aging By :</span>
-              <select
-                value={agingBy}
-                onChange={(event) => setAgingBy(event.target.value as AgingByOption)}
-                className="bg-transparent outline-none"
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setMoreFiltersOpen(false);
+                  setOpenMoreFilterFieldRowId(null);
+                  setOpenMoreFilterComparatorRowId(null);
+                  setActiveFilterDropdown((prev) => (prev === "aging-by" ? null : "aging-by"));
+                }}
+                className={`inline-flex h-8 items-center gap-1 rounded border px-3 text-sm transition-colors ${
+                  isAgingByOpen
+                    ? "border-[#156372] bg-white text-[#156372] shadow-sm"
+                    : "border-[#cfd6e4] bg-white text-[#334155] hover:border-[#156372] hover:text-[#156372]"
+                }`}
               >
-                {AGING_BY_OPTIONS.map((option) => (
-                  <option key={option.key} value={option.key}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <span>Aging By :</span>
+                <span className="font-medium">{agingByLabel}</span>
+                <ChevronDown size={14} className={`transition-transform ${isAgingByOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {isAgingByOpen ? (
+                <div className="absolute left-0 top-[calc(100%+8px)] z-30 w-[180px] overflow-hidden rounded-[10px] border border-[#d7dce7] bg-white shadow-[0_10px_30px_rgba(15,23,42,0.18)]">
+                  {AGING_BY_OPTIONS.map((option) => {
+                    const isSelected = option.key === agingBy;
+                    return (
+                      <button
+                        key={option.key}
+                        type="button"
+                        onClick={() => {
+                          setAgingBy(option.key);
+                          setActiveFilterDropdown(null);
+                        }}
+                        className={`flex w-full items-center px-3 py-2 text-left text-[14px] transition-colors ${
+                          isSelected ? "font-medium text-[#156372]" : "text-[#334155]"
+                        } hover:bg-transparent hover:text-[#334155]`}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
           ) : null}
           <button
             type="button"
