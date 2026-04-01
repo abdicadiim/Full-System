@@ -158,6 +158,19 @@ const getAgingBucketLabel = (days: number) => {
   return "> 45 Days";
 };
 
+const normalizeAgingDetailColumns = (columns: string[], agingBy: AgingByOption) =>
+  columns.map((column) => {
+    if (column === "Due Date" && agingBy === "invoice-date") {
+      return "Invoice Date";
+    }
+
+    if (column === "Invoice Date" && agingBy === "invoice-due-date") {
+      return "Due Date";
+    }
+
+    return column;
+  });
+
 const MORE_FILTER_FIELDS_BY_CATEGORY: Record<string, string[]> = {
   sales: ["Invoice", "Credit Note", "Sales Receipt", "Customer", "Item", "Plan", "Addon", "Coupon", "Sales Person", "Date", "Amount"],
   receivables: ["Invoice", "Credit Note", "Retainer Invoice", "Quote", "Customer", "Due Date", "Status", "Amount"],
@@ -1776,6 +1789,12 @@ export default function ReportDetailPage() {
         const nextPreview = await buildDatabasePreview(resolvedReportId, reportDisplayName, category.name, agingBy);
         if (!cancelled) {
           const useCustomSubtitle = Boolean(customReport) && !isAgingReport;
+          const nextColumns =
+            customReport?.selectedColumns?.length && isAgingReport && resolvedReportId === "ar-aging-details"
+              ? normalizeAgingDetailColumns(customReport.selectedColumns, agingBy)
+              : customReport?.selectedColumns?.length
+                ? customReport.selectedColumns
+                : nextPreview?.columns ?? [];
           setLivePreview(
             nextPreview && customReport
               ? {
@@ -1785,7 +1804,7 @@ export default function ReportDetailPage() {
                 }
               : nextPreview
           );
-          setVisibleColumns(customReport?.selectedColumns?.length ? customReport.selectedColumns : nextPreview?.columns ?? []);
+          setVisibleColumns(nextColumns);
         }
       } finally {
         if (!cancelled) {
