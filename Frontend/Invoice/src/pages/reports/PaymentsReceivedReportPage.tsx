@@ -112,6 +112,11 @@ type RefundRecord = {
   rate?: number;
 };
 
+type SummaryTotals = {
+  amount: number;
+  unused: number;
+};
+
 const DATE_RANGE_OPTIONS: Array<{ key: DateRangeKey; label: string }> = [
   { key: "today", label: "Today" },
   { key: "this-week", label: "This Week" },
@@ -608,7 +613,7 @@ export default function PaymentsReceivedReportView({
 
   const totals = useMemo(
     () =>
-      filteredPayments.reduce(
+      filteredPayments.reduce<SummaryTotals>(
         (acc, payment) => {
           if (isRefundMode) {
             const refund = payment as RefundRecord;
@@ -775,7 +780,7 @@ export default function PaymentsReceivedReportView({
     toast.success("Report columns updated");
   };
 
-  const formatColumnValue = (column: ColumnOption, payment: Payment) => {
+  const formatColumnValue = (column: ColumnOption, payment: Payment | RefundRecord) => {
     if (isRefundMode) {
       const refund = payment as RefundRecord;
       const amount = Number(refund.amount ?? 0) || 0;
@@ -816,29 +821,30 @@ export default function PaymentsReceivedReportView({
       }
     }
 
+    const paymentRecord = payment as Payment;
     switch (column.key) {
       case "payment-number":
-        return payment.paymentNumber || payment.id || "";
+        return paymentRecord.paymentNumber || paymentRecord.id || "";
       case "date":
-        return formatDate(payment.paymentDate || payment.date || "");
+        return formatDate(paymentRecord.paymentDate || paymentRecord.date || "");
       case "status":
-        return payment.status || "";
+        return paymentRecord.status || "";
       case "reference-number":
-        return payment.referenceNumber || payment.reference || payment.paymentReference || "";
+        return paymentRecord.referenceNumber || paymentRecord.reference || paymentRecord.paymentReference || "";
       case "customer-name":
-        return payment.customerName || "";
+        return paymentRecord.customerName || "";
       case "payment-mode":
-        return payment.paymentMode || payment.paymentMethod || "";
+        return paymentRecord.paymentMode || paymentRecord.paymentMethod || "";
       case "notes":
-        return payment.notes || "";
+        return paymentRecord.notes || "";
       case "invoice-number":
-        return payment.invoiceNumber || "";
+        return paymentRecord.invoiceNumber || "";
       case "deposit-to":
-        return payment.depositTo || "";
+        return paymentRecord.depositTo || "";
       case "amount":
-        return formatMoney(payment.amountReceived ?? payment.amount ?? 0, payment.currency || "SOS");
+        return formatMoney(paymentRecord.amountReceived ?? paymentRecord.amount ?? 0, paymentRecord.currency || "SOS");
       case "unused-amount":
-        return formatMoney(payment.unusedAmount ?? 0, payment.currency || "SOS");
+        return formatMoney(paymentRecord.unusedAmount ?? 0, paymentRecord.currency || "SOS");
       default:
         return "";
     }
@@ -1209,7 +1215,7 @@ export default function PaymentsReceivedReportView({
                 ) : (
                   <>
                     {groupedPayments.map((group) => {
-                      const groupTotals = group.items.reduce(
+                      const groupTotals = group.items.reduce<SummaryTotals>(
                         (acc, payment) => {
                           if (isRefundMode) {
                             const refund = payment as RefundRecord;
