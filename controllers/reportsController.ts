@@ -4,6 +4,7 @@ import { Customer } from "../models/Customer.js";
 import { CreditNote } from "../models/CreditNote.js";
 import { Invoice } from "../models/Invoice.js";
 import { Item } from "../models/Item.js";
+import { Quote } from "../models/Quote.js";
 import { Salesperson } from "../models/Salesperson.js";
 import { ReportingTag } from "../models/ReportingTag.js";
 import { SalesReceipt } from "../models/SalesReceipt.js";
@@ -333,35 +334,47 @@ const matchesMoreFilters = (values: Record<string, unknown>, filters: MoreFilter
           ? String(values.name || "")
           : field === "invoice-number"
             ? String(values["invoice-number"] || values.invoiceNumber || values.transaction || "")
-            : field === "order-number"
-              ? String(values["order-number"] || values.orderNumber || "")
-              : field === "status"
-                ? String(values.status || "")
-                : field === "transaction"
-                  ? String(values.transaction || values["invoice-number"] || "")
-                  : field === "age"
-                    ? String(values.age || "")
-                : field === "amount"
-                      ? String(values.amount || "")
-                      : field === "balance-due"
-                        ? String(values["balance-due"] || values.balance || "")
-                        : field === "balance"
-                          ? String(values.balance || values["balance-due"] || "")
-                          : field === "invoice-date"
-                            ? String(values["invoice-date"] || values.date || "")
-                            : field === "due-date"
-                              ? String(values["due-date"] || values.dueDate || "")
-        : field === "item-name"
-          ? String(values["item-name"] || values.name || "")
-          : field === "sku"
-            ? String(values.sku || "")
-            : field === "usage-unit"
-                ? String(values["usage-unit"] || "")
-                : field === "currency"
-                  ? String(values.currency || "")
-                : field === "location"
-                  ? String(values.location || "")
-                  : String(values[field] ?? "");
+            : field === "quote-number"
+              ? String(values["quote-number"] || values.name || "")
+              : field === "reference-number"
+                ? String(values["reference-number"] || values.referenceNumber || "")
+                : field === "project-name"
+                  ? String(values["project-name"] || values.projectName || "")
+                  : field === "order-number"
+                    ? String(values["order-number"] || values.orderNumber || "")
+                    : field === "status"
+                      ? String(values.status || "")
+                      : field === "transaction"
+                        ? String(values.transaction || values["invoice-number"] || values["quote-number"] || "")
+                        : field === "quote-date"
+                          ? String(values["quote-date"] || values.quoteDate || values.date || "")
+                          : field === "expiry-date"
+                            ? String(values["expiry-date"] || values.expiryDate || "")
+                            : field === "age"
+                              ? String(values.age || "")
+                              : field === "amount"
+                                ? String(values.amount || values["quote-amount"] || "")
+                                : field === "quote-amount"
+                                  ? String(values["quote-amount"] || values.amount || "")
+                                  : field === "balance-due"
+                                    ? String(values["balance-due"] || values.balance || "")
+                                    : field === "balance"
+                                      ? String(values.balance || values["balance-due"] || "")
+                                      : field === "invoice-date"
+                                        ? String(values["invoice-date"] || values.date || "")
+                                        : field === "due-date"
+                                          ? String(values["due-date"] || values.dueDate || "")
+                                          : field === "item-name"
+                                            ? String(values["item-name"] || values.name || "")
+                                            : field === "sku"
+                                              ? String(values.sku || "")
+                                              : field === "usage-unit"
+                                                ? String(values["usage-unit"] || "")
+                                                : field === "currency"
+                                                  ? String(values.currency || "")
+                                                  : field === "location"
+                                                    ? String(values.location || "")
+                                                    : String(values[field] ?? "");
     return compareValue(left, comparator, rawValue);
   });
 
@@ -435,6 +448,58 @@ const getDocumentTypeLabel = (source: ReportEntity) => {
   if (source === "credit-note") return "Credit Note";
   if (source === "sales-receipt") return "Sales Receipt";
   return "Invoice";
+};
+
+const getQuoteDate = (row: any) => asDate(row?.quoteDate || row?.date || row?.createdAt);
+const getQuoteExpiryDate = (row: any) => asDate(row?.expiryDate);
+
+const getLinkedInvoiceNumberForQuote = (quote: any, invoices: any[]) => {
+  const quoteIdValue = String(quote?._id || quote?.id || "").trim();
+  const quoteNumber = String(quote?.quoteNumber || "").trim();
+  const quoteInvoiceId = String(quote?.convertedToInvoiceId || quote?.invoiceId || "").trim();
+  const quoteInvoiceNumber = String(quote?.convertedToInvoiceNumber || quote?.invoiceNumber || "").trim();
+
+  const matches = (invoices || [])
+    .filter((invoice) => {
+      const invId = String(invoice?._id || invoice?.id || "").trim();
+      if (quoteInvoiceId && invId && invId === quoteInvoiceId) return true;
+
+      const refCandidates = [
+        invoice?.convertedFromQuote,
+        invoice?.convertedFromQuoteId,
+        invoice?.sourceQuoteId,
+        invoice?.quoteId,
+        invoice?.createdFromQuote,
+        invoice?.convertedFrom,
+        invoice?.quote?._id,
+        invoice?.quote?.id,
+        invoice?.quote,
+      ]
+        .filter(Boolean)
+        .map((value: any) => String(value).trim());
+      if (quoteIdValue && refCandidates.some((value) => value === quoteIdValue)) return true;
+
+      const invoiceQuoteNumber = String(
+        invoice?.sourceQuoteNumber ||
+          invoice?.quoteNumber ||
+          invoice?.convertedQuoteNumber ||
+          invoice?.referenceNumber ||
+          invoice?.orderNumber ||
+          ""
+      ).trim();
+      if (quoteInvoiceNumber && invoiceQuoteNumber && invoiceQuoteNumber === quoteInvoiceNumber) return true;
+      if (quoteNumber && invoiceQuoteNumber && invoiceQuoteNumber === quoteNumber) return true;
+
+      return false;
+    })
+    .sort((left, right) => {
+      const leftTime = new Date(left?.invoiceDate || left?.date || left?.createdAt || 0).getTime();
+      const rightTime = new Date(right?.invoiceDate || right?.date || right?.createdAt || 0).getTime();
+      return rightTime - leftTime;
+    });
+
+  const linked = matches[0];
+  return String(linked?.invoiceNumber || linked?.number || linked?.invoiceNo || quoteInvoiceNumber || "").trim();
 };
 
 const buildAgingSummaryRows = (rows: Array<{ source: ReportEntity; row: any }>, customers: any[], asOf: Date, moreFilters: MoreFilterRow[]) => {
@@ -1603,6 +1668,83 @@ const buildInvoiceDetailsRows = (invoices: any[], creditNotes: any[], customers:
         return acc;
       },
       { total: 0, balance: 0 } as Record<string, number>
+    ),
+  };
+};
+
+const buildQuoteDetailsRows = (
+  quotes: any[],
+  invoices: any[],
+  customers: any[],
+  range: { start: Date; end: Date },
+  reportBy: string,
+  moreFilters: MoreFilterRow[]
+) => {
+  const customerById = new Map<string, any>();
+  const customerByName = new Map<string, any>();
+  for (const customer of customers || []) {
+    const id = String(customer?._id || customer?.id || "").trim();
+    const name = resolveCustomerName(customer);
+    if (id) customerById.set(id, customer);
+    if (name) customerByName.set(normalizeText(name), customer);
+    const number = String(customer?.customerNumber || "").trim();
+    if (number) customerByName.set(normalizeText(number), customer);
+  }
+
+  const normalizedRangeStart = startOfDay(range.start);
+  const normalizedRangeEnd = endOfDay(range.end);
+  const normalizedReportBy = normalizeText(reportBy || "quote-date");
+  const detailRows: Array<{ values: Record<string, any> }> = [];
+  let currency = "";
+
+  for (const quote of quotes || []) {
+    const quoteDate = getQuoteDate(quote);
+    const expiryDate = getQuoteExpiryDate(quote);
+    const selectedDate = normalizedReportBy === "expiry-date" ? expiryDate || quoteDate : quoteDate;
+    if (!selectedDate || selectedDate < normalizedRangeStart || selectedDate > normalizedRangeEnd) continue;
+
+    const customerId = String(quote?.customerId || quote?.customer?._id || quote?.customer?.id || "").trim();
+    const fallbackName = String(quote?.customerName || quote?.customer?.displayName || quote?.customer?.name || quote?.customer?.companyName || "").trim();
+    const customer = customerById.get(customerId) || customerByName.get(normalizeText(fallbackName)) || quote?.customer || null;
+    const customerName = resolveCustomerName(customer, fallbackName);
+    const rowCurrency = String(quote?.currency || customer?.currency || "SOS").trim() || "SOS";
+    const quoteNumber = String(quote?.quoteNumber || quote?.quoteNo || quote?.number || quote?._id || "").trim();
+    const linkedInvoiceNumber = getLinkedInvoiceNumberForQuote(quote, invoices);
+    const amount = Math.abs(asNumber(quote?.total, 0));
+
+    const values = {
+      name: quoteNumber || String(quote?._id || "").trim(),
+      status: String(quote?.status || "").trim(),
+      "quote-date": quoteDate ? quoteDate.toISOString() : "",
+      "expiry-date": expiryDate ? expiryDate.toISOString() : "",
+      "quote-number": quoteNumber,
+      "reference-number": String(quote?.referenceNumber || "").trim(),
+      "customer-name": customerName,
+      "invoice-number": linkedInvoiceNumber,
+      "project-name": String(quote?.projectName || "").trim(),
+      "quote-amount": amount,
+      amount,
+      currency: rowCurrency,
+      location: String(quote?.location || customer?.location || customer?.city || customer?.billingAddress?.city || customer?.shippingAddress?.city || "").trim(),
+    };
+
+    if (!matchesMoreFilters(values, moreFilters)) continue;
+
+    detailRows.push({ values });
+    if (!currency) currency = rowCurrency;
+  }
+
+  detailRows.sort((left, right) => String(right.values["quote-date"] || "").localeCompare(String(left.values["quote-date"] || "")));
+
+  return {
+    rows: detailRows,
+    currency: currency || "SOS",
+    totals: detailRows.reduce(
+      (acc, row) => {
+        acc["quote-amount"] += asNumber(row.values["quote-amount"], 0);
+        return acc;
+      },
+      { "quote-amount": 0 } as Record<string, number>
     ),
   };
 };
