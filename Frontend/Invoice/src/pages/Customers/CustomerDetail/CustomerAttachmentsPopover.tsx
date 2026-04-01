@@ -40,6 +40,28 @@ const formatAttachmentSize = (size: string | number | undefined) => {
 
 const isPdfAttachment = (name?: string) => String(name || "").toLowerCase().endsWith(".pdf");
 
+const resolveAttachmentUrl = (rawUrl?: string) => {
+  const url = String(rawUrl || "").trim();
+  if (!url) return "";
+  if (/^(blob:|data:|https?:\/\/)/i.test(url)) return url;
+  if (url.startsWith("//")) return `${window.location.protocol}${url}`;
+  try {
+    return new URL(url, window.location.origin).href;
+  } catch {
+    return url;
+  }
+};
+
+const triggerDownload = (href: string, fileName: string) => {
+  const link = document.createElement("a");
+  link.href = href;
+  link.download = fileName;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
 export default function CustomerAttachmentsPopover({
   open,
   onClose,
@@ -68,21 +90,45 @@ export default function CustomerAttachmentsPopover({
     }
   };
 
-  const handleDownloadAttachment = (file: CustomerAttachment) => {
-    const url = String(file?.url || "").trim();
-    if (!url) return;
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = String(file?.name || "attachment");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleDownloadAttachment = async (file: CustomerAttachment) => {
+    const resolvedUrl = resolveAttachmentUrl(file?.url);
+    if (!resolvedUrl) return;
+
+    const fileName = String(file?.name || "attachment");
+
+    if (/^https?:\/\//i.test(resolvedUrl)) {
+      try {
+        const response = await fetch(resolvedUrl, { credentials: "include" });
+        if (response.ok) {
+          const blob = await response.blob();
+          const objectUrl = URL.createObjectURL(blob);
+          triggerDownload(objectUrl, fileName);
+          window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+          return;
+        }
+      } catch {
+        // Fall back to the direct link below.
+      }
+    }
+
+    triggerDownload(resolvedUrl, fileName);
   };
 
   const handleOpenAttachmentInNewTab = (file: CustomerAttachment) => {
-    const url = String(file?.url || "").trim();
-    if (!url) return;
-    window.open(url, "_blank", "noopener,noreferrer");
+    const resolvedUrl = resolveAttachmentUrl(file?.url);
+    if (!resolvedUrl) return;
+
+    const openedWindow = window.open(resolvedUrl, "_blank", "noopener,noreferrer");
+    if (!openedWindow) {
+      const link = document.createElement("a");
+      link.href = resolvedUrl;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
 
   const handleRequestRemoveAttachment = (index: number) => {
@@ -158,7 +204,7 @@ export default function CustomerAttachmentsPopover({
                         <button
                           type="button"
                           onClick={() => {
-                            handleDownloadAttachment(file);
+                            void handleDownloadAttachment(file);
                             setAttachmentMenuIndex(null);
                           }}
                           className="flex items-center gap-1 hover:text-blue-700"
@@ -175,7 +221,10 @@ export default function CustomerAttachmentsPopover({
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleOpenAttachmentInNewTab(file)}
+                          onClick={() => {
+                            handleOpenAttachmentInNewTab(file);
+                            setAttachmentMenuIndex(null);
+                          }}
                           className="rounded p-1 text-blue-600 hover:bg-blue-50"
                           aria-label="Open attachment"
                           title="Open"
