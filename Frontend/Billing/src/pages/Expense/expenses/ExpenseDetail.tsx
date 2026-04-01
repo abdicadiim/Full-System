@@ -10,6 +10,7 @@ import {
   X,
   MessageCircle,
   Trash2,
+  FileText,
   ChevronRight,
   Paperclip,
   Plus,

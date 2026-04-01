@@ -7,6 +7,7 @@ import { deleteInvoice, getCustomers, getInvoiceById, getInvoicesPaginated, Invo
 import { useOrganizationBranding } from "../../../hooks/useOrganizationBranding";
 import { toast } from "react-hot-toast";
 import ApplyRetainersToInvoiceModal from "./ApplyRetainersToInvoiceModal";
+import RetainerInvoiceCommentsPanel from "./RetainerInvoiceCommentsPanel";
 
 type RetainerListRow = {
   id: string;
@@ -27,8 +28,15 @@ type RetainerAttachment = {
 type RetainerComment = {
   id: string;
   text: string;
+  content?: string;
   author?: string;
+  authorName?: string;
+  authorInitial?: string;
+  createdAt?: string;
   timestamp?: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
 };
 
 const VIEW_OPTIONS: Array<{ key: string; label: string }> = [
@@ -244,14 +252,9 @@ export default function Retailinvoicedetail() {
   const [deleteRetainerId, setDeleteRetainerId] = useState<string>("");
   const [attachments, setAttachments] = useState<RetainerAttachment[]>([]);
   const [comments, setComments] = useState<RetainerComment[]>([]);
-  const [commentText, setCommentText] = useState("");
   const [isSendEmailModalOpen, setIsSendEmailModalOpen] = useState(false);
   const [showCc, setShowCc] = useState(false);
   const [showBcc, setShowBcc] = useState(false);
-  const [isBold, setIsBold] = useState(false);
-  const [isItalic, setIsItalic] = useState(false);
-  const [isUnderline, setIsUnderline] = useState(false);
-  const [isStrikethrough, setIsStrikethrough] = useState(false);
   const [fontSize, setFontSize] = useState("16");
   const [emailData, setEmailData] = useState({
     fromName: "Abdi Ladiif",
@@ -273,7 +276,6 @@ export default function Retailinvoicedetail() {
   const headerMoreMenuRef = useRef<HTMLDivElement | null>(null);
   const attachmentsDropdownRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const commentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const detailActionsMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -430,12 +432,26 @@ export default function Retailinvoicedetail() {
     setAttachments(nextAttachments);
 
     const rawComments = Array.isArray((invoice as any)?.comments) ? (invoice as any).comments : [];
-    const nextComments: RetainerComment[] = rawComments.map((row: any, index: number) => ({
-      id: String(row?.id || row?._id || `c-${index}`),
-      text: String(row?.text || ""),
-      author: String(row?.author || "User"),
-      timestamp: String(row?.timestamp || row?.createdAt || new Date().toISOString()),
-    }));
+    const nextComments: RetainerComment[] = rawComments.map((row: any, index: number) => {
+      const authorName = String(row?.authorName || row?.author || "User").trim() || "User";
+      const createdAt = String(row?.createdAt || row?.timestamp || new Date().toISOString());
+      const text = String(row?.text || "").trim();
+      const content = String(row?.content || "").trim() || text;
+
+      return {
+        id: String(row?.id || row?._id || `c-${index}`),
+        text,
+        content,
+        author: String(row?.author || authorName),
+        authorName,
+        authorInitial: String(row?.authorInitial || authorName.charAt(0).toUpperCase() || "U"),
+        createdAt,
+        timestamp: String(row?.timestamp || createdAt),
+        bold: Boolean(row?.bold),
+        italic: Boolean(row?.italic),
+        underline: Boolean(row?.underline),
+      };
+    });
     setComments(nextComments);
   }, [invoice]);
 
@@ -480,6 +496,7 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
           } as Invoice)
         : updated
     );
+    return updated;
   };
 
   const handleAttachmentUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -535,72 +552,48 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
     }
   };
 
-  const handleAddComment = async () => {
-    const trimmed = commentText.trim();
-    if (!trimmed) return;
-    const nextComment: RetainerComment = {
-      id: `comment-${Date.now()}`,
-      text: trimmed,
-      author: "User",
-      timestamp: new Date().toISOString(),
+  const updateRetainerInvoiceComments = async (retainerInvoiceId: string, data: any) => {
+    const updated = await persistInvoicePatch(data);
+    const responseComments = Array.isArray((updated as any)?.comments)
+      ? (updated as any).comments
+      : Array.isArray(data?.comments)
+        ? data.comments
+        : [];
+
+    return {
+      success: true,
+      data: updated,
+      invoice: updated,
+      comments: responseComments,
+      retainerInvoiceId,
     };
-    const next = [...comments, nextComment];
-    setComments(next);
-    setCommentText("");
-    try {
-      await persistInvoicePatch({ comments: next });
-    } catch (error) {
-      console.error("Failed to save retainer comment:", error);
-    }
   };
 
-  const handleDeleteComment = async (commentId: string) => {
-    const next = comments.filter((comment) => comment.id !== commentId);
-    setComments(next);
-    try {
-      await persistInvoicePatch({ comments: next });
-    } catch (error) {
-      console.error("Failed to delete retainer comment:", error);
-    }
-  };
+  const handleRetainerInvoiceCommentsChange = (nextComments: any[]) => {
+    const normalized = Array.isArray(nextComments) ? nextComments : [];
+    setComments(
+      normalized.map((row: any, index: number) => {
+        const authorName = String(row?.authorName || row?.author || "User").trim() || "User";
+        const createdAt = String(row?.createdAt || row?.timestamp || new Date().toISOString());
+        const text = String(row?.text || "").trim();
+        const content = String(row?.content || "").trim() || text;
 
-  const applyCommentFormatting = (style: "bold" | "italic" | "underline") => {
-    const textarea = commentTextareaRef.current;
-    if (!textarea) return;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selected = commentText.substring(start, end);
-    const wrappers =
-      style === "bold"
-        ? { left: "**", right: "**" }
-        : style === "italic"
-        ? { left: "*", right: "*" }
-        : { left: "__", right: "__" };
-
-    const replacement = `${wrappers.left}${selected || "text"}${wrappers.right}`;
-    const updated = commentText.substring(0, start) + replacement + commentText.substring(end);
-    setCommentText(updated);
-
-    window.setTimeout(() => {
-      textarea.focus();
-      const cursor = start + replacement.length;
-      textarea.setSelectionRange(cursor, cursor);
-    }, 0);
-  };
-
-  const formatCommentTimestamp = (value?: string) => {
-    if (!value) return "";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "";
-    const formatted = date.toLocaleString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
-    return formatted.toUpperCase();
+        return {
+          id: String(row?.id || row?._id || `c-${index}`),
+          text,
+          content,
+          author: String(row?.author || authorName),
+          authorName,
+          authorInitial: String(row?.authorInitial || authorName.charAt(0).toUpperCase() || "U"),
+          createdAt,
+          timestamp: String(row?.timestamp || createdAt),
+          bold: Boolean(row?.bold),
+          italic: Boolean(row?.italic),
+          underline: Boolean(row?.underline),
+        };
+      })
+    );
+    setInvoice((prev) => (prev ? ({ ...prev, comments: normalized } as Invoice) : prev));
   };
 
 
@@ -2759,119 +2752,14 @@ Amount: ${currency}${formatMoney(amountValue)}</p>
         </div>
       )}
 
-      {isCommentsPanelOpen && (
-        <div className="fixed inset-0 z-[120] bg-black/20 flex justify-end">
-          <div className="w-[430px] h-full bg-white border-l border-[#d6d9e3] shadow-2xl flex flex-col">
-            <div className="h-14 px-5 border-b border-[#e5e7eb] bg-white flex items-center justify-between">
-              <div className="text-[32px] font-normal text-slate-900 leading-none">Comments &amp; History</div>
-              <button
-                type="button"
-                onClick={() => setIsCommentsPanelOpen(false)}
-                className="h-8 w-8 rounded-md text-[#ef4444] hover:bg-red-50 inline-flex items-center justify-center"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="p-4 border-b border-[#e5e7eb] bg-white">
-              <div className="rounded-md border border-[#d1d5db] overflow-hidden">
-                <div className="h-10 border-b border-[#d1d5db] bg-[#f8fafc] px-3 flex items-center gap-5">
-                  <button
-                    type="button"
-                    onClick={() => applyCommentFormatting("bold")}
-                    className="text-[14px] text-slate-700 hover:text-slate-900"
-                    title="Bold"
-                  >
-                    B
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => applyCommentFormatting("italic")}
-                    className="text-[14px] italic text-slate-700 hover:text-slate-900"
-                    title="Italic"
-                  >
-                    I
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => applyCommentFormatting("underline")}
-                    className="text-[14px] underline text-slate-700 hover:text-slate-900"
-                    title="Underline"
-                  >
-                    U
-                  </button>
-                </div>
-              <textarea
-                ref={commentTextareaRef}
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                placeholder="Add a comment..."
-                rows={4}
-                className="w-full border-0 px-3 py-2 text-sm text-gray-700 outline-none resize-none"
-              />
-              <div className="p-3 border-t border-[#d1d5db]">
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleAddComment();
-                  }}
-                  disabled={!commentText.trim()}
-                  className="px-4 py-2 border border-[#d1d5db] text-[#94a3b8] bg-[#f8fafc] rounded-md text-sm font-medium disabled:opacity-100"
-                >
-                  Add Comment
-                </button>
-              </div>
-            </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="text-[13px] font-semibold text-[#475569] uppercase tracking-wide inline-flex items-center gap-1">
-                <span>All Comments</span>
-                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#22c55e] px-1.5 text-[12px] text-white">
-                  {comments.length}
-                </span>
-              </div>
-              <div className="h-px bg-[#e5e7eb] mt-2 mb-4" />
-              {comments.length === 0 ? (
-                <div className="text-center text-sm text-slate-500 py-10">No comments yet.</div>
-              ) : (
-                comments
-                  .slice()
-                  .reverse()
-                  .map((comment) => (
-                    <div key={comment.id} className="mb-4">
-                      <div className="flex items-start gap-3">
-                        <span className="inline-flex h-7 w-7 rounded-full border border-[#cbd5e1] bg-white text-[#f59e0b] items-center justify-center text-[14px]">
-                          ?
-                        </span>
-                        <div className="min-w-0">
-                          <div className="text-[13px] text-[#111827]">
-                            <span className="font-medium">{comment.author || "User"}</span>
-                            <span className="mx-1 text-[#94a3b8]">•</span>
-                            <span className="text-[12px] text-[#6b7280]">{formatCommentTimestamp(comment.timestamp)}</span>
-                          </div>
-                          <div className="mt-2 rounded-md bg-[#f3f4f6] px-3 py-2 text-[13px] text-[#111827] whitespace-pre-wrap">
-                            {comment.text}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void handleDeleteComment(comment.id);
-                          }}
-                          className="p-1 text-gray-400 hover:text-red-600"
-                          title="Delete comment"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <RetainerInvoiceCommentsPanel
+        open={isCommentsPanelOpen}
+        onClose={() => setIsCommentsPanelOpen(false)}
+        retainerInvoiceId={String((invoice as any)?.id || (invoice as any)?._id || id || "")}
+        comments={comments}
+        onCommentsChange={handleRetainerInvoiceCommentsChange}
+        updateRetainerInvoice={updateRetainerInvoiceComments}
+      />
     </div>
   );
 }

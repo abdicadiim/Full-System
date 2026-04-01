@@ -1970,7 +1970,7 @@ export default function ReportDetailPage() {
   const [openMoreFilterFieldRowId, setOpenMoreFilterFieldRowId] = useState<number | null>(null);
   const [openMoreFilterComparatorRowId, setOpenMoreFilterComparatorRowId] = useState<number | null>(null);
   const [selectedDateRange, setSelectedDateRange] = useState<DateRangePreset>(
-    isAgingReport || isTimeToGetPaidReport ? "Today" : "This Month"
+    isAgingReport ? "Today" : "This Month"
   );
   const [agingBy, setAgingBy] = useState<AgingByOption>("invoice-due-date");
   const [selectedEntities, setSelectedEntities] = useState<string[]>(() =>
@@ -2041,7 +2041,7 @@ export default function ReportDetailPage() {
   }, [resolvedCategoryId]);
 
   useEffect(() => {
-    setSelectedDateRange(isAgingReport || isTimeToGetPaidReport ? "Today" : "This Month");
+    setSelectedDateRange(isAgingReport ? "Today" : "This Month");
   }, [isAgingReport, isTimeToGetPaidReport]);
 
   useEffect(() => {
