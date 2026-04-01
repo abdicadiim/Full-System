@@ -1410,6 +1410,23 @@ function ReceivablesReportShell({
     return String(value);
   };
 
+  const formatCellForRow = (
+    column: ColumnOption,
+    value: any,
+    rowValues?: Record<string, any>,
+  ) => {
+    if (value === null || value === undefined || value === "") return "—";
+    if (column.kind === "currency") {
+      const currency = column.key.endsWith("-fcy")
+        ? String(rowValues?.currency || payload?.currency || "SOS")
+        : String(payload?.currency || "SOS");
+      return currencyValue(value, currency);
+    }
+    if (column.kind === "number") return numberValue(value);
+    if (column.kind === "date") return dateValue(value);
+    return String(value);
+  };
+
   const addFilterRow = () =>
     setMoreFilters((rows) => [...rows, makeFilterRow()]);
   const updateFilterRow = (id: string, patch: Partial<FilterRow>) =>
@@ -2644,7 +2661,11 @@ function ReceivablesReportShell({
                               key={column.key}
                               className={`px-4 py-3 text-sm ${columnIndex === 0 ? "font-medium text-[#0f172a]" : "text-[#2563eb]"}`}
                             >
-                              {formatCell(column, row.values[column.key])}
+                              {formatCellForRow(
+                                column,
+                                row.values[column.key],
+                                row.values,
+                              )}
                             </td>
                           ))}
                         </tr>

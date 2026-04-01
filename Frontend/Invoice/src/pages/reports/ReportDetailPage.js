@@ -1,1 +1,1 @@
-export { default } from "./SalesByCustomerReportPage";
+export { default } from "./ReportDetailPage.tsx";
