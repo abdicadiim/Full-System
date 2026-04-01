@@ -649,13 +649,7 @@ const REPORTS_DRAWER_SECTIONS: ReportsDrawerSection[] = [
   {
     id: "payments-received",
     label: "Payments Received",
-    reportIds: [
-      "payments-received",
-      "time-to-get-paid",
-      "credit-note-details",
-      "refund-history",
-      "withholding-tax",
-    ],
+    reportIds: ["refund-history"],
   },
   {
     id: "subscriptions",
@@ -5118,7 +5112,7 @@ export default function ReportDetailPage() {
     );
   }
 
-  if (report.id === "payments-received") {
+  if (report.id === "payments-received" || report.id === "refund-history") {
     return (
       <div className="relative min-h-[calc(100vh-64px)] pt-3">
         <ReportsDrawer
@@ -5147,6 +5141,8 @@ export default function ReportDetailPage() {
             onRunReport={() =>
               toast.success(`Report refreshed: ${report.name}`)
             }
+            mode={report.id === "refund-history" ? "refund-history" : "payments"}
+            subtitleMode={report.id === "refund-history" ? "from-to" : "as-of"}
           />
         </div>
       </div>

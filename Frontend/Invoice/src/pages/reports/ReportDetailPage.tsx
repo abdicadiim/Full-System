@@ -5,6 +5,7 @@ import BadDebtsReportPage from "./BadDebtsReportPage";
 import CreditNoteDetailsReportPage from "./CreditNoteDetailsReportPage";
 import ReceivableDetailsReportPage from "./ReceivableDetailsReportPage";
 import ReceivableSummaryReportPage from "./ReceivableSummaryReportPage";
+import RefundHistoryReportPage from "./RefundHistoryReportPage";
 import SalesByCustomerReportPage from "./SalesByCustomerReportPage";
 import TimeToGetPaidReportPage from "./TimeToGetPaidReportPage";
 
@@ -25,6 +26,9 @@ export default function ReportDetailPage() {
   }
   if (reportId === "credit-note-details") {
     return <CreditNoteDetailsReportPage />;
+  }
+  if (reportId === "refund-history") {
+    return <RefundHistoryReportPage />;
   }
   if (reportId === "time-to-get-paid") {
     return <TimeToGetPaidReportPage />;
