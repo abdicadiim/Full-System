@@ -127,7 +127,16 @@ const COMPARATORS = [
 
 const NO_VALUE = new Set(["is-empty", "is-not-empty"]);
 const CURRENCY_CODES = ["SOS", "USD", "EUR", "GBP", "KES"];
-const ENTITY_OPTIONS = [{ key: "invoice", label: "Invoice" }];
+type EntityKey = "invoice" | "credit-note" | "sales-receipt";
+type EntityOption = {
+  key: EntityKey;
+  label: string;
+};
+const ENTITY_OPTIONS: EntityOption[] = [
+  { key: "invoice", label: "Invoice" },
+  { key: "credit-note", label: "Credit Note" },
+  { key: "sales-receipt", label: "Sales Receipt" },
+];
 type AgingByKey = "invoice-due-date" | "invoice-date";
 const AGING_BY_OPTIONS: Array<{ key: AgingByKey; label: string }> = [
   { key: "invoice-due-date", label: "Invoice Due Date" },
@@ -1032,6 +1041,7 @@ function ReceivablesReportShell({
       window.location.search.includes("debug=1"));
 
   const dateRangeRef = useRef<HTMLDivElement | null>(null);
+  const entityRef = useRef<HTMLDivElement | null>(null);
   const [dateRangeKey, setDateRangeKey] = useState<DateRangeKey>(
     config.defaultRange,
   );
@@ -1052,7 +1062,9 @@ function ReceivablesReportShell({
     { key: "invoice-date", label: "Invoice Date" },
     { key: "due-date", label: "Due Date" },
   ];
-  const [entities, setEntities] = useState("invoice");
+  const [entityKeys, setEntityKeys] = useState<EntityKey[]>(["invoice"]);
+  const [isEntityOpen, setIsEntityOpen] = useState(false);
+  const [entitySearch, setEntitySearch] = useState("");
   const agingByRef = useRef<HTMLDivElement | null>(null);
   const [agingByOpen, setAgingByOpen] = useState(false);
   const [agingBy, setAgingBy] = useState<AgingByKey>("invoice-due-date");
@@ -1125,6 +1137,20 @@ function ReceivablesReportShell({
   );
   const rows = (payload?.rows ?? []) as ReportRow[];
   const totals = payload?.totals ?? null;
+  const filteredEntityOptions = useMemo(() => {
+    const query = entitySearch.trim().toLowerCase();
+    return ENTITY_OPTIONS.filter((option) =>
+      option.label.toLowerCase().includes(query),
+    );
+  }, [entitySearch]);
+  const getEntitySelectionLabel = (keys: EntityKey[]) => {
+    if (keys.length === 0) return "None";
+    if (keys.length === ENTITY_OPTIONS.length) return "All";
+    return ENTITY_OPTIONS.filter((option) => keys.includes(option.key))
+      .map((option) => option.label)
+      .join(", ");
+  };
+  const entityLabel = getEntitySelectionLabel(entityKeys);
 
   useEffect(() => {
     const load = async () => {
@@ -1143,7 +1169,9 @@ function ReceivablesReportShell({
           showBy,
           agingIntervals,
         };
-        if (config.showEntities) params.entities = entities;
+        if (config.showEntities && entityKeys.length > 0) {
+          params.entities = entityKeys.join(",");
+        }
         if (config.showAgingBy) params.agingBy = agingBy;
         if (config.showReportBy) params.reportBy = reportBy;
         if (debugReceivables) {
@@ -1168,7 +1196,7 @@ function ReceivablesReportShell({
     agingBy,
     agingIntervals,
     config,
-    entities,
+    entityKeys,
     groupBy,
     moreFilters,
     selectedDateRange.end.getTime(),
@@ -1229,6 +1257,8 @@ function ReceivablesReportShell({
   const openColumns = () => {
     setColumnDraft(selectedColumns);
     setColumnsOpen(true);
+    setIsEntityOpen(false);
+    setMoreFiltersOpen(false);
     setDateRangeOpen(false);
     setIsCustomDateRangeOpen(false);
     setAgingByOpen(false);
@@ -1245,6 +1275,8 @@ function ReceivablesReportShell({
     setCompareWithDraftKey(compareWithKey);
     setCompareWithDraftCount(compareWithKey === "none" ? 1 : compareWithCount);
     setCompareWithDraftArrangeLatest(compareWithArrangeLatest);
+    setIsEntityOpen(false);
+    setMoreFiltersOpen(false);
     setDateRangeOpen(false);
     setIsCustomDateRangeOpen(false);
     setAgingByOpen(false);
@@ -1253,12 +1285,25 @@ function ReceivablesReportShell({
   };
 
   const openAgingByDropdown = () => {
+    setIsEntityOpen(false);
+    setMoreFiltersOpen(false);
     setDateRangeOpen(false);
     setIsCustomDateRangeOpen(false);
     setColumnsOpen(false);
     setCompareWithOpen(false);
     setCompareWithCountOpen(false);
     setAgingByOpen((prev) => !prev);
+  };
+
+  const openEntityDropdown = () => {
+    setDateRangeOpen(false);
+    setIsCustomDateRangeOpen(false);
+    setColumnsOpen(false);
+    setMoreFiltersOpen(false);
+    setAgingByOpen(false);
+    setCompareWithOpen(false);
+    setCompareWithCountOpen(false);
+    setIsEntityOpen((prev) => !prev);
   };
 
   const applyCompareWith = () => {
@@ -1283,12 +1328,15 @@ function ReceivablesReportShell({
     if (dateRangeOpen) {
       setDateRangeOpen(false);
       setIsCustomDateRangeOpen(false);
+      setIsEntityOpen(false);
       setAgingByOpen(false);
       return;
     }
 
     const currentRange =
       dateRangeKey === "custom" ? customDateRange : getRange(dateRangeKey);
+    setIsEntityOpen(false);
+    setMoreFiltersOpen(false);
     setDateRangeDraftKey(dateRangeKey);
     setCustomDateRangeDraft(currentRange);
     setCustomDateRangeMonth(getStartOfMonth(currentRange.start));
@@ -1361,6 +1409,30 @@ function ReceivablesReportShell({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [dateRangeOpen, cancelDateRangeSelection]);
+
+  useEffect(() => {
+    if (!isEntityOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!entityRef.current?.contains(target)) {
+        setIsEntityOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsEntityOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isEntityOpen]);
 
   useEffect(() => {
     if (!agingByOpen) return;
@@ -1883,25 +1955,113 @@ function ReceivablesReportShell({
             ) : null}
 
             {config.showEntities ? (
-              <label className="inline-flex h-8 items-center gap-2 rounded border border-[#cfd6e4] bg-[#f8fafc] px-3 text-sm text-[#334155]">
-                <span>Entities :</span>
-                <select
-                  value={entities}
-                  onChange={(event) => setEntities(event.target.value)}
-                  className="bg-transparent outline-none"
+              <div ref={entityRef} className="relative inline-flex">
+                <button
+                  type="button"
+                  onClick={openEntityDropdown}
+                  className={`relative inline-flex h-8 w-[184px] items-center overflow-hidden rounded border px-3 pr-12 text-sm text-[#334155] hover:bg-white ${
+                    isEntityOpen
+                      ? "border-[#1b6f7b] bg-white"
+                      : "border-[#cfd6e4] bg-[#f8fafc]"
+                  }`}
+                  aria-haspopup="menu"
+                  aria-expanded={isEntityOpen}
                 >
-                  {ENTITY_OPTIONS.map((option) => (
-                    <option key={option.key} value={option.key}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  <span className="shrink-0 whitespace-nowrap">Entities :</span>
+                  <span className="min-w-0 flex-1 truncate text-left font-medium whitespace-nowrap">
+                    {entityLabel}
+                  </span>
+                  <ChevronDown
+                    size={14}
+                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#334155]"
+                  />
+                </button>
+
+                {entityKeys.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setEntityKeys([]);
+                    }}
+                    className="absolute right-6 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-[#ef4444] hover:bg-[#fef2f2]"
+                    aria-label="Clear selected entities"
+                  >
+                    <X size={12} />
+                  </button>
+                ) : null}
+
+                {isEntityOpen ? (
+                  <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-[168px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                    <div className="border-b border-[#eef2f7] p-2">
+                      <div className="relative">
+                        <input
+                          value={entitySearch}
+                          onChange={(event) =>
+                            setEntitySearch(event.target.value)
+                          }
+                          placeholder="Search"
+                          className="h-9 w-full rounded-md border border-[#1b6f7b] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                        />
+                        <Search
+                          size={14}
+                          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="max-h-[220px] overflow-y-auto py-1">
+                      {filteredEntityOptions.length > 0 ? (
+                        filteredEntityOptions.map((option) => {
+                          const isSelected = entityKeys.includes(option.key);
+                          return (
+                            <button
+                              key={option.key}
+                              type="button"
+                              onClick={() => {
+                                setEntityKeys((prev) =>
+                                  prev.includes(option.key)
+                                    ? prev.filter((key) => key !== option.key)
+                                    : [...prev, option.key],
+                                );
+                              }}
+                              className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm ${
+                                isSelected
+                                  ? "bg-[#f1f5f9] font-medium text-[#0f172a]"
+                                  : "text-[#334155] hover:bg-[#f8fafc]"
+                              }`}
+                            >
+                              <span className="inline-flex h-4 w-4 items-center justify-center rounded border border-[#c7d0de] bg-white">
+                                {isSelected ? (
+                                  <Check size={12} className="text-[#0f172a]" />
+                                ) : null}
+                              </span>
+                              <span>{option.label}</span>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <div className="px-4 py-3 text-sm text-[#64748b]">
+                          No results.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             ) : null}
 
             <button
               type="button"
-              onClick={() => setMoreFiltersOpen((value) => !value)}
+              onClick={() => {
+                setIsEntityOpen(false);
+                setDateRangeOpen(false);
+                setIsCustomDateRangeOpen(false);
+                setAgingByOpen(false);
+                setCompareWithOpen(false);
+                setCompareWithCountOpen(false);
+                setMoreFiltersOpen((value) => !value);
+              }}
               className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
             >
               <Plus size={14} className="text-[#1b6f7b]" /> More Filters

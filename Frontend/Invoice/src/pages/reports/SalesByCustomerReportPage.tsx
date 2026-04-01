@@ -292,12 +292,11 @@ const getReportColumnOptionForReport = (
   reportId: SalesReportId,
 ) => {
   const option = getReportColumnOption(key);
-  if (reportId !== "bad-debts") {
-    return option;
-  }
+  const labelOverride =
+    REPORT_MODE_COLUMN_LABEL_OVERRIDES[reportId]?.[key] ?? option.label;
   return {
     ...option,
-    label: BAD_DEBT_COLUMN_LABEL_OVERRIDES[key] ?? option.label,
+    label: labelOverride,
   };
 };
 
@@ -332,7 +331,7 @@ const COMPARE_WITH_NUMBER_OPTIONS = Array.from({ length: 35 }, (_, index) =>
 );
 
 type ReportColumnKey = string;
-type SalesReportId = "sales-by-customer" | "bad-debts";
+type SalesReportId = "sales-by-customer" | "bad-debts" | "bank-charges";
 type ReportColumnKind = "text" | "number" | "currency";
 
 type ReportColumnOption = {
@@ -347,11 +346,21 @@ type ReportColumnGroup = {
   options: ReportColumnOption[];
 };
 
-const BAD_DEBT_COLUMN_LABEL_OVERRIDES: Partial<Record<ReportColumnKey, string>> =
-  {
+const REPORT_MODE_COLUMN_LABEL_OVERRIDES: Record<
+  SalesReportId,
+  Partial<Record<ReportColumnKey, string>>
+> = {
+  "sales-by-customer": {},
+  "bad-debts": {
     sales: "Write Off Amount (FCY)",
     "sales-with-tax": "Write Off Amount (BCY)",
-  };
+  },
+  "bank-charges": {
+    sales: "Bank Charges (FCY)",
+    "sales-with-tax": "Bank Charges (BCY)",
+    "invoice-count": "Payment Count",
+  },
+};
 
 const REPORT_COLUMN_GROUPS: ReportColumnGroup[] = [
   {
@@ -919,10 +928,12 @@ function SalesByCustomerReportView({
   const compareWithCountRef = useRef<HTMLDivElement | null>(null);
   const moreFiltersRef = useRef<HTMLDivElement | null>(null);
   const exportRef = useRef<HTMLDivElement | null>(null);
+  const isSalesByCustomerReport = reportId === "sales-by-customer";
   const isBadDebtsReport = reportId === "bad-debts";
-  const defaultDateRangeKey: DateRangeKey = isBadDebtsReport
-    ? "this-month"
-    : "this-week";
+  const isBankChargesReport = reportId === "bank-charges";
+  const defaultDateRangeKey: DateRangeKey = isSalesByCustomerReport
+    ? "this-week"
+    : "this-month";
   const [dateRangeKey, setDateRangeKey] =
     useState<DateRangeKey>(defaultDateRangeKey);
   const [dateRangeDraftKey, setDateRangeDraftKey] =
@@ -994,14 +1005,14 @@ function SalesByCustomerReportView({
   >([]);
   const [selectedReportColumns, setSelectedReportColumns] = useState<
     ReportColumnKey[]
-  >(isBadDebtsReport
-    ? ["name", "sales", "sales-with-tax"]
-    : ["name", "invoice-count", "sales", "sales-with-tax"]);
+  >(isSalesByCustomerReport
+    ? ["name", "invoice-count", "sales", "sales-with-tax"]
+    : ["name", "sales", "sales-with-tax"]);
   const [customizeDraftSelectedColumns, setCustomizeDraftSelectedColumns] =
     useState<ReportColumnKey[]>(
-      isBadDebtsReport
-        ? ["name", "sales", "sales-with-tax"]
-        : ["name", "invoice-count", "sales", "sales-with-tax"],
+      isSalesByCustomerReport
+        ? ["name", "invoice-count", "sales", "sales-with-tax"]
+        : ["name", "sales", "sales-with-tax"],
     );
   const { settings } = useSettings();
   const organizationName = String(
@@ -1572,9 +1583,12 @@ function SalesByCustomerReportView({
       setReportError("");
 
       try {
-        const response = isBadDebtsReport
-          ? await reportsAPI.getBadDebts(buildSalesByCustomerQuery())
-          : await reportsAPI.getSalesByCustomer(buildSalesByCustomerQuery());
+        const query = buildSalesByCustomerQuery();
+        const response = isBankChargesReport
+          ? await reportsAPI.getBankCharges(query)
+          : isBadDebtsReport
+            ? await reportsAPI.getBadDebts(query)
+            : await reportsAPI.getSalesByCustomer(query);
         if (cancelled) return;
 
         const data = response?.data || {};
@@ -1605,7 +1619,7 @@ function SalesByCustomerReportView({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isBadDebtsReport, reportRefreshTick]);
+  }, [isBadDebtsReport, isBankChargesReport, reportRefreshTick]);
 
   const closeAllOpenPanels = () => {
     setIsCompareWithOpen(false);
@@ -4927,7 +4941,11 @@ export default function ReportDetailPage() {
     : null;
   const calculatorPrecision = report.calculator?.precision ?? 2;
 
-  if (report.id === "sales-by-customer" || report.id === "bad-debts") {
+  if (
+    report.id === "sales-by-customer" ||
+    report.id === "bad-debts" ||
+    report.id === "bank-charges"
+  ) {
     return (
       <div className="relative min-h-[calc(100vh-64px)] pt-3">
         <ReportsDrawer

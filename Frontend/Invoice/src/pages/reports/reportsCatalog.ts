@@ -369,7 +369,17 @@ const ALL_REPORTS: ReportDefinition[] = [
     summary: "Bank charges related to receivable transactions and collections.",
     howItHelps:
       "Track deductions and reconciliation adjustments from payment processing.",
-    functionSupport: support("filter", "sort", "share", "export", "print"),
+    functionSupport: support(
+      "filter",
+      "compare",
+      "customizeColumns",
+      "sort",
+      "schedule",
+      "share",
+      "export",
+      "print",
+      "custom",
+    ),
   },
   {
     id: "bad-debts",

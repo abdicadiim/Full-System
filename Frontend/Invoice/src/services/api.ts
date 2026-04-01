@@ -2805,6 +2805,13 @@ export const reportsAPI = {
     }
     return res as any;
   },
+  getBankCharges: async (params?: Record<string, any>) => {
+    const res = await request({ path: "/reports/bank-charges", params });
+    if (!res?.success) {
+      throw new Error(res?.message || "Failed to fetch bank charges report");
+    }
+    return res as any;
+  },
 };
 
 export const locationsAPI = {

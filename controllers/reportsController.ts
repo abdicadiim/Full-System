@@ -5,6 +5,7 @@ import { CreditNote } from "../models/CreditNote.js";
 import { Invoice } from "../models/Invoice.js";
 import { Item } from "../models/Item.js";
 import { Organization } from "../models/Organization.js";
+import { PaymentReceived } from "../models/PaymentReceived.js";
 import { Quote } from "../models/Quote.js";
 import { Salesperson } from "../models/Salesperson.js";
 import { ReportingTag } from "../models/ReportingTag.js";
@@ -1446,6 +1447,180 @@ const buildBadDebtRows = (
   };
 };
 
+const getPaymentBankChargeDate = (row: any) =>
+  asDate(row?.date || row?.paymentDate || row?.createdAt);
+
+const getPaymentBankChargeAmount = (row: any) => {
+  const manualSource =
+    row?.bankCharges ?? row?.bank_charges ?? row?.bankCharge ?? row?.chargeFee;
+  const manualAmount = Number(manualSource);
+  if (Number.isFinite(manualAmount) && manualAmount > 0) {
+    return manualAmount;
+  }
+  return 0;
+};
+
+const getPaymentBankChargeAmountBase = (
+  row: any,
+  amount: number,
+  baseCurrency: string,
+) => {
+  const rowCurrency = String(row?.currency || baseCurrency || "").trim();
+  if (!rowCurrency || rowCurrency.toUpperCase() === baseCurrency.toUpperCase()) {
+    return amount;
+  }
+
+  const exchangeRate = asNumber(
+    row?.exchangeRate ?? row?.exchange_rate ?? row?.fxRate ?? row?.rate,
+    0,
+  );
+  if (exchangeRate > 0) {
+    return amount * exchangeRate;
+  }
+  return amount;
+};
+
+const buildBankChargeRows = (
+  rows: Array<{ row: any }>,
+  customers: any[],
+  range: { start: Date; end: Date },
+  moreFilters: MoreFilterRow[],
+  baseCurrency: string,
+) => {
+  const customerById = new Map<string, any>();
+  const customerByName = new Map<string, any>();
+  for (const customer of customers || []) {
+    const id = String(customer?._id || customer?.id || "").trim();
+    const name = resolveCustomerName(customer);
+    if (id) customerById.set(id, customer);
+    if (name) customerByName.set(normalizeText(name), customer);
+    const number = String(customer?.customerNumber || "").trim();
+    if (number) customerByName.set(normalizeText(number), customer);
+  }
+
+  const groupMap = new Map<string, any>();
+  let currency = baseCurrency || "SOS";
+
+  for (const item of rows || []) {
+    const row = item?.row || {};
+    const status = normalizeText(row?.status);
+    if (status === "draft" || status === "void" || status === "cancelled" || status === "canceled") {
+      continue;
+    }
+
+    const paymentDate = getPaymentBankChargeDate(row);
+    if (!paymentDate || paymentDate < range.start || paymentDate > range.end) {
+      continue;
+    }
+
+    const bankChargeAmount = getPaymentBankChargeAmount(row);
+    if (bankChargeAmount <= 0) continue;
+
+    const customerId = String(
+      row?.customerId || row?.customer?._id || row?.customer?.id || "",
+    ).trim();
+    const fallbackName = String(
+      row?.customerName ||
+        row?.customer?.displayName ||
+        row?.customer?.name ||
+        row?.customer?.companyName ||
+        "",
+    ).trim();
+    const customer =
+      customerById.get(customerId) ||
+      customerByName.get(normalizeText(fallbackName)) ||
+      row?.customer ||
+      null;
+
+    const customerContext = buildCustomerContext(customer, fallbackName);
+    const location = String(
+      row?.location ||
+        row?.locationName ||
+        customerContext["billing-city"] ||
+        customerContext["shipping-city"] ||
+        customerContext["billing-state"] ||
+        "",
+    ).trim();
+    const rowCurrency =
+      String(row?.currency || customer?.currency || baseCurrency || "SOS")
+        .trim() || baseCurrency || "SOS";
+    const bankChargeBase = getPaymentBankChargeAmountBase(
+      row,
+      bankChargeAmount,
+      baseCurrency || rowCurrency || "SOS",
+    );
+
+    const baseValues = {
+      ...customerContext,
+      location,
+      currency: rowCurrency,
+      "payment-number": String(
+        row?.paymentNumber || row?.number || row?.transactionNumber || "",
+      ).trim(),
+      "payment-date": paymentDate ? paymentDate.toISOString() : "",
+      sales: bankChargeAmount,
+      "sales-with-tax": bankChargeBase,
+    };
+
+    if (!matchesMoreFilters(baseValues, moreFilters)) continue;
+
+    const key = String(
+      baseValues["customer-id"] || baseValues.name || "unassigned",
+    )
+      .trim()
+      .toLowerCase();
+
+    if (!groupMap.has(key)) {
+      groupMap.set(key, {
+        values: {
+          ...baseValues,
+          "invoice-count": 0,
+          sales: 0,
+          "sales-with-tax": 0,
+        },
+      });
+      if (!currency) currency = rowCurrency;
+    }
+
+    const target = groupMap.get(key);
+    target.values["invoice-count"] =
+      asNumber(target.values["invoice-count"], 0) + 1;
+    target.values.sales = asNumber(target.values.sales, 0) + bankChargeAmount;
+    target.values["sales-with-tax"] =
+      asNumber(target.values["sales-with-tax"], 0) + bankChargeBase;
+    target.values["payment-number"] =
+      target.values["payment-number"] || baseValues["payment-number"];
+    target.values.currency = rowCurrency || String(target.values.currency || "");
+  }
+
+  const groupedRows = [...groupMap.values()].sort((left, right) => {
+    const amountDelta =
+      asNumber(right.values.sales, 0) - asNumber(left.values.sales, 0);
+    if (amountDelta !== 0) return amountDelta;
+    return String(left.values.name || "").localeCompare(
+      String(right.values.name || ""),
+    );
+  });
+
+  return {
+    rows: groupedRows,
+    currency: currency || baseCurrency || "SOS",
+    totals: groupedRows.reduce(
+      (acc, row) => {
+        acc["invoice-count"] += asNumber(row.values["invoice-count"], 0);
+        acc.sales += asNumber(row.values.sales, 0);
+        acc["sales-with-tax"] += asNumber(row.values["sales-with-tax"], 0);
+        return acc;
+      },
+      {
+        "invoice-count": 0,
+        sales: 0,
+        "sales-with-tax": 0,
+      } as Record<string, number>,
+    ),
+  };
+};
+
 const resolveItemName = (line: any, itemDoc: any, fallback = "") => {
   const values = [
     line?.itemDetails,
@@ -2424,6 +2599,88 @@ export const getBadDebtsReport: express.RequestHandler = async (
         compareRange,
         moreFilters,
         reportBy,
+        baseCurrency,
+      )
+    : null;
+
+  return res.json({
+    success: true,
+    data: {
+      rows: main.rows,
+      currency: main.currency,
+      totals: main.totals,
+      comparison,
+      appliedFilters: {
+        fromDate: range.start.toISOString(),
+        toDate: range.end.toISOString(),
+        compareWith,
+        compareCount,
+        reportBy,
+        moreFilters,
+      },
+    },
+  });
+};
+
+export const getBankChargesReport: express.RequestHandler = async (
+  req,
+  res,
+) => {
+  const orgId = requireOrgId(req, res);
+  if (!orgId) return;
+
+  const range = getDateRangeFromQuery(req);
+  const compareWith = String(
+    req.query.compareWith ?? req.query.compare_with ?? "none",
+  ).trim();
+  const compareCount = Math.max(
+    1,
+    Number(req.query.compareCount ?? req.query.compare_count ?? 1) || 1,
+  );
+  const reportBy = String(
+    req.query.reportBy ?? req.query.report_by ?? "payment-date",
+  ).trim();
+  const moreFilters = parseMoreFilters(
+    req.query.moreFilters ?? req.query.more_filters ?? req.query.filter_rows,
+  );
+
+  const [customers, payments, organization] = await Promise.all([
+    Customer.find({ organizationId: orgId }).lean(),
+    PaymentReceived.find({ organizationId: orgId, bankCharges: { $gt: 0 } }).lean(),
+    Organization.findOne({ _id: orgId }).lean(),
+  ]);
+
+  const baseCurrency = String(
+    (organization as any)?.baseCurrency || "SOS",
+  ).trim();
+  const postedPayments = (payments || []).filter((row: any) => {
+    const status = normalizeText(row?.status);
+    return (
+      status !== "draft" &&
+      status !== "void" &&
+      status !== "cancelled" &&
+      status !== "canceled"
+    );
+  });
+
+  const main = buildBankChargeRows(
+    postedPayments.map((row: any) => ({ row })),
+    customers,
+    range,
+    moreFilters,
+    baseCurrency,
+  );
+
+  const compareRange =
+    compareWith && compareWith !== "none"
+      ? shiftDateRange(range, compareWith, compareCount)
+      : null;
+  const comparison = compareRange
+    ? buildBankChargeRows(
+        postedPayments.map((row: any) => ({ row })),
+        customers,
+        compareRange,
+        moreFilters,
         baseCurrency,
       )
     : null;
