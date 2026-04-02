@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  checkEmailExists,
   login,
   logout,
   me,
@@ -15,6 +16,7 @@ import { requireAuth } from "../midelwares/requireAuth.js";
 
 export const authRoutes = Router();
 
+authRoutes.post("/check-email", checkEmailExists);
 authRoutes.post("/signup", signup);
 authRoutes.post("/login", login);
 authRoutes.post("/login/email-otp", requestLoginOtp);

@@ -289,7 +289,8 @@ export const REPORTS: ReportDefinition[] = [
     id: "average-sales-cycle-length",
     categoryId: "acquisition-insights",
     name: "Average Sales Cycle Length",
-    summary: "Average days from trial start to first payment.",
+    summary:
+      "This report displays the average length of your subscriptions' sales cycles in days, i.e., the average number of days that it takes to receive the first payment after a subscription's trial period started.",
     howItHelps: "Reduce time-to-convert by refining onboarding and sales touchpoints.",
     functionSupport: support("filter", "group", "compare", "performance", "schedule", "share", "export"),
   },

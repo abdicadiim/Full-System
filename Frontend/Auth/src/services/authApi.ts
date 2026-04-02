@@ -14,6 +14,8 @@ const request = async <T>(path: string, body?: unknown, method = "POST"): Promis
 };
 
 export const authApi = {
+  checkEmail: (email: string) =>
+    request<{ exists: boolean }>("/auth/check-email", { email }),
   login: (email: string, password: string) => request<{ id: string; name: string; email: string }>(
       "/auth/login",
       { email, password }

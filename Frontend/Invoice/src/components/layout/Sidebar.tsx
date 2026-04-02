@@ -28,6 +28,31 @@ import { useSettings } from "../../lib/settings/SettingsContext";
 import { getNavConfigForRole } from "../../config/roleBasedNav";
 import packageJson from "../../../package.json";
 
+const SIDEBAR_MODULE_BY_PATH: Record<string, string> = {
+  "/sales/quotes": "quotes",
+  "/sales/sales-receipts": "salesReceipts",
+  "/sales/retainer-invoices": "retainerInvoices",
+  "/sales/recurring-invoices": "recurringInvoice",
+  "/sales/credit-notes": "creditNote",
+  "/payments/payment-links": "paymentLinks",
+  "/time-tracking": "timeTracking",
+  "/time-tracking/projects": "timeTracking",
+  "/time-tracking/timesheet": "timeTracking",
+  "/time-tracking/approvals": "timeTracking",
+  "/time-tracking/customer-approvals": "timeTracking",
+};
+
+function normalizeModulePreferences(value: any) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function isSidebarPathVisible(path: string, modulePreferences: Record<string, boolean>) {
+  const moduleKey = SIDEBAR_MODULE_BY_PATH[path];
+  if (!moduleKey) return true;
+  if (typeof modulePreferences[moduleKey] !== "boolean") return true;
+  return modulePreferences[moduleKey];
+}
+
 function renderIcon(name) {
   const common = {
     className: "h-5 w-5",
@@ -281,8 +306,8 @@ function renderIcon(name) {
       return <Clock3 {...lineIconProps} />;
     case "events":
       return <Calendar {...lineIconProps} />;
-    case "documents":
-      return <File {...lineIconProps} />;
+    // case "documents":
+    //   return <File {...lineIconProps} />;
     default:
       return (
         <svg {...common}>
@@ -324,7 +349,7 @@ const routePermissionMap = {
   "/time-tracking": "time-tracking",
   "/events": "events",
   "/reports": "reports",
-  "/documents": "documents",
+  // "/documents": "documents",
 
   "/plans": "plans",
   "/coupons": "coupons",
@@ -367,7 +392,7 @@ const routePermissionContextMap = {
   "/payments/payments-received": { module: "payments", submodule: "Payments" },
   "/expenses": { module: "expenses", submodule: "Expenses" },
   "/time-tracking/projects": { module: "time-tracking", submodule: "Projects" },
-  "/documents": { module: "documents" },
+  // "/documents": { module: "documents" },
   "/reports": { module: "reports" },
   "/settings": { module: "settings" },
   "/settings/all-settings": { module: "settings" },
@@ -425,17 +450,40 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
   const navConfig = getNavConfigForRole(userRole);
   const sections = navConfig.sections;
   const subMenus = navConfig.subMenus;
+  const modulePreferences = React.useMemo(
+    () => normalizeModulePreferences(settings?.general?.modules),
+    [settings?.general?.modules]
+  );
+  const filteredSubMenus = React.useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(subMenus).map(([parent, items]) => [
+          parent,
+          items.filter((sub) => isSidebarPathVisible(sub.to, modulePreferences)),
+        ])
+      ),
+    [subMenus, modulePreferences]
+  );
 
   const [openParent, setOpenParent] = useState(() => {
-    return Object.keys(subMenus).find(
+    return Object.keys(filteredSubMenus).find(
       (parent) =>
         location.pathname === parent ||
-        subMenus[parent].some(sub =>
+        filteredSubMenus[parent].some(sub =>
           location.pathname === sub.to ||
           location.pathname.startsWith(sub.to + "/")
         )
     );
   });
+
+  React.useEffect(() => {
+    if (openParent && !filteredSubMenus[openParent]?.length) {
+      setOpenParent(null);
+    }
+    if (hoveredParent && !filteredSubMenus[hoveredParent]?.length) {
+      setHoveredParent(null);
+    }
+  }, [filteredSubMenus, hoveredParent, openParent]);
 
   const handleLinkClick = () => {
     if (onCloseMobile) onCloseMobile();
@@ -498,6 +546,7 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
       items: section.items.filter(item => {
         // Hide special onboarding card from sidebar modules.
         if (item.special) return false;
+        if (!isSidebarPathVisible(item.to, modulePreferences)) return false;
 
         // Find module key (e.g., '/timetable' -> 'timetable')
         const moduleKey = getPermissionContextForPath(item.to)?.module || getModuleKeyForPath(item.to);
@@ -512,11 +561,11 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
         }
 
         const parentHasAccess = hasPermission(moduleKey, getPermissionContextForPath(item.to)?.submodule, 'view');
-        if (!subMenus[item.to]) {
+        if (!filteredSubMenus[item.to]?.length) {
           return parentHasAccess;
         }
 
-        const childHasAccess = subMenus[item.to].some((sub) => hasViewPermissionForPath(sub.to));
+        const childHasAccess = filteredSubMenus[item.to].some((sub) => hasViewPermissionForPath(sub.to));
         return parentHasAccess || childHasAccess;
       }).map(item => {
         // Dynamic link replacements
@@ -526,7 +575,7 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
         return item;
       })
     })).filter(section => section.items.length > 0); // Hide empty sections
-  }, [sections, hasPermission, user]);
+  }, [sections, filteredSubMenus, hasPermission, modulePreferences, user]);
 
   return (
     <aside className={sidebarClasses} aria-label="Primary sidebar navigation">
@@ -608,12 +657,12 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
                 <div key={index} className="mb-4 last:mb-0 space-y-1.5">
                   <ul className="space-y-1.5">
                     {section.items.map((item) => {
-                      const hasSubMenu = !!subMenus[item.to];
+                      const hasSubMenu = Boolean(filteredSubMenus[item.to]?.length);
                       const isRouteActive =
                         location.pathname === item.to || location.pathname.startsWith(item.to + "/");
                       const isSubRouteActive =
                         hasSubMenu &&
-                        subMenus[item.to].some(
+                        filteredSubMenus[item.to].some(
                           (sub) =>
                             location.pathname === sub.to || location.pathname.startsWith(sub.to + "/")
                         );
@@ -721,7 +770,7 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
                                 className="absolute -left-4 -top-3 bottom-0 w-px bg-white/10"
                               />
                               <ul className="space-y-2.5">
-                                {subMenus[item.to]
+                                {filteredSubMenus[item.to]
                                   .filter(sub => {
                                     // Filter submenu items based on permissions too
                                     const permissionContext = getPermissionContextForPath(sub.to);
@@ -773,7 +822,7 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
             </div>
           </nav>
 
-          {isCollapsed && hoveredParent && subMenus[hoveredParent] && typeof document !== "undefined"
+          {isCollapsed && hoveredParent && filteredSubMenus[hoveredParent]?.length && typeof document !== "undefined"
             ? createPortal(
               <div
                 className="fixed z-[9999]"
@@ -797,7 +846,7 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
                     {hoveredParentLabel}
                   </div>
                   <div className="pb-4 px-3 max-h-[70vh] overflow-y-auto">
-                    {subMenus[hoveredParent]
+                    {filteredSubMenus[hoveredParent]
                       .filter((sub) => {
                         const permissionContext = getPermissionContextForPath(sub.to);
                         if (!permissionContext) return true;

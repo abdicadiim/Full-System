@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AuthShell from "../components/AuthShell";
 import { getAppDisplayName } from "../lib/appBranding";
@@ -27,14 +27,49 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [checkingEmail, setCheckingEmail] = useState(false);
+  const [emailExists, setEmailExists] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const appName = getAppDisplayName();
   const navigate = useNavigate();
+  const trimmedEmail = email.trim().toLowerCase();
+
+  useEffect(() => {
+    let active = true;
+
+    if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setCheckingEmail(false);
+      setEmailExists(false);
+      return;
+    }
+
+    setCheckingEmail(true);
+    const timer = window.setTimeout(async () => {
+      const result = await authApi.checkEmail(trimmedEmail).catch(() => null);
+      if (!active) return;
+      setCheckingEmail(false);
+      setEmailExists(Boolean(result?.success && result.data?.exists));
+    }, 350);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [trimmedEmail]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
+    const nextEmail = trimmedEmail;
+    const existsResult = nextEmail ? await authApi.checkEmail(nextEmail).catch(() => null) : null;
+    if (existsResult?.success && existsResult.data?.exists) {
+      setEmailExists(true);
+      setLoading(false);
+      setError("An account with this email already exists. Please log in.");
+      return;
+    }
 
     try {
       sessionStorage.setItem("orgName", name);
@@ -44,6 +79,9 @@ export default function SignupPage() {
     if (!result || !result.success) {
       setLoading(false);
       const message = result && !result.success ? result.message || "Signup failed" : "Signup failed";
+      if (message.toLowerCase().includes("already exists")) {
+        setEmailExists(true);
+      }
       setError(message);
       return;
     }
@@ -72,12 +110,27 @@ export default function SignupPage() {
         <div>
           <label className="mb-2 block text-sm font-semibold text-slate-700">Email Address</label>
           <input
-            className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-primary"
+            className={[
+              "w-full rounded-lg border bg-white px-4 py-3 text-slate-900 outline-none transition-all focus:border-transparent focus:ring-2",
+              emailExists ? "border-red-300 focus:ring-red-200" : "border-slate-200 focus:ring-primary",
+            ].join(" ")}
             placeholder="name@company.com"
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              setError(null);
+            }}
           />
+          {checkingEmail ? <p className="mt-2 text-xs text-slate-500">Checking email...</p> : null}
+          {!checkingEmail && emailExists ? (
+            <p className="mt-2 text-xs text-red-600">
+              An account with this email already exists.{" "}
+              <Link className="font-semibold underline" to={`/login${window.location.search}`}>
+                Log in
+              </Link>
+            </p>
+          ) : null}
         </div>
         <div>
           <label className="mb-2 block text-sm font-semibold text-slate-700">Password</label>
@@ -94,7 +147,7 @@ export default function SignupPage() {
 
         <button
           className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-4 font-bold text-white shadow-[0_10px_25px_rgba(18,86,99,0.20)] transition-all hover:bg-primary/90 disabled:opacity-60"
-          disabled={loading}
+          disabled={loading || checkingEmail || emailExists}
           type="submit"
         >
           <span>{loading ? "Creating..." : "Create Account"}</span>

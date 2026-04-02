@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import SearchableSelect, { type SelectOption } from "../components/SearchableSelect";
 import SetupHeader from "../components/SetupHeader";
@@ -27,6 +27,30 @@ export default function MovingSystemPage() {
       ].map((label) => ({ value: label, label })),
     []
   );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const hydrateFromDatabase = async () => {
+      const result = await orgApi.getMe().catch(() => null);
+      if (!result?.success || !isMounted) return;
+
+      const org = result.data || {};
+      const storedBillingTool = String(org?.currentBillingTool || "").trim();
+      const storedWantsImport = typeof org?.wantsImport === "boolean" ? org.wantsImport : undefined;
+
+      if (storedBillingTool) setHowBill(storedBillingTool);
+      if (typeof storedWantsImport === "boolean") {
+        setImportChoice(storedWantsImport ? "yes" : "no");
+      }
+    };
+
+    void hydrateFromDatabase();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const onStart = (e: React.FormEvent) => {
     e.preventDefault();

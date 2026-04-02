@@ -5,6 +5,7 @@ export type SelectOption = { value: string; label: string };
 export default function SearchableSelect({
   label,
   required,
+  labelClassName,
   value,
   options,
   placeholder,
@@ -16,6 +17,7 @@ export default function SearchableSelect({
 }: {
   label?: string;
   required?: boolean;
+  labelClassName?: string;
   value: string;
   options: SelectOption[];
   placeholder: string;
@@ -64,7 +66,7 @@ export default function SearchableSelect({
   return (
     <div ref={containerRef} className="relative space-y-2">
       {label ? (
-        <label className="text-xs font-semibold text-slate-700">
+        <label className={labelClassName || "text-xs font-semibold text-slate-700"}>
           {label}
           {required ? <span className="text-red-500">*</span> : null}
         </label>

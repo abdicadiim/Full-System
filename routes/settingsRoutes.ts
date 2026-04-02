@@ -41,6 +41,10 @@ import {
   getQuotesSettings,
   upsertQuotesSettings,
 } from "../controllers/quotesSettingsController.js";
+import {
+  getGeneralSettings,
+  upsertGeneralSettings,
+} from "../controllers/generalSettingsController.js";
 
 export const settingsRoutes = Router();
 
@@ -64,6 +68,10 @@ settingsRoutes.put("/items", requireAuth, requireOrgAdmin, upsertItemSettings);
 // Quotes (module settings)
 settingsRoutes.get("/quotes", requireAuth, getQuotesSettings);
 settingsRoutes.put("/quotes", requireAuth, requireOrgAdmin, upsertQuotesSettings);
+
+// General settings
+settingsRoutes.get("/general", requireAuth, getGeneralSettings);
+settingsRoutes.put("/general", requireAuth, requireOrgAdmin, upsertGeneralSettings);
 
 // Sender emails
 settingsRoutes.get("/sender-emails", requireAuth, listSenderEmails);

@@ -248,6 +248,48 @@ export default function OrgSetupPage() {
   }, [countryIso]);
 
   useEffect(() => {
+    let isMounted = true;
+
+    const hydrateFromDatabase = async () => {
+      const result = await orgApi.getMe().catch(() => null);
+      if (!result?.success || !isMounted) return;
+
+      const org = result.data || {};
+      const storedName = String(org?.name || "").trim();
+      const storedCountryIso = String(org?.countryIso || "").trim().toUpperCase();
+      const storedState = String(org?.state || "").trim();
+      const storedCurrencyCode = String(org?.baseCurrency || "").trim().toUpperCase();
+      const storedFiscalYear = String(org?.fiscalYear || "").trim();
+      const storedLanguage = String(org?.language || "").trim();
+      const storedTimeZone = String(org?.timeZone || "").trim();
+      const storedLogoUrl = String(org?.logoUrl || "").trim();
+
+      if (storedName) {
+        setOrgName(storedName);
+        try {
+          sessionStorage.setItem("orgName", storedName);
+        } catch {}
+      }
+      if (storedCountryIso) setCountryIso(storedCountryIso);
+      if (storedState) setState(storedState);
+      if (storedCurrencyCode) {
+        const matchedCurrency = CURRENCIES.find((entry) => entry.startsWith(`${storedCurrencyCode} - `));
+        setCurrency(matchedCurrency || storedCurrencyCode);
+      }
+      if (storedFiscalYear) setFiscalYear(storedFiscalYear);
+      if (storedLanguage) setLanguage(storedLanguage);
+      if (storedTimeZone) setTimeZone(storedTimeZone);
+      if (storedLogoUrl) setLogoUrl(storedLogoUrl);
+    };
+
+    void hydrateFromDatabase();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (stateOptions.length === 0) return;
     if (!state) return;
     if (!stateOptions.includes(state)) setState("");
@@ -309,7 +351,7 @@ export default function OrgSetupPage() {
 
         <form onSubmit={onContinue} className="space-y-8">
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-slate-700">
+            <label className="text-xs font-semibold text-red-600">
               Organization Name<span className="text-red-500">*</span>
             </label>
             <input
@@ -372,6 +414,7 @@ export default function OrgSetupPage() {
           <div className="grid gap-6 md:grid-cols-2">
             <SearchableSelect
               label="Organization Location"
+              labelClassName="text-xs font-semibold text-red-600"
               required
               value={countryIso}
               options={COUNTRIES}
@@ -406,6 +449,7 @@ export default function OrgSetupPage() {
 
           <SearchableSelect
             label="Base Currency"
+            labelClassName="text-xs font-semibold text-red-600"
             required
             value={currency}
             options={currencyOptions}
@@ -417,7 +461,7 @@ export default function OrgSetupPage() {
 
           <div className="space-y-6">
             <div className="flex flex-col gap-2 md:flex-row md:items-center">
-              <div className="w-40 text-xs font-semibold text-slate-700">
+              <div className="w-40 text-xs font-semibold text-red-600">
                 Fiscal Year<span className="text-red-500">*</span>
               </div>
               <div className="w-full md:max-w-md">
@@ -433,7 +477,7 @@ export default function OrgSetupPage() {
             </div>
 
             <div className="flex flex-col gap-2 md:flex-row md:items-center">
-              <div className="w-40 text-xs font-semibold text-slate-700">
+              <div className="w-40 text-xs font-semibold text-red-600">
                 Language<span className="text-red-500">*</span>
               </div>
               <div className="w-full md:max-w-md">
@@ -450,7 +494,7 @@ export default function OrgSetupPage() {
             </div>
 
             <div className="flex flex-col gap-2 md:flex-row md:items-center">
-              <div className="w-40 text-xs font-semibold text-slate-700">
+              <div className="w-40 text-xs font-semibold text-red-600">
                 Time Zone<span className="text-red-500">*</span>
               </div>
               <div className="w-full md:max-w-md">

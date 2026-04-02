@@ -5,6 +5,7 @@ import { Upload, Edit2, X, Search, HelpCircle, Send, Settings as SettingsIcon, I
 import { toast } from "react-toastify";
 import Skeleton from "../../../../../components/ui/Skeleton";
 import { TIMEZONES } from "../../../../../constants/timezones";
+import { currenciesAPI } from "../../../../../services/api";
 
 const API_BASE_URL = '/api';
 const DEFAULT_SYSTEM_SENDER_EMAIL = "message-service@sender.tabanbooks.com";
@@ -327,7 +328,7 @@ const COUNTRIES = [
   "Zimbabwe"
 ];
 
-const CURRENCIES = [
+const DEFAULT_CURRENCY_OPTIONS = [
   "SOS - Somali Shilling",
   "USD - US Dollar",
   "EUR - Euro",
@@ -339,6 +340,7 @@ const CURRENCIES = [
   "CNY - Chinese Yuan",
   "JPY - Japanese Yen"
 ];
+const CURRENCY_STORAGE_KEYS = ["taban_currencies", "taban_books_currencies"];
 const LANGUAGES = ["English", "Spanish", "French", "German", "Arabic", "Chinese", "Hindi"];
 const TIME_ZONES = TIMEZONES;
 const DATE_FORMATS = {
@@ -372,6 +374,184 @@ const ALL_DATE_FORMATS = [
 ];
 const FISCAL_YEARS = ["January - December", "February - January", "March - February", "April - March"];
 const START_DATES = Array.from({ length: 31 }, (_, i) => i + 1);
+
+const isBaseCurrencyRecord = (currency: any) => {
+  const flag = currency?.isBase ?? currency?.isBaseCurrency ?? currency?.is_base_currency ?? currency?.baseCurrency ?? currency?.base_currency;
+  if (typeof flag === "string") {
+    return ["true", "yes", "1", "base"].includes(flag.trim().toLowerCase());
+  }
+  return Boolean(flag);
+};
+
+const formatCurrencyOption = (code: string, name: string) => `${code} - ${name}`;
+
+const normalizeCurrencyOption = (raw: any) => {
+  const code = String(raw?.code || raw?.currencyCode || "").trim().toUpperCase();
+  const name = String(raw?.name || raw?.currencyName || "").trim();
+
+  if (!code || !name) {
+    return null;
+  }
+
+  return {
+    label: formatCurrencyOption(code, name),
+    isBase: isBaseCurrencyRecord(raw),
+  };
+};
+
+const buildCurrencyOptions = (rows: any[]) => {
+  const seen = new Set<string>();
+  const normalized = rows
+    .map(normalizeCurrencyOption)
+    .filter((currency): currency is { label: string; isBase: boolean } => Boolean(currency))
+    .filter((currency) => {
+      if (seen.has(currency.label)) {
+        return false;
+      }
+      seen.add(currency.label);
+      return true;
+    });
+
+  normalized.sort((a, b) => {
+    if (a.isBase !== b.isBase) {
+      return a.isBase ? -1 : 1;
+    }
+    return a.label.localeCompare(b.label);
+  });
+
+  return normalized.map((currency) => currency.label);
+};
+
+const extractCurrencyRows = (response: any) => {
+  const candidates = [
+    response?.data,
+    response?.data?.data,
+    response?.data?.currencies,
+    response?.data?.items,
+    response?.currencies,
+    response?.items,
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return candidate;
+    }
+  }
+
+  return [];
+};
+
+const readStoredCurrencyRows = () => {
+  for (const storageKey of CURRENCY_STORAGE_KEYS) {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      if (!stored) continue;
+
+      const parsed = JSON.parse(stored);
+      const rows = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.data)
+          ? parsed.data
+          : Array.isArray(parsed?.currencies)
+            ? parsed.currencies
+            : [];
+
+      if (rows.length > 0) {
+        return rows;
+      }
+    } catch {
+      // Ignore malformed cache and try the next storage key.
+    }
+  }
+
+  return [];
+};
+
+const resolveCurrencySelection = (value: string | null | undefined, options: string[]) => {
+  const availableOptions = options.length > 0 ? options : DEFAULT_CURRENCY_OPTIONS;
+  const fallback = availableOptions[0] || DEFAULT_CURRENCY_OPTIONS[0];
+  const raw = String(value || "").trim();
+
+  if (!raw) {
+    return fallback;
+  }
+
+  const code = raw.split(" - ")[0].trim().toUpperCase();
+
+  return availableOptions.find((option) => option.toUpperCase() === raw.toUpperCase())
+    || availableOptions.find((option) => option.toUpperCase().startsWith(`${code} - `))
+    || raw;
+};
+
+const readStoredCurrencyOptions = () => {
+  const rows = readStoredCurrencyRows();
+  const options = buildCurrencyOptions(rows);
+  return options.length > 0 ? options : DEFAULT_CURRENCY_OPTIONS;
+};
+
+const extractCurrencyCode = (value: string | null | undefined) =>
+  String(value || "").split(" - ")[0].trim().toUpperCase();
+
+const getBaseCurrencySelectionFromRows = (rows: any[], options?: string[]) => {
+  const base = normalizeCurrencyOption(rows.find(isBaseCurrencyRecord));
+  if (!base) return null;
+  const availableOptions = options && options.length > 0 ? options : buildCurrencyOptions(rows);
+  return resolveCurrencySelection(base.label, availableOptions);
+};
+
+const readStoredBaseCurrencySelection = () => {
+  const rows = readStoredCurrencyRows();
+  return rows.length > 0 ? getBaseCurrencySelectionFromRows(rows) : null;
+};
+
+const updateStoredBaseCurrencySelection = (selectedCurrency: string) => {
+  const targetCode = extractCurrencyCode(selectedCurrency);
+  if (!targetCode) return;
+
+  for (const storageKey of CURRENCY_STORAGE_KEYS) {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      if (!stored) continue;
+
+      const parsed = JSON.parse(stored);
+      const rows = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.data)
+          ? parsed.data
+          : Array.isArray(parsed?.currencies)
+            ? parsed.currencies
+            : [];
+
+      if (!rows.length) continue;
+
+      const nextRows = rows.map((row: any) => {
+        const rowCode = extractCurrencyCode(String(row?.code || row?.currencyCode || ""));
+        const isTarget = rowCode === targetCode;
+        const nextRow: any = {
+          ...row,
+          isBase: isTarget,
+          isBaseCurrency: isTarget,
+        };
+
+        if (Object.prototype.hasOwnProperty.call(row, "is_base_currency")) {
+          nextRow.is_base_currency = isTarget;
+        }
+        if (Object.prototype.hasOwnProperty.call(row, "baseCurrency")) {
+          nextRow.baseCurrency = isTarget;
+        }
+        if (Object.prototype.hasOwnProperty.call(row, "base_currency")) {
+          nextRow.base_currency = isTarget;
+        }
+
+        return nextRow;
+      });
+
+      localStorage.setItem(storageKey, JSON.stringify(nextRows));
+    } catch {
+      // Ignore malformed cache writes.
+    }
+  }
+};
 
 // Helper for click away
 function useClickAway(ref, onAway, additionalRef = null) {
@@ -738,9 +918,9 @@ function DateFormatDropdown({ value, placeholder, onChange }) {
 
 export default function ProfilePage() {
   const navigate = useNavigate();
+  const [currencyOptions, setCurrencyOptions] = useState<string[]>(() => readStoredCurrencyOptions());
   const [orgName, setOrgName] = useState(() => {
     const local = localStorage.getItem('org_profile');
-    console.log("DEBUG: Local org_profile from storage:", local);
     return local ? JSON.parse(local).organizationName : "Taban enterprise";
   });
 
@@ -804,14 +984,22 @@ export default function ProfilePage() {
 
   // Additional fields
   const [baseCurrency, setBaseCurrency] = useState(() => {
-    const local = localStorage.getItem('org_profile');
-    if (local) {
-      const parsed = JSON.parse(local);
-      const cur = parsed.currency;
-      if (cur) return cur.includes(' - ') ? cur : CURRENCIES.find(c => c.startsWith(cur)) || cur;
-      return "SOS - Somali Shilling";
+    const storedBaseSelection = readStoredBaseCurrencySelection();
+    if (storedBaseSelection) {
+      return storedBaseSelection;
     }
-    return "SOS - Somali Shilling";
+    const options = readStoredCurrencyOptions();
+    try {
+      const local = localStorage.getItem('org_profile');
+      if (local) {
+        const parsed = JSON.parse(local);
+        const cur = parsed.currency || parsed.baseCurrency;
+        return resolveCurrencySelection(cur, options);
+      }
+    } catch (error) {
+      console.error('Error parsing local org profile currency:', error);
+    }
+    return resolveCurrencySelection(null, options);
   });
   const [fiscalYear, setFiscalYear] = useState("January - December");
   const [startDate, setStartDate] = useState("1");
@@ -940,6 +1128,44 @@ export default function ProfilePage() {
     setIsEditCurrencyModalOpen(true);
   };
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const applyCurrencyOptions = (options: string[], preferredSelection: string | null = null) => {
+      if (!isMounted || options.length === 0) return;
+      setCurrencyOptions(options);
+      setBaseCurrency((current) => resolveCurrencySelection(preferredSelection || current, options));
+    };
+
+    const loadCurrencyOptions = async () => {
+      const storedRows = readStoredCurrencyRows();
+      const storedOptions = buildCurrencyOptions(storedRows);
+      const storedBaseSelection = getBaseCurrencySelectionFromRows(storedRows, storedOptions);
+      applyCurrencyOptions(
+        storedOptions.length > 0 ? storedOptions : readStoredCurrencyOptions(),
+        storedBaseSelection,
+      );
+
+      try {
+        const response = await currenciesAPI.getAll({ limit: 2000 });
+        const rows = extractCurrencyRows(response);
+        const options = buildCurrencyOptions(rows);
+        const baseSelection = getBaseCurrencySelectionFromRows(rows, options);
+        if (options.length > 0) {
+          applyCurrencyOptions(options, baseSelection);
+        }
+      } catch (error) {
+        console.error("Error loading currency options:", error);
+      }
+    };
+
+    void loadCurrencyOptions();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Load profile data on mount
   useEffect(() => {
     const loadProfile = async () => {
@@ -949,6 +1175,7 @@ export default function ProfilePage() {
       if (localData) {
         try {
           const lp = JSON.parse(localData);
+          const storedBaseSelection = readStoredBaseCurrencySelection();
           if (lp.organizationName) setOrgName(lp.organizationName);
           if (lp.businessType) setBusinessType(lp.businessType);
           if (lp.industry) setIndustry(lp.industry);
@@ -958,7 +1185,11 @@ export default function ProfilePage() {
           if (lp.city) setCity(lp.city);
           if (lp.zipCode) setZipCode(lp.zipCode);
           if (lp.state) setState(lp.state);
-          if (lp.currency) setBaseCurrency(lp.currency.split(' - ')[0]);
+          if (storedBaseSelection) {
+            setBaseCurrency(storedBaseSelection);
+          } else if (lp.currency || lp.baseCurrency) {
+            setBaseCurrency(resolveCurrencySelection(lp.currency || lp.baseCurrency, readStoredCurrencyOptions()));
+          }
           if (lp.language) setOrgLanguage(lp.language);
           if (lp.timezone) setTimeZone(lp.timezone);
         } catch (e) {
@@ -982,13 +1213,18 @@ export default function ProfilePage() {
           const data = await response.json();
           if (data.success && data.data) {
             const p = data.data;
+            const storedBaseSelection = readStoredBaseCurrencySelection();
             // Only update if server has non-empty values
             if (p.name && p.name !== "Taban enterprise") setOrgName(p.name);
             if (p.businessType) setBusinessType(p.businessType);
             if (p.industry) setIndustry(p.industry);
             if (p.address?.country) setLocation(p.address.country);
             if (p.website) setWebsite(p.website);
-            if (p.baseCurrency) setBaseCurrency(CURRENCIES.find(c => c.startsWith(p.baseCurrency)) || p.baseCurrency);
+            if (storedBaseSelection) {
+              setBaseCurrency(storedBaseSelection);
+            } else if (p.baseCurrency) {
+              setBaseCurrency(resolveCurrencySelection(p.baseCurrency, readStoredCurrencyOptions()));
+            }
             if (p.fiscalYear) setFiscalYear(p.fiscalYear);
             if (p.reportBasis) setReportBasis(p.reportBasis);
             if (p.orgLanguage) setOrgLanguage(p.orgLanguage);
@@ -1131,6 +1367,52 @@ export default function ProfilePage() {
     fax,
   ]);
 
+  const syncBaseCurrencyWithCurrencyTable = async (selectedCurrency: string) => {
+    const selectedCode = extractCurrencyCode(selectedCurrency);
+    if (!selectedCode) {
+      return resolveCurrencySelection(selectedCurrency, currencyOptions);
+    }
+
+    const response = await currenciesAPI.getAll({ limit: 2000 });
+    const rows = extractCurrencyRows(response);
+    if (!rows.length) {
+      updateStoredBaseCurrencySelection(selectedCurrency);
+      return resolveCurrencySelection(selectedCurrency, currencyOptions);
+    }
+
+    const targetCurrency = rows.find(
+      (row) => extractCurrencyCode(String(row?.code || row?.currencyCode || "")) === selectedCode,
+    );
+
+    if (!targetCurrency) {
+      updateStoredBaseCurrencySelection(selectedCurrency);
+      return resolveCurrencySelection(selectedCurrency, buildCurrencyOptions(rows));
+    }
+
+    const targetId = String(targetCurrency?._id || targetCurrency?.id || "").trim();
+    if (targetId && !isBaseCurrencyRecord(targetCurrency)) {
+      const updateResponse = await currenciesAPI.update(targetId, { isBaseCurrency: true });
+      if (!updateResponse?.success) {
+        throw new Error(updateResponse?.message || "Failed to update base currency in currencies table");
+      }
+    }
+
+    const refreshedResponse = targetId ? await currenciesAPI.getAll({ limit: 2000 }) : response;
+    const refreshedRows = extractCurrencyRows(refreshedResponse);
+    const nextRows = refreshedRows.length > 0 ? refreshedRows : rows;
+    const nextOptions = buildCurrencyOptions(nextRows);
+    const nextSelection =
+      getBaseCurrencySelectionFromRows(nextRows, nextOptions)
+      || resolveCurrencySelection(selectedCurrency, nextOptions.length > 0 ? nextOptions : currencyOptions);
+
+    if (nextOptions.length > 0) {
+      setCurrencyOptions(nextOptions);
+    }
+    updateStoredBaseCurrencySelection(nextSelection);
+
+    return nextSelection;
+  };
+
   // Save profile function
   const handleSave = async () => {
     setIsSaving(true);
@@ -1246,6 +1528,15 @@ export default function ProfilePage() {
       }
 
       if (response.ok && data.success) {
+        let syncedBaseCurrency = baseCurrency;
+        try {
+          syncedBaseCurrency = await syncBaseCurrencyWithCurrencyTable(baseCurrency);
+          setBaseCurrency(syncedBaseCurrency);
+        } catch (currencyError: any) {
+          console.error('Error syncing base currency:', currencyError);
+          toast.warn(currencyError?.message || 'Profile was saved, but the currencies table base currency could not be updated.');
+        }
+
         toast.success('Profile saved successfully!');
         try {
           const existingOrgProfile = (() => {
@@ -1266,7 +1557,7 @@ export default function ProfilePage() {
             logoUrl: logoBase64,
             email: email,
             website: website,
-            baseCurrency: baseCurrency.split(" - ")[0],
+            baseCurrency: syncedBaseCurrency.split(" - ")[0],
             orgLanguage: orgLanguage,
             timeZone: timeZone,
             dateFormat: dateFormat,
@@ -1571,7 +1862,7 @@ export default function ProfilePage() {
                 <SearchableDropdown
                   value={baseCurrency}
                   placeholder="Select Currency"
-                  options={CURRENCIES}
+                  options={currencyOptions}
                   onChange={setBaseCurrency}
                 />
               </div>

@@ -44,11 +44,12 @@ import {
 import { getInvoices, getInvoicesPaginated, getInvoiceById, updateInvoice, deleteInvoice, Invoice } from "../salesModel";
 import { getInvoiceStatusDisplay } from "../../utils/invoiceUtils";
 import { useCurrency } from "../../hooks/useCurrency";
+import { useSettings } from "../../lib/settings/SettingsContext";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
 
-const invoiceViews = [
+const ALL_INVOICE_VIEWS = [
   "All Invoices",
   "Draft",
   "Locked",
@@ -107,6 +108,7 @@ const decimalFormatOptions = [
 export default function Invoices() {
   const navigate = useNavigate();
   const { formatMoney } = useCurrency();
+  const { settings } = useSettings();
   const [searchParams] = useSearchParams();
   const [isInvoiceDropdownOpen, setIsInvoiceDropdownOpen] = useState(false);
   const [selectedView, setSelectedView] = useState("All Invoices");
@@ -192,6 +194,21 @@ export default function Invoices() {
     termsAndConditions: "",
     customerNotes: "Thank you for the payment. You just made our day."
   });
+  const modulePreferences =
+    settings?.general?.modules &&
+    typeof settings.general.modules === "object" &&
+    !Array.isArray(settings.general.modules)
+      ? settings.general.modules
+      : {};
+  const showDebitNoteModule =
+    typeof modulePreferences.debitNote === "boolean" ? modulePreferences.debitNote : true;
+  const invoiceViews = useMemo(
+    () =>
+      ALL_INVOICE_VIEWS.filter(
+        (view) => view !== "Debit Note" || showDebitNoteModule
+      ),
+    [showDebitNoteModule]
+  );
   // Refresh data when returning to page
   const refreshData = async (page = currentPage, limit = itemsPerPage) => {
     setIsRefreshing(true);
@@ -699,6 +716,12 @@ export default function Invoices() {
     navigate("/sales/debit-notes/new");
   };
   const showRetailAndDebitInNewDropdown = false;
+
+  useEffect(() => {
+    if (showDebitNoteModule || selectedView !== "Debit Note") return;
+    setSelectedView("All Invoices");
+    void applyFilters("All Invoices", selectedStatus);
+  }, [showDebitNoteModule, selectedStatus, selectedView]);
 
   const formatCurrency = (amount) => {
     return formatMoney(amount);

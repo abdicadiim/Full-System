@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import SearchableSelect, { type SelectOption } from "../components/SearchableSelect";
 import SetupHeader from "../components/SetupHeader";
@@ -80,6 +80,34 @@ export default function OptimizePage() {
     []
   );
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const hydrateFromDatabase = async () => {
+      const result = await orgApi.getMe().catch(() => null);
+      if (!result?.success || !isMounted) return;
+
+      const org = result.data || {};
+      const storedIndustry = String(org?.industry || "").trim();
+      const storedBillingProcess = String(org?.billingProcess || "").trim() as BillingMode;
+      const storedInvoicingTool = String(org?.invoicingTool || "").trim();
+
+      if (storedIndustry) setIndustry(storedIndustry);
+      if (showBillingModes && ["one_time", "recurring", "both"].includes(storedBillingProcess)) {
+        setMode(storedBillingProcess);
+      }
+      if (showInvoiceTool && storedInvoicingTool) {
+        setInvoiceTool(storedInvoicingTool);
+      }
+    };
+
+    void hydrateFromDatabase();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [showBillingModes, showInvoiceTool]);
+
   const onContinue = (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitted(true);
@@ -134,7 +162,7 @@ export default function OptimizePage() {
 
         <form onSubmit={onContinue} className="space-y-8">
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-slate-700">
+            <label className="text-xs font-semibold text-red-600">
               Industry Type<span className="text-red-500">*</span>
             </label>
             <SearchableSelect
@@ -155,7 +183,7 @@ export default function OptimizePage() {
 
           {showBillingModes ? (
             <div className="space-y-3">
-              <label className="text-xs font-semibold text-slate-700">
+              <label className="text-xs font-semibold text-red-600">
                 Which of these best describes your billing process?<span className="text-red-500">*</span>
               </label>
 
@@ -184,7 +212,7 @@ export default function OptimizePage() {
 
           {showInvoiceTool ? (
             <div className="space-y-2">
-              <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+              <label className="flex items-center gap-2 text-xs font-semibold text-red-600">
                 <span>
                   How are you managing invoicing currently?<span className="text-red-500">*</span>
                 </span>

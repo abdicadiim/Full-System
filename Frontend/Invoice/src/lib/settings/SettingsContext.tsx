@@ -16,6 +16,42 @@ const DEFAULT_THEME = {
   buttonHoverColor: 'rgb(245, 178, 33)',
   accentColor: 'rgb(245, 178, 33)',
 };
+const DEFAULT_LIGHT_SIDEBAR_COLOR = '#f9fafb';
+
+function normalizeAppearance(value: any, fallback = 'dark') {
+  const raw = String(value || '').trim();
+  if (!raw) return fallback;
+  return raw === 'system' ? 'dark' : raw;
+}
+
+function readStoredBranding() {
+  try {
+    const savedBranding = localStorage.getItem("organization_branding");
+    if (!savedBranding) return {};
+    const parsed = JSON.parse(savedBranding);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function mergeBrandingPayload(existing: any, incoming: any) {
+  const merged = {
+    ...(existing && typeof existing === "object" ? existing : {}),
+    ...(incoming && typeof incoming === "object" ? incoming : {}),
+  };
+
+  merged.appearance = normalizeAppearance(
+    merged.appearance,
+    normalizeAppearance(existing?.appearance, 'dark')
+  );
+
+  return merged;
+}
+
+function normalizeModuleSettings(value: any) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
 
 // Helper function to convert hex to rgb
 function hexToRgb(hex) {
@@ -115,17 +151,12 @@ export function SettingsProvider({ children }) {
   const brandingUpdatedLocallyRef = useRef(false);
   const [settings, setSettings] = useState(() => {
     const saved = localStorage.getItem('appSettings');
-    let parsedBranding = null;
-    try {
-      const savedBranding = localStorage.getItem("organization_branding");
-      if (savedBranding) parsedBranding = JSON.parse(savedBranding);
-    } catch {}
+    const parsedBranding = readStoredBranding();
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         const accentColor = String(parsedBranding?.accentColor || parsed.theme?.accentColor || DEFAULT_THEME.accentColor).trim();
-        const appearanceRaw = String(parsedBranding?.appearance || parsed.branding?.appearance || "").trim();
-        const appearance = appearanceRaw === "system" ? "dark" : (appearanceRaw || parsed.branding?.appearance || "dark");
+        const appearance = normalizeAppearance(parsedBranding?.appearance, parsed.branding?.appearance || "dark");
         const sidebarDarkFrom = String(parsedBranding?.sidebarDarkFrom || "").trim();
         const sidebarLightFrom = String(parsedBranding?.sidebarLightFrom || "").trim();
         const logo = String(parsedBranding?.logo || parsed.branding?.logoUrl || "").trim();
@@ -135,6 +166,7 @@ export function SettingsProvider({ children }) {
             shortName: parsed.general?.shortName || 'Taban',
             companyDisplayName: parsed.general?.companyDisplayName || 'Taban Enterprise',
             organizationEmail: parsed.general?.organizationEmail || "",
+            modules: normalizeModuleSettings(parsed.general?.modules),
           },
           branding: {
             primaryColor: parsed.branding?.primaryColor || DEFAULT_THEME.primaryColor,
@@ -163,6 +195,7 @@ export function SettingsProvider({ children }) {
         shortName: 'Taban',
         companyDisplayName: 'Taban Enterprise',
         organizationEmail: "",
+        modules: {},
       },
       branding: {
         primaryColor: DEFAULT_THEME.primaryColor,
@@ -207,18 +240,27 @@ export function SettingsProvider({ children }) {
   const applyBrandingToSettings = (branding: any) => {
     if (!branding) return;
 
-    const appearanceRaw = String(branding?.appearance || "").trim();
-    const appearance = appearanceRaw === "system" ? "dark" : (appearanceRaw || "dark");
     const accentColor = String(branding?.accentColor || "").trim();
     const sidebarDarkFrom = String(branding?.sidebarDarkFrom || "").trim();
     const sidebarLightFrom = String(branding?.sidebarLightFrom || "").trim();
     const logo = String(branding?.logo || "").trim();
+    const hasLogoField = Object.prototype.hasOwnProperty.call(branding, "logo");
 
     setSettings((prev) => {
+      const previousAppearance = normalizeAppearance(prev?.branding?.appearance, 'dark');
+      const appearance = normalizeAppearance(branding?.appearance, previousAppearance);
       const nextSidebarColor =
         appearance === "light"
-          ? (sidebarLightFrom || prev.theme?.sidebarColor || DEFAULT_THEME.sidebarColor)
-          : (sidebarDarkFrom || prev.theme?.sidebarColor || DEFAULT_THEME.sidebarColor);
+          ? (
+              sidebarLightFrom
+              || (previousAppearance === "light" ? prev.theme?.sidebarColor : DEFAULT_LIGHT_SIDEBAR_COLOR)
+              || DEFAULT_LIGHT_SIDEBAR_COLOR
+            )
+          : (
+              sidebarDarkFrom
+              || (previousAppearance === "dark" ? prev.theme?.sidebarColor : DEFAULT_THEME.sidebarColor)
+              || DEFAULT_THEME.sidebarColor
+            );
 
       const nextAccent = accentColor || prev.theme?.accentColor || DEFAULT_THEME.accentColor;
 
@@ -227,7 +269,7 @@ export function SettingsProvider({ children }) {
         branding: {
           ...prev.branding,
           appearance,
-          ...(logo ? { logoUrl: logo } : {}),
+          ...(hasLogoField ? { logoUrl: logo } : {}),
         },
         theme: {
           ...prev.theme,
@@ -237,6 +279,22 @@ export function SettingsProvider({ children }) {
         },
       };
     });
+  };
+
+  const applyGeneralSettingsToSettings = (generalSettings: any) => {
+    const modules = normalizeModuleSettings(generalSettings?.modules);
+    if (!Object.keys(modules).length) return;
+
+    setSettings((prev) => ({
+      ...prev,
+      general: {
+        ...prev.general,
+        modules: {
+          ...normalizeModuleSettings(prev.general?.modules),
+          ...modules,
+        },
+      },
+    }));
   };
 
   useEffect(() => {
@@ -260,6 +318,23 @@ export function SettingsProvider({ children }) {
           localStorage.setItem("organization_profile", JSON.stringify(profile));
         } catch {}
         applyOrganizationProfileToSettings(profile);
+      })
+      .catch(() => {});
+  }, [hasChecked, user?.id]);
+
+  useEffect(() => {
+    if (!hasChecked || !user) return;
+
+    const token = localStorage.getItem("auth_token") || localStorage.getItem("token") || "";
+    fetch("/api/settings/general", {
+      credentials: "include",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
+      .then((res) => res.json().catch(() => null))
+      .then((payload) => {
+        const generalSettings = payload?.success ? payload?.data?.settings : null;
+        if (!generalSettings) return;
+        applyGeneralSettingsToSettings(generalSettings);
       })
       .catch(() => {});
   }, [hasChecked, user?.id]);
@@ -293,11 +368,18 @@ export function SettingsProvider({ children }) {
     const handleBrandingUpdate = (event: any) => {
       const detail = event?.detail;
       if (!detail) return;
-      brandingUpdatedLocallyRef.current = true;
+      const hasVisualBrandingFields = Boolean(
+        String(detail?.appearance || "").trim()
+        || String(detail?.accentColor || "").trim()
+        || String(detail?.sidebarDarkFrom || "").trim()
+        || String(detail?.sidebarLightFrom || "").trim()
+      );
+      brandingUpdatedLocallyRef.current = hasVisualBrandingFields;
+      const mergedBranding = mergeBrandingPayload(readStoredBranding(), detail);
       try {
-        localStorage.setItem("organization_branding", JSON.stringify(detail));
+        localStorage.setItem("organization_branding", JSON.stringify(mergedBranding));
       } catch {}
-      applyBrandingToSettings(detail);
+      applyBrandingToSettings(mergedBranding);
     };
 
     window.addEventListener("brandingUpdated" as any, handleBrandingUpdate);
@@ -317,6 +399,18 @@ export function SettingsProvider({ children }) {
 
     window.addEventListener("organizationProfileUpdated" as any, handleOrganizationProfileUpdate);
     return () => window.removeEventListener("organizationProfileUpdated" as any, handleOrganizationProfileUpdate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const handleGeneralSettingsUpdate = (event: any) => {
+      const detail = event?.detail;
+      if (!detail) return;
+      applyGeneralSettingsToSettings(detail);
+    };
+
+    window.addEventListener("generalSettingsUpdated" as any, handleGeneralSettingsUpdate);
+    return () => window.removeEventListener("generalSettingsUpdated" as any, handleGeneralSettingsUpdate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

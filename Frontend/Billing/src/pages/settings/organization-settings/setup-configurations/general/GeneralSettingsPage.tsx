@@ -5,6 +5,37 @@ import { Info, Settings, ExternalLink, Search, ChevronUp, ChevronDown, Settings2
 import { getToken, API_BASE_URL } from "../../../../../services/auth";
 import toast from "react-hot-toast";
 
+const BILLING_MODULE_OPTIONS = [
+  { key: "quotes", label: "Quotes" },
+  { key: "salesReceipts", label: "Sales Receipts" },
+  { key: "timeTracking", label: "Time Tracking", showInfo: true },
+  { key: "retainerInvoices", label: "Retainer Invoices" },
+  { key: "recurringExpense", label: "Recurring Expense" },
+  { key: "creditNote", label: "Credit Note" },
+  { key: "debitNote", label: "Debit Note" },
+  { key: "paymentLinks", label: "Payment Links" },
+  { key: "tasks", label: "Tasks" },
+  { key: "subscriptions", label: "Subscriptions" },
+  { key: "plansAddons", label: "Plans and Addons" },
+  { key: "coupons", label: "Coupons" },
+] as const;
+
+const BILLING_MODULE_KEYS = BILLING_MODULE_OPTIONS.map((option) => option.key);
+const DEFAULT_BILLING_MODULES: Record<string, boolean> = {
+  quotes: true,
+  salesReceipts: true,
+  timeTracking: true,
+  retainerInvoices: true,
+  recurringExpense: true,
+  creditNote: true,
+  debitNote: true,
+  paymentLinks: true,
+  tasks: true,
+  subscriptions: true,
+  plansAddons: true,
+  coupons: true,
+};
+
 export default function GeneralSettingsPage() {
   const location = useLocation();
   const [loading, setLoading] = useState(true);
@@ -12,19 +43,7 @@ export default function GeneralSettingsPage() {
   const [organizationSettings, setOrganizationSettings] = useState<any>({});
 
   // Module selection states
-  const [modules, setModules] = useState<Record<string, boolean>>({
-    quotes: true,
-    salesOrders: false,
-    salesReceipts: true,
-    purchaseOrders: false,
-    timeTracking: true,
-    retainerInvoices: false,
-    recurringInvoice: true,
-    recurringExpense: true,
-    recurringBills: true,
-    recurringJournals: false,
-    creditNote: true
-  });
+  const [modules, setModules] = useState<Record<string, boolean>>(DEFAULT_BILLING_MODULES);
 
   // Zoho Inventory Add-on
   const [enableInventory, setEnableInventory] = useState(false);
@@ -116,15 +135,19 @@ export default function GeneralSettingsPage() {
             const s = data.data.settings;
             setOrganizationSettings(s);
             if (s.modules) {
-              const {
-                paymentLinks,
-                tasks,
-                selfBilledInvoice,
-                debitNote,
-                fixedAsset,
-                ...visibleModules
-              } = s.modules;
-              setModules(visibleModules);
+              const nextModules = BILLING_MODULE_KEYS.reduce<Record<string, boolean>>((acc, key) => {
+                if (typeof s.modules[key] === "boolean") {
+                  acc[key] = s.modules[key];
+                  return acc;
+                }
+                if (key === "subscriptions" && typeof s.modules.recurringInvoice === "boolean") {
+                  acc[key] = s.modules.recurringInvoice;
+                  return acc;
+                }
+                acc[key] = DEFAULT_BILLING_MODULES[key];
+                return acc;
+              }, { ...DEFAULT_BILLING_MODULES });
+              setModules(nextModules);
             }
             if (s.workWeek) setWorkWeek(s.workWeek);
             if (s.enableInventory !== undefined) setEnableInventory(s.enableInventory);
@@ -196,7 +219,10 @@ export default function GeneralSettingsPage() {
       const payload = {
         settings: {
           ...organizationSettings,
-          modules,
+          modules: {
+            ...(organizationSettings?.modules && typeof organizationSettings.modules === "object" ? organizationSettings.modules : {}),
+            ...modules,
+          },
           workWeek,
           enableInventory,
           enablePANValidation,
@@ -373,19 +399,17 @@ export default function GeneralSettingsPage() {
           <h3 className="text-sm font-semibold text-gray-900 mb-4">
             Select the modules you would like to enable.
           </h3>
-          <div className="grid grid-cols-2 gap-3">
-            {Object.entries(modules).map(([key, value]) => (
+          <div className="grid grid-cols-1 gap-3">
+            {BILLING_MODULE_OPTIONS.map(({ key, label, showInfo }) => (
               <label key={key} className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={value}
+                  checked={Boolean(modules[key])}
                   onChange={() => handleModuleChange(key)}
                   className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                 />
-                <span className="text-sm text-gray-700 capitalize">
-                  {key.replace(/([A-Z])/g, ' $1').trim()}
-                </span>
-                {(key === "timeTracking" || key === "recurringInvoice") && (
+                <span className="text-sm text-gray-700">{label}</span>
+                {showInfo && (
                   <Info size={14} className="text-gray-400" />
                 )}
               </label>

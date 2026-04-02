@@ -74,8 +74,66 @@ const COLUMN_GROUPS_BY_REPORT: Record<string, ColumnGroup[]> = {
     { label: "Reports", items: ["Date", "Name", "Invoices", "Credit Notes", "Sales Receipts", "Sales", "Sales With Tax"] },
     { label: "Locations", items: ["Location"] },
   ],
+<<<<<<< Updated upstream
   "time-to-get-paid": [
     { label: "Reports", items: ["Customer Name", "0 - 15 Days", "16 - 30 Days", "31 - 45 Days", "Above 45 Days"] },
+=======
+  signups: [
+    {
+      label: "Reports",
+      items: ["Date", "Signups", "Active", "Inactive"],
+    },
+  ],
+  activations: [
+    {
+      label: "Reports",
+      items: ["Date", "Activations", "Active Subscriptions", "Notes"],
+    },
+  ],
+  "activations-by-country": [
+    {
+      label: "Reports",
+      items: ["Country", "Total"],
+    },
+  ],
+  "active-trials": [
+    {
+      label: "Reports",
+      items: [
+        "SUBSCRIPTION#",
+        "TRIAL START DATE",
+        "SUBSCRIPTION STATUS",
+        "TRIAL END DATE",
+        "REMAINING TRIAL DAYS",
+        "PLAN NAME",
+        "PRODUCT NAME",
+        "CUSTOMER NAME",
+        "CUSTOMER SALUTATION",
+        "EMAIL",
+        "REFERENCE#",
+        "MOBILE",
+      ],
+    },
+  ],
+  "inactive-trials": [
+    {
+      label: "Reports",
+      items: [
+        "CUSTOMER NAME",
+        "EMAIL",
+        "SUBSCRIPTION#",
+        "SUBSCRIPTION STATUS",
+        "PLAN NAME",
+        "PLAN CODE",
+        "AMOUNT",
+        "TRIAL START DATE",
+        "TRIAL END DATE",
+        "CUSTOMER SALUTATION",
+        "REFERENCE NUMBER",
+        "MOBILE",
+      ],
+    },
+>>>>>>> Stashed changes
   ],
   "ar-aging-summary": [
     {
@@ -86,7 +144,13 @@ const COLUMN_GROUPS_BY_REPORT: Record<string, ColumnGroup[]> = {
   "ar-aging-details": [
     {
       label: "Reports",
-      items: ["Invoice", "Customer", "Invoice Date", "Due Date", "Aging Bucket", "Amount", "Status"],
+      items: ["DATE", "DUE DATE", "TRANSACTION#", "TYPE", "STATUS", "CUSTOMER NAME", "AGE", "AMOUNT", "BALANCE DUE"],
+    },
+  ],
+  "invoice-details": [
+    {
+      label: "Reports",
+      items: ["STATUS", "INVOICE DATE", "DUE DATE", "INVOICE#", "ORDER NUMBER", "CUSTOMER NAME", "TOTAL", "BALANCE DUE"],
     },
   ],
   "receivable-details": [

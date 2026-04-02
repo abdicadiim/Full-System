@@ -176,35 +176,73 @@ export const signup = async (req: express.Request, res: express.Response) => {
     return res.status(400).json({ success: false, message: "Organization name required", data: null });
   }
 
-  const exists = await User.findOne({ email }).lean();
-  if (exists) return res.status(409).json({ success: false, message: "Email already exists", data: null });
-
-  const org = await Organization.create({ name, primaryContactEmail: email });
-  // Ensure default roles exist for this organization.
-  try {
-    await Role.updateOne(
-      { organizationId: org._id, name: "Admin" },
-      { $setOnInsert: { organizationId: org._id, name: "Admin", description: "System administrator", isSystem: true } },
-      { upsert: true }
-    );
-    await Role.updateOne(
-      { organizationId: org._id, name: "Member" },
-      { $setOnInsert: { organizationId: org._id, name: "Member", description: "Standard member", isSystem: true } },
-      { upsert: true }
-    );
-  } catch {
-    // no-op
+  const exists = await findUserByEmail(email);
+  if (exists) {
+    return res.status(409).json({
+      success: false,
+      message: "An account with this email already exists. Please log in.",
+      data: { exists: true },
+    });
   }
-  const passwordHash = await bcrypt.hash(password, 10);
-  const created = await User.create({ name, email, passwordHash, organizationId: org._id, role: "admin", sessionVersion: 0 });
-  setSessionCookie(res, String(created._id));
-  const token = issueSessionToken(String(created._id), Number((created as any).sessionVersion || 0));
-  const authUser = await buildAuthUserData(created);
-  return res.status(201).json({
-    success: true,
-    data: authUser,
-    token,
-  });
+
+  let org: any = null;
+  try {
+    org = await Organization.create({ name, primaryContactEmail: email });
+    // Ensure default roles exist for this organization.
+    try {
+      await Role.updateOne(
+        { organizationId: org._id, name: "Admin" },
+        { $setOnInsert: { organizationId: org._id, name: "Admin", description: "System administrator", isSystem: true } },
+        { upsert: true }
+      );
+      await Role.updateOne(
+        { organizationId: org._id, name: "Member" },
+        { $setOnInsert: { organizationId: org._id, name: "Member", description: "Standard member", isSystem: true } },
+        { upsert: true }
+      );
+    } catch {
+      // no-op
+    }
+    const passwordHash = await bcrypt.hash(password, 10);
+    const created = await User.create({ name, email, passwordHash, organizationId: org._id, role: "admin", sessionVersion: 0 });
+    setSessionCookie(res, String(created._id));
+    const token = issueSessionToken(String(created._id), Number((created as any).sessionVersion || 0));
+    const authUser = await buildAuthUserData(created);
+    return res.status(201).json({
+      success: true,
+      data: authUser,
+      token,
+    });
+  } catch (error: any) {
+    if (error?.code === 11000 && error?.keyPattern?.email) {
+      if (org?._id) {
+        await Organization.deleteOne({ _id: org._id }).catch(() => undefined);
+      }
+      return res.status(409).json({
+        success: false,
+        message: "An account with this email already exists. Please log in.",
+        data: { exists: true },
+      });
+    }
+    throw error;
+  }
+};
+
+export const checkEmailExists = async (req: express.Request, res: express.Response) => {
+  if (AUTH_BYPASS) {
+    return res.json({ success: true, data: { exists: false } });
+  }
+  if (!isConfiguredForRealAuth()) {
+    return res.status(500).json({ success: false, message: "Auth/DB not configured", data: null });
+  }
+
+  const email = normalizeEmail(req.body?.email);
+  if (!email) {
+    return res.status(400).json({ success: false, message: "Email is required", data: null });
+  }
+
+  const existingUser = await findUserByEmail(email);
+  return res.json({ success: true, data: { exists: Boolean(existingUser) } });
 };
 
 export const login = async (req: express.Request, res: express.Response) => {

@@ -5,6 +5,34 @@ import { Info, Settings, ExternalLink, Search, ChevronUp, ChevronDown, Settings2
 import { getToken, API_BASE_URL } from "../../../../../services/auth";
 import toast from "react-hot-toast";
 
+const INVOICE_MODULE_OPTIONS = [
+  { key: "quotes", label: "Quotes" },
+  { key: "salesReceipts", label: "Sales Receipts" },
+  { key: "timeTracking", label: "Time Tracking", showInfo: true },
+  { key: "recurringInvoice", label: "Recurring Invoice", showInfo: true },
+  { key: "creditNote", label: "Credit Note" },
+  { key: "debitNote", label: "Debit Note" },
+  { key: "paymentLinks", label: "Payment Links" },
+] as const;
+
+const INVOICE_MODULE_KEYS = INVOICE_MODULE_OPTIONS.map((option) => option.key);
+const DEFAULT_INVOICE_MODULES: Record<string, boolean> = {
+  quotes: true,
+  salesReceipts: true,
+  timeTracking: true,
+  recurringInvoice: false,
+  creditNote: false,
+  debitNote: false,
+  paymentLinks: false,
+};
+
+const PROFILE_INPUT_CLASS =
+  "w-full h-10 rounded-lg border-2 border-gray-300 bg-transparent px-3 text-sm font-medium text-gray-900 transition hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500";
+const PROFILE_DROPDOWN_TRIGGER_CLASS =
+  "w-full h-10 rounded-lg border-2 border-gray-300 bg-transparent px-3 text-left text-sm font-medium text-gray-900 transition hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 flex items-center justify-between";
+const PROFILE_TEXTAREA_CLASS =
+  "w-full rounded-lg border-2 border-gray-300 bg-transparent px-3 py-2 text-sm text-gray-900 transition hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500";
+
 export default function GeneralSettingsPage() {
   const location = useLocation();
   const [loading, setLoading] = useState(true);
@@ -12,19 +40,7 @@ export default function GeneralSettingsPage() {
   const [organizationSettings, setOrganizationSettings] = useState<any>({});
 
   // Module selection states
-  const [modules, setModules] = useState<Record<string, boolean>>({
-    quotes: true,
-    salesOrders: false,
-    salesReceipts: true,
-    purchaseOrders: false,
-    timeTracking: true,
-    retainerInvoices: false,
-    recurringInvoice: true,
-    recurringExpense: true,
-    recurringBills: true,
-    recurringJournals: false,
-    creditNote: true
-  });
+  const [modules, setModules] = useState<Record<string, boolean>>(DEFAULT_INVOICE_MODULES);
 
   // Zoho Inventory Add-on
   const [enableInventory, setEnableInventory] = useState(false);
@@ -116,15 +132,11 @@ export default function GeneralSettingsPage() {
             const s = data.data.settings;
             setOrganizationSettings(s);
             if (s.modules) {
-              const {
-                paymentLinks,
-                tasks,
-                selfBilledInvoice,
-                debitNote,
-                fixedAsset,
-                ...visibleModules
-              } = s.modules;
-              setModules(visibleModules);
+              const nextModules = INVOICE_MODULE_KEYS.reduce<Record<string, boolean>>((acc, key) => {
+                acc[key] = typeof s.modules[key] === "boolean" ? s.modules[key] : DEFAULT_INVOICE_MODULES[key];
+                return acc;
+              }, { ...DEFAULT_INVOICE_MODULES });
+              setModules(nextModules);
             }
             if (s.workWeek) setWorkWeek(s.workWeek);
             if (s.enableInventory !== undefined) setEnableInventory(s.enableInventory);
@@ -196,7 +208,10 @@ export default function GeneralSettingsPage() {
       const payload = {
         settings: {
           ...organizationSettings,
-          modules,
+          modules: {
+            ...(organizationSettings?.modules && typeof organizationSettings.modules === "object" ? organizationSettings.modules : {}),
+            ...modules,
+          },
           workWeek,
           enableInventory,
           enablePANValidation,
@@ -364,28 +379,26 @@ export default function GeneralSettingsPage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl">
+    <div className="p-6 max-w-5xl">
       <h1 className="text-2xl font-semibold text-gray-900 mb-6">General</h1>
 
-      <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-8">
+      <div className="rounded-lg border-0">
         {/* Select Modules */}
-        <div>
+        <div className="rounded-lg border-0 px-6">
           <h3 className="text-sm font-semibold text-gray-900 mb-4">
             Select the modules you would like to enable.
           </h3>
-          <div className="grid grid-cols-2 gap-3">
-            {Object.entries(modules).map(([key, value]) => (
+          <div className="grid grid-cols-1 gap-3">
+            {INVOICE_MODULE_OPTIONS.map(({ key, label, showInfo }) => (
               <label key={key} className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={value}
+                  checked={Boolean(modules[key])}
                   onChange={() => handleModuleChange(key)}
                   className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                 />
-                <span className="text-sm text-gray-700 capitalize">
-                  {key.replace(/([A-Z])/g, ' $1').trim()}
-                </span>
-                {(key === "timeTracking" || key === "recurringInvoice") && (
+                <span className="text-sm text-gray-700">{label}</span>
+                {showInfo && (
                   <Info size={14} className="text-gray-400" />
                 )}
               </label>
@@ -394,7 +407,7 @@ export default function GeneralSettingsPage() {
         </div>
 
         {/* Zoho Inventory Add-on */}
-        <div className="border-t border-gray-200 pt-6">
+        <div className="border-t border-gray-200 px-6 pt-6">
           <h3 className="text-sm font-semibold text-gray-900 mb-3">PAN Validation For Customers and Vendors</h3>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
@@ -408,7 +421,7 @@ export default function GeneralSettingsPage() {
         </div>
 
         {/* Zoho Inventory Add-on */}
-        <div className="border-t border-gray-200 pt-6">
+        <div className="border-t border-gray-200 px-6 pt-6">
           <div className="flex items-center gap-2 mb-3">
             <h3 className="text-sm font-semibold text-gray-900">Zoho Inventory Add-on</h3>
             <Info size={14} className="text-gray-400" />
@@ -441,14 +454,14 @@ export default function GeneralSettingsPage() {
         </div>
 
         {/* Work Week */}
-        <div className="border-t border-gray-200 pt-6">
+        <div className="border-t border-gray-200 px-6 pt-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Set the first day of your work week:
           </label>
           <select
             value={workWeek}
             onChange={(e) => setWorkWeek(e.target.value)}
-            className="w-full h-10 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={PROFILE_INPUT_CLASS}
           >
             {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((day) => (
               <option key={day} value={day}>{day}</option>
@@ -457,7 +470,7 @@ export default function GeneralSettingsPage() {
         </div>
 
         {/* PDF Attachment */}
-        <div className="border-t border-gray-200 pt-6">
+        <div className="border-t border-gray-200 px-6 pt-6">
           <h3 className="text-sm font-semibold text-gray-900 mb-3">PDF Attachment</h3>
           <div className="space-y-3">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -497,7 +510,7 @@ export default function GeneralSettingsPage() {
         </div>
 
         {/* Discounts */}
-        <div className="border-t border-gray-200 pt-6">
+        <div className="border-t border-gray-200 px-6 pt-6">
           <h3 className="text-sm font-semibold text-gray-900 mb-3">Do you give discounts?</h3>
           <div className="space-y-2 mb-3">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -538,7 +551,7 @@ export default function GeneralSettingsPage() {
             <select
               value={discountBeforeTax}
               onChange={(e) => setDiscountBeforeTax(e.target.value)}
-              className="w-full h-10 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={PROFILE_INPUT_CLASS}
             >
               <option>Discount Before Tax</option>
               <option>Discount After Tax</option>
@@ -547,7 +560,7 @@ export default function GeneralSettingsPage() {
         </div>
 
         {/* Additional Charges */}
-        <div className="border-t border-gray-200 pt-6">
+        <div className="border-t border-gray-200 px-6 pt-6">
           <h3 className="text-sm font-semibold text-gray-900 mb-3">
             Select any additional charges you'll like to add:
           </h3>
@@ -591,7 +604,7 @@ export default function GeneralSettingsPage() {
                       <select
                         value={defaultTaxRate}
                         onChange={(e) => setDefaultTaxRate(e.target.value)}
-                        className="w-full h-10 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className={PROFILE_INPUT_CLASS}
                       >
                         <option>Apply Default Tax Rate</option>
                         <option>No Tax</option>
@@ -605,7 +618,7 @@ export default function GeneralSettingsPage() {
         </div>
 
         {/* Tax Inclusive/Exclusive */}
-        <div className="border-t border-gray-200 pt-6">
+        <div className="border-t border-gray-200 px-6 pt-6">
           <h3 className="text-sm font-semibold text-gray-900 mb-3">
             Do you sell your items at rates inclusive of Tax?
           </h3>
@@ -647,7 +660,7 @@ export default function GeneralSettingsPage() {
         </div>
 
         {/* Round Off Tax */}
-        <div className="border-t border-gray-200 pt-6">
+        <div className="border-t border-gray-200 px-6 pt-6">
           <div className="flex items-center gap-2 mb-2">
             <label className="block text-sm font-medium text-gray-700">Round Off Tax</label>
             <Info size={14} className="text-gray-400" />
@@ -655,7 +668,7 @@ export default function GeneralSettingsPage() {
           <select
             value={roundOffTax}
             onChange={(e) => setRoundOffTax(e.target.value)}
-            className="w-full h-10 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={PROFILE_INPUT_CLASS}
           >
             <option value="transaction">At transaction level</option>
             <option value="line-item">At line item level</option>
@@ -663,7 +676,7 @@ export default function GeneralSettingsPage() {
         </div>
 
         {/* Rounding off in Sales Transactions */}
-        <div className="border-t border-gray-200 pt-6">
+        <div className="border-t border-gray-200 px-6 pt-6">
           <h3 className="text-sm font-semibold text-gray-900 mb-3">
             Rounding off in Sales Transactions
           </h3>
@@ -726,7 +739,7 @@ export default function GeneralSettingsPage() {
         </div>
 
         {/* Salesperson Field */}
-        <div className="border-t border-gray-200 pt-6">
+        <div className="border-t border-gray-200 px-6 pt-6">
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -739,7 +752,7 @@ export default function GeneralSettingsPage() {
         </div>
 
         {/* Billable Bills and Expenses */}
-        <div className="border-t border-gray-200 pt-6">
+        <div className="border-t border-gray-200 px-6 pt-6">
           <h3 className="text-sm font-semibold text-gray-900 mb-3">
             Billable Bills and Expenses
           </h3>
@@ -755,7 +768,7 @@ export default function GeneralSettingsPage() {
                 <button
                   type="button"
                   onClick={() => setBillableAccountDropdownOpen(!billableAccountDropdownOpen)}
-                  className="w-full h-10 px-3 rounded-lg border border-blue-300 bg-white text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={PROFILE_DROPDOWN_TRIGGER_CLASS}
                 >
                   <span className={billableAccount ? "text-gray-900" : "text-gray-400"}>
                     {billableAccount || "Select an account"}
@@ -832,7 +845,7 @@ export default function GeneralSettingsPage() {
                   type="number"
                   value={defaultMarkup}
                   onChange={(e) => setDefaultMarkup(e.target.value)}
-                  className="w-full h-10 px-3 pr-8 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={`${PROFILE_INPUT_CLASS} pr-8`}
                   placeholder="0"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">%</span>
@@ -842,7 +855,7 @@ export default function GeneralSettingsPage() {
         </div>
 
         {/* Document Copy Labels */}
-        <div className="border-t border-gray-200 pt-6">
+        <div className="border-t border-gray-200 px-6 pt-6">
           <div className="flex items-center gap-2 mb-4">
             <h3 className="text-sm font-semibold text-gray-900">Document copy label</h3>
             <Info size={14} className="text-gray-400" />
@@ -941,7 +954,7 @@ export default function GeneralSettingsPage() {
         </div>
 
         {/* Default Print Preferences */}
-        <div className="border-t border-gray-200 pt-6">
+        <div className="border-t border-gray-200 px-6 pt-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Default print preferences
           </label>
@@ -949,7 +962,7 @@ export default function GeneralSettingsPage() {
             <button
               type="button"
               onClick={() => setPrintPreferencesDropdownOpen(!printPreferencesDropdownOpen)}
-              className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-white text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={PROFILE_DROPDOWN_TRIGGER_CLASS}
             >
               <span className="text-gray-900">
                 {printPreferencesOptions.find(opt => opt.toLowerCase().replace(/\s+/g, '-') === printPreferences) || "I will choose while printing"}
@@ -1022,7 +1035,7 @@ export default function GeneralSettingsPage() {
         </div>
 
         {/* Weekly Summary Report */}
-        <div className="border-t border-gray-200 pt-6">
+        <div className="border-t border-gray-200 px-6 pt-6">
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -1046,7 +1059,7 @@ export default function GeneralSettingsPage() {
         </div>
 
         {/* Payment Retention */}
-        <div className="border-t border-gray-200 pt-6">
+        <div className="border-t border-gray-200 px-6 pt-6">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold text-gray-900 mb-1">Payment Retention</h3>
@@ -1069,7 +1082,7 @@ export default function GeneralSettingsPage() {
         </div>
 
         {/* Organization Address Format */}
-        <div id="organization-address-format" className="border-t border-gray-200 pt-6">
+        <div id="organization-address-format" className="border-t border-gray-200 px-6 pt-6">
           <div className="flex items-center gap-2 mb-3">
             <h3 className="text-sm font-semibold text-gray-900">
               Organization Address Format (Displayed in PDF only)
@@ -1082,7 +1095,7 @@ export default function GeneralSettingsPage() {
                 Insert Placeholders
               </label>
               <select
-                className="w-full h-10 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={PROFILE_INPUT_CLASS}
                 onChange={(e) => {
                   if (e.target.value) {
                     const textarea = addressFormatTextareaRef.current;
@@ -1120,7 +1133,7 @@ export default function GeneralSettingsPage() {
                 value={addressFormat}
                 onChange={(e) => setAddressFormat(e.target.value)}
                 rows={6}
-                className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                className={`${PROFILE_TEXTAREA_CLASS} font-mono`}
               />
             </div>
             <button
@@ -1162,7 +1175,7 @@ export default function GeneralSettingsPage() {
         )}
 
         {/* Save Button */}
-        <div className="flex items-center justify-end pt-6 border-t border-gray-200">
+        <div className="flex items-center justify-end px-6 pt-6 border-t border-gray-200">
           <button
             onClick={handleSave}
             disabled={saving}
