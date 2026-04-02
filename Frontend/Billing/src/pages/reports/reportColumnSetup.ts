@@ -74,10 +74,9 @@ const COLUMN_GROUPS_BY_REPORT: Record<string, ColumnGroup[]> = {
     { label: "Reports", items: ["Date", "Name", "Invoices", "Credit Notes", "Sales Receipts", "Sales", "Sales With Tax"] },
     { label: "Locations", items: ["Location"] },
   ],
-<<<<<<< Updated upstream
   "time-to-get-paid": [
     { label: "Reports", items: ["Customer Name", "0 - 15 Days", "16 - 30 Days", "31 - 45 Days", "Above 45 Days"] },
-=======
+  ],
   signups: [
     {
       label: "Reports",
@@ -133,7 +132,6 @@ const COLUMN_GROUPS_BY_REPORT: Record<string, ColumnGroup[]> = {
         "MOBILE",
       ],
     },
->>>>>>> Stashed changes
   ],
   "ar-aging-summary": [
     {
