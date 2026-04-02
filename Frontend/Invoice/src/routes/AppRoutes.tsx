@@ -1,38 +1,33 @@
-import React from 'react'
-// Force refresh routes
-
+import React, { Suspense, lazy } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 
-import DashboardRoutes from '../pages/home/DashboardRoutes'
-import SalesInvoicesRoutes from '../pages/Invoices/InvoicesRoutes'
-import RetainerInvoiceRoutes from '../pages/RetainerInvoice/RetainerInvoiceRoutes'
-import SalesReceiptsRoutes from '../pages/SalesReceipts/SalesReceiptsRoutes'
-import CreditNotesRoutes from '../pages/CreditNotes/CreditNotesRoutes'
-import RecurringInvoicesRoutes from '../pages/RecurringInvoices/RecurringInvoicesRoutes'
-import CustomersRoutes from '../pages/Customers/CustomersRoutes'
-import PaymentsRoutes from '../pages/payments/PaymentsRoutes'
-import ReportsRoutes from '../pages/reports/ReportsRoutes'
+const DashboardRoutes = lazy(() => import('../pages/home/DashboardRoutes'))
+const SalesInvoicesRoutes = lazy(() => import('../pages/Invoices/InvoicesRoutes'))
+const RetainerInvoiceRoutes = lazy(() => import('../pages/RetainerInvoice/RetainerInvoiceRoutes'))
+const SalesReceiptsRoutes = lazy(() => import('../pages/SalesReceipts/SalesReceiptsRoutes'))
+const CreditNotesRoutes = lazy(() => import('../pages/CreditNotes/CreditNotesRoutes'))
+const RecurringInvoicesRoutes = lazy(() => import('../pages/RecurringInvoices/RecurringInvoicesRoutes'))
+const CustomersRoutes = lazy(() => import('../pages/Customers/CustomersRoutes'))
+const PaymentsRoutes = lazy(() => import('../pages/payments/PaymentsRoutes'))
+const ReportsRoutes = lazy(() => import('../pages/reports/ReportsRoutes'))
+const TaxesRoutes = lazy(() => import('../pages/taxes/TaxesRoutes'))
+const OrgsRoutes = lazy(() => import('../pages/orgs/OrgsRoutes'))
+const QuotesRoutes = lazy(() => import('../pages/Quotes/QuotesRoutes'))
+const InvoiceDetail = lazy(() => import('../pages/Invoices/InvoiceDetail/InvoiceDetail'))
+const NewDebitNote = lazy(() => import('../pages/DebitNotes/NewDebitNote/NewDebitNote'))
+const ItemsPage = lazy(() => import('../pages/items/ItemsPage'))
+const ImportItems = lazy(() => import('../pages/items/ImportItems'))
+const ExpensesRoutes = lazy(() => import('../pages/Expense/ExpensesRoutes'))
+const SettingsRoutes = lazy(() => import('../pages/settings/SettingsRoutes'))
+const TimeTrackingPage = lazy(() => import('../pages/timeTracking/TimeTrackingPage'))
+const EventsPage = lazy(() => import('../pages/events/EventsPage'))
+const DocumentsPage = lazy(() => import('../pages/documents/DocumentsPage'))
+const SenderVerificationPage = lazy(() => import('../pages/public/SenderVerificationPage'))
 
-import TaxesRoutes from '../pages/taxes/TaxesRoutes'
-import OrgsRoutes from '../pages/orgs/OrgsRoutes'
-import QuotesRoutes from '../pages/Quotes/QuotesRoutes'
-import InvoiceDetail from '../pages/Invoices/InvoiceDetail/InvoiceDetail'
-import NewDebitNote from '../pages/DebitNotes/NewDebitNote/NewDebitNote'
-import ItemsPage from '../pages/items/ItemsPage'
-import ImportItems from '../pages/items/ImportItems'
-import ExpensesRoutes from '../pages/Expense/ExpensesRoutes'
-import SettingsRoutes from '../pages/settings/SettingsRoutes'
-import TimeTrackingPage from '../pages/timeTracking/TimeTrackingPage'
-import EventsPage from '../pages/events/EventsPage'
-import DocumentsPage from '../pages/documents/DocumentsPage'
-import SenderVerificationPage from '../pages/public/SenderVerificationPage'
-
-
-function ModulePlaceholder({ title }: { title: string }) {
+function RouteFallback() {
   return (
-    <div className="p-6">
-      <h1 className="text-xl font-semibold">{title}</h1>
-      <p className="mt-2 text-sm text-gray-600">This module will be configured next.</p>
+    <div className="flex min-h-[40vh] items-center justify-center p-6 text-sm text-gray-500">
+      Loading...
     </div>
   )
 }
@@ -88,53 +83,55 @@ function LegacyCustomersRedirect() {
 
 export default function AppRoutes() {
   return (
-    <Routes>
-      <Route path="/sender-verification/*" element={<SenderVerificationPage />} />
-      <Route index element={<Navigate to="/dashboard" replace />} />
+    <Suspense fallback={<RouteFallback />}>
+      <Routes>
+        <Route path="/sender-verification/*" element={<SenderVerificationPage />} />
+        <Route index element={<Navigate to="/dashboard" replace />} />
 
-      <Route path="/dashboard/*" element={<DashboardRoutes />} />
+        <Route path="/dashboard/*" element={<DashboardRoutes />} />
 
-      <Route path="/invoices/*" element={<Navigate to="/sales/invoices" replace />} />
-      <Route path="/quotes/*" element={<Navigate to="/sales/quotes" replace />} />
+        <Route path="/invoices/*" element={<Navigate to="/sales/invoices" replace />} />
+        <Route path="/quotes/*" element={<Navigate to="/sales/quotes" replace />} />
 
-      <Route path="/sales" element={<Navigate to="/sales/invoices" replace />} />
+        <Route path="/sales" element={<Navigate to="/sales/invoices" replace />} />
 
-      <Route path="/sales/invoices/*" element={<SalesInvoicesRoutes />} />
-      <Route path="/sales/quotes/*" element={<QuotesRoutes />} />
-      <Route path="/sales/retainer-invoices/*" element={<RetainerInvoiceRoutes />} />
-      <Route path="/sales/receipts/*" element={<Navigate to="/sales/sales-receipts" replace />} />
-      <Route path="/sales/sales-receipts/*" element={<SalesReceiptsRoutes />} />
-      <Route path="/sales/credit-notes/*" element={<CreditNotesRoutes />} />
-      <Route path="/sales/recurring-invoices/*" element={<RecurringInvoicesRoutes />} />
-      <Route path="/sales/debit-notes/:id" element={<InvoiceDetail />} />
-      <Route path="/sales/debit-notes/new" element={<NewDebitNote />} />
-      <Route path="/sales/customer/*" element={<LegacyCustomersRedirect />} />
-      <Route path="/customers/*" element={<LegacyCustomersRedirect />} />
-      <Route path="/sales/customers/*" element={<CustomersRoutes />} />
-      <Route path="/sales/payments-received/*" element={<LegacyPaymentsReceivedRedirect />} />
-      <Route path="/payments-received/*" element={<LegacyPaymentsReceivedRedirect />} />
-      <Route path="/purchases/expenses/*" element={<LegacyPurchasesExpensesRedirect />} />
-      <Route path="/purchases/recurring-expenses/*" element={<LegacyPurchasesExpensesRedirect />} />
-      <Route path="/payments/*" element={<PaymentsRoutes />} />
+        <Route path="/sales/invoices/*" element={<SalesInvoicesRoutes />} />
+        <Route path="/sales/quotes/*" element={<QuotesRoutes />} />
+        <Route path="/sales/retainer-invoices/*" element={<RetainerInvoiceRoutes />} />
+        <Route path="/sales/receipts/*" element={<Navigate to="/sales/sales-receipts" replace />} />
+        <Route path="/sales/sales-receipts/*" element={<SalesReceiptsRoutes />} />
+        <Route path="/sales/credit-notes/*" element={<CreditNotesRoutes />} />
+        <Route path="/sales/recurring-invoices/*" element={<RecurringInvoicesRoutes />} />
+        <Route path="/sales/debit-notes/:id" element={<InvoiceDetail />} />
+        <Route path="/sales/debit-notes/new" element={<NewDebitNote />} />
+        <Route path="/sales/customer/*" element={<LegacyCustomersRedirect />} />
+        <Route path="/customers/*" element={<LegacyCustomersRedirect />} />
+        <Route path="/sales/customers/*" element={<CustomersRoutes />} />
+        <Route path="/sales/payments-received/*" element={<LegacyPaymentsReceivedRedirect />} />
+        <Route path="/payments-received/*" element={<LegacyPaymentsReceivedRedirect />} />
+        <Route path="/purchases/expenses/*" element={<LegacyPurchasesExpensesRedirect />} />
+        <Route path="/purchases/recurring-expenses/*" element={<LegacyPurchasesExpensesRedirect />} />
+        <Route path="/payments/*" element={<PaymentsRoutes />} />
 
-      <Route path="/taxes/*" element={<TaxesRoutes />} />
-      <Route path="/orgs/*" element={<OrgsRoutes />} />
-      <Route path="/expenses/*" element={<ExpensesRoutes />} />
-      <Route path="/products" element={<Navigate to="/products/items" replace />} />
-      <Route path="/products/items" element={<ItemsPage />} />
-      <Route path="/products/items/import" element={<ImportItems />} />
-      <Route path="/products/items/new" element={<Navigate to="/products/items" replace />} />
-      
-      <Route path="/products/*" element={<Navigate to="/products/items" replace />} />
-      <Route path="/items/*" element={<Navigate to="/products/items" replace />} />
-      <Route path="/time-tracking/*" element={<TimeTrackingPage />} />
-      <Route path="/events/*" element={<EventsPage />} />
+        <Route path="/taxes/*" element={<TaxesRoutes />} />
+        <Route path="/orgs/*" element={<OrgsRoutes />} />
+        <Route path="/expenses/*" element={<ExpensesRoutes />} />
+        <Route path="/products" element={<Navigate to="/products/items" replace />} />
+        <Route path="/products/items" element={<ItemsPage />} />
+        <Route path="/products/items/import" element={<ImportItems />} />
+        <Route path="/products/items/new" element={<Navigate to="/products/items" replace />} />
 
-      <Route path="/documents/*" element={<DocumentsPage />} />
-      <Route path="/settings/*" element={<SettingsRoutes />} />
-      <Route path="/reports/*" element={<ReportsRoutes />} />
+        <Route path="/products/*" element={<Navigate to="/products/items" replace />} />
+        <Route path="/items/*" element={<Navigate to="/products/items" replace />} />
+        <Route path="/time-tracking/*" element={<TimeTrackingPage />} />
+        <Route path="/events/*" element={<EventsPage />} />
 
-      <Route path="*" element={<div className="p-6">Not Found</div>} />
-    </Routes>
+        <Route path="/documents/*" element={<DocumentsPage />} />
+        <Route path="/settings/*" element={<SettingsRoutes />} />
+        <Route path="/reports/*" element={<ReportsRoutes />} />
+
+        <Route path="*" element={<div className="p-6">Not Found</div>} />
+      </Routes>
+    </Suspense>
   )
 }

@@ -1,34 +1,140 @@
 import express from "express";
+import mongoose from "mongoose";
 import { AUTH_BYPASS } from "../config/env.js";
 import { Organization } from "../models/Organization.js";
-import mongoose from "mongoose";
+import {
+  buildZohoOrganizationListItem,
+  buildZohoOrganizationPayload,
+  normalizeCurrencyCode,
+  parseOrganizationPayload,
+} from "../services/organizationPayloads.js";
 
-const pickString = (v: unknown) => (typeof v === "string" ? v : "");
-const pickBoolean = (v: unknown) => (typeof v === "boolean" ? v : undefined);
-const MAX_BRANDING_LEN = 2_000_000; // ~2MB string
+const buildDevOrganization = () => ({
+  _id: "dev_org",
+  name: "Dev Org",
+  primaryContactEmail: "dev@example.com",
+  currencyCode: "USD",
+  baseCurrency: "USD",
+  languageCode: "en",
+  language: "English",
+  timeZone: "UTC",
+  dateFormat: "dd MMM yyyy",
+  fieldSeparator: " ",
+  fiscalYearStartMonth: "january",
+  createdAt: new Date().toISOString(),
+});
 
-export const getMyOrganization = async (req: express.Request, res: express.Response) => {
+const buildMyOrganizationSummary = (org: any) => ({
+  id: String(org?._id || ""),
+  name: String(org?.name || "").trim(),
+  primaryContactEmail: String(org?.primaryContactEmail || "").trim(),
+  portalName: String(org?.portalName || "").trim(),
+  currencyCode: normalizeCurrencyCode(org?.currencyCode || org?.baseCurrency),
+});
+
+const requireDbConnection = (res: express.Response) => {
+  if (mongoose.connection.readyState === 1) return true;
+  res.status(500).json({ success: false, message: "DB not connected", data: null });
+  return false;
+};
+
+const getAuthedOrganizationId = (req: express.Request) => String(req.user?.organizationId || "").trim();
+
+const loadAccessibleOrganization = async (
+  req: express.Request,
+  res: express.Response,
+  organizationId?: string,
+) => {
   if (AUTH_BYPASS) {
+    return buildDevOrganization();
+  }
+
+  const authedOrgId = getAuthedOrganizationId(req);
+  if (!authedOrgId) {
+    res.status(401).json({ success: false, message: "Unauthenticated", data: null });
+    return null;
+  }
+
+  const targetOrgId = String(organizationId || authedOrgId).trim();
+  if (!targetOrgId) {
+    res.status(400).json({ success: false, message: "Organization id is required", data: null });
+    return null;
+  }
+
+  if (!mongoose.isValidObjectId(targetOrgId)) {
+    res.status(400).json({ success: false, message: "Invalid organization id", data: null });
+    return null;
+  }
+
+  if (targetOrgId !== authedOrgId) {
+    res.status(403).json({ success: false, message: "You do not have access to this organization", data: null });
+    return null;
+  }
+
+  if (!requireDbConnection(res)) return null;
+
+  const organization = await Organization.findById(targetOrgId).lean();
+  if (!organization) {
+    res.status(404).json({ success: false, message: "Organization not found", data: null });
+    return null;
+  }
+
+  return organization;
+};
+
+const updateOrganizationDocument = async (
+  req: express.Request,
+  res: express.Response,
+  organizationId: string,
+) => {
+  if (AUTH_BYPASS) {
+    const devOrg = {
+      ...buildDevOrganization(),
+      ...(req.body && typeof req.body === "object" ? req.body : {}),
+      _id: organizationId || "dev_org",
+    };
     return res.json({
-      success: true,
-      data: {
-        id: "dev_org",
-        name: "Dev Org",
-        primaryContactEmail: "dev@example.com",
-      },
+      code: 0,
+      message: "success",
+      organization: buildZohoOrganizationPayload(devOrg, req.user),
     });
   }
 
-  const orgId = req.user?.organizationId;
-  if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
-  if (mongoose.connection.readyState !== 1) {
-    return res.status(500).json({ success: false, message: "DB not connected", data: null });
+  const existing = await loadAccessibleOrganization(req, res, organizationId);
+  if (!existing) return;
+
+  const { patch, errors } = parseOrganizationPayload(req.body || {});
+  if (errors.length > 0) {
+    return res.status(400).json({
+      code: 1,
+      message: errors[0],
+      errors,
+    });
   }
 
-  const org = await Organization.findById(orgId).lean();
-  if (!org) return res.status(404).json({ success: false, message: "Organization not found", data: null });
+  const updated = await Organization.findByIdAndUpdate(organizationId, { $set: patch }, { new: true }).lean();
+  if (!updated) {
+    return res.status(404).json({
+      code: 1,
+      message: "Organization not found",
+    });
+  }
 
-  return res.json({ success: true, data: { id: String(org._id), ...org } });
+  return res.json({
+    code: 0,
+    message: "success",
+    organization: buildZohoOrganizationPayload(updated, req.user),
+  });
+};
+
+export const getMyOrganization = async (req: express.Request, res: express.Response) => {
+  const organization = await loadAccessibleOrganization(req, res);
+  if (!organization) return;
+
+  return res.json({
+    success: true,
+    data: buildMyOrganizationSummary(organization),
+  });
 };
 
 export const updateMyOrganization = async (req: express.Request, res: express.Response) => {
@@ -36,76 +142,47 @@ export const updateMyOrganization = async (req: express.Request, res: express.Re
     return res.json({ success: true, data: { ok: true } });
   }
 
-  const orgId = req.user?.organizationId;
-  if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
-  if (mongoose.connection.readyState !== 1) {
-    return res.status(500).json({ success: false, message: "DB not connected", data: null });
+  const organizationId = getAuthedOrganizationId(req);
+  if (!organizationId) {
+    return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
   }
 
-  const patch: Record<string, unknown> = {};
+  const { patch, errors } = parseOrganizationPayload(req.body || {});
+  if (errors.length > 0) {
+    return res.status(400).json({ success: false, message: errors[0], errors, data: null });
+  }
 
-  const name = pickString(req.body?.name).trim();
-  if (name) patch.name = name.slice(0, 100);
+  if (!requireDbConnection(res)) return;
 
-  const primaryContactEmail = pickString(req.body?.primaryContactEmail).trim().toLowerCase();
-  if (primaryContactEmail) patch.primaryContactEmail = primaryContactEmail;
+  const updated = await Organization.findByIdAndUpdate(organizationId, { $set: patch }, { new: true }).lean();
+  if (!updated) {
+    return res.status(404).json({ success: false, message: "Organization not found", data: null });
+  }
 
-  const industry = pickString(req.body?.industry).trim();
-  if (industry) patch.industry = industry.slice(0, 120);
-
-  const businessType = pickString(req.body?.businessType).trim();
-  if (businessType) patch.businessType = businessType.slice(0, 80);
-
-  const countryIso = pickString(req.body?.countryIso).trim().toUpperCase();
-  if (countryIso) patch.countryIso = countryIso.slice(0, 2);
-
-  const state = pickString(req.body?.state).trim();
-  if (state) patch.state = state.slice(0, 80);
-
-  const baseCurrencyRaw = pickString(req.body?.baseCurrency).trim();
-  const baseCurrency = baseCurrencyRaw.includes(" - ") ? baseCurrencyRaw.split(" - ")[0] : baseCurrencyRaw;
-  if (baseCurrency) patch.baseCurrency = baseCurrency.slice(0, 80);
-
-  const fiscalYear = pickString(req.body?.fiscalYear).trim();
-  if (fiscalYear) patch.fiscalYear = fiscalYear.slice(0, 80);
-
-  const language = pickString(req.body?.language ?? req.body?.orgLanguage).trim();
-  if (language) patch.language = language.slice(0, 50);
-
-  const timeZone = pickString(req.body?.timeZone).trim();
-  if (timeZone) patch.timeZone = timeZone.slice(0, 80);
-
-  const websiteUrl = pickString(req.body?.websiteUrl).trim();
-  if (websiteUrl) patch.websiteUrl = websiteUrl.slice(0, 255);
-
-  const phone = pickString(req.body?.phone).trim();
-  if (phone) patch.phone = phone.slice(0, 40);
-
-  const addressLine1 = pickString(req.body?.addressLine1).trim();
-  if (addressLine1) patch.addressLine1 = addressLine1.slice(0, 255);
-  const addressLine2 = pickString(req.body?.addressLine2).trim();
-  if (addressLine2) patch.addressLine2 = addressLine2.slice(0, 255);
-  const city = pickString(req.body?.city).trim();
-  if (city) patch.city = city.slice(0, 80);
-  const postalCode = pickString(req.body?.postalCode).trim();
-  if (postalCode) patch.postalCode = postalCode.slice(0, 20);
-
-  const billingProcess = pickString(req.body?.billingProcess).trim();
-  if (billingProcess) patch.billingProcess = billingProcess.slice(0, 40);
-
-  const invoicingTool = pickString(req.body?.invoicingTool).trim();
-  if (invoicingTool) patch.invoicingTool = invoicingTool.slice(0, 80);
-
-  const currentBillingTool = pickString(req.body?.currentBillingTool).trim();
-  if (currentBillingTool) patch.currentBillingTool = currentBillingTool.slice(0, 80);
-
-  const wantsImport = pickBoolean(req.body?.wantsImport);
-  if (typeof wantsImport === "boolean") patch.wantsImport = wantsImport;
-
-  const logoUrl = pickString(req.body?.logoUrl ?? req.body?.logo).trim();
-  if (logoUrl) patch.logoUrl = logoUrl.slice(0, MAX_BRANDING_LEN);
-
-  const updated = await Organization.findByIdAndUpdate(orgId, { $set: patch }, { new: true }).lean();
-  if (!updated) return res.status(404).json({ success: false, message: "Organization not found", data: null });
-  return res.json({ success: true, data: { id: String(updated._id), ...updated } });
+  return res.json({ success: true, data: buildMyOrganizationSummary(updated) });
 };
+
+export const listOrganizations = async (req: express.Request, res: express.Response) => {
+  const organization = await loadAccessibleOrganization(req, res);
+  if (!organization) return;
+
+  return res.json({
+    code: 0,
+    message: "success",
+    organizations: [buildZohoOrganizationListItem(organization, req.user)],
+  });
+};
+
+export const getOrganizationById = async (req: express.Request, res: express.Response) => {
+  const organization = await loadAccessibleOrganization(req, res, req.params.organization_id);
+  if (!organization) return;
+
+  return res.json({
+    code: 0,
+    message: "success",
+    organization: buildZohoOrganizationPayload(organization, req.user),
+  });
+};
+
+export const updateOrganizationById = async (req: express.Request, res: express.Response) =>
+  updateOrganizationDocument(req, res, String(req.params.organization_id || "").trim());

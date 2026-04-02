@@ -9,11 +9,26 @@ import { currenciesAPI } from "../../../../../services/api";
 
 const API_BASE_URL = '/api';
 const DEFAULT_SYSTEM_SENDER_EMAIL = "message-service@sender.tabanbooks.com";
+const USER_STORAGE_KEYS = ["user", "current_user", "auth_user"];
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const LANGUAGE_LABEL_BY_CODE: Record<string, string> = {
+  ar: "Arabic",
+  de: "German",
+  en: "English",
+  es: "Spanish",
+  fr: "French",
+  hi: "Hindi",
+  zh: "Chinese",
+};
 
 const getStoredUser = () => {
   try {
-    const user = localStorage.getItem('user');
-    return user ? JSON.parse(user) : null;
+    for (const key of USER_STORAGE_KEYS) {
+      const user = localStorage.getItem(key);
+      if (!user) continue;
+      return JSON.parse(user);
+    }
+    return null;
   } catch (error) {
     console.error('Error parsing local user:', error);
     return null;
@@ -365,6 +380,167 @@ const ALL_DATE_FORMATS = [
 ];
 const FISCAL_YEARS = ["January - December", "February - January", "March - February", "April - March"];
 const START_DATES = Array.from({ length: 31 }, (_, i) => i + 1);
+const MONTH_OPTIONS = [
+  "january",
+  "february",
+  "march",
+  "april",
+  "may",
+  "june",
+  "july",
+  "august",
+  "september",
+  "october",
+  "november",
+  "december",
+];
+
+const getOrganizationEndpoint = () => {
+  const organizationId = String(getStoredUser()?.organizationId || "").trim();
+  return organizationId ? `${API_BASE_URL}/organizations/${organizationId}` : `${API_BASE_URL}/settings/organization/profile`;
+};
+
+const extractOrganizationResponse = (payload: any) => payload?.organization || payload?.data || null;
+
+const getLanguageLabel = (value: string | null | undefined) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const normalized = raw.toLowerCase();
+  return LANGUAGE_LABEL_BY_CODE[normalized] || raw;
+};
+
+const getLanguageCode = (value: string | null | undefined) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const normalized = raw.toLowerCase();
+  const found = Object.entries(LANGUAGE_LABEL_BY_CODE).find(([, label]) => label.toLowerCase() === normalized);
+  return found?.[0] || normalized;
+};
+
+const getFiscalYearLabel = (value: string | number | null | undefined) => {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (!raw) return "";
+
+  let monthIndex = MONTH_OPTIONS.indexOf(raw);
+  if (monthIndex < 0) {
+    const numericValue = Number(raw);
+    if (Number.isInteger(numericValue) && numericValue >= 0 && numericValue < MONTH_OPTIONS.length) {
+      monthIndex = numericValue;
+    }
+  }
+
+  if (monthIndex < 0) {
+    return String(value || "");
+  }
+
+  const start = MONTH_OPTIONS[monthIndex];
+  const end = MONTH_OPTIONS[(monthIndex + 11) % MONTH_OPTIONS.length];
+  return `${start.charAt(0).toUpperCase()}${start.slice(1)} - ${end.charAt(0).toUpperCase()}${end.slice(1)}`;
+};
+
+const normalizeOrganizationPayload = (responsePayload: any) => {
+  const payload = extractOrganizationResponse(responsePayload);
+  if (!payload || typeof payload !== "object") return null;
+
+  const address = payload?.address && typeof payload.address === "object" ? payload.address : {};
+  const customFields = Array.isArray(payload?.custom_fields)
+    ? payload.custom_fields
+    : Array.isArray(payload?.additionalFields)
+      ? payload.additionalFields
+      : [];
+
+  return {
+    name: String(payload?.name || payload?.organizationName || "").trim(),
+    industry: String(payload?.industry || payload?.industry_type || "").trim(),
+    country: String(address?.country || payload?.country || "").trim(),
+    website: String(payload?.website || "").trim(),
+    email: String(payload?.email || "").trim(),
+    baseCurrency: String(payload?.baseCurrency || payload?.currency_code || "").trim(),
+    fiscalYear: String(payload?.fiscalYear || getFiscalYearLabel(payload?.fiscal_year_start_month)).trim(),
+    reportBasis: String(payload?.reportBasis || "").trim(),
+    orgLanguage: String(payload?.orgLanguage || getLanguageLabel(payload?.language_code)).trim(),
+    commLanguage: String(payload?.commLanguage || "").trim(),
+    timeZone: String(payload?.timeZone || payload?.time_zone || "").trim(),
+    dateFormat: String(payload?.dateFormat || payload?.date_format || "").trim(),
+    dateSeparator: String(payload?.dateSeparator || payload?.field_separator || "").trim(),
+    street1: String(address?.street1 || address?.street_address1 || "").trim(),
+    street2: String(address?.street2 || address?.street_address2 || "").trim(),
+    city: String(address?.city || "").trim(),
+    zipCode: String(address?.zipCode || address?.zip || "").trim(),
+    state: String(address?.state || "").trim(),
+    phone: String(address?.phone || payload?.phone || "").trim(),
+    fax: String(address?.fax || payload?.fax || "").trim(),
+    logo: String(payload?.logo || payload?.logoUrl || "").trim(),
+    companyIdType: String(payload?.companyIdType || payload?.company_id_label || payload?.companyid_label || "").trim(),
+    companyIdValue: String(payload?.companyIdValue || payload?.company_id_value || payload?.companyid_value || "").trim(),
+    additionalFields: customFields.map((field: any, index: number) => ({
+      label: String(field?.label || "").trim(),
+      value: String(field?.value || "").trim(),
+      index: Number(field?.index) || index + 1,
+    })),
+    paymentStubAddress: String(payload?.paymentStubAddress || "").trim(),
+    showPaymentStubAddress: Boolean(payload?.showPaymentStubAddress),
+  };
+};
+
+const isValidWebsite = (value: string) => {
+  if (!value) return true;
+  try {
+    const url = new URL(value.startsWith("http://") || value.startsWith("https://") ? value : `https://${value}`);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+
+const validateProfileForm = (input: {
+  orgName: string;
+  industry: string;
+  location: string;
+  email: string;
+  website: string;
+  baseCurrency: string;
+  timeZone: string;
+  paymentStubAddress: string;
+  companyIdType: string;
+  companyIdValue: string;
+  additionalFields: Array<{ label?: string; value?: string }>;
+}) => {
+  if (!input.orgName.trim()) return "Organization name is required.";
+  if (!input.industry.trim()) return "Industry is required.";
+  if (!input.location.trim()) return "Organization location is required.";
+  if (!extractCurrencyCode(input.baseCurrency)) return "Base currency is required.";
+  if (!input.timeZone.trim()) return "Time zone is required.";
+
+  const normalizedEmail = input.email.trim().toLowerCase();
+  if (normalizedEmail && !EMAIL_REGEX.test(normalizedEmail)) {
+    return "Enter a valid organization email address.";
+  }
+
+  if (input.website.trim() && !isValidWebsite(input.website.trim())) {
+    return "Enter a valid website URL.";
+  }
+
+  if ((input.companyIdType.trim() && !input.companyIdValue.trim()) || (!input.companyIdType.trim() && input.companyIdValue.trim())) {
+    return "Company ID type and value must be entered together.";
+  }
+
+  const incompleteAdditionalField = input.additionalFields.find((field) => {
+    const label = String(field?.label || "").trim();
+    const value = String(field?.value || "").trim();
+    return (label || value) && (!label || !value);
+  });
+
+  if (incompleteAdditionalField) {
+    return "Each additional field needs both a label and a value.";
+  }
+
+  if (input.paymentStubAddress.trim().length > 255) {
+    return "Payment stub address cannot exceed 255 characters.";
+  }
+
+  return "";
+};
 
 const isBaseCurrencyRecord = (currency: any) => {
   const flag = currency?.isBase ?? currency?.isBaseCurrency ?? currency?.is_base_currency ?? currency?.baseCurrency ?? currency?.base_currency;
@@ -1187,7 +1363,7 @@ export default function ProfilePage() {
         const token = localStorage.getItem('auth_token');
         if (!token) return;
 
-        const response = await fetch(`${API_BASE_URL}/settings/organization/profile`, {
+        const response = await fetch(getOrganizationEndpoint(), {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
@@ -1196,13 +1372,14 @@ export default function ProfilePage() {
 
         if (response.ok) {
           const data = await response.json();
-          if (data.success && data.data) {
-            const p = data.data;
+          const p = normalizeOrganizationPayload(data);
+          if (p) {
             const storedBaseSelection = readStoredBaseCurrencySelection();
             // Only update if server has non-empty values
             if (p.name && p.name !== "Taban enterprise") setOrgName(p.name);
             if (p.industry) setIndustry(p.industry);
-            if (p.address?.country) setLocation(p.address.country);
+            if (p.country) setLocation(p.country);
+            if (p.email) setEmail(p.email);
             if (p.website) setWebsite(p.website);
             if (storedBaseSelection) {
               setBaseCurrency(storedBaseSelection);
@@ -1216,20 +1393,19 @@ export default function ProfilePage() {
             if (p.timeZone) setTimeZone(p.timeZone);
             if (p.dateFormat) setDateFormat(p.dateFormat);
             if (p.dateSeparator) setDateSeparator(p.dateSeparator);
-
-            if (p.address) {
-              if (p.address.street1) setStreet1(p.address.street1);
-              if (p.address.street2) setStreet2(p.address.street2);
-              if (p.address.city) setCity(p.address.city);
-              if (p.address.zipCode) setZipCode(p.address.zipCode);
-              if (p.address.state) setState(p.address.state);
-              if (p.address.phone) setPhone(p.address.phone);
-              if (p.address.fax) setFax(p.address.fax);
-            }
-
-            if (p.logo) {
-              setLogoPreview(p.logo);
-            }
+            if (p.street1) setStreet1(p.street1);
+            if (p.street2) setStreet2(p.street2);
+            if (p.city) setCity(p.city);
+            if (p.zipCode) setZipCode(p.zipCode);
+            if (p.state) setState(p.state);
+            if (p.phone) setPhone(p.phone);
+            if (p.fax) setFax(p.fax);
+            if (p.logo) setLogoPreview(p.logo);
+            if (p.companyIdType) setCompanyIdType(p.companyIdType);
+            if (p.companyIdValue) setCompanyIdValue(p.companyIdValue);
+            if (Array.isArray(p.additionalFields) && p.additionalFields.length > 0) setAdditionalFields(p.additionalFields);
+            if (p.paymentStubAddress) setPaymentStubAddress(p.paymentStubAddress);
+            if (typeof p.showPaymentStubAddress === "boolean") setShowPaymentStubAddress(p.showPaymentStubAddress);
           }
         }
       } catch (error) {
@@ -1407,6 +1583,26 @@ export default function ProfilePage() {
         return;
       }
 
+      const validationError = validateProfileForm({
+        orgName,
+        industry,
+        location,
+        email,
+        website,
+        baseCurrency,
+        timeZone,
+        paymentStubAddress,
+        companyIdType,
+        companyIdValue,
+        additionalFields,
+      });
+
+      if (validationError) {
+        toast.error(validationError);
+        setIsSaving(false);
+        return;
+      }
+
       // Convert logo to base64 if image file is selected
       let logoBase64 = logoPreview || "";
       if (logoImage) {
@@ -1443,39 +1639,47 @@ export default function ProfilePage() {
 
       const profileData = {
         name: orgName,
-        industry: industry,
+        industry_type: industry,
+        contact_name: primarySenderName || orgName,
         email: email,
         website: website,
         logo: logoBase64,
         address: {
-          street1: street1,
-          street2: street2,
+          street_address1: street1,
+          street_address2: street2,
           city: city,
-          zipCode: zipCode,
+          zip: zipCode,
           state: state,
           country: location,
           phone: phone,
           fax: fax,
         },
-        baseCurrency: baseCurrency.split(' - ')[0],
-        fiscalYear: fiscalYear,
+        currency_code: baseCurrency.split(' - ')[0],
+        fiscal_year_start_month: startMonthName.toLowerCase(),
         fiscalYearStart: fStartDate.toISOString(),
         reportBasis: reportBasis,
         orgLanguage: orgLanguage,
         commLanguage: commLanguage,
-        timeZone: timeZone,
-        dateFormat: dateFormat,
-        dateSeparator: dateSeparator,
-        companyIdType: companyIdType,
-        companyIdValue: companyIdValue,
-        additionalFields: additionalFields,
+        language_code: getLanguageCode(orgLanguage) || "en",
+        time_zone: timeZone,
+        date_format: dateFormat,
+        field_separator: dateSeparator,
+        companyid_label: companyIdType,
+        companyid_value: companyIdValue,
+        custom_fields: additionalFields
+          .map((field, index) => ({
+            index: index + 1,
+            label: String(field?.label || "").trim(),
+            value: String(field?.value || "").trim(),
+          }))
+          .filter((field) => field.label || field.value),
         paymentStubAddress: paymentStubAddress,
         showPaymentStubAddress: showPaymentStubAddress,
       };
 
       console.log('Saving profile data:', profileData);
 
-      const response = await fetch(`${API_BASE_URL}/settings/organization/profile`, {
+      const response = await fetch(getOrganizationEndpoint(), {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -1508,7 +1712,7 @@ export default function ProfilePage() {
         return;
       }
 
-      if (response.ok && data.success) {
+      if (response.ok && (data?.success || data?.code === 0)) {
         let syncedBaseCurrency = baseCurrency;
         try {
           syncedBaseCurrency = await syncBaseCurrencyWithCurrencyTable(baseCurrency);

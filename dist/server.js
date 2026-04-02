@@ -6,6 +6,7 @@ import mongoose from "mongoose";
 import { connectDb } from "./config/db.js";
 import { AUTH_BYPASS, FRONTEND_URL, JWT_SECRET, MONGO_URI, PORT } from "./config/env.js";
 import { authRoutes } from "./routes/authRoutes.js";
+import { documentsRoutes } from "./routes/documentsRoutes.js";
 import { organizationRoutes } from "./routes/organizationRoutes.js";
 import { settingsRoutes } from "./routes/settingsRoutes.js";
 import { publicVerificationRoutes } from "./routes/publicVerificationRoutes.js";
@@ -20,6 +21,7 @@ import { transactionNumberSeriesRoutes } from "./routes/transactionNumberSeriesR
 import { locationsRoutes } from "./routes/locationsRoutes.js";
 import { customersRoutes } from "./routes/customersRoutes.js";
 import { itemsRoutes } from "./routes/itemsRoutes.js";
+import { itemDetailsRoutes } from "./routes/itemDetailsRoutes.js";
 import { productsRoutes } from "./routes/productsRoutes.js";
 import { plansRoutes } from "./routes/plansRoutes.js";
 import { addonsRoutes } from "./routes/addonsRoutes.js";
@@ -55,6 +57,33 @@ else if (!JWT_SECRET) {
     console.warn("Missing JWT_SECRET. Auth will not work until you set it in .env.");
 }
 const app = express();
+let server = null;
+const shutdownServer = async (signal) => {
+    // eslint-disable-next-line no-console
+    console.log(`Received ${signal}. Shutting down API server...`);
+    await new Promise((resolve) => {
+        if (!server) {
+            resolve();
+            return;
+        }
+        server.close(() => resolve());
+    });
+    try {
+        if (mongoose.connection.readyState !== 0) {
+            await mongoose.connection.close(false);
+        }
+    }
+    catch (error) {
+        // eslint-disable-next-line no-console
+        console.error("Error while closing Mongo connection:", error);
+    }
+};
+process.once("SIGINT", () => {
+    void shutdownServer("SIGINT").finally(() => process.exit(0));
+});
+process.once("SIGTERM", () => {
+    void shutdownServer("SIGTERM").finally(() => process.exit(0));
+});
 app.disable("x-powered-by");
 app.use(express.json({ limit: "20mb" }));
 app.use(cookieParser());
@@ -79,6 +108,7 @@ app.get("/api/health", (_req, res) => {
     });
 });
 app.use("/api/auth", authRoutes);
+app.use("/api/documents", documentsRoutes);
 app.use("/api/public", publicVerificationRoutes);
 app.use("/api/public", publicUserInvitationRoutes);
 app.use("/api/organizations", organizationRoutes);
@@ -93,6 +123,7 @@ app.use("/api/locations", locationsRoutes);
 app.use("/api/customers", customersRoutes);
 app.use("/api/salespersons", salespersonsRoutes);
 app.use("/api/items", itemsRoutes);
+app.use("/api/itemdetails", itemDetailsRoutes);
 app.use("/api/products", productsRoutes);
 app.use("/api/plans", plansRoutes);
 app.use("/api/addons", addonsRoutes);
@@ -124,9 +155,14 @@ app.use((err, _req, res, _next) => {
 });
 const start = async () => {
     const dbConnected = await connectDb();
-    app.listen(PORT, () => {
+    server = app.listen(PORT, () => {
         // eslint-disable-next-line no-console
         console.log(`API listening on http://localhost:${PORT}`);
+    });
+    server.on("error", (error) => {
+        // eslint-disable-next-line no-console
+        console.error(`Failed to listen on port ${PORT}:`, error);
+        process.exitCode = 1;
     });
     if (!dbConnected && !AUTH_BYPASS) {
         // eslint-disable-next-line no-console

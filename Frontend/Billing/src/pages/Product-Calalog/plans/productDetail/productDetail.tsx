@@ -261,7 +261,9 @@ export default function ProductDetailPage() {
     const nextStatus = currentlyActive ? "Inactive" : "Active";
 
     try {
-      const res: any = await productsAPI.update(targetId, { status: nextStatus });
+      const res: any = currentlyActive
+        ? await productsAPI.markInactive(targetId)
+        : await productsAPI.markActive(targetId);
       if (res?.success === false) throw new Error(res?.message || "Failed to update product");
       await refreshProducts(true);
       setActionsOpen(false);

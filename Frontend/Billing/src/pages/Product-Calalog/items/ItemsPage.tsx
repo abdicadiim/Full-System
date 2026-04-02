@@ -52,6 +52,13 @@ function ItemsPageContent() {
     active: item.active !== undefined ? item.active : item.isActive
   });
 
+  const ensureItemApiSuccess = (response: any, fallbackMessage: string) => {
+    if (response && typeof response === "object" && "success" in response && response.success === false) {
+      throw new Error((response as any).message || fallbackMessage);
+    }
+    return response;
+  };
+
   // Load items from API
   const fetchItems = async () => {
     setLoading(true);
@@ -91,10 +98,7 @@ function ItemsPageContent() {
       return;
     }
     try {
-      const response = await itemsAPI.create(data);
-      if (response && "success" in response && response.success === false) {
-        throw new Error((response as any).message || "Failed to save item locally");
-      }
+      const response = ensureItemApiSuccess(await itemsAPI.create(data), "Failed to save item");
 
       const newItem = response.data || response;
       const normalizedItem = normalizeItemForList(newItem as Item);
@@ -177,13 +181,31 @@ function ItemsPageContent() {
       delete safeData.createdAt;
       delete safeData.updatedAt;
       delete safeData.__v;
-      const response = await itemsAPI.update(targetId, {
-        ...safeSelected,
-        ...safeData,
-      });
-      if (response && response.success === false) {
-        throw new Error(response.message || "Failed to update item");
-      }
+
+      const requestedStatus =
+        typeof safeData.active === "boolean"
+          ? safeData.active
+          : typeof safeData.isActive === "boolean"
+            ? safeData.isActive
+            : typeof safeData.status === "string"
+              ? safeData.status.toLowerCase() === "active"
+              : null;
+      const updateKeys = Object.keys(safeData);
+      const isStatusOnlyUpdate =
+        requestedStatus !== null &&
+        updateKeys.length > 0 &&
+        updateKeys.every((key) => ["active", "isActive", "status"].includes(key));
+
+      const response = isStatusOnlyUpdate
+        ? requestedStatus
+          ? await itemsAPI.markActive(targetId)
+          : await itemsAPI.markInactive(targetId)
+        : await itemsAPI.update(targetId, {
+            ...safeSelected,
+            ...safeData,
+          });
+
+      ensureItemApiSuccess(response, "Failed to update item");
       await fetchItems();
       setSelectedId(targetId);
       setView("detail");
@@ -211,7 +233,7 @@ function ItemsPageContent() {
     if (!deleteConfirmModal.itemId) return;
     setIsDeletingItems(true);
     try {
-      await itemsAPI.delete(deleteConfirmModal.itemId);
+      ensureItemApiSuccess(await itemsAPI.delete(deleteConfirmModal.itemId), "Failed to delete item");
       await fetchItems();
       if (selectedId === deleteConfirmModal.itemId) {
         setSelectedId(null);
@@ -234,7 +256,11 @@ function ItemsPageContent() {
     if (!deleteConfirmModal.itemIds || deleteConfirmModal.itemIds.length === 0) return;
     setIsDeletingItems(true);
     try {
-      await Promise.all(deleteConfirmModal.itemIds.map(id => itemsAPI.delete(id)));
+      await Promise.all(
+        deleteConfirmModal.itemIds.map(async (id) =>
+          ensureItemApiSuccess(await itemsAPI.delete(id), "Failed to delete item")
+        )
+      );
       await fetchItems();
       if (deleteConfirmModal.itemIds.includes(selectedId || "")) {
         setSelectedId(null);
@@ -255,10 +281,12 @@ function ItemsPageContent() {
       return;
     }
     try {
-      await Promise.all(ids.map(id => itemsAPI.update(id, { active: true, isActive: true, status: "Active" })));
+      await Promise.all(
+        ids.map(async (id) => ensureItemApiSuccess(await itemsAPI.markActive(id), "Failed to mark item active"))
+      );
       await fetchItems();
       toast.success(`${ids.length} item(s) marked as active`);
-    } catch (e) { toast.error("Bulk action failed"); }
+    } catch (e: any) { toast.error(e?.message || "Bulk action failed"); }
   };
 
   const handleBulkMarkInactive = async (ids: string[]) => {
@@ -267,10 +295,12 @@ function ItemsPageContent() {
       return;
     }
     try {
-      await Promise.all(ids.map(id => itemsAPI.update(id, { active: false, isActive: false, status: "Inactive" })));
+      await Promise.all(
+        ids.map(async (id) => ensureItemApiSuccess(await itemsAPI.markInactive(id), "Failed to mark item inactive"))
+      );
       await fetchItems();
       toast.success(`${ids.length} item(s) marked as inactive`);
-    } catch (e) { toast.error("Bulk action failed"); }
+    } catch (e: any) { toast.error(e?.message || "Bulk action failed"); }
   };
 
   const handleBulkUpdate = async (field: string, value: any) => {
@@ -280,12 +310,16 @@ function ItemsPageContent() {
     }
     try {
       setLoading(true);
-      await Promise.all(bulkUpdateModal.itemIds.map(id => itemsAPI.update(id, { [field]: value })));
+      await Promise.all(
+        bulkUpdateModal.itemIds.map(async (id) =>
+          ensureItemApiSuccess(await itemsAPI.update(id, { [field]: value }), "Bulk update failed")
+        )
+      );
       await fetchItems();
       toast.success(`${bulkUpdateModal.itemIds.length} item(s) updated successfully`);
       setBulkUpdateModal({ open: false, itemIds: [] });
-    } catch (e) {
-      toast.error("Bulk update failed");
+    } catch (e: any) {
+      toast.error(e?.message || "Bulk update failed");
       setLoading(false);
     }
   };

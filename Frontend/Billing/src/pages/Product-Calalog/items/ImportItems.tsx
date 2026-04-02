@@ -637,11 +637,17 @@ export default function ImportItems() {
               skippedCount++;
               continue;
             } else if (duplicateHandling === "overwrite") {
-              await itemsAPI.update(existingServerItem._id || existingServerItem.id, itemData);
+              const updateResponse = await itemsAPI.update(existingServerItem._id || existingServerItem.id, itemData);
+              if (updateResponse && typeof updateResponse === "object" && "success" in updateResponse && updateResponse.success === false) {
+                throw new Error((updateResponse as any).message || "Failed to update item");
+              }
               importedCount++;
             }
           } else {
-            await itemsAPI.create(itemData);
+            const createResponse = await itemsAPI.create(itemData);
+            if (createResponse && typeof createResponse === "object" && "success" in createResponse && createResponse.success === false) {
+              throw new Error((createResponse as any).message || "Failed to create item");
+            }
             importedCount++;
           }
         } catch (error: any) {

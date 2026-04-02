@@ -55,7 +55,13 @@ export default function Layout({ children }) {
   const disablePageScroll = isCreditNotesDetailPage;
 
   useEffect(() => {
-    transactionNumberSeriesAPI.getAll({ limit: 10000 }).catch(() => null);
+    const warmSeriesCache = window.setTimeout(() => {
+      transactionNumberSeriesAPI.getAll({ limit: 1000 }).catch(() => null);
+    }, 1200);
+
+    return () => {
+      window.clearTimeout(warmSeriesCache);
+    };
   }, []);
 
   if (hideAppChrome) {

@@ -2,17 +2,7 @@ import express from "express";
 import mongoose from "mongoose";
 import { AUTH_BYPASS } from "../config/env.js";
 import { Organization } from "../models/Organization.js";
-
-const regionNameFromIso = (iso2: string) => {
-  if (!iso2) return "";
-  try {
-    // Node 25 supports Intl.DisplayNames.
-    const dn = new Intl.DisplayNames(["en"], { type: "region" });
-    return dn.of(iso2.toUpperCase()) || iso2;
-  } catch {
-    return iso2;
-  }
-};
+import { buildOrganizationProfilePayload, parseOrganizationPayload } from "../services/organizationPayloads.js";
 
 const normalizeMileagePreferences = (value: any) => {
   const source = value && typeof value === "object" ? value : {};
@@ -35,31 +25,6 @@ const normalizeMileagePreferences = (value: any) => {
     mileageRates,
   };
 };
-
-const buildOrganizationProfilePayload = (org: any) => ({
-  id: String(org._id),
-  name: org.name || "",
-  logoUrl: org.logoUrl || "",
-  logo: org.logoUrl || "",
-  businessType: org.businessType || "",
-  industry: org.industry || "",
-  email: org.primaryContactEmail || "",
-  website: org.websiteUrl || "",
-  baseCurrency: org.baseCurrency || "",
-  fiscalYear: org.fiscalYear || "",
-  orgLanguage: org.language || "",
-  timeZone: org.timeZone || "",
-  mileagePreferences: org.mileagePreferences ? normalizeMileagePreferences(org.mileagePreferences) : null,
-  address: {
-    country: regionNameFromIso(org.countryIso || ""),
-    state: org.state || "",
-    city: org.city || "",
-    street1: org.addressLine1 || "",
-    street2: org.addressLine2 || "",
-    zipCode: org.postalCode || "",
-    phone: org.phone || "",
-  },
-});
 
 const buildOrganizationBrandingPayload = (org: any) => ({
   appearance: (org as any).brandingAppearance || "dark",
@@ -103,7 +68,10 @@ export const getOrganizationProfile = async (req: express.Request, res: express.
 
   return res.json({
     success: true,
-    data: buildOrganizationProfilePayload(org),
+    data: {
+      ...buildOrganizationProfilePayload(org, req.user),
+      mileagePreferences: org.mileagePreferences ? normalizeMileagePreferences(org.mileagePreferences) : null,
+    },
   });
 };
 
@@ -115,51 +83,30 @@ export const updateOrganizationProfile = async (req: express.Request, res: expre
   if (mongoose.connection.readyState !== 1) return res.status(500).json({ success: false, message: "DB not connected", data: null });
 
   const body = req.body || {};
-  const patch: Record<string, unknown> = {};
-  const MAX_BRANDING_LEN = 2_000_000; // ~2MB string (supports data: URLs)
-
-  if (typeof body.name === "string" && body.name.trim()) patch.name = body.name.trim().slice(0, 100);
-  if (typeof body.businessType === "string" && body.businessType.trim()) patch.businessType = body.businessType.trim().slice(0, 80);
-  if (typeof body.industry === "string" && body.industry.trim()) patch.industry = body.industry.trim().slice(0, 120);
-
-  // Logo can be provided as `logo` (legacy) or `logoUrl`.
-  if (typeof body.logo === "string") patch.logoUrl = body.logo.trim().slice(0, MAX_BRANDING_LEN);
-  if (typeof body.logoUrl === "string") patch.logoUrl = body.logoUrl.trim().slice(0, MAX_BRANDING_LEN);
-
-  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
-  if (email) patch.primaryContactEmail = email;
-
-  const website = typeof body.website === "string" ? body.website.trim() : "";
-  if (website) patch.websiteUrl = website.slice(0, 255);
-
-  const baseCurrencyRaw = typeof body.baseCurrency === "string" ? body.baseCurrency.trim() : "";
-  const baseCurrency = baseCurrencyRaw.includes(" - ") ? baseCurrencyRaw.split(" - ")[0] : baseCurrencyRaw;
-  if (baseCurrency) patch.baseCurrency = baseCurrency.slice(0, 80);
-
-  if (typeof body.fiscalYear === "string" && body.fiscalYear.trim()) patch.fiscalYear = body.fiscalYear.trim().slice(0, 80);
-  if (typeof body.orgLanguage === "string" && body.orgLanguage.trim()) patch.language = body.orgLanguage.trim().slice(0, 50);
-  if (typeof body.timeZone === "string" && body.timeZone.trim()) patch.timeZone = body.timeZone.trim().slice(0, 80);
-
-  const addr = body.address || {};
-  if (typeof addr.state === "string" && addr.state.trim()) patch.state = addr.state.trim().slice(0, 80);
-  if (typeof addr.city === "string" && addr.city.trim()) patch.city = addr.city.trim().slice(0, 80);
-  if (typeof addr.street1 === "string" && addr.street1.trim()) patch.addressLine1 = addr.street1.trim().slice(0, 255);
-  if (typeof addr.street2 === "string" && addr.street2.trim()) patch.addressLine2 = addr.street2.trim().slice(0, 255);
-  if (typeof addr.zipCode === "string" && addr.zipCode.trim()) patch.postalCode = addr.zipCode.trim().slice(0, 20);
-  if (typeof addr.phone === "string" && addr.phone.trim()) patch.phone = addr.phone.trim().slice(0, 40);
+  const { patch, errors } = parseOrganizationPayload(body);
+  if (errors.length > 0) {
+    return res.status(400).json({
+      success: false,
+      message: errors[0],
+      errors,
+      data: null,
+    });
+  }
 
   if (body.mileagePreferences && typeof body.mileagePreferences === "object") {
     patch.mileagePreferences = normalizeMileagePreferences(body.mileagePreferences);
   }
 
-  // Only update country if a 2-letter ISO code is provided explicitly.
-  const countryIso = typeof body.countryIso === "string" ? body.countryIso.trim().toUpperCase() : "";
-  if (countryIso && countryIso.length === 2) patch.countryIso = countryIso;
-
   const updated = await Organization.findByIdAndUpdate(orgId, { $set: patch }, { new: true }).lean();
   if (!updated) return res.status(404).json({ success: false, message: "Organization not found", data: null });
 
-  return res.json({ success: true, data: buildOrganizationProfilePayload(updated) });
+  return res.json({
+    success: true,
+    data: {
+      ...buildOrganizationProfilePayload(updated, req.user),
+      mileagePreferences: updated.mileagePreferences ? normalizeMileagePreferences(updated.mileagePreferences) : null,
+    },
+  });
 };
 
 export const getOrganizationOwnerEmail = async (req: express.Request, res: express.Response) => {

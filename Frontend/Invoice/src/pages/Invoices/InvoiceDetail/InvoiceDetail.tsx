@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { senderEmailsAPI } from "../../../services/api";
 import { resolveVerifiedPrimarySender } from "../../../utils/emailSenderDisplay";
@@ -7,6 +7,9 @@ import { getInvoiceById, getInvoices, updateInvoice, getPayments, getTaxes, getC
 import { currenciesAPI, invoicesAPI, creditNotesAPI, paymentsReceivedAPI, bankAccountsAPI, refundsAPI } from "../../../services/api";
 import FieldCustomization from "../../shared/FieldCustomization";
 import InvoiceCommentsPanel from "./InvoiceCommentsPanel";
+const InvoiceCommunicationModals = lazy(() => import("./modals/InvoiceCommunicationModals"));
+const InvoicePaymentModals = lazy(() => import("./modals/InvoicePaymentModals"));
+const InvoiceSupportModals = lazy(() => import("./modals/InvoiceSupportModals"));
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import {
@@ -88,21 +91,12 @@ export default function InvoiceDetail() { // Start of component
     fromAccountId: "",
     description: ""
   });
-  const [doNotShowAgain, setDoNotShowAgain] = useState(false);
-  // Share Modal States
   const [showShareModal, setShowShareModal] = useState(false);
-  const [shareVisibility, setShareVisibility] = useState("Public");
-  const [isVisibilityDropdownOpen, setIsVisibilityDropdownOpen] = useState(false);
-  const [linkExpirationDate, setLinkExpirationDate] = useState("");
-  const [generatedLink, setGeneratedLink] = useState("");
-  const [isLinkGenerated, setIsLinkGenerated] = useState(false);
-  // Attachments Modal States
   const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
   const [invoiceAttachments, setInvoiceAttachments] = useState<AttachedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [showImageViewer, setShowImageViewer] = useState(false);
-  const attachmentsFileInputRef = useRef<HTMLInputElement>(null);
   // Comments Sidebar States
   const [showCommentsSidebar, setShowCommentsSidebar] = useState(false);
   const [comments, setComments] = useState<any[]>([]);
@@ -141,16 +135,15 @@ export default function InvoiceDetail() { // Start of component
     useNotesForAllInvoices: false,
     useTermsForAllInvoices: false
   });
-  const shareModalRef = useRef(null);
-  const organizationAddressFileInputRef = useRef(null);
   const customizeDropdownRef = useRef(null);
-  const visibilityDropdownRef = useRef(null);
   const moreMenuRef = useRef(null);
   const remindersDropdownRef = useRef(null);
   const allInvoicesDropdownRef = useRef(null);
   const sidebarMoreRef = useRef(null);
   const sendDropdownRef = useRef(null);
   const pdfDropdownRef = useRef(null);
+  const attachmentsFileInputRef = useRef<HTMLInputElement>(null);
+  const organizationAddressFileInputRef = useRef<HTMLInputElement>(null);
 
   // Organization profile data
   const [organizationProfile, setOrganizationProfile] = useState<any>(null);
@@ -349,12 +342,6 @@ export default function InvoiceDetail() { // Start of component
     }
   };
 
-  // Rich Text Editor State
-  const [fontSize, setFontSize] = useState("16");
-  const [isBold, setIsBold] = useState(false);
-  const [isItalic, setIsItalic] = useState(false);
-  const [isUnderline, setIsUnderline] = useState(false);
-  const [isStrikethrough, setIsStrikethrough] = useState(false);
   // Fetch organization profile data
   const fetchOrganizationProfile = async () => {
     try {
@@ -741,9 +728,6 @@ export default function InvoiceDetail() { // Start of component
       if (pdfDropdownRef.current && !pdfDropdownRef.current.contains(event.target as Node)) {
         setIsPdfDropdownOpen(false);
       }
-      if (visibilityDropdownRef.current && !visibilityDropdownRef.current.contains(event.target as Node)) {
-        setIsVisibilityDropdownOpen(false);
-      }
       if (customizeDropdownRef.current && !customizeDropdownRef.current.contains(event.target as Node)) {
         setIsCustomizeDropdownOpen(false);
       }
@@ -759,7 +743,7 @@ export default function InvoiceDetail() { // Start of component
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isMoreMenuOpen, isAllInvoicesDropdownOpen, isSendDropdownOpen, isRemindersDropdownOpen, isPdfDropdownOpen, isVisibilityDropdownOpen, isCustomizeDropdownOpen]);
+  }, [isMoreMenuOpen, isAllInvoicesDropdownOpen, isSendDropdownOpen, isRemindersDropdownOpen, isPdfDropdownOpen, isCustomizeDropdownOpen]);
 
   const handleSendReminderNow = async () => {
     try {
@@ -1309,65 +1293,7 @@ export default function InvoiceDetail() { // Start of component
 
   const handleShare = () => {
     if (!invoice) return;
-
-    // Calculate default expiration date (90 days from invoice due date or 90 days from today)
-    let defaultExpiryDate;
-    if (invoice.dueDate) {
-      defaultExpiryDate = new Date(invoice.dueDate);
-      defaultExpiryDate.setDate(defaultExpiryDate.getDate() + 90);
-    } else {
-      defaultExpiryDate = new Date();
-      defaultExpiryDate.setDate(defaultExpiryDate.getDate() + 90);
-    }
-
-    // Format as DD/MM/YYYY
-    const day = String(defaultExpiryDate.getDate()).padStart(2, '0');
-    const month = String(defaultExpiryDate.getMonth() + 1).padStart(2, '0');
-    const year = defaultExpiryDate.getFullYear();
-    const formattedDate = `${day}/${month}/${year}`;
-
-    setLinkExpirationDate(formattedDate);
-    setGeneratedLink("");
-    setIsLinkGenerated(false);
     setShowShareModal(true);
-  };
-
-  const handleGenerateLink = () => {
-    if (!linkExpirationDate) {
-      toast("Please select an expiration date");
-      return;
-    }
-
-    // Generate a secure link similar to the example
-    const baseUrl = "https://zohosecurepay.com/books/tabanenterprises/secure";
-    const invoiceId = invoice.id || invoice.invoiceNumber || Date.now();
-    // Generate a long secure token (128 characters like in the example)
-    const token = Array.from(crypto.getRandomValues(new Uint8Array(64)))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
-
-    // Format: CInvoiceID=invoiceId-token (matching the example format)
-    const secureLink = `${baseUrl}?CInvoiceID=${invoiceId}-${token}`;
-    setGeneratedLink(secureLink);
-    setIsLinkGenerated(true);
-  };
-
-  const handleCopyLink = () => {
-    if (generatedLink) {
-      navigator.clipboard.writeText(generatedLink).then(() => {
-        toast("Link copied to clipboard!");
-      }).catch(() => {
-        toast("Unable to copy link. Please copy manually: " + generatedLink);
-      });
-    }
-  };
-
-  const handleDisableAllActiveLinks = () => {
-    if (window.confirm("Are you sure you want to disable all active links for this invoice?")) {
-      setGeneratedLink("");
-      setIsLinkGenerated(false);
-      toast("All active links have been disabled.");
-    }
   };
 
   // Generate HTML content for invoice (shared for print and download)
@@ -2464,9 +2390,8 @@ export default function InvoiceDetail() { // Start of component
     return "text-gray-700";
   };
 
-  const handleRecordPaymentConfirm = () => {
-    // Save preference if checkbox is checked
-    if (doNotShowAgain) {
+  const handleRecordPaymentConfirm = (skipWarning = false) => {
+    if (skipWarning) {
       localStorage.setItem('hideRecordPaymentWarning', 'true');
     }
     setIsRecordPaymentModalOpen(false);
@@ -2774,24 +2699,6 @@ export default function InvoiceDetail() { // Start of component
     processFiles();
   };
 
-  const handleFileClick = (attachment) => {
-    if (attachment.type && attachment.type.startsWith('image/')) {
-      setSelectedImage(attachment.preview || (attachment.file ? URL.createObjectURL(attachment.file) : null));
-      setShowImageViewer(true);
-    } else {
-      if (attachment.file) {
-        const url = URL.createObjectURL(attachment.file);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = attachment.name;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }
-    }
-  };
-
   const handleRemoveAttachment = (attachmentId) => {
     setInvoiceAttachments(prev => {
       const updated = prev.filter(att => att.id !== attachmentId);
@@ -2815,22 +2722,43 @@ export default function InvoiceDetail() { // Start of component
     });
   };
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
+  const handleFileClick = (attachment: AttachedFile) => {
+    if (attachment.type && attachment.type.startsWith("image/")) {
+      setSelectedImage(
+        attachment.preview || (attachment.file ? URL.createObjectURL(attachment.file) : null)
+      );
+      setShowImageViewer(true);
+      return;
+    }
+
+    if (attachment.file) {
+      const url = URL.createObjectURL(attachment.file);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = attachment.name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
     setIsDragging(false);
-    const files: File[] = Array.from(e.dataTransfer.files || []);
+    const files = Array.from(event.dataTransfer.files || []);
     if (files.length > 0) {
       handleFileUpload(files);
     }
   };
 
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
     setIsDragging(true);
   };
 
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
+  const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
     setIsDragging(false);
   };
 
@@ -2917,6 +2845,21 @@ export default function InvoiceDetail() { // Start of component
     creditsAppliedCount > 0 ||
     creditAppliedAmount > 0 ||
     retainerAppliedAmount > 0;
+  const shouldRenderPaymentModals =
+    isApplyAdjustmentsModalOpen ||
+    (showDeletePaymentModal && Boolean(selectedPaymentForDelete)) ||
+    (isRefundModalOpen && Boolean(selectedPaymentForRefund)) ||
+    isDeleteInvoiceModalOpen ||
+    isRecordPaymentModalOpen;
+  const shouldRenderCommunicationModals =
+    isSendEmailModalOpen ||
+    isScheduleEmailModalOpen ||
+    (showShareModal && Boolean(invoice));
+  const shouldRenderSupportModals =
+    showAttachmentsModal ||
+    isChooseTemplateModalOpen ||
+    isOrganizationAddressModalOpen ||
+    isTermsAndConditionsModalOpen;
 
   return (
     <>
@@ -3896,937 +3839,75 @@ export default function InvoiceDetail() { // Start of component
 
         </div>
 
-        {isApplyAdjustmentsModalOpen && invoice && (
-          <div className="fixed inset-0 z-[130] bg-black/40 flex items-start justify-center pt-8 px-4">
-            <div className="w-full max-w-[900px] bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-                <h3 className="text-[16px] font-semibold text-gray-900">
-                  Apply credits to {String((invoice as any)?.invoiceNumber || "")}
-                </h3>
-                <button
-                  className="text-red-500 hover:text-red-600"
-                  onClick={() => {
-                    if (isApplyingAdjustments) return;
-                    setIsApplyAdjustmentsModalOpen(false);
-                  }}
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              <div className="px-5 py-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-[15px] font-medium text-gray-800">Credits to Apply</h4>
-                  <div className="flex items-center gap-3 text-[13px] text-gray-700">
-                    <span>Set Applied on Date</span>
-                    <button
-                      type="button"
-                      onClick={() => setUseApplyDate((prev) => !prev)}
-                      className={`w-11 h-6 rounded-full relative transition-colors ${useApplyDate ? "bg-[#1f6f84]" : "bg-gray-300"}`}
-                    >
-                      <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${useApplyDate ? "left-5" : "left-0.5"}`} />
-                    </button>
-                    {useApplyDate && (
-                      <input
-                        type="date"
-                        value={applyOnDate}
-                        onChange={(e) => setApplyOnDate(e.target.value)}
-                        className="border border-gray-300 rounded px-2 py-1 text-[14px]"
-                      />
-                    )}
-                    <span>
-                      Invoice Balance:{" "}
-                      <span className="font-semibold">
-                        {formatCurrency(invoiceTotalsMeta.balance, invoice.currency)}
-                        {` (${formatDate((invoice as any)?.invoiceDate || new Date().toISOString())})`}
-                      </span>
-                    </span>
-                  </div>
-                </div>
-
-                <div className="border border-gray-200 rounded overflow-hidden">
-                  <table className="w-full text-left">
-                    <thead className="bg-[#f6f7fb]">
-                      <tr className="text-[12px] uppercase text-[#6b7280]">
-                        <th className="px-3 py-2 font-medium">Transaction#</th>
-                        <th className="px-3 py-2 font-medium">Transaction Date</th>
-                        <th className="px-3 py-2 font-medium">Location</th>
-                        <th className="px-3 py-2 font-medium text-right">Credit Amount</th>
-                        <th className="px-3 py-2 font-medium text-right">Credits Available</th>
-                        <th className="px-3 py-2 font-medium">Credits Applied Date</th>
-                        <th className="px-3 py-2 font-medium text-right">Early Payment Discount</th>
-                        <th className="px-3 py-2 font-medium text-right">Credits to Apply</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {applyAdjustmentRows.map((row: any, index: number) => (
-                        <tr key={row.rowKey || index} className="border-t border-gray-100">
-                          <td className="px-3 py-2 text-[12px] text-gray-800">{row.transactionNumber}</td>
-                          <td className="px-3 py-2 text-[12px] text-gray-800">{formatDate(row.date)}</td>
-                          <td className="px-3 py-2 text-[12px] text-gray-800">{row.location || "Head Office"}</td>
-                          <td className="px-3 py-2 text-[12px] text-right text-gray-900">{formatCurrency(row.creditAmount, invoice.currency)}</td>
-                          <td className="px-3 py-2 text-[12px] text-right text-gray-900">{formatCurrency(row.availableAmount, invoice.currency)}</td>
-                          <td className="px-3 py-2 text-[12px] text-gray-800">{formatDate(useApplyDate ? applyOnDate : new Date().toISOString())}</td>
-                          <td className="px-3 py-2 text-[12px] text-right text-gray-900">{formatCurrency(0, invoice.currency)}</td>
-                          <td className="px-3 py-2">
-                            <input
-                              type="number"
-                              min={0}
-                              step="0.01"
-                              value={applyAdjustmentValues[row.rowKey] ?? 0}
-                              onChange={(e) => handleAdjustmentValueChange(row.rowKey, e.target.value, Number(row.availableAmount || 0))}
-                              placeholder="Enter amount"
-                              className="w-full border border-gray-300 rounded px-2 py-1 text-right text-[12px]"
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="mt-4 flex justify-end">
-                  <div className="w-[290px] bg-[#f8fafc] border border-gray-200 rounded p-3 text-[13px] space-y-2">
-                    <div className="flex justify-between"><span>Amount to Credit:</span><span className="font-semibold">{formatCurrency(Object.values(applyAdjustmentValues).reduce((s, v) => s + toNumber(v), 0), invoice.currency)}</span></div>
-                    <div className="flex justify-between"><span>Total Discount:</span><span>{formatCurrency(0, invoice.currency)}</span></div>
-                    <div className="flex justify-between"><span>Invoice Balance Due:</span><span className="font-semibold">{formatCurrency(Math.max(0, invoiceTotalsMeta.balance - Object.values(applyAdjustmentValues).reduce((s, v) => s + toNumber(v), 0)), invoice.currency)}</span></div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 px-5 py-4 border-t border-gray-200 bg-gray-50">
-                <button
-                  type="button"
-                  disabled={isApplyingAdjustments}
-                  onClick={() => void handleApplyAdjustments()}
-                  className="px-4 py-2 rounded text-white text-[14px] font-medium bg-[#3b82f6] hover:bg-[#2563eb] disabled:opacity-60"
-                >
-                  {isApplyingAdjustments ? "Applying..." : "Apply Credits"}
-                </button>
-                <button
-                  type="button"
-                  disabled={isApplyingAdjustments}
-                  onClick={() => setIsApplyAdjustmentsModalOpen(false)}
-                  className="px-4 py-2 rounded border border-gray-300 text-[14px] text-gray-700 bg-white hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
+        {shouldRenderPaymentModals && (
+          <Suspense fallback={null}>
+            <InvoicePaymentModals
+              invoice={invoice}
+              formatCurrency={formatCurrency}
+              formatDate={formatDate}
+              toNumber={toNumber}
+              isApplyAdjustmentsModalOpen={isApplyAdjustmentsModalOpen}
+              setIsApplyAdjustmentsModalOpen={setIsApplyAdjustmentsModalOpen}
+              isApplyingAdjustments={isApplyingAdjustments}
+              applyAdjustmentRows={applyAdjustmentRows}
+              useApplyDate={useApplyDate}
+              setUseApplyDate={setUseApplyDate}
+              applyOnDate={applyOnDate}
+              setApplyOnDate={setApplyOnDate}
+              invoiceTotalsMeta={invoiceTotalsMeta}
+              applyAdjustmentValues={applyAdjustmentValues}
+              handleAdjustmentValueChange={handleAdjustmentValueChange}
+              handleApplyAdjustments={handleApplyAdjustments}
+              showDeletePaymentModal={showDeletePaymentModal}
+              setShowDeletePaymentModal={setShowDeletePaymentModal}
+              selectedPaymentForDelete={selectedPaymentForDelete}
+              setSelectedPaymentForDelete={setSelectedPaymentForDelete}
+              isDeletingPayment={isDeletingPayment}
+              handleDissociateAndAddAsCredit={handleDissociateAndAddAsCredit}
+              handleDeleteRecordedPayment={handleDeleteRecordedPayment}
+              isRefundModalOpen={isRefundModalOpen}
+              selectedPaymentForRefund={selectedPaymentForRefund}
+              handleCloseRefundModal={handleCloseRefundModal}
+              bankAccounts={bankAccounts}
+              getAccountId={getAccountId}
+              getAccountDisplayName={getAccountDisplayName}
+              refundData={refundData}
+              setRefundData={setRefundData}
+              refundPaymentModeOptions={refundPaymentModeOptions}
+              isSavingRefund={isSavingRefund}
+              handleRefundSave={handleRefundSave}
+              isDeleteInvoiceModalOpen={isDeleteInvoiceModalOpen}
+              setIsDeleteInvoiceModalOpen={setIsDeleteInvoiceModalOpen}
+              handleConfirmDeleteInvoice={handleConfirmDeleteInvoice}
+              isRecordPaymentModalOpen={isRecordPaymentModalOpen}
+              setIsRecordPaymentModalOpen={setIsRecordPaymentModalOpen}
+              handleRecordPaymentConfirm={handleRecordPaymentConfirm}
+            />
+          </Suspense>
         )}
 
         {/* Send Email Modal */}
-        {showDeletePaymentModal && selectedPaymentForDelete && (
-          <div className="fixed inset-0 z-[120] bg-black/40 flex items-start justify-center pt-12">
-            <div className="w-full max-w-[560px] bg-white rounded-lg shadow-xl border border-gray-200">
-              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-                <h3 className="text-[22px] font-medium text-gray-900 leading-none">Delete Recorded Payment?</h3>
-                <button
-                  className="w-8 h-8 rounded-full hover:bg-gray-100 text-gray-500 flex items-center justify-center"
-                  onClick={() => {
-                    if (isDeletingPayment) return;
-                    setShowDeletePaymentModal(false);
-                    setSelectedPaymentForDelete(null);
-                  }}
-                >
-                  <X size={18} />
-                </button>
-              </div>
-              <div className="px-5 py-4">
-                <div className="flex items-start gap-4 mb-4">
-                  <div className="w-10 h-10 rounded-full border-2 border-amber-400 text-amber-500 flex items-center justify-center mt-1">
-                    <AlertTriangle size={20} />
-                  </div>
-                  <p className="text-[12px] text-gray-700 leading-6">
-                    You&apos;re deleting a payment of{" "}
-                    {formatCurrency(
-                      selectedPaymentForDelete.amountReceived ?? selectedPaymentForDelete.amount ?? 0,
-                      selectedPaymentForDelete.currency || invoice?.currency
-                    )}
-                    . You can either dissociate this payment from this invoice and add it as a credit to the customer, or delete this payment entirely.
-                  </p>
-                </div>
 
-                <div className="space-y-3">
-                  <button
-                    disabled={isDeletingPayment}
-                    className="w-full bg-[#f1f5f9] hover:bg-[#e2e8f0] disabled:opacity-60 disabled:cursor-not-allowed text-left px-4 py-2.5 rounded-lg text-[14px] text-gray-700 flex items-center justify-between"
-                    onClick={() => {
-                      void handleDissociateAndAddAsCredit();
-                    }}
-                  >
-                    <span>Dissociate & Add As Credit</span>
-                    <ChevronRight size={16} />
-                  </button>
-                  <button
-                    disabled={isDeletingPayment}
-                    className="w-full bg-[#f1f5f9] hover:bg-[#e2e8f0] disabled:opacity-60 disabled:cursor-not-allowed text-left px-4 py-2.5 rounded-lg text-[14px] text-gray-700 flex items-center justify-between"
-                    onClick={() => {
-                      void handleDeleteRecordedPayment();
-                    }}
-                  >
-                    <span>{isDeletingPayment ? "Deleting Payment..." : "Delete Payment"}</span>
-                    {isDeletingPayment ? <RotateCw size={16} className="animate-spin" /> : <ChevronRight size={16} />}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {isRefundModalOpen && selectedPaymentForRefund && (
-          <div className="fixed inset-0 z-[120] bg-black/40 flex items-start justify-center pt-8 px-4" onClick={handleCloseRefundModal}>
-            <div className="w-full max-w-[1100px] bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-                <h3 className="text-[22px] font-medium text-gray-900 leading-none">Refund</h3>
-                <button
-                  className="w-8 h-8 rounded-full hover:bg-gray-100 text-gray-500 flex items-center justify-center"
-                  onClick={handleCloseRefundModal}
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="px-5 py-5 space-y-5 max-h-[80vh] overflow-y-auto">
-                <div className="flex items-center gap-4">
-                  <div className="w-11 h-11 rounded-xl bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-500">
-                    <Banknote size={18} />
-                  </div>
-                  <div>
-                    <div className="text-[13px] text-gray-500">Customer Name</div>
-                    <div className="text-[18px] font-medium text-gray-900">
-                      {selectedPaymentForRefund.customerName || invoice?.customerName || invoice?.customer || "-"}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-[#f8fafc] border border-gray-200 rounded-lg p-5">
-                  <label className="block text-[14px] font-medium text-gray-700 mb-2">Total Refund Amount</label>
-                  <div className="max-w-[320px] flex border border-gray-300 rounded-md overflow-hidden bg-white">
-                    <div className="px-3 flex items-center text-[14px] text-gray-600 border-r border-gray-300 bg-gray-50">
-                      {String(selectedPaymentForRefund.currency || invoice?.currency || baseCurrency || "USD").slice(0, 3)}
-                    </div>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      max={Number(selectedPaymentForRefund.amountReceived ?? selectedPaymentForRefund.amount ?? 0) || 0}
-                      value={refundData.amount}
-                      onChange={(e) => setRefundData((prev) => ({ ...prev, amount: e.target.value }))}
-                      className="flex-1 px-3 py-2.5 text-[14px] text-gray-800 outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-5">
-                  <div>
-                    <label className="block text-[14px] text-gray-700 mb-2">
-                      Refunded On<span className="text-red-500 ml-1">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      value={refundData.refundedOn}
-                      onChange={(e) => setRefundData((prev) => ({ ...prev, refundedOn: e.target.value }))}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-[14px] text-gray-800 outline-none focus:border-[#156372]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[14px] text-gray-700 mb-2">Payment Mode</label>
-                    <select
-                      value={refundData.paymentMode}
-                      onChange={(e) => setRefundData((prev) => ({ ...prev, paymentMode: e.target.value }))}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-[14px] text-gray-800 outline-none focus:border-[#156372] bg-white"
-                    >
-                      {refundPaymentModeOptions.map((mode) => (
-                        <option key={mode} value={mode}>
-                          {mode}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-[14px] text-gray-700 mb-2">Reference#</label>
-                    <input
-                      type="text"
-                      value={refundData.referenceNumber}
-                      onChange={(e) => setRefundData((prev) => ({ ...prev, referenceNumber: e.target.value }))}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-[14px] text-gray-800 outline-none focus:border-[#156372]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[14px] text-gray-700 mb-2">
-                      From Account<span className="text-red-500 ml-1">*</span>
-                    </label>
-                    <select
-                      value={refundData.fromAccountId || refundData.fromAccount}
-                      onChange={(e) => {
-                        const selected = bankAccounts.find((account: any) => {
-                          const accountId = getAccountId(account);
-                          const accountName = getAccountDisplayName(account);
-                          return accountId === e.target.value || accountName === e.target.value;
-                        });
-                        setRefundData((prev) => ({
-                          ...prev,
-                          fromAccount: selected ? getAccountDisplayName(selected) : e.target.value,
-                          fromAccountId: selected ? getAccountId(selected) : ""
-                        }));
-                      }}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-[14px] text-gray-800 outline-none focus:border-[#156372] bg-white"
-                    >
-                      <option value="">Select account</option>
-                      {bankAccounts.map((account: any, index: number) => {
-                        const accountId = getAccountId(account) || `account-${index}`;
-                        const accountName = getAccountDisplayName(account) || `Account ${index + 1}`;
-                        return (
-                          <option key={accountId} value={accountId}>
-                            {accountName}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
-
-                  <div className="md:col-span-2 max-w-[420px]">
-                    <label className="block text-[14px] text-gray-700 mb-2">Description</label>
-                    <textarea
-                      rows={3}
-                      value={refundData.description}
-                      onChange={(e) => setRefundData((prev) => ({ ...prev, description: e.target.value }))}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-[14px] text-gray-800 outline-none focus:border-[#156372] resize-none"
-                    />
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-gray-200 text-[13px] text-gray-500">
-                  Note: Once you save this refund, the payment received will be dissociated from the related invoice(s), changing the invoice status to Unpaid.
-                </div>
-              </div>
-
-              <div className="px-5 py-4 border-t border-gray-200 flex items-center gap-3">
-                <button
-                  type="button"
-                  disabled={isSavingRefund}
-                  onClick={handleRefundSave}
-                  className="px-5 py-2 bg-[#3b82f6] text-white rounded-md text-[14px] font-medium hover:bg-[#2563eb] disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {isSavingRefund ? "Saving..." : "Save"}
-                </button>
-                <button
-                  type="button"
-                  disabled={isSavingRefund}
-                  onClick={handleCloseRefundModal}
-                  className="px-5 py-2 border border-gray-300 text-gray-700 rounded-md text-[14px] font-medium hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {isDeleteInvoiceModalOpen && (
-          <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16" onClick={() => setIsDeleteInvoiceModalOpen(false)}>
-            <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
-                <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
-                  !
-                </div>
-                <h3 className="text-[15px] font-semibold text-slate-800 flex-1">
-                  Delete invoice?
-                </h3>
-                <button
-                  type="button"
-                  className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-                  onClick={() => setIsDeleteInvoiceModalOpen(false)}
-                  aria-label="Close"
-                >
-                  <X size={14} />
-                </button>
-              </div>
-              <div className="px-5 py-3 text-[13px] text-slate-600">
-                You cannot retrieve this invoice once it has been deleted.
-              </div>
-              <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
-                <button
-                  type="button"
-                  className="px-4 py-1.5 rounded-md bg-red-600 text-white text-[12px] hover:bg-red-700"
-                  onClick={handleConfirmDeleteInvoice}
-                >
-                  Delete
-                </button>
-                <button
-                  type="button"
-                  className="px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50"
-                  onClick={() => setIsDeleteInvoiceModalOpen(false)}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Send Email Modal */}
-        {isSendEmailModalOpen && (
-          <div
-            className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) {
-                setIsSendEmailModalOpen(false);
-              }
-            }}
-          >
-            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-              {/* Send Email Modal Header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-                <h2 className="text-xl font-semibold text-gray-800">Email To {invoice.customerName || invoice.customer || "Customer"}</h2>
-                <button
-                  className="p-1 text-gray-400 hover:text-gray-600 cursor-pointer"
-                  onClick={() => setIsSendEmailModalOpen(false)}
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              <div className="p-6">
-                {/* From Field */}
-                <div className="flex mb-4">
-                  <div className="w-24 pt-2 text-right pr-4">
-                    <label className="text-sm text-gray-500 font-medium flex items-center justify-end gap-1">
-                      From <HelpCircle size={14} className="text-gray-400" />
-                    </label>
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-sm text-gray-700 py-2">
-                      {ownerEmail?.name || organizationProfile?.name || "Team"} &lt;{ownerEmail?.email || organizationProfile?.email || ""}&gt;
-                    </div>
-                  </div>
-                </div>
-
-                {/* Send To Field */}
-                <div className="flex mb-4">
-                  <div className="w-24 pt-2 text-right pr-4">
-                    <label className="text-sm text-gray-500 font-medium">Send To</label>
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex flex-wrap items-center gap-2 p-1.5 border border-gray-300 rounded-md focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-400">
-                      {emailData.to && (
-                        <div className="flex items-center gap-1 bg-gray-100 text-gray-700 px-2 py-1 rounded text-sm">
-                          <span className="w-5 h-5 flex items-center justify-center bg-gray-200 rounded text-xs font-bold text-gray-600 uppercase">
-                            {emailData.to.charAt(0)}
-                          </span>
-                          <span>{emailData.to}</span>
-                          <button
-                            type="button"
-                            className="text-gray-400 hover:text-gray-600 ml-1"
-                            onClick={() => setEmailData(prev => ({ ...prev, to: "" }))}
-                          >
-                            <X size={14} />
-                          </button>
-                        </div>
-                      )}
-                      <input
-                        type="email"
-                        className="flex-1 min-w-[150px] outline-none text-sm text-gray-700 py-1"
-                        value={emailData.to ? "" : emailData.to} // Hide raw value if chip is shown? Or allow editing? Simplified for now: if empty allow type
-                        onChange={(e) => setEmailData(prev => ({ ...prev, to: e.target.value }))}
-                        placeholder={emailData.to ? "" : "Enter email address"}
-                      />
-                      <div className="ml-auto flex items-center gap-3 pr-2">
-                        {!emailData.cc && <button className="text-blue-500 text-sm hover:underline cursor-pointer" onClick={() => setEmailData(prev => ({ ...prev, cc: " " }))}>Cc</button>}
-                        {!emailData.bcc && <button className="text-blue-500 text-sm hover:underline cursor-pointer" onClick={() => setEmailData(prev => ({ ...prev, bcc: " " }))}>Bcc</button>}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* CC Field - Conditionally Shown */}
-                {emailData.cc !== undefined && (
-                  <div className="flex mb-4">
-                    <div className="w-24 pt-2 text-right pr-4">
-                      <label className="text-sm text-gray-500 font-medium">Cc</label>
-                    </div>
-                    <div className="flex-1 relative">
-                      <input
-                        type="email"
-                        className="w-full px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        value={emailData.cc.trim()}
-                        onChange={(e) => setEmailData(prev => ({ ...prev, cc: e.target.value }))}
-                      />
-                      <button className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600" onClick={() => setEmailData(prev => ({ ...prev, cc: undefined }))}>
-                        <X size={16} />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* BCC Field - Conditionally Shown */}
-                {emailData.bcc !== undefined && (
-                  <div className="flex mb-4">
-                    <div className="w-24 pt-2 text-right pr-4">
-                      <label className="text-sm text-gray-500 font-medium">Bcc</label>
-                    </div>
-                    <div className="flex-1 relative">
-                      <input
-                        type="email"
-                        className="w-full px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        value={emailData.bcc.trim()}
-                        onChange={(e) => setEmailData(prev => ({ ...prev, bcc: e.target.value }))}
-                      />
-                      <button className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600" onClick={() => setEmailData(prev => ({ ...prev, bcc: undefined }))}>
-                        <X size={16} />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-
-                {/* Subject Field */}
-                <div className="flex mb-6">
-                  <div className="w-24 pt-2 text-right pr-4">
-                    <label className="text-sm text-gray-500 font-medium">Subject</label>
-                  </div>
-                  <div className="flex-1">
-                    <input
-                      type="text"
-                      className="w-full border-0 border-b border-gray-300 focus:border-blue-500 focus:ring-0 px-0 py-2 text-sm text-gray-800 font-medium"
-                      value={emailData.subject}
-                      onChange={(e) => setEmailData(prev => ({ ...prev, subject: e.target.value }))}
-                    />
-                  </div>
-                </div>
-                <div className="mb-4">
-                  {/* Rich Text Toolbar */}
-                  <div className="flex items-center gap-2 p-2 bg-gray-50 border border-gray-200 rounded-t-md border-b-0 flex-wrap">
-                    <button
-                      type="button"
-                      className={`p-1.5 border border-gray-300 rounded bg-white hover:bg-gray-50 cursor-pointer ${isBold ? 'bg-gray-200' : ''}`}
-                      onClick={() => setIsBold(!isBold)}
-                    >
-                      <Bold size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      className={`p-1.5 border border-gray-300 rounded bg-white hover:bg-gray-50 cursor-pointer ${isItalic ? 'bg-gray-200' : ''}`}
-                      onClick={() => setIsItalic(!isItalic)}
-                    >
-                      <Italic size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      className={`p-1.5 border border-gray-300 rounded bg-white hover:bg-gray-50 cursor-pointer ${isUnderline ? 'bg-gray-200' : ''}`}
-                      onClick={() => setIsUnderline(!isUnderline)}
-                    >
-                      <Underline size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      className={`p-1.5 border border-gray-300 rounded bg-white hover:bg-gray-50 cursor-pointer ${isStrikethrough ? 'bg-gray-200' : ''}`}
-                      onClick={() => setIsStrikethrough(!isStrikethrough)}
-                    >
-                      <Strikethrough size={14} />
-                    </button>
-                    <div className="w-px h-6 bg-gray-300 mx-1"></div>
-                    <select
-                      value={fontSize}
-                      onChange={(e) => setFontSize(e.target.value)}
-                      className="px-2 py-1 border border-gray-300 rounded bg-white text-xs cursor-pointer focus:outline-none"
-                    >
-                      <option value="12">12 px</option>
-                      <option value="14">14 px</option>
-                      <option value="16">16 px</option>
-                      <option value="18">18 px</option>
-                    </select>
-                    <div className="w-px h-6 bg-gray-300 mx-1"></div>
-                    <button type="button" className="p-1.5 border border-gray-300 rounded bg-white hover:bg-gray-50 cursor-pointer">
-                      <AlignLeft size={14} />
-                    </button>
-                    <button type="button" className="p-1.5 border border-gray-300 rounded bg-white hover:bg-gray-50 cursor-pointer">
-                      <AlignCenter size={14} />
-                    </button>
-                    <button type="button" className="p-1.5 border border-gray-300 rounded bg-white hover:bg-gray-50 cursor-pointer">
-                      <AlignRight size={14} />
-                    </button>
-                    <div className="w-px h-6 bg-gray-300 mx-1"></div>
-                    <button type="button" className="p-1.5 border border-gray-300 rounded bg-white hover:bg-gray-50 cursor-pointer">
-                      <LinkIcon size={14} />
-                    </button>
-                    <button type="button" className="p-1.5 border border-gray-300 rounded bg-white hover:bg-gray-50 cursor-pointer">
-                      <ImageIcon size={14} />
-                    </button>
-                  </div>
-
-                  {/* Rich Text Editor Content */}
-                  <div
-                    contentEditable
-                    className="min-h-[300px] p-4 border border-gray-300 rounded-b-md text-sm outline-none bg-white overflow-y-auto"
-                    style={{
-                      fontWeight: isBold ? "bold" : "normal",
-                      fontStyle: isItalic ? "italic" : "normal",
-                      textDecoration: isUnderline ? "underline" : isStrikethrough ? "line-through" : "none",
-                      fontSize: `${fontSize}px`,
-                    }}
-                    onInput={(e) => setEmailData(prev => ({ ...prev, message: (e.target as HTMLElement).innerHTML }))}
-                    suppressContentEditableWarning={true}
-                    dangerouslySetInnerHTML={{ __html: emailData.message }}
-                  />
-                </div>
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <FileText size={16} />
-                  <span>Invoice PDF will be attached</span>
-                </div>
-              </div>
-              <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50">
-                <button
-                  className="px-4 py-2 text-white rounded-md text-sm font-medium cursor-pointer transition-opacity"
-                  style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                  onMouseEnter={(e) => e.currentTarget.style.opacity = "0.9"}
-                  onMouseLeave={(e) => e.currentTarget.style.opacity = "1"}
-                  onClick={handleSendEmailSubmit}
-                >
-                  Send
-                </button>
-                <button
-                  className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md text-sm font-medium cursor-pointer hover:bg-gray-50"
-                  onClick={() => setIsSendEmailModalOpen(false)}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Schedule Email Modal */}
-        {isScheduleEmailModalOpen && (
-          <div
-            className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) {
-                setIsScheduleEmailModalOpen(false);
-              }
-            }}
-          >
-            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">Schedule Email</h2>
-                <button
-                  className="p-1 text-gray-500 hover:text-gray-700 cursor-pointer"
-                  onClick={() => setIsScheduleEmailModalOpen(false)}
-                >
-                  <X size={20} />
-                </button>
-              </div>
-              <div className="p-6">
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    To<span className="text-red-500 ml-1">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={scheduleData.to}
-                    onChange={(e) => setScheduleData(prev => ({ ...prev, to: e.target.value }))}
-                    placeholder="Enter email address"
-                    required
-                  />
-                </div>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">CC</label>
-                  <input
-                    type="email"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={scheduleData.cc}
-                    onChange={(e) => setScheduleData(prev => ({ ...prev, cc: e.target.value }))}
-                    placeholder="Enter CC email addresses (comma separated)"
-                  />
-                </div>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">BCC</label>
-                  <input
-                    type="email"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={scheduleData.bcc}
-                    onChange={(e) => setScheduleData(prev => ({ ...prev, bcc: e.target.value }))}
-                    placeholder="Enter BCC email addresses (comma separated)"
-                  />
-                </div>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Subject<span className="text-red-500 ml-1">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={scheduleData.subject}
-                    onChange={(e) => setScheduleData(prev => ({ ...prev, subject: e.target.value }))}
-                    placeholder="Enter email subject"
-                    required
-                  />
-                </div>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
-                  <textarea
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                    value={scheduleData.message}
-                    onChange={(e) => setScheduleData(prev => ({ ...prev, message: e.target.value }))}
-                    placeholder="Enter email message"
-                    rows={8}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Date<span className="text-red-500 ml-1">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={scheduleData.date}
-                      onChange={(e) => setScheduleData(prev => ({ ...prev, date: e.target.value }))}
-                      required
-                    />
-                  </div>
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Time<span className="text-red-500 ml-1">*</span>
-                    </label>
-                    <input
-                      type="time"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={scheduleData.time}
-                      onChange={(e) => setScheduleData(prev => ({ ...prev, time: e.target.value }))}
-                      required
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-gray-600 mb-4">
-                  <FileText size={16} />
-                  <span>Invoice PDF will be attached</span>
-                </div>
-              </div>
-              <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50">
-                <button
-                  className="px-4 py-2 text-white rounded-md text-sm font-medium cursor-pointer transition-opacity"
-                  style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                  onMouseEnter={(e) => e.currentTarget.style.opacity = "0.9"}
-                  onMouseLeave={(e) => e.currentTarget.style.opacity = "1"}
-                  onClick={handleScheduleEmailSubmit}
-                >
-                  Schedule
-                </button>
-                <button
-                  className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md text-sm font-medium cursor-pointer hover:bg-gray-50"
-                  onClick={() => setIsScheduleEmailModalOpen(false)}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Record Payment Confirmation Modal */}
-        {isRecordPaymentModalOpen && (
-          <div
-            className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) {
-                setIsRecordPaymentModalOpen(false);
-              }
-            }}
-          >
-            <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-              <div className="p-6">
-                <div className="flex items-start gap-3 mb-4">
-                  <AlertTriangle size={24} className="text-yellow-600 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-gray-700">
-                    Invoice status will be changed to 'Sent' once the payment is recorded.
-                  </p>
-                </div>
-                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="w-4 h-4 cursor-pointer"
-                    checked={doNotShowAgain}
-                    onChange={(e) => setDoNotShowAgain(e.target.checked)}
-                  />
-                  <span>Do not show this again</span>
-                </label>
-              </div>
-              <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50">
-                <button
-                  className="px-4 py-2 text-white rounded-md text-sm font-medium cursor-pointer transition-opacity"
-                  style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                  onMouseEnter={(e) => e.currentTarget.style.opacity = "0.9"}
-                  onMouseLeave={(e) => e.currentTarget.style.opacity = "1"}
-                  onClick={handleRecordPaymentConfirm}
-                >
-                  OK
-                </button>
-                <button
-                  className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md text-sm font-medium cursor-pointer hover:bg-gray-50"
-                  onClick={() => setIsRecordPaymentModalOpen(false)}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Share Modal */}
-        {showShareModal && invoice && (
-          <div
-            className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) {
-                setShowShareModal(false);
-              }
-            }}
-          >
-            <div
-              className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col"
-              ref={shareModalRef}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  Share Invoice Link
-                </h2>
-                <button
-                  className="p-2 hover:bg-gray-100 rounded-md text-gray-600 hover:text-gray-900 cursor-pointer"
-                  onClick={() => setShowShareModal(false)}
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-6">
-                {/* Visibility Dropdown */}
-                <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Visibility:
-                  </label>
-                  <div className="relative" ref={visibilityDropdownRef}>
-                    <button
-                      className="w-full flex items-center justify-between px-4 py-2 border border-gray-300 rounded-md bg-white text-red-600 hover:bg-gray-50 cursor-pointer"
-                      onClick={() => setIsVisibilityDropdownOpen(!isVisibilityDropdownOpen)}
-                    >
-                      <span className="font-medium">{shareVisibility}</span>
-                      <ChevronDown size={16} className="text-red-600" />
-                    </button>
-                    {isVisibilityDropdownOpen && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50">
-                        <div
-                          className="px-4 py-2 text-sm text-red-600 cursor-pointer hover:bg-gray-50"
-                          onClick={() => {
-                            setShareVisibility("Public");
-                            setIsVisibilityDropdownOpen(false);
-                          }}
-                        >
-                          Public
-                        </div>
-                        <div
-                          className="px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
-                          onClick={() => {
-                            setShareVisibility("Private");
-                            setIsVisibilityDropdownOpen(false);
-                          }}
-                        >
-                          Private
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Description Text */}
-                <p className="text-sm text-gray-600 mb-6">
-                  Select an expiration date and generate the link to share it with your customer. Remember that anyone who has access to this link can view, print or download it.
-                </p>
-
-                {/* Link Expiration Date */}
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-red-600 mb-2">
-                    Link Expiration Date<span className="text-red-600">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={linkExpirationDate}
-                    onChange={(e) => setLinkExpirationDate(e.target.value)}
-                    placeholder="DD/MM/YYYY"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <div className="flex items-center gap-2 mt-2 text-xs text-gray-600">
-                    <HelpCircle size={14} className="text-gray-500" />
-                    <span>By default, the link is set to expire 90 days from the invoice due date.</span>
-                  </div>
-                </div>
-
-                {/* Generated Link Display */}
-                {isLinkGenerated && generatedLink && (
-                  <div className="mb-6">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Generated Link:
-                    </label>
-                    <textarea
-                      readOnly
-                      value={generatedLink}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-md text-sm bg-gray-50 font-mono resize-none"
-                      rows={3}
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between gap-3 p-6 border-t border-gray-200 bg-gray-50">
-                <div>
-                  {isLinkGenerated && (
-                    <button
-                      className="px-4 py-2 text-white rounded-md text-sm font-medium cursor-pointer transition-opacity"
-                      style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                      onMouseEnter={(e) => e.currentTarget.style.opacity = "0.9"}
-                      onMouseLeave={(e) => e.currentTarget.style.opacity = "1"}
-                      onClick={handleCopyLink}
-                    >
-                      Copy Link
-                    </button>
-                  )}
-                </div>
-                <div className="flex items-center gap-3">
-                  {!isLinkGenerated ? (
-                    <button
-                      className="px-4 py-2 text-white rounded-md text-sm font-medium cursor-pointer transition-opacity"
-                      style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                      onMouseEnter={(e) => e.currentTarget.style.opacity = "0.9"}
-                      onMouseLeave={(e) => e.currentTarget.style.opacity = "1"}
-                      onClick={handleGenerateLink}
-                    >
-                      Generate Link
-                    </button>
-                  ) : (
-                    <button
-                      className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md text-sm font-medium cursor-pointer hover:bg-gray-50"
-                      onClick={handleDisableAllActiveLinks}
-                    >
-                      Disable All Active Links
-                    </button>
-                  )}
-                  <button
-                    className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md text-sm font-medium cursor-pointer hover:bg-gray-50"
-                    onClick={() => setShowShareModal(false)}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+        {shouldRenderCommunicationModals && (
+          <Suspense fallback={null}>
+            <InvoiceCommunicationModals
+              invoice={invoice}
+              ownerEmail={ownerEmail}
+              organizationProfile={organizationProfile}
+              isSendEmailModalOpen={isSendEmailModalOpen}
+              setIsSendEmailModalOpen={setIsSendEmailModalOpen}
+              emailData={emailData}
+              setEmailData={setEmailData}
+              handleSendEmailSubmit={handleSendEmailSubmit}
+              isScheduleEmailModalOpen={isScheduleEmailModalOpen}
+              setIsScheduleEmailModalOpen={setIsScheduleEmailModalOpen}
+              scheduleData={scheduleData}
+              setScheduleData={setScheduleData}
+              handleScheduleEmailSubmit={handleScheduleEmailSubmit}
+              showShareModal={showShareModal}
+              setShowShareModal={setShowShareModal}
+            />
+          </Suspense>
         )}
 
         {/* Attachments Modal */}

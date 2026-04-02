@@ -2,8 +2,8 @@ import React, { useMemo, useRef, useState } from "react";
 import { AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronUp, HelpCircle, Info, Upload, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
+import { productsAPI } from "../../../../services/api";
 
-const PRODUCTS_STORAGE_KEY = "inv_products_v1";
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 const ACCEPTED_EXTENSIONS = [".csv", ".tsv", ".xls"];
 
@@ -254,37 +254,39 @@ export default function ImportProductsPage() {
     if (step === 3) setStep(2);
   };
 
-  const handleImport = () => {
+  const handleImport = async () => {
     if (!preview.ready.length) {
       toast.error("No valid product rows to import.");
       return;
     }
 
     try {
-      const raw = localStorage.getItem(PRODUCTS_STORAGE_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      const existing = Array.isArray(parsed) ? parsed : [];
-
       const prepared = preview.ready.map((row) => ({
-        id: `prod-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
         name: row.name || "",
         description: row.description || "",
         status: row.status || "Active",
-        redirectionUrl: row.redirectUrl || "",
-        emailRecipients: row.notificationMailAddress || "",
-        plans: 0,
-        addons: 0,
-        coupons: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        redirect_url: row.redirectUrl || "",
+        email_ids: row.notificationMailAddress || "",
       }));
 
-      localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify([...prepared, ...existing]));
-      toast.success(`${prepared.length} product(s) imported successfully.`);
+      const response: any = await productsAPI.bulkCreate(prepared);
+      if (response?.success === false) {
+        throw new Error(response?.message || "Failed to import products.");
+      }
+
+      const insertedCount = Number(response?.data?.insertedCount ?? prepared.length);
+      const skippedExisting = Number(response?.data?.skippedExisting ?? 0);
+      const invalidCount = Array.isArray(response?.data?.invalid) ? response.data.invalid.length : 0;
+
+      const parts = [`${insertedCount} product(s) imported successfully.`];
+      if (skippedExisting > 0) parts.push(`${skippedExisting} skipped as existing.`);
+      if (invalidCount > 0) parts.push(`${invalidCount} skipped as invalid.`);
+
+      toast.success(parts.join(" "));
       navigate("/products/plans?tab=products");
     } catch (error) {
       console.error("Failed to import products", error);
-      toast.error("Failed to import products.");
+      toast.error((error as Error)?.message || "Failed to import products.");
     }
   };
 

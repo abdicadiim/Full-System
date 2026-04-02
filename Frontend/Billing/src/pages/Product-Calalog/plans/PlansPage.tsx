@@ -132,16 +132,16 @@ const normalizePlan = (row: any): PlanRow => {
 const normalizeProduct = (row: any): ProductRow => {
     const fallbackId = `prod-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     return {
-        id: String(row?.id || row?._id || fallbackId),
+        id: String(row?.id || row?._id || row?.product_id || fallbackId),
         name: String(row?.name || row?.product || "").trim(),
         description: String(row?.description || "").trim(),
         status: String(row?.status || "Active"),
         plans: Number(row?.plans || 0),
         addons: Number(row?.addons || 0),
         coupons: Number(row?.coupons || 0),
-        creationDate: String(row?.creationDate || row?.createdAt || ""),
-        emailRecipients: String(row?.emailRecipients || ""),
-        redirectionUrl: String(row?.redirectionUrl || ""),
+        creationDate: String(row?.creationDate || row?.createdAt || row?.created_time || ""),
+        emailRecipients: String(row?.emailRecipients || row?.email_ids || ""),
+        redirectionUrl: String(row?.redirectionUrl || row?.redirect_url || ""),
     };
 };
 
@@ -214,6 +214,13 @@ export default function PlansPage() {
     const location = useLocation();
     const { formatMoney, baseCurrencyCode } = useCurrency();
     const { canCreate, canEdit, canDelete } = usePermissions();
+
+    const ensureProductApiSuccess = (response: any, fallbackMessage: string) => {
+        if (response && typeof response === "object" && "success" in response && response.success === false) {
+            throw new Error((response as any).message || fallbackMessage);
+        }
+        return response;
+    };
 
     const [tab, setTab] = useState<TabType>("plans");
     const [planStatusFilter, setPlanStatusFilter] = useState<"All Plans" | "Active Plans" | "Inactive Plans">("All Plans");
@@ -582,9 +589,8 @@ export default function PlansPage() {
                             description: row.description || "",
                             status: row.status || "Active",
                         };
-                        // best-effort create
                         // eslint-disable-next-line no-await-in-loop
-                        await productsAPI.create(payload);
+                        ensureProductApiSuccess(await productsAPI.create(payload), "Failed to create product");
                     }
                     const res: any = await productsAPI.getAll({ limit: 1000 });
                     const list = Array.isArray(res?.data) ? res.data : [];
@@ -615,14 +621,22 @@ export default function PlansPage() {
         if (tab === "products") {
             void (async () => {
                 try {
-                    await Promise.all(selectedIds.map((id) => productsAPI.update(id, { status })));
+                    const shouldActivate = String(status || "").toLowerCase() === "active";
+                    await Promise.all(
+                        selectedIds.map(async (id) =>
+                            ensureProductApiSuccess(
+                                shouldActivate ? await productsAPI.markActive(id) : await productsAPI.markInactive(id),
+                                `Failed to mark product as ${status.toLowerCase()}`
+                            )
+                        )
+                    );
                     const res: any = await productsAPI.getAll({ limit: 1000 });
                     const list = Array.isArray(res?.data) ? res.data : [];
                     setProducts(list.map(normalizeProduct).filter((r: ProductRow) => r.name));
                     setSelectedIds([]);
                     toast.success(`Selected products marked as ${status}`);
-                } catch {
-                    toast.error("Failed to update products");
+                } catch (e: any) {
+                    toast.error(e?.message || "Failed to update products");
                 }
             })();
             return;
@@ -661,7 +675,11 @@ export default function PlansPage() {
 
         try {
             if (deleteModal.entityType === "products") {
-                await Promise.all(deleteModal.ids.map((id) => productsAPI.delete(id)));
+                await Promise.all(
+                    deleteModal.ids.map(async (id) =>
+                        ensureProductApiSuccess(await productsAPI.delete(id), "Failed to delete product")
+                    )
+                );
                 const res: any = await productsAPI.getAll({ limit: 1000 });
                 const list = Array.isArray(res?.data) ? res.data : [];
                 setProducts(list.map(normalizeProduct).filter((r: ProductRow) => r.name));
@@ -684,15 +702,22 @@ export default function PlansPage() {
         if (tab === "products") {
             void (async () => {
                 try {
-                    await Promise.all(selectedIds.map((id) => productsAPI.update(id, { [field]: newValue })));
+                    await Promise.all(
+                        selectedIds.map(async (id) =>
+                            ensureProductApiSuccess(
+                                await productsAPI.update(id, { [field]: newValue }),
+                                "Bulk update failed"
+                            )
+                        )
+                    );
                     const res: any = await productsAPI.getAll({ limit: 1000 });
                     const list = Array.isArray(res?.data) ? res.data : [];
                     setProducts(list.map(normalizeProduct).filter((r: ProductRow) => r.name));
                     setBulkUpdateOpen(false);
                     setSelectedIds([]);
                     toast.success("Selected products updated successfully");
-                } catch {
-                    toast.error("Bulk update failed");
+                } catch (e: any) {
+                    toast.error(e?.message || "Bulk update failed");
                 }
             })();
             return;

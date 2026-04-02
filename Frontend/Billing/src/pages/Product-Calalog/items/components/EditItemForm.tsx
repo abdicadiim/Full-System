@@ -439,12 +439,12 @@ export default function EditItemForm({ item, initialData, onCancel, onUpdate, ba
         if (!form.name.trim()) newErrors.name = true;
 
         if (form.sellable) {
-            if (!form.sellingPrice || parseFloat(form.sellingPrice) <= 0) newErrors.sellingPrice = true;
+            if (form.sellingPrice === "" || Number(form.sellingPrice) < 0) newErrors.sellingPrice = true;
             if (!form.salesAccount) newErrors.salesAccount = true;
         }
 
         if (form.purchasable) {
-            if (!form.costPrice || parseFloat(form.costPrice) <= 0) newErrors.costPrice = true;
+            if (form.costPrice === "" || Number(form.costPrice) < 0) newErrors.costPrice = true;
             if (!form.purchaseAccount) newErrors.purchaseAccount = true;
         }
 

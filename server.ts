@@ -23,6 +23,7 @@ import { transactionNumberSeriesRoutes } from "./routes/transactionNumberSeriesR
 import { locationsRoutes } from "./routes/locationsRoutes.js";
 import { customersRoutes } from "./routes/customersRoutes.js";
 import { itemsRoutes } from "./routes/itemsRoutes.js";
+import { itemDetailsRoutes } from "./routes/itemDetailsRoutes.js";
 import { productsRoutes } from "./routes/productsRoutes.js";
 import { plansRoutes } from "./routes/plansRoutes.js";
 import { addonsRoutes } from "./routes/addonsRoutes.js";
@@ -138,6 +139,7 @@ app.use("/api/locations", locationsRoutes);
 app.use("/api/customers", customersRoutes);
 app.use("/api/salespersons", salespersonsRoutes);
 app.use("/api/items", itemsRoutes);
+app.use("/api/itemdetails", itemDetailsRoutes);
 app.use("/api/products", productsRoutes);
 app.use("/api/plans", plansRoutes);
 app.use("/api/addons", addonsRoutes);

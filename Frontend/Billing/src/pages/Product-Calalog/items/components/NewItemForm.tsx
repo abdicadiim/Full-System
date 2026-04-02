@@ -526,12 +526,8 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
       toast.error("Name is required.");
       return;
     }
-    if (!form.sku.trim()) {
-      toast.error("SKU is required.");
-      return;
-    }
-    if (!form.sellingPrice || Number(form.sellingPrice) <= 0) {
-      toast.error("Selling Price must be greater than 0.");
+    if (form.sellingPrice === "" || Number(form.sellingPrice) < 0) {
+      toast.error("Selling Price must be 0 or greater.");
       return;
     }
 

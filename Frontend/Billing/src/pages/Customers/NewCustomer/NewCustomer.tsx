@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { Info, Phone, Smartphone, Upload, X, Search, ChevronDown, Check, Globe, File, Edit, CheckCircle, Plus, MoreVertical, Folder, Cloud, Box, Layers, HardDrive, Settings, Paperclip, FileText, CreditCard, ChevronUp, Square, Grid3x3, LayoutGrid, Loader2 } from "lucide-react";
+import { Info, Phone, Smartphone, Upload, X, Search, ChevronDown, Check, Globe, File, Edit, CheckCircle, Plus, MoreVertical, Folder, Cloud, Box, Layers, HardDrive, Settings, Paperclip, FileText, CreditCard, ChevronUp, Square, Grid3x3, LayoutGrid, Loader2, RefreshCw } from "lucide-react";
 import { customersAPI, currenciesAPI, documentsAPI, taxesAPI, reportingTagsAPI, priceListsAPI } from "../../../services/api";
 
 import { getAllDocuments } from "../../../../utils/documentStorage";

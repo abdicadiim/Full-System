@@ -23,6 +23,23 @@ const getDefaultForm = () => ({
     nextNumber: "00001",
 });
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
+
+const normalizeEmailIds = (value: string) =>
+    value
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+
+const isValidRedirectUrl = (value: string) => {
+    try {
+        const parsed = new URL(value);
+        return ["http:", "https:"].includes(parsed.protocol);
+    } catch {
+        return false;
+    }
+};
+
 export default function NewProductModal({
     isOpen,
     onClose,
@@ -60,8 +77,8 @@ export default function NewProductModal({
             setForm({
                 name: String(initialProduct?.name || ""),
                 description: String(initialProduct?.description || ""),
-                emailRecipients: String(initialProduct?.emailRecipients || ""),
-                redirectionUrl: String(initialProduct?.redirectionUrl || ""),
+                emailRecipients: String(initialProduct?.emailRecipients || initialProduct?.email_ids || ""),
+                redirectionUrl: String(initialProduct?.redirectionUrl || initialProduct?.redirect_url || ""),
                 autoGenerateSubscriptionNumbers: Boolean(initialProduct?.autoGenerateSubscriptionNumbers),
                 prefix: String(initialProduct?.prefix || "SUB-"),
                 nextNumber: String(initialProduct?.nextNumber || "00001"),
@@ -76,17 +93,39 @@ export default function NewProductModal({
             toast.error("Name is required.");
             return;
         }
+        const emailIds = normalizeEmailIds(form.emailRecipients);
+        const invalidEmail = emailIds.find((email) => !EMAIL_REGEX.test(email));
+        if (invalidEmail) {
+            toast.error("Email IDs must contain valid email addresses.");
+            return;
+        }
+        if (form.redirectionUrl.trim() && !isValidRedirectUrl(form.redirectionUrl.trim())) {
+            toast.error("Redirection URL must be a valid http or https URL.");
+            return;
+        }
+        if (form.autoGenerateSubscriptionNumbers) {
+            if (!form.prefix.trim()) {
+                toast.error("Prefix is required when subscription number generation is enabled.");
+                return;
+            }
+            if (!form.nextNumber.trim()) {
+                toast.error("Next number is required when subscription number generation is enabled.");
+                return;
+            }
+        }
         setIsSaving(true);
         try {
             const editingId = String(initialProduct?.id || initialProduct?._id || "");
             const record: any = {
                 name: form.name.trim(),
                 description: form.description.trim(),
-                emailRecipients: form.emailRecipients.trim(),
+                email_ids: emailIds.join(", "),
+                emailRecipients: emailIds.join(", "),
+                redirect_url: form.redirectionUrl.trim(),
                 redirectionUrl: form.redirectionUrl.trim(),
                 autoGenerateSubscriptionNumbers: form.autoGenerateSubscriptionNumbers,
-                prefix: form.autoGenerateSubscriptionNumbers ? form.prefix : "",
-                nextNumber: form.autoGenerateSubscriptionNumbers ? form.nextNumber : "",
+                prefix: form.autoGenerateSubscriptionNumbers ? form.prefix.trim() : "",
+                nextNumber: form.autoGenerateSubscriptionNumbers ? form.nextNumber.trim() : "",
                 status: String(initialProduct?.status || "Active"),
             };
 
@@ -103,7 +142,7 @@ export default function NewProductModal({
             onClose();
         } catch (error) {
             console.error("Failed to save product", error);
-            toast.error(isEditMode ? "Failed to update product" : "Failed to save product");
+            toast.error((error as Error)?.message || (isEditMode ? "Failed to update product" : "Failed to save product"));
         } finally {
             setIsSaving(false);
         }

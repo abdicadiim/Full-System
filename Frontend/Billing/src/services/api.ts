@@ -675,9 +675,18 @@ export const itemsAPI = {
   getAll: async (params?: Record<string, any>) => itemsBase.getAll(params),
   list: async (params?: Record<string, any>) => itemsAPI.getAll(params),
   getById: async (id: string) => itemsBase.getById(String(id)),
+  getDetailsByIds: async (ids: string[]) =>
+    request({
+      path: "/itemdetails",
+      params: { item_ids: ids.map((id) => String(id || "").trim()).filter(Boolean).join(",") },
+    }),
   create: async (data: any) => itemsBase.create(data),
   update: async (id: string, data: any) => itemsBase.update(String(id), data),
   delete: async (id: string) => itemsBase.delete(String(id)),
+  markActive: async (id: string) =>
+    request({ method: "POST", path: `/items/${encodeURIComponent(String(id))}/active` }),
+  markInactive: async (id: string) =>
+    request({ method: "POST", path: `/items/${encodeURIComponent(String(id))}/inactive` }),
 };
 
 const productsBase = resource("/products");
@@ -689,6 +698,10 @@ export const productsAPI = {
   bulkCreate: async (rows: any[]) => request({ method: "POST", path: "/products/bulk", data: rows }),
   update: async (id: string, data: any) => productsBase.update(String(id), data),
   delete: async (id: string) => productsBase.delete(String(id)),
+  markActive: async (id: string) =>
+    request({ method: "POST", path: `/products/${encodeURIComponent(String(id))}/markasactive` }),
+  markInactive: async (id: string) =>
+    request({ method: "POST", path: `/products/${encodeURIComponent(String(id))}/markasinactive` }),
 };
 
 const plansBase = resource("/plans");
