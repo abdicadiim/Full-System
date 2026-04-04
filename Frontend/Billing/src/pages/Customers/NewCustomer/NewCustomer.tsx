@@ -28,11 +28,123 @@ const splitPhoneNumber = (phone: string, defaultPrefix: string) => {
   return { prefix: defaultPrefix, number: phone };
 };
 
+const TEXT_ONLY_FIELDS = new Set(["firstName", "lastName"]);
+const DIGITS_ONLY_FIELDS = new Set([
+  "workPhone",
+  "mobile",
+  "billingPhone",
+  "billingFax",
+  "shippingPhone",
+  "shippingFax",
+]);
+const DECIMAL_FIELDS = new Set(["openingBalance", "exchangeRate"]);
+
+const sanitizeTextOnlyValue = (value: string) =>
+  value.replace(/[^\p{L}\s.'-]/gu, "");
+
+const sanitizeDigitsOnlyValue = (value: string) => value.replace(/\D+/g, "");
+
+const sanitizeDecimalValue = (value: string) => {
+  const cleaned = value.replace(/[^\d.]/g, "");
+  const [integerPart, ...decimalParts] = cleaned.split(".");
+  if (decimalParts.length === 0) return integerPart;
+  return `${integerPart}.${decimalParts.join("")}`;
+};
+
+const sanitizeTypedFieldValue = (fieldName: string, fieldValue: string) => {
+  if (TEXT_ONLY_FIELDS.has(fieldName)) {
+    return sanitizeTextOnlyValue(fieldValue);
+  }
+
+  if (DIGITS_ONLY_FIELDS.has(fieldName)) {
+    return sanitizeDigitsOnlyValue(fieldValue);
+  }
+
+  if (DECIMAL_FIELDS.has(fieldName)) {
+    return sanitizeDecimalValue(fieldValue);
+  }
+
+  return fieldValue;
+};
+
+const buildFormDataFromCustomer = (customer: any) => {
+  const workPhoneData = splitPhoneNumber(customer.workPhone || customer.phone || customer.work_phone || "", "+358");
+  const mobileData = splitPhoneNumber(customer.mobile || customer.mobilePhone || customer.mobile_phone || "", "+252");
+  const contactPersons = (customer.contactPersons || []).map((cp: any) => {
+    const cpWorkPhoneData = splitPhoneNumber(cp.workPhone || cp.phone || "", "+358");
+    const cpMobileData = splitPhoneNumber(cp.mobile || "", "+252");
+    return {
+      ...cp,
+      workPhonePrefix: cpWorkPhoneData.prefix,
+      workPhone: cpWorkPhoneData.number,
+      mobilePrefix: cpMobileData.prefix,
+      mobile: cpMobileData.number
+    };
+  });
+
+  return {
+    customerType: customer.customerType || "business",
+    salutation: customer.salutation || "",
+    firstName: customer.firstName || "",
+    lastName: customer.lastName || "",
+    companyName: customer.companyName || "",
+    displayName: customer.displayName || customer.name || "",
+    email: customer.email || "",
+    workPhonePrefix: workPhoneData.prefix,
+    workPhone: workPhoneData.number,
+    mobilePrefix: mobileData.prefix,
+    mobile: mobileData.number,
+    customerLanguage: customer.customerLanguage || customer.portalLanguage || "english",
+    taxRate: customer.taxRate || "",
+    companyId: customer.companyId || "",
+    locationCode: customer.locationCode || "",
+    currency: customer.currency || "USD",
+    accountsReceivable: customer.accountsReceivable || "",
+    openingBalance: customer.receivables?.toString() || customer.openingBalance || "",
+    paymentTerms: customer.paymentTerms || "due-on-receipt",
+    priceListId: customer.priceListId || customer.priceListID || customer.price_list_id || "",
+    enablePortal: customer.enablePortal || false,
+    customerOwner: customer.customerOwner || customer.salesperson || "",
+    websiteUrl: customer.websiteUrl || customer.website || "",
+    department: customer.department || "",
+    designation: customer.designation || "",
+    xHandle: customer.xHandle || "",
+    skypeName: customer.skypeName || "",
+    facebook: customer.facebook || "",
+    billingAttention: customer.billingAddress?.attention || customer.billingAttention || "",
+    billingCountry: customer.billingAddress?.country || customer.billingCountry || "",
+    billingStreet1: customer.billingAddress?.street1 || customer.billingStreet1 || "",
+    billingStreet2: customer.billingAddress?.street2 || customer.billingStreet2 || "",
+    billingCity: customer.billingAddress?.city || customer.billingCity || "",
+    billingState: customer.billingAddress?.state || customer.billingState || "",
+    billingZipCode: customer.billingAddress?.zipCode || customer.billingZipCode || "",
+    billingPhone: customer.billingAddress?.phone || customer.billingPhone || "",
+    billingFax: customer.billingAddress?.fax || customer.billingFax || "",
+    shippingAttention: customer.shippingAddress?.attention || customer.shippingAttention || "",
+    shippingCountry: customer.shippingAddress?.country || customer.shippingCountry || "",
+    shippingStreet1: customer.shippingAddress?.street1 || customer.shippingStreet1 || "",
+    shippingStreet2: customer.shippingAddress?.street2 || customer.shippingStreet2 || "",
+    shippingCity: customer.shippingAddress?.city || customer.shippingCity || "",
+    shippingState: customer.shippingAddress?.state || customer.shippingState || "",
+    shippingZipCode: customer.shippingAddress?.zipCode || customer.shippingZipCode || "",
+    shippingPhone: customer.shippingAddress?.phone || customer.shippingPhone || "",
+    shippingFax: customer.shippingAddress?.fax || customer.shippingFax || "",
+    documents: customer.documents || [],
+    contactPersons,
+    customFields: customer.customFields || {},
+    reportingTags: customer.reportingTags || [],
+    remarks: customer.remarks || customer.notes || "",
+    exchangeRate: customer.exchangeRate || "1.00",
+    customerNumber: customer.customerNumber || customer.customer_number || ""
+  };
+};
+
 const accounts = [
   { id: "ar1", name: "Accounts Receivable" }
 ];
 
 const PRICE_LISTS_STORAGE_KEY = "inv_price_lists_v1";
+const CUSTOMER_EDIT_PRELOAD_PREFIX = "billing_customer_edit_preload:";
 
 
 
@@ -101,8 +213,32 @@ export default function NewCustomer() {
   const location = useLocation();
   const { id } = useParams();
   const isEditMode = !!id;
+  const routeState = (location.state as any) || {};
+  const routeCustomer = routeState.customer || routeState.savedCustomer || null;
+  const cachedRouteCustomer = React.useMemo(() => {
+    if (!isEditMode || !id || typeof window === "undefined") return null;
+    try {
+      const raw = sessionStorage.getItem(`${CUSTOMER_EDIT_PRELOAD_PREFIX}${String(id).trim()}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }, [id, isEditMode]);
+  const candidateRouteCustomer = routeCustomer || cachedRouteCustomer;
+  const routeCustomerId = String(
+    candidateRouteCustomer?._id ||
+    candidateRouteCustomer?.id ||
+    candidateRouteCustomer?.customerId ||
+    ""
+  ).trim();
+  const preloadedEditCustomer =
+    isEditMode &&
+    candidateRouteCustomer &&
+    (!id || !routeCustomerId || routeCustomerId === String(id).trim())
+      ? candidateRouteCustomer
+      : null;
   const saveAndSubscribeRef = useRef(false);
-  const [isLoading, setIsLoading] = useState(isEditMode);
+  const [isLoading, setIsLoading] = useState(isEditMode && !preloadedEditCustomer);
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("other-details");
   const [showMoreDetails, setShowMoreDetails] = useState(false);
@@ -291,6 +427,12 @@ export default function NewCustomer() {
   }, [loadPriceLists]);
 
   const [availableReportingTags, setAvailableReportingTags] = useState<any[]>([]);
+
+  const applyExistingCustomerToForm = useCallback((customer: any) => {
+    setExistingCustomerData(customer);
+    setFormData(buildFormDataFromCustomer(customer));
+    setIsDisplayNameManuallyEdited(Boolean(customer.displayName || customer.name));
+  }, []);
 
   const normalizeReportingTagOptions = (tag: any): string[] => {
     const candidates = Array.isArray(tag?.options)
@@ -537,6 +679,20 @@ export default function NewCustomer() {
     }
   }, [location.state, isEditMode]);
 
+  useEffect(() => {
+    if (preloadedEditCustomer) {
+      applyExistingCustomerToForm(preloadedEditCustomer);
+      setIsLoading(false);
+
+      if (isEditMode && id && typeof window !== "undefined") {
+        try {
+          sessionStorage.removeItem(`${CUSTOMER_EDIT_PRELOAD_PREFIX}${String(id).trim()}`);
+        } catch {
+        }
+      }
+    }
+  }, [applyExistingCustomerToForm, id, isEditMode, preloadedEditCustomer]);
+
 
 
 
@@ -642,9 +798,14 @@ export default function NewCustomer() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type, checked } = e.target as any;
+    const resolvedValue =
+      type === "checkbox"
+        ? checked
+        : sanitizeTypedFieldValue(name, String(value ?? ""));
+
     setFormData((prev: typeof formData) => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : value
+      [name]: resolvedValue
     }));
     if (name && errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: "" }));
@@ -659,6 +820,16 @@ export default function NewCustomer() {
       setIsDisplayNameManuallyEdited(false);
     }
   };
+
+  const updateContactPersonField = useCallback((contactId: number, fieldName: string, fieldValue: string) => {
+    const sanitizedValue = sanitizeTypedFieldValue(fieldName, fieldValue);
+    setFormData(prev => ({
+      ...prev,
+      contactPersons: prev.contactPersons.map(cp =>
+        cp.id === contactId ? { ...cp, [fieldName]: sanitizedValue } : cp
+      )
+    }));
+  }, []);
 
   const applyNextCustomerNumber = useCallback(
     async (force = false) => {
@@ -812,94 +983,35 @@ export default function NewCustomer() {
 
   // Load customer data when in edit mode
   useEffect(() => {
+    let isActive = true;
+
     const loadCustomerData = async () => {
       if (isEditMode && id) {
-        setIsLoading(true);
+        if (!preloadedEditCustomer) {
+          setIsLoading(true);
+        }
         try {
           const response = await customersAPI.getById(id);
           const customer = response?.data?.customer || response?.data || response;
 
+          if (!isActive) return;
+
           if (customer && (customer.id || customer._id || id)) {
-            setExistingCustomerData(customer);
-            const workPhoneData = splitPhoneNumber(customer.workPhone || customer.phone || customer.work_phone || "", "+358");
-            const mobileData = splitPhoneNumber(customer.mobile || customer.mobilePhone || customer.mobile_phone || "", "+252");
-
-            const contactPersons = (customer.contactPersons || []).map((cp: any) => {
-              const cpWorkPhoneData = splitPhoneNumber(cp.workPhone || cp.phone || "", "+358");
-              const cpMobileData = splitPhoneNumber(cp.mobile || "", "+252");
-              return {
-                ...cp,
-                workPhonePrefix: cpWorkPhoneData.prefix,
-                workPhone: cpWorkPhoneData.number,
-                mobilePrefix: cpMobileData.prefix,
-                mobile: cpMobileData.number
-              };
-            });
-
-            setFormData({
-              customerType: customer.customerType || "business",
-              salutation: customer.salutation || "",
-              firstName: customer.firstName || "",
-              lastName: customer.lastName || "",
-              companyName: customer.companyName || "",
-              displayName: customer.displayName || customer.name || "",
-              email: customer.email || "",
-              workPhonePrefix: workPhoneData.prefix,
-              workPhone: workPhoneData.number,
-              mobilePrefix: mobileData.prefix,
-              mobile: mobileData.number,
-              customerLanguage: customer.customerLanguage || customer.portalLanguage || "english",
-              taxRate: customer.taxRate || "",
-              companyId: customer.companyId || "",
-              locationCode: customer.locationCode || "",
-              currency: customer.currency || "USD",
-              accountsReceivable: customer.accountsReceivable || "",
-              openingBalance: customer.receivables?.toString() || customer.openingBalance || "",
-              paymentTerms: customer.paymentTerms || "due-on-receipt",
-              priceListId: customer.priceListId || customer.priceListID || customer.price_list_id || "",
-              enablePortal: customer.enablePortal || false,
-              customerOwner: customer.customerOwner || customer.salesperson || "",
-              websiteUrl: customer.websiteUrl || customer.website || "",
-              department: customer.department || "",
-              designation: customer.designation || "",
-              xHandle: customer.xHandle || "",
-              skypeName: customer.skypeName || "",
-              facebook: customer.facebook || "",
-              billingAttention: customer.billingAddress?.attention || customer.billingAttention || "",
-              billingCountry: customer.billingAddress?.country || customer.billingCountry || "",
-              billingStreet1: customer.billingAddress?.street1 || customer.billingStreet1 || "",
-              billingStreet2: customer.billingAddress?.street2 || customer.billingStreet2 || "",
-              billingCity: customer.billingAddress?.city || customer.billingCity || "",
-              billingState: customer.billingAddress?.state || customer.billingState || "",
-              billingZipCode: customer.billingAddress?.zipCode || customer.billingZipCode || "",
-              billingPhone: customer.billingAddress?.phone || customer.billingPhone || "",
-              billingFax: customer.billingAddress?.fax || customer.billingFax || "",
-              shippingAttention: customer.shippingAddress?.attention || customer.shippingAttention || "",
-              shippingCountry: customer.shippingAddress?.country || customer.shippingCountry || "",
-              shippingStreet1: customer.shippingAddress?.street1 || customer.shippingStreet1 || "",
-              shippingStreet2: customer.shippingAddress?.street2 || customer.shippingStreet2 || "",
-              shippingCity: customer.shippingAddress?.city || customer.shippingCity || "",
-              shippingState: customer.shippingAddress?.state || customer.shippingState || "",
-              shippingZipCode: customer.shippingAddress?.zipCode || customer.shippingZipCode || "",
-              shippingPhone: customer.shippingAddress?.phone || customer.shippingPhone || "",
-              shippingFax: customer.shippingAddress?.fax || customer.shippingFax || "",
-              documents: customer.documents || [],
-              contactPersons: contactPersons,
-              customFields: customer.customFields || {},
-              reportingTags: customer.reportingTags || [],
-              remarks: customer.remarks || customer.notes || "",
-              exchangeRate: customer.exchangeRate || "1.00",
-              customerNumber: customer.customerNumber || customer.customer_number || ""
-            });
+            applyExistingCustomerToForm(customer);
             setIsLoading(false);
           } else {
-            toast.error("Customer not found. You can still edit the form, but changes won't be saved to an existing customer.");
-            setExistingCustomerData(null);
+            if (!preloadedEditCustomer) {
+              toast.error("Customer not found. You can still edit the form, but changes won't be saved to an existing customer.");
+              setExistingCustomerData(null);
+            }
             setIsLoading(false);
           }
         } catch (error: any) {
-          toast.error("Error loading customer: " + (error?.message || "Unknown error."));
-          setExistingCustomerData(null);
+          if (!isActive) return;
+          if (!preloadedEditCustomer) {
+            toast.error("Error loading customer: " + (error?.message || "Unknown error."));
+            setExistingCustomerData(null);
+          }
           setIsLoading(false);
         }
       } else {
@@ -909,7 +1021,10 @@ export default function NewCustomer() {
     };
 
     loadCustomerData();
-  }, [isEditMode, id]);
+    return () => {
+      isActive = false;
+    };
+  }, [applyExistingCustomerToForm, id, isEditMode, preloadedEditCustomer]);
 
   const handleSave = async () => {
     let resolvedCustomerNumber = String(formData.customerNumber || "").trim();
@@ -1132,11 +1247,15 @@ export default function NewCustomer() {
         // Navigate back
         setTimeout(() => {
           const returnTo = location.state?.returnTo;
+          const returnState = {
+            ...(location.state || {}),
+            customer: savedCustomer,
+          };
           if (returnTo) {
-            navigate(returnTo);
+            navigate(returnTo, { state: returnState });
           } else if (isEditMode && id) {
             // If editing, navigate back to customer detail page
-            navigate(`/sales/customers/${id}`);
+            navigate(`/sales/customers/${id}`, { state: { customer: savedCustomer } });
           } else {
             navigate("/sales/customers");
           }
@@ -1155,6 +1274,7 @@ export default function NewCustomer() {
     const searchParams = new URLSearchParams(location.search);
     const isEmbeddedQuickAction =
       searchParams.get("embed") === "1" || searchParams.get("quickAction") === "1";
+    const returnTo = routeState?.returnTo;
 
     if (isEmbeddedQuickAction && window.parent && window.parent !== window) {
       window.parent.postMessage(
@@ -1164,6 +1284,11 @@ export default function NewCustomer() {
         },
         window.location.origin
       );
+      return;
+    }
+
+    if (returnTo) {
+      navigate(returnTo, { state: routeState });
       return;
     }
 
@@ -1469,25 +1594,34 @@ export default function NewCustomer() {
   const isEmbeddedQuickAction =
     embeddedSearchParams.get("embed") === "1" || embeddedSearchParams.get("quickAction") === "1";
 
+  const contactPersonsGridTemplate = showExtendedContactColumns
+    ? "minmax(96px,0.75fr) minmax(120px,0.95fr) minmax(120px,0.95fr) minmax(190px,1.35fr) minmax(170px,1.1fr) minmax(170px,1.1fr) minmax(150px,0.95fr) minmax(150px,0.95fr) minmax(140px,0.9fr) 64px"
+    : "minmax(96px,0.75fr) minmax(130px,1fr) minmax(130px,1fr) minmax(210px,1.45fr) minmax(185px,1.15fr) minmax(185px,1.15fr) 64px";
+  const contactPersonsGridMinWidth = showExtendedContactColumns ? "1380px" : "1000px";
+  const pageContentMaxWidthClass =
+    activeTab === "contact-persons"
+      ? showExtendedContactColumns
+        ? "max-w-[1460px]"
+        : "max-w-[1120px]"
+      : "max-w-4xl";
 
 
 
 
-  if (isLoading) {
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-        <div className="bg-white rounded-lg shadow-xl p-8">
-          <h1 className="text-2xl font-semibold text-gray-900">Loading...</h1>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="w-full min-h-full flex flex-col bg-gray-50">
       {/* Header */}
       <div className="border-b border-gray-200 bg-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
-        <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 m-0">{isEditMode ? "Edit Customer" : "New Customer"}</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 m-0">{isEditMode ? "Edit Customer" : "New Customer"}</h1>
+          {isEditMode && isLoading && (
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Syncing customer...
+            </div>
+          )}
+        </div>
         {isEmbeddedQuickAction && (
           <button
             type="button"
@@ -1502,7 +1636,7 @@ export default function NewCustomer() {
 
       <div className="flex-1 flex">
         <div className="flex-1 overflow-x-hidden relative bg-gray-50">
-          <div className="w-full max-w-4xl px-4 sm:px-6 py-5 sm:py-8 pb-24 overflow-x-hidden">
+          <div className={`w-full ${pageContentMaxWidthClass} px-4 sm:px-6 py-5 sm:py-8 pb-24 overflow-x-hidden`}>
 
             <div>
               <div className="space-y-6 pb-12">
@@ -1794,6 +1928,7 @@ export default function NewCustomer() {
                         value={formData.workPhone}
                         onChange={handleChange}
                         placeholder="Work Phone"
+                        inputMode="numeric"
                         className="flex-1 px-3 py-1.5 text-[13px] text-gray-700 outline-none bg-transparent"
                       />
                     </div>
@@ -1850,6 +1985,7 @@ export default function NewCustomer() {
                         value={formData.mobile}
                         onChange={handleChange}
                         placeholder="Mobile"
+                        inputMode="numeric"
                         className="flex-1 px-3 py-1.5 text-[13px] text-gray-700 outline-none bg-transparent"
                       />
                     </div>
@@ -1957,7 +2093,6 @@ export default function NewCustomer() {
                   { id: "other-details", label: "Other Details" },
                   { id: "address", label: "Address" },
                   { id: "contact-persons", label: "Contact Persons" },
-                  { id: "custom-fields", label: "Custom Fields" },
                   { id: "remarks", label: "Remarks" },
                 ].map((tab) => (
                   <button
@@ -2206,6 +2341,7 @@ export default function NewCustomer() {
                           name="openingBalance"
                           value={formData.openingBalance}
                           onChange={handleChange}
+                          inputMode="decimal"
                           className="flex-1 px-3 py-1.5 border border-gray-300 rounded-r text-[13px] text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#156372] focus:border-[#156372] hover:border-gray-400 transition-colors"
                           step="0.01"
                         />
@@ -2223,6 +2359,7 @@ export default function NewCustomer() {
                               name="exchangeRate"
                               value={formData.exchangeRate}
                               onChange={handleChange}
+                              inputMode="decimal"
                               className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                               step="0.0001"
                             />
@@ -2752,6 +2889,7 @@ export default function NewCustomer() {
                               value={formData.billingPhone}
                               onChange={handleChange}
                               placeholder="Enter phone"
+                              inputMode="numeric"
                               className="w-full px-3 py-1.5 border border-gray-300 rounded text-[13px] text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#156372] focus:border-[#156372]"
                             />
                           </div>
@@ -2766,6 +2904,7 @@ export default function NewCustomer() {
                               value={formData.billingFax}
                               onChange={handleChange}
                               placeholder="Enter fax number"
+                              inputMode="numeric"
                               className="w-full px-3 py-1.5 border border-gray-300 rounded text-[13px] text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#156372] focus:border-[#156372]"
                             />
                           </div>
@@ -2955,6 +3094,7 @@ export default function NewCustomer() {
                               value={formData.shippingPhone}
                               onChange={handleChange}
                               placeholder="Enter phone"
+                              inputMode="numeric"
                               className="w-full px-3 py-1.5 border border-gray-300 rounded text-[13px] text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#156372] focus:border-[#156372]"
                             />
                           </div>
@@ -2969,6 +3109,7 @@ export default function NewCustomer() {
                               value={formData.shippingFax}
                               onChange={handleChange}
                               placeholder="Enter fax number"
+                              inputMode="numeric"
                               className="w-full px-3 py-1.5 border border-gray-300 rounded text-[13px] text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#156372] focus:border-[#156372]"
                             />
                           </div>
@@ -2996,14 +3137,13 @@ export default function NewCustomer() {
                 {activeTab === "contact-persons" && (
                   <div className="mt-6">
                     {/* Table Structure */}
-                    <div className="border border-gray-200 rounded-md overflow-x-auto">
+                    <div className="border border-gray-200 rounded-md overflow-hidden">
                       {/* Table Header */}
                       <div
-                        className="bg-gray-50 border-b border-gray-200 grid gap-4 px-4 py-3 items-center"
+                        className="bg-gray-50 border-b border-gray-200 grid gap-4 px-4 py-3 items-center min-w-full"
                         style={{
-                          gridTemplateColumns: showExtendedContactColumns
-                            ? '90px 1fr 1fr 1.5fr 1.3fr 1.3fr 1fr 1fr 1fr 50px'
-                            : '90px 1fr 1fr 1.5fr 1.3fr 1.3fr 50px'
+                          gridTemplateColumns: contactPersonsGridTemplate,
+                          minWidth: contactPersonsGridMinWidth,
                         }}
                       >
                         <div className="text-xs font-semibold text-gray-700 uppercase">SALUTATION</div>
@@ -3031,11 +3171,10 @@ export default function NewCustomer() {
                         formData.contactPersons.map((contact, index) => (
                           <div
                             key={contact.id}
-                            className="grid gap-4 px-4 py-3 border-b border-gray-200 last:border-b-0 hover:bg-gray-50 items-start"
+                            className="grid gap-4 px-4 py-3 border-b border-gray-200 last:border-b-0 hover:bg-gray-50 items-start min-w-full"
                             style={{
-                              gridTemplateColumns: showExtendedContactColumns
-                                ? '90px 1fr 1fr 1.5fr 1.3fr 1.3fr 1fr 1fr 1fr 50px'
-                                : '90px 1fr 1fr 1.5fr 1.3fr 1.3fr 50px'
+                              gridTemplateColumns: contactPersonsGridTemplate,
+                              minWidth: contactPersonsGridMinWidth,
                             }}
                           >
                             {/* Salutation */}
@@ -3066,12 +3205,7 @@ export default function NewCustomer() {
                             <input
                               type="text"
                               value={contact.firstName}
-                              onChange={(e) => {
-                                const updated = formData.contactPersons.map(cp =>
-                                  cp.id === contact.id ? { ...cp, firstName: e.target.value } : cp
-                                );
-                                setFormData(prev => ({ ...prev, contactPersons: updated }));
-                              }}
+                              onChange={(e) => updateContactPersonField(contact.id, "firstName", e.target.value)}
                               className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             />
 
@@ -3079,12 +3213,7 @@ export default function NewCustomer() {
                             <input
                               type="text"
                               value={contact.lastName}
-                              onChange={(e) => {
-                                const updated = formData.contactPersons.map(cp =>
-                                  cp.id === contact.id ? { ...cp, lastName: e.target.value } : cp
-                                );
-                                setFormData(prev => ({ ...prev, contactPersons: updated }));
-                              }}
+                              onChange={(e) => updateContactPersonField(contact.id, "lastName", e.target.value)}
                               className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             />
 
@@ -3160,12 +3289,8 @@ export default function NewCustomer() {
                               <input
                                 type="text"
                                 value={contact.workPhone}
-                                onChange={(e) => {
-                                  const updated = formData.contactPersons.map(cp =>
-                                    cp.id === contact.id ? { ...cp, workPhone: e.target.value } : cp
-                                  );
-                                  setFormData(prev => ({ ...prev, contactPersons: updated }));
-                                }}
+                                onChange={(e) => updateContactPersonField(contact.id, "workPhone", e.target.value)}
+                                inputMode="numeric"
                                 className="flex-1 w-full px-2 py-2 text-sm text-gray-700 border-none focus:outline-none bg-transparent"
                               />
                             </div>
@@ -3229,12 +3354,8 @@ export default function NewCustomer() {
                               <input
                                 type="text"
                                 value={contact.mobile}
-                                onChange={(e) => {
-                                  const updated = formData.contactPersons.map(cp =>
-                                    cp.id === contact.id ? { ...cp, mobile: e.target.value } : cp
-                                  );
-                                  setFormData(prev => ({ ...prev, contactPersons: updated }));
-                                }}
+                                onChange={(e) => updateContactPersonField(contact.id, "mobile", e.target.value)}
+                                inputMode="numeric"
                                 className="flex-1 w-full px-2 py-2 text-sm text-gray-700 border-none focus:outline-none bg-transparent"
                               />
                             </div>
@@ -3245,34 +3366,19 @@ export default function NewCustomer() {
                                 <input
                                   type="text"
                                   value={contact.skypeName}
-                                  onChange={(e) => {
-                                    const updated = formData.contactPersons.map(cp =>
-                                      cp.id === contact.id ? { ...cp, skypeName: e.target.value } : cp
-                                    );
-                                    setFormData(prev => ({ ...prev, contactPersons: updated }));
-                                  }}
+                                  onChange={(e) => updateContactPersonField(contact.id, "skypeName", e.target.value)}
                                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                 />
                                 <input
                                   type="text"
                                   value={contact.designation}
-                                  onChange={(e) => {
-                                    const updated = formData.contactPersons.map(cp =>
-                                      cp.id === contact.id ? { ...cp, designation: e.target.value } : cp
-                                    );
-                                    setFormData(prev => ({ ...prev, contactPersons: updated }));
-                                  }}
+                                  onChange={(e) => updateContactPersonField(contact.id, "designation", e.target.value)}
                                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                 />
                                 <input
                                   type="text"
                                   value={contact.department}
-                                  onChange={(e) => {
-                                    const updated = formData.contactPersons.map(cp =>
-                                      cp.id === contact.id ? { ...cp, department: e.target.value } : cp
-                                    );
-                                    setFormData(prev => ({ ...prev, contactPersons: updated }));
-                                  }}
+                                  onChange={(e) => updateContactPersonField(contact.id, "department", e.target.value)}
                                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                 />
                               </>
@@ -3334,81 +3440,6 @@ export default function NewCustomer() {
                     </div>
                   </div>
                 )}
-
-
-                {activeTab === "custom-fields" && (
-                  <div className="mt-6">
-                    <div className="mb-4 flex items-center justify-between">
-                      <label className="block text-sm font-medium text-gray-700">Custom Fields</label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFormData(prev => {
-                            const currentFields = { ...(prev.customFields || {}) } as Record<string, string>;
-                            let counter = 1;
-                            while (currentFields[`Custom Field ${counter}`] !== undefined) {
-                              counter += 1;
-                            }
-                            currentFields[`Custom Field ${counter}`] = "";
-                            return { ...prev, customFields: currentFields };
-                          });
-                        }}
-                        className="px-3 py-1.5 text-xs font-medium text-blue-700 border border-blue-200 rounded-md hover:bg-blue-50 transition-colors"
-                      >
-                        + Add Field
-                      </button>
-                    </div>
-
-                    {Object.keys(formData.customFields || {}).length === 0 ? (
-                      <div className="p-6 border border-dashed border-gray-300 rounded-md bg-gray-50 text-sm text-gray-500">
-                        No custom fields added yet.
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {Object.entries(formData.customFields || {}).map(([fieldKey, fieldValue]) => (
-                          <div key={fieldKey} className="grid grid-cols-[220px_1fr_auto] gap-3 items-center">
-                            <div className="text-sm text-gray-700 font-medium truncate" title={fieldKey}>
-                              {fieldKey}
-                            </div>
-                            <input
-                              type="text"
-                              value={String(fieldValue ?? "")}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                setFormData(prev => ({
-                                  ...prev,
-                                  customFields: {
-                                    ...(prev.customFields || {}),
-                                    [fieldKey]: value
-                                  }
-                                }));
-                              }}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              placeholder="Enter value"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setFormData(prev => {
-                                  const currentFields = { ...(prev.customFields || {}) } as Record<string, string>;
-                                  delete currentFields[fieldKey];
-                                  return { ...prev, customFields: currentFields };
-                                });
-                              }}
-                              className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
-                              aria-label={`Remove ${fieldKey}`}
-                            >
-                              <X size={14} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-
-
                 {activeTab === "remarks" && (
                   <div className="mt-6">
                     <div className="mb-6">
@@ -3434,7 +3465,7 @@ export default function NewCustomer() {
                 <button
                   type="button"
                   onClick={handleSave}
-                  disabled={isSaving}
+                  disabled={isSaving || (isEditMode && isLoading && !existingCustomerData)}
                   className="px-5 py-2 bg-[#156372] text-white rounded text-[13px] font-semibold hover:bg-[#0f4f5a] transition-all disabled:opacity-70 flex items-center gap-2 shadow-sm"
                 >
                   {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -3443,7 +3474,7 @@ export default function NewCustomer() {
                 <button
                   type="button"
                   onClick={handleSaveAndSubscribe}
-                  disabled={isSaving}
+                  disabled={isSaving || (isEditMode && isLoading && !existingCustomerData)}
                   className="px-5 py-2 bg-white text-gray-700 border border-gray-300 rounded text-[13px] font-semibold hover:bg-gray-50 hover:border-gray-400 transition-all disabled:opacity-70 flex items-center gap-2 shadow-sm"
                 >
                   {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -4279,8 +4310,8 @@ export default function NewCustomer() {
 
       {/* Customer Number Settings Modal */}
       {isCustomerNumberSettingsModalOpen && createPortal(
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-4 bg-black/25 backdrop-blur-[2px]">
-          <div className="bg-white rounded-md shadow-xl w-full max-w-[720px] max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-[1000] flex items-start justify-center px-3 pt-3 pb-4 sm:px-4 sm:pt-4 bg-black/25 backdrop-blur-[2px]">
+          <div className="bg-white rounded-md shadow-xl w-full max-w-[620px] max-h-[calc(100vh-24px)] overflow-y-auto">
             <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
               <h3 className="text-lg font-medium text-gray-800">
                 Configure Customer Numbers Preferences
@@ -4295,11 +4326,11 @@ export default function NewCustomer() {
             </div>
 
             <div className="px-5 py-4">
-              <p className="text-sm text-gray-600 max-w-[620px] mb-6 leading-relaxed">
+              <p className="text-sm text-gray-600 max-w-[520px] mb-6 leading-relaxed">
                 Customer numbers will be auto-generated based on the preferences below. For each new customer that is created, the number after the prefix will be incremented by 1.
               </p>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-5 max-w-[520px]">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 mb-5 max-w-[460px]">
                 <div>
                   <label className="block text-sm text-gray-700 mb-2">Prefix</label>
                   <input
@@ -4315,8 +4346,9 @@ export default function NewCustomer() {
                   <input
                     type="text"
                     value={customerNumberStart}
-                    onChange={(e) => setCustomerNumberStart(e.target.value)}
+                    onChange={(e) => setCustomerNumberStart(sanitizeDigitsOnlyValue(e.target.value))}
                     placeholder="0001"
+                    inputMode="numeric"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>

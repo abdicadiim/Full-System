@@ -1,6 +1,5 @@
 import React from "react";
 import { ChevronDown, Edit, Paperclip, Plus, X } from "lucide-react";
-import { toast } from "react-toastify";
 import CustomerDetailMoreMenu from "./CustomerDetailMoreMenu";
 
 export default function CustomerDetailHeader(args: any) {
@@ -9,6 +8,7 @@ export default function CustomerDetailHeader(args: any) {
     id,
     attachments,
     navigate,
+    handleEditCustomer,
     setIsDeleteModalOpen,
     isAttachmentsDropdownOpen,
     setIsAttachmentsDropdownOpen,
@@ -23,7 +23,7 @@ export default function CustomerDetailHeader(args: any) {
     isMoreDropdownOpen,
     setIsMoreDropdownOpen,
     areRemindersStopped,
-    setAreRemindersStopped,
+    handleToggleReminders,
     handleAssociateTemplates,
     setIsConfigurePortalModalOpen,
     setPortalAccessContacts,
@@ -83,7 +83,8 @@ export default function CustomerDetailHeader(args: any) {
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => navigate(`/sales/customers/${id}/edit`)}
+              type="button"
+              onClick={handleEditCustomer}
               className="flex h-[38px] cursor-pointer items-center gap-2 rounded-lg border-b-[4px] border-[#0D4A52] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[1px] active:border-b-[2px]"
               style={{ background: "linear-gradient(180deg, #156372 0%, #0D4A52 100%)" }}
             >
@@ -176,11 +177,7 @@ export default function CustomerDetailHeader(args: any) {
                 setPortalAccessContacts(contacts);
                 setIsConfigurePortalModalOpen(true);
               }}
-              onToggleReminders={() => {
-                setIsMoreDropdownOpen(false);
-                setAreRemindersStopped(!areRemindersStopped);
-                toast.success(!areRemindersStopped ? "All reminders stopped for this customer" : "All reminders enabled for this customer");
-              }}
+              onToggleReminders={handleToggleReminders}
               onClone={handleClone}
               onMergeCustomers={handleMergeCustomers}
               onToggleActive={async () => {

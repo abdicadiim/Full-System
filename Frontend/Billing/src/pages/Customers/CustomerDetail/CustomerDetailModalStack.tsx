@@ -68,6 +68,7 @@ export default function CustomerDetailModalStack(args: any) {
     isConfigurePortalModalOpen,
     portalAccessContacts,
     setPortalAccessContacts,
+    setIsConfigurePortalModalOpen,
     setCustomer,
     isLinkToVendorModalOpen,
     selectedVendor,
@@ -246,38 +247,43 @@ export default function CustomerDetailModalStack(args: any) {
                   : contact;
               }) || [];
 
+            let nextCustomer = customer;
+
             if ((!customer.contactPersons || customer.contactPersons.length === 0) && portalAccessContacts.length > 0) {
               const mainContact = portalAccessContacts[0];
               if (mainContact.id === "customer-main") {
                 try {
-                  await customersAPI.update(customer.id, {
+                  nextCustomer = {
                     ...customer,
                     enablePortal: mainContact.hasAccess,
                     email: mainContact.email || customer.email,
-                  });
+                  };
+                  const response = await customersAPI.update(customer.id, nextCustomer);
+                  setCustomer(response?.data || nextCustomer);
                 } catch (error: any) {
                   toast.error("Failed to update customer: " + (error.message || "Unknown error"));
+                  return;
                 }
               }
             } else {
               try {
-                await customersAPI.update(customer.id, {
+                nextCustomer = {
                   ...customer,
                   contactPersons: updatedContactPersons,
                   enablePortal: portalAccessContacts.some((contact: any) => contact.hasAccess),
-                });
+                };
+                const response = await customersAPI.update(customer.id, nextCustomer);
+                setCustomer(response?.data || nextCustomer);
               } catch (error: any) {
                 toast.error("Failed to update customer: " + (error.message || "Unknown error"));
+                return;
               }
             }
 
-            const refreshResponse = await customersAPI.getById(customer.id);
-            const updatedCustomer = refreshResponse?.success ? refreshResponse.data : null;
-            if (updatedCustomer) {
-              setCustomer(updatedCustomer);
-            }
+            args.setIsConfigurePortalModalOpen(false);
+            toast.success("Portal access updated successfully.");
+            void refreshData();
           }
-          args.setIsConfigurePortalModalOpen(false);
         }}
       />
 
@@ -338,12 +344,20 @@ export default function CustomerDetailModalStack(args: any) {
               return;
             }
 
-            await refreshData();
+            setCustomer({
+              ...customer,
+              linkedVendorId: selectedVendorId,
+              linkedVendorName: vendorName,
+            });
+            if (args.setLinkedVendor) {
+              args.setLinkedVendor(selectedVendor);
+            }
+            setIsLinkToVendorModalOpen(false);
+            setSelectedVendor(null);
+            setVendorSearch("");
             toast.success(`Customer "${customer.name || customer.displayName}" has been linked to vendor "${vendorName}"`);
+            void refreshData();
           }
-          setIsLinkToVendorModalOpen(false);
-          setSelectedVendor(null);
-          setVendorSearch("");
         }}
       />
 
@@ -440,40 +454,41 @@ export default function CustomerDetailModalStack(args: any) {
           }
 
           try {
-            await customersAPI.update(id, updatedCustomer);
-            const response = await customersAPI.getById(id);
-            if (response && response.data) {
-              const normalizedComments = normalizeComments(response.data.comments);
+            const response = await customersAPI.update(id, updatedCustomer);
+            const persistedCustomer = response?.data || updatedCustomer;
+            if (persistedCustomer) {
+              const normalizedComments = normalizeComments(persistedCustomer.comments);
               setCustomer({
-                ...response.data,
-                billingStreet1: response.data.billingAddress?.street1 || response.data.billingStreet1 || "",
-                billingStreet2: response.data.billingAddress?.street2 || response.data.billingStreet2 || "",
-                billingCity: response.data.billingAddress?.city || response.data.billingCity || "",
-                billingState: response.data.billingAddress?.state || response.data.billingState || "",
-                billingZipCode: response.data.billingAddress?.zipCode || response.data.billingZipCode || "",
-                billingPhone: response.data.billingAddress?.phone || response.data.billingPhone || "",
-                billingFax: response.data.billingAddress?.fax || response.data.billingFax || "",
-                billingAttention: response.data.billingAddress?.attention || response.data.billingAttention || "",
-                billingCountry: response.data.billingAddress?.country || response.data.billingCountry || "",
-                shippingStreet1: response.data.shippingAddress?.street1 || response.data.shippingStreet1 || "",
-                shippingStreet2: response.data.shippingAddress?.street2 || response.data.shippingStreet2 || "",
-                shippingCity: response.data.shippingAddress?.city || response.data.shippingCity || "",
-                shippingState: response.data.shippingAddress?.state || response.data.shippingState || "",
-                shippingZipCode: response.data.shippingAddress?.zipCode || response.data.shippingZipCode || "",
-                shippingPhone: response.data.shippingAddress?.phone || response.data.shippingPhone || "",
-                shippingFax: response.data.shippingAddress?.fax || response.data.shippingFax || "",
-                shippingAttention: response.data.shippingAddress?.attention || response.data.shippingAttention || "",
-                shippingCountry: response.data.shippingAddress?.country || response.data.shippingCountry || "",
+                ...persistedCustomer,
+                billingStreet1: persistedCustomer.billingAddress?.street1 || persistedCustomer.billingStreet1 || "",
+                billingStreet2: persistedCustomer.billingAddress?.street2 || persistedCustomer.billingStreet2 || "",
+                billingCity: persistedCustomer.billingAddress?.city || persistedCustomer.billingCity || "",
+                billingState: persistedCustomer.billingAddress?.state || persistedCustomer.billingState || "",
+                billingZipCode: persistedCustomer.billingAddress?.zipCode || persistedCustomer.billingZipCode || "",
+                billingPhone: persistedCustomer.billingAddress?.phone || persistedCustomer.billingPhone || "",
+                billingFax: persistedCustomer.billingAddress?.fax || persistedCustomer.billingFax || "",
+                billingAttention: persistedCustomer.billingAddress?.attention || persistedCustomer.billingAttention || "",
+                billingCountry: persistedCustomer.billingAddress?.country || persistedCustomer.billingCountry || "",
+                shippingStreet1: persistedCustomer.shippingAddress?.street1 || persistedCustomer.shippingStreet1 || "",
+                shippingStreet2: persistedCustomer.shippingAddress?.street2 || persistedCustomer.shippingStreet2 || "",
+                shippingCity: persistedCustomer.shippingAddress?.city || persistedCustomer.shippingCity || "",
+                shippingState: persistedCustomer.shippingAddress?.state || persistedCustomer.shippingState || "",
+                shippingZipCode: persistedCustomer.shippingAddress?.zipCode || persistedCustomer.shippingZipCode || "",
+                shippingPhone: persistedCustomer.shippingAddress?.phone || persistedCustomer.shippingPhone || "",
+                shippingFax: persistedCustomer.shippingAddress?.fax || persistedCustomer.shippingFax || "",
+                shippingAttention: persistedCustomer.shippingAddress?.attention || persistedCustomer.shippingAttention || "",
+                shippingCountry: persistedCustomer.shippingAddress?.country || persistedCustomer.shippingCountry || "",
                 comments: normalizedComments,
               });
               args.setComments(normalizedComments);
             }
+            setShowAddressModal(false);
             toast.success(`${addressType === "billing" ? "Billing" : "Shipping"} address saved successfully`);
+            void refreshData();
           } catch (error: any) {
             toast.error("Failed to update address: " + (error.message || "Unknown error"));
+            return;
           }
-
-          setShowAddressModal(false);
         }}
       />
 

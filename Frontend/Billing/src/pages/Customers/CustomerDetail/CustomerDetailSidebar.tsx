@@ -6,6 +6,7 @@ export default function CustomerDetailSidebar(args: any) {
   const {
     selectedCustomers,
     customers,
+    handleOpenSidebarCustomer,
     handleSelectAllCustomers,
     bulkActionsDropdownRef,
     isBulkActionsDropdownOpen,
@@ -173,7 +174,19 @@ export default function CustomerDetailSidebar(args: any) {
             className={`flex cursor-pointer items-center gap-3 border-b border-gray-100 p-3 hover:bg-gray-50 ${
               customerRow.id === id ? "border-l-4 border-l-blue-600 bg-blue-50" : ""
             } ${selectedCustomers.includes(customerRow.id) ? "bg-[#f5f6ff]" : ""}`}
-            onClick={() => navigate(`/sales/customers/${customerRow.id}`, { state: { customer: customerRow } })}
+            onClick={() => {
+              if (typeof handleOpenSidebarCustomer === "function") {
+                handleOpenSidebarCustomer(customerRow);
+                return;
+              }
+
+              navigate(`/sales/customers/${customerRow.id}`, {
+                state: {
+                  customer: customerRow,
+                  customerList: sidebarSortedCustomers,
+                },
+              });
+            }}
           >
             <input
               type="checkbox"

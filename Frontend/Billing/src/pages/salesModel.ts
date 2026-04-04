@@ -14,6 +14,32 @@ const STORAGE_KEYS = {
   MAILS: 'taban_mails'
 };
 
+type CustomerListParams = {
+  page?: number;
+  limit?: number;
+  search?: string;
+  __skipCache?: boolean;
+};
+
+type CustomerListPagination = {
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+};
+
+type PaginatedCustomersResult = {
+  data: any[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  pagination: CustomerListPagination;
+};
+
+const CUSTOMER_PAGINATED_CACHE_TTL_MS = 30 * 1000;
+const customerPaginatedCache = new Map<string, { expiresAt: number; value: PaginatedCustomersResult }>();
+
 /**
  * Get all customers from db
  * @returns {Array} Array of customer objects
@@ -27,16 +53,45 @@ export const getCustomersPaginated = async ({
   page = 1,
   limit = 50,
   search = "",
-} = {}) => {
+  __skipCache = false,
+}: CustomerListParams = {}): Promise<PaginatedCustomersResult> => {
+  const cacheKey = JSON.stringify({ page, limit, search });
+  const now = Date.now();
+
+  if (!__skipCache) {
+    const cached = customerPaginatedCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      return cached.value;
+    }
+  }
+
   const res: any = await customersAPI.getAll({ page, limit, search });
   if (!res?.success) throw new Error(res?.message || "Failed to load customers");
-  return {
-    data: res.data || [],
-    total: res.total || 0,
-    page: res.page || page,
-    limit: res.limit || limit,
-    totalPages: res.totalPages || 1,
+
+  const pagination: CustomerListPagination = {
+    total: Number(res?.pagination?.total ?? res?.total ?? 0) || 0,
+    page: Number(res?.pagination?.page ?? res?.page ?? page) || page,
+    limit: Number(res?.pagination?.limit ?? res?.limit ?? limit) || limit,
+    pages: Number(res?.pagination?.pages ?? res?.totalPages ?? 1) || 1,
   };
+
+  const result: PaginatedCustomersResult = {
+    data: Array.isArray(res?.data) ? res.data : [],
+    total: pagination.total,
+    page: pagination.page,
+    limit: pagination.limit,
+    totalPages: pagination.pages,
+    pagination,
+  };
+
+  if (!__skipCache) {
+    customerPaginatedCache.set(cacheKey, {
+      expiresAt: now + CUSTOMER_PAGINATED_CACHE_TTL_MS,
+      value: result,
+    });
+  }
+
+  return result;
 };
 
 export type Customer = any;

@@ -17,6 +17,7 @@ type CustomerDetailOverviewSidebarProps = {
   setIsSettingsDropdownOpen: React.Dispatch<React.SetStateAction<boolean>>;
   openEditContactPerson: (contact: any, index: number) => void;
   navigate: (to: string, options?: any) => void;
+  handleEditCustomer: () => void;
   openDeleteContactPersonModal: (index: number) => void;
   setIsDeleteModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setIsInviteModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -69,6 +70,7 @@ export default function CustomerDetailOverviewSidebar({
   setIsSettingsDropdownOpen,
   openEditContactPerson,
   navigate,
+  handleEditCustomer,
   openDeleteContactPersonModal,
   setIsDeleteModalOpen,
   setIsInviteModalOpen,
@@ -155,13 +157,13 @@ export default function CustomerDetailOverviewSidebar({
                         onClick={(event) => {
                           event.stopPropagation();
                           setIsSettingsDropdownOpen(false);
-                          if (primaryContact && resolvedPrimaryContactIndex >= 0) {
-                            openEditContactPerson(primaryContact, resolvedPrimaryContactIndex);
-                          } else {
-                            navigate(`/sales/customers/${id}/edit`);
-                          }
-                        }}
-                      >
+                        if (primaryContact && resolvedPrimaryContactIndex >= 0) {
+                          openEditContactPerson(primaryContact, resolvedPrimaryContactIndex);
+                        } else {
+                            handleEditCustomer();
+                        }
+                      }}
+                    >
                         Edit
                       </button>
                       <button

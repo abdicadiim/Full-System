@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { toast } from "react-toastify";
 import {
   billsAPI,
@@ -21,6 +21,7 @@ import {
   vendorCreditsAPI,
   vendorsAPI,
 } from "../../../services/api";
+import { getCustomers } from "../../salesModel";
 import { resolveVerifiedPrimarySender } from "../../../utils/emailSenderDisplay";
 import type { Transaction } from "./customerDetailTypes";
 
@@ -94,6 +95,8 @@ const filterRowsByCustomerId = (rows: any[], customerId: string) =>
     return rowCustomerId === customerId;
   });
 
+const VISIBILITY_REFRESH_MIN_AGE_MS = 45 * 1000;
+
 export default function useCustomerDetailData(args: any) {
   const {
     id,
@@ -138,6 +141,9 @@ export default function useCustomerDetailData(args: any) {
     setActiveTab,
     setStatementTransactions,
   } = args;
+
+  const lastRefreshAtRef = useRef(0);
+  const isRefreshInFlightRef = useRef(false);
 
   const fetchOrganizationProfile = useCallback(async () => {
     try {
@@ -188,17 +194,25 @@ export default function useCustomerDetailData(args: any) {
     }
   }, [organizationProfile, setOwnerEmail]);
 
-  const refreshData = useCallback(async () => {
+  const refreshData = useCallback(async (options: { minAgeMs?: number } = {}) => {
     if (!id) return;
+    const { minAgeMs = 0 } = options;
+    const now = Date.now();
+    if (minAgeMs > 0 && now - lastRefreshAtRef.current < minAgeMs) {
+      return;
+    }
 
+    if (isRefreshInFlightRef.current) {
+      return;
+    }
+
+    isRefreshInFlightRef.current = true;
     setIsRefreshing(true);
     try {
       const customerId = String(id).trim();
 
       const [
         customerResponse,
-        currenciesData,
-        customersResponse,
         invoicesResponse,
         paymentsResponse,
         creditNotesResponse,
@@ -213,10 +227,8 @@ export default function useCustomerDetailData(args: any) {
         vendorsResponse,
       ] = await Promise.all([
         customersAPI.getById(customerId),
-        currenciesAPI.getAll(),
-        customersAPI.getAll({ limit: 1000 }),
         invoicesAPI.getByCustomer(customerId).catch(() => ({ success: true, data: [] })),
-        paymentsReceivedAPI.getByInvoice(customerId).catch(() => ({ success: true, data: [] })),
+        paymentsReceivedAPI.getByCustomer(customerId).catch(() => ({ success: true, data: [] })),
         creditNotesAPI.getByCustomer(customerId).catch(() => ({ success: true, data: [] })),
         quotesAPI.getAll({ customerId }).catch(() => ({ success: true, data: [] })),
         recurringInvoicesAPI.getAll().catch(() => ({ success: true, data: [] })),
@@ -258,14 +270,6 @@ export default function useCustomerDetailData(args: any) {
           ? filterRowsByCustomerId(creditNotesResponse.data, canonicalCustomerId)
           : [],
       );
-
-      if (Array.isArray(currenciesData)) {
-        setAvailableCurrencies(currenciesData.filter((row: any) => row.status === "active"));
-      }
-
-      if (customersResponse?.success && Array.isArray(customersResponse.data)) {
-        setCustomers(mapSidebarCustomers(customersResponse.data));
-      }
 
       if (quotesResponse?.success && Array.isArray(quotesResponse.data)) {
         setQuotes(quotesResponse.data);
@@ -311,10 +315,12 @@ export default function useCustomerDetailData(args: any) {
           setLinkedVendor(null);
         }
       }
+      lastRefreshAtRef.current = Date.now();
     } catch (error: any) {
       toast.error("Failed to refresh customer data: " + (error.message || "Unknown error"));
     } finally {
       setIsRefreshing(false);
+      isRefreshInFlightRef.current = false;
     }
   }, [
     id,
@@ -328,8 +334,6 @@ export default function useCustomerDetailData(args: any) {
     setInvoices,
     setPayments,
     setCreditNotes,
-    setAvailableCurrencies,
-    setCustomers,
     setQuotes,
     setRecurringInvoices,
     setExpenses,
@@ -345,29 +349,66 @@ export default function useCustomerDetailData(args: any) {
   useEffect(() => {
     let isActive = true;
 
+    const loadReferenceData = async () => {
+      try {
+        const [currenciesData, sidebarCustomers] = await Promise.all([
+          currenciesAPI.getAll(),
+          getCustomers({ limit: 1000 }),
+        ]);
+
+        if (!isActive) return;
+
+        if (Array.isArray(currenciesData)) {
+          setAvailableCurrencies(currenciesData.filter((row: any) => row.status === "active"));
+        }
+
+        if (Array.isArray(sidebarCustomers)) {
+          setCustomers(mapSidebarCustomers(sidebarCustomers));
+        }
+      } catch {
+      }
+    };
+
+    loadReferenceData();
+
+    return () => {
+      isActive = false;
+    };
+  }, [setAvailableCurrencies, setCustomers]);
+
+  useEffect(() => {
+    let isActive = true;
+
     const loadData = async () => {
       if (!id) return;
 
       const customerId = String(id).trim();
       const prefill = args.initialCustomer || null;
       const prefillId = prefill ? String(prefill._id || prefill.id || "").trim() : "";
+      const currentCustomerId = String(customer?._id || customer?.id || "").trim();
+      const previewCustomer =
+        prefill && prefillId === customerId
+          ? prefill
+          : currentCustomerId && currentCustomerId === customerId
+            ? customer
+            : null;
 
-      if (prefill && prefillId && prefillId === customerId) {
-        const prefillName =
-          prefill.displayName ||
-          prefill.name ||
-          prefill.companyName ||
-          `${prefill.firstName || ""} ${prefill.lastName || ""}`.trim() ||
+      if (previewCustomer) {
+        const previewName =
+          previewCustomer.displayName ||
+          previewCustomer.name ||
+          previewCustomer.companyName ||
+          `${previewCustomer.firstName || ""} ${previewCustomer.lastName || ""}`.trim() ||
           "Customer";
 
         setCustomer({
-          ...prefill,
-          id: String(prefill._id || prefill.id),
-          _id: prefill._id || prefill.id,
-          name: prefillName,
-          displayName: prefill.displayName || prefillName,
+          ...previewCustomer,
+          id: String(previewCustomer._id || previewCustomer.id),
+          _id: previewCustomer._id || previewCustomer.id,
+          name: previewName,
+          displayName: previewCustomer.displayName || previewName,
         });
-        setComments(normalizeComments(prefill.comments));
+        setComments(normalizeComments(previewCustomer.comments));
         setLoading(false);
       } else {
         setCustomer(null);
@@ -376,11 +417,7 @@ export default function useCustomerDetailData(args: any) {
       }
 
       try {
-        const [customerResponse, currenciesData, customersResponse] = await Promise.all([
-          customersAPI.getById(customerId),
-          currenciesAPI.getAll(),
-          customersAPI.getAll({ limit: 1000 }),
-        ]);
+        const customerResponse = await customersAPI.getById(customerId);
 
         if (customerResponse && customerResponse.success && customerResponse.data) {
           const { mappedCustomer, normalizedComments } = mapCustomerRecord(customerResponse.data, normalizeComments);
@@ -392,16 +429,9 @@ export default function useCustomerDetailData(args: any) {
           return;
         }
 
-        if (Array.isArray(currenciesData)) {
-          setAvailableCurrencies(currenciesData.filter((row: any) => row.status === "active"));
-        }
-
-        if (customersResponse?.success && Array.isArray(customersResponse.data)) {
-          setCustomers(mapSidebarCustomers(customersResponse.data));
-        }
-
         if (!isActive) return;
         setLoading(false);
+        lastRefreshAtRef.current = Date.now();
 
         const canonicalCustomerId = String(customerResponse?.data?._id || customerResponse?.data?.id || customerId).trim();
         const linkedVendorId = String(customerResponse?.data?.linkedVendorId || "").trim();
@@ -423,7 +453,7 @@ export default function useCustomerDetailData(args: any) {
               vendorsResponse,
             ] = await Promise.all([
               invoicesAPI.getByCustomer(customerId).catch(() => ({ success: true, data: [] })),
-              paymentsReceivedAPI.getByInvoice(customerId).catch(() => ({ success: true, data: [] })),
+              paymentsReceivedAPI.getByCustomer(customerId).catch(() => ({ success: true, data: [] })),
               creditNotesAPI.getByCustomer(customerId).catch(() => ({ success: true, data: [] })),
               quotesAPI.getAll({ customerId }).catch(() => ({ success: true, data: [] })),
               recurringInvoicesAPI.getAll().catch(() => ({ success: true, data: [] })),
@@ -513,8 +543,6 @@ export default function useCustomerDetailData(args: any) {
     };
 
     loadData();
-    fetchOrganizationProfile();
-    fetchOwnerEmail();
 
     return () => {
       isActive = false;
@@ -526,14 +554,10 @@ export default function useCustomerDetailData(args: any) {
     navigate,
     normalizeComments,
     mapDocumentsToAttachments,
-    fetchOrganizationProfile,
-    fetchOwnerEmail,
     setCustomer,
     setComments,
     setLoading,
     setAttachments,
-    setAvailableCurrencies,
-    setCustomers,
     setInvoices,
     setPayments,
     setCreditNotes,
@@ -548,6 +572,14 @@ export default function useCustomerDetailData(args: any) {
     setVendors,
     setLinkedVendor,
   ]);
+
+  useEffect(() => {
+    fetchOrganizationProfile();
+  }, [fetchOrganizationProfile]);
+
+  useEffect(() => {
+    fetchOwnerEmail();
+  }, [fetchOwnerEmail]);
 
   useEffect(() => {
     if (typeof document === "undefined") return undefined;
@@ -760,7 +792,7 @@ export default function useCustomerDetailData(args: any) {
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (!document.hidden && id) {
-        refreshData();
+        refreshData({ minAgeMs: VISIBILITY_REFRESH_MIN_AGE_MS });
       }
     };
 

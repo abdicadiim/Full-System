@@ -123,10 +123,31 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+const requireDbConnection: express.RequestHandler = (_req, res, next) => {
+  const readyState = mongoose.connection.readyState;
+  if (readyState === 1) {
+    next();
+    return;
+  }
+
+  res.status(503).json({
+    success: false,
+    message: MONGO_URI
+      ? "Database unavailable. Check the MongoDB connection string or network/DNS access."
+      : "Database not configured. Set MONGO_URI or MONGODB_URI.",
+    data: {
+      readyState,
+      connected: false,
+      hasMongoUri: Boolean(MONGO_URI),
+    },
+  });
+};
+
 app.use("/api/auth", authRoutes);
 app.use("/api/documents", documentsRoutes);
 app.use("/api/public", publicVerificationRoutes);
 app.use("/api/public", publicUserInvitationRoutes);
+app.use("/api", requireDbConnection);
 app.use("/api/organizations", organizationRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/reporting-tags", reportingTagsRoutes);

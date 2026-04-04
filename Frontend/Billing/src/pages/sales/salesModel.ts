@@ -165,7 +165,12 @@ export const getCustomers = async (params: any = {}): Promise<Customer[]> => {
 };
 
 export const getCustomersPaginated = async (params: any = {}): Promise<any> => {
-  return getCustomersFromAPI(params);
+  const { __skipCache, ...finalParams } = params || {};
+  if (__skipCache) {
+    return getCustomersFromAPI(finalParams);
+  }
+  const cacheKey = `customers:paginated:${JSON.stringify(finalParams)}`;
+  return cachedFetch(cacheKey, async () => getCustomersFromAPI(finalParams), 30 * 1000);
 };
 
 

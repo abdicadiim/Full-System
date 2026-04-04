@@ -227,6 +227,119 @@ const updateCustomerLocal = (id: string, patch: any) => {
   return merged;
 };
 
+const deleteCustomerLocal = (id: string) => {
+  const normalizedId = toCustomerId(id);
+  if (!normalizedId) return false;
+  db.customers.remove(normalizedId);
+  return true;
+};
+
+const shouldFallbackToLocalCustomers = (response: any) => {
+  if (response?.success) return false;
+  const status = Number(response?.status || 0);
+  if (!status) return true;
+  if (status >= 500) return true;
+  const message = String(response?.message || "");
+  return /database unavailable|db not connected|network error|server error/i.test(message);
+};
+
+const filterCustomersLocalRows = (rows: any[], params?: Record<string, any>) => {
+  const search = String(params?.search || params?.q || "").trim().toLowerCase();
+  const status = String(params?.status || "").trim().toLowerCase();
+
+  return (Array.isArray(rows) ? rows : [])
+    .filter((customer: any) => {
+      if (status && String(customer?.status || "").trim().toLowerCase() !== status) {
+        return false;
+      }
+      if (!search) return true;
+
+      return [
+        customer?.name,
+        customer?.displayName,
+        customer?.companyName,
+        customer?.email,
+        customer?.customerNumber,
+      ].some((value) => String(value ?? "").toLowerCase().includes(search));
+    })
+    .sort(byNewest);
+};
+
+const getCustomersLocalResponse = async (params?: Record<string, any>) => {
+  await ensureCustomersDbReady();
+  const filtered = filterCustomersLocalRows(readAllCustomersLocal(), params);
+  const { data, pagination } = paginateRows(filtered, params);
+  return {
+    success: true,
+    data,
+    total: pagination.total,
+    page: pagination.page,
+    limit: pagination.limit,
+    totalPages: pagination.pages,
+    pagination,
+  };
+};
+
+const syncCustomerLocalCache = async (customer: any) => {
+  await ensureCustomersDbReady();
+  return writeCustomerLocal(customer);
+};
+
+const syncCustomersLocalCache = async (rows: any[]) => {
+  await ensureCustomersDbReady();
+  return (Array.isArray(rows) ? rows : []).map((row: any) => writeCustomerLocal(row));
+};
+
+const mergeCustomersLocal = async (targetCustomerId: string, sourceCustomerIds: string[]) => {
+  await ensureCustomersDbReady();
+
+  const normalizedTargetId = toCustomerId(targetCustomerId);
+  const target = db.customers.get(normalizedTargetId);
+  if (!target) {
+    return { success: false, message: "Target customer not found", data: null };
+  }
+
+  const normalizedSourceIds = (Array.isArray(sourceCustomerIds) ? sourceCustomerIds : [])
+    .map((value) => toCustomerId(value))
+    .filter((value) => value && value !== normalizedTargetId);
+
+  const sources = normalizedSourceIds
+    .map((sourceId) => db.customers.get(sourceId))
+    .filter(Boolean) as any[];
+
+  if (!sources.length) {
+    return { success: false, message: "No source customers found to merge", data: null };
+  }
+
+  const sumNumber = (key: string) =>
+    sources.reduce((sum, row: any) => sum + (Number.parseFloat(String(row?.[key] ?? 0)) || 0), 0);
+
+  const patch: any = {
+    updatedAt: new Date().toISOString(),
+  };
+  if (target?.receivables !== undefined || sources.some((row: any) => row?.receivables !== undefined)) {
+    patch.receivables = (Number(target?.receivables) || 0) + sumNumber("receivables");
+  }
+  if (target?.unusedCredits !== undefined || sources.some((row: any) => row?.unusedCredits !== undefined)) {
+    patch.unusedCredits = (Number(target?.unusedCredits) || 0) + sumNumber("unusedCredits");
+  }
+
+  const updatedTarget = updateCustomerLocal(normalizedTargetId, patch) || normalizeCustomer({ ...target, ...patch }, normalizedTargetId);
+
+  normalizedSourceIds.forEach((sourceId) => {
+    updateCustomerLocal(sourceId, {
+      status: "inactive",
+      mergedInto: normalizedTargetId,
+      updatedAt: new Date().toISOString(),
+    });
+  });
+
+  return {
+    success: true,
+    data: updatedTarget,
+  };
+};
+
 const asNumber = (value: any) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -620,7 +733,17 @@ const customersBase = resource("/customers");
 
 export const customersAPI = {
   getAll: async (params?: Record<string, any>) => {
-    return (await customersBase.getAll(params)) as any;
+    const remote = (await customersBase.getAll(params)) as any;
+    if (remote?.success) {
+      if (Array.isArray(remote?.data) && remote.data.length > 0) {
+        await syncCustomersLocalCache(remote.data);
+      }
+      return remote;
+    }
+    if (!shouldFallbackToLocalCustomers(remote)) {
+      return remote;
+    }
+    return getCustomersLocalResponse(params);
   },
   list: async (params?: Record<string, any>) => customersAPI.getAll(params),
   getNextCustomerNumber: async (options?: { prefix?: string; start?: string | number }) => {
@@ -632,32 +755,154 @@ export const customersAPI = {
       },
     });
     if (remote?.success) return (remote as any).data as string;
-    throw new Error(remote?.message || "Failed to get next customer number");
+    if (!shouldFallbackToLocalCustomers(remote)) {
+      throw new Error(remote?.message || "Failed to get next customer number");
+    }
+
+    await ensureCustomersDbReady();
+    const rows = readAllCustomersLocal();
+    return getNextCustomerNumberFromCustomers(rows, options);
   },
   getById: async (id: string) => {
-    return (await customersBase.getById(String(id))) as any;
+    const normalizedId = String(id);
+    const remote = (await customersBase.getById(normalizedId)) as any;
+    if (remote?.success && remote?.data) {
+      const synced = await syncCustomerLocalCache(remote.data);
+      return { ...remote, data: synced };
+    }
+    if (!shouldFallbackToLocalCustomers(remote)) {
+      return remote;
+    }
+
+    await ensureCustomersDbReady();
+    const row = normalizeCustomer(db.customers.get(normalizedId), normalizedId);
+    if (!row) {
+      return { success: false, message: "Customer not found", data: null };
+    }
+    return { success: true, data: row };
   },
   create: async (data: any) => {
-    return (await customersBase.create(data)) as any;
+    const remote = (await customersBase.create(data)) as any;
+    if (remote?.success && remote?.data) {
+      const created = await syncCustomerLocalCache(remote.data);
+      return { ...remote, data: created };
+    }
+    if (!shouldFallbackToLocalCustomers(remote)) {
+      return remote;
+    }
+
+    await ensureCustomersDbReady();
+    const rows = readAllCustomersLocal();
+    const requestedCustomerNumber = String(data?.customerNumber || "").trim();
+    const hasExistingCustomerNumbers = rows.some((row: any) => String(row?.customerNumber || "").trim());
+    let customerNumber = requestedCustomerNumber;
+
+    if (customerNumber) {
+      const exists = rows.some((row: any) => String(row?.customerNumber || "").trim() === customerNumber);
+      if (exists) {
+        customerNumber = getNextCustomerNumberFromCustomers(rows, {
+          prefix: detectCustomerNumberPrefix(customerNumber),
+          start: customerNumber.match(/\d+/)?.[0] || "0001",
+        });
+      }
+    } else if (hasExistingCustomerNumbers) {
+      customerNumber = getNextCustomerNumberFromCustomers(rows);
+    }
+
+    const created = writeCustomerLocal({
+      ...data,
+      customerNumber,
+    });
+    return { success: true, data: created };
   },
   update: async (id: string, data: any) => {
-    return (await customersBase.update(String(id), data)) as any;
+    const normalizedId = String(id);
+    const remote = (await customersBase.update(normalizedId, data)) as any;
+    if (remote?.success && remote?.data) {
+      const updated = await syncCustomerLocalCache(remote.data);
+      return { ...remote, data: updated };
+    }
+    if (!shouldFallbackToLocalCustomers(remote)) {
+      return remote;
+    }
+
+    await ensureCustomersDbReady();
+    const updated = updateCustomerLocal(normalizedId, data);
+    if (!updated) {
+      return { success: false, message: "Customer not found", data: null };
+    }
+    return { success: true, data: updated };
   },
   delete: async (id: string) => {
-    return (await customersBase.delete(String(id))) as any;
+    const normalizedId = String(id);
+    const remote = (await customersBase.delete(normalizedId)) as any;
+    if (remote?.success) {
+      await ensureCustomersDbReady();
+      deleteCustomerLocal(normalizedId);
+      return remote;
+    }
+    if (!shouldFallbackToLocalCustomers(remote)) {
+      return remote;
+    }
+
+    await ensureCustomersDbReady();
+    deleteCustomerLocal(normalizedId);
+    return { success: true, data: { id: normalizedId } };
   },
   bulkUpdate: async (ids: string[], data: any) => {
-    return (await request({ method: "POST", path: "/customers/bulk-update", data: { ids, data } })) as any;
+    const remote = (await request({ method: "POST", path: "/customers/bulk-update", data: { ids, data } })) as any;
+    if (remote?.success) {
+      await ensureCustomersDbReady();
+      (Array.isArray(remote?.data) ? remote.data : []).forEach((row: any) => writeCustomerLocal(row));
+      return remote;
+    }
+    if (!shouldFallbackToLocalCustomers(remote)) {
+      return remote;
+    }
+
+    await ensureCustomersDbReady();
+    const updated = (Array.isArray(ids) ? ids : [])
+      .map((rowId) => updateCustomerLocal(String(rowId), data))
+      .filter(Boolean);
+    return { success: true, data: updated };
   },
   bulkDelete: async (ids: string[]) => {
-    return (await request({ method: "POST", path: "/customers/bulk-delete", data: { ids } })) as any;
+    const remote = (await request({ method: "POST", path: "/customers/bulk-delete", data: { ids } })) as any;
+    if (remote?.success) {
+      await ensureCustomersDbReady();
+      (Array.isArray(ids) ? ids : []).forEach((rowId) => deleteCustomerLocal(String(rowId)));
+      return remote;
+    }
+    if (!shouldFallbackToLocalCustomers(remote)) {
+      return remote;
+    }
+
+    await ensureCustomersDbReady();
+    (Array.isArray(ids) ? ids : []).forEach((rowId) => deleteCustomerLocal(String(rowId)));
+    return { success: true, data: { ids: (Array.isArray(ids) ? ids : []).map((value) => String(value)) } };
   },
   merge: async (targetCustomerId: string, sourceCustomerIds: string[]) => {
-    return (await request({
+    const remote = (await request({
       method: "POST",
       path: `/customers/${encodeURIComponent(String(targetCustomerId))}/merge`,
       data: { sourceCustomerIds },
     })) as any;
+    if (remote?.success && remote?.data) {
+      await ensureCustomersDbReady();
+      writeCustomerLocal(remote.data);
+      (Array.isArray(sourceCustomerIds) ? sourceCustomerIds : []).forEach((sourceId) => {
+        updateCustomerLocal(String(sourceId), {
+          status: "inactive",
+          mergedInto: String(targetCustomerId),
+          updatedAt: new Date().toISOString(),
+        });
+      });
+      return remote;
+    }
+    if (!shouldFallbackToLocalCustomers(remote)) {
+      return remote;
+    }
+    return mergeCustomersLocal(String(targetCustomerId), sourceCustomerIds);
   },
   sendInvitation: async (id: string, data: any) => {
     return { success: false, message: "Not implemented for DB-backed customers yet", data: null };
@@ -1202,6 +1447,20 @@ export const paymentsReceivedAPI = {
       if (res?.success) return res as any;
     } catch {}
     return paymentsReceivedLocal.getById(id);
+  },
+  getByCustomer: async (customerId: string, params?: Record<string, any>) => {
+    const all = await paymentsReceivedAPI.getAll({ ...params, customerId, limit: 10000 });
+    const filtered = (all.data || []).filter((payment: any) => {
+      const ref =
+        payment?.customerId ||
+        payment?.customer?._id ||
+        payment?.customer?.id ||
+        payment?.customer ||
+        "";
+      return String(ref) === String(customerId);
+    });
+    const { data, pagination } = paginateRows(filterRowsByParams(filtered, params), params);
+    return { success: true, data, pagination };
   },
   getByInvoice: async (invoiceId: string, params?: Record<string, any>) => {
     try {
