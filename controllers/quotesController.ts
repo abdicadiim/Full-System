@@ -5,6 +5,7 @@ import { SenderEmail } from "../models/SenderEmail.js";
 import { Organization } from "../models/Organization.js";
 import { sendSmtpMail } from "../services/smtpMailer.js";
 import { recordEvent } from "../services/eventService.js";
+import { findCustomerByAnyId } from "./customerIdentity.js";
 
 const asString = (v: unknown) => (typeof v === "string" ? v : "");
 const normalizeEmail = (value: unknown) => {
@@ -116,7 +117,7 @@ export const getQuoteById: express.RequestHandler = async (req, res) => {
 
   if (row.customerId) {
     try {
-      const cust = await mongoose.model("Customer").findOne({ _id: row.customerId, organizationId: orgId }).lean();
+      const cust = await findCustomerByAnyId(orgId, row.customerId);
       if (cust) {
         row.customer = cust;
         if (!row.customerName) row.customerName = (cust as any).displayName || (cust as any).name || (cust as any).companyName;
@@ -139,7 +140,7 @@ export const createQuote: express.RequestHandler = async (req, res) => {
   
   if (customerId && (!customerName || customerName === customerId)) {
     try {
-      const cust = await mongoose.model("Customer").findOne({ _id: customerId, organizationId: orgId }).lean();
+      const cust = await findCustomerByAnyId(orgId, customerId);
       if (cust) {
         customerName = (cust as any).displayName || (cust as any).name || (cust as any).companyName || customerName;
       }
@@ -181,7 +182,7 @@ export const updateQuote: express.RequestHandler = async (req, res) => {
 
   if (patch.customerId && (!patch.customerName || patch.customerName === patch.customerId)) {
     try {
-      const cust = await mongoose.model("Customer").findOne({ _id: patch.customerId, organizationId: orgId }).lean();
+      const cust = await findCustomerByAnyId(orgId, patch.customerId);
       if (cust) {
         patch.customerName = (cust as any).displayName || (cust as any).name || (cust as any).companyName || patch.customerName;
       }

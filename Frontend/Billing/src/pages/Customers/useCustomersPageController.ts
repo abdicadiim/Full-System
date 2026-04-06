@@ -1,12 +1,18 @@
 ﻿import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useLocation } from "react-router-dom";
-import { getCustomViews, getCustomersPaginated, getCustomers } from "../salesModel";
-import { customersAPI, taxesAPI, reportingTagsAPI, currenciesAPI } from "../../services/api";
+import { getCustomViews, getCustomers } from "../salesModel";
+import { customersAPI, taxesAPI, currenciesAPI } from "../../services/api";
 import { usePaymentTermsDropdown } from "../../../hooks/usePaymentTermsDropdown";
 import { toast } from "react-toastify";
-import { jsPDF } from "jspdf";
-import html2canvas from "html2canvas";
 import { useSettings } from "../../lib/settings/SettingsContext";
+import {
+  customerQueryKeys,
+  fetchCustomersList,
+  type CustomersListQueryResult,
+  useCustomersListQuery,
+} from "./customerQueries";
+import { loadCustomerReportingTags } from "./customerReportingTags";
 
 const defaultCustomerViews = [
   "All Customers",
@@ -24,6 +30,7 @@ const defaultCustomerViews = [
 export default function useCustomersPageController() {
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const { settings } = useSettings();
   const organizationName = String(settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "").trim() || "Organization";
   const organizationNameHtml = organizationName.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -37,6 +44,10 @@ export default function useCustomersPageController() {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
+  const currentPageRef = useRef(1);
+  const itemsPerPageRef = useRef(50);
+  const loadCustomersRef = useRef<any>(null);
+  const lastAutoRefreshAtRef = useRef(0);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -305,75 +316,10 @@ export default function useCustomersPageController() {
     loadPriceLists();
   }, [loadPriceLists]);
 
-  const normalizeReportingTagOptions = (tag: any): string[] => {
-    const candidates = Array.isArray(tag?.options)
-      ? tag.options
-      : Array.isArray(tag?.values)
-        ? tag.values
-        : [];
-
-    return candidates
-      .map((option: any) => {
-        if (typeof option === "string") return option.trim();
-        if (option && typeof option === "object") {
-          return String(
-            option.value ??
-            option.label ??
-            option.name ??
-            option.option ??
-            option.title ??
-            ""
-          ).trim();
-        }
-        return "";
-      })
-      .filter((value: string) => Boolean(value));
-  };
-
-  const normalizeReportingTagAppliesTo = (tag: any): string[] => {
-    const direct = Array.isArray(tag?.appliesTo) ? tag.appliesTo : [];
-    const fromModulesObject = tag?.modules && typeof tag.modules === "object"
-      ? Object.keys(tag.modules).filter((key) => Boolean(tag.modules[key]))
-      : [];
-    const fromModuleSettings = tag?.moduleSettings && typeof tag.moduleSettings === "object"
-      ? Object.keys(tag.moduleSettings).filter((key) => Boolean(tag.moduleSettings[key]))
-      : [];
-    const fromAssociations = Array.isArray(tag?.associations) ? tag.associations : [];
-    const fromModulesList = Array.isArray(tag?.modulesList) ? tag.modulesList : [];
-
-    return [...direct, ...fromModulesObject, ...fromModuleSettings, ...fromAssociations, ...fromModulesList]
-      .map((value: any) => String(value || "").toLowerCase().trim())
-      .filter(Boolean);
-  };
-
   const loadReportingTags = useCallback(async () => {
     try {
-      const response = await reportingTagsAPI.getAll();
-      const rows = Array.isArray(response) ? response : (response?.data || []);
-      if (!Array.isArray(rows)) {
-        setAvailableReportingTags([]);
-        return;
-      }
-
-      const filtered = rows
-        .filter((tag: any) => {
-          const appliesTo = normalizeReportingTagAppliesTo(tag);
-          const hasCustomersAssociation = appliesTo.some((entry) => entry.includes("customer"));
-          return hasCustomersAssociation;
-        })
-        .map((tag: any) => ({
-          ...tag,
-          options: normalizeReportingTagOptions(tag),
-        }));
-
-      const tagsToUse = filtered.length > 0
-        ? filtered
-        : rows.map((tag: any) => ({
-          ...tag,
-          options: normalizeReportingTagOptions(tag),
-        }));
-
-      setAvailableReportingTags(tagsToUse);
+      const tags = await loadCustomerReportingTags();
+      setAvailableReportingTags(tags);
     } catch (error) {
       setAvailableReportingTags([]);
     }
@@ -1113,61 +1059,103 @@ export default function useCustomersPageController() {
     };
   };
 
-  // Load customers from API when component mounts or when navigating back
+  const applyCustomerListResult = useCallback((result?: CustomersListQueryResult | null) => {
+    if (!result) return;
+
+    const customersArray = Array.isArray(result.data) ? result.data : [];
+    setTotalItems(result.total || result.pagination?.total || customersArray.length || 0);
+    setTotalPages(result.totalPages || result.pagination?.pages || 0);
+    setCustomers(customersArray.map(mapCustomerForList).filter(Boolean));
+  }, []);
+
+  const customersListQuery = useCustomersListQuery({
+    page: currentPage,
+    limit: itemsPerPage,
+    search: "",
+  });
+
   useEffect(() => {
-    // Clean up legacy local cache (DB is the source of truth now).
+    if (customersListQuery.data) {
+      applyCustomerListResult(customersListQuery.data);
+    }
+  }, [applyCustomerListResult, customersListQuery.data]);
+
+  useEffect(() => {
+    const hasLoadedRows =
+      Array.isArray(customersListQuery.data?.data) && customersListQuery.data.data.length > 0;
+    setIsRefreshing(customersListQuery.isFetching);
+    setIsLoading(customersListQuery.isPending && !hasLoadedRows && customers.length === 0);
+  }, [
+    customers.length,
+    customersListQuery.data?.data,
+    customersListQuery.isFetching,
+    customersListQuery.isPending,
+  ]);
+
+  currentPageRef.current = currentPage;
+  itemsPerPageRef.current = itemsPerPage;
+
+  const refreshCustomViews = useCallback(() => {
+    setCustomViews(getCustomViews().filter(v => v.type === "customers" || !v.type));
+  }, []);
+
+  const triggerAutomaticCustomerReload = useCallback((
+    options: {
+      minIntervalMs?: number;
+      rowRefreshOnly?: boolean;
+      useCache?: boolean;
+    } = {}
+  ) => {
+    const {
+      minIntervalMs = 0,
+      rowRefreshOnly = false,
+      useCache = false,
+    } = options;
+    const now = Date.now();
+    if (minIntervalMs > 0 && now - lastAutoRefreshAtRef.current < minIntervalMs) {
+      return;
+    }
+    lastAutoRefreshAtRef.current = now;
+    void loadCustomersRef.current?.(
+      currentPageRef.current,
+      itemsPerPageRef.current,
+      { rowRefreshOnly, useCache }
+    );
+  }, []);
+
+  // Load customers once on mount and keep the list fresh on focus/visibility/customer updates.
+  useEffect(() => {
     try {
       localStorage.removeItem("taban_customers_cache");
     } catch { }
-    loadCustomers();
-    const refreshCustomViews = () => {
-      setCustomViews(getCustomViews());
-    };
+
     refreshCustomViews();
 
-    // Also refresh when the page becomes visible (user navigates back)
     const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        loadCustomers();
-        refreshCustomViews();
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    // Listen for customer updates from other components
-    const handleCustomersUpdated = (event) => {
-      // Force immediate refresh
-      loadCustomers();
-      // Also refresh after a short delay to ensure backend has processed
-      setTimeout(() => {
-        loadCustomers();
-      }, 800);
+      if (document.hidden) return;
+      refreshCustomViews();
+      triggerAutomaticCustomerReload({ minIntervalMs: 750, rowRefreshOnly: true, useCache: false });
     };
 
-    // Listen for the custom event
-    window.addEventListener("customersUpdated", handleCustomersUpdated);
+    const handleCustomersUpdated = () => {
+      refreshCustomViews();
+      triggerAutomaticCustomerReload({ minIntervalMs: 150, rowRefreshOnly: true, useCache: false });
+    };
 
-    // Listen for focus events (when user returns to tab)
     const handleFocus = () => {
-      loadCustomers();
+      triggerAutomaticCustomerReload({ minIntervalMs: 750, rowRefreshOnly: true, useCache: false });
     };
 
-    window.addEventListener('focus', handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("customersUpdated", handleCustomersUpdated);
+    window.addEventListener("focus", handleFocus);
 
-    // Cleanup event listener
     return () => {
-      window.removeEventListener("customersUpdated", handleCustomersUpdated);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener("customersUpdated", handleCustomersUpdated);
+      window.removeEventListener("focus", handleFocus);
     };
-  }, [location.pathname]); // Refresh when pathname changes (navigating back from new customer page)
-
-  // Also refresh when component becomes visible or pathname changes
-  useEffect(() => {
-    if (location.pathname === '/sales/customers') {
-      loadCustomers();
-    }
-  }, [location.pathname]);
+  }, [refreshCustomViews, triggerAutomaticCustomerReload]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -1391,28 +1379,32 @@ export default function useCustomersPageController() {
     options: { rowRefreshOnly?: boolean; useCache?: boolean } = {}
   ) => {
     const { rowRefreshOnly = false, useCache = false } = options;
-    const shouldShowBlockingLoader = !rowRefreshOnly && customers.length === 0;
+    const queryParams = {
+      page,
+      limit,
+      search: "",
+    };
+    const queryKey = customerQueryKeys.list(queryParams);
+    const cachedResult = queryClient.getQueryData<CustomersListQueryResult>(queryKey);
+    const shouldShowBlockingLoader = !rowRefreshOnly && customers.length === 0 && !cachedResult;
+
     try {
       if (shouldShowBlockingLoader) {
         setIsLoading(true);
       }
       setIsRefreshing(true);
 
-      const response = await getCustomersPaginated({
-        page,
-        limit,
-        search: viewSearchQuery,
-        __skipCache: !useCache
+      if (useCache && cachedResult) {
+        applyCustomerListResult(cachedResult);
+      }
+
+      const response = await queryClient.fetchQuery({
+        queryKey,
+        queryFn: () => fetchCustomersList(queryParams),
       });
 
-      const customersArray = response.data || [];
-      setTotalItems(response.total || response.pagination?.total || customersArray.length || 0);
-      setTotalPages(response.totalPages || response.pagination?.pages || 0);
-
-      const mappedCustomers = customersArray.map(mapCustomerForList).filter(Boolean);
-
-      setCustomers(mappedCustomers);
-    } catch (error) {
+      applyCustomerListResult(response);
+    } catch (error: any) {
 
       if (error.status === 401 || error.message?.includes('authorized') || error.message?.includes('Unauthorized')) {
         localStorage.removeItem('auth_token');
@@ -1431,10 +1423,7 @@ export default function useCustomersPageController() {
       setIsRefreshing(false);
     }
   };
-
-  useEffect(() => {
-    loadCustomers(currentPage, itemsPerPage, { useCache: true });
-  }, [currentPage, itemsPerPage, selectedView]);
+  loadCustomersRef.current = loadCustomers;
 
   const [isNewDropdownOpen, setIsNewDropdownOpen] = useState(false);
   const newDropdownRef = useRef<HTMLDivElement>(null);
@@ -1664,6 +1653,11 @@ export default function useCustomersPageController() {
     document.body.appendChild(container);
 
     try {
+      const [{ jsPDF }, html2canvasModule] = await Promise.all([
+        import("jspdf"),
+        import("html2canvas"),
+      ]);
+      const html2canvas = html2canvasModule.default;
       const pdf = new jsPDF({
         orientation: 'p',
         unit: 'mm',

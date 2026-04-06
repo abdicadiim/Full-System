@@ -1,8 +1,22 @@
-type ApiResult<T> =
-  | { success: true; data: T; message?: string }
-  | { success: false; message?: string; data?: unknown };
+export type ApiSuccess<T> = { success: true; data: T; message?: string; token?: string };
+export type ApiFailure<T = unknown> = { success: false; message?: string; data?: T; code?: number; token?: string };
+type ApiResult<T, F = unknown> = ApiSuccess<T> | ApiFailure<F>;
 
-const request = async <T>(path: string, body?: unknown, method = "POST"): Promise<ApiResult<T>> => {
+export type AuthUser = {
+  id: string;
+  name: string;
+  email: string;
+  organizationId: string;
+  emailVerified?: boolean;
+};
+
+export type VerificationRequirement = {
+  requiresEmailVerification?: boolean;
+  email?: string;
+  alreadyVerified?: boolean;
+};
+
+const request = async <T, F = unknown>(path: string, body?: unknown, method = "POST"): Promise<ApiResult<T, F>> => {
   const res = await fetch(`/api${path}`, {
     method,
     headers: { "Content-Type": "application/json" },
@@ -16,7 +30,7 @@ const request = async <T>(path: string, body?: unknown, method = "POST"): Promis
 export const authApi = {
   checkEmail: (email: string) =>
     request<{ exists: boolean }>("/auth/check-email", { email }),
-  login: (email: string, password: string) => request<{ id: string; name: string; email: string }>(
+  login: (email: string, password: string) => request<AuthUser, VerificationRequirement>(
       "/auth/login",
       { email, password }
     ),
@@ -26,10 +40,17 @@ export const authApi = {
       { email, app }
     ),
   verifyLoginOtp: (email: string, otp: string) =>
-    request<{ id: string; name: string; email: string }>(
+    request<AuthUser>(
       "/auth/login/email-otp/verify",
       { email, otp }
     ),
+  requestEmailVerification: (email: string, app?: string) =>
+    request<{ email: string; expiresInSeconds?: number; debugCode?: string; alreadyVerified?: boolean }>(
+      "/auth/email-verification",
+      { email, app }
+    ),
+  verifyEmailVerification: (email: string, code: string) =>
+    request<AuthUser, VerificationRequirement>("/auth/email-verification/verify", { email, code }),
   requestPasswordReset: (email: string, app?: string) =>
     request<{ email: string; expiresInSeconds: number; debugCode?: string }>(
       "/auth/password/reset-request",
@@ -38,7 +59,7 @@ export const authApi = {
   verifyPasswordResetCode: (email: string, code: string) =>
     request<{ verified: true; email: string }>("/auth/password/reset-verify", { email, code }),
   resetPassword: (email: string, code: string, newPassword: string, name?: string) =>
-    request<{ id: string; name: string; email: string }>(
+    request<AuthUser>(
       "/auth/password/reset",
       { email, code, newPassword, name }
     ),
@@ -56,6 +77,6 @@ export const authApi = {
   rejectUserInvitation: (userId: string, token: string) =>
     request<{ id: string }>(`/public/users/invitations/${encodeURIComponent(userId)}/reject`, { token }),
   signup: (name: string, email: string, password: string) =>
-    request<{ id: string; name: string; email: string }>("/auth/signup", { name, email, password }),
+    request<AuthUser & { requiresEmailVerification: true }>("/auth/signup", { name, email, password }),
 };
 

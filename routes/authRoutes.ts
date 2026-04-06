@@ -5,8 +5,10 @@ import {
   logout,
   me,
   requestLoginOtp,
+  requestEmailVerification,
   requestPasswordReset,
   resetPasswordWithCode,
+  verifyEmailVerification,
   verifyPasswordResetCode,
   signup,
   updateMe,
@@ -21,6 +23,8 @@ authRoutes.post("/signup", signup);
 authRoutes.post("/login", login);
 authRoutes.post("/login/email-otp", requestLoginOtp);
 authRoutes.post("/login/email-otp/verify", verifyLoginOtp);
+authRoutes.post("/email-verification", requestEmailVerification);
+authRoutes.post("/email-verification/verify", verifyEmailVerification);
 authRoutes.post("/password/reset-request", requestPasswordReset);
 authRoutes.post("/password/reset-verify", verifyPasswordResetCode);
 authRoutes.post("/password/reset", resetPasswordWithCode);

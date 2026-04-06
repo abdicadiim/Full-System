@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import AuthShell from "../components/AuthShell";
 import { getAppDisplayName, getFallbackUrl } from "../lib/appBranding";
+import { prepareAuthViewTransition } from "../lib/authViewTransition";
 import { goReturnTo } from "../lib/returnTo";
 import { setSessionBridgeToken } from "../lib/sessionBridge";
 import { authApi } from "../services/authApi";
@@ -47,6 +48,9 @@ export default function EmailOtpLoginPage() {
   const appName = getAppDisplayName();
   const search = window.location.search;
   const isLogoutRedirect = new URLSearchParams(search).get("logout") === "1";
+  const fieldWrapClass = "w-full max-w-[460px]";
+  const inputClassName =
+    "h-14 w-full rounded-2xl border border-slate-200 bg-slate-100/80 px-4 py-0 text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-primary/25 focus:bg-white focus:ring-2 focus:ring-primary/20";
   const app = new URLSearchParams(search).get("app") || "";
   const initialEmail = useMemo(() => new URLSearchParams(search).get("email") || "", [search]);
   const autoSendAttemptedRef = useRef(false);
@@ -149,40 +153,71 @@ export default function EmailOtpLoginPage() {
   };
 
   return (
-    <AuthShell>
-      <div className="mb-8 flex items-start justify-between gap-4">
-        <div>
-          <h2 className="mb-2 text-3xl font-bold text-slate-900">Sign in using email OTP</h2>
-          <p className="text-slate-600">We will send a one-time code to your email for {appName}.</p>
+    <AuthShell
+      variant="split"
+      sidePanel={
+        <div className="mx-auto flex h-full w-full max-w-md flex-col items-center justify-center text-center">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-white/85">
+            <span className="material-symbols-outlined text-base">verified_user</span>
+            Secure Login
+          </div>
+          <h2 className="whitespace-nowrap text-3xl font-bold tracking-tight sm:text-4xl">{`Welcome to ${appName}`}</h2>
+          <p className="mt-5 max-w-sm text-base leading-7 text-white/80">
+            Use your email code to access {appName} quickly and securely from the same workspace.
+          </p>
+          <Link
+            className="mt-10 inline-flex min-w-[200px] items-center justify-center rounded-full border border-white/35 px-6 py-3.5 text-sm font-bold text-white transition-colors hover:bg-white/10"
+            to={`/signup${window.location.search}`}
+            viewTransition
+            onClick={() => prepareAuthViewTransition("forward")}
+          >
+            Create Account
+          </Link>
         </div>
-        <Link className="mt-2 shrink-0 text-sm font-semibold text-slate-600 hover:underline" to={`/login${search}`}>
-          Back to password sign in
-        </Link>
+      }
+    >
+      <div className="mb-8">
+        <h1 className="text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">Sign In with OTP</h1>
+        <p className="mt-4 max-w-md text-sm leading-6 text-slate-500">
+          We will send a one-time code to your email for {appName}.
+        </p>
       </div>
 
       <form className="space-y-5" onSubmit={codeSent ? onVerifyCode : onRequestCode}>
-        <div>
+        <div className={fieldWrapClass}>
           <label className="mb-2 block text-sm font-semibold text-slate-700">Email Address</label>
-          <input
-            className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-primary"
-            placeholder="name@company.com"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
+          <div className="relative">
+            <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-slate-400">
+              <span className="material-symbols-outlined block text-[18px] leading-none">mail</span>
+            </span>
+            <input
+              className={`${inputClassName} pl-12 ${codeSent ? "cursor-not-allowed bg-slate-100 text-slate-500" : ""}`}
+              placeholder="name@company.com"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              readOnly={codeSent}
+              disabled={codeSent}
+            />
+          </div>
         </div>
 
         {codeSent ? (
-          <div>
+          <div className={fieldWrapClass}>
             <label className="mb-2 block text-sm font-semibold text-slate-700">OTP Code</label>
-            <input
-              className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-primary"
-              placeholder="Enter the 6-digit code"
-              inputMode="numeric"
-              maxLength={6}
-              value={otp}
-              onChange={(e) => setOtp(e.target.value)}
-            />
+            <div className="relative">
+              <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-slate-400">
+                <span className="material-symbols-outlined block text-[18px] leading-none">password_2</span>
+              </span>
+              <input
+                className={`${inputClassName} pl-12`}
+                placeholder="Enter the 6-digit code"
+                inputMode="numeric"
+                maxLength={6}
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+              />
+            </div>
             <div className="mt-2 flex items-center justify-between gap-3 text-sm font-medium">
               <p className={remainingSeconds > 0 ? "text-slate-500" : "text-rose-600"}>
                 {remainingSeconds > 0
@@ -205,10 +240,22 @@ export default function EmailOtpLoginPage() {
             </div>
           </div>
         ) : null}
+
+        <div className={`${fieldWrapClass} flex items-center justify-end`}>
+          <Link
+            className="inline-flex items-center justify-center px-1 py-2.5 text-sm font-semibold text-blue-600 transition-colors hover:text-blue-700"
+            to={`/login${search}`}
+            viewTransition
+            onClick={() => prepareAuthViewTransition("backward")}
+          >
+            Back to password sign in
+          </Link>
+        </div>
+
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
         <button
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-4 font-bold text-white shadow-[0_10px_25px_rgba(18,86,99,0.20)] transition-all hover:bg-primary/90 disabled:opacity-60"
+          className="mx-auto flex w-full max-w-[220px] items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 font-bold text-white shadow-[0_18px_40px_rgba(18,86,99,0.24)] transition-all hover:-translate-y-0.5 hover:bg-primary/90 disabled:transform-none disabled:opacity-60"
           disabled={loading}
           type="submit"
         >
@@ -216,7 +263,6 @@ export default function EmailOtpLoginPage() {
           <span className="material-symbols-outlined text-sm">arrow_forward</span>
         </button>
       </form>
-
     </AuthShell>
   );
 }

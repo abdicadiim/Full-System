@@ -26,7 +26,9 @@ router.post("/", async (req, res) => {
 // Recurring expenses
 router.get("/recurring", async (req, res) => {
   const orgId = req.user?.organizationId;
-  const rows = await RecurringExpense.find({ organizationId: orgId }).lean();
+  const filter: any = { organizationId: orgId };
+  if (req.query.customerId) filter.customerId = req.query.customerId;
+  const rows = await RecurringExpense.find(filter).lean();
   res.json({ success: true, data: rows.map(normalizeRow) });
 });
 

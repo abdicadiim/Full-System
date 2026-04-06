@@ -1,5 +1,7 @@
 export type AuthApp = "billing" | "invoice" | "full";
 
+export const AUTH_BRAND_NAME = "Taban";
+
 export const getAuthApp = (): AuthApp => {
   const params = new URLSearchParams(window.location.search);
   const app = (params.get("app") || "").toLowerCase();
@@ -13,6 +15,28 @@ export const getAppDisplayName = () => {
   if (app === "billing") return "Billing";
   if (app === "invoice") return "Invoice";
   return "Full System";
+};
+
+export const getAuthTabTitle = () => `${AUTH_BRAND_NAME} ${getAppDisplayName()}`;
+
+export const getAuthFaviconDataUrl = () => {
+  const app = getAuthApp();
+  const label = app === "billing" ? "TB" : app === "invoice" ? "TI" : "TF";
+  const background = app === "billing" ? "#125663" : app === "invoice" ? "#1f6f8b" : "#163c52";
+  const accent = app === "billing" ? "#5fa6b4" : app === "invoice" ? "#7dbad1" : "#6b9bc2";
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+      <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="${accent}" />
+          <stop offset="100%" stop-color="${background}" />
+        </linearGradient>
+      </defs>
+      <rect width="64" height="64" rx="18" fill="url(#g)" />
+      <text x="32" y="39" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="800" fill="#ffffff">${label}</text>
+    </svg>
+  `;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 };
 
 export const getHeroTitle = () => {

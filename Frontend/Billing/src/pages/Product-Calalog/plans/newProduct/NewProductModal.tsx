@@ -2,13 +2,12 @@ import React, { useEffect, useState } from "react";
 import { HelpCircle, Info } from "lucide-react";
 import { toast } from "react-toastify";
 import Modal from "../../../../components/ui/Modal";
-import { useOrganizationBranding } from "../../../../hooks/useOrganizationBranding";
-import { productsAPI } from "../../../../services/api";
+import { useSaveProductMutation } from "../productQueries";
 
 interface NewProductModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSaveSuccess?: () => void;
+    onSaveSuccess?: (savedProduct?: any) => void;
     mode?: "create" | "edit";
     initialProduct?: any;
 }
@@ -47,11 +46,11 @@ export default function NewProductModal({
     mode = "create",
     initialProduct,
 }: NewProductModalProps) {
-    const { accentColor } = useOrganizationBranding();
-    const [isSaving, setIsSaving] = useState(false);
+    const saveProductMutation = useSaveProductMutation();
     const [form, setForm] = useState(getDefaultForm);
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const isEditMode = mode === "edit" && Boolean(initialProduct);
+    const isSaving = saveProductMutation.isPending;
 
     const placeholders = [
         "%EmailID%",
@@ -113,7 +112,6 @@ export default function NewProductModal({
                 return;
             }
         }
-        setIsSaving(true);
         try {
             const editingId = String(initialProduct?.id || initialProduct?._id || "");
             const record: any = {
@@ -129,22 +127,17 @@ export default function NewProductModal({
                 status: String(initialProduct?.status || "Active"),
             };
 
-            if (isEditMode && editingId) {
-                const res: any = await productsAPI.update(editingId, record);
-                if (res?.success === false) throw new Error(res?.message || "Failed to update product");
-                toast.success("Product updated");
-            } else {
-                const res: any = await productsAPI.create(record);
-                if (res?.success === false) throw new Error(res?.message || "Failed to create product");
-                toast.success("Product saved");
-            }
-            onSaveSuccess?.();
+            const savedProduct = await saveProductMutation.mutateAsync({
+                id: isEditMode && editingId ? editingId : undefined,
+                data: record,
+            });
+
+            toast.success(isEditMode ? "Product updated" : "Product saved");
+            onSaveSuccess?.(savedProduct);
             onClose();
         } catch (error) {
             console.error("Failed to save product", error);
             toast.error((error as Error)?.message || (isEditMode ? "Failed to update product" : "Failed to save product"));
-        } finally {
-            setIsSaving(false);
         }
     };
 

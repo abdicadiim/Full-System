@@ -8,6 +8,7 @@ export type AuthedUser = {
   id: string;
   name: string;
   email: string;
+  emailVerified: boolean;
   organizationId: string;
   role: string;
   sessionVersion: number;
@@ -20,6 +21,7 @@ type SessionClaims = { sub: string; ver: number };
 const normalizeRoleName = (value: unknown) => String(value || "").trim().toLowerCase();
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const STANDARD_ROLE_NAMES = new Set(["admin", "owner", "staff", "member", "staff assigned", "timesheet staff"]);
+const isUserEmailVerified = (user: any) => (user as any)?.emailVerified !== false;
 
 export const isStandardRoleName = (value: unknown) => STANDARD_ROLE_NAMES.has(normalizeRoleName(value));
 export const isSuperRoleName = (value: unknown) => ["admin", "owner"].includes(normalizeRoleName(value));
@@ -50,6 +52,7 @@ const buildAuthedUser = async (user: any): Promise<AuthedUser> => ({
   id: String(user._id),
   name: user.name,
   email: user.email,
+  emailVerified: isUserEmailVerified(user),
   organizationId: String(user.organizationId),
   role: String(user.role || "member"),
   sessionVersion: Number((user as any).sessionVersion || 0),
@@ -85,6 +88,7 @@ export const getAuthedUser = async (req: express.Request): Promise<AuthedUser | 
       id: "000000000000000000000001",
       name: "Dev User",
       email: "dev@example.com",
+      emailVerified: true,
       organizationId: "00000000000000000000000a",
       role: "admin",
       sessionVersion: 0,

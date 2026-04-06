@@ -1,5 +1,4 @@
 ﻿import React from "react";
-import { flushSync } from "react-dom";
 import { ChevronDown, Edit, Eye, EyeOff, Info, Loader2, Lock, Plus, Search, SlidersHorizontal, X } from "lucide-react";
 import { toast } from "react-toastify";
 
@@ -726,15 +725,13 @@ export default function CustomersSecondaryModals({ controller }: { controller: a
                     }
                   }
 
-                  flushSync(() => {
-                    navigate(`/sales/customers/${customerId || openReceivablesDropdownId}/edit`, {
-                      state: customerId
-                        ? {
-                            customer: safeCustomer,
-                            returnTo: "/sales/customers",
-                          }
-                        : undefined,
-                    });
+                  navigate(`/sales/customers/${customerId || openReceivablesDropdownId}/edit`, {
+                    state: customerId
+                      ? {
+                          customer: safeCustomer,
+                          returnTo: "/sales/customers",
+                        }
+                      : undefined,
                   });
                 }
                 setOpenReceivablesDropdownId(null);

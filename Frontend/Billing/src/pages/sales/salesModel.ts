@@ -1475,7 +1475,7 @@ const mapQuoteComments = (quote: any): QuoteComment[] => {
     }));
 };
 
-const mapQuoteFromApi = (quote: any): Quote => {
+export const mapQuoteFromApi = (quote: any): Quote => {
   // Extract customer name safely
   let customerName = '';
   if (quote?.customer) {

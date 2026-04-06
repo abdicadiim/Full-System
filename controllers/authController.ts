@@ -1,7 +1,22 @@
 import express from "express";
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
-import { AUTH_BYPASS, JWT_SECRET, MONGO_URI, SMTP_FROM, SMTP_HOST, SMTP_PASS, SMTP_PORT, SMTP_USER, NODE_ENV } from "../config/env.js";
+import {
+  AUTH_BYPASS,
+  AUTH_SMTP_FROM,
+  AUTH_SMTP_HOST,
+  AUTH_SMTP_PASS,
+  AUTH_SMTP_PORT,
+  AUTH_SMTP_USER,
+  JWT_SECRET,
+  MONGO_URI,
+  SMTP_FROM,
+  SMTP_HOST,
+  SMTP_PASS,
+  SMTP_PORT,
+  SMTP_USER,
+  NODE_ENV,
+} from "../config/env.js";
 import { Organization } from "../models/Organization.js";
 import { User } from "../models/User.js";
 import { SenderEmail } from "../models/SenderEmail.js";
@@ -15,6 +30,10 @@ const normalizeEmail = (value: unknown) => String(typeof value === "string" ? va
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const sha256 = (value: string) => crypto.createHash("sha256").update(String(value || ""), "utf8").digest("hex");
 const generateOtp = () => String(Math.floor(100000 + Math.random() * 900000));
+const LOGIN_OTP_EXPIRES_IN_SECONDS = 90;
+const PASSWORD_RESET_EXPIRES_IN_SECONDS = 90;
+const EMAIL_VERIFICATION_EXPIRES_IN_SECONDS = 300;
+const isUserEmailVerified = (user: any) => (user as any)?.emailVerified !== false;
 
 const getAppDisplayName = (app: unknown) => {
   const value = String(app || "").trim().toLowerCase();
@@ -23,12 +42,16 @@ const getAppDisplayName = (app: unknown) => {
   return "Full System";
 };
 
+const getAuthBrandName = (app: unknown) => `Taban ${getAppDisplayName(app)}`;
+
 const buildAuthEmailHtml = ({
+  brandName,
   title,
   headline,
   description,
   code,
 }: {
+  brandName: string;
   title: string;
   headline: string;
   description: string;
@@ -40,7 +63,7 @@ const buildAuthEmailHtml = ({
   `<div style="max-width:640px;margin:0 auto;padding:32px 20px;">` +
   `<div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:20px;overflow:hidden;">` +
   `<div style="padding:28px 28px 12px;background:linear-gradient(135deg,#156372 0%,#0f4f5d 100%);color:#fff;">` +
-  `<div style="font-size:13px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.85;">BillForward</div>` +
+  `<div style="font-size:13px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.85;">${brandName}</div>` +
   `<h1 style="margin:10px 0 0;font-size:28px;line-height:1.2;">${title}</h1>` +
   `</div>` +
   `<div style="padding:28px;">` +
@@ -51,6 +74,19 @@ const buildAuthEmailHtml = ({
   `</div></div></div></body></html>`;
 
 const pickAuthSender = async (organizationId?: any) => {
+  if (AUTH_SMTP_HOST && AUTH_SMTP_PORT > 0 && AUTH_SMTP_USER && AUTH_SMTP_PASS) {
+    return {
+      email: String(AUTH_SMTP_FROM || AUTH_SMTP_USER || "").trim(),
+      name: "Taban",
+      smtpHost: AUTH_SMTP_HOST,
+      smtpPort: AUTH_SMTP_PORT,
+      smtpUser: AUTH_SMTP_USER,
+      smtpPassword: AUTH_SMTP_PASS,
+      smtpSecure: AUTH_SMTP_PORT === 465,
+      isEnvFallback: true,
+    };
+  }
+
   if (organizationId) {
     const primary: any = await SenderEmail.findOne({
       organizationId,
@@ -81,7 +117,7 @@ const pickAuthSender = async (organizationId?: any) => {
   if (SMTP_HOST && SMTP_PORT > 0 && SMTP_USER && SMTP_PASS) {
     return {
       email: String(SMTP_FROM || SMTP_USER || "").trim(),
-      name: "BillForward",
+      name: "Taban",
       smtpHost: SMTP_HOST,
       smtpPort: SMTP_PORT,
       smtpUser: SMTP_USER,
@@ -96,12 +132,14 @@ const pickAuthSender = async (organizationId?: any) => {
 
 const sendAuthCodeEmail = async ({
   organizationId,
+  senderName,
   to,
   subject,
   text,
   html,
 }: {
   organizationId?: any;
+  senderName?: string;
   to: string;
   subject: string;
   text: string;
@@ -115,7 +153,7 @@ const sendAuthCodeEmail = async ({
     return {
       ok: false as const,
       error:
-        "SMTP sender is not configured. Set SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS or add a verified sender in Settings > Emails.",
+        "SMTP sender is not configured. Set AUTH_SMTP_HOST/AUTH_SMTP_PORT/AUTH_SMTP_USER/AUTH_SMTP_PASS or add a verified sender in Settings > Emails.",
     };
   }
 
@@ -128,7 +166,7 @@ const sendAuthCodeEmail = async ({
       pass: String(sender.smtpPassword || ""),
     },
     {
-      from: `${String(sender.name || "BillForward")} <${String(sender.email || sender.smtpUser || "")}>`,
+      from: `${String(senderName || sender.name || "Taban")} <${String(sender.email || sender.smtpUser || "")}>`,
       replyTo: String(sender.email || sender.smtpUser || "") || undefined,
       to,
       subject,
@@ -145,6 +183,18 @@ const findUserByEmail = async (email: string) =>
   (await User.findOne({ email }).lean()) ||
   (await User.findOne({ email: { $regex: new RegExp(`^${escapeRegex(email)}$`, "i") } }).lean());
 
+const verifyEmailVerificationCodeForUser = (user: any, code: string) => {
+  const verificationExpiresAt = user?.emailVerificationExpiresAt ? new Date(user.emailVerificationExpiresAt) : null;
+  const verificationHash = String(user?.emailVerificationHash || "");
+  if (!verificationExpiresAt || verificationExpiresAt.getTime() < Date.now()) {
+    return { ok: false as const, message: "Verification code expired. Please request a new one." };
+  }
+  if (!verificationHash || sha256(code) !== verificationHash) {
+    return { ok: false as const, message: "Invalid verification code" };
+  }
+  return { ok: true as const };
+};
+
 const verifyPasswordResetCodeForUser = (user: any, code: string) => {
   const resetExpiresAt = user?.passwordResetExpiresAt ? new Date(user.passwordResetExpiresAt) : null;
   const resetHash = String(user?.passwordResetHash || "");
@@ -155,6 +205,75 @@ const verifyPasswordResetCodeForUser = (user: any, code: string) => {
     return { ok: false as const, message: "Invalid reset code" };
   }
   return { ok: true as const };
+};
+
+const getEmailVerifiedPatch = () => ({
+  emailVerified: true,
+  emailVerifiedAt: new Date(),
+  emailVerificationHash: "",
+  emailVerificationExpiresAt: null,
+  emailVerificationSentAt: null,
+});
+
+const sendEmailVerificationCode = async ({
+  user,
+  app,
+}: {
+  user: any;
+  app?: unknown;
+}) => {
+  const verificationCode = generateOtp();
+  const verificationHash = sha256(verificationCode);
+  const expiresInSeconds = EMAIL_VERIFICATION_EXPIRES_IN_SECONDS;
+  const verificationExpiresAt = new Date(Date.now() + expiresInSeconds * 1000);
+
+  await User.updateOne(
+    { _id: user._id },
+    {
+      $set: {
+        emailVerificationHash: verificationHash,
+        emailVerificationExpiresAt: verificationExpiresAt,
+        emailVerificationSentAt: new Date(),
+      },
+    }
+  );
+
+  const appName = getAppDisplayName(app);
+  const brandName = getAuthBrandName(app);
+  const subject = `Verify your ${appName} email`;
+  const text =
+    `Use this code to verify your ${appName} email: ${verificationCode}\n\n` +
+    `This code expires in 5 minutes.\n` +
+    `If you did not request this email, you can ignore it.`;
+  const html = buildAuthEmailHtml({
+    brandName,
+    title: "Email Verification",
+    headline: `Verify your email for ${appName}`,
+    description:
+      `Hi ${String((user as any).name || user.email || "").trim() || "there"}, enter the code below to verify your email and continue to ${appName}.`,
+    code: verificationCode,
+  });
+
+  const mail = await sendAuthCodeEmail({
+    organizationId: user.organizationId,
+    senderName: brandName,
+    to: String(user.email || ""),
+    subject,
+    text,
+    html,
+  });
+  if (!mail.ok) {
+    return { ok: false as const, error: mail.error };
+  }
+
+  return {
+    ok: true as const,
+    data: {
+      email: String(user.email || ""),
+      expiresInSeconds,
+      ...(NODE_ENV !== "production" ? { debugCode: verificationCode } : {}),
+    },
+  };
 };
 
 export const signup = async (req: express.Request, res: express.Response) => {
@@ -204,13 +323,26 @@ export const signup = async (req: express.Request, res: express.Response) => {
       // no-op
     }
     const passwordHash = await bcrypt.hash(password, 10);
-    const created = await User.create({ name, email, passwordHash, organizationId: org._id, role: "admin", sessionVersion: 0 });
+    const created = await User.create({
+      name,
+      email,
+      passwordHash,
+      organizationId: org._id,
+      role: "admin",
+      sessionVersion: 0,
+      emailVerified: false,
+      emailVerifiedAt: null,
+    });
     setSessionCookie(res, String(created._id));
     const token = issueSessionToken(String(created._id), Number((created as any).sessionVersion || 0));
     const authUser = await buildAuthUserData(created);
     return res.status(201).json({
       success: true,
-      data: authUser,
+      message: "Account created. Please verify your email to continue.",
+      data: {
+        ...authUser,
+        requiresEmailVerification: true,
+      },
       token,
     });
   } catch (error: any) {
@@ -272,6 +404,18 @@ export const login = async (req: express.Request, res: express.Response) => {
   const ok = await bcrypt.compare(password, user.passwordHash).catch(() => false) || password === user.passwordHash;
   if (!ok) return res.status(200).json({ success: false, message: "Invalid Username or Password", data: null, code: 401 });
 
+  if (!isUserEmailVerified(user)) {
+    return res.status(200).json({
+      success: false,
+      message: "Please verify your email before signing in.",
+      data: {
+        requiresEmailVerification: true,
+        email,
+      },
+      code: 403,
+    });
+  }
+
   // Treat first successful login as invitation acceptance.
   if ((user as any).status === "Invited") {
     await User.updateOne({ _id: user._id }, { $set: { status: "Active", inviteAcceptedAt: new Date() } });
@@ -316,7 +460,7 @@ export const requestLoginOtp = async (req: express.Request, res: express.Respons
 
   const otp = generateOtp();
   const otpHash = sha256(otp);
-  const expiresInSeconds = 90;
+  const expiresInSeconds = LOGIN_OTP_EXPIRES_IN_SECONDS;
   const otpExpiresAt = new Date(Date.now() + expiresInSeconds * 1000);
   await User.updateOne(
     { _id: user._id },
@@ -330,12 +474,14 @@ export const requestLoginOtp = async (req: express.Request, res: express.Respons
   );
 
   const appName = getAppDisplayName(req.body?.app);
+  const brandName = getAuthBrandName(req.body?.app);
   const subject = `Your ${appName} sign-in code`;
   const text =
     `Your ${appName} sign-in OTP is ${otp}.\n\n` +
     `This code expires in 90 seconds.\n` +
     `If you did not request this, ignore this email.`;
   const html = buildAuthEmailHtml({
+    brandName,
     title: "Email OTP Sign-in",
     headline: `Use this code to sign in to ${appName}`,
     description:
@@ -345,6 +491,7 @@ export const requestLoginOtp = async (req: express.Request, res: express.Respons
 
   const mail = await sendAuthCodeEmail({
     organizationId: user.organizationId,
+    senderName: brandName,
     to: String(user.email || ""),
     subject,
     text,
@@ -397,10 +544,6 @@ export const verifyLoginOtp = async (req: express.Request, res: express.Response
     return res.status(400).json({ success: false, message: "Invalid OTP", data: null });
   }
 
-  if ((user as any).status === "Invited") {
-    await User.updateOne({ _id: user._id }, { $set: { status: "Active", inviteAcceptedAt: new Date() } });
-  }
-
   await User.updateOne(
     { _id: user._id },
     {
@@ -408,16 +551,127 @@ export const verifyLoginOtp = async (req: express.Request, res: express.Response
         loginOtpHash: "",
         loginOtpExpiresAt: null,
         loginOtpSentAt: null,
+        ...(isUserEmailVerified(user) ? {} : getEmailVerifiedPatch()),
+        ...((user as any).status === "Invited" ? { status: "Active", inviteAcceptedAt: new Date() } : {}),
       },
     }
   );
 
-  const sessionVersion = Number((user as any).sessionVersion || 0);
+  const updated = await User.findById(user._id).lean();
+  const sessionVersion = Number((updated as any)?.sessionVersion || (user as any).sessionVersion || 0);
   setSessionCookie(res, String(user._id), sessionVersion);
   const token = issueSessionToken(String(user._id), sessionVersion);
-  const authUser = await buildAuthUserData(user);
+  const authUser = await buildAuthUserData(updated || user);
   return res.json({
     success: true,
+    data: authUser,
+    token,
+  });
+};
+
+export const requestEmailVerification = async (req: express.Request, res: express.Response) => {
+  if (AUTH_BYPASS) {
+    const email = normalizeEmail(req.body?.email || "dev@example.com") || "dev@example.com";
+    return res.json({
+      success: true,
+      message: "Development verification code ready.",
+      data: { email, debugCode: "123456", expiresInSeconds: EMAIL_VERIFICATION_EXPIRES_IN_SECONDS },
+    });
+  }
+  if (!isConfiguredForRealAuth()) {
+    return res.status(500).json({ success: false, message: "Auth/DB not configured", data: null });
+  }
+
+  const email = normalizeEmail(req.body?.email);
+  if (!email) {
+    return res.status(400).json({ success: false, message: "Email is required", data: null });
+  }
+
+  const user = await findUserByEmail(email);
+  if (!user) {
+    return res.status(404).json({ success: false, message: "User is not recognized.", data: null });
+  }
+  if ((user as any).status === "Inactive") {
+    return res.status(403).json({ success: false, message: "User is inactive", data: null });
+  }
+  if (isUserEmailVerified(user)) {
+    return res.json({
+      success: true,
+      message: "Email already verified.",
+      data: { email, alreadyVerified: true },
+    });
+  }
+
+  const verification = await sendEmailVerificationCode({ user, app: req.body?.app });
+  if (!verification.ok) {
+    return res.status(400).json({ success: false, message: verification.error, data: null });
+  }
+
+  return res.json({
+    success: true,
+    message: "Verification code sent.",
+    data: verification.data,
+  });
+};
+
+export const verifyEmailVerification = async (req: express.Request, res: express.Response) => {
+  if (AUTH_BYPASS) {
+    const email = normalizeEmail(req.body?.email || "dev@example.com") || "dev@example.com";
+    return res.json({
+      success: true,
+      data: { id: "dev", name: "Dev User", email, organizationId: "dev_org", emailVerified: true },
+      token: "dev-token",
+    });
+  }
+  if (!isConfiguredForRealAuth()) {
+    return res.status(500).json({ success: false, message: "Auth/DB not configured", data: null });
+  }
+
+  const email = normalizeEmail(req.body?.email);
+  const code = String(req.body?.code || "").trim();
+  if (!email || !code) {
+    return res.status(400).json({ success: false, message: "Email and verification code are required", data: null });
+  }
+
+  const user = await findUserByEmail(email);
+  if (!user) {
+    return res.status(400).json({ success: false, message: "Invalid verification code", data: null });
+  }
+  if ((user as any).status === "Inactive") {
+    return res.status(403).json({ success: false, message: "User is inactive", data: null });
+  }
+  if (isUserEmailVerified(user)) {
+    return res.status(200).json({
+      success: false,
+      message: "This email is already verified. Please sign in.",
+      data: { alreadyVerified: true, email },
+      code: 409,
+    });
+  }
+
+  const validation = verifyEmailVerificationCodeForUser(user, code);
+  if (!validation.ok) {
+    return res.status(400).json({ success: false, message: validation.message, data: null });
+  }
+
+  await User.updateOne(
+    { _id: user._id },
+    {
+      $set: {
+        ...getEmailVerifiedPatch(),
+        ...((user as any).status === "Invited" ? { status: "Active", inviteAcceptedAt: new Date() } : {}),
+      },
+    }
+  );
+
+  const updated = await User.findById(user._id).lean();
+  const sessionVersion = Number((updated as any)?.sessionVersion || (user as any).sessionVersion || 0);
+  setSessionCookie(res, String(user._id), sessionVersion);
+  const token = issueSessionToken(String(user._id), sessionVersion);
+  const authUser = await buildAuthUserData(updated || user);
+  return res.json({
+    success: true,
+    message: "Email verified successfully.",
     data: authUser,
     token,
   });
@@ -451,7 +705,7 @@ export const requestPasswordReset = async (req: express.Request, res: express.Re
 
   const resetCode = generateOtp();
   const resetHash = sha256(resetCode);
-  const expiresInSeconds = 90;
+  const expiresInSeconds = PASSWORD_RESET_EXPIRES_IN_SECONDS;
   const resetExpiresAt = new Date(Date.now() + expiresInSeconds * 1000);
   await User.updateOne(
     { _id: user._id },
@@ -465,11 +719,13 @@ export const requestPasswordReset = async (req: express.Request, res: express.Re
   );
 
   const appName = getAppDisplayName(req.body?.app);
+  const brandName = getAuthBrandName(req.body?.app);
   const subject = `Reset your ${appName} password`;
   const text =
     `Use this code to reset your ${appName} password: ${resetCode}\n\n` +
     `This code expires in 90 seconds.`;
   const html = buildAuthEmailHtml({
+    brandName,
     title: "Password Reset",
     headline: `Reset your ${appName} password`,
     description:
@@ -479,6 +735,7 @@ export const requestPasswordReset = async (req: express.Request, res: express.Re
 
   const mail = await sendAuthCodeEmail({
     organizationId: user.organizationId,
+    senderName: brandName,
     to: String(user.email || ""),
     subject,
     text,
@@ -566,6 +823,7 @@ export const resetPasswordWithCode = async (req: express.Request, res: express.R
         passwordResetHash: "",
         passwordResetExpiresAt: null,
         passwordResetSentAt: null,
+        ...(isUserEmailVerified(user) ? {} : getEmailVerifiedPatch()),
         ...(nextName ? { name: nextName } : {}),
         ...(String((user as any).status || "").toLowerCase() === "invited" || (user as any).inviteAcceptedAt
           ? {

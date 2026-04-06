@@ -4,9 +4,10 @@ import { toast } from "react-toastify";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useOrganizationBranding } from "../../../../hooks/useOrganizationBranding";
 import { useCurrency } from "../../../../hooks/useCurrency";
-import { plansAPI, productsAPI, reportingTagsAPI, taxesAPI, unitsAPI } from "../../../../services/api";
+import { plansAPI, reportingTagsAPI, taxesAPI, unitsAPI } from "../../../../services/api";
 import NewProductModal from "../newProduct/NewProductModal";
 import ManageUnitsModal from "../../items/components/modals/ManageUnitsModal";
+import { useProductsListQuery } from "../productQueries";
 
 const BILLING_PERIODS = ["Day(s)", "Week(s)", "Month(s)", "Year(s)"];
 const BILLING_CYCLES = ["Auto-renews until canceled", "Fixed number of cycles"];
@@ -690,35 +691,24 @@ export default function NewPlanForm() {
       frequencyPeriod: toBillingPeriod(match[2] || "Month(s)"),
     };
   };
-
-  const loadActiveProducts = async (): Promise<string[]> => {
-    try {
-      const res: any = await productsAPI.getAll({ limit: 1000 });
-      const rows = Array.isArray(res?.data) ? res.data : [];
-      const map: Record<string, string> = {};
-      const names = rows
-        .filter((p: any) => String(p?.status || "Active").toLowerCase() === "active")
-        .map((p: any): string => {
-          const name = String(p?.name || "").trim();
-          const id = String(p?.id || p?._id || "").trim();
-          if (name && id) map[name.toLowerCase()] = id;
-          return name;
-        })
-        .filter((v: string) => v.length > 0);
-      const unique = Array.from(new Set<string>(names));
-      setProductNameToId(map);
-      setProducts(unique);
-      return unique;
-    } catch {
-      setProductNameToId({});
-      setProducts([]);
-      return [];
-    }
-  };
+  const productsListQuery = useProductsListQuery({ limit: 1000 });
 
   useEffect(() => {
-    void loadActiveProducts();
-  }, []);
+    const rows = Array.isArray(productsListQuery.data) ? productsListQuery.data : [];
+    const map: Record<string, string> = {};
+    const names = rows
+      .filter((p: any) => String(p?.status || "Active").toLowerCase() === "active")
+      .map((p: any): string => {
+        const name = String(p?.name || "").trim();
+        const id = String(p?.id || p?._id || p?.product_id || "").trim();
+        if (name && id) map[name.toLowerCase()] = id;
+        return name;
+      })
+      .filter((value: string) => value.length > 0);
+    const unique = Array.from(new Set<string>(names));
+    setProductNameToId(map);
+    setProducts(unique);
+  }, [productsListQuery.data]);
 
   const refreshUnits = async () => {
     try {
@@ -795,13 +785,20 @@ export default function NewPlanForm() {
     return () => { mounted = false; };
   }, []);
 
-  const handleNewProductSaved = () => {
-    void (async () => {
-      const names = await loadActiveProducts();
-      if (names.length > 0) {
-        setForm((prev) => ({ ...prev, product: prev.product || names[0] }));
-      }
-    })();
+  const handleNewProductSaved = (savedProduct?: any) => {
+    const savedName = String(savedProduct?.name || "").trim();
+    const savedId = String(savedProduct?.id || savedProduct?._id || savedProduct?.product_id || "").trim();
+
+    if (savedName && savedId) {
+      setProductNameToId((prev) => ({ ...prev, [savedName.toLowerCase()]: savedId }));
+      setProducts((prev) => (prev.includes(savedName) ? prev : [savedName, ...prev]));
+      setForm((prev) => ({ ...prev, product: savedName }));
+      return;
+    }
+
+    if (products.length > 0) {
+      setForm((prev) => ({ ...prev, product: prev.product || products[0] }));
+    }
   };
 
   useEffect(() => {

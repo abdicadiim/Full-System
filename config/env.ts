@@ -12,6 +12,11 @@ export const JWT_SECRET = process.env.JWT_SECRET || "";
 export const JWT_EXPIRE = process.env.JWT_EXPIRE || "7d";
 
 export const FRONTEND_URL = process.env.FRONTEND_URL || "";
+export const AUTH_SMTP_HOST = process.env.AUTH_SMTP_HOST || "";
+export const AUTH_SMTP_PORT = Number(process.env.AUTH_SMTP_PORT || 0);
+export const AUTH_SMTP_USER = process.env.AUTH_SMTP_USER || "";
+export const AUTH_SMTP_PASS = process.env.AUTH_SMTP_PASS || "";
+export const AUTH_SMTP_FROM = process.env.AUTH_SMTP_FROM || "";
 export const SMTP_HOST = process.env.SMTP_HOST || "";
 export const SMTP_PORT = Number(process.env.SMTP_PORT || 0);
 export const SMTP_USER = process.env.SMTP_USER || "";

@@ -95,8 +95,8 @@ export const ConfigurePaymentTermsModal = ({
   const isNA = (value: unknown) => String(value ?? "").trim().toUpperCase() === "N/A";
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-start justify-center bg-black/45 p-4 pt-4">
-      <div className="w-full max-w-[840px] overflow-hidden rounded-lg bg-white shadow-[0_20px_52px_rgba(15,23,42,0.28)]">
+    <div className="fixed inset-0 z-[1000] flex items-start justify-center bg-black/45 px-4 pb-4 pt-0">
+      <div className="w-full max-w-[760px] overflow-hidden rounded-b-lg bg-white shadow-[0_20px_52px_rgba(15,23,42,0.28)]">
         <div className="flex items-center justify-between border-b border-[#e3e6ef] px-5 py-4">
           <h3 className="text-[32px] font-medium text-gray-700">Configure Payment Terms</h3>
           <button
@@ -110,7 +110,7 @@ export const ConfigurePaymentTermsModal = ({
 
         <div className="px-5 py-5">
           <div className="flex items-start gap-3" onMouseLeave={() => setHoveredRowIndex(null)}>
-            <div className="w-full max-w-[585px] overflow-hidden rounded-md border border-[#d9dde8]">
+            <div className="w-full max-w-[560px] overflow-hidden rounded-md border border-[#d9dde8]">
               <table className="w-full border-collapse text-sm">
               <thead className="bg-[#f7f8fb] text-[12px] uppercase text-[#737987]">
                 <tr>
@@ -186,10 +186,10 @@ export const ConfigurePaymentTermsModal = ({
                 </tbody>
               </table>
             </div>
-            <div className="relative w-[170px] min-h-[340px]">
+            <div className="relative w-[140px] min-h-[340px]">
               {hoveredRowIndex !== null && terms[hoveredRowIndex] ? (
                 <div
-                  className="absolute left-0 flex items-center gap-3 text-sm"
+                  className="absolute left-0 flex w-full flex-col items-start gap-2 text-sm"
                   style={{ top: `${86 + hoveredRowIndex * 40}px` }}
                 >
                   <button
@@ -231,7 +231,7 @@ export const ConfigurePaymentTermsModal = ({
           <button
             type="button"
             onClick={handleSave}
-            className="rounded-md bg-[#25b46b] px-5 py-2 text-sm font-medium text-white hover:bg-[#1f9c5d]"
+            className="rounded-md bg-[#156372] px-5 py-2 text-sm font-medium text-white hover:bg-[#0f4f5b]"
           >
             Save
           </button>

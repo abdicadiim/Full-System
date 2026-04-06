@@ -1,9 +1,82 @@
 import React from "react";
 import { getHeroIcon, getHeroTitle } from "../lib/appBranding";
 
-export default function AuthShell({ children }: { children: React.ReactNode }) {
+type AuthShellProps = {
+  children: React.ReactNode;
+  variant?: "default" | "split";
+  sidePanel?: React.ReactNode;
+  contentClassName?: string;
+  panelSide?: "left" | "right";
+};
+
+export default function AuthShell({
+  children,
+  variant = "default",
+  sidePanel,
+  contentClassName = "",
+  panelSide = "right",
+}: AuthShellProps) {
   const heroTitle = getHeroTitle();
   const heroIcon = getHeroIcon();
+  const panelOnLeft = panelSide === "left";
+
+  if (variant === "split") {
+    const splitGridClass = panelOnLeft
+      ? "lg:grid-cols-[minmax(320px,0.92fr)_minmax(0,1.08fr)]"
+      : "lg:grid-cols-[minmax(0,1.08fr)_minmax(320px,0.92fr)]";
+    const splitContentOrderClass = panelOnLeft ? "lg:order-2" : "lg:order-1";
+    const splitPanelOrderClass = panelOnLeft ? "lg:order-1 auth-panel-enter-left" : "lg:order-2 auth-panel-enter-right";
+    const splitPanelRadiusClass = panelOnLeft
+      ? "lg:rounded-tl-[32px] lg:rounded-bl-[32px] lg:rounded-tr-[180px] lg:rounded-br-[180px]"
+      : "lg:rounded-tl-[180px] lg:rounded-bl-[180px] lg:rounded-tr-[32px] lg:rounded-br-[32px]";
+
+    return (
+      <div className="min-h-screen w-full bg-[linear-gradient(135deg,#e8f2f3_0%,#f6f8f8_45%,#ecf6f6_100%)] font-display text-slate-900">
+        <div className="flex min-h-screen items-center justify-center px-4 py-6 sm:px-6 lg:px-10">
+          <div
+            className="auth-shell-enter w-full max-w-6xl overflow-hidden rounded-[32px] border border-white/70 bg-white/95 shadow-[0_24px_70px_rgba(18,86,99,0.16)] backdrop-blur"
+            style={{ viewTransitionName: "auth-card" }}
+          >
+            <div className={["flex flex-col lg:grid", splitGridClass].join(" ")}>
+              <div
+                className={[
+                  "auth-content-enter flex items-center justify-center px-6 py-10 sm:px-10 lg:px-14 lg:py-14",
+                  splitContentOrderClass,
+                  contentClassName,
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+              >
+                <div className="w-full max-w-lg">{children}</div>
+              </div>
+
+              <div
+                className={[
+                  "relative flex h-full overflow-hidden rounded-t-[28px] bg-primary px-8 py-10 text-white sm:px-10 lg:rounded-t-none lg:px-14 lg:py-14",
+                  splitPanelRadiusClass,
+                  splitPanelOrderClass,
+                ].join(" ")}
+              >
+                <div className="absolute inset-0 bg-[linear-gradient(155deg,rgba(255,255,255,0.18)_0%,rgba(255,255,255,0.06)_42%,rgba(6,29,34,0.12)_100%)]" />
+                <div className="absolute -right-16 top-12 h-44 w-44 rounded-full bg-white/10 blur-2xl" />
+                <div className="absolute -bottom-20 left-6 h-52 w-52 rounded-full bg-white/10 blur-3xl" />
+                <div className="relative z-10 flex h-full min-h-[320px] w-full items-center justify-center">
+                  {sidePanel ?? (
+                    <div className="max-w-sm text-center">
+                      <h2 className="text-4xl font-bold tracking-tight sm:text-5xl">{heroTitle}</h2>
+                      <p className="mt-4 text-base leading-7 text-white/80">
+                        Secure access to your workspace with the tools you need to keep work moving.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen w-full bg-background-light font-display text-slate-900">

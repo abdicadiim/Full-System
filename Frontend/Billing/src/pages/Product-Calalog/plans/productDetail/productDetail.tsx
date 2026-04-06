@@ -1,10 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CirclePlus, Download, MoreVertical, Pencil, Trash2, Upload, X } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import NewProductModal from "../newProduct/NewProductModal";
 import { addonsAPI, couponsAPI, plansAPI, productsAPI } from "../../../../services/api";
 import { usePermissions } from "../../../../hooks/usePermissions";
+import {
+  invalidateProductQueries,
+  removeProductFromProductQueries,
+  syncProductIntoProductQueries,
+  useProductDetailQuery,
+  useProductsListQuery,
+} from "../productQueries";
 
 const EMAIL_TEMPLATE_EVENTS = [
   "Update Subscription",
@@ -67,14 +75,12 @@ export default function ProductDetailPage() {
   const navigate = useNavigate();
   const { productId } = useParams();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const { canCreate, canEdit, canDelete } = usePermissions();
   const actionsRef = useRef<HTMLDivElement>(null);
   const sidebarFilterRef = useRef<HTMLDivElement>(null);
   const sidebarMoreRef = useRef<HTMLDivElement>(null);
-  const mountedRef = useRef(true);
 
-  const [products, setProducts] = useState<any[]>([]);
-  const [productsLoading, setProductsLoading] = useState(false);
   const [initialSelectedProduct, setInitialSelectedProduct] = useState<any | null>(() => {
     const state: any = (location as any)?.state;
     return state?.initialProduct ?? null;
@@ -109,28 +115,23 @@ export default function ProductDetailPage() {
   const canCreatePlan = canCreate("products", "Plan") || canCreateProduct;
   const canCreateAddon = canCreate("products", "Addon") || canCreateProduct;
   const canCreateCoupon = canCreate("products", "Coupon") || canCreateProduct;
-
-  const refreshProducts = async (silent = false) => {
-    if (!silent && mountedRef.current) setProductsLoading(true);
-    try {
-      const res: any = await productsAPI.getAll({ limit: 1000 });
-      const rows = Array.isArray(res?.data) ? res.data : [];
-      if (mountedRef.current) setProducts(rows);
-    } catch {
-      if (mountedRef.current) setProducts([]);
-    } finally {
-      if (!silent && mountedRef.current) setProductsLoading(false);
-    }
-  };
+  const normalizedProductId = String(productId || "").trim();
+  const productsListQuery = useProductsListQuery({ limit: 1000 });
+  const products = useMemo(
+    () => (Array.isArray(productsListQuery.data) ? productsListQuery.data : []),
+    [productsListQuery.data]
+  );
+  const selectedProductQuery = useProductDetailQuery(normalizedProductId, {
+    enabled: Boolean(normalizedProductId),
+    initialProduct: initialSelectedProduct,
+  });
 
   useEffect(() => {
-    mountedRef.current = true;
     const state: any = (location as any)?.state;
     if (state?.initialProduct) {
       setInitialSelectedProduct(state.initialProduct);
     }
     const load = async () => {
-      await refreshProducts(true);
       try {
         const plansRes: any = await plansAPI.getAll({ limit: 1000 });
         setPlans(safeArray(plansRes?.data));
@@ -151,9 +152,6 @@ export default function ProductDetailPage() {
       }
     };
     void load();
-    return () => {
-      mountedRef.current = false;
-    };
   }, []);
 
   useEffect(() => {
@@ -181,13 +179,24 @@ export default function ProductDetailPage() {
   }, []);
 
   const selectedProduct = useMemo(() => {
-    const fromList = products.find((row) => getId(row) === productId);
+    if (selectedProductQuery.data) return selectedProductQuery.data;
+    const fromList = products.find((row) => getId(row) === normalizedProductId);
     if (fromList) return fromList;
-    const fromState = initialSelectedProduct && getId(initialSelectedProduct) === String(productId || "") ? initialSelectedProduct : null;
+    const fromState =
+      initialSelectedProduct && getId(initialSelectedProduct) === normalizedProductId
+        ? initialSelectedProduct
+        : null;
     if (fromState) return fromState;
-    if (!productId) return products[0] || null;
+    if (!normalizedProductId) return products[0] || null;
     return null;
-  }, [products, productId, initialSelectedProduct]);
+  }, [initialSelectedProduct, normalizedProductId, products, selectedProductQuery.data]);
+
+  const productsLoading =
+    !selectedProduct &&
+    (productsListQuery.isPending ||
+      productsListQuery.isFetching ||
+      selectedProductQuery.isPending ||
+      selectedProductQuery.isFetching);
 
   const selectedProductName = String(selectedProduct?.name || "").trim();
   const emailTemplateStorageKey = selectedProduct ? `taban_product_email_templates_${getId(selectedProduct)}` : "";
@@ -265,7 +274,13 @@ export default function ProductDetailPage() {
         ? await productsAPI.markInactive(targetId)
         : await productsAPI.markActive(targetId);
       if (res?.success === false) throw new Error(res?.message || "Failed to update product");
-      await refreshProducts(true);
+      syncProductIntoProductQueries(queryClient, {
+        ...selectedProduct,
+        status: nextStatus,
+        active: !currentlyActive,
+        isActive: !currentlyActive,
+      });
+      await invalidateProductQueries(queryClient, targetId);
       setActionsOpen(false);
       toast.success(`Product marked as ${nextStatus.toLowerCase()}`);
     } catch (e: any) {
@@ -292,14 +307,15 @@ export default function ProductDetailPage() {
   const confirmDeleteProduct = async () => {
     if (!selectedProduct) return;
     const targetId = getId(selectedProduct);
+    const remaining = products.filter((row) => getId(row) !== targetId);
     try {
       const res: any = await productsAPI.delete(targetId);
       if (res?.success === false) throw new Error(res?.message || "Failed to delete product");
-      await refreshProducts(true);
+      removeProductFromProductQueries(queryClient, targetId);
+      await invalidateProductQueries(queryClient, targetId);
       setIsDeleteModalOpen(false);
       toast.success("Product deleted");
 
-      const remaining = products.filter((row) => getId(row) !== targetId);
       if (remaining.length > 0) {
         navigate(`/products/products/${getId(remaining[0])}`);
       } else {
@@ -950,16 +966,10 @@ export default function ProductDetailPage() {
         mode="edit"
         initialProduct={selectedProduct}
         onClose={() => setEditProductOpen(false)}
-        onSaveSuccess={() => {
-          void (async () => {
-            try {
-              const res: any = await productsAPI.getAll({ limit: 1000 });
-              const rows = Array.isArray(res?.data) ? res.data : [];
-              setProducts(rows);
-            } catch {
-              setProducts([]);
-            }
-          })();
+        onSaveSuccess={(savedProduct) => {
+          if (savedProduct && getId(savedProduct) === normalizedProductId) {
+            setInitialSelectedProduct(savedProduct);
+          }
         }}
       />
 

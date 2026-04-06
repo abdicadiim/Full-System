@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import LoadingSpinner from "../../../components/LoadingSpinner";
-import { getQuotes, deleteQuotes, updateQuote, getCustomers, getProjects, getSalespersons, getCustomViews, deleteCustomView } from "../salesModel";
+import { useQueryClient } from "@tanstack/react-query";
+import { deleteQuotes, updateQuote, getCustomers, getProjects, getSalespersons, getCustomViews, deleteCustomView } from "../salesModel";
+import { invalidateQuoteQueries, useQuotesListQuery } from "./quoteQueries";
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import {
@@ -117,7 +119,6 @@ export default function Quotes() {
   const [viewSearchQuery, setViewSearchQuery] = useState("");
   const [customViews, setCustomViews] = useState<CustomView[]>(() => getCustomViews().filter(v => v.type === "quotes"));
   const [quotes, setQuotes] = useState<Quote[]>([]);
-  const [quotesLoading, setQuotesLoading] = useState(true);
   const [sortConfig, setSortConfig] = useState({ key: "createdTime", direction: "desc" as "asc" | "desc" });
   const [selectedQuotes, setSelectedQuotes] = useState<string[]>([]);
   const [isBulkUpdateModalOpen, setIsBulkUpdateModalOpen] = useState(false);
@@ -223,6 +224,9 @@ export default function Quotes() {
     fileFormat: "XLSX",
     password: "",
   });
+  const queryClient = useQueryClient();
+  const quotesListQuery = useQuotesListQuery();
+  const isQuotesLoading = (quotesListQuery.isPending || quotesListQuery.isFetching) && !(quotesListQuery.data?.length);
   const exportStatusOptions = [
     "All",
     "Draft",
@@ -409,6 +413,12 @@ export default function Quotes() {
     const columnsTotal = visibleColumns.reduce((sum, key) => sum + Number(columnWidths[key] || 120), 0);
     return 56 + 40 + columnsTotal;
   }, [visibleColumns, columnWidths]);
+
+  useEffect(() => {
+    if (quotesListQuery.data) {
+      setQuotes(quotesListQuery.data);
+    }
+  }, [quotesListQuery.data]);
 
   const startColumnResizing = (key: string, e: React.MouseEvent) => {
     e.preventDefault();

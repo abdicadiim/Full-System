@@ -109,6 +109,13 @@ const ensureCustomersDbReady = async () => {
 };
 
 const toCustomerId = (value: any) => String(value ?? "").trim();
+const isMongoObjectId = (value: any) => /^[a-f0-9]{24}$/i.test(toCustomerId(value));
+const isSyntheticCustomerId = (value: any) => {
+  const normalized = toCustomerId(value);
+  return Boolean(normalized) && !isMongoObjectId(normalized);
+};
+const hasSyntheticCustomerScope = (params?: Record<string, any>) =>
+  isSyntheticCustomerId((params as any)?.customerId);
 
 const detectCustomerNumberPrefix = (value: any) => {
   const text = String(value ?? "").trim();
@@ -194,6 +201,12 @@ const normalizeCustomer = (input: any, fallbackId?: string) => {
 
 const readAllCustomersLocal = () =>
   (db.customers.list({}) || []).map((customer: any) => normalizeCustomer(customer, customer?.id));
+
+const readCustomerLocalById = async (id: string) => {
+  await ensureCustomersDbReady();
+  const row = db.customers.get(id);
+  return row ? normalizeCustomer(row, id) : null;
+};
 
 const writeCustomerLocal = (customer: any) => {
   const normalized = normalizeCustomer(customer);
@@ -765,6 +778,13 @@ export const customersAPI = {
   },
   getById: async (id: string) => {
     const normalizedId = String(id);
+    if (!isMongoObjectId(normalizedId)) {
+      const localRow = await readCustomerLocalById(normalizedId);
+      if (localRow) {
+        return { success: true, data: localRow };
+      }
+    }
+
     const remote = (await customersBase.getById(normalizedId)) as any;
     if (remote?.success && remote?.data) {
       const synced = await syncCustomerLocalCache(remote.data);
@@ -774,8 +794,7 @@ export const customersAPI = {
       return remote;
     }
 
-    await ensureCustomersDbReady();
-    const row = normalizeCustomer(db.customers.get(normalizedId), normalizedId);
+    const row = await readCustomerLocalById(normalizedId);
     if (!row) {
       return { success: false, message: "Customer not found", data: null };
     }
@@ -817,6 +836,14 @@ export const customersAPI = {
   },
   update: async (id: string, data: any) => {
     const normalizedId = String(id);
+    if (!isMongoObjectId(normalizedId)) {
+      await ensureCustomersDbReady();
+      const updatedLocal = updateCustomerLocal(normalizedId, data);
+      if (updatedLocal) {
+        return { success: true, data: updatedLocal };
+      }
+    }
+
     const remote = (await customersBase.update(normalizedId, data)) as any;
     if (remote?.success && remote?.data) {
       const updated = await syncCustomerLocalCache(remote.data);
@@ -835,6 +862,14 @@ export const customersAPI = {
   },
   delete: async (id: string) => {
     const normalizedId = String(id);
+    if (!isMongoObjectId(normalizedId)) {
+      const localRow = await readCustomerLocalById(normalizedId);
+      if (localRow) {
+        deleteCustomerLocal(normalizedId);
+        return { success: true, data: { id: normalizedId } };
+      }
+    }
+
     const remote = (await customersBase.delete(normalizedId)) as any;
     if (remote?.success) {
       await ensureCustomersDbReady();
@@ -882,18 +917,27 @@ export const customersAPI = {
     return { success: true, data: { ids: (Array.isArray(ids) ? ids : []).map((value) => String(value)) } };
   },
   merge: async (targetCustomerId: string, sourceCustomerIds: string[]) => {
+    const normalizedTargetId = String(targetCustomerId);
+    const normalizedSourceIds = (Array.isArray(sourceCustomerIds) ? sourceCustomerIds : []).map((value) => String(value));
+    if ([normalizedTargetId, ...normalizedSourceIds].some((value) => !isMongoObjectId(value))) {
+      const localMerge = await mergeCustomersLocal(normalizedTargetId, normalizedSourceIds);
+      if (localMerge?.success) {
+        return localMerge;
+      }
+    }
+
     const remote = (await request({
       method: "POST",
-      path: `/customers/${encodeURIComponent(String(targetCustomerId))}/merge`,
-      data: { sourceCustomerIds },
+      path: `/customers/${encodeURIComponent(normalizedTargetId)}/merge`,
+      data: { sourceCustomerIds: normalizedSourceIds },
     })) as any;
     if (remote?.success && remote?.data) {
       await ensureCustomersDbReady();
       writeCustomerLocal(remote.data);
-      (Array.isArray(sourceCustomerIds) ? sourceCustomerIds : []).forEach((sourceId) => {
+      normalizedSourceIds.forEach((sourceId) => {
         updateCustomerLocal(String(sourceId), {
           status: "inactive",
-          mergedInto: String(targetCustomerId),
+          mergedInto: normalizedTargetId,
           updatedAt: new Date().toISOString(),
         });
       });
@@ -902,7 +946,7 @@ export const customersAPI = {
     if (!shouldFallbackToLocalCustomers(remote)) {
       return remote;
     }
-    return mergeCustomersLocal(String(targetCustomerId), sourceCustomerIds);
+    return mergeCustomersLocal(normalizedTargetId, normalizedSourceIds);
   },
   sendInvitation: async (id: string, data: any) => {
     return { success: false, message: "Not implemented for DB-backed customers yet", data: null };
@@ -1286,6 +1330,9 @@ export const currenciesAPI = {
 export const invoicesAPI = {
   ...invoicesLocal,
   getAll: async (params?: Record<string, any>) => {
+    if (hasSyntheticCustomerScope(params)) {
+      return invoicesLocal.getAll(params);
+    }
     try {
       const res = await resource("/invoices").getAll(params);
       if (res?.success) return res as any;
@@ -1434,6 +1481,9 @@ const paymentsReceivedBase = resource("/payments-received");
 export const paymentsReceivedAPI = {
   ...paymentsReceivedLocal,
   getAll: async (params?: Record<string, any>) => {
+    if (hasSyntheticCustomerScope(params)) {
+      return paymentsReceivedLocal.getAll(params);
+    }
     try {
       const res = await paymentsReceivedBase.getAll(params);
       if (res?.success) return res as any;
@@ -1601,6 +1651,9 @@ const creditNotesBase = resource("/credit-notes");
 export const creditNotesAPI = {
   ...creditNotesLocal,
   getAll: async (params?: Record<string, any>) => {
+    if (hasSyntheticCustomerScope(params)) {
+      return creditNotesLocal.getAll(params);
+    }
     try {
       const res = await creditNotesBase.getAll(params);
       if (res?.success) return res as any;
@@ -1816,7 +1869,17 @@ export const debitNotesAPI = {
 
 const quotesBase = resource("/quotes");
 export const quotesAPI = {
-  getAll: (params?: any) => quotesBase.getAll(params),
+  getAll: async (params?: any) => {
+    if (hasSyntheticCustomerScope(params)) {
+      return quotesLocal.getAll(params);
+    }
+    try {
+      const res = await quotesBase.getAll(params);
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {}
+    return quotesLocal.getAll(params);
+  },
   list: (params?: any) => quotesAPI.getAll(params),
   getById: (id: string) => quotesBase.getById(id),
   create: (data: any) => quotesBase.create(data),
@@ -1862,6 +1925,9 @@ const recurringInvoicesBase = resource("/recurring-invoices");
 export const recurringInvoicesAPI = {
   ...recurringInvoicesLocal,
   getAll: async (params?: Record<string, any>) => {
+    if (hasSyntheticCustomerScope(params)) {
+      return recurringInvoicesLocal.getAll(params);
+    }
     try {
       const res = await recurringInvoicesBase.getAll(params);
       if (res?.success) return res as any;
@@ -1938,6 +2004,17 @@ const expensesBase = resource("/expenses");
 export const expensesAPI = {
   ...expensesLocal,
   getAll: async (params?: Record<string, any>) => {
+    if (hasSyntheticCustomerScope(params)) {
+      const response = await expensesLocal.getAll(params);
+      const rows = Array.isArray(response?.data) ? response.data : [];
+      return {
+        success: true,
+        code: 0,
+        data: rows,
+        expenses: rows,
+        pagination: response?.pagination,
+      };
+    }
     try {
       const res: any = await expensesBase.getAll(params);
       if (res?.success) return res;
@@ -2050,6 +2127,17 @@ const recurringExpensesBase = resource("/expenses/recurring");
 export const recurringExpensesAPI = {
   ...recurringExpensesLocal,
   getAll: async (params?: Record<string, any>) => {
+    if (hasSyntheticCustomerScope(params)) {
+      const response = await recurringExpensesLocal.getAll(params);
+      const rows = Array.isArray(response?.data) ? response.data : [];
+      return {
+        success: true,
+        code: 0,
+        data: rows,
+        recurring_expenses: rows,
+        pagination: response?.pagination,
+      };
+    }
     try {
       const res: any = await recurringExpensesBase.getAll(params);
       if (res?.success) {
@@ -2221,7 +2309,15 @@ export const recurringExpensesAPI = {
 const projectsBase = resource("/projects");
 export const projectsAPI = {
   getAll: async (params?: Record<string, any>) => {
-    return (await projectsBase.getAll(params)) as any;
+    if (hasSyntheticCustomerScope(params)) {
+      return projectsLocal.getAll(params);
+    }
+    try {
+      const res = await projectsBase.getAll(params);
+      if (res?.success) return res as any;
+      if (typeof (res as any)?.status === "number") return res as any;
+    } catch {}
+    return projectsLocal.getAll(params);
   },
   list: async (params?: Record<string, any>) => projectsAPI.getAll(params),
   getById: async (id: string) => {
@@ -2281,6 +2377,9 @@ const salesReceiptsBase = resource("/sales-receipts");
 export const salesReceiptsAPI = {
   ...salesReceiptsLocal,
   getAll: async (params?: any) => {
+    if (hasSyntheticCustomerScope(params)) {
+      return salesReceiptsLocal.getAll(params);
+    }
     try {
       const res = await salesReceiptsBase.getAll(params);
       if (res?.success) return res as any;

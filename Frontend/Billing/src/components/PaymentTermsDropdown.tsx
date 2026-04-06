@@ -63,7 +63,7 @@ export const PaymentTermsDropdown = ({
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="flex h-9 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 text-sm text-gray-700 shadow-none outline-none transition-colors hover:border-slate-300 focus:border-slate-300"
+        className="flex h-9 w-full items-center justify-between rounded border border-gray-300 bg-white px-3 text-[13px] text-gray-700 shadow-none outline-none transition-colors hover:border-gray-400 focus:border-[#156372] focus:outline-none focus:ring-1 focus:ring-[#156372] focus-visible:outline-none"
       >
         <span className="truncate text-left">{selected?.label || placeholder}</span>
         <ChevronDown

@@ -9,69 +9,38 @@ import type {
 } from "./customerDetailTypes";
 
 const normalizeCustomerText = (value: any) => String(value ?? "").trim();
+const isMongoObjectId = (value: any) => /^[a-f0-9]{24}$/i.test(normalizeCustomerText(value));
 
-const detectCustomerNumberPrefix = (value: any) => {
-    const text = normalizeCustomerText(value);
-    if (!text) return "";
-    const match = text.match(/^(\D*?)(\d+)/);
-    return match ? match[1] : "";
+const getCustomerIdCandidates = (customer: any, routeId?: any) => {
+    const seen = new Set<string>();
+
+    return [customer?._id, customer?.id, routeId]
+        .map(normalizeCustomerText)
+        .filter((value) => {
+            if (!value || seen.has(value)) return false;
+            seen.add(value);
+            return true;
+        });
 };
 
-const getCustomerNumberStart = (value: any) =>
-    normalizeCustomerText(value).match(/(\d+)/)?.[1] || "0001";
-
-const parseCustomerNumberValue = (customerNumber: any, prefix: string) => {
-    const text = normalizeCustomerText(customerNumber);
-    if (!text) return null;
-    if (prefix && !text.startsWith(prefix)) return null;
-
-    const rest = prefix ? text.slice(prefix.length) : text;
-    const match = rest.match(/^(\d+)/);
-    if (!match) return null;
-
-    const numeric = Number(match[1]);
-    if (!Number.isFinite(numeric)) return null;
+const buildCustomerStatusPatch = (makeActive: boolean, persistedCustomer?: any) => {
+    const normalizedStatus = normalizeCustomerText(persistedCustomer?.status).toLowerCase();
+    const status = normalizedStatus || (makeActive ? "active" : "inactive");
+    const resolvedIsActive =
+        typeof persistedCustomer?.isActive === "boolean"
+            ? persistedCustomer.isActive
+            : status !== "inactive";
+    const resolvedIsInactive =
+        typeof persistedCustomer?.isInactive === "boolean"
+            ? persistedCustomer.isInactive
+            : !resolvedIsActive;
 
     return {
-        numeric,
-        digits: match[1].length,
+        ...(persistedCustomer && typeof persistedCustomer === "object" ? persistedCustomer : {}),
+        status,
+        isActive: resolvedIsActive,
+        isInactive: resolvedIsInactive,
     };
-};
-
-const getNextCustomerNumberCandidate = (
-    customerRows: any[],
-    options?: { prefix?: string; start?: string | number }
-) => {
-    const rows = Array.isArray(customerRows) ? customerRows : [];
-    const startDigits = String(options?.start ?? "").match(/\d+/)?.[0] || "";
-    const startNumeric = Number(startDigits || 1);
-    const parsedStart = Number.isFinite(startNumeric) && startNumeric > 0 ? startNumeric : 1;
-    const inferredPrefix =
-        normalizeCustomerText(options?.prefix) ||
-        detectCustomerNumberPrefix(rows.find((row: any) => row?.customerNumber)?.customerNumber) ||
-        "CUS-";
-
-    const existingNumbers = new Set(
-        rows
-            .map((row: any) => normalizeCustomerText(row?.customerNumber))
-            .filter(Boolean)
-    );
-
-    const parsed = rows
-        .map((row: any) => parseCustomerNumberValue(row?.customerNumber, inferredPrefix))
-        .filter(Boolean) as Array<{ numeric: number; digits: number }>;
-
-    const maxExisting = parsed.reduce((max, entry) => Math.max(max, entry.numeric), parsedStart - 1);
-    const width = Math.max(5, startDigits.length, parsed.reduce((max, entry) => Math.max(max, entry.digits), 0));
-
-    let next = maxExisting + 1;
-    let candidate = `${inferredPrefix}${String(next).padStart(width, "0")}`;
-    while (existingNumbers.has(candidate)) {
-        next += 1;
-        candidate = `${inferredPrefix}${String(next).padStart(width, "0")}`;
-    }
-
-    return candidate;
 };
 
 const buildUniqueCloneLabel = (baseValue: any, existingValues: any[]) => {
@@ -96,9 +65,6 @@ const buildUniqueCloneLabel = (baseValue: any, existingValues: any[]) => {
 
     return candidate;
 };
-
-const isDuplicateCustomerNumberError = (message: any) =>
-    /duplicate|already exists|unique|customer number/i.test(String(message ?? ""));
 
 export function useCustomerDetailPageViewModel(args: any) {
     const {
@@ -267,7 +233,7 @@ export function useCustomerDetailPageViewModel(args: any) {
     // Close dropdowns when clicking outside
     // Close dropdowns when clicking outside
     useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
+        const handleClickOutside = (event: PointerEvent) => {
             if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
                 setIsStatusDropdownOpen(false);
             }
@@ -340,12 +306,12 @@ export function useCustomerDetailPageViewModel(args: any) {
         };
         if (isStatusDropdownOpen || isLinkEmailDropdownOpen || isStatementPeriodDropdownOpen || isStatementFilterDropdownOpen || isBulkActionsDropdownOpen || isStartDatePickerOpen || isEndDatePickerOpen || isMergeCustomerDropdownOpen || isNewTransactionDropdownOpen || isGoToTransactionsDropdownOpen || isAttachmentsDropdownOpen || isMoreDropdownOpen || isVendorDropdownOpen || isSettingsDropdownOpen || isSidebarMoreMenuOpen ||
             isQuoteStatusDropdownOpen || isRecurringInvoiceStatusDropdownOpen || isExpenseStatusDropdownOpen || isRecurringExpenseStatusDropdownOpen || isProjectStatusDropdownOpen || isCreditNoteStatusDropdownOpen || isSalesReceiptStatusDropdownOpen || isSubscriptionDropdownOpen) {
-            document.addEventListener("mousedown", handleClickOutside);
+            document.addEventListener("pointerdown", handleClickOutside);
         } else {
-            document.removeEventListener("mousedown", handleClickOutside);
+            document.removeEventListener("pointerdown", handleClickOutside);
         }
         return () => {
-            document.removeEventListener("mousedown", handleClickOutside);
+            document.removeEventListener("pointerdown", handleClickOutside);
         };
     }, [isStatusDropdownOpen, isLinkEmailDropdownOpen, isStatementPeriodDropdownOpen, isStatementFilterDropdownOpen, isBulkActionsDropdownOpen, isStartDatePickerOpen, isEndDatePickerOpen, isMergeCustomerDropdownOpen, isNewTransactionDropdownOpen, isGoToTransactionsDropdownOpen, isAttachmentsDropdownOpen, isMoreDropdownOpen, isVendorDropdownOpen, isSettingsDropdownOpen, isSidebarMoreMenuOpen,
         isQuoteStatusDropdownOpen, isRecurringInvoiceStatusDropdownOpen, isExpenseStatusDropdownOpen, isRecurringExpenseStatusDropdownOpen, isProjectStatusDropdownOpen, isCreditNoteStatusDropdownOpen, isSalesReceiptStatusDropdownOpen, isSubscriptionDropdownOpen]);
@@ -1090,32 +1056,6 @@ export function useCustomerDetailPageViewModel(args: any) {
             ]);
             const resolvedDisplayName = buildUniqueCloneLabel(source.displayName || source.name || "Customer", existingNameValues);
             const resolvedName = buildUniqueCloneLabel(source.name || source.displayName || "Customer", existingNameValues);
-            const customerNumberPrefix = detectCustomerNumberPrefix(source.customerNumber);
-            const customerNumberStart = getCustomerNumberStart(source.customerNumber);
-            const existingNumbers = new Set(
-                sourceRows
-                    .map((row: any) => normalizeCustomerText(row?.customerNumber))
-                    .filter(Boolean)
-            );
-            const hasCustomerNumberSeed = existingNumbers.size > 0 || Boolean(normalizeCustomerText(source.customerNumber));
-            let resolvedNextCustomerNumber = hasCustomerNumberSeed
-                ? getNextCustomerNumberCandidate(sourceRows, {
-                    prefix: customerNumberPrefix,
-                    start: customerNumberStart,
-                })
-                : "";
-
-            try {
-                const remoteNextCustomerNumber = normalizeCustomerText(await customersAPI.getNextCustomerNumber({
-                    prefix: customerNumberPrefix || undefined,
-                    start: customerNumberStart || undefined,
-                }));
-                if (remoteNextCustomerNumber && !existingNumbers.has(remoteNextCustomerNumber)) {
-                    resolvedNextCustomerNumber = remoteNextCustomerNumber;
-                }
-            } catch {
-                // Fall back to the local customer list when next-number lookup is unavailable.
-            }
 
             const billingAddress = source.billingAddress || {
                 attention: source.billingAttention || "",
@@ -1159,8 +1099,6 @@ export function useCustomerDetailPageViewModel(args: any) {
                 xHandle: source.xHandle || "",
                 skypeName: source.skypeName || "",
                 facebook: source.facebook || "",
-                customerNumber: resolvedNextCustomerNumber,
-                customerCode: resolvedNextCustomerNumber,
                 customerLanguage: source.customerLanguage || source.portalLanguage || "english",
                 taxRate: source.taxRate || "",
                 exchangeRate: parseFloat(String(source.exchangeRate || "1")) || 1,
@@ -1190,22 +1128,7 @@ export function useCustomerDetailPageViewModel(args: any) {
                 reportingTags: source.reportingTags || []
             };
 
-            let response: any = await customersAPI.create(clonedPayload);
-            if (!response?.success && isDuplicateCustomerNumberError(response?.message)) {
-                resolvedNextCustomerNumber = getNextCustomerNumberCandidate(
-                    [...sourceRows, { customerNumber: resolvedNextCustomerNumber }],
-                    {
-                        prefix: customerNumberPrefix,
-                        start: customerNumberStart,
-                    }
-                );
-                clonedPayload = {
-                    ...clonedPayload,
-                    customerNumber: resolvedNextCustomerNumber,
-                    customerCode: resolvedNextCustomerNumber,
-                };
-                response = await customersAPI.create(clonedPayload);
-            }
+            const response: any = await customersAPI.create(clonedPayload);
 
             if (!response?.success) {
                 throw new Error(response?.message || "Failed to clone customer");
@@ -1220,7 +1143,7 @@ export function useCustomerDetailPageViewModel(args: any) {
                 _id: clonedCustomerId || clonedCustomer?._id || clonedCustomer?.id,
                 name: clonedCustomer?.name || resolvedName,
                 displayName: clonedCustomer?.displayName || resolvedDisplayName,
-                customerNumber: clonedCustomer?.customerNumber || resolvedNextCustomerNumber,
+                customerNumber: clonedCustomer?.customerNumber || "",
                 status: clonedCustomer?.status || "active",
                 isActive: clonedCustomer?.isActive ?? true,
                 isInactive: clonedCustomer?.isInactive ?? false,
@@ -1248,6 +1171,7 @@ export function useCustomerDetailPageViewModel(args: any) {
                     state: {
                         customer: sidebarClone,
                         customerList: nextSidebarCustomers,
+                        customerJustSaved: true,
                     },
                 });
             }
@@ -1372,24 +1296,41 @@ export function useCustomerDetailPageViewModel(args: any) {
     };
 
     const setActiveStatus = async (makeActive: boolean) => {
-        const targetId = String((customer as any)?._id || (customer as any)?.id || id || "").trim();
+        const customerIdCandidates = getCustomerIdCandidates(customer, id);
+        const targetId = customerIdCandidates.find(isMongoObjectId) || customerIdCandidates[0] || "";
         if (!targetId || targetId.toLowerCase() === "undefined" || targetId.toLowerCase() === "null") {
             toast.error("Customer ID not found. Please refresh and try again.");
             return;
         }
 
-        const status = makeActive ? "active" : "inactive";
+        const optimisticStatusPatch = buildCustomerStatusPatch(makeActive);
+        const status = optimisticStatusPatch.status;
         const statusLabel = makeActive ? "active" : "inactive";
 
-        // Optimistic UI update for current customer and exact matching sidebar row only.
-        syncCurrentCustomerPatch({ status, isActive: makeActive, isInactive: !makeActive }, targetId);
+        customerIdCandidates.forEach((candidateId) => {
+            syncCurrentCustomerPatch(optimisticStatusPatch, candidateId);
+        });
 
         try {
-            const response = await customersAPI.update(targetId, { status });
+            const response = await customersAPI.update(targetId, {
+                status,
+                isActive: optimisticStatusPatch.isActive,
+                isInactive: optimisticStatusPatch.isInactive,
+            });
             if (!response?.success) {
                 throw new Error(response?.message || "Failed to update customer");
             }
+
+            const persistedStatusPatch = buildCustomerStatusPatch(makeActive, response?.data);
+            const persistedIdCandidates = getCustomerIdCandidates(response?.data, targetId);
+            const patchTargets = Array.from(new Set([...customerIdCandidates, ...persistedIdCandidates]));
+
+            patchTargets.forEach((candidateId) => {
+                syncCurrentCustomerPatch(persistedStatusPatch, candidateId);
+            });
+
             toast.success(`Customer marked as ${statusLabel} successfully`);
+            void reloadSidebarCustomerList();
             void refreshData();
         } catch (error: any) {
             toast.error("Failed to update customer: " + (error.message || "Unknown error"));

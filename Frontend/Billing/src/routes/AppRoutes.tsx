@@ -1,5 +1,7 @@
 import React, { Suspense, lazy } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { Loader2 } from 'lucide-react'
+import ItemsPage from '../pages/Product-Calalog/items/ItemsPage'
 
 const DashboardRoutes = lazy(() => import('../pages/home/DashboardRoutes'))
 const SalesInvoicesRoutes = lazy(() => import('../pages/sales/Invoices/InvoicesRoutes'))
@@ -17,7 +19,6 @@ const QuotesRoutes = lazy(() => import('../pages/sales/Quotes/QuotesRoutes'))
 const NewDebitNote = lazy(() => import('../pages/sales/DebitNotes/NewDebitNote/NewDebitNote'))
 const InvoiceDetail = lazy(() => import('../pages/sales/Invoices/InvoiceDetail/InvoiceDetail'))
 const SendInvoiceEmail = lazy(() => import('../pages/sales/Invoices/SendInvoiceEmail/SendInvoiceEmail'))
-const ItemsPage = lazy(() => import('../pages/Product-Calalog/items/ItemsPage'))
 const ImportItems = lazy(() => import('../pages/Product-Calalog/items/ImportItems'))
 const PlansPage = lazy(() => import('../pages/Product-Calalog/plans/PlansPage'))
 const ImportPlansPage = lazy(() => import('../pages/Product-Calalog/plans/import/ImportPlansPage'))
@@ -47,8 +48,9 @@ const SenderVerificationPage = lazy(() => import('../pages/public/SenderVerifica
 
 function RouteFallback() {
   return (
-    <div className="flex min-h-[40vh] items-center justify-center p-6 text-sm text-gray-500">
-      Loading...
+    <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3 p-6 text-sm text-gray-500">
+      <Loader2 className="h-6 w-6 animate-spin text-[rgb(21,99,114)]" />
+      <span>Loading page...</span>
     </div>
   )
 }
@@ -103,9 +105,12 @@ function LegacyCustomersRedirect() {
 }
 
 export default function AppRoutes() {
+  const location = useLocation()
+  const routeKey = `${location.pathname}${location.search}${location.hash}`
+
   return (
     <Suspense fallback={<RouteFallback />}>
-      <Routes>
+      <Routes location={location} key={routeKey}>
         <Route path="/sender-verification/*" element={<SenderVerificationPage />} />
         <Route index element={<Navigate to="/dashboard" replace />} />
 

@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { Customer } from "../models/Customer.js";
 import { CustomersVendorsSettings } from "../models/CustomersVendorsSettings.js";
 import { StoredDocument } from "../models/StoredDocument.js";
+import { buildCustomerIdsFilter, buildCustomerLookupFilter, isMongoObjectIdString } from "./customerIdentity.js";
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -39,7 +40,12 @@ const findDuplicateCustomerDisplayName = async (
   };
 
   if (excludeId) {
-    filter._id = { $ne: excludeId };
+    const normalizedExcludeId = excludeId.trim();
+    const exclusions: Record<string, unknown>[] = [{ id: normalizedExcludeId }];
+    if (isMongoObjectIdString(normalizedExcludeId)) {
+      exclusions.push({ _id: normalizedExcludeId });
+    }
+    filter.$nor = exclusions;
   }
 
   return Boolean(await Customer.exists(filter));
@@ -108,6 +114,8 @@ const normalizeCustomerRecord = (row: any) =>
 
 const normalizeCustomerPatch = (payload: Record<string, unknown>) => {
   const patch = { ...payload };
+  delete (patch as any)._id;
+  delete (patch as any).id;
   if (Object.prototype.hasOwnProperty.call(payload, "comments") && (payload as any).comments !== undefined) {
     patch.comments = normalizeCustomerComments((payload as any).comments);
   }
@@ -176,7 +184,12 @@ export const getCustomerById: express.RequestHandler = async (req, res, next) =>
     const orgId = getOrgId(req);
     if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
 
-    const row = await Customer.findOne({ _id: req.params.id, organizationId: orgId }).lean();
+    const filter = buildCustomerLookupFilter(orgId, req.params.id);
+    if (!filter) {
+      return res.status(400).json({ success: false, message: "Invalid customer id", data: null });
+    }
+
+    const row = await Customer.findOne(filter).lean();
     if (!row) return res.status(404).json({ success: false, message: "Customer not found", data: null });
     res.json({ success: true, data: normalizeCustomerRecord(row) });
   } catch (err) {
@@ -268,14 +281,20 @@ export const updateCustomer: express.RequestHandler = async (req, res, next) => 
       }
     }
 
+    const filter = buildCustomerLookupFilter(orgId, req.params.id);
+    if (!filter) {
+      return res.status(400).json({ success: false, message: "Invalid customer id", data: null });
+    }
+
     const updated = await Customer.findOneAndUpdate(
-      { _id: req.params.id, organizationId: orgId },
+      filter,
       { $set: { ...normalizedPayload } },
       { new: true }
     ).lean();
     if (!updated) return res.status(404).json({ success: false, message: "Customer not found", data: null });
-    await linkCustomerDocuments(orgId, String(req.params.id), (payload as Record<string, unknown>).documents);
-    const refreshed = await Customer.findOne({ _id: req.params.id, organizationId: orgId }).lean();
+    const persistedCustomerId = String(updated._id || (updated as any)?.id || req.params.id).trim();
+    await linkCustomerDocuments(orgId, persistedCustomerId, (payload as Record<string, unknown>).documents);
+    const refreshed = await Customer.findOne({ _id: persistedCustomerId, organizationId: orgId }).lean();
     res.json({ success: true, data: normalizeCustomerRecord(refreshed || updated) });
   } catch (err) {
     next(err);
@@ -287,7 +306,12 @@ export const deleteCustomer: express.RequestHandler = async (req, res, next) => 
     const orgId = getOrgId(req);
     if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
 
-    const deleted = await Customer.findOneAndDelete({ _id: req.params.id, organizationId: orgId }).lean();
+    const filter = buildCustomerLookupFilter(orgId, req.params.id);
+    if (!filter) {
+      return res.status(400).json({ success: false, message: "Invalid customer id", data: null });
+    }
+
+    const deleted = await Customer.findOneAndDelete(filter).lean();
     if (!deleted) return res.status(404).json({ success: false, message: "Customer not found", data: null });
     await StoredDocument.deleteMany({
       organizationId: orgId,
@@ -307,11 +331,11 @@ export const bulkUpdateCustomers: express.RequestHandler = async (req, res, next
 
     const ids = Array.isArray(req.body?.ids) ? (req.body.ids as unknown[]) : [];
     const data = normalizeCustomerPatch((req.body?.data || {}) as Record<string, unknown>);
-    const objectIds = ids.filter((id) => mongoose.isValidObjectId(id)).map((id) => new mongoose.Types.ObjectId(String(id)));
-    if (!objectIds.length) return res.json({ success: true, data: [] });
+    const filter = buildCustomerIdsFilter(orgId, ids);
+    if (!filter) return res.json({ success: true, data: [] });
 
-    await Customer.updateMany({ organizationId: orgId, _id: { $in: objectIds } }, { $set: data });
-    const rows = await Customer.find({ organizationId: orgId, _id: { $in: objectIds } }).lean();
+    await Customer.updateMany(filter, { $set: data });
+    const rows = await Customer.find(filter).lean();
     res.json({ success: true, data: rows.map(normalizeCustomerRecord) });
   } catch (err) {
     next(err);
@@ -324,16 +348,22 @@ export const bulkDeleteCustomers: express.RequestHandler = async (req, res, next
     if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
 
     const ids = Array.isArray(req.body?.ids) ? (req.body.ids as unknown[]) : [];
-    const objectIds = ids.filter((id) => mongoose.isValidObjectId(id)).map((id) => new mongoose.Types.ObjectId(String(id)));
-    if (!objectIds.length) return res.json({ success: true, data: { ids: [] } });
+    const filter = buildCustomerIdsFilter(orgId, ids);
+    if (!filter) return res.json({ success: true, data: { ids: [] } });
 
-    await Customer.deleteMany({ organizationId: orgId, _id: { $in: objectIds } });
+    const rows = await Customer.find(filter, { _id: 1 }).lean();
+    const deletedIds = rows.map((row: any) => String(row?._id || "")).filter(Boolean);
+    if (!deletedIds.length) {
+      return res.json({ success: true, data: { ids: [] } });
+    }
+
+    await Customer.deleteMany({ organizationId: orgId, _id: { $in: deletedIds } });
     await StoredDocument.deleteMany({
       organizationId: orgId,
       relatedToType: "customer",
-      relatedToId: { $in: objectIds.map((id) => String(id)) },
+      relatedToId: { $in: deletedIds },
     }).catch(() => null);
-    res.json({ success: true, data: { ids: objectIds.map((id) => String(id)) } });
+    res.json({ success: true, data: { ids: deletedIds } });
   } catch (err) {
     next(err);
   }
@@ -345,30 +375,36 @@ export const mergeCustomers: express.RequestHandler = async (req, res, next) => 
     if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
 
     const targetId = req.params.id;
-    if (!mongoose.isValidObjectId(targetId)) {
+    const targetFilter = buildCustomerLookupFilter(orgId, targetId);
+    if (!targetFilter) {
       return res.status(400).json({ success: false, message: "Invalid target id", data: null });
     }
-    const target = await Customer.findOne({ _id: targetId, organizationId: orgId });
+    const target = await Customer.findOne(targetFilter);
     if (!target) return res.status(404).json({ success: false, message: "Target customer not found", data: null });
+    const persistedTargetId = String(target._id || (target as any)?.id || targetId).trim();
 
     const sourceIds = Array.isArray(req.body?.sourceCustomerIds) ? (req.body.sourceCustomerIds as unknown[]) : [];
-    const objectIds = sourceIds
-      .filter((id) => mongoose.isValidObjectId(id))
-      .map((id) => String(id))
-      .filter((id) => id !== targetId);
+    const sourceFilter = buildCustomerIdsFilter(orgId, sourceIds);
+    if (!sourceFilter) {
+      return res.status(400).json({ success: false, message: "No source customers found to merge", data: null });
+    }
 
-    if (!objectIds.length) {
+    const sources = (await Customer.find(sourceFilter).lean()).filter(
+      (row: any) => String(row?._id || "") !== persistedTargetId
+    );
+    const sourceObjectIds = sources.map((row: any) => String(row?._id || "")).filter(Boolean);
+
+    if (!sourceObjectIds.length) {
       return res.status(400).json({ success: false, message: "No source customers found to merge", data: null });
     }
 
     // Mark sources inactive and point to target.
     await Customer.updateMany(
-      { organizationId: orgId, _id: { $in: objectIds } },
-      { $set: { status: "inactive", mergedInto: targetId, updatedAt: new Date().toISOString() } }
+      { organizationId: orgId, _id: { $in: sourceObjectIds } },
+      { $set: { status: "inactive", mergedInto: persistedTargetId, updatedAt: new Date().toISOString() } }
     );
 
     // Optionally aggregate some numeric fields if present.
-    const sources = await Customer.find({ organizationId: orgId, _id: { $in: objectIds } }).lean();
     const sumNumber = (key: string) =>
       sources.reduce((sum, s: any) => sum + (Number.parseFloat(String((s as any)?.[key] ?? 0)) || 0), 0);
 
@@ -377,7 +413,11 @@ export const mergeCustomers: express.RequestHandler = async (req, res, next) => 
     if ((target as any).unusedCredits !== undefined)
       patch.unusedCredits = (Number((target as any).unusedCredits) || 0) + sumNumber("unusedCredits");
 
-    const updated = await Customer.findOneAndUpdate({ _id: targetId, organizationId: orgId }, { $set: patch }, { new: true }).lean();
+    const updated = await Customer.findOneAndUpdate(
+      { _id: persistedTargetId, organizationId: orgId },
+      { $set: patch },
+      { new: true }
+    ).lean();
     res.json({ success: true, data: normalizeCustomerRecord(updated) });
   } catch (err) {
     next(err);

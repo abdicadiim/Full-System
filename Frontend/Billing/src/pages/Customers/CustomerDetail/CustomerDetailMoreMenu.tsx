@@ -1,11 +1,12 @@
 import React from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Loader2 } from "lucide-react";
 
 type CustomerDetailMoreMenuProps = {
   moreDropdownRef: React.RefObject<HTMLDivElement>;
   isMoreDropdownOpen: boolean;
   areRemindersStopped: boolean;
   isCustomerActive: boolean;
+  isCloning: boolean;
   onToggle: () => void;
   onAssociateTemplates: () => void;
   onConfigurePortal: () => void;
@@ -21,6 +22,7 @@ export default function CustomerDetailMoreMenu({
   isMoreDropdownOpen,
   areRemindersStopped,
   isCustomerActive,
+  isCloning,
   onToggle,
   onAssociateTemplates,
   onConfigurePortal,
@@ -69,10 +71,16 @@ export default function CustomerDetailMoreMenu({
           </button>
           <button
             type="button"
-            className="w-full text-left px-4 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-50 transition-colors"
+            className={`w-full px-4 py-2 text-left text-sm text-gray-700 transition-colors ${
+              isCloning ? "cursor-wait opacity-70" : "cursor-pointer hover:bg-gray-50"
+            }`}
             onClick={onClone}
+            disabled={isCloning}
           >
-            Clone
+            <span className="flex items-center gap-2">
+              {isCloning ? <Loader2 size={14} className="animate-spin" /> : null}
+              {isCloning ? "Cloning..." : "Clone"}
+            </span>
           </button>
           <button
             type="button"

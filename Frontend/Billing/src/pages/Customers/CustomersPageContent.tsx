@@ -1,6 +1,20 @@
 ﻿import React from "react";
 import { ArrowUpDown, Check, ChevronDown, ChevronRight, ChevronUp, Download, Eye, Loader2, MoreVertical, Plus, Search, SlidersHorizontal, Star, Trash2, X } from "lucide-react";
 
+import { preloadCustomerDetailRoute } from "./customerRouteLoaders";
+
+const CUSTOMER_DETAIL_SIDEBAR_CACHE_KEY = "billing_customer_detail_sidebar_seed";
+const CUSTOMER_DETAIL_SIDEBAR_SEED_LIMIT = 60;
+
+const toSerializableCustomerState = (value: any) => {
+  if (!value || typeof value !== "object") return value ?? null;
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return value;
+  }
+};
+
 export default function CustomersPageContent({ controller }: { controller: any }) {
   const {
     bulkMoreMenuRef,
@@ -58,6 +72,41 @@ export default function CustomersPageContent({ controller }: { controller: any }
     setViewSearchQuery,
     visibleColumns,
   } = controller;
+
+  const navigateToCustomerDetail = (selectedCustomer: any) => {
+    void preloadCustomerDetailRoute();
+    const customerId = getCustomerIdForNavigation(selectedCustomer);
+    if (!customerId) return;
+
+    const safeCustomer = toSerializableCustomerState(selectedCustomer);
+
+    if (typeof window !== "undefined") {
+      try {
+        const selectedCustomerId = String(selectedCustomer?._id ?? selectedCustomer?.id ?? "").trim();
+        const sidebarSeed: any[] = [];
+
+        if (safeCustomer) {
+          sidebarSeed.push(safeCustomer);
+        }
+
+        for (const row of Array.isArray(displayedCustomers) ? displayedCustomers : []) {
+          const rowId = String(row?._id ?? row?.id ?? "").trim();
+          if (!rowId || rowId === selectedCustomerId) continue;
+          sidebarSeed.push(toSerializableCustomerState(row));
+          if (sidebarSeed.length >= CUSTOMER_DETAIL_SIDEBAR_SEED_LIMIT) break;
+        }
+
+        sessionStorage.setItem(CUSTOMER_DETAIL_SIDEBAR_CACHE_KEY, JSON.stringify(sidebarSeed));
+      } catch {
+      }
+    }
+
+    navigate(`/sales/customers/${String(customerId)}`, {
+      state: {
+        customer: safeCustomer,
+      },
+    });
+  };
 
   return (
     <>      {/* Header - Show Bulk Actions Bar when items are selected, otherwise show normal header */}
@@ -511,7 +560,6 @@ export default function CustomersPageContent({ controller }: { controller: any }
               </div>
             </div>
           )) : displayedCustomers.map((customer, index) => {
-            const customerId = getCustomerIdForNavigation(customer);
             const receivables = parseFloat(customer.receivables || 0);
             const unusedCredits = parseFloat(customer.unusedCredits || 0);
             const isInactiveCustomer = customer.status?.toLowerCase() === "inactive" || customer.isInactive === true;
@@ -525,15 +573,11 @@ export default function CustomersPageContent({ controller }: { controller: any }
             return (
               <div
                 key={`${customer.id}-${index}`}
+                onPointerDown={() => {
+                  void preloadCustomerDetailRoute();
+                }}
                 onClick={() => {
-                  if (customerId) {
-                    navigate(`/sales/customers/${String(customerId)}`, {
-                      state: {
-                        customer,
-                        customerList: displayedCustomers,
-                      },
-                    });
-                  }
+                  navigateToCustomerDetail(customer);
                 }}
                 className="flex items-center gap-3 p-4 active:bg-slate-50 transition-colors"
               >
@@ -694,7 +738,13 @@ export default function CustomersPageContent({ controller }: { controller: any }
                 return (
                   <tr
                     key={`${customer.id}-${index}`}
-                    onMouseEnter={() => setHoveredRowId(customer.id)}
+                    onMouseEnter={() => {
+                      setHoveredRowId(customer.id);
+                      void preloadCustomerDetailRoute();
+                    }}
+                    onPointerDown={() => {
+                      void preloadCustomerDetailRoute();
+                    }}
                     onMouseLeave={() => {
                       if (openReceivablesDropdownId !== customer.id) {
                         setHoveredRowId(null);
@@ -707,15 +757,7 @@ export default function CustomersPageContent({ controller }: { controller: any }
                         target.closest('[data-receivables-button]')) {
                         return;
                       }
-                      const customerId = getCustomerIdForNavigation(customer);
-                      if (customerId) {
-                        navigate(`/sales/customers/${String(customerId)}`, {
-                          state: {
-                            customer,
-                            customerList: displayedCustomers,
-                          },
-                        });
-                      }
+                      navigateToCustomerDetail(customer);
                     }}
                     className="text-[13px] group transition-all hover:bg-[#f8fafc] cursor-pointer h-[50px] border-b border-[#eef1f6]"
                     style={isSelected ? { backgroundColor: "#1b5e6a1A" } : {}}

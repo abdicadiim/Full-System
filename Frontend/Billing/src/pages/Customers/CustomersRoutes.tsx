@@ -1,12 +1,28 @@
-import React from "react";
+import React, { Suspense } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
-import Customers from "./Customers";
-import NewCustomer from "./NewCustomer/NewCustomer";
-import CustomerDetail from "./CustomerDetail/CustomerDetail";
-import ImportCustomers from "./ImportCustomers/ImportCustomers";
-import NewCustomView from "./NewCustomView/NewCustomView";
-import RequestReview from "./RequestReview/RequestReview";
-import SendEmailStatement from "./CustomerDetail/SendEmailStatement/SendEmailStatement";
+import {
+  CustomerDetailRoute,
+  CustomersIndexRoute,
+  ImportCustomersRoute,
+  NewCustomerRoute,
+  NewCustomViewRoute,
+  RequestReviewRoute,
+  SendEmailStatementRoute,
+} from "./customerRouteLoaders";
+
+function CustomersRouteFallback() {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center p-6 text-sm text-gray-500">
+      Loading customers...
+    </div>
+  );
+}
+
+const withSuspense = (node: React.ReactNode) => (
+  <Suspense fallback={<CustomersRouteFallback />}>
+    {node}
+  </Suspense>
+);
 
 export default function CustomersRoutes() {
   const location = useLocation();
@@ -14,14 +30,14 @@ export default function CustomersRoutes() {
 
   return (
     <Routes location={location} key={routeKey}>
-      <Route index element={<Customers />} />
-      <Route path="new" element={<NewCustomer key={`customer-new-${routeKey}`} />} />
-      <Route path="import" element={<ImportCustomers />} />
-      <Route path="new-custom-view" element={<NewCustomView />} />
-      <Route path=":id/edit" element={<NewCustomer key={`customer-edit-${routeKey}`} />} />
-      <Route path=":id/request-review" element={<RequestReview />} />
-      <Route path=":id/send-email-statement" element={<SendEmailStatement />} />
-      <Route path=":id" element={<CustomerDetail key={`customer-detail-${routeKey}`} />} />
+      <Route index element={withSuspense(<CustomersIndexRoute />)} />
+      <Route path="new" element={withSuspense(<NewCustomerRoute key={`customer-new-${routeKey}`} />)} />
+      <Route path="import" element={withSuspense(<ImportCustomersRoute />)} />
+      <Route path="new-custom-view" element={withSuspense(<NewCustomViewRoute />)} />
+      <Route path=":id/edit" element={withSuspense(<NewCustomerRoute key={`customer-edit-${routeKey}`} />)} />
+      <Route path=":id/request-review" element={withSuspense(<RequestReviewRoute />)} />
+      <Route path=":id/send-email-statement" element={withSuspense(<SendEmailStatementRoute />)} />
+      <Route path=":id" element={withSuspense(<CustomerDetailRoute key={`customer-detail-${routeKey}`} />)} />
       <Route path="*" element={<Navigate to="." replace />} />
     </Routes>
   );

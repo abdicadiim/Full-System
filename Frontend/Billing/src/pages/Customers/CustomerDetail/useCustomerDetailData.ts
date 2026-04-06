@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 import {
   billsAPI,
@@ -7,7 +8,6 @@ import {
   customersAPI,
   expensesAPI,
   invoicesAPI,
-  journalEntriesAPI,
   paymentsMadeAPI,
   paymentsReceivedAPI,
   projectsAPI,
@@ -21,27 +21,32 @@ import {
   vendorCreditsAPI,
   vendorsAPI,
 } from "../../../services/api";
-import { getCustomers } from "../../salesModel";
+import {
+  syncCustomerIntoCustomerQueries,
+  useCustomerDetailQuery,
+  useCustomersSidebarQuery,
+} from "../customerQueries";
 import { resolveVerifiedPrimarySender } from "../../../utils/emailSenderDisplay";
 import type { Transaction } from "./customerDetailTypes";
 
-const mapCustomerRecord = (customerData: any, normalizeComments: (value: any) => any[]) => {
-  let customerName = customerData.displayName || customerData.name;
+const resolveCustomerName = (customerData: any) => {
+  let customerName = customerData?.displayName || customerData?.companyName || customerData?.name;
   if (!customerName || customerName.trim() === "") {
-    const firstName = customerData.firstName || "";
-    const lastName = customerData.lastName || "";
-    const companyName = customerData.companyName || "";
+    const firstName = customerData?.firstName || "";
+    const lastName = customerData?.lastName || "";
 
     if (firstName || lastName) {
       customerName = `${firstName} ${lastName}`.trim();
-    } else if (companyName) {
-      customerName = companyName.trim();
     } else {
       customerName = "Customer";
     }
   }
 
-  customerName = customerName.trim() || "Customer";
+  return customerName.trim() || "Customer";
+};
+
+const mapCustomerRecord = (customerData: any, normalizeComments: (value: any) => any[]) => {
+  const customerName = resolveCustomerName(customerData);
   const normalizedComments = normalizeComments(customerData.comments);
 
   return {
@@ -79,7 +84,8 @@ const mapSidebarCustomers = (rows: any[]) =>
   rows.map((row: any) => ({
     ...row,
     id: String(row._id || row.id),
-    name: row.displayName || row.name,
+    name: resolveCustomerName(row),
+    displayName: row.displayName || resolveCustomerName(row),
   }));
 
 const mapVendorRows = (rows: any[]) =>
@@ -100,6 +106,8 @@ const VISIBILITY_REFRESH_MIN_AGE_MS = 45 * 1000;
 export default function useCustomerDetailData(args: any) {
   const {
     id,
+    initialCustomer,
+    customerJustSaved,
     locationKey,
     navigate,
     activeTab,
@@ -144,6 +152,23 @@ export default function useCustomerDetailData(args: any) {
 
   const lastRefreshAtRef = useRef(0);
   const isRefreshInFlightRef = useRef(false);
+  const isMountedRef = useRef(false);
+  const queryClient = useQueryClient();
+  const customerDetailQuery = useCustomerDetailQuery(id, {
+    enabled: Boolean(id),
+    initialCustomer,
+  });
+  const sidebarCustomersQuery = useCustomersSidebarQuery({
+    enabled: true,
+    limit: 1000,
+  });
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const fetchOrganizationProfile = useCallback(async () => {
     try {
@@ -195,7 +220,7 @@ export default function useCustomerDetailData(args: any) {
   }, [organizationProfile, setOwnerEmail]);
 
   const refreshData = useCallback(async (options: { minAgeMs?: number } = {}) => {
-    if (!id) return;
+    if (!id || !isMountedRef.current) return;
     const { minAgeMs = 0 } = options;
     const now = Date.now();
     if (minAgeMs > 0 && now - lastRefreshAtRef.current < minAgeMs) {
@@ -231,21 +256,24 @@ export default function useCustomerDetailData(args: any) {
         paymentsReceivedAPI.getByCustomer(customerId).catch(() => ({ success: true, data: [] })),
         creditNotesAPI.getByCustomer(customerId).catch(() => ({ success: true, data: [] })),
         quotesAPI.getAll({ customerId }).catch(() => ({ success: true, data: [] })),
-        recurringInvoicesAPI.getAll().catch(() => ({ success: true, data: [] })),
-        expensesAPI.getAll().catch(() => ({ success: true, data: [] })),
-        recurringExpensesAPI.getAll().catch(() => ({ success: true, data: [] })),
+        recurringInvoicesAPI.getAll({ customerId }).catch(() => ({ success: true, data: [] })),
+        expensesAPI.getAll({ customerId }).catch(() => ({ success: true, data: [] })),
+        recurringExpensesAPI.getAll({ customerId }).catch(() => ({ success: true, data: [] })),
         projectsAPI.getByCustomer(customerId).catch(() => ({ success: true, data: [] })),
-        billsAPI.getAll().catch(() => ({ success: true, data: [] })),
+        Promise.resolve({ success: true, data: [] }),
         salesReceiptsAPI.getAll({ customerId }).catch(() => ({ success: true, data: [] })),
-        journalEntriesAPI.getAll().catch(() => ({ success: true, data: [] })),
+        Promise.resolve({ success: true, data: [] }),
         vendorsAPI.getAll().catch(() => ({ success: true, data: [] })),
       ]);
+
+      if (!isMountedRef.current) return;
 
       if (customerResponse && customerResponse.success && customerResponse.data) {
         const { mappedCustomer, normalizedComments } = mapCustomerRecord(customerResponse.data, normalizeComments);
         setCustomer(mappedCustomer);
         setComments(normalizedComments);
         setAttachments(mapDocumentsToAttachments(customerResponse.data.documents || []));
+        syncCustomerIntoCustomerQueries(queryClient, customerResponse.data);
       } else {
         navigate("/sales/customers");
         return;
@@ -317,33 +345,37 @@ export default function useCustomerDetailData(args: any) {
       }
       lastRefreshAtRef.current = Date.now();
     } catch (error: any) {
+      if (!isMountedRef.current) return;
       toast.error("Failed to refresh customer data: " + (error.message || "Unknown error"));
     } finally {
-      setIsRefreshing(false);
+      if (isMountedRef.current) {
+        setIsRefreshing(false);
+      }
       isRefreshInFlightRef.current = false;
     }
   }, [
     id,
+    mapDocumentsToAttachments,
     navigate,
     normalizeComments,
-    mapDocumentsToAttachments,
-    setIsRefreshing,
-    setCustomer,
+    queryClient,
+    setLinkedVendor,
     setComments,
     setAttachments,
-    setInvoices,
-    setPayments,
-    setCreditNotes,
-    setQuotes,
-    setRecurringInvoices,
-    setExpenses,
-    setRecurringExpenses,
-    setProjects,
     setBills,
-    setSalesReceipts,
+    setCreditNotes,
+    setCustomer,
+    setExpenses,
+    setInvoices,
+    setIsRefreshing,
     setJournals,
+    setPayments,
+    setProjects,
+    setQuotes,
+    setRecurringExpenses,
+    setRecurringInvoices,
+    setSalesReceipts,
     setVendors,
-    setLinkedVendor,
   ]);
 
   useEffect(() => {
@@ -351,19 +383,12 @@ export default function useCustomerDetailData(args: any) {
 
     const loadReferenceData = async () => {
       try {
-        const [currenciesData, sidebarCustomers] = await Promise.all([
-          currenciesAPI.getAll(),
-          getCustomers({ limit: 1000 }),
-        ]);
+        const currenciesData = await currenciesAPI.getAll();
 
         if (!isActive) return;
 
         if (Array.isArray(currenciesData)) {
           setAvailableCurrencies(currenciesData.filter((row: any) => row.status === "active"));
-        }
-
-        if (Array.isArray(sidebarCustomers)) {
-          setCustomers(mapSidebarCustomers(sidebarCustomers));
         }
       } catch {
       }
@@ -374,7 +399,29 @@ export default function useCustomerDetailData(args: any) {
     return () => {
       isActive = false;
     };
-  }, [setAvailableCurrencies, setCustomers]);
+  }, [setAvailableCurrencies]);
+
+  useEffect(() => {
+    const sidebarCustomers = sidebarCustomersQuery.data?.data;
+    if (!Array.isArray(sidebarCustomers)) return;
+
+    const mappedSidebarCustomers = mapSidebarCustomers(sidebarCustomers);
+    const previewCustomerId = String(initialCustomer?._id || initialCustomer?.id || "").trim();
+    const currentCustomerId = String(id || "").trim();
+    const previewCustomer =
+      previewCustomerId && previewCustomerId === currentCustomerId
+        ? mapSidebarCustomers([initialCustomer])[0]
+        : null;
+
+    setCustomers(
+      previewCustomer
+        ? [
+            previewCustomer,
+            ...mappedSidebarCustomers.filter((row: any) => String(row?.id || row?._id || "").trim() !== previewCustomerId),
+          ]
+        : mappedSidebarCustomers
+    );
+  }, [id, initialCustomer, setCustomers, sidebarCustomersQuery.data]);
 
   useEffect(() => {
     let isActive = true;
@@ -383,32 +430,123 @@ export default function useCustomerDetailData(args: any) {
       if (!id) return;
 
       const customerId = String(id).trim();
-      const prefill = args.initialCustomer || null;
+      const prefill = initialCustomer || null;
       const prefillId = prefill ? String(prefill._id || prefill.id || "").trim() : "";
       const currentCustomerId = String(customer?._id || customer?.id || "").trim();
+      const queryCustomer = customerDetailQuery.data;
+      const queryCustomerId = queryCustomer ? String(queryCustomer._id || queryCustomer.id || "").trim() : "";
       const previewCustomer =
-        prefill && prefillId === customerId
+        queryCustomer && queryCustomerId === customerId
+          ? queryCustomer
+          : prefill && prefillId === customerId
           ? prefill
           : currentCustomerId && currentCustomerId === customerId
             ? customer
             : null;
 
-      if (previewCustomer) {
-        const previewName =
-          previewCustomer.displayName ||
-          previewCustomer.name ||
-          previewCustomer.companyName ||
-          `${previewCustomer.firstName || ""} ${previewCustomer.lastName || ""}`.trim() ||
-          "Customer";
+      const loadSupplementaryData = async (canonicalCustomerId: string, linkedVendorId: string) => {
+        try {
+          const [
+            invoicesResponse,
+            paymentsResponse,
+            creditNotesResponse,
+            quotesResponse,
+            recurringInvoicesResponse,
+            expensesResponse,
+            recurringExpensesResponse,
+            projectsResponse,
+            billsResponse,
+            salesReceiptsResponse,
+            journalsResponse,
+            vendorsResponse,
+          ] = await Promise.all([
+            invoicesAPI.getByCustomer(customerId).catch(() => ({ success: true, data: [] })),
+            paymentsReceivedAPI.getByCustomer(customerId).catch(() => ({ success: true, data: [] })),
+            creditNotesAPI.getByCustomer(customerId).catch(() => ({ success: true, data: [] })),
+            quotesAPI.getAll({ customerId }).catch(() => ({ success: true, data: [] })),
+            recurringInvoicesAPI.getAll({ customerId }).catch(() => ({ success: true, data: [] })),
+            expensesAPI.getAll({ customerId }).catch(() => ({ success: true, data: [] })),
+            recurringExpensesAPI.getAll({ customerId }).catch(() => ({ success: true, data: [] })),
+            projectsAPI.getByCustomer(customerId).catch(() => ({ success: true, data: [] })),
+            Promise.resolve({ success: true, data: [] }),
+            salesReceiptsAPI.getAll({ customerId }).catch(() => ({ success: true, data: [] })),
+            Promise.resolve({ success: true, data: [] }),
+            vendorsAPI.getAll().catch(() => ({ success: true, data: [] })),
+          ]);
 
-        setCustomer({
-          ...previewCustomer,
-          id: String(previewCustomer._id || previewCustomer.id),
-          _id: previewCustomer._id || previewCustomer.id,
-          name: previewName,
-          displayName: previewCustomer.displayName || previewName,
-        });
-        setComments(normalizeComments(previewCustomer.comments));
+          if (!isActive) return;
+
+          setInvoices(
+            invoicesResponse?.success && Array.isArray(invoicesResponse.data)
+              ? filterRowsByCustomerId(invoicesResponse.data, canonicalCustomerId)
+              : [],
+          );
+
+          setPayments(
+            paymentsResponse?.success && Array.isArray(paymentsResponse.data)
+              ? filterRowsByCustomerId(paymentsResponse.data, canonicalCustomerId)
+              : [],
+          );
+
+          setCreditNotes(
+            creditNotesResponse?.success && Array.isArray(creditNotesResponse.data)
+              ? filterRowsByCustomerId(creditNotesResponse.data, canonicalCustomerId)
+              : [],
+          );
+
+          if (quotesResponse?.success && Array.isArray(quotesResponse.data)) {
+            setQuotes(quotesResponse.data);
+          }
+
+          if (recurringInvoicesResponse?.success && Array.isArray(recurringInvoicesResponse.data)) {
+            setRecurringInvoices(filterRowsByCustomerId(recurringInvoicesResponse.data, canonicalCustomerId));
+          }
+
+          if (expensesResponse?.success && Array.isArray(expensesResponse.data)) {
+            setExpenses(filterRowsByCustomerId(expensesResponse.data, canonicalCustomerId));
+          }
+
+          if (recurringExpensesResponse?.success && Array.isArray(recurringExpensesResponse.data)) {
+            setRecurringExpenses(filterRowsByCustomerId(recurringExpensesResponse.data, canonicalCustomerId));
+          }
+
+          if (projectsResponse?.success && Array.isArray(projectsResponse.data)) {
+            setProjects(projectsResponse.data);
+          }
+
+          if (billsResponse?.success && Array.isArray(billsResponse.data)) {
+            setBills(filterRowsByCustomerId(billsResponse.data, canonicalCustomerId));
+          }
+
+          if (salesReceiptsResponse?.success && Array.isArray(salesReceiptsResponse.data)) {
+            setSalesReceipts(salesReceiptsResponse.data);
+          }
+
+          if (journalsResponse?.success && Array.isArray(journalsResponse.data)) {
+            setJournals(filterRowsByCustomerId(journalsResponse.data, canonicalCustomerId));
+          }
+
+          if (vendorsResponse?.success && Array.isArray(vendorsResponse.data)) {
+            const mappedVendors = mapVendorRows(vendorsResponse.data);
+            setVendors(mappedVendors);
+            if (linkedVendorId) {
+              const foundVendor = mappedVendors.find((row: any) => String(row.id) === linkedVendorId);
+              setLinkedVendor(foundVendor || null);
+            } else {
+              setLinkedVendor(null);
+            }
+          }
+        } catch (error: any) {
+          if (!isActive) return;
+          toast.error("Failed to load customer details: " + (error.message || "Unknown error"));
+        }
+      };
+
+      if (previewCustomer) {
+        const { mappedCustomer, normalizedComments } = mapCustomerRecord(previewCustomer, normalizeComments);
+        setCustomer(mappedCustomer);
+        setComments(normalizedComments);
+        setAttachments(mapDocumentsToAttachments(previewCustomer.documents || []));
         setLoading(false);
       } else {
         setCustomer(null);
@@ -416,14 +554,29 @@ export default function useCustomerDetailData(args: any) {
         setLoading(true);
       }
 
+      if (previewCustomer && customerJustSaved) {
+        lastRefreshAtRef.current = Date.now();
+        await loadSupplementaryData(
+          String(previewCustomer._id || previewCustomer.id || customerId).trim(),
+          String(previewCustomer.linkedVendorId || "").trim(),
+        );
+        return;
+      }
+
       try {
-        const customerResponse = await customersAPI.getById(customerId);
+        const customerResponse =
+          queryCustomer && queryCustomerId === customerId
+            ? { success: true, data: queryCustomer }
+            : await customersAPI.getById(customerId);
+
+        if (!isActive) return;
 
         if (customerResponse && customerResponse.success && customerResponse.data) {
           const { mappedCustomer, normalizedComments } = mapCustomerRecord(customerResponse.data, normalizeComments);
           setCustomer(mappedCustomer);
           setComments(normalizedComments);
           setAttachments(mapDocumentsToAttachments(customerResponse.data.documents || []));
+          syncCustomerIntoCustomerQueries(queryClient, customerResponse.data);
         } else {
           navigate("/sales/customers");
           return;
@@ -435,106 +588,7 @@ export default function useCustomerDetailData(args: any) {
 
         const canonicalCustomerId = String(customerResponse?.data?._id || customerResponse?.data?.id || customerId).trim();
         const linkedVendorId = String(customerResponse?.data?.linkedVendorId || "").trim();
-
-        const loadSupplementaryData = async () => {
-          try {
-            const [
-              invoicesResponse,
-              paymentsResponse,
-              creditNotesResponse,
-              quotesResponse,
-              recurringInvoicesResponse,
-              expensesResponse,
-              recurringExpensesResponse,
-              projectsResponse,
-              billsResponse,
-              salesReceiptsResponse,
-              journalsResponse,
-              vendorsResponse,
-            ] = await Promise.all([
-              invoicesAPI.getByCustomer(customerId).catch(() => ({ success: true, data: [] })),
-              paymentsReceivedAPI.getByCustomer(customerId).catch(() => ({ success: true, data: [] })),
-              creditNotesAPI.getByCustomer(customerId).catch(() => ({ success: true, data: [] })),
-              quotesAPI.getAll({ customerId }).catch(() => ({ success: true, data: [] })),
-              recurringInvoicesAPI.getAll().catch(() => ({ success: true, data: [] })),
-              expensesAPI.getAll().catch(() => ({ success: true, data: [] })),
-              recurringExpensesAPI.getAll().catch(() => ({ success: true, data: [] })),
-              projectsAPI.getByCustomer(customerId).catch(() => ({ success: true, data: [] })),
-              billsAPI.getAll().catch(() => ({ success: true, data: [] })),
-              salesReceiptsAPI.getAll({ customerId }).catch(() => ({ success: true, data: [] })),
-              journalEntriesAPI.getAll().catch(() => ({ success: true, data: [] })),
-              vendorsAPI.getAll().catch(() => ({ success: true, data: [] })),
-            ]);
-
-            if (!isActive) return;
-
-            setInvoices(
-              invoicesResponse?.success && Array.isArray(invoicesResponse.data)
-                ? filterRowsByCustomerId(invoicesResponse.data, canonicalCustomerId)
-                : [],
-            );
-
-            setPayments(
-              paymentsResponse?.success && Array.isArray(paymentsResponse.data)
-                ? filterRowsByCustomerId(paymentsResponse.data, canonicalCustomerId)
-                : [],
-            );
-
-            setCreditNotes(
-              creditNotesResponse?.success && Array.isArray(creditNotesResponse.data)
-                ? filterRowsByCustomerId(creditNotesResponse.data, canonicalCustomerId)
-                : [],
-            );
-
-            if (quotesResponse?.success && Array.isArray(quotesResponse.data)) {
-              setQuotes(quotesResponse.data);
-            }
-
-            if (recurringInvoicesResponse?.success && Array.isArray(recurringInvoicesResponse.data)) {
-              setRecurringInvoices(filterRowsByCustomerId(recurringInvoicesResponse.data, canonicalCustomerId));
-            }
-
-            if (expensesResponse?.success && Array.isArray(expensesResponse.data)) {
-              setExpenses(filterRowsByCustomerId(expensesResponse.data, canonicalCustomerId));
-            }
-
-            if (recurringExpensesResponse?.success && Array.isArray(recurringExpensesResponse.data)) {
-              setRecurringExpenses(filterRowsByCustomerId(recurringExpensesResponse.data, canonicalCustomerId));
-            }
-
-            if (projectsResponse?.success && Array.isArray(projectsResponse.data)) {
-              setProjects(projectsResponse.data);
-            }
-
-            if (billsResponse?.success && Array.isArray(billsResponse.data)) {
-              setBills(filterRowsByCustomerId(billsResponse.data, canonicalCustomerId));
-            }
-
-            if (salesReceiptsResponse?.success && Array.isArray(salesReceiptsResponse.data)) {
-              setSalesReceipts(salesReceiptsResponse.data);
-            }
-
-            if (journalsResponse?.success && Array.isArray(journalsResponse.data)) {
-              setJournals(filterRowsByCustomerId(journalsResponse.data, canonicalCustomerId));
-            }
-
-            if (vendorsResponse?.success && Array.isArray(vendorsResponse.data)) {
-              const mappedVendors = mapVendorRows(vendorsResponse.data);
-              setVendors(mappedVendors);
-              if (linkedVendorId) {
-                const foundVendor = mappedVendors.find((row: any) => String(row.id) === linkedVendorId);
-                setLinkedVendor(foundVendor || null);
-              } else {
-                setLinkedVendor(null);
-              }
-            }
-          } catch (error: any) {
-            if (!isActive) return;
-            toast.error("Failed to load customer details: " + (error.message || "Unknown error"));
-          }
-        };
-
-        loadSupplementaryData();
+        await loadSupplementaryData(canonicalCustomerId, linkedVendorId);
       } catch (error: any) {
         if (!isActive) return;
         toast.error("Error loading customer: " + (error.message || "Unknown error"));
@@ -548,12 +602,15 @@ export default function useCustomerDetailData(args: any) {
       isActive = false;
     };
   }, [
+    customerDetailQuery.data,
+    customerJustSaved,
     id,
+    initialCustomer,
     locationKey,
-    args.initialCustomer,
+    mapDocumentsToAttachments,
     navigate,
     normalizeComments,
-    mapDocumentsToAttachments,
+    queryClient,
     setCustomer,
     setComments,
     setLoading,

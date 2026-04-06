@@ -2,6 +2,7 @@ import type express from "express";
 import mongoose from "mongoose";
 import { Customer } from "../models/Customer.js";
 import { StoredDocument } from "../models/StoredDocument.js";
+import { findCustomerByAnyId } from "./customerIdentity.js";
 
 const getOrgId = (req: express.Request) => {
   const orgId = req.user?.organizationId;
@@ -73,10 +74,11 @@ const normalizeDocument = (doc: any) => {
 };
 
 const syncCustomerDocuments = async (customerId: string, orgId: string) => {
-  const customer = await Customer.findOne({ _id: customerId, organizationId: orgId }).lean();
+  const customer = await findCustomerByAnyId(orgId, customerId);
   if (!customer) return null;
+  const persistedCustomerId = String(customer._id || (customer as any)?.id || customerId).trim();
 
-  const docs = await StoredDocument.find({ organizationId: orgId, relatedToType: "customer", relatedToId: customerId })
+  const docs = await StoredDocument.find({ organizationId: orgId, relatedToType: "customer", relatedToId: persistedCustomerId })
     .sort({ uploadedAt: -1, createdAt: -1 })
     .lean();
   const normalized = docs.map(normalizeDocument).filter(Boolean);
@@ -88,7 +90,7 @@ const syncCustomerDocuments = async (customerId: string, orgId: string) => {
     return !storedIds.has(docId);
   });
   const merged = [...preservedExisting, ...normalized];
-  await Customer.updateOne({ _id: customerId, organizationId: orgId }, { $set: { documents: merged } });
+  await Customer.updateOne({ _id: persistedCustomerId, organizationId: orgId }, { $set: { documents: merged } });
   return merged;
 };
 

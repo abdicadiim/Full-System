@@ -21,6 +21,12 @@ const UserSchema = new mongoose.Schema(
     inviteTokenExpiresAt: { type: Date, default: null, index: true },
     inviteTokenSentAt: { type: Date, default: null, index: true },
 
+    emailVerified: { type: Boolean, default: true, index: true },
+    emailVerifiedAt: { type: Date, default: null, index: true },
+    emailVerificationHash: { type: String, default: "" },
+    emailVerificationExpiresAt: { type: Date, default: null, index: true },
+    emailVerificationSentAt: { type: Date, default: null, index: true },
+
     // Temporary auth codes for email OTP sign-in and password resets.
     loginOtpHash: { type: String, default: "" },
     loginOtpExpiresAt: { type: Date, default: null, index: true },

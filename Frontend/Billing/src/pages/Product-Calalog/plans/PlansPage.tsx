@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
     AlignLeft,
     ArrowDownUp,
@@ -22,6 +23,16 @@ import NewProductModal from "./newProduct/NewProductModal";
 import { addonsAPI, couponsAPI, plansAPI, productsAPI } from "../../../services/api";
 import { useCurrency } from "../../../hooks/useCurrency";
 import { usePermissions } from "../../../hooks/usePermissions";
+import {
+    fetchProductsList,
+    invalidateProductQueries,
+    productQueryKeys,
+    useProductsListQuery,
+} from "./productQueries";
+import {
+    invalidatePlanQueries,
+    usePlansListQuery,
+} from "./planQueries";
 
 type TabType = "plans" | "products";
 type ImportEntity = "plans" | "products";
@@ -212,6 +223,7 @@ const buildProductCountMap = (rows: any[], productField: string) => {
 export default function PlansPage() {
     const navigate = useNavigate();
     const location = useLocation();
+    const queryClient = useQueryClient();
     const { formatMoney, baseCurrencyCode } = useCurrency();
     const { canCreate, canEdit, canDelete } = usePermissions();
 
@@ -238,16 +250,26 @@ export default function PlansPage() {
     const [newProductModalOpen, setNewProductModalOpen] = useState(false);
     const [deleteModal, setDeleteModal] = useState<{ entityType: TabType; ids: string[] } | null>(null);
 
-    const [plans, setPlans] = useState<PlanRow[]>([]);
     const [products, setProducts] = useState<ProductRow[]>([]);
-    const [productsLoading, setProductsLoading] = useState(false);
-    const [plansLoading, setPlansLoading] = useState(false);
     const [addons, setAddons] = useState<any[]>([]);
     const [coupons, setCoupons] = useState<any[]>([]);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
     const [sortKey, setSortKey] = useState("plan");
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+
+    const plansListQuery = usePlansListQuery();
+    const plans = useMemo(
+        () =>
+            (Array.isArray(plansListQuery.data) ? plansListQuery.data : [])
+                .map((row: any) => normalizePlan(row))
+                .filter((row: PlanRow) => Boolean(row.plan)),
+        [plansListQuery.data]
+    );
+    const plansLoading = (plansListQuery.isPending || plansListQuery.isFetching) && plans.length === 0;
+    const refreshPlans = useCallback(async () => {
+        await invalidatePlanQueries(queryClient);
+    }, [queryClient]);
 
     const [planColumns, setPlanColumns] = useState<ColumnConfig[]>(() =>
         loadColumns(PLAN_COLUMNS_STORAGE_KEY, DEFAULT_PLAN_COLUMNS)
@@ -273,37 +295,26 @@ export default function PlansPage() {
         ? canDelete("products", "Products")
         : canDelete("products", "Plan");
 
-  useEffect(() => {
-    const refreshProducts = async () => {
-      setProductsLoading(true);
-      try {
-        const res: any = await productsAPI.getAll({ limit: 1000 });
-                const rows = Array.isArray(res?.data) ? res.data : [];
-                setProducts(rows.map(normalizeProduct).filter((row: ProductRow) => row.name));
-            } catch {
-                setProducts([]);
-            } finally {
-                setProductsLoading(false);
-            }
-        };
+    const productsListQuery = useProductsListQuery({ limit: 1000 });
 
-    const refreshPlans = async () => {
-      setPlansLoading(true);
-      try {
-        const res: any = await plansAPI.getAll({ limit: 1000 });
-                const rows = Array.isArray(res?.data) ? res.data : [];
-                setPlans(rows.map(normalizePlan).filter((row: PlanRow) => row.plan));
-            } catch {
-                setPlans([]);
-            } finally {
-                setPlansLoading(false);
-        }
-      };
+    const refreshProductsFromQuery = useCallback(async () => {
+        await invalidateProductQueries(queryClient);
+        await queryClient.fetchQuery({
+            queryKey: productQueryKeys.list({ limit: 1000 }),
+            queryFn: () => fetchProductsList({ limit: 1000 }),
+        });
+    }, [queryClient]);
 
-      const loadData = async () => {
-            await refreshPlans();
-            await refreshProducts();
+    useEffect(() => {
+        const rows = Array.isArray(productsListQuery.data) ? productsListQuery.data : [];
+        setProducts(rows.map(normalizeProduct).filter((row: ProductRow) => row.name));
+    }, [productsListQuery.data]);
 
+    const productsLoading =
+        (productsListQuery.isPending || productsListQuery.isFetching) && products.length === 0;
+
+    useEffect(() => {
+        const loadMetadata = async () => {
             try {
                 const res: any = await addonsAPI.getAll({ limit: 1000 });
                 const rows = Array.isArray(res?.data) ? res.data : [];
@@ -319,9 +330,9 @@ export default function PlansPage() {
             } catch {
                 setCoupons([]);
             }
-      };
+        };
 
-        loadData();
+        void loadMetadata();
     }, []);
 
     useEffect(() => {
@@ -566,10 +577,7 @@ export default function PlansPage() {
                     });
 
                     await plansAPI.bulkCreate(prepared);
-
-                    const res: any = await plansAPI.getAll({ limit: 1000 });
-                    const list = Array.isArray(res?.data) ? res.data : [];
-                    setPlans(list.map(normalizePlan).filter((r) => r.plan));
+                    await refreshPlans();
                     toast.success(`${prepared.length} plan(s) imported`);
                 } catch (e: any) {
                     console.error("Failed to import plans", e);
@@ -592,9 +600,7 @@ export default function PlansPage() {
                         // eslint-disable-next-line no-await-in-loop
                         ensureProductApiSuccess(await productsAPI.create(payload), "Failed to create product");
                     }
-                    const res: any = await productsAPI.getAll({ limit: 1000 });
-                    const list = Array.isArray(res?.data) ? res.data : [];
-                    setProducts(list.map(normalizeProduct).filter((r: ProductRow) => r.name));
+                    await refreshProductsFromQuery();
                     toast.success(`${rows.length} product(s) imported`);
                 } catch (e) {
                     toast.error("Failed to import products");
@@ -630,9 +636,7 @@ export default function PlansPage() {
                             )
                         )
                     );
-                    const res: any = await productsAPI.getAll({ limit: 1000 });
-                    const list = Array.isArray(res?.data) ? res.data : [];
-                    setProducts(list.map(normalizeProduct).filter((r: ProductRow) => r.name));
+                    await refreshProductsFromQuery();
                     setSelectedIds([]);
                     toast.success(`Selected products marked as ${status}`);
                 } catch (e: any) {
@@ -645,9 +649,7 @@ export default function PlansPage() {
         void (async () => {
             try {
                 await Promise.all(selectedIds.map((id) => plansAPI.update(id, { status })));
-                const res: any = await plansAPI.getAll({ limit: 1000 });
-                const list = Array.isArray(res?.data) ? res.data : [];
-                setPlans(list.map(normalizePlan).filter((r: PlanRow) => r.plan));
+                await refreshPlans();
                 setSelectedIds([]);
                 toast.success(`Selected plans marked as ${status}`);
             } catch (e: any) {
@@ -680,15 +682,11 @@ export default function PlansPage() {
                         ensureProductApiSuccess(await productsAPI.delete(id), "Failed to delete product")
                     )
                 );
-                const res: any = await productsAPI.getAll({ limit: 1000 });
-                const list = Array.isArray(res?.data) ? res.data : [];
-                setProducts(list.map(normalizeProduct).filter((r: ProductRow) => r.name));
+                await refreshProductsFromQuery();
                 toast.success("Selected products deleted");
             } else {
                 await Promise.all(deleteModal.ids.map((id) => plansAPI.delete(id)));
-                const res: any = await plansAPI.getAll({ limit: 1000 });
-                const list = Array.isArray(res?.data) ? res.data : [];
-                setPlans(list.map(normalizePlan).filter((r: PlanRow) => r.plan));
+                await refreshPlans();
                 toast.success("Selected plans deleted");
             }
             setSelectedIds([]);
@@ -710,9 +708,7 @@ export default function PlansPage() {
                             )
                         )
                     );
-                    const res: any = await productsAPI.getAll({ limit: 1000 });
-                    const list = Array.isArray(res?.data) ? res.data : [];
-                    setProducts(list.map(normalizeProduct).filter((r: ProductRow) => r.name));
+                    await refreshProductsFromQuery();
                     setBulkUpdateOpen(false);
                     setSelectedIds([]);
                     toast.success("Selected products updated successfully");
@@ -740,9 +736,7 @@ export default function PlansPage() {
                 } else patch[field] = newValue;
 
                 await Promise.all(selectedIds.map((id) => plansAPI.update(id, patch)));
-                const res: any = await plansAPI.getAll({ limit: 1000 });
-                const list = Array.isArray(res?.data) ? res.data : [];
-                setPlans(list.map(normalizePlan).filter((r: PlanRow) => r.plan));
+                await refreshPlans();
                 setBulkUpdateOpen(false);
                 setSelectedIds([]);
                 toast.success("Selected plans updated successfully");
@@ -1190,16 +1184,7 @@ export default function PlansPage() {
                 isOpen={newProductModalOpen}
                 onClose={() => setNewProductModalOpen(false)}
                 onSaveSuccess={() => {
-                    void (async () => {
-                        try {
-                            const res: any = await productsAPI.getAll({ limit: 1000 });
-                            const list = Array.isArray(res?.data) ? res.data : [];
-                            setProducts(list.map(normalizeProduct).filter((row: ProductRow) => row.name));
-                        } catch {
-                            setProducts([]);
-                        }
-                    })();
-                    toast.success("Products list updated");
+                    void refreshProductsFromQuery();
                 }}
             />
 

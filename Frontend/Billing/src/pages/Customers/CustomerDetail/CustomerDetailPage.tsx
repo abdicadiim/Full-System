@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { flushSync } from "react-dom";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { toast } from "react-toastify";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
-import { customersAPI, vendorsAPI, currenciesAPI, invoicesAPI, paymentsReceivedAPI, creditNotesAPI, quotesAPI, recurringInvoicesAPI, expensesAPI, recurringExpensesAPI, projectsAPI, billsAPI, salesReceiptsAPI, journalEntriesAPI, paymentsMadeAPI, purchaseOrdersAPI, vendorCreditsAPI, documentsAPI, reportingTagsAPI } from "../../../services/api";
+import { customersAPI, vendorsAPI, currenciesAPI, invoicesAPI, paymentsReceivedAPI, creditNotesAPI, quotesAPI, recurringInvoicesAPI, expensesAPI, recurringExpensesAPI, projectsAPI, billsAPI, salesReceiptsAPI, journalEntriesAPI, paymentsMadeAPI, purchaseOrdersAPI, vendorCreditsAPI, documentsAPI } from "../../../services/api";
 import SearchableDropdown from "../../../components/ui/SearchableDropdown";
 import {
     X, Edit, Paperclip, ChevronDown, Plus, MoreVertical,
@@ -24,6 +23,7 @@ import CustomerDetailOverviewTab from "./CustomerDetailOverviewTab";
 import CustomerDetailSidebar from "./CustomerDetailSidebar";
 import CustomerDetailStatementTab from "./CustomerDetailStatementTab";
 import CustomerDetailPurchasesTab from "./CustomerDetailPurchasesTab";
+import { loadCustomerReportingTags } from "../customerReportingTags";
 import CustomerDetailTransactionsTab from "./CustomerDetailTransactionsTab";
 import useCustomerDetailData from "./useCustomerDetailData";
 import CustomerPortalAccessModal from "./CustomerPortalAccessModal";
@@ -69,17 +69,27 @@ const DEFAULT_CUSTOMER_PDF_TEMPLATES: CustomerPdfTemplates = {
     paymentThankYou: "Elite Template",
 };
 
-const normalizeSidebarCustomer = (row: any): ExtendedCustomer => ({
-    ...row,
-    id: String(row?._id || row?.id || ""),
-    _id: row?._id || row?.id,
-    name:
-        row?.name ||
+const resolveCustomerDisplayName = (row: any) =>
+    String(
         row?.displayName ||
         row?.companyName ||
+        row?.name ||
         `${row?.firstName || ""} ${row?.lastName || ""}`.trim() ||
-        "Customer",
-});
+        "Customer"
+    ).trim() || "Customer";
+
+const normalizeSidebarCustomer = (row: any): ExtendedCustomer => {
+    const resolvedId = String(row?._id || row?.id || "").trim();
+    const resolvedName = resolveCustomerDisplayName(row);
+
+    return {
+        ...row,
+        id: resolvedId,
+        _id: row?._id || row?.id || resolvedId,
+        name: resolvedName,
+        displayName: row?.displayName || resolvedName,
+    };
+};
 
 const toSerializableCustomerState = (value: any) => {
     if (!value || typeof value !== "object") return value ?? null;
@@ -108,6 +118,7 @@ export default function CustomerDetail() {
     const location = useLocation();
     const detailRouteState = (location.state as any) || {};
     const initialCustomer = detailRouteState.customer || null;
+    const customerJustSaved = Boolean(detailRouteState.customerJustSaved);
     const normalizedInitialCustomer = initialCustomer ? normalizeSidebarCustomer(initialCustomer) : null;
     const initialSidebarCustomersFromRoute = Array.isArray(detailRouteState.customerList) && detailRouteState.customerList.length > 0
         ? detailRouteState.customerList.map(normalizeSidebarCustomer)
@@ -133,6 +144,7 @@ export default function CustomerDetail() {
     const [customer, setCustomer] = useState<ExtendedCustomer | null>(normalizedInitialCustomer);
     const [availableCurrencies, setAvailableCurrencies] = useState<any[]>([]);
     const [loading, setLoading] = useState(!normalizedInitialCustomer);
+    const [isNavigatingToEdit, setIsNavigatingToEdit] = useState(false);
     const [customers, setCustomers] = useState<ExtendedCustomer[]>(initialSidebarCustomers);
     const [activeTab, setActiveTab] = useState("overview");
     const [comments, setComments] = useState<Comment[]>([]);
@@ -161,6 +173,21 @@ export default function CustomerDetail() {
         journals: false,
         bills: false
     });
+
+    useEffect(() => {
+        if (!isNavigatingToEdit || typeof window === "undefined") {
+            return;
+        }
+
+        const timeoutId = window.setTimeout(() => {
+            setIsNavigatingToEdit(false);
+        }, 2500);
+
+        return () => {
+            window.clearTimeout(timeoutId);
+        };
+    }, [isNavigatingToEdit]);
+
     const [invoiceStatusFilter, setInvoiceStatusFilter] = useState("all");
     const [invoiceCurrentPage, setInvoiceCurrentPage] = useState(1);
     const invoicesPerPage = 10;
@@ -494,7 +521,7 @@ export default function CustomerDetail() {
 
 
     useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
+        const handleClickOutside = (event: PointerEvent) => {
             if (incomeTimePeriodRef.current && !incomeTimePeriodRef.current.contains(event.target as Node)) {
                 setIsIncomeTimePeriodDropdownOpen(false);
             }
@@ -508,8 +535,8 @@ export default function CustomerDetail() {
                 setIsMobilePhoneCodeDropdownOpen(false);
             }
         };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
+        document.addEventListener("pointerdown", handleClickOutside);
+        return () => document.removeEventListener("pointerdown", handleClickOutside);
     }, []);
 
     // Profile Image and Invite Card state
@@ -625,6 +652,7 @@ export default function CustomerDetail() {
     const { refreshData } = useCustomerDetailData({
         id,
         initialCustomer,
+        customerJustSaved,
         locationKey: location.key,
         navigate,
         activeTab,
@@ -825,14 +853,14 @@ export default function CustomerDetail() {
 
     useEffect(() => {
         if (openContactPersonSettingsIndex === null) return;
-        const handleClickOutside = (event: MouseEvent) => {
+        const handleClickOutside = (event: PointerEvent) => {
             const target = event.target as HTMLElement | null;
             if (!target) return;
             if (target.closest?.('[data-contact-person-menu-root="true"]')) return;
             setOpenContactPersonSettingsIndex(null);
         };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
+        document.addEventListener("pointerdown", handleClickOutside);
+        return () => document.removeEventListener("pointerdown", handleClickOutside);
     }, [openContactPersonSettingsIndex]);
 
     const handleContactPersonProfileFile = (file: File | null | undefined) => {
@@ -882,8 +910,7 @@ export default function CustomerDetail() {
 
         const loadTags = async () => {
             try {
-                const response: any = await reportingTagsAPI.getAll({ limit: 10000 });
-                const list = Array.isArray(response?.data) ? response.data : [];
+                const list = await loadCustomerReportingTags();
                 setAvailableReportingTags(list);
 
                 setAssociateTagsValues((prev) => {
@@ -1050,13 +1077,10 @@ export default function CustomerDetail() {
             }
         }
 
-        flushSync(() => {
-            navigate(`/sales/customers/${nextCustomerId}`, {
-                state: {
-                    customer: previewCustomer,
-                    customerList: safeCustomerList,
-                },
-            });
+        navigate(`/sales/customers/${nextCustomerId}`, {
+            state: {
+                customer: previewCustomer,
+            },
         });
     }, [navigate, normalizeComments, sidebarSortedCustomers]);
 
@@ -1266,6 +1290,10 @@ export default function CustomerDetail() {
     }, [customer?.id, (customer as any)?.pdfTemplates]);
 
     const handleEditCustomer = useCallback(() => {
+        if (isNavigatingToEdit) {
+            return;
+        }
+
         const customerId = String(customer?._id || customer?.id || id || "").trim();
         if (!customerId) {
             toast.error("Customer data is still loading. Please try again.");
@@ -1283,15 +1311,24 @@ export default function CustomerDetail() {
             }
         }
 
-        flushSync(() => {
+        setIsNavigatingToEdit(true);
+
+        const openEditPage = () => {
             navigate(`/sales/customers/${customerId}/edit`, {
                 state: {
                     customer: safeCustomer,
                     returnTo: `/sales/customers/${customerId}`,
                 },
             });
-        });
-    }, [customer, id, navigate]);
+        };
+
+        if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+            window.requestAnimationFrame(openEditPage);
+            return;
+        }
+
+        openEditPage();
+    }, [customer, id, isNavigatingToEdit, navigate]);
 
     const {
         displayName,
@@ -1551,6 +1588,7 @@ export default function CustomerDetail() {
                     attachments={attachments}
                     navigate={navigate}
                     handleEditCustomer={handleEditCustomer}
+                    isNavigatingToEdit={isNavigatingToEdit}
                     setIsDeleteModalOpen={setIsDeleteModalOpen}
                     isAttachmentsDropdownOpen={isAttachmentsDropdownOpen}
                     setIsAttachmentsDropdownOpen={setIsAttachmentsDropdownOpen}
@@ -1570,6 +1608,7 @@ export default function CustomerDetail() {
                     setPortalAccessContacts={setPortalAccessContacts}
                     setIsConfigurePortalModalOpen={setIsConfigurePortalModalOpen}
                     handleClone={handleClone}
+                    isCloning={isCloning}
                     handleMergeCustomers={handleMergeCustomers}
                     setActiveStatus={setActiveStatus}
                     setShowActionHeader={setShowActionHeader}

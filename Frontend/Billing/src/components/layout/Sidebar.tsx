@@ -19,6 +19,7 @@ import {
 import { useUser } from "../../lib/auth/UserContext";
 import { useSettings } from "../../lib/settings/SettingsContext";
 import { getNavConfigForRole } from "../../config/roleBasedNav";
+import { preloadCustomersIndexRoute } from "../../pages/Customers/customerRouteLoaders";
 import packageJson from "../../../package.json";
 
 const SIDEBAR_MODULE_BY_PATH: Record<string, string[]> = {
@@ -690,6 +691,21 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
                           <NavLink
                             to={item.to}
                             end={item.to === "/dashboard" || item.to === "/"}
+                            onMouseEnter={() => {
+                              if (item.to === "/sales/customers") {
+                                void preloadCustomersIndexRoute();
+                              }
+                            }}
+                            onFocus={() => {
+                              if (item.to === "/sales/customers") {
+                                void preloadCustomersIndexRoute();
+                              }
+                            }}
+                            onPointerDown={() => {
+                              if (item.to === "/sales/customers") {
+                                void preloadCustomersIndexRoute();
+                              }
+                            }}
                             onClick={(event) => {
                               if (hasSubMenu) {
                                 if (!isCollapsed) {

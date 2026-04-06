@@ -1,5 +1,6 @@
 // src/features/items/ItemsPage.tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 import { Loader2, X } from "lucide-react";
 import { itemsAPI, tagAssignmentsAPI } from "../../../services/api";
@@ -16,10 +17,12 @@ import BulkUpdateModal from "./components/modals/BulkUpdateModal";
 import { useCurrency } from "../../../hooks/useCurrency";
 import { usePermissions } from "../../../hooks/usePermissions";
 import { buildCloneName } from "../utils/cloneName";
+import { fetchItemsList, itemQueryKeys, useItemDetailQuery, useItemsListQuery } from "./itemQueries";
 
 function ItemsPageContent() {
   const location = useLocation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -44,13 +47,32 @@ function ItemsPageContent() {
   const canDeleteItems = canDelete();
 
   const ITEMS_STORAGE_KEY = "inv_items_v1";
+  const normalizedSelectedId = String(selectedId || "").trim();
 
-  const normalizeItemForList = (item: Item) => ({
+  const setRouteHash = useCallback(
+    (hash: string) => {
+      navigate(
+        { pathname: location.pathname, search: location.search, hash: hash || "" },
+        { replace: true }
+      );
+    },
+    [location.pathname, location.search, navigate]
+  );
+
+  const normalizeItemForList = (item?: Item | null) => {
+    if (!item) return null;
+
+    const normalizedId = String(item.id || item._id || "").trim();
+    if (!normalizedId) return null;
+
+    return {
     ...item,
     images: Array.isArray(item.images) ? item.images : (item.image ? [item.image] : []),
-    id: item.id || item._id,
-    active: item.active !== undefined ? item.active : item.isActive
-  });
+      id: normalizedId,
+      _id: item._id || item.id || normalizedId,
+      active: item.active !== undefined ? item.active : item.isActive
+    };
+  };
 
   const ensureItemApiSuccess = (response: any, fallbackMessage: string) => {
     if (response && typeof response === "object" && "success" in response && response.success === false) {
@@ -59,20 +81,30 @@ function ItemsPageContent() {
     return response;
   };
 
-  // Load items from API
-  const fetchItems = async () => {
-    setLoading(true);
-    try {
-      const response = await itemsAPI.getAll();
-      const itemsData = response.data || [];
-      const normalizedItems = itemsData.map((item: Item) => normalizeItemForList(item));
-      setItems(normalizedItems);
-    } catch (error) {
-      console.error("Failed to fetch items:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const applyItemsResult = useCallback((rows: any[]) => {
+    const normalizedItems = (Array.isArray(rows) ? rows : [])
+      .map((item: Item) => normalizeItemForList(item))
+      .filter(Boolean) as Item[];
+    setItems(normalizedItems);
+  }, []);
+
+  const upsertItemInState = useCallback((item: any) => {
+    const normalizedItem = normalizeItemForList(item as Item);
+    if (!normalizedItem) return null;
+
+    setItems((prev) => {
+      const withoutCurrent = prev.filter(
+        (row: any) => String(row?.id || row?._id || "").trim() !== normalizedItem.id
+      );
+      return [normalizedItem, ...withoutCurrent];
+    });
+
+    return normalizedItem;
+  }, []);
+
+  const itemsListQuery = useItemsListQuery({
+    enabled: !permissionsLoading && canViewItems,
+  });
 
   useEffect(() => {
     if (permissionsLoading) return;
@@ -80,13 +112,105 @@ function ItemsPageContent() {
       setLoading(false);
       return;
     }
-    fetchItems();
-  }, [permissionsLoading, canViewItems]);
+
+    if (itemsListQuery.data) {
+      applyItemsResult(itemsListQuery.data);
+    }
+  }, [applyItemsResult, canViewItems, itemsListQuery.data, permissionsLoading]);
+
+  useEffect(() => {
+    if (permissionsLoading) return;
+    if (!canViewItems) {
+      setLoading(false);
+      return;
+    }
+
+    if (itemsListQuery.isPending && items.length === 0) {
+      setLoading(true);
+      return;
+    }
+
+    if (itemsListQuery.data || itemsListQuery.isError) {
+      setLoading(false);
+    }
+  }, [
+    canViewItems,
+    items.length,
+    itemsListQuery.data,
+    itemsListQuery.isError,
+    itemsListQuery.isPending,
+    permissionsLoading,
+  ]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(ITEMS_STORAGE_KEY, JSON.stringify(items));
+    } catch {
+      // Ignore local storage sync errors for item cache mirror.
+    }
+  }, [items]);
+
+  const fetchItems = useCallback(async () => {
+    if (!canViewItems) return [];
+
+    if (items.length === 0) {
+      setLoading(true);
+    }
+
+    try {
+      const rows = await queryClient.fetchQuery({
+        queryKey: itemQueryKeys.list(),
+        queryFn: fetchItemsList,
+      });
+      applyItemsResult(rows);
+      return rows;
+    } catch (error) {
+      console.error("Failed to fetch items:", error);
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  }, [applyItemsResult, canViewItems, items.length, queryClient]);
 
   const selectedItem = useMemo(
-    () => items.find((x: Item) => x.id === selectedId || x._id === selectedId) || null,
-    [items, selectedId]
+    () =>
+      items.find(
+        (x: Item) => String(x.id || x._id || "").trim() === normalizedSelectedId
+      ) || null,
+    [items, normalizedSelectedId]
   );
+
+  const selectedItemQuery = useItemDetailQuery(normalizedSelectedId, {
+    enabled: view === "detail" && Boolean(normalizedSelectedId),
+    initialItem: selectedItem,
+  });
+
+  const resolvedSelectedItem = selectedItemQuery.data || selectedItem || null;
+
+  useEffect(() => {
+    if (resolvedSelectedItem) {
+      upsertItemInState(resolvedSelectedItem);
+    }
+  }, [resolvedSelectedItem, upsertItemInState]);
+
+  const handleSelectItem = useCallback((id: string) => {
+    const nextId = String(id || "").trim();
+    if (!nextId) return;
+
+    setSelectedId(nextId);
+    window.scrollTo(0, 0);
+  }, []);
+
+  useEffect(() => {
+    if (!normalizedSelectedId) return;
+    if (view === "detail") {
+      setRouteHash("detail");
+      return;
+    }
+
+    setView("detail");
+    setRouteHash("detail");
+  }, [normalizedSelectedId, setRouteHash, view]);
 
   const handleCreateItem = async (
     data: any,
@@ -101,30 +225,11 @@ function ItemsPageContent() {
       const response = ensureItemApiSuccess(await itemsAPI.create(data), "Failed to save item");
 
       const newItem = response.data || response;
-      const normalizedItem = normalizeItemForList(newItem as Item);
-      const normalizedId = String(normalizedItem.id || normalizedItem._id || "");
+      const normalizedItem = upsertItemInState(newItem as Item);
+      const normalizedId = String(normalizedItem?.id || normalizedItem?._id || "");
       if (!normalizedId) {
         throw new Error("Item saved without id");
       }
-
-      // Ensure localStorage has the new item (hard guarantee for offline/local flow).
-      try {
-        const raw = localStorage.getItem(ITEMS_STORAGE_KEY);
-        const existing = raw ? JSON.parse(raw) : [];
-        const rows = Array.isArray(existing) ? existing : [];
-        const withoutCurrent = rows.filter((row: any) => String(row?.id || row?._id) !== normalizedId);
-        localStorage.setItem(ITEMS_STORAGE_KEY, JSON.stringify([normalizedItem, ...withoutCurrent]));
-      } catch (storageError) {
-        console.error("Local storage sync failed:", storageError);
-      }
-
-      // Immediately reflect in UI list before refresh.
-      setItems((prev) => {
-        const withoutCurrent = prev.filter(
-          (row: any) => String(row?.id || row?._id) !== normalizedId
-        );
-        return [normalizedItem, ...withoutCurrent];
-      });
 
       const itemId = newItem._id || newItem.id;
 
@@ -149,8 +254,7 @@ function ItemsPageContent() {
       }
       setClonedItem(null);
       toast.success("Item created successfully");
-      // Final sync from local store/API
-      fetchItems();
+      await fetchItems();
     } catch (error: any) {
       console.error("Failed to create item:", error);
       toast.error("Failed to create item: " + (error.message || "Unknown error"));
@@ -324,31 +428,18 @@ function ItemsPageContent() {
     }
   };
 
+  const openNewView = () => {
+    setView("new");
+    setSelectedId(null);
+    setRouteHash("new");
+  };
+
   const handleBackToList = () => {
     setView("list");
     setSelectedId(null);
     setClonedItem(null);
+    setRouteHash("");
   };
-
-  // Keep a tiny URL signal while inside the Items module.
-  // This lets a global sidebar click to `/products/items` reliably reset the view back to the list
-  // even if this page is already mounted (detail/new/edit are state-driven).
-  useEffect(() => {
-    const desiredHash = view === "list" ? "" : `#${view}`;
-    if (location.hash === desiredHash) return;
-    navigate({ pathname: location.pathname, search: location.search, hash: desiredHash }, { replace: true });
-    // Intentionally do not depend on `location.hash` so external hash changes can drive state.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, navigate, location.pathname, location.search]);
-
-  // If the URL hash is cleared (ex: user clicks "Items" in the global sidebar),
-  // force the list view.
-  useEffect(() => {
-    if (location.hash) return;
-    if (view === "list") return;
-    handleBackToList();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.hash]);
 
   const handleCloneItem = async (data: any) => {
     if (!canCreateItems) {
@@ -396,14 +487,14 @@ function ItemsPageContent() {
 
   return (
     <div className="w-full h-full">
-      {view === "detail" && selectedItem ? (
+      {view === "detail" && normalizedSelectedId ? (
         <div className="flex flex-col md:flex-row gap-0 h-full">
           <div className="hidden md:flex w-full md:w-1/5 border-r border-gray-200 bg-white flex-col z-20">
-            <ItemSidebar
+              <ItemSidebar
               items={items}
               selectedId={selectedId}
-              onSelect={(id: string) => { setSelectedId(id); setView("detail"); window.scrollTo(0, 0); }}
-              onNew={() => { if (canCreateItems) { setView("new"); setSelectedId(null); } }}
+              onSelect={handleSelectItem}
+              onNew={() => { if (canCreateItems) openNewView(); }}
               baseCurrency={baseCurrency}
               onBulkMarkActive={handleBulkMarkActive}
               onBulkMarkInactive={handleBulkMarkInactive}
@@ -415,22 +506,44 @@ function ItemsPageContent() {
             />
           </div>
           <div className="flex-1 bg-white overflow-auto w-full">
-            <ItemDetails
-              item={selectedItem as Item}
-              onBack={handleBackToList}
-              onEdit={() => { if (canEditItems) setView("edit"); }}
-              onUpdate={handleUpdateItem}
-              items={items}
-              setItems={setItems}
-              onDelete={handleDeleteItem}
-              setSelectedId={setSelectedId}
-              setView={setView}
-              onClone={handleCloneItem}
-              baseCurrency={baseCurrency}
-              canCreate={canCreateItems}
-              canEdit={canEditItems}
-              canDelete={canDeleteItems}
-            />
+            {resolvedSelectedItem ? (
+              <ItemDetails
+                item={resolvedSelectedItem as Item}
+                onBack={handleBackToList}
+                onEdit={() => { if (canEditItems) { setView("edit"); setRouteHash("edit"); } }}
+                onUpdate={handleUpdateItem}
+                items={items}
+                setItems={setItems}
+                onDelete={handleDeleteItem}
+                setSelectedId={setSelectedId}
+                setView={setView}
+                onClone={handleCloneItem}
+                baseCurrency={baseCurrency}
+                canCreate={canCreateItems}
+                canEdit={canEditItems}
+                canDelete={canDeleteItems}
+              />
+            ) : (
+              <div className="flex min-h-[320px] items-center justify-center px-6">
+                {selectedItemQuery.isPending ? (
+                  <div className="flex items-center gap-3 text-sm text-gray-500">
+                    <Loader2 size={18} className="animate-spin" />
+                    Loading item details...
+                  </div>
+                ) : (
+                  <div className="text-center">
+                    <p className="text-sm text-gray-600">We couldn't open that item.</p>
+                    <button
+                      type="button"
+                      onClick={handleBackToList}
+                      className="mt-3 rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      Back to Items
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       ) : (
@@ -438,8 +551,8 @@ function ItemsPageContent() {
           {view === "list" && (
             <ItemsList
               items={items}
-              onSelect={(id: string) => { setSelectedId(id); setView("detail"); window.scrollTo(0, 0); }}
-              onNew={() => { if (canCreateItems) { setView("new"); setSelectedId(null); } }}
+              onSelect={handleSelectItem}
+              onNew={() => { if (canCreateItems) openNewView(); }}
               onDelete={handleDeleteItem}
               onBulkDelete={async (ids: string[]) => setDeleteConfirmModal({ open: true, itemId: null, itemName: null, count: ids.length, itemIds: ids })}
               onBulkUpdate={(ids: string[]) => setBulkUpdateModal({ open: true, itemIds: ids })}
@@ -463,12 +576,12 @@ function ItemsPageContent() {
             />
           )}
 
-          {view === "edit" && selectedItem && canEditItems && (
+          {view === "edit" && resolvedSelectedItem && canEditItems && (
             <EditItemForm
-              onCancel={() => setView("detail")}
+              onCancel={() => { setView("detail"); setRouteHash("detail"); }}
               onUpdate={handleUpdateItem}
               baseCurrency={baseCurrency}
-              item={selectedItem as Item}
+              item={resolvedSelectedItem as Item}
               formTitle="Edit Item"
             />
           )}
