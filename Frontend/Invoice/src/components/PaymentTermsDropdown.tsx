@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown, Search, Settings } from "lucide-react";
 import { defaultPaymentTerms, PaymentTerm } from "../hooks/usePaymentTermsDropdown";
 
@@ -10,6 +11,7 @@ type PaymentTermsDropdownProps = {
   placeholder?: string;
   className?: string;
   menuClassName?: string;
+  openDirection?: "down" | "up";
 };
 
 export const PaymentTermsDropdown = ({
@@ -20,11 +22,15 @@ export const PaymentTermsDropdown = ({
   placeholder = "Select payment terms",
   className = "",
   menuClassName = "",
+  openDirection = "down",
 }: PaymentTermsDropdownProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTermValue, setActiveTermValue] = useState("");
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
 
   const terms = customTerms.length ? customTerms : defaultPaymentTerms;
   const selected = terms.find((term) => term.value === value);
@@ -32,13 +38,52 @@ export const PaymentTermsDropdown = ({
   useEffect(() => {
     if (!isOpen) return;
     const handleOutsideClick = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) {
         setIsOpen(false);
       }
     };
     document.addEventListener("mousedown", handleOutsideClick);
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const focusSearch = () => {
+      searchInputRef.current?.focus({ preventScroll: true });
+    };
+
+    const raf = window.requestAnimationFrame(focusSearch);
+
+    const updatePosition = () => {
+      const anchor = rootRef.current;
+      if (!anchor) return;
+
+      const rect = anchor.getBoundingClientRect();
+      const maxWidth = Math.max(240, Math.min(rect.width, window.innerWidth - 16));
+      const spaceBelow = window.innerHeight - rect.bottom - 12;
+      const spaceAbove = rect.top - 12;
+      const openUp = openDirection === "up" || (openDirection === "down" ? (spaceBelow < 320 && spaceAbove > spaceBelow) : false);
+
+      setMenuStyle({
+        position: "fixed",
+        left: Math.max(8, Math.min(rect.left, window.innerWidth - maxWidth - 8)),
+        top: openUp ? "auto" : rect.bottom + 8,
+        bottom: openUp ? Math.max(8, window.innerHeight - rect.top + 8) : "auto",
+        width: maxWidth,
+      });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [isOpen, searchQuery, value, customTerms]);
 
   const filteredTerms = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -72,24 +117,27 @@ export const PaymentTermsDropdown = ({
         />
       </button>
 
-      {isOpen && (
-        <div
-          className={`absolute left-0 top-full z-50 mt-2 w-full min-w-[200px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.14)] ${menuClassName}`}
-        >
+      {isOpen && typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className={`z-[1400] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.14)] ${menuClassName}`}
+            style={menuStyle}
+          >
           <div className="border-b border-gray-100 p-2">
             <div className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2">
               <Search size={15} className="text-gray-400" />
               <input
+                ref={searchInputRef}
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Search"
                 className="w-full border-0 p-0 text-sm text-gray-700 outline-none placeholder:text-gray-400 focus:ring-0"
-                autoFocus
               />
             </div>
           </div>
 
-          <div className="max-h-64 overflow-y-auto p-1.5">
+          <div className="max-h-[132px] overflow-y-auto p-1.5">
             {filteredTerms.length > 0 ? (
               filteredTerms.map((term) => {
                 const isSelected = term.value === value;
@@ -136,8 +184,9 @@ export const PaymentTermsDropdown = ({
               </button>
             </div>
           )}
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 };

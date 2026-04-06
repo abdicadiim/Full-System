@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Navigate, Route, Routes, Link } from "react-router-dom";
 import {
   AlertTriangle,
@@ -20,7 +21,7 @@ import { useUser } from "../../lib/auth/UserContext";
 import { usePermissions } from "../../hooks/usePermissions";
 import { useCurrency } from "../../hooks/useCurrency";
 import { useSettings } from "../../lib/settings/SettingsContext";
-import { dashboardAPI, expensesAPI, invoicesAPI, paymentsReceivedAPI } from "../../services/api";
+import { expensesAPI, invoicesAPI, paymentsReceivedAPI, subscriptionsAPI } from "../../services/api";
 
 function asRows(res: any) {
   if (!res) return [];
@@ -94,6 +95,7 @@ const DASHBOARD_SUMMARY_CACHE_KEY = "taban_invoice_dashboard_summary";
 const DASHBOARD_INVOICES_CACHE_KEY = "taban_invoice_dashboard_invoices";
 const DASHBOARD_PAYMENTS_CACHE_KEY = "taban_invoice_dashboard_payments";
 const DASHBOARD_EXPENSES_CACHE_KEY = "taban_invoice_dashboard_expenses";
+const DASHBOARD_SUBSCRIPTIONS_CACHE_KEY = "taban_invoice_dashboard_subscriptions";
 
 function readCachedSummary() {
   try {
@@ -131,6 +133,216 @@ function writeCachedRows(cacheKey: string, rows: any[]) {
   } catch {
     // Ignore non-critical cache failures.
   }
+}
+
+function readStoredOrganizationProfile() {
+  try {
+    const raw = localStorage.getItem("organization_profile");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function addMonths(date: Date, amount: number) {
+  return new Date(date.getFullYear(), date.getMonth() + amount, 1);
+}
+
+function monthKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabelLine(date: Date) {
+  const label = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).format(date);
+  const [month, year] = label.split(" ");
+  return `${month}\n${year}`;
+}
+
+function buildMonthBuckets(months = 12) {
+  const currentMonth = startOfMonth(new Date());
+  const start = addMonths(currentMonth, -(months - 1));
+  return Array.from({ length: months }, (_, index) => {
+    const monthStart = addMonths(start, index);
+    return {
+      key: monthKey(monthStart),
+      label: monthLabelLine(monthStart),
+      start: monthStart,
+      end: addMonths(monthStart, 1),
+    };
+  });
+}
+
+function toMonthlySeries(
+  rows: any[],
+  buckets: Array<{ start: Date; end: Date }>,
+  getDate: (row: any) => Date | null,
+  getValue: (row: any) => number,
+) {
+  const values = new Array(buckets.length).fill(0);
+  const bucketStart = buckets[0]?.start;
+  const bucketEnd = buckets[buckets.length - 1]?.end;
+  if (!bucketStart || !bucketEnd) return values;
+
+  for (const row of rows || []) {
+    const date = getDate(row);
+    if (!date || date < bucketStart || date >= bucketEnd) continue;
+    const index = (date.getFullYear() - bucketStart.getFullYear()) * 12 + (date.getMonth() - bucketStart.getMonth());
+    if (index < 0 || index >= values.length) continue;
+    values[index] += getValue(row);
+  }
+
+  return values;
+}
+
+function buildDashboardSummaryFromRows({
+  invoices,
+  payments,
+  expenses,
+  subscriptions,
+  organizationName,
+  baseCurrency,
+}: {
+  invoices: any[];
+  payments: any[];
+  expenses: any[];
+  subscriptions: any[];
+  organizationName: string;
+  baseCurrency: string;
+}) {
+  const months = buildMonthBuckets(12);
+  const invoicePayments = new Map<string, number>();
+  for (const payment of payments || []) {
+    const amount = paymentTotal(payment);
+    const key = String(payment?.invoiceId || payment?.invoiceNumber || "").trim();
+    if (!key) continue;
+    invoicePayments.set(key, (invoicePayments.get(key) || 0) + amount);
+  }
+
+  const openInvoices = (invoices || []).filter((row) => !isDraftInvoice(row) && !isVoidInvoice(row));
+  const totalIncome = (invoices || []).reduce((sum, row) => sum + invoiceTotal(row), 0);
+  const totalReceipts = (payments || []).reduce((sum, row) => sum + paymentTotal(row), 0);
+  const totalExpenses = (expenses || []).reduce((sum, row) => sum + expenseTotal(row), 0);
+  const netRevenue = totalIncome - totalExpenses;
+
+  let receivableTotal = 0;
+  let receivableCurrent = 0;
+  let receivableOverdue = 0;
+  let receivableCurrentCount = 0;
+  let receivableOverdueCount = 0;
+
+  for (const invoice of openInvoices) {
+    const invoiceId = String(invoice?._id || invoice?.id || "").trim();
+    const invoiceNumber = String(invoice?.invoiceNumber || "").trim();
+    const total = invoiceTotal(invoice);
+    const paid = (invoicePayments.get(invoiceId) || 0) + (invoicePayments.get(invoiceNumber) || 0);
+    const outstanding = Math.max(0, total - paid);
+    if (!outstanding) continue;
+
+    receivableTotal += outstanding;
+    const due = d(invoice?.dueDate);
+    if (due && due.getTime() < Date.now()) {
+      receivableOverdue += outstanding;
+      receivableOverdueCount += 1;
+    } else {
+      receivableCurrent += outstanding;
+      receivableCurrentCount += 1;
+    }
+  }
+
+  const activeSubscriptions = (subscriptions || []).filter((row) => !["cancelled", "canceled", "inactive", "expired", "draft"].includes(String(row?.status || "").trim().toLowerCase()));
+  const cancelledSubscriptions = (subscriptions || []).filter((row) => ["cancelled", "canceled", "inactive", "expired"].includes(String(row?.status || "").trim().toLowerCase()));
+  const activeCustomersCount = Math.max(1, new Set((invoices || []).map((row) => String(row?.customerId || row?.customer || "").trim()).filter(Boolean)).size);
+
+  const netRevenueSeries = toMonthlySeries(invoices || [], months, (row) => d(row?.date || row?.createdAt), (row) => invoiceTotal(row));
+  const receiptSeries = toMonthlySeries(payments || [], months, (row) => d(row?.date || row?.createdAt), (row) => paymentTotal(row));
+  const expenseSeries = toMonthlySeries(expenses || [], months, (row) => d(row?.date || row?.createdAt), (row) => expenseTotal(row));
+  const activeSubscriptionSeries = months.map((bucket) =>
+    (subscriptions || []).filter((row) => {
+      const createdAt = d(row?.createdAt || row?.startDate);
+      if (!createdAt || createdAt >= bucket.end) return false;
+      return !["cancelled", "canceled", "inactive", "expired", "draft"].includes(String(row?.status || "").trim().toLowerCase());
+    }).length
+  );
+  const mrrSeries = months.map((bucket) =>
+    (subscriptions || []).reduce((sum, row) => {
+      const createdAt = d(row?.createdAt || row?.startDate);
+      if (!createdAt || createdAt >= bucket.end) return sum;
+      if (["cancelled", "canceled", "inactive", "expired", "draft"].includes(String(row?.status || "").trim().toLowerCase())) return sum;
+      return sum + n(row?.monthlyAmount ?? row?.mrr ?? row?.amount ?? row?.total ?? row?.price ?? row?.billingAmount ?? row?.recurringAmount ?? row?.chargeAmount ?? row?.rate, 0);
+    }, 0)
+  );
+  const arpuSeries = months.map((_, index) => {
+    const subs = activeSubscriptionSeries[index] || 0;
+    return subs > 0 ? receiptSeries.slice(0, index + 1).reduce((sum, value) => sum + value, 0) / subs : 0;
+  });
+  const ltvSeries = months.map((_, index) => {
+    return netRevenueSeries.slice(0, index + 1).reduce((sum, value) => sum + value, 0) / activeCustomersCount;
+  });
+  const churnSeries = months.map((_, index) => {
+    const active = Math.max(activeSubscriptionSeries[index] || 0, 1);
+    return ((cancelledSubscriptions.length || 0) / active) * 100;
+  });
+  const mrr = activeSubscriptions.reduce((sum, row) => sum + n(row?.monthlyAmount ?? row?.mrr ?? row?.amount ?? row?.total ?? row?.price ?? row?.billingAmount ?? row?.recurringAmount ?? row?.chargeAmount ?? row?.rate, 0), 0);
+  const totalSubscriptions = subscriptions.length;
+  const activeCount = activeSubscriptions.length;
+  const cancelledCount = cancelledSubscriptions.length;
+  const churnRate = totalSubscriptions > 0 ? (cancelledCount / totalSubscriptions) * 100 : 0;
+  const arpu = activeCount > 0 ? totalIncome / activeCount : 0;
+  const ltv = activeCustomersCount > 0 ? totalIncome / activeCustomersCount : 0;
+
+  const expenseGroups = new Map<string, number>();
+  for (const row of expenses || []) {
+    const label = String(row?.accountName || row?.vendorName || row?.customerName || "Uncategorized").trim() || "Uncategorized";
+    expenseGroups.set(label, (expenseGroups.get(label) || 0) + expenseTotal(row));
+  }
+  const topExpenseItems = [...expenseGroups.entries()]
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5);
+
+  return {
+    metrics: {
+      netRevenue: { total: netRevenue, labels: months.map((bucket) => bucket.label), values: netRevenueSeries },
+      receivables: {
+        total: receivableTotal,
+        current: receivableCurrent,
+        overdue: receivableOverdue,
+        currentCount: receivableCurrentCount,
+        overdueCount: receivableOverdueCount,
+        labels: ["Current", "1-15", "15-30", "31-45", ">45"],
+        values: [receivableCurrent, receivableOverdue, 0, 0, 0],
+      },
+      mrr: { total: mrr, labels: months.map((bucket) => bucket.label), values: mrrSeries },
+      activeSubscriptions: { total: activeCount, labels: months.map((bucket) => bucket.label), values: activeSubscriptionSeries },
+      churnRate: { total: churnRate, asOf: new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).format(new Date()), labels: months.map((bucket) => bucket.label), values: churnSeries },
+      arpu: { total: arpu, labels: months.map((bucket) => bucket.label), values: arpuSeries },
+      ltv: { total: ltv, asOf: new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).format(new Date()), labels: months.map((bucket) => bucket.label), values: ltvSeries },
+    },
+    incomeExpense: {
+      totalIncome,
+      totalReceipts,
+      totalExpenses,
+      labels: months.map((bucket) => bucket.label),
+      income: netRevenueSeries,
+      receipts: receiptSeries,
+      expenses: expenseSeries,
+    },
+    topExpenses: {
+      total: totalExpenses,
+      items: topExpenseItems,
+    },
+    organization: {
+      name: organizationName,
+      baseCurrency,
+    },
+    generatedAt: new Date().toISOString(),
+  };
 }
 
 function AnimatedMoney({ value, currency, symbol }: { value: number; currency: string; symbol?: string }) {
@@ -561,82 +773,55 @@ function DashboardHome() {
   const { loading: permissionsLoading, canView } = usePermissions();
   const { baseCurrency, code: baseCurrencyCode } = useCurrency();
   const canViewDashboard = canView("dashboard", "View Dashboard");
-  const [summary, setSummary] = useState<any>(() => readCachedSummary());
-  const [invoices, setInvoices] = useState<any[]>(() => readCachedRows(DASHBOARD_INVOICES_CACHE_KEY));
-  const [payments, setPayments] = useState<any[]>(() => readCachedRows(DASHBOARD_PAYMENTS_CACHE_KEY));
-  const [expenses, setExpenses] = useState<any[]>(() => readCachedRows(DASHBOARD_EXPENSES_CACHE_KEY));
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState("ytd");
-
-  useEffect(() => {
-    if (permissionsLoading) return;
-    if (!canViewDashboard) {
-      return;
-    }
-
-    let cancelled = false;
-    setError(null);
-
-    const loadLists = async () => {
+  const dashboardQuery = useQuery({
+    queryKey: ["dashboard", "summary", String(baseCurrencyCode || "").trim().toUpperCase()],
+    staleTime: 30_000,
+    enabled: !permissionsLoading && canViewDashboard,
+    queryFn: async () => {
+      setError(null);
       const results = await Promise.allSettled([
         withTimeout(invoicesAPI.getAll({ limit: 1000 }), 8000),
         withTimeout(paymentsReceivedAPI.getAll({ limit: 1000 }), 8000),
         withTimeout(expensesAPI.getAll({ limit: 1000 }), 8000),
+        withTimeout(subscriptionsAPI.getAll({ limit: 1000 }), 8000),
       ]);
-      if (cancelled) return;
-      const [invoiceRes, paymentRes, expenseRes] = results;
-      if (invoiceRes.status === "fulfilled") {
-        const rows = asRows(invoiceRes.value);
-        setInvoices(rows);
-        writeCachedRows(DASHBOARD_INVOICES_CACHE_KEY, rows);
-      }
-      if (paymentRes.status === "fulfilled") {
-        const rows = asRows(paymentRes.value);
-        setPayments(rows);
-        writeCachedRows(DASHBOARD_PAYMENTS_CACHE_KEY, rows);
-      }
-      if (expenseRes.status === "fulfilled") {
-        const rows = asRows(expenseRes.value);
-        setExpenses(rows);
-        writeCachedRows(DASHBOARD_EXPENSES_CACHE_KEY, rows);
-      }
-    };
-
-    const loadSummary = async () => {
-      try {
-        const summaryRes: any = await withTimeout(dashboardAPI.getSummary(), 8000);
-        if (cancelled) return;
-
-        if (summaryRes?.success) {
-          setSummary(summaryRes.data);
-          writeCachedSummary(summaryRes.data);
-        } else {
-          if (!summary) {
-            setSummary(null);
-          }
-          setError(summaryRes?.message || "Failed to load dashboard summary.");
-        }
-      } catch (err: any) {
-        if (cancelled) return;
-        if (!summary) {
-          setSummary(null);
-        }
-        setError(err?.message || "Failed to load dashboard data.");
-      }
-    };
-
-    void loadLists();
-    void loadSummary();
-    return () => {
-      cancelled = true;
-    };
-  }, [canViewDashboard, permissionsLoading]);
+      const [invoiceRes, paymentRes, expenseRes, subscriptionRes] = results;
+      const invoices = invoiceRes.status === "fulfilled" ? asRows(invoiceRes.value) : [];
+      const payments = paymentRes.status === "fulfilled" ? asRows(paymentRes.value) : [];
+      const expenses = expenseRes.status === "fulfilled" ? asRows(expenseRes.value) : [];
+      const subscriptions = subscriptionRes.status === "fulfilled" ? asRows(subscriptionRes.value) : [];
+      writeCachedRows(DASHBOARD_INVOICES_CACHE_KEY, invoices);
+      writeCachedRows(DASHBOARD_PAYMENTS_CACHE_KEY, payments);
+      writeCachedRows(DASHBOARD_EXPENSES_CACHE_KEY, expenses);
+      writeCachedRows(DASHBOARD_SUBSCRIPTIONS_CACHE_KEY, subscriptions);
+      const storedOrganization = readStoredOrganizationProfile();
+      const organizationName = String(
+        storedOrganization?.name ||
+          storedOrganization?.organizationName ||
+          settings?.general?.companyDisplayName ||
+          settings?.general?.schoolDisplayName ||
+          "Organization"
+      ).trim();
+      const nextSummary = buildDashboardSummaryFromRows({
+        invoices,
+        payments,
+        expenses,
+        subscriptions,
+        organizationName,
+        baseCurrency: String(baseCurrencyCode || "").trim().toUpperCase(),
+      });
+      writeCachedSummary(nextSummary);
+      return nextSummary;
+    },
+  });
 
   if (!permissionsLoading && !canViewDashboard) {
     return <AccessDenied title="Dashboard access required" message="Your role does not include permission to view the dashboard." />;
   }
 
-  const currentSummary = summary || {
+  const currentSummary = dashboardQuery.data || readCachedSummary() || {
     metrics: {
       netRevenue: { total: 0, labels: [], values: [] },
       receivables: { total: 0, current: 0, overdue: 0, currentCount: 0, overdueCount: 0, labels: [], values: [] },
@@ -653,12 +838,16 @@ function DashboardHome() {
   const currencySymbol = String(baseCurrency?.symbol || "").trim();
   const userName = String(user?.name || "Guest").trim() || "Guest";
   const organizationName = String(
-    settings?.general?.companyDisplayName ||
+    currentSummary.organization?.name ||
+      settings?.general?.companyDisplayName ||
       settings?.general?.schoolDisplayName ||
-      currentSummary.organization?.name ||
       "Organization"
   ).trim();
-  const summaryReady = Boolean(summary);
+  const summaryReady = Boolean(dashboardQuery.data || readCachedSummary());
+  const invoices = readCachedRows(DASHBOARD_INVOICES_CACHE_KEY);
+  const payments = readCachedRows(DASHBOARD_PAYMENTS_CACHE_KEY);
+  const expenses = readCachedRows(DASHBOARD_EXPENSES_CACHE_KEY);
+  const subscriptions = readCachedRows(DASHBOARD_SUBSCRIPTIONS_CACHE_KEY);
 
   const openInvoices = invoices.filter((row) => !isDraftInvoice(row) && !isVoidInvoice(row));
   const overdueInvoices = openInvoices.filter(isOverdueInvoice);

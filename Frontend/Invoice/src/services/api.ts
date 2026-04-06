@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { queryClient, QUERY_CACHE_TTL_MS } from "../lib/queryClient";
 import { db } from "../store/db";
 import { readTaxesLocal } from "../pages/settings/organization-settings/taxes-compliance/TAX/storage";
 
@@ -41,6 +42,154 @@ const withBase = (path: string) => {
   return `${API_BASE_URL}${clean}`;
 };
 
+const pendingGetRequests = new Map<string, Promise<any>>();
+
+const LIST_ARRAY_KEYS = [
+  "data",
+  "items",
+  "results",
+  "rows",
+  "list",
+  "customers",
+  "quotes",
+  "invoices",
+  "expenses",
+  "payments",
+  "paymentsReceived",
+  "receipts",
+  "creditNotes",
+  "recurringInvoices",
+  "vendors",
+  "projects",
+  "timeEntries",
+  "salespersons",
+  "subscriptions",
+  "plans",
+  "taxes",
+  "currencies",
+  "locations",
+  "bankAccounts",
+  "banks",
+  "accounts",
+] as const;
+
+const tryParseJsonPayload = (payload: any) => {
+  let current = payload;
+  for (let i = 0; i < 2 && typeof current === "string"; i += 1) {
+    const text = String(current).trim();
+    if (!text) break;
+    if (
+      !(
+        text.startsWith("{") ||
+        text.startsWith("[") ||
+        text === "null" ||
+        text === "true" ||
+        text === "false" ||
+        /^-?\d+(\.\d+)?$/.test(text)
+      )
+    ) {
+      break;
+    }
+    try {
+      current = JSON.parse(text);
+    } catch {
+      break;
+    }
+  }
+  return current;
+};
+
+const stableSerialize = (value: any): string => {
+  const seen = new WeakSet();
+  const normalize = (input: any): any => {
+    if (input === null || input === undefined) return input;
+    if (typeof input !== "object") return input;
+    if (input instanceof Date) return input.toISOString();
+    if (Array.isArray(input)) return input.map(normalize);
+    if (seen.has(input)) return undefined;
+    seen.add(input);
+    const output: Record<string, any> = {};
+    Object.keys(input)
+      .sort()
+      .forEach((key) => {
+        const normalized = normalize(input[key]);
+        if (normalized !== undefined) output[key] = normalized;
+      });
+    return output;
+  };
+
+  try {
+    return JSON.stringify(normalize(value));
+  } catch {
+    return String(value ?? "");
+  }
+};
+
+const getPathPrefixes = (path: string) => {
+  const normalized = String(path || "").startsWith("/") ? String(path || "") : `/${String(path || "")}`;
+  const segments = normalized.split("/").filter(Boolean);
+  const prefixes: string[] = [];
+  for (let i = 1; i <= segments.length; i += 1) {
+    prefixes.push(`/${segments.slice(0, i).join("/")}`);
+  }
+  return prefixes.length > 0 ? prefixes : [normalized];
+};
+
+const invalidateRequestPath = async (path: string) => {
+  const prefixes = getPathPrefixes(path);
+  await Promise.all(
+    prefixes.map((prefix) =>
+      queryClient.invalidateQueries({ queryKey: ["api", prefix] }),
+    ),
+  );
+};
+
+const extractArrayPayload = (payload: any): any[] | null => {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== "object") return null;
+
+  for (const key of LIST_ARRAY_KEYS) {
+    const candidate = (payload as any)[key];
+    if (Array.isArray(candidate)) return candidate;
+  }
+
+  const nestedData = (payload as any).data;
+  if (nestedData && typeof nestedData === "object") {
+    return extractArrayPayload(nestedData);
+  }
+
+  return null;
+};
+
+const normalizePayload = (payload: any) => {
+  const parsed = tryParseJsonPayload(payload);
+  if (Array.isArray(parsed)) {
+    return { success: true, data: parsed };
+  }
+
+  if (!parsed || typeof parsed !== "object") {
+    return { success: true, data: parsed };
+  }
+
+  const normalized = { ...(parsed as Record<string, any>) };
+
+  if (typeof normalized.data === "string") {
+    const parsedData = tryParseJsonPayload(normalized.data);
+    if (Array.isArray(parsedData) || (parsedData && typeof parsedData === "object")) {
+      normalized.data = parsedData;
+    }
+  }
+
+  if (!Array.isArray(normalized.data)) {
+    const arrayPayload = extractArrayPayload(normalized);
+    if (arrayPayload) {
+      normalized.data = arrayPayload;
+    }
+  }
+
+  return normalized;
+};
+
 type RequestOptions = {
   method?: string;
   path: string;
@@ -57,6 +206,7 @@ const request = async ({
   headers = {},
 }: RequestOptions) => {
   const url = `${withBase(path)}${toQuery(params)}`;
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const token = getStoredToken();
   const mergedHeaders: Record<string, string> = { ...headers };
 
@@ -68,46 +218,91 @@ const request = async ({
   }
 
   try {
-    const response = await fetch(url, {
-      method,
-      headers: mergedHeaders,
-      credentials: "include",
-      body:
-        method === "GET"
-          ? undefined
-          : data !== undefined
-            ? JSON.stringify(data)
-            : undefined,
-    });
+    const performFetch = async () => {
+      const response = await fetch(url, {
+        method,
+        headers: mergedHeaders,
+        credentials: "include",
+        body:
+          method === "GET"
+            ? undefined
+            : data !== undefined
+              ? JSON.stringify(data)
+              : undefined,
+      });
 
-    const contentType = response.headers.get("content-type") || "";
-    const payload = contentType.includes("application/json")
-      ? await response.json().catch(() => null)
-      : await response.text().catch(() => "");
+      const contentType = response.headers.get("content-type") || "";
+      const payload = contentType.includes("application/json")
+        ? await response.json().catch(() => null)
+        : await response.text().catch(() => "");
+      const normalizedPayload = normalizePayload(payload);
 
-    if (!response.ok) {
-      return {
-        success: false,
-        status: response.status,
-        message:
-          (payload &&
-            typeof payload === "object" &&
-            (payload as any).message) ||
-          response.statusText ||
-          "Request failed",
-        data:
-          payload && typeof payload === "object"
-            ? ((payload as any).data ?? null)
-            : payload,
-      };
+      if (!response.ok) {
+        return {
+          success: false,
+          status: response.status,
+          message:
+            (payload &&
+              typeof payload === "object" &&
+              (payload as any).message) ||
+            response.statusText ||
+            "Request failed",
+          data:
+            normalizedPayload && typeof normalizedPayload === "object"
+              ? ((normalizedPayload as any).data ?? null)
+              : normalizedPayload,
+        };
+      }
+
+      if (normalizedPayload && typeof normalizedPayload === "object") {
+        if ("success" in (normalizedPayload as any)) {
+          return normalizedPayload;
+        }
+        if (Array.isArray((normalizedPayload as any).data)) {
+          return normalizedPayload;
+        }
+        return { success: true, data: normalizedPayload };
+      }
+
+      return { success: true, data: normalizedPayload };
+    };
+
+    if (method === "GET") {
+      const queryKey = ["api", normalizedPath, stableSerialize(params || {}), token || ""];
+      const cachedState = queryClient.getQueryState(queryKey);
+      const cachedValue = queryClient.getQueryData(queryKey);
+      if (
+        cachedState &&
+        cachedValue !== undefined &&
+        Date.now() - cachedState.dataUpdatedAt < QUERY_CACHE_TTL_MS
+      ) {
+        return cachedValue;
+      }
+
+      const pendingKey = stableSerialize({ path: normalizedPath, params: params || {}, token: token || "" });
+      const pending = pendingGetRequests.get(pendingKey);
+      if (pending) return pending;
+
+      const promise = performFetch()
+        .then((result) => {
+          if (result?.success !== false) {
+            queryClient.setQueryData(queryKey, result);
+          }
+          return result;
+        })
+        .finally(() => {
+          pendingGetRequests.delete(pendingKey);
+        });
+
+      pendingGetRequests.set(pendingKey, promise);
+      return promise;
     }
 
-    if (payload && typeof payload === "object") {
-      if ("success" in (payload as any)) return payload as any;
-      return { success: true, data: payload };
+    const result = await performFetch();
+    if (result?.success !== false) {
+      await invalidateRequestPath(normalizedPath);
     }
-
-    return { success: true, data: payload };
+    return result;
   } catch (error: any) {
     return {
       success: false,
@@ -801,6 +996,80 @@ export const customersAPI = {
   delete: async (id: string) => {
     return (await customersBase.delete(String(id))) as any;
   },
+  getAddresses: async (id: string) => {
+    return (await request({ path: `/customers/${encodeURIComponent(String(id))}/address` })) as any;
+  },
+  addAddress: async (id: string, data: any) => {
+    return (await request({
+      method: "POST",
+      path: `/customers/${encodeURIComponent(String(id))}/address`,
+      data,
+    })) as any;
+  },
+  updateAddress: async (id: string, addressId: string, data: any) => {
+    return (await request({
+      method: "PUT",
+      path: `/customers/${encodeURIComponent(String(id))}/address/${encodeURIComponent(String(addressId))}`,
+      data,
+    })) as any;
+  },
+  deleteAddress: async (id: string, addressId: string) => {
+    return (await request({
+      method: "DELETE",
+      path: `/customers/${encodeURIComponent(String(id))}/address/${encodeURIComponent(String(addressId))}`,
+    })) as any;
+  },
+  enablePortal: async (id: string, data: any = {}) => {
+    return (await request({
+      method: "POST",
+      path: `/customers/${encodeURIComponent(String(id))}/portal/enable`,
+      data,
+    })) as any;
+  },
+  disablePortal: async (id: string, data: any = {}) => {
+    return (await request({
+      method: "POST",
+      path: `/customers/${encodeURIComponent(String(id))}/portal/disable`,
+      data,
+    })) as any;
+  },
+  enablePaymentReminders: async (id: string) => {
+    return (await request({
+      method: "POST",
+      path: `/customers/${encodeURIComponent(String(id))}/paymentreminder/enable`,
+    })) as any;
+  },
+  disablePaymentReminders: async (id: string) => {
+    return (await request({
+      method: "POST",
+      path: `/customers/${encodeURIComponent(String(id))}/paymentreminder/disable`,
+    })) as any;
+  },
+  markActive: async (id: string) => {
+    return (await request({
+      method: "POST",
+      path: `/customers/${encodeURIComponent(String(id))}/active`,
+    })) as any;
+  },
+  markInactive: async (id: string) => {
+    return (await request({
+      method: "POST",
+      path: `/customers/${encodeURIComponent(String(id))}/inactive`,
+    })) as any;
+  },
+  getStatementEmail: async (id: string, params?: Record<string, any>) => {
+    return (await request({
+      path: `/customers/${encodeURIComponent(String(id))}/statements/email`,
+      params,
+    })) as any;
+  },
+  sendStatementEmail: async (id: string, data: any) => {
+    return (await request({
+      method: "POST",
+      path: `/customers/${encodeURIComponent(String(id))}/statements/email`,
+      data,
+    })) as any;
+  },
   bulkUpdate: async (ids: string[], data: any) => {
     return (await request({
       method: "POST",
@@ -844,6 +1113,8 @@ export const customersAPI = {
     };
   },
 };
+
+export const contactsAPI = customersAPI;
 
 const itemsBase = resource("/items");
 export const itemsAPI = {

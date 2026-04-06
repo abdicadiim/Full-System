@@ -4,3 +4,17 @@
 
 DB connected.
 API listening on http://localhost:5000
+5:27:43 PM [tsx] change in ./server.ts Restarting...
+cDB connected.
+API listening on http://localhost:5000
+5:32:06 PM [tsx] change in ./controllers\customersController.ts Restarting...
+cDB connected.
+API listening on http://localhost:5000
+5:32:39 PM [tsx] change in ./controllers\documentsController.ts Restarting...
+cDB connected.
+5:33:19 PM [tsx] change in ./controllers\customersController.ts Restarting...
+cDB connected.
+API listening on http://localhost:5000
+5:33:44 PM [tsx] change in ./controllers\documentsController.ts Restarting...
+cDB connected.
+API listening on http://localhost:5000

@@ -56,6 +56,22 @@ export interface ContactPerson {
   enablePortal?: boolean;
 }
 
+export interface CustomerAddress {
+  addressId?: string;
+  attention?: string;
+  country?: string;
+  street1?: string;
+  street2?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  phone?: string;
+  fax?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  type?: string;
+}
+
 export interface Customer {
   id: string;
   _id?: string;
@@ -119,6 +135,8 @@ export interface Customer {
     phone?: string;
     fax?: string;
   };
+  additionalAddresses?: CustomerAddress[];
+  paymentReminderEnabled?: boolean;
   reviewRequested?: boolean;
   reviewRequestedAt?: string;
 }

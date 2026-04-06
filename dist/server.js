@@ -85,7 +85,7 @@ process.once("SIGTERM", () => {
     void shutdownServer("SIGTERM").finally(() => process.exit(0));
 });
 app.disable("x-powered-by");
-app.use(express.json({ limit: "20mb" }));
+app.use(express.json({ limit: "50mb" }));
 app.use(cookieParser());
 app.use(cors({
     origin: FRONTEND_URL || true,
@@ -140,6 +140,7 @@ app.use("/api/currencies", currenciesRoutes);
 app.use("/api/transaction-number-series", transactionNumberSeriesRoutes);
 app.use("/api/locations", locationsRoutes);
 app.use("/api/customers", customersRoutes);
+app.use("/api/contacts", customersRoutes);
 app.use("/api/salespersons", salespersonsRoutes);
 app.use("/api/items", itemsRoutes);
 app.use("/api/itemdetails", itemDetailsRoutes);

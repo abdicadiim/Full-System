@@ -22,6 +22,9 @@
   "include": [
     "src"
   ],
+  "exclude": [
+    "src/pages/Customers/CustomerDetailLegacy"
+  ],
   "references": [
     {
       "path": "./tsconfig.node.json"

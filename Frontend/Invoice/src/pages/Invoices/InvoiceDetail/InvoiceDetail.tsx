@@ -2810,7 +2810,7 @@ export default function InvoiceDetail() { // Start of component
   );
 
   if (!invoice) {
-    return <div>Loading...</div>;
+    return null;
   }
 
   const invoiceTotalsMeta = getInvoiceTotalsMeta(invoice);

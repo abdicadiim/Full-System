@@ -1,6 +1,14 @@
 import express from "express";
 import jwt from "jsonwebtoken";
 import { AUTH_BYPASS, JWT_SECRET, SESSION_COOKIE_NAME } from "../config/env.js";
+import { Organization } from "../models/Organization.js";
+import { Customer } from "../models/Customer.js";
+import { Item } from "../models/Item.js";
+import { Invoice } from "../models/Invoice.js";
+import { Quote } from "../models/Quote.js";
+import { SalesReceipt } from "../models/SalesReceipt.js";
+import { CreditNote } from "../models/CreditNote.js";
+import { Expense } from "../models/Expense.js";
 import { User } from "../models/User.js";
 import { Role } from "../models/Role.js";
 
@@ -21,7 +29,11 @@ type SessionClaims = { sub: string; ver: number };
 const normalizeRoleName = (value: unknown) => String(value || "").trim().toLowerCase();
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const STANDARD_ROLE_NAMES = new Set(["admin", "owner", "staff", "member", "staff assigned", "timesheet staff"]);
+<<<<<<< Updated upstream
 const isUserEmailVerified = (user: any) => (user as any)?.emailVerified !== false;
+=======
+const DEV_SCOPE_MODELS = [Customer, Item, Invoice, Quote, SalesReceipt, CreditNote, Expense];
+>>>>>>> Stashed changes
 
 export const isStandardRoleName = (value: unknown) => STANDARD_ROLE_NAMES.has(normalizeRoleName(value));
 export const isSuperRoleName = (value: unknown) => ["admin", "owner"].includes(normalizeRoleName(value));
@@ -46,6 +58,73 @@ export const resolveRolePermissions = async (organizationId: unknown, roleName: 
   }
 
   return ((role as any).permissions && typeof (role as any).permissions === "object") ? (role as any).permissions : {};
+};
+
+const buildDevAuthedUser = async (): Promise<AuthedUser> => {
+  const organizations = await Organization.find({}).sort({ createdAt: 1 }).lean();
+  if (organizations.length === 0) {
+    return {
+      id: "000000000000000000000001",
+      name: "Dev User",
+      email: "dev@example.com",
+      organizationId: "00000000000000000000000a",
+      role: "admin",
+      sessionVersion: 0,
+      permissions: null,
+      photoUrl: "",
+      activeTimer: null,
+    };
+  }
+
+  let bestOrg: any = organizations[0];
+  let bestScore = -1;
+
+  for (const organization of organizations) {
+    const counts = await Promise.all(
+      DEV_SCOPE_MODELS.map((Model) => Model.countDocuments({ organizationId: organization._id })),
+    );
+    const score = counts.reduce((sum, count) => sum + count, 0);
+    if (score > bestScore) {
+      bestScore = score;
+      bestOrg = organization;
+    }
+  }
+
+  const orgUsers = await User.find({ organizationId: bestOrg._id, status: { $ne: "Inactive" } })
+    .sort({ createdAt: 1 })
+    .lean();
+  const scoreUser = (user: any) => {
+    const role = normalizeRoleName(user?.role);
+    const roleScore = isSuperRoleName(role) ? 3 : role === "staff" || role === "member" ? 2 : 1;
+    const statusScore = String(user?.status || "").trim().toLowerCase() === "active" ? 2 : 1;
+    const hasNameScore = String(user?.name || "").trim() ? 1 : 0;
+    return roleScore * 100 + statusScore * 10 + hasNameScore;
+  };
+  const preferredUser = orgUsers
+    .slice()
+    .sort((a, b) => {
+      const byScore = scoreUser(b) - scoreUser(a);
+      if (byScore) return byScore;
+      const at = new Date(a?.createdAt || 0).getTime();
+      const bt = new Date(b?.createdAt || 0).getTime();
+      return at - bt;
+    })[0];
+
+  if (preferredUser) {
+    return buildAuthedUser(preferredUser);
+  }
+
+  return {
+    id: "000000000000000000000001",
+    name: "Dev User",
+    email: "dev@example.com",
+    organizationId: String(bestOrg._id),
+    role: "admin",
+    sessionVersion: 0,
+    permissions: null,
+    photoUrl: "",
+    activeTimer: null,
+  };
 };
 
 const buildAuthedUser = async (user: any): Promise<AuthedUser> => ({
@@ -84,6 +163,7 @@ export const clearSessionCookie = (res: express.Response) => {
 
 export const getAuthedUser = async (req: express.Request): Promise<AuthedUser | null> => {
   if (AUTH_BYPASS) {
+<<<<<<< Updated upstream
     return {
       id: "000000000000000000000001",
       name: "Dev User",
@@ -96,6 +176,9 @@ export const getAuthedUser = async (req: express.Request): Promise<AuthedUser | 
       photoUrl: "",
       activeTimer: null,
     };
+=======
+    return buildDevAuthedUser();
+>>>>>>> Stashed changes
   }
 
   const header = req.headers.authorization;
@@ -117,3 +200,5 @@ export const getAuthedUser = async (req: express.Request): Promise<AuthedUser | 
 };
 
 export const buildAuthUserData = async (user: any) => buildAuthedUser(user);
+
+export const getDevAuthedUser = async () => buildDevAuthedUser();

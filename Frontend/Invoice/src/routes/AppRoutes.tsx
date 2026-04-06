@@ -2,12 +2,12 @@ import React, { Suspense, lazy } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 
 const DashboardRoutes = lazy(() => import('../pages/home/DashboardRoutes'))
+const CustomersRoutes = lazy(() => import('../pages/Customers/CustomersRoutes'))
 const SalesInvoicesRoutes = lazy(() => import('../pages/Invoices/InvoicesRoutes'))
 const RetainerInvoiceRoutes = lazy(() => import('../pages/RetainerInvoice/RetainerInvoiceRoutes'))
 const SalesReceiptsRoutes = lazy(() => import('../pages/SalesReceipts/SalesReceiptsRoutes'))
 const CreditNotesRoutes = lazy(() => import('../pages/CreditNotes/CreditNotesRoutes'))
 const RecurringInvoicesRoutes = lazy(() => import('../pages/RecurringInvoices/RecurringInvoicesRoutes'))
-const CustomersRoutes = lazy(() => import('../pages/Customers/CustomersRoutes'))
 const PaymentsRoutes = lazy(() => import('../pages/payments/PaymentsRoutes'))
 const ReportsRoutes = lazy(() => import('../pages/reports/ReportsRoutes'))
 const TaxesRoutes = lazy(() => import('../pages/taxes/TaxesRoutes'))
@@ -25,11 +25,7 @@ const DocumentsPage = lazy(() => import('../pages/documents/DocumentsPage'))
 const SenderVerificationPage = lazy(() => import('../pages/public/SenderVerificationPage'))
 
 function RouteFallback() {
-  return (
-    <div className="flex min-h-[40vh] items-center justify-center p-6 text-sm text-gray-500">
-      Loading...
-    </div>
-  )
+  return null
 }
 
 function LegacyPaymentsReceivedRedirect() {

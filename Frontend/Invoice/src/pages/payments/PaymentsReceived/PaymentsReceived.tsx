@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
-import LoadingSpinner from "../../../components/LoadingSpinner";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import PaginationFooter from "../../../components/ui/PaginationFooter";
 import { getPayments, getPaymentById, getCustomViews, deleteCustomView, updatePayment, deletePayment, CustomView } from "../../salesModel";
 import { useCurrency } from "../../../hooks/useCurrency";
 import { settingsAPI, bankAccountsAPI, paymentModesAPI } from "../../../services/api";
@@ -135,7 +136,20 @@ export default function PaymentsReceived() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [filteredPayments, setFilteredPayments] = useState<Payment[]>([]);
   const [selectedPayments, setSelectedPayments] = useState<Set<string | number>>(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: string }>({ key: "paymentDate", direction: "asc" });
+  const paymentsQuery = useQuery({
+    queryKey: ["payments-received", "list"],
+    placeholderData: keepPreviousData,
+    staleTime: 2 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const response = await getPayments();
+      return Array.isArray(response) ? response : [];
+    }
+  });
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const [isImportMenuOpen, setIsImportMenuOpen] = useState(false);
   const [isExportSubmenuOpen, setIsExportSubmenuOpen] = useState(false);
@@ -333,41 +347,43 @@ export default function PaymentsReceived() {
   }, []);
 
   const refreshData = () => {
-    setIsRefreshing(true);
-    setTimeout(async () => {
-      const allPayments = await getPayments();
-      const allCustomViews = getCustomViews().filter(v => v.type === "payments-received");
-      setPayments(allPayments);
-      setCustomViews(allCustomViews);
-      applyFilters(allPayments, selectedStatus, allCustomViews);
-      setIsRefreshing(false);
-    }, 1000);
+    const allCustomViews = getCustomViews().filter(v => v.type === "payments-received");
+    setCustomViews(allCustomViews);
+    void paymentsQuery.refetch();
   };
 
   useEffect(() => {
     const initialLoad = async () => {
-      setIsLoading(true);
-      const allPayments = await getPayments();
-      // Ensure we have CustomView[] from imported module
       const allCustomViews = getCustomViews().filter(v => v.type === "payments-received");
-      setPayments(allPayments);
       setCustomViews(allCustomViews);
-      applyFilters(allPayments, selectedStatus, allCustomViews);
-      setIsLoading(false);
     };
 
     initialLoad();
 
-    window.addEventListener("storage", initialLoad);
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) initialLoad();
-    });
+    const handleStorage = () => refreshData();
+    const handleVisibilityChange = () => {
+      if (!document.hidden) refreshData();
+    };
+
+    window.addEventListener("storage", handleStorage);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      window.removeEventListener("storage", initialLoad);
-      document.removeEventListener("visibilitychange", initialLoad);
+      window.removeEventListener("storage", handleStorage);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [selectedStatus, sortConfig]);
+  }, []);
+
+  useEffect(() => {
+    const nextPayments = Array.isArray(paymentsQuery.data) ? paymentsQuery.data : [];
+    setPayments(nextPayments);
+    applyFilters(nextPayments, selectedStatus, customViews);
+    setIsLoading(Boolean(paymentsQuery.isLoading && nextPayments.length === 0));
+  }, [paymentsQuery.data, paymentsQuery.isLoading, selectedStatus, sortConfig, customViews]);
+
+  useEffect(() => {
+    setIsRefreshing(paymentsQuery.isFetching);
+  }, [paymentsQuery.isFetching]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -586,7 +602,6 @@ export default function PaymentsReceived() {
     setIsSortMenuOpen(false);
     setIsSortBySubmenuOpen(false);
     setIsMoreMenuOpen(false);
-    applyFilters(payments, selectedStatus);
   };
 
   const handleImportPayments = () => {
@@ -731,15 +746,11 @@ export default function PaymentsReceived() {
 
   const handleRefreshList = async () => {
     setIsMoreMenuOpen(false);
-    // Force reload payments from storage
-    const allPayments = await getPayments();
-    setPayments(allPayments);
-    // Reset filters and reapply
-    applyFilters(allPayments, selectedStatus);
+    await paymentsQuery.refetch();
+    const allCustomViews = getCustomViews().filter(v => v.type === "payments-received");
+    setCustomViews(allCustomViews);
     // Clear selected payments
     setSelectedPayments(new Set());
-    // Show feedback
-    console.log("Payments list refreshed. Total payments:", allPayments.length);
   };
 
   const handleStatusFilter = (status: string) => {
@@ -791,11 +802,19 @@ export default function PaymentsReceived() {
     });
   };
 
-  const handleSelectAllPayments = () => {
-    if (selectedPayments.size === filteredPayments.length) {
-      setSelectedPayments(new Set());
+  const totalPaymentPages = Math.max(1, Math.ceil(filteredPayments.length / itemsPerPage));
+  const safeCurrentPage = Math.min(Math.max(currentPage, 1), totalPaymentPages);
+  const paginatedPayments = useMemo(
+    () => filteredPayments.slice((safeCurrentPage - 1) * itemsPerPage, safeCurrentPage * itemsPerPage),
+    [filteredPayments, safeCurrentPage, itemsPerPage]
+  );
+
+  const handleSelectAllPayments = (checked: boolean) => {
+    const pageIds = new Set(paginatedPayments.map((payment) => payment.id));
+    if (checked) {
+      setSelectedPayments((prev) => new Set([...Array.from(prev), ...paginatedPayments.map((payment) => payment.id)]));
     } else {
-      setSelectedPayments(new Set(filteredPayments.map(p => p.id)));
+      setSelectedPayments((prev) => new Set(Array.from(prev).filter((id) => !pageIds.has(id))));
     }
   };
 
@@ -871,9 +890,7 @@ export default function PaymentsReceived() {
         return;
       }
 
-      const allPayments = await getPayments();
-      setPayments(allPayments);
-      applyFilters(allPayments, selectedStatus);
+      await paymentsQuery.refetch();
       setIsBulkUpdateModalOpen(false);
       setBulkUpdateField("");
       setBulkUpdateValue("");
@@ -1170,9 +1187,7 @@ export default function PaymentsReceived() {
       const successCount = results.filter((result) => result.status === "fulfilled").length;
       const failedCount = selectedIds.length - successCount;
 
-      const allPayments = await getPayments();
-      setPayments(allPayments);
-      applyFilters(allPayments, selectedStatus);
+      await paymentsQuery.refetch();
       setSelectedPayments(new Set());
       setIsDeleteModalOpen(false);
 
@@ -1580,8 +1595,8 @@ export default function PaymentsReceived() {
                         <div className="h-5 w-px bg-gray-200" />
                         <input
                           type="checkbox"
-                          checked={selectedPayments.size === filteredPayments.length && filteredPayments.length > 0}
-                          onChange={handleSelectAllPayments}
+                          checked={paginatedPayments.length > 0 && paginatedPayments.every((payment) => selectedPayments.has(payment.id))}
+                          onChange={(e) => handleSelectAllPayments(e.target.checked)}
                           style={{ accentColor: "#1b5e6a" }}
                           className="cursor-pointer h-4 w-4 rounded border-gray-300 transition-all focus:ring-0"
                         />
@@ -1646,7 +1661,7 @@ export default function PaymentsReceived() {
                     </tr>
                   ))
                 ) : (
-                    filteredPayments.map((payment, index) => (
+                    paginatedPayments.map((payment, index) => (
                       <tr
                         key={payment.id}
                         onClick={(e) => {
@@ -1761,6 +1776,18 @@ export default function PaymentsReceived() {
           </div>
         )}
       </div>
+
+      <PaginationFooter
+        currentPage={safeCurrentPage}
+        totalItems={filteredPayments.length}
+        totalPages={totalPaymentPages}
+        pageSize={itemsPerPage}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={(pageSize) => {
+          setItemsPerPage(pageSize);
+          setCurrentPage(1);
+        }}
+      />
 
       {/* Bulk Update Modal */}
       {isBulkUpdateModalOpen && (

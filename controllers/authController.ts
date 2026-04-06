@@ -21,7 +21,7 @@ import { Organization } from "../models/Organization.js";
 import { User } from "../models/User.js";
 import { SenderEmail } from "../models/SenderEmail.js";
 import { Role } from "../models/Role.js";
-import { buildAuthUserData, clearSessionCookie, getAuthedUser, issueSessionToken, setSessionCookie } from "../midelwares/auth.js";
+import { buildAuthUserData, clearSessionCookie, getAuthedUser, getDevAuthedUser, issueSessionToken, setSessionCookie } from "../midelwares/auth.js";
 import mongoose from "mongoose";
 import { sendSmtpMail } from "../services/smtpMailer.js";
 
@@ -279,7 +279,8 @@ const sendEmailVerificationCode = async ({
 export const signup = async (req: express.Request, res: express.Response) => {
   if (AUTH_BYPASS) {
     const email = String(req.body?.email ?? "dev@example.com").trim().toLowerCase() || "dev@example.com";
-    return res.status(201).json({ success: true, data: { id: "dev", name: "Dev User", email, organizationId: "dev_org" } });
+    const devUser = await getDevAuthedUser();
+    return res.status(201).json({ success: true, data: { id: devUser.id, name: devUser.name, email, organizationId: devUser.organizationId } });
   }
   if (!isConfiguredForRealAuth()) {
     return res.status(500).json({ success: false, message: "Auth/DB not configured", data: null });
@@ -380,7 +381,8 @@ export const checkEmailExists = async (req: express.Request, res: express.Respon
 export const login = async (req: express.Request, res: express.Response) => {
   if (AUTH_BYPASS) {
     const email = String(req.body?.email ?? "dev@example.com").trim().toLowerCase() || "dev@example.com";
-    return res.json({ success: true, data: { id: "dev", name: "Dev User", email, organizationId: "dev_org" } });
+    const devUser = await getDevAuthedUser();
+    return res.json({ success: true, data: { id: devUser.id, name: devUser.name, email, organizationId: devUser.organizationId } });
   }
   if (!isConfiguredForRealAuth()) {
     return res.status(500).json({ success: false, message: "Auth/DB not configured", data: null });
@@ -513,9 +515,10 @@ export const requestLoginOtp = async (req: express.Request, res: express.Respons
 export const verifyLoginOtp = async (req: express.Request, res: express.Response) => {
   if (AUTH_BYPASS) {
     const email = normalizeEmail(req.body?.email || "dev@example.com") || "dev@example.com";
+    const devUser = await getDevAuthedUser();
     return res.json({
       success: true,
-      data: { id: "dev", name: "Dev User", email, organizationId: "dev_org" },
+      data: { id: devUser.id, name: devUser.name, email, organizationId: devUser.organizationId },
       token: "dev-token",
     });
   }
@@ -785,9 +788,10 @@ export const verifyPasswordResetCode = async (req: express.Request, res: express
 export const resetPasswordWithCode = async (req: express.Request, res: express.Response) => {
   if (AUTH_BYPASS) {
     const email = normalizeEmail(req.body?.email || "dev@example.com") || "dev@example.com";
+    const devUser = await getDevAuthedUser();
     return res.json({
       success: true,
-      data: { id: "dev", name: "Dev User", email, organizationId: "dev_org" },
+      data: { id: devUser.id, name: devUser.name, email, organizationId: devUser.organizationId },
       token: "dev-token",
     });
   }
@@ -872,9 +876,10 @@ export const me = async (req: express.Request, res: express.Response) => {
 export const updateMe = async (req: express.Request, res: express.Response) => {
   if (AUTH_BYPASS) {
     const photoUrl = typeof req.body?.photoUrl === "string" ? req.body.photoUrl.trim() : "";
+    const devUser = await getDevAuthedUser();
     return res.json({
       success: true,
-      data: { id: "dev", name: "Dev User", email: "dev@example.com", organizationId: "dev_org", role: "admin", photoUrl },
+      data: { id: devUser.id, name: devUser.name, email: devUser.email, organizationId: devUser.organizationId, role: devUser.role, photoUrl },
     });
   }
 

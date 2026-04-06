@@ -1,6 +1,5 @@
 import express from "express";
 import mongoose from "mongoose";
-import { AUTH_BYPASS } from "../config/env.js";
 import { Organization } from "../models/Organization.js";
 import {
   buildZohoOrganizationListItem,
@@ -8,21 +7,6 @@ import {
   normalizeCurrencyCode,
   parseOrganizationPayload,
 } from "../services/organizationPayloads.js";
-
-const buildDevOrganization = () => ({
-  _id: "dev_org",
-  name: "Dev Org",
-  primaryContactEmail: "dev@example.com",
-  currencyCode: "USD",
-  baseCurrency: "USD",
-  languageCode: "en",
-  language: "English",
-  timeZone: "UTC",
-  dateFormat: "dd MMM yyyy",
-  fieldSeparator: " ",
-  fiscalYearStartMonth: "january",
-  createdAt: new Date().toISOString(),
-});
 
 const buildMyOrganizationSummary = (org: any) => ({
   id: String(org?._id || ""),
@@ -45,10 +29,6 @@ const loadAccessibleOrganization = async (
   res: express.Response,
   organizationId?: string,
 ) => {
-  if (AUTH_BYPASS) {
-    return buildDevOrganization();
-  }
-
   const authedOrgId = getAuthedOrganizationId(req);
   if (!authedOrgId) {
     res.status(401).json({ success: false, message: "Unauthenticated", data: null });
@@ -87,19 +67,6 @@ const updateOrganizationDocument = async (
   res: express.Response,
   organizationId: string,
 ) => {
-  if (AUTH_BYPASS) {
-    const devOrg = {
-      ...buildDevOrganization(),
-      ...(req.body && typeof req.body === "object" ? req.body : {}),
-      _id: organizationId || "dev_org",
-    };
-    return res.json({
-      code: 0,
-      message: "success",
-      organization: buildZohoOrganizationPayload(devOrg, req.user),
-    });
-  }
-
   const existing = await loadAccessibleOrganization(req, res, organizationId);
   if (!existing) return;
 
@@ -138,10 +105,6 @@ export const getMyOrganization = async (req: express.Request, res: express.Respo
 };
 
 export const updateMyOrganization = async (req: express.Request, res: express.Response) => {
-  if (AUTH_BYPASS) {
-    return res.json({ success: true, data: { ok: true } });
-  }
-
   const organizationId = getAuthedOrganizationId(req);
   if (!organizationId) {
     return res.status(401).json({ success: false, message: "Unauthenticated", data: null });

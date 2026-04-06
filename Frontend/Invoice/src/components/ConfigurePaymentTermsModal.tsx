@@ -102,7 +102,7 @@ export const ConfigurePaymentTermsModal = ({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-[#3f83f8] p-1 text-red-500 hover:bg-red-50"
+            className="rounded-md p-1 text-red-500 hover:bg-teal-50"
           >
             <X size={18} />
           </button>
@@ -192,13 +192,13 @@ export const ConfigurePaymentTermsModal = ({
                   className="absolute left-0 flex items-center gap-3 text-sm"
                   style={{ top: `${86 + hoveredRowIndex * 40}px` }}
                 >
-                  <button
-                    type="button"
-                    onClick={() => markAsDefault(terms[hoveredRowIndex])}
-                    className="text-[#2f6fed] hover:underline disabled:cursor-default disabled:text-gray-400 disabled:no-underline"
-                    disabled={String(terms[hoveredRowIndex]?.value || "") === String(defaultTermValue || "")}
-                  >
-                    Mark as Default
+                <button
+                  type="button"
+                  onClick={() => markAsDefault(terms[hoveredRowIndex])}
+                  className="text-[#156372] hover:underline disabled:cursor-default disabled:text-gray-400 disabled:no-underline"
+                  disabled={String(terms[hoveredRowIndex]?.value || "") === String(defaultTermValue || "")}
+                >
+                  Mark as Default
                   </button>
                   {!isNA(terms[hoveredRowIndex]?.days) && !isNA(terms[hoveredRowIndex]?.discountDays) && !isNA(terms[hoveredRowIndex]?.discountPercentage) ? (
                     <button
@@ -218,9 +218,9 @@ export const ConfigurePaymentTermsModal = ({
           <button
             type="button"
             onClick={addTerm}
-            className="mt-5 inline-flex items-center gap-2 text-sm text-[#2f6fed] hover:text-[#1f5bdb]"
+            className="mt-5 inline-flex items-center gap-2 text-sm text-[#156372] hover:text-[#0f4f5a]"
           >
-            <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#2f6fed] text-white">
+            <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#156372] text-white">
               <Plus size={12} />
             </span>
             <span>Add New</span>
@@ -231,7 +231,7 @@ export const ConfigurePaymentTermsModal = ({
           <button
             type="button"
             onClick={handleSave}
-            className="rounded-md bg-[#25b46b] px-5 py-2 text-sm font-medium text-white hover:bg-[#1f9c5d]"
+            className="rounded-md bg-[#156372] px-5 py-2 text-sm font-medium text-white hover:bg-[#0f4f5a]"
           >
             Save
           </button>

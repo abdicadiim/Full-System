@@ -5,9 +5,7 @@ import { Expense } from "../models/Expense.js";
 import { Invoice } from "../models/Invoice.js";
 import { Organization } from "../models/Organization.js";
 import { PaymentReceived } from "../models/PaymentReceived.js";
-import { Project } from "../models/Project.js";
 import { Subscription } from "../models/Subscription.js";
-import { TimeEntry } from "../models/TimeEntry.js";
 
 const normalizeText = (value: unknown) => String(value ?? "").trim().toLowerCase();
 const asNumber = (value: unknown, fallback = 0) => {
@@ -35,14 +33,6 @@ const monthLabelLine = (date: Date) => {
 const isOpenInvoice = (row: any) => !["draft", "void", "cancelled", "canceled"].includes(normalizeText(row?.status));
 const isActiveSubscription = (row: any) => !["cancelled", "canceled", "inactive", "expired", "draft"].includes(normalizeText(row?.status));
 const isCancelledSubscription = (row: any) => ["cancelled", "canceled", "inactive", "expired"].includes(normalizeText(row?.status));
-const isBilledTimeEntry = (row: any) => ["billed", "invoiced"].includes(normalizeText(row?.billingStatus));
-const isUnbilledExpense = (row: any) => !["billed", "invoiced", "paid"].includes(normalizeText(row?.status));
-const canViewDashboardProjects = (permissions: unknown) => {
-  if (!permissions || typeof permissions !== "object") return true;
-  const dashboard = (permissions as any).dashboard;
-  if (!dashboard || typeof dashboard !== "object") return false;
-  return Boolean((dashboard as any)["Projects"]);
-};
 
 const subscriptionValue = (row: any) =>
   asNumber(
@@ -104,11 +94,8 @@ const toMonthlySeries = (
 const toMonthlyCounts = (rows: any[], buckets: Array<{ start: Date; end: Date }>, getDate: (row: any) => Date | null) =>
   toMonthlySeries(rows, buckets, getDate, () => 1);
 
-const normalizeDashboardRow = (row: any) => (row ? { ...row, id: String(row._id) } : row);
-
 export const getDashboardSummary: express.RequestHandler = async (req, res) => {
   const orgId = req.user?.organizationId;
-  const projectAccessAllowed = canViewDashboardProjects(req.user?.permissions);
   if (!orgId) {
     return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
   }
@@ -120,16 +107,12 @@ export const getDashboardSummary: express.RequestHandler = async (req, res) => {
   }
 
   const months = buildMonthBuckets(12);
-  const rangeStart = months[0]?.start || startOfMonth(new Date());
-
-  const [customers, projects, invoices, payments, expenses, subscriptions, timeEntries] = await Promise.all([
+  const [customers, invoices, payments, expenses, subscriptions] = await Promise.all([
     Customer.find({ organizationId: orgId }).lean(),
-    projectAccessAllowed ? Project.find({ organizationId: orgId }).lean() : Promise.resolve([] as any[]),
     Invoice.find({ organizationId: orgId }).lean(),
     PaymentReceived.find({ organizationId: orgId }).lean(),
     Expense.find({ organizationId: orgId }).lean(),
     Subscription.find({ organizationId: orgId }).lean(),
-    projectAccessAllowed ? TimeEntry.find({ organizationId: orgId }).lean() : Promise.resolve([] as any[]),
   ]);
   const organization = await Organization.findById(orgId).lean();
 
@@ -174,7 +157,7 @@ export const getDashboardSummary: express.RequestHandler = async (req, res) => {
 
   const activeSubscriptions = (subscriptions || []).filter(isActiveSubscription);
   const cancelledSubscriptions = (subscriptions || []).filter(isCancelledSubscription);
-  const activeCustomersCount = await Customer.countDocuments({ organizationId: orgId });
+  const activeCustomersCount = customers.length;
 
   const netRevenueSeries = toMonthlySeries(
     invoices || [],
@@ -262,56 +245,6 @@ export const getDashboardSummary: express.RequestHandler = async (req, res) => {
     .sort((a, b) => b.value - a.value)
     .slice(0, 5);
 
-  const projectStats = (projects || []).map((project) => {
-    const id = String((project as any)?._id || (project as any)?.id || "").trim();
-    const name = String((project as any)?.name || (project as any)?.projectName || "Project").trim();
-    const customerName = String((project as any)?.customerName || "").trim();
-    const projectNameTarget = normalizeText(name);
-
-    const projectTimeEntries = (timeEntries || []).filter((entry) => String((entry as any)?.projectId || "").trim() === id);
-    const unbilledMinutes = projectTimeEntries.reduce((sum, entry) => {
-      if (isBilledTimeEntry(entry)) return sum;
-      return sum + asNumber((entry as any)?.duration, 0);
-    }, 0);
-
-    const projectExpenses = (expenses || []).filter((expense) => {
-      const refId = String((expense as any)?.projectId || (expense as any)?.project_id || "").trim();
-      const refName = normalizeText(
-        (expense as any)?.projectName || (expense as any)?.project_name || (expense as any)?.project || ""
-      );
-      return refId === id || (projectNameTarget && refName === projectNameTarget);
-    });
-    const unbilledExpenses = projectExpenses.reduce((sum, expense) => {
-      if (!isUnbilledExpense(expense)) return sum;
-      return sum + asNumber((expense as any)?.amount, 0);
-    }, 0);
-
-    const budgetHours = asNumber(
-      (project as any)?.budgetHours ??
-        (project as any)?.budget_hours ??
-        (project as any)?.estimatedHours ??
-        (project as any)?.estimated_hours,
-      0
-    );
-    const progress = budgetHours > 0 ? Math.min(100, Math.round((unbilledMinutes / (budgetHours * 60)) * 100)) : 0;
-
-    return {
-      id,
-      name,
-      customerName,
-      unbilledMinutes,
-      unbilledExpenses,
-      progress,
-      budgetLabel: budgetHours > 0 ? `${budgetHours}h budget` : "No budget hours",
-      totalActivity: unbilledMinutes + unbilledExpenses,
-    };
-  });
-
-  projectStats.sort((a, b) => b.totalActivity - a.totalActivity);
-  const topProject = projectStats[0] || null;
-  const totalProjectUnbilledMinutes = projectStats.reduce((sum, row) => sum + row.unbilledMinutes, 0);
-  const totalProjectUnbilledExpenses = projectStats.reduce((sum, row) => sum + row.unbilledExpenses, 0);
-
   const responseData = {
     metrics: {
       netRevenue: {
@@ -389,28 +322,12 @@ export const getDashboardSummary: express.RequestHandler = async (req, res) => {
       items: topExpenseItems,
     },
     projects: {
-      totalCount: projectAccessAllowed ? projectStats.length : 0,
-      totalUnbilledMinutes: projectAccessAllowed ? totalProjectUnbilledMinutes : 0,
-      totalUnbilledHours: projectAccessAllowed ? formatMinutes(totalProjectUnbilledMinutes) : "00:00",
-      totalUnbilledExpenses: projectAccessAllowed ? totalProjectUnbilledExpenses : 0,
-      topProject:
-        projectAccessAllowed && topProject
-          ? {
-              id: topProject.id,
-              name: topProject.name,
-              customerName: topProject.customerName,
-              unbilledHours: formatMinutes(topProject.unbilledMinutes),
-              unbilledExpenses: topProject.unbilledExpenses,
-              progress: topProject.progress,
-              budgetLabel: topProject.budgetLabel,
-            }
-          : null,
-      rows: projectAccessAllowed
-        ? projectStats.slice(0, 10).map((row) => ({
-            ...row,
-            unbilledHours: formatMinutes(row.unbilledMinutes),
-          }))
-        : [],
+      totalCount: 0,
+      totalUnbilledMinutes: 0,
+      totalUnbilledHours: "00:00",
+      totalUnbilledExpenses: 0,
+      topProject: null,
+      rows: [],
     },
     organization: {
       name: String(organization?.name || "").trim(),

@@ -109,5 +109,7 @@ const QuoteSchema = new mongoose.Schema(
 );
 
 QuoteSchema.index({ organizationId: 1, quoteNumber: 1 }, { unique: true });
+QuoteSchema.index({ organizationId: 1, createdAt: -1 });
+QuoteSchema.index({ organizationId: 1, status: 1, createdAt: -1 });
 
 export const Quote = mongoose.model("Quote", QuoteSchema);

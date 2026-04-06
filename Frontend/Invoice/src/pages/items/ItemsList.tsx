@@ -703,7 +703,7 @@ const ItemsList = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {isLoading ? (
+            {isLoading && filteredItems.length === 0 ? (
               <TableRowSkeleton columns={visibleColumns} />
             ) : (
               filteredItems.map(item => {
@@ -738,11 +738,14 @@ const ItemsList = ({
                       >
                         {col.key === 'name' ? (
                           <div className="flex items-center gap-2">
-                            {item.images && item.images.length > 0 ? (
+                            {(item.thumbnail || item.imageUrl || item.imageURL || item.image || (item.images && item.images.length > 0)) ? (
                               <img
-                                src={item.images[0]}
+                                src={item.thumbnail || item.imageUrl || item.imageURL || item.image || item.images[0]}
                                 alt={item.name}
-                                className="w-8 h-8 rounded object-cover flex-shrink-0"
+                                loading="eager"
+                                decoding="async"
+                                referrerPolicy="no-referrer"
+                                className="w-8 h-8 rounded object-cover flex-shrink-0 bg-white"
                               />
                             ) : (
                               <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center flex-shrink-0">

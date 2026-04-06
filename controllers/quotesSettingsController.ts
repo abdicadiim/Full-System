@@ -1,6 +1,5 @@
 import type express from "express";
 import mongoose from "mongoose";
-import { AUTH_BYPASS } from "../config/env.js";
 import { QuoteSettings } from "../models/QuoteSettings.js";
 
 const pickString = (value: unknown, fallback: string) => (typeof value === "string" ? value : fallback);
@@ -64,10 +63,6 @@ const normalizeQuoteSettings = (settings: any) => ({
 
 export const getQuotesSettings: express.RequestHandler = async (req, res, next) => {
   try {
-    if (AUTH_BYPASS) {
-      return res.json({ success: true, data: DEFAULTS });
-    }
-
     const orgId = req.user?.organizationId;
     if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
     if (!mongoose.isValidObjectId(orgId)) {
@@ -88,10 +83,6 @@ export const getQuotesSettings: express.RequestHandler = async (req, res, next) 
 
 export const upsertQuotesSettings: express.RequestHandler = async (req, res, next) => {
   try {
-    if (AUTH_BYPASS) {
-      return res.json({ success: true, data: DEFAULTS });
-    }
-
     const orgId = req.user?.organizationId;
     if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
     if (!mongoose.isValidObjectId(orgId)) {

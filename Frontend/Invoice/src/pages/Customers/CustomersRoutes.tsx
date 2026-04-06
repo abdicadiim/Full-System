@@ -2,7 +2,7 @@ import React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import Customers from "./Customers";
 import NewCustomer from "./NewCustomer/NewCustomer";
-import CustomerDetail from "./CustomerDetail/CustomerDetail";
+import CustomerDetail from "./CustomerDetail";
 import ImportCustomers from "./ImportCustomers/ImportCustomers";
 import NewCustomView from "./NewCustomView/NewCustomView";
 import RequestReview from "./RequestReview/RequestReview";

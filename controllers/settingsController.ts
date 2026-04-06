@@ -1,6 +1,5 @@
 import express from "express";
 import mongoose from "mongoose";
-import { AUTH_BYPASS } from "../config/env.js";
 import { Organization } from "../models/Organization.js";
 import { buildOrganizationProfilePayload, parseOrganizationPayload } from "../services/organizationPayloads.js";
 
@@ -39,26 +38,6 @@ const buildOrganizationBrandingPayload = (org: any) => ({
 });
 
 export const getOrganizationProfile = async (req: express.Request, res: express.Response) => {
-  if (AUTH_BYPASS) {
-    return res.json({
-      success: true,
-      data: {
-        name: "Dev Org",
-        logo: "",
-        logoUrl: "",
-        businessType: "",
-        industry: "",
-        email: "dev@example.com",
-        website: "",
-        baseCurrency: "USD",
-        fiscalYear: "January - December",
-        orgLanguage: "English",
-        timeZone: "UTC",
-        address: { country: "United States", state: "", city: "", street1: "", street2: "", zipCode: "", phone: "" },
-      },
-    });
-  }
-
   const orgId = req.user?.organizationId;
   if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
   if (mongoose.connection.readyState !== 1) return res.status(500).json({ success: false, message: "DB not connected", data: null });
@@ -76,8 +55,6 @@ export const getOrganizationProfile = async (req: express.Request, res: express.
 };
 
 export const updateOrganizationProfile = async (req: express.Request, res: express.Response) => {
-  if (AUTH_BYPASS) return res.json({ success: true, data: { ok: true } });
-
   const orgId = req.user?.organizationId;
   if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
   if (mongoose.connection.readyState !== 1) return res.status(500).json({ success: false, message: "DB not connected", data: null });
@@ -125,22 +102,6 @@ export const getPrimarySender = async (req: express.Request, res: express.Respon
 };
 
 export const getOrganizationBranding = async (req: express.Request, res: express.Response) => {
-  if (AUTH_BYPASS) {
-    return res.json({
-      success: true,
-      data: {
-        appearance: "dark",
-        accentColor: "#3b82f6",
-        keepZohoBranding: false,
-        logo: "",
-        sidebarDarkFrom: "#156372",
-        sidebarDarkTo: "#156372",
-        sidebarLightFrom: "#f9fafb",
-        sidebarLightTo: "#f3f4f6",
-      },
-    });
-  }
-
   const orgId = req.user?.organizationId;
   if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
   if (mongoose.connection.readyState !== 1) return res.status(500).json({ success: false, message: "DB not connected", data: null });
@@ -155,8 +116,6 @@ export const getOrganizationBranding = async (req: express.Request, res: express
 };
 
 export const updateOrganizationBranding = async (req: express.Request, res: express.Response) => {
-  if (AUTH_BYPASS) return res.json({ success: true, data: { ok: true } });
-
   const orgId = req.user?.organizationId;
   if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
   if (mongoose.connection.readyState !== 1) return res.status(500).json({ success: false, message: "DB not connected", data: null });

@@ -26,7 +26,19 @@ import {
 import { useUser } from "../../lib/auth/UserContext";
 import { useSettings } from "../../lib/settings/SettingsContext";
 import { getNavConfigForRole } from "../../config/roleBasedNav";
+import { prefetchRouteChunk } from "../../routes/routeWarmers";
 import packageJson from "../../../package.json";
+
+function readStoredOrganizationProfile() {
+  try {
+    const raw = localStorage.getItem("organization_profile");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 const SIDEBAR_MODULE_BY_PATH: Record<string, string> = {
   "/sales/quotes": "quotes",
@@ -437,7 +449,13 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
   };
 
   // Get company name from settings
-  const companyName = (settings?.general?.companyDisplayName || "Billing").trim();
+  const storedOrganization = readStoredOrganizationProfile();
+  const companyName = String(
+    storedOrganization?.name ||
+      storedOrganization?.organizationName ||
+      settings?.general?.companyDisplayName ||
+      "Billing",
+  ).trim();
   const [companyPrimaryRaw, ...companySecondaryParts] = companyName.split(/\s+/).filter(Boolean);
   const companyPrimary = companyPrimaryRaw || "Billing";
   const companySecondary = companySecondaryParts.join(" ");
@@ -699,6 +717,9 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
                           <NavLink
                             to={item.to}
                             end={item.to === "/dashboard" || item.to === "/"}
+                            onMouseEnter={() => prefetchRouteChunk(item.to)}
+                            onPointerDown={() => prefetchRouteChunk(item.to)}
+                            onFocus={() => prefetchRouteChunk(item.to)}
                             onClick={(event) => {
                               if (hasSubMenu) {
                                 if (!isCollapsed) {
@@ -784,6 +805,9 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
                                         <NavLink
                                           to={sub.to}
                                           end={sub.to === item.to}
+                                          onMouseEnter={() => prefetchRouteChunk(sub.to)}
+                                          onPointerDown={() => prefetchRouteChunk(sub.to)}
+                                          onFocus={() => prefetchRouteChunk(sub.to)}
                                           onClick={handleLinkClick}
                                           className={({ isActive }) =>
                                             submenuClasses(isActive)
@@ -857,6 +881,9 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
                           key={sub.to}
                           to={sub.to}
                           end
+                          onMouseEnter={() => prefetchRouteChunk(sub.to)}
+                          onPointerDown={() => prefetchRouteChunk(sub.to)}
+                          onFocus={() => prefetchRouteChunk(sub.to)}
                           onClick={handleLinkClick}
                           className={({ isActive }) =>
                             `group flex items-center justify-between gap-2 rounded-xl px-4 py-2.5 text-[14px] font-medium transition-colors no-underline mb-1 border ${isActive

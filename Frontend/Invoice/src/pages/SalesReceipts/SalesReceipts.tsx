@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useLocation } from "react-router-dom";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import LoadingSpinner from "../../components/LoadingSpinner";
+import PaginationFooter from "../../components/ui/PaginationFooter";
 import { getSalesReceipts, getSalesReceiptsPaginated, deleteSalesReceipt, updateSalesReceipt, getSalesReceiptById, getCustomers, getSalespersons, getTaxes, getProjects, getItemsFromAPI, getCustomViews, deleteCustomView } from "../salesModel";
 // import { sampleItems } from "../items/itemsModel";
 import { toast } from "react-toastify";
@@ -10,7 +12,6 @@ import { jsPDF } from "jspdf";
 import {
   ChevronDown,
   ChevronRight,
-  ChevronLeft,
   Plus,
   MoreVertical,
   ArrowUpDown,
@@ -299,6 +300,42 @@ export default function SalesReceipts() {
   const [taxes, setTaxes] = useState([]);
   const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 50, pages: 0 });
   const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
+  const mapSortOptionToField = (option) => {
+    switch (option) {
+      case "Date (Newest First)":
+      case "Date (Oldest First)": return "date";
+      case "Receipt # (Ascending)":
+      case "Receipt # (Descending)": return "receiptNumber";
+      case "Amount (High to Low)":
+      case "Amount (Low to High)": return "total";
+      case "Customer Name (A-Z)":
+      case "Customer Name (Z-A)": return "customerName";
+      default: return "date";
+    }
+  };
+  const salesReceiptsQuery = useQuery({
+    queryKey: ["sales-receipts", currentPage, itemsPerPage, selectedStatus, activeSort],
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const isDesc = activeSort.includes("Descending") || activeSort.includes("Newest") || activeSort.includes("High to Low");
+      const response = await getSalesReceiptsPaginated({
+        page: currentPage,
+        limit: itemsPerPage,
+        status: selectedStatus === "All" ? undefined : selectedStatus,
+        sortBy: mapSortOptionToField(activeSort),
+        sortOrder: isDesc ? "desc" : "asc"
+      });
+
+      return {
+        data: response.data || [],
+        pagination: response.pagination || { total: 0, page: currentPage, limit: itemsPerPage, pages: 0 }
+      };
+    }
+  });
 
   const viewDropdownRef = useRef(null);
   const moreMenuRef = useRef(null);
@@ -543,49 +580,24 @@ export default function SalesReceipts() {
   const bulkUpdateFieldOptions = bulkFieldConfigs.map((config) => config.label);
   const selectedBulkFieldConfig = bulkFieldConfigs.find((config) => config.label === bulkUpdateField) || null;
 
-  const mapSortOptionToField = (option) => {
-    switch (option) {
-      case "Date (Newest First)":
-      case "Date (Oldest First)": return "date";
-      case "Receipt # (Ascending)":
-      case "Receipt # (Descending)": return "receiptNumber";
-      case "Amount (High to Low)":
-      case "Amount (Low to High)": return "total";
-      case "Customer Name (A-Z)":
-      case "Customer Name (Z-A)": return "customerName";
-      default: return "date";
-    }
-  };
-
-  const refreshData = async (page = currentPage) => {
-    setIsRefreshing(true);
-    try {
-      const isDesc = activeSort.includes("Descending") || activeSort.includes("Newest") || activeSort.includes("High to Low");
-      const response = await getSalesReceiptsPaginated({
-        page,
-        limit: 50,
-        status: selectedStatus === "All" ? undefined : selectedStatus,
-        sortBy: mapSortOptionToField(activeSort),
-        sortOrder: isDesc ? "desc" : "asc"
-      });
-
-      setSalesReceipts(response.data);
-      setFilteredSalesReceipts(response.data);
-      setPagination(response.pagination);
-
-      const allCustomViews = getCustomViews().filter(v => v.type === "sales-receipts");
-      setCustomViews(allCustomViews);
-    } catch (error) {
-      console.error("Error refreshing data:", error);
-    } finally {
-      setIsRefreshing(false);
-      setHasLoadedOnce(true);
-    }
+  const refreshData = async (page = currentPage, limit = itemsPerPage) => {
+    setCurrentPage(page);
+    setItemsPerPage(limit);
+    await salesReceiptsQuery.refetch();
   };
 
   useEffect(() => {
-    refreshData(currentPage);
-  }, [selectedStatus, activeSort, currentPage]);
+    if (salesReceiptsQuery.data) {
+      setSalesReceipts(salesReceiptsQuery.data.data);
+      setFilteredSalesReceipts(salesReceiptsQuery.data.data);
+      setPagination(salesReceiptsQuery.data.pagination);
+      setHasLoadedOnce(true);
+    }
+  }, [salesReceiptsQuery.data]);
+
+  useEffect(() => {
+    setIsRefreshing(salesReceiptsQuery.isFetching);
+  }, [salesReceiptsQuery.isFetching]);
 
   useEffect(() => {
     const initialLoad = async () => {
@@ -611,6 +623,15 @@ export default function SalesReceipts() {
       document.removeEventListener("visibilitychange", () => refreshData(currentPage));
     };
   }, []);
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handlePageSizeChange = (pageSize: number) => {
+    setItemsPerPage(pageSize);
+    setCurrentPage(1);
+  };
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -1814,6 +1835,16 @@ export default function SalesReceipts() {
           </div>
         </div>
       )}
+
+      <PaginationFooter
+        currentPage={currentPage}
+        totalItems={pagination.total}
+        totalPages={pagination.pages}
+        pageSize={itemsPerPage}
+        itemLabel="sales receipts"
+        onPageChange={handlePageChange}
+        onPageSizeChange={handlePageSizeChange}
+      />
 
       {/* Bulk Update Modal */}
       {isBulkUpdateModalOpen && bulkUpdateModalRoot && createPortal(

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useLayoutEffect } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useNavigate, useLocation } from "react-router-dom";
-import LoadingSpinner from "../../components/LoadingSpinner";
 import { getQuotes, deleteQuotes, updateQuote, getCustomers, getProjects, getSalespersons, getCustomViews, deleteCustomView } from "../salesModel";
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -116,8 +116,26 @@ export default function Quotes() {
   const [isNewQuoteMenuOpen, setIsNewQuoteMenuOpen] = useState(false);
   const [viewSearchQuery, setViewSearchQuery] = useState("");
   const [customViews, setCustomViews] = useState<CustomView[]>(() => getCustomViews().filter(v => v.type === "quotes"));
-  const [quotes, setQuotes] = useState<Quote[]>([]);
-  const [quotesLoading, setQuotesLoading] = useState(true);
+  const QUOTES_STORAGE_KEY = "taban_quotes_list_v1";
+  const readStoredQuotes = (): Quote[] => {
+    try {
+      const raw = localStorage.getItem(QUOTES_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+  const storeQuotes = (rows: Quote[]) => {
+    try {
+      localStorage.setItem(QUOTES_STORAGE_KEY, JSON.stringify(rows));
+    } catch {
+      // best effort only
+    }
+  };
+  const [quotes, setQuotes] = useState<Quote[]>(() => readStoredQuotes());
+  const [quotesLoading, setQuotesLoading] = useState(() => readStoredQuotes().length === 0);
   const [sortConfig, setSortConfig] = useState({ key: "createdTime", direction: "desc" as "asc" | "desc" });
   const [selectedQuotes, setSelectedQuotes] = useState<string[]>([]);
   const [isBulkUpdateModalOpen, setIsBulkUpdateModalOpen] = useState(false);
@@ -207,6 +225,64 @@ export default function Quotes() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [salespersons, setSalespersons] = useState<Salesperson[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const customerLookup = useMemo(() => {
+    const map = new Map<string, Customer>();
+    customers.forEach((customer) => {
+      const id = String(customer._id || customer.id || "").trim();
+      if (id) map.set(id, customer);
+    });
+    return map;
+  }, [customers]);
+  const salespersonLookup = useMemo(() => {
+    const map = new Map<string, Salesperson>();
+    salespersons.forEach((salesperson) => {
+      const id = String(salesperson._id || salesperson.id || "").trim();
+      if (id) map.set(id, salesperson);
+    });
+    return map;
+  }, [salespersons]);
+  const projectLookup = useMemo(() => {
+    const map = new Map<string, Project>();
+    projects.forEach((project) => {
+      const id = String(project._id || project.id || "").trim();
+      if (id) map.set(id, project);
+    });
+    return map;
+  }, [projects]);
+
+  const applySupportData = (supportResults: PromiseSettledResult<any>[]) => {
+    const [customersResult, salespersonsResult, projectsResult] = supportResults;
+
+    if (customersResult.status === "fulfilled") {
+      setCustomers(Array.isArray(customersResult.value) ? customersResult.value : []);
+    } else {
+      setCustomers([]);
+    }
+
+    if (salespersonsResult.status === "fulfilled") {
+      setSalespersons(Array.isArray(salespersonsResult.value) ? salespersonsResult.value : []);
+    } else {
+      setSalespersons([]);
+    }
+
+    if (projectsResult.status === "fulfilled") {
+      setProjects(Array.isArray(projectsResult.value) ? projectsResult.value : []);
+    } else {
+      setProjects([]);
+    }
+  };
+  const quotesQuery = useQuery({
+    queryKey: ["quotes", "list"],
+    placeholderData: keepPreviousData,
+    staleTime: 2 * 60 * 1000,
+    initialData: readStoredQuotes().length > 0 ? readStoredQuotes() : undefined,
+    queryFn: async () => {
+      const loadedQuotes = await getQuotes();
+      const rows = Array.isArray(loadedQuotes) ? loadedQuotes : [];
+      storeQuotes(rows);
+      return rows;
+    }
+  });
   const [exportQuotesData, setExportQuotesData] = useState({
     module: "Quotes",
     status: "All",
@@ -464,50 +540,58 @@ export default function Quotes() {
   const refreshData = async () => {
     setIsRefreshing(true);
     try {
-      const [loadedQuotes, loadedCustomers, loadedSalespersons, loadedProjects] = await Promise.all([
-        getQuotes(),
+      const supportDataPromise = Promise.allSettled([
         getCustomers(),
         getSalespersons(),
         getProjects()
       ]);
-      setQuotes(Array.isArray(loadedQuotes) ? loadedQuotes : []);
-      setCustomers(Array.isArray(loadedCustomers) ? loadedCustomers : []);
-      setSalespersons(Array.isArray(loadedSalespersons) ? loadedSalespersons : []);
-      setProjects(Array.isArray(loadedProjects) ? loadedProjects : []);
       setCustomViews(getCustomViews().filter(v => v.type === "quotes"));
+      void supportDataPromise.then(applySupportData);
+      await quotesQuery.refetch();
     } catch (error) {
       console.error("Error refreshing quotes:", error);
-      setQuotes([]);
     } finally {
       setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
-    const loadData = async () => {
-      setQuotesLoading(true);
+    let isActive = true;
+
+    const loadSupportData = async () => {
       try {
-        const [loadedQuotes, loadedCustomers, loadedSalespersons, loadedProjects] = await Promise.all([
-          getQuotes(),
+        const supportDataPromise = Promise.allSettled([
           getCustomers(),
           getSalespersons(),
           getProjects()
         ]);
-        setQuotes(Array.isArray(loadedQuotes) ? loadedQuotes : []);
-        setCustomers(Array.isArray(loadedCustomers) ? loadedCustomers : []);
-        setSalespersons(Array.isArray(loadedSalespersons) ? loadedSalespersons : []);
-        setProjects(Array.isArray(loadedProjects) ? loadedProjects : []);
         setCustomViews(getCustomViews().filter(v => v.type === "quotes"));
+        const results = await supportDataPromise;
+        if (!isActive) return;
+        applySupportData(results);
       } catch (error) {
-        console.error("Error loading quotes:", error);
-        setQuotes([]);
-      } finally {
-        setQuotesLoading(false);
+        console.error("Error loading quote support data:", error);
       }
     };
 
-    loadData();
+    void loadSupportData();
+    return () => {
+      isActive = false;
+    };
   }, [location.pathname]);
+
+  useEffect(() => {
+    const nextQuotes = quotesQuery.data || [];
+    setQuotes(nextQuotes);
+    setQuotesLoading(Boolean(quotesQuery.isLoading && nextQuotes.length === 0));
+    if (nextQuotes.length > 0) {
+      storeQuotes(nextQuotes);
+    }
+  }, [quotesQuery.data, quotesQuery.isLoading]);
+
+  useEffect(() => {
+    setIsRefreshing(quotesQuery.isFetching);
+  }, [quotesQuery.isFetching]);
 
   const resolveCustomerName = (q: Quote) => {
     // If it's already an object with a name, use it
@@ -519,7 +603,7 @@ export default function Quotes() {
     // Try to find by ID in our customers list
     const customerId = q.customerId || (typeof q.customer === 'string' ? q.customer : q.customer?._id || q.customer?.id);
     if (customerId) {
-      const found = customers.find(c => (c._id || c.id) === customerId);
+      const found = customerLookup.get(customerId) || customers.find(c => (c._id || c.id) === customerId);
       if (found) return found.displayName || found.name || found.companyName || found.company_name;
     }
 
@@ -541,6 +625,28 @@ export default function Quotes() {
       }
       return q.customer || '';
     };
+    const getSalespersonName = (q: any) => {
+      const salespersonId = String(q?.salespersonId || q?.salesperson?._id || q?.salesperson?.id || "").trim();
+      if (salespersonId) {
+        const matched = salespersonLookup.get(salespersonId);
+        if (matched) return matched.displayName || matched.name || matched.email || "";
+      }
+      if (typeof q?.salesperson === "object" && q.salesperson) {
+        return q.salesperson.displayName || q.salesperson.name || q.salesperson.email || "";
+      }
+      return String(q?.salespersonName || q?.salesperson || "");
+    };
+    const getProjectName = (q: any) => {
+      const projectId = String(q?.projectId || q?.project?._id || q?.project?.id || "").trim();
+      if (projectId) {
+        const matched = projectLookup.get(projectId);
+        if (matched) return matched.projectName || matched.name || "";
+      }
+      if (typeof q?.project === "object" && q.project) {
+        return q.project.projectName || q.project.name || "";
+      }
+      return String(q?.projectName || q?.project || "");
+    };
 
     const fieldMap = {
       "Date": quote.quoteDate || quote.date || "",
@@ -549,8 +655,8 @@ export default function Quotes() {
       "Customer Name": resolveCustomerName(quote),
       "Status": quote.status || "draft",
       "Amount": quote.total || quote.amount || 0,
-      "Project Name": quote.projectName || "",
-      "Salesperson": quote.salesperson || ""
+      "Project Name": getProjectName(quote),
+      "Salesperson": getSalespersonName(quote)
     };
     return fieldMap[fieldName] !== undefined ? fieldMap[fieldName] : "";
   };
@@ -643,10 +749,10 @@ export default function Quotes() {
           aValue = (a.quoteNumber || a.id || "").toLowerCase();
           bValue = (b.quoteNumber || b.id || "").toLowerCase();
           break;
-        case "customerName":
-          aValue = (a.customerName || (typeof a.customer === 'object' && a.customer ? (a.customer.displayName || a.customer.name || '') : (a.customer || ""))).toLowerCase();
-          bValue = (b.customerName || (typeof b.customer === 'object' && b.customer ? (b.customer.displayName || b.customer.name || '') : (b.customer || ""))).toLowerCase();
-          break;
+      case "customerName":
+        aValue = (a.customerName || (typeof a.customer === 'object' && a.customer ? (a.customer.displayName || a.customer.name || '') : (a.customer || ""))).toLowerCase();
+        bValue = (b.customerName || (typeof b.customer === 'object' && b.customer ? (b.customer.displayName || b.customer.name || '') : (b.customer || ""))).toLowerCase();
+        break;
         case "amount":
           aValue = Number(a.total || a.amount || 0);
           bValue = Number(b.total || b.amount || 0);
@@ -2407,13 +2513,7 @@ export default function Quotes() {
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-hidden flex flex-col relative">
-        {isRefreshing && (
-          <div className="absolute inset-0 bg-white/50 z-20 flex items-center justify-center backdrop-blur-[1px]">
-            <RefreshCw size={24} className="text-[#156372] animate-spin" />
-          </div>
-        )}
-
-        {quotesLoading ? (
+        {quotesLoading && quotes.length === 0 ? (
           <div className="flex-1 overflow-auto bg-white min-h-0">
             <table className="w-full text-left border-collapse" style={{ minWidth: `${tableMinWidth}px` }}>
               <thead className="bg-[#f6f7fb] sticky top-0 z-20 border-b border-[#e6e9f2]">

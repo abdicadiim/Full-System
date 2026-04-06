@@ -228,26 +228,23 @@ export default function NewCustomView() {
   };
 
   // Refs for dropdowns
-  const fieldDropdownRefs = useRef({});
-  const comparatorDropdownRefs = useRef({});
-  const operatorDropdownRefs = useRef({});
-  const userRoleDropdownRef = useRef(null);
-  const searchDropdownRef = useRef(null);
+  const fieldDropdownRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const comparatorDropdownRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const operatorDropdownRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const userRoleDropdownRef = useRef<HTMLButtonElement | null>(null);
+  const searchDropdownRef = useRef<HTMLDivElement | null>(null);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      const isFieldDropdown = Object.values(fieldDropdownRefs.current).some(ref =>
-        ref && ref.contains(event.target)
-      );
-      const isComparatorDropdown = Object.values(comparatorDropdownRefs.current).some(ref =>
-        ref && ref.contains(event.target)
-      );
-      const isOperatorDropdown = Object.values(operatorDropdownRefs.current).some(ref =>
-        ref && ref.contains(event.target)
-      );
-      const isUserRoleDropdown = userRoleDropdownRef.current && userRoleDropdownRef.current.contains(event.target);
-      const isSearchDropdown = searchDropdownRef.current && searchDropdownRef.current.contains(event.target);
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+
+      const isFieldDropdown = Object.values(fieldDropdownRefs.current).some((ref) => ref?.contains(target));
+      const isComparatorDropdown = Object.values(comparatorDropdownRefs.current).some((ref) => ref?.contains(target));
+      const isOperatorDropdown = Object.values(operatorDropdownRefs.current).some((ref) => ref?.contains(target));
+      const isUserRoleDropdown = userRoleDropdownRef.current?.contains(target);
+      const isSearchDropdown = searchDropdownRef.current?.contains(target);
 
       if (!isFieldDropdown && Object.keys(isFieldDropdownOpen).length > 0) {
         setIsFieldDropdownOpen({});

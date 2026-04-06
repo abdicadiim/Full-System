@@ -14,6 +14,17 @@ import { useUser } from "../../lib/auth/UserContext";
 import { useSettings } from "../../lib/settings/SettingsContext";
 import SettingsDrawer from "../settings/SettingsDrawer";
 
+function readStoredOrganizationProfile() {
+  try {
+    const raw = localStorage.getItem("organization_profile");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function Header({ onToggleSidebar }) {
   const { user, logout } = useUser();
   const { settings } = useSettings();
@@ -35,7 +46,15 @@ function Header({ onToggleSidebar }) {
 
   const displayName = user?.name || "Guest";
   const email = user?.email || "";
-  const organizationName = settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "Organization";
+  const storedOrganization = readStoredOrganizationProfile();
+  const organizationName =
+    String(
+      storedOrganization?.name ||
+        storedOrganization?.organizationName ||
+        settings?.general?.companyDisplayName ||
+        settings?.general?.schoolDisplayName ||
+        "Organization",
+    ).trim();
   const avatarInitial = displayName.trim().charAt(0).toUpperCase() || "A";
   const avatarSrc = String(settings?.branding?.logoUrl || settings?.branding?.logoFile || user?.photoUrl || "").trim();
   const unreadMessages = user?.unreadMessages ?? 0;

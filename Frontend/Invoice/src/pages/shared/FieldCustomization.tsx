@@ -1,5 +1,10 @@
 import React from "react";
 
-export default function FieldCustomization() {
+export interface FieldCustomizationProps {
+  featureType?: string;
+  onClose?: () => void;
+}
+
+export default function FieldCustomization(_props: FieldCustomizationProps) {
   return null;
 }

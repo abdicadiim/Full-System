@@ -1,6 +1,5 @@
 import type express from "express";
 import mongoose from "mongoose";
-import { AUTH_BYPASS } from "../config/env.js";
 import { GeneralSettings } from "../models/GeneralSettings.js";
 
 const DEFAULT_COPY_LABELS = {
@@ -266,10 +265,6 @@ const mergeGeneralSettings = (currentValue: unknown, incomingValue: unknown) => 
 
 export const getGeneralSettings: express.RequestHandler = async (req, res, next) => {
   try {
-    if (AUTH_BYPASS) {
-      return res.json({ success: true, data: { settings: DEFAULT_SETTINGS } });
-    }
-
     const orgId = req.user?.organizationId;
     if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
     if (!mongoose.isValidObjectId(orgId)) {
@@ -293,10 +288,6 @@ export const getGeneralSettings: express.RequestHandler = async (req, res, next)
 
 export const upsertGeneralSettings: express.RequestHandler = async (req, res, next) => {
   try {
-    if (AUTH_BYPASS) {
-      return res.json({ success: true, data: { settings: DEFAULT_SETTINGS } });
-    }
-
     const orgId = req.user?.organizationId;
     if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
     if (!mongoose.isValidObjectId(orgId)) {

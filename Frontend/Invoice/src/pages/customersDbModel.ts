@@ -3,14 +3,65 @@
  * API-backed model used by Customers pages.
  */
 
-import { customersAPI } from "../services/api";
-import { db } from "../store/db";
+import { customersAPI, invoicesAPI, paymentsReceivedAPI, salesReceiptsAPI } from "../services/api";
 
 const STORAGE_KEYS = {
   CUSTOM_VIEWS: 'taban_custom_views',
+  CUSTOMERS_PAGE_CACHE: 'taban_customers_page_cache_v1',
   TRANSACTIONS: 'taban_transactions',
   COMMENTS: 'taban_comments',
   MAILS: 'taban_mails'
+};
+
+const buildCustomersPageCacheKey = ({
+  page = 1,
+  limit = 50,
+  search = "",
+} = {}) => `${STORAGE_KEYS.CUSTOMERS_PAGE_CACHE}:${page}:${limit}:${String(search || "").trim().toLowerCase()}`;
+
+export const getCachedCustomersPage = (params: {
+  page?: number;
+  limit?: number;
+  search?: string;
+} = {}) => {
+  try {
+    const key = buildCustomersPageCacheKey(params);
+    const stored = localStorage.getItem(key);
+    if (!stored) return null;
+    const parsed = JSON.parse(stored);
+    if (!parsed || !Array.isArray(parsed.data)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
+export const setCachedCustomersPage = (
+  params: {
+    page?: number;
+    limit?: number;
+    search?: string;
+  } = {},
+  payload: {
+    data: any[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }
+) => {
+  try {
+    const key = buildCustomersPageCacheKey(params);
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        ...payload,
+        updatedAt: new Date().toISOString(),
+      })
+    );
+  } catch {
+    // Cache is best-effort only.
+  }
 };
 
 /**
@@ -19,7 +70,15 @@ const STORAGE_KEYS = {
  */
 export const getCustomers = async (params: any = {}) => {
   const res: any = await customersAPI.getAll(params);
-  return res?.success ? res.data || [] : [];
+  if (!res?.success) return [];
+  const rows = Array.isArray(res.data)
+    ? res.data
+    : Array.isArray(res.items)
+      ? res.items
+      : Array.isArray(res?.data?.data)
+        ? res.data.data
+        : [];
+  return rows;
 };
 
 export const getCustomersPaginated = async ({
@@ -29,12 +88,19 @@ export const getCustomersPaginated = async ({
 } = {}) => {
   const res: any = await customersAPI.getAll({ page, limit, search });
   if (!res?.success) throw new Error(res?.message || "Failed to load customers");
+  const rows = Array.isArray(res.data)
+    ? res.data
+    : Array.isArray(res.items)
+      ? res.items
+      : Array.isArray(res?.data?.data)
+        ? res.data.data
+        : [];
   return {
-    data: res.data || [],
-    total: res.total || 0,
-    page: res.page || page,
-    limit: res.limit || limit,
-    totalPages: res.totalPages || 1,
+    data: rows,
+    total: res.total ?? res.pagination?.total ?? 0,
+    page: res.page ?? res.pagination?.page ?? page,
+    limit: res.limit ?? res.per_page ?? res.pagination?.limit ?? limit,
+    totalPages: res.totalPages ?? res.pagination?.pages ?? 1,
   };
 };
 
@@ -162,40 +228,73 @@ export const deleteCustomView = (id) => {
  * @param {string} customerId - Customer ID
  * @returns {Array} Array of transaction objects
  */
-export const getCustomerTransactions = (customerId) => {
+export const getCustomerTransactions = async (customerId) => {
   try {
-    const stored = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
-    if (stored) {
-      const allTransactions = JSON.parse(stored);
-      return allTransactions.filter(t => t.customerId === customerId);
+    const [invoiceRes, paymentRes, receiptRes] = await Promise.all([
+      invoicesAPI.getAll({ customerId, limit: 1000 }).catch(() => ({ success: true, data: [] })),
+      paymentsReceivedAPI.getAll({ customerId, limit: 1000 }).catch(() => ({ success: true, data: [] })),
+      salesReceiptsAPI.getAll({ customerId, limit: 1000 }).catch(() => ({ success: true, data: [] })),
+    ]);
+
+    const invoices = Array.isArray(invoiceRes?.data) ? invoiceRes.data : [];
+    const payments = Array.isArray(paymentRes?.data) ? paymentRes.data : [];
+    const receipts = Array.isArray(receiptRes?.data) ? receiptRes.data : [];
+
+    const transactions = [
+      ...invoices.map((inv: any) => ({
+        id: inv.id || inv._id,
+        customerId,
+        type: "invoice",
+        date: inv.date || inv.createdAt,
+        invoiceNumber: inv.invoiceNumber || inv.number || inv.id || inv._id,
+        orderNumber: inv.orderNumber || "-",
+        amount: Number(inv.total ?? inv.balanceDue ?? inv.balance ?? 0) || 0,
+        balanceDue: Number(inv.balanceDue ?? inv.balance ?? 0) || 0,
+        status: inv.status || "Sent",
+        currency: inv.currency || "USD",
+      })),
+      ...payments.map((payment: any) => ({
+        id: payment.id || payment._id,
+        customerId,
+        type: "payment",
+        date: payment.date || payment.paymentDate || payment.createdAt,
+        invoiceNumber: payment.paymentNumber || payment.referenceNumber || payment.id || payment._id,
+        orderNumber: "-",
+        amount: Number(payment.amount ?? payment.total ?? 0) || 0,
+        balanceDue: Number(payment.balance ?? payment.balanceAmount ?? 0) || 0,
+        status: payment.status || "Paid",
+        currency: payment.currency || "USD",
+      })),
+      ...receipts.map((receipt: any) => ({
+        id: receipt.id || receipt._id,
+        customerId,
+        type: "sales_receipt",
+        date: receipt.date || receipt.receiptDate || receipt.createdAt,
+        invoiceNumber: receipt.receiptNumber || receipt.salesReceiptNumber || receipt.id || receipt._id,
+        orderNumber: "-",
+        amount: Number(receipt.total ?? receipt.amount ?? 0) || 0,
+        balanceDue: Number(receipt.balance ?? 0) || 0,
+        status: receipt.status || "Paid",
+        currency: receipt.currency || "USD",
+      })),
+    ];
+
+    if (transactions.length > 0) {
+      localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
     }
-    // Initialize with sample data if customer has invoices
-    const invoices = db.invoices.list({}).filter((inv) => inv.customerId === customerId);
-    if (invoices.length) {
-      const sampleTransactions = invoices.map(inv => {
-        const totals = db.invoices.calc(inv);
-        return {
-          id: inv.id,
-          customerId: customerId,
-          type: "invoice",
-          date: inv.date,
-          invoiceNumber: inv.id,
-          orderNumber: "-",
-          amount: totals.total,
-          balanceDue: totals.total,
-          status: inv.status || "Sent",
-          currency: inv.currency || "USD"
-        };
-      });
-      if (sampleTransactions.length > 0) {
-        localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(sampleTransactions));
-      }
-      return sampleTransactions;
-    }
-    return [];
+    return transactions;
   } catch (error) {
     console.error("Error getting transactions:", error);
-    return [];
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
+      if (!stored) return [];
+      const allTransactions = JSON.parse(stored);
+      return Array.isArray(allTransactions)
+        ? allTransactions.filter((t) => String(t?.customerId || "") === String(customerId))
+        : [];
+    } catch {
+      return [];
+    }
   }
 };
 

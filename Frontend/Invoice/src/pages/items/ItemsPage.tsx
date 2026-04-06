@@ -1,5 +1,6 @@
 // src/features/items/ItemsPage.tsx
 import React, { useEffect, useMemo, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 import { itemsAPI, tagAssignmentsAPI } from "../../services/api";
 import { Item, DeleteConfirmModal } from "./itemsModel";
@@ -13,14 +14,96 @@ import NewItemForm from "./components/NewItemForm";
 import BulkUpdateModal from "./components/modals/BulkUpdateModal";
 import { useCurrency } from "../../hooks/useCurrency";
 import { usePermissions } from "../../hooks/usePermissions";
+import { waitForBackendReady } from "../../services/backendReady";
 import { buildCloneName } from "./utils/cloneName";
+
+const ITEM_THUMBNAIL_CACHE = new Map<string, string>();
+
+function getPrimaryItemImage(item: any) {
+  const sources = [
+    ...(Array.isArray(item?.images) ? item.images : []),
+    item?.thumbnail,
+    item?.previewImage,
+    item?.imageThumbnail,
+    item?.imageUrl,
+    item?.imageURL,
+    item?.image,
+    item?.picture,
+  ];
+  const source = sources.find((value) => typeof value === "string" && value.trim().length > 0);
+  return typeof source === "string" ? source.trim() : "";
+}
+
+function createThumbnailFromImage(source: string, size = 48): Promise<string> {
+  const cached = ITEM_THUMBNAIL_CACHE.get(source);
+  if (cached) return Promise.resolve(cached);
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(source);
+          return;
+        }
+        ctx.clearRect(0, 0, size, size);
+        const ratio = Math.min(size / img.width, size / img.height);
+        const drawWidth = Math.max(1, Math.round(img.width * ratio));
+        const drawHeight = Math.max(1, Math.round(img.height * ratio));
+        const x = Math.floor((size - drawWidth) / 2);
+        const y = Math.floor((size - drawHeight) / 2);
+        ctx.drawImage(img, x, y, drawWidth, drawHeight);
+        const thumbnail = canvas.toDataURL("image/png", 0.82);
+        ITEM_THUMBNAIL_CACHE.set(source, thumbnail);
+        resolve(thumbnail);
+      } catch {
+        resolve(source);
+      }
+    };
+    img.onerror = () => resolve(source);
+    img.src = source;
+  });
+}
+
+function collectItemImages(item: any) {
+  const candidates = [
+    ...(Array.isArray(item?.images) ? item.images : []),
+    item?.thumbnail,
+    item?.previewImage,
+    item?.imageThumbnail,
+    item?.imageUrl,
+    item?.imageURL,
+    item?.image,
+    item?.picture,
+  ];
+  return candidates
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .filter((value) => value.length > 0);
+}
 
 function ItemsPageContent() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const [items, setItems] = useState<Item[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const ITEMS_STORAGE_KEY = "inv_items_v1";
+  const readStoredItems = (): Item[] => {
+    try {
+      const raw = localStorage.getItem(ITEMS_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const [items, setItems] = useState<Item[]>(() => readStoredItems());
+  const [loading, setLoading] = useState<boolean>(() => readStoredItems().length === 0);
   const [view, setView] = useState<string>("list"); // list | new | detail | edit
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<DeleteConfirmModal>({
@@ -32,46 +115,86 @@ function ItemsPageContent() {
   const [clonedItem, setClonedItem] = useState<any>(null);
 
   const { baseCurrency } = useCurrency();
-  const { canView, canCreate, canEdit, canDelete, loading: permissionsLoading } = usePermissions();
-
-  // FIXED: Removed arguments to match usePermissions hook signature (Expected 0 arguments)
-  const canViewItems = canView();
+  const { canCreate, canEdit, canDelete } = usePermissions();
   const canCreateItems = canCreate();
   const canEditItems = canEdit();
   const canDeleteItems = canDelete();
 
-  const ITEMS_STORAGE_KEY = "inv_items_v1";
-
   const normalizeItemForList = (item: Item) => ({
     ...item,
-    images: Array.isArray(item.images) ? item.images : (item.image ? [item.image] : []),
+    images: collectItemImages(item),
     id: item.id || item._id,
-    active: item.active !== undefined ? item.active : item.isActive
+    active: item.active !== undefined ? item.active : item.isActive,
+    thumbnail: getPrimaryItemImage(item) || (item as any).thumbnail || ""
   });
 
-  // Load items from API
-  const fetchItems = async () => {
-    setLoading(true);
-    try {
+  const extractItemRows = (response: any): Item[] => {
+    const rows = Array.isArray(response?.data)
+      ? response.data
+      : Array.isArray(response?.items)
+        ? response.items
+        : Array.isArray(response?.data?.data)
+          ? response.data.data
+          : [];
+    return rows as Item[];
+  };
+
+  const itemsQuery = useQuery({
+    queryKey: ["items", "list"],
+    placeholderData: keepPreviousData,
+    staleTime: 2 * 60 * 1000,
+    initialData: readStoredItems().length > 0 ? readStoredItems().map((item) => normalizeItemForList(item)) : undefined,
+    queryFn: async () => {
+      if ((import.meta as any).env?.DEV) {
+        await waitForBackendReady();
+      }
       const response = await itemsAPI.getAll();
-      const itemsData = response.data || [];
-      const normalizedItems = itemsData.map((item: Item) => normalizeItemForList(item));
-      setItems(normalizedItems);
-    } catch (error) {
-      console.error("Failed to fetch items:", error);
-    } finally {
-      setLoading(false);
-    }
+      const itemsData = extractItemRows(response);
+      return itemsData.map((item: Item) => normalizeItemForList(item));
+    },
+  });
+
+  const fetchItems = async () => {
+    await itemsQuery.refetch();
   };
 
   useEffect(() => {
-    if (permissionsLoading) return;
-    if (!canViewItems) {
-      setLoading(false);
-      return;
-    }
-    fetchItems();
-  }, [permissionsLoading, canViewItems]);
+    const nextItems = itemsQuery.data || [];
+    setItems(nextItems);
+    setLoading(Boolean(itemsQuery.isPending && nextItems.length === 0));
+  }, [itemsQuery.data, itemsQuery.isPending]);
+
+  useEffect(() => {
+    if (!items.length) return;
+
+    const cancellers: Array<() => void> = [];
+    const visibleItems = items.slice(0, 8);
+
+    visibleItems.forEach((item, index) => {
+      const primaryImage = getPrimaryItemImage(item);
+      if (!primaryImage || (item as any).thumbnail) return;
+
+      const warmThumbnail = () => {
+        void createThumbnailFromImage(primaryImage).then((thumbnail) => {
+          if (!thumbnail || thumbnail === primaryImage) return;
+          setItems((prev) =>
+            prev.map((current) =>
+              (current.id || current._id) === (item.id || item._id)
+                ? { ...current, thumbnail }
+                : current
+            )
+          );
+        });
+      };
+
+      const id = window.setTimeout(warmThumbnail, index * 50);
+      cancellers.push(() => window.clearTimeout(id));
+    });
+
+    return () => {
+      cancellers.forEach((cancel) => cancel());
+    };
+  }, [items]);
 
   const selectedItem = useMemo(
     () => items.find((x: Item) => x.id === selectedId || x._id === selectedId) || null,
@@ -94,7 +217,14 @@ function ItemsPageContent() {
       }
 
       const newItem = response.data || response;
-      const normalizedItem = normalizeItemForList(newItem as Item);
+      const createImages = collectItemImages({ ...(newItem || {}), ...(data || {}) });
+      const createThumbnailSource = createImages[0] || "";
+      const normalizedItem = normalizeItemForList({
+        ...(newItem as any),
+        ...(data || {}),
+        images: createImages.length > 0 ? createImages : collectItemImages(newItem),
+        thumbnail: createThumbnailSource,
+      } as Item);
       const normalizedId = String(normalizedItem.id || normalizedItem._id || "");
       if (!normalizedId) {
         throw new Error("Item saved without id");
@@ -119,20 +249,6 @@ function ItemsPageContent() {
         return [normalizedItem, ...withoutCurrent];
       });
 
-      const itemId = newItem._id || newItem.id;
-
-      if (tagIds && tagIds.length > 0 && itemId) {
-        try {
-          await tagAssignmentsAPI.assignTags({
-            entityType: "Item",
-            entityId: itemId,
-            tagIds: tagIds,
-          });
-        } catch (tagError) {
-          console.error("Failed to assign tags:", tagError);
-        }
-      }
-
       if (!options?.stayOnCurrent) {
         if (view === "detail") {
           setSelectedId(String(newItem._id || newItem.id));
@@ -142,8 +258,20 @@ function ItemsPageContent() {
       }
       setClonedItem(null);
       toast.success("Item created successfully");
-      // Final sync from local store/API
-      fetchItems();
+
+      const itemId = newItem._id || newItem.id;
+
+      if (tagIds && tagIds.length > 0 && itemId) {
+        void tagAssignmentsAPI.assignTags({
+          entityType: "Item",
+          entityId: itemId,
+          tagIds: tagIds,
+        }).catch((tagError) => {
+          console.error("Failed to assign tags:", tagError);
+        });
+      }
+      // Final sync from local store/API without blocking the save flow.
+      void fetchItems();
     } catch (error: any) {
       console.error("Failed to create item:", error);
       toast.error("Failed to create item: " + (error.message || "Unknown error"));
@@ -307,22 +435,6 @@ function ItemsPageContent() {
 
     await handleCreateItem(clonedPayload, [], { stayOnCurrent: true });
   };
-
-  if (permissionsLoading) {
-    return (
-      <div className="w-full p-8 text-center text-gray-500">Loading permissions...</div>
-    );
-  }
-
-  if (!canViewItems) {
-    return (
-      <div className="w-full p-8">
-        <div className="max-w-xl rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          You do not have permission to view Items.
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="w-full h-full">

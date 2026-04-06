@@ -15,6 +15,24 @@ const AddressSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const AdditionalAddressSchema = new mongoose.Schema(
+  {
+    addressId: { type: String, default: "" },
+    attention: { type: String, default: "" },
+    country: { type: String, default: "" },
+    street1: { type: String, default: "" },
+    street2: { type: String, default: "" },
+    city: { type: String, default: "" },
+    state: { type: String, default: "" },
+    zipCode: { type: String, default: "" },
+    phone: { type: String, default: "" },
+    fax: { type: String, default: "" },
+    createdAt: { type: String, default: () => new Date().toISOString() },
+    updatedAt: { type: String, default: () => new Date().toISOString() },
+  },
+  { _id: false }
+);
+
 const CustomerCommentSchema = new mongoose.Schema(
   {
     id: { type: String, required: true },
@@ -47,6 +65,9 @@ const CustomerSchema = new mongoose.Schema(
 
     billingAddress: { type: AddressSchema, default: () => ({}) },
     shippingAddress: { type: AddressSchema, default: () => ({}) },
+    additionalAddresses: { type: [AdditionalAddressSchema], default: [] },
+    enablePortal: { type: Boolean, default: false },
+    paymentReminderEnabled: { type: Boolean, default: false },
 
     comments: { type: [CustomerCommentSchema], default: [] },
     contactPersons: { type: Array, default: [] },

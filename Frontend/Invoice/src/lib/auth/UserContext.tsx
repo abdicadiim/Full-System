@@ -118,6 +118,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }, [refresh]);
 
   useEffect(() => {
+    const isPlaceholderUser =
+      String(user?.name || "").trim() === "Dev User" ||
+      String(user?.email || "").trim().toLowerCase() === "dev@example.com" ||
+      String(user?.id || "").trim() === "000000000000000000000001";
+
+    if (!hasChecked || loading || !isPlaceholderUser) return;
+    void refresh();
+  }, [user?.id, user?.name, user?.email, hasChecked, loading, refresh]);
+
+  useEffect(() => {
     if (!pollingEnabled) return;
     const interval = window.setInterval(refresh, 30000);
     return () => window.clearInterval(interval);

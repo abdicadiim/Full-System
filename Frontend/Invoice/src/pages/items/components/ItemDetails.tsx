@@ -13,7 +13,6 @@ import {
     Lock,
     Unlock,
     Pencil,
-    Trash2,
     Copy,
     Info,
     Image as ImageIcon,
@@ -95,6 +94,8 @@ export default function ItemDetails({
     const [editingAssociatedPriceListId, setEditingAssociatedPriceListId] = useState<string | null>(null);
     const [editingRate, setEditingRate] = useState("");
     const [editingDiscount, setEditingDiscount] = useState("");
+    const [isDraggingImage, setIsDraggingImage] = useState(false);
+    const [imagePreview, setImagePreview] = useState<string | null>(null);
 
     const moreDropdownRef = useRef<HTMLDivElement>(null);
     const typeDropdownRef = useRef<HTMLDivElement>(null);
@@ -103,6 +104,12 @@ export default function ItemDetails({
     const txCountsReqRef = useRef(0);
     const txTypeFilterRef = useRef(txTypeFilter);
     const itemId = String(item.id || item._id || "");
+    const currentItemImage = imagePreview || (Array.isArray(item.images) ? item.images[0] : item.image || "");
+
+    useEffect(() => {
+        setImagePreview(null);
+        setIsDraggingImage(false);
+    }, [itemId]);
 
     const readStoredRows = (key: string) => {
         try {
@@ -458,22 +465,67 @@ export default function ItemDetails({
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onload = async () => {
-                const base64 = reader.result as string;
-                const newImages = [base64, ...(item.images || [])];
-                await onUpdate({ images: newImages });
-            };
-            reader.readAsDataURL(file);
+            void handleImageFile(file);
         }
         if (e.target) {
             e.target.value = "";
         }
     };
 
+    const openImagePicker = () => {
+        if (!canEdit) return;
+        fileInputRef.current?.click();
+    };
+
+    const handleImageFile = async (file: File) => {
+        if (!canEdit) return;
+        const reader = new FileReader();
+        reader.onload = async () => {
+            const base64 = reader.result as string;
+            setImagePreview(base64);
+            const newImages = [base64, ...(item.images || [])];
+            await onUpdate({ images: newImages });
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const handleImageDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDraggingImage(false);
+        if (!canEdit) return;
+        const file = e.dataTransfer.files?.[0];
+        if (file) {
+            await handleImageFile(file);
+        }
+    };
+
+    const handleImageDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+        if (!canEdit) return;
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDraggingImage(true);
+    };
+
+    const handleImageDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+        if (!canEdit) return;
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDraggingImage(false);
+    };
+
+    const handleImageKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        if (!canEdit) return;
+        if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openImagePicker();
+        }
+    };
+
     const handleRemoveImage = async () => {
         if (!canEdit) return;
         if (!item.images || item.images.length === 0) return;
+        setImagePreview(null);
         const remaining = item.images.slice(1);
         await onUpdate({ images: remaining });
     };
@@ -651,11 +703,26 @@ export default function ItemDetails({
                             <div className="flex justify-start pt-2">
                                 <div className="w-full">
                                     <div
-                                        className="border-2 border-dashed border-gray-100 rounded-xl h-[220px] flex flex-col items-center justify-center bg-white text-center cursor-pointer transition-all hover:border-gray-200 hover:bg-gray-50/50 group relative overflow-hidden"
-                                        onClick={() => canEdit && fileInputRef.current?.click()}
+                                        role={canEdit ? "button" : undefined}
+                                        tabIndex={canEdit ? 0 : -1}
+                                        aria-label={canEdit ? "Edit item image" : "Item image"}
+                                        className={[
+                                            "border-2 border-dashed rounded-xl h-[220px] flex flex-col items-center justify-center bg-white text-center transition-all group relative overflow-hidden",
+                                            canEdit ? "cursor-pointer hover:border-gray-200 hover:bg-gray-50/50" : "cursor-default",
+                                            isDraggingImage ? "border-[#1b5e6a] bg-[#1b5e6a]/5" : "border-gray-100",
+                                        ].join(" ")}
+                                        onClick={openImagePicker}
+                                        onKeyDown={handleImageKeyDown}
+                                        onDragOver={handleImageDragOver}
+                                        onDragLeave={handleImageDragLeave}
+                                        onDrop={handleImageDrop}
                                     >
-                                        {item.images && item.images.length > 0 ? (
-                                            <img src={item.images[0]} alt={item.name} className="absolute inset-0 h-full w-full object-contain p-4" />
+                                        {currentItemImage ? (
+                                            <img
+                                                src={currentItemImage}
+                                                alt={item.name}
+                                                className="absolute inset-0 h-full w-full object-contain p-4"
+                                            />
                                         ) : (
                                             <div className="flex flex-col items-center">
                                                 <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4 group-hover:bg-white transition-colors">
@@ -665,23 +732,37 @@ export default function ItemDetails({
                                                 <span className="text-[13px] text-blue-500 font-medium mt-1">Browse images</span>
                                             </div>
                                         )}
+                                        {canEdit && (
+                                            <div className="absolute inset-x-0 bottom-0 bg-white/80 backdrop-blur-sm border-t border-gray-100 px-4 py-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <div className="text-[12px] text-gray-500">
+                                                    Click, drop, or press Enter to upload
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                    {item.images && item.images.length > 0 && (
+                                    {canEdit && (
                                         <div className="mt-4 flex items-center gap-3">
                                             <button
                                                 type="button"
-                                                onClick={() => canEdit && fileInputRef.current?.click()}
+                                                onClick={openImagePicker}
                                                 className="text-[13px] font-medium text-blue-600 hover:text-blue-700 underline underline-offset-4"
                                             >
-                                                Change Image
+                                                {currentItemImage ? "Change Image" : "Upload Image"}
                                             </button>
-                                            <button
-                                                type="button"
-                                                onClick={handleRemoveImage}
-                                                className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
+                                            {currentItemImage && (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleRemoveImage}
+                                                    className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+                                                >
+                                                    <Trash size={16} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                    {!canEdit && item.images && item.images.length > 0 && (
+                                        <div className="mt-4 flex items-center gap-3">
+                                            <div className="text-[13px] text-gray-400">Image is read-only</div>
                                         </div>
                                     )}
                                 </div>

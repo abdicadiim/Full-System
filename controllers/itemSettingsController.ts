@@ -1,6 +1,5 @@
 import type express from "express";
 import mongoose from "mongoose";
-import { AUTH_BYPASS } from "../config/env.js";
 import { ItemSettings } from "../models/ItemSettings.js";
 
 const pickString = (value: unknown, fallback: string) => (typeof value === "string" ? value : fallback);
@@ -29,10 +28,6 @@ const normalizeItemSettings = (settings: any) => ({
 
 export const getItemSettings: express.RequestHandler = async (req, res, next) => {
   try {
-    if (AUTH_BYPASS) {
-      return res.json({ success: true, data: DEFAULTS });
-    }
-
     const orgId = req.user?.organizationId;
     if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
     if (!mongoose.isValidObjectId(orgId)) {
@@ -53,10 +48,6 @@ export const getItemSettings: express.RequestHandler = async (req, res, next) =>
 
 export const upsertItemSettings: express.RequestHandler = async (req, res, next) => {
   try {
-    if (AUTH_BYPASS) {
-      return res.json({ success: true, data: DEFAULTS });
-    }
-
     const orgId = req.user?.organizationId;
     if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
     if (!mongoose.isValidObjectId(orgId)) {

@@ -88,19 +88,24 @@ export const listQuotes: express.RequestHandler = async (req, res) => {
     filter.$or = [{ quoteNumber: re }, { customerName: re }, { subject: re }];
   }
 
-  const total = await Quote.countDocuments(filter);
+  const shouldPage = limit > 0;
   let query = Quote.find(filter).sort({ createdAt: -1 });
-  if (limit > 0) query = query.skip((page - 1) * limit).limit(limit);
-  const rows = await query.lean();
+  if (shouldPage) query = query.skip((page - 1) * limit).limit(limit);
+
+  const [total, rows] = await Promise.all([
+    shouldPage ? Quote.countDocuments(filter) : Promise.resolve(0),
+    query.lean(),
+  ]);
+  const effectiveTotal = shouldPage ? total : rows.length;
 
   return res.json({
     success: true,
     data: rows.map(normalizeRow),
     pagination: {
-      total,
+      total: effectiveTotal,
       page,
-      limit: limit || total,
-      pages: limit > 0 ? Math.max(1, Math.ceil(total / limit)) : 1,
+      limit: limit || effectiveTotal,
+      pages: shouldPage ? Math.max(1, Math.ceil(effectiveTotal / limit)) : 1,
     },
   });
 };

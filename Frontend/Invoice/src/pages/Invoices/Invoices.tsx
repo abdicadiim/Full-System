@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   ChevronDown,
   ChevronUp,
   ChevronRight,
-  ChevronLeft,
   Plus,
   ArrowDownLeft,
   ArrowUpDown,
@@ -41,10 +41,11 @@ import {
   GripVertical,
   RotateCcw
 } from "lucide-react";
-import { getInvoices, getInvoicesPaginated, getInvoiceById, updateInvoice, deleteInvoice, Invoice } from "../salesModel";
+import { getInvoicesPaginated, getInvoiceById, updateInvoice, deleteInvoice, Invoice } from "../salesModel";
 import { getInvoiceStatusDisplay } from "../../utils/invoiceUtils";
 import { useCurrency } from "../../hooks/useCurrency";
 import { useSettings } from "../../lib/settings/SettingsContext";
+import PaginationFooter from "../../components/ui/PaginationFooter";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
@@ -109,7 +110,7 @@ export default function Invoices() {
   const navigate = useNavigate();
   const { formatMoney } = useCurrency();
   const { settings } = useSettings();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [isInvoiceDropdownOpen, setIsInvoiceDropdownOpen] = useState(false);
   const [selectedView, setSelectedView] = useState("All Invoices");
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
@@ -122,6 +123,12 @@ export default function Invoices() {
   const [searchQuery, setSearchQuery] = useState("");
   const [viewSearchQuery, setViewSearchQuery] = useState("");
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [activeSortField, setActiveSortField] = useState("Invoice#");
+  const [sortConfig, setSortConfig] = useState({ key: "Date", direction: "desc" });
   const isRetainerInvoiceRecord = (invoice: any) => {
     const rawType = String(
       invoice?.invoiceType ||
@@ -209,24 +216,106 @@ export default function Invoices() {
       ),
     [showDebitNoteModule]
   );
-  // Refresh data when returning to page
-  const refreshData = async (page = currentPage, limit = itemsPerPage) => {
-    setIsRefreshing(true);
-    try {
-      const response = await getInvoicesPaginated({
-        page,
-        limit,
-        status: selectedStatus !== "All" ? selectedStatus.toLowerCase() : undefined,
-        search: searchQuery
-      });
-      setInvoices(stripRetainerInvoices(response.data));
-      setTotalItems(response.pagination.total);
-      setTotalPages(response.pagination.pages);
-    } catch (error) {
-      console.error("Error refreshing invoices:", error);
-    } finally {
-      setIsRefreshing(false);
+  const syncPageToUrl = (page: number) => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("page", String(page));
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const resolveInvoiceStatusParam = (view: string, status: string) => {
+    const effectiveStatus = status && status !== "All" ? status.toLowerCase() : undefined;
+
+    if (!view || view === "All Invoices") {
+      return effectiveStatus;
     }
+
+    switch (view) {
+      case "Draft":
+      case "Locked":
+      case "Approved":
+      case "Void":
+      case "Write Off":
+        return view.toLowerCase().replace(" ", "_");
+      case "Pending Approval":
+        return "pending_approval";
+      case "Customer Viewed":
+        return "customer_viewed";
+      case "Partially Paid":
+        return "partially paid";
+      case "Payment Initiated":
+        return "payment_initiated";
+      case "Paid":
+        return "paid";
+      case "Overdue":
+        return "overdue";
+      case "Unpaid":
+      case "Unpaid Invoices":
+        return "unpaid";
+      case "Debit Note":
+        return undefined;
+      default:
+        return effectiveStatus;
+    }
+  };
+
+  const invoiceQuery = useQuery({
+    queryKey: [
+      "invoices",
+      currentPage,
+      itemsPerPage,
+      searchQuery,
+      selectedStatus,
+      selectedView,
+      sortConfig.key,
+      sortConfig.direction
+    ],
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+    gcTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const statusParam = resolveInvoiceStatusParam(selectedView, selectedStatus);
+      const response = await getInvoicesPaginated({
+        page: currentPage,
+        limit: itemsPerPage,
+        search: searchQuery,
+        sort: sortConfig.key,
+        order: sortConfig.direction,
+        ...(statusParam ? { status: statusParam } : {})
+      });
+
+      return {
+        data: stripRetainerInvoices(response.data || []),
+        total: response.pagination?.total ?? 0,
+        pages: response.pagination?.pages ?? 0
+      };
+    }
+  });
+
+  useEffect(() => {
+    if (!invoiceQuery.data) return;
+    setInvoices(invoiceQuery.data.data);
+    setTotalItems(invoiceQuery.data.total);
+    setTotalPages(invoiceQuery.data.pages);
+  }, [invoiceQuery.data]);
+
+  useEffect(() => {
+    setIsRefreshing(invoiceQuery.isFetching);
+  }, [invoiceQuery.isFetching]);
+
+  const refreshData = async () => {
+    await invoiceQuery.refetch();
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    syncPageToUrl(page);
+  };
+
+  const handlePageSizeChange = (pageSize: number) => {
+    setItemsPerPage(pageSize);
+    setCurrentPage(1);
+    syncPageToUrl(1);
   };
 
   const [isBulkUpdateModalOpen, setIsBulkUpdateModalOpen] = useState(false);
@@ -430,8 +519,6 @@ export default function Invoices() {
   const [isDissociateModalOpen, setIsDissociateModalOpen] = useState(false);
   const [isDeleteConfirmModalOpen, setIsDeleteConfirmModalOpen] = useState(false);
   const [isDeletingInvoices, setIsDeletingInvoices] = useState(false);
-  const [activeSortField, setActiveSortField] = useState("Invoice#");
-  const [sortConfig, setSortConfig] = useState({ key: "Date", direction: "desc" });
   const [isExportCurrentViewModalOpen, setIsExportCurrentViewModalOpen] = useState(false);
   const [exportData, setExportData] = useState({
     decimalFormat: "1234567.89",
@@ -442,10 +529,6 @@ export default function Invoices() {
   const [isDecimalFormatDropdownOpen, setIsDecimalFormatDropdownOpen] = useState(false);
   const [activeActionInvoiceId, setActiveActionInvoiceId] = useState(null);
   const [hoveredRowId, setHoveredRowId] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(50);
-  const [totalItems, setTotalItems] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
 
   // Share Modal States
   const [showShareModal, setShowShareModal] = useState(false);
@@ -468,65 +551,30 @@ export default function Invoices() {
   const actionDropdownRef = useRef(null);
 
   useEffect(() => {
-    const loadData = async () => {
-      setIsRefreshing(true);
-      const statusFromUrl = searchParams.get('status');
-      const pageFromUrl = parseInt(searchParams.get('page')) || 1;
+    const statusFromUrl = searchParams.get("status");
+    const pageFromUrl = parseInt(searchParams.get("page") || "1", 10) || 1;
 
-      setCurrentPage(pageFromUrl);
+    setCurrentPage(pageFromUrl);
 
-      let currentStatus = selectedStatus;
-      if (statusFromUrl) {
-        const statusMap: { [key: string]: string } = {
-          "all": "All",
-          "draft": "Draft",
-          "unpaid": "Unpaid",
-          "overdue": "Overdue",
-          "partially_paid": "Partially Paid",
-          "customer_viewed": "Customer Viewed",
-          "approved": "Approved",
-          "pending_approval": "Pending Approval",
-          "locked": "Locked"
-        };
-        currentStatus = statusMap[statusFromUrl] || statusFromUrl;
-        setSelectedStatus(currentStatus);
-      }
-
-      const params: any = {
-        page: pageFromUrl,
-        limit: itemsPerPage,
-        search: searchQuery,
-        sort: sortConfig.key,
-        order: sortConfig.direction
+    if (statusFromUrl) {
+      const statusMap: Record<string, string> = {
+        all: "All",
+        draft: "Draft",
+        unpaid: "Unpaid",
+        overdue: "Overdue",
+        partially_paid: "Partially Paid",
+        customer_viewed: "Customer Viewed",
+        approved: "Approved",
+        pending_approval: "Pending Approval",
+        locked: "Locked",
+        paid: "Paid",
+        "write_off": "Write Off",
+        "payment_initiated": "Payment Initiated",
+        "debit_note": "Debit Note"
       };
-
-      if (currentStatus !== "All") {
-        params.status = currentStatus.toLowerCase();
-      }
-
-      const response = await getInvoicesPaginated(params);
-
-      setInvoices(stripRetainerInvoices(response.data));
-      setTotalItems(response.pagination.total);
-      setTotalPages(response.pagination.pages);
-      setIsRefreshing(false);
-    };
-
-    loadData();
-
-    const handleVisibilityChange = () => {
-      if (!document.hidden) loadData();
-    };
-
-    window.addEventListener("storage", loadData);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      window.removeEventListener("storage", loadData);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, itemsPerPage, searchQuery, selectedStatus]);
+      setSelectedStatus(statusMap[statusFromUrl] || statusFromUrl);
+    }
+  }, [searchParams]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -573,7 +621,6 @@ export default function Invoices() {
   }, [isInvoiceDropdownOpen, isStatusDropdownOpen, isMoreMenuOpen, isNewDropdownOpen, isDownloadDropdownOpen, isBulkUpdateFieldDropdownOpen, isBulkUpdateValueDropdownOpen, isDecimalFormatDropdownOpen, activeActionInvoiceId, isVisibilityDropdownOpen]);
 
   const handleViewSelect = async (view: string) => {
-    setSelectedView(view);
     setIsInvoiceDropdownOpen(false);
     await applyFilters(view, selectedStatus);
   };
@@ -620,80 +667,16 @@ export default function Invoices() {
   };
 
   const applyFilters = async (view: string, status: string) => {
-    setIsRefreshing(true);
-    try {
-      const params: any = {
-        page: 1, // Always reset to page 1 when filtering
-        limit: itemsPerPage,
-        search: searchQuery,
-        sort: sortConfig.key,
-        order: sortConfig.direction
-      };
-
-      // Handle Status Dropdown
-      if (status && status !== "All") {
-        params.status = status.toLowerCase();
-      }
-
-      // Handle View Selection (Overwrites status if specific view)
-      if (view !== "All Invoices") {
-        switch (view) {
-          case "Draft":
-          case "Locked":
-          case "Pending Approval":
-          case "Approved":
-          case "Partially Paid":
-          case "Paid":
-          case "Void":
-          case "Overdue":
-            params.status = view.toLowerCase().replace(" ", "_"); // e.g. "Pending Approval" -> "pending_approval"
-            if (view === "Overdue") params.status = "overdue";
-            if (view === "Partially Paid") params.status = "partially paid"; // Backend expects space? Let's check. 
-            // Model says 'partially paid'. 
-            // Wait, 'Pending Approval' -> 'pending_approval' usually.
-            if (view === "Pending Approval") params.status = "pending_approval";
-            if ((view as string) === "Payment Initiated") params.status = "payment_initiated";
-            break;
-          case "Unpaid":
-          case "Unpaid Invoices":
-            params.status_ne = "paid";
-            break;
-          case "Customer Viewed":
-            // Not supported server-side yet, might return all. 
-            // Ideally we add backend support.
-            break;
-          case "Debit Note":
-            // Filter by type? Backend has no type filter in query yet.
-            break;
-          case "Write Off":
-            params.status = "write_off";
-            break;
-          case "Sent":
-            params.status = "sent";
-            break;
-          default:
-            // Custom view? 
-            break;
-        }
-      }
-
-      const response = await getInvoicesPaginated(params);
-      setInvoices(stripRetainerInvoices(response.data));
-      setTotalItems(response.pagination.total);
-      setTotalPages(response.pagination.pages);
-      setCurrentPage(1); // Update current page state
-
-    } catch (error) {
-      console.error("Error applying filters:", error);
-    } finally {
-      setIsRefreshing(false);
-    }
+    const nextStatus = status || "All";
+    setSelectedView(view);
+    setSelectedStatus(nextStatus);
+    setCurrentPage(1);
+    syncPageToUrl(1);
   };
 
   const handleStatusSelect = (status: string) => {
-    setSelectedStatus(status);
     setIsStatusDropdownOpen(false);
-    applyFilters(selectedView, status);
+    void applyFilters(selectedView, status);
   };
 
   const handleCreateNewInvoice = () => {
@@ -1945,8 +1928,7 @@ export default function Invoices() {
       }
 
       // Refresh the invoices list
-      const allInvoices = await getInvoices();
-      setInvoices(stripRetainerInvoices(allInvoices as any[]));
+      await invoiceQuery.refetch();
 
       setIsMarkAsSentModalOpen(false);
       setSelectedInvoices(new Set());
@@ -1983,9 +1965,10 @@ export default function Invoices() {
 
   // Sort invoices
   const sortedInvoices = useMemo(() => {
-    if (!Array.isArray(invoices)) return [];
+    const liveInvoices = invoiceQuery.data ? invoiceQuery.data.data : invoices;
+    if (!Array.isArray(liveInvoices)) return [];
 
-    const uniqueInvoices = Array.from(new Map(invoices.map(invoice => [invoice.id, invoice])).values());
+    const uniqueInvoices = Array.from(new Map(liveInvoices.map(invoice => [invoice.id, invoice])).values());
     return uniqueInvoices.sort((a, b) => {
       let aValue, bValue;
 
@@ -2042,7 +2025,7 @@ export default function Invoices() {
           : bValue - aValue;
       }
     });
-  }, [invoices, sortConfig]);
+  }, [invoiceQuery.data?.data, invoices, sortConfig]);
   const hasInvoices = sortedInvoices.length > 0;
 
   const paymentSummary = useMemo(() => {
@@ -2125,24 +2108,14 @@ export default function Invoices() {
   };
 
   const handleRefreshList = async () => {
-    // Reload invoices
-    const allInvoices = await getInvoices();
-    setInvoices(stripRetainerInvoices(allInvoices as any[]));
+    await invoiceQuery.refetch();
     setIsMoreMenuOpen(false);
   };
 
   const handleSummaryRefresh = async () => {
     setIsSummaryRefreshing(true);
     try {
-      const response = await getInvoicesPaginated({
-        page: currentPage,
-        limit: itemsPerPage,
-        status: selectedStatus !== "All" ? selectedStatus.toLowerCase() : undefined,
-        search: searchQuery
-      });
-      setInvoices(stripRetainerInvoices(response.data));
-      setTotalItems(response.pagination.total);
-      setTotalPages(response.pagination.pages);
+      await invoiceQuery.refetch();
     } catch (error) {
       console.error("Error refreshing payment summary:", error);
     } finally {
@@ -2890,42 +2863,15 @@ export default function Invoices() {
       </div>
 
       {/* Pagination Controls */}
-      {sortedInvoices.length > 0 && (
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-white">
-          <div className="flex items-center text-sm text-gray-500">
-            Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalItems)} invoices
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                if (currentPage > 1) {
-                  refreshData(currentPage - 1);
-                }
-              }}
-              disabled={currentPage === 1}
-              className={`p-2 rounded-md ${currentPage === 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100'}`}
-            >
-              <ChevronLeft size={20} />
-            </button>
-
-            <span className="text-sm font-medium text-gray-700">
-              Page {currentPage} of {totalPages}
-            </span>
-
-            <button
-              onClick={() => {
-                if (currentPage < totalPages) {
-                  refreshData(currentPage + 1);
-                }
-              }}
-              disabled={currentPage === totalPages}
-              className={`p-2 rounded-md ${currentPage === totalPages ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100'}`}
-            >
-              <ChevronRight size={20} />
-            </button>
-          </div>
-        </div>
-      )}
+      <PaginationFooter
+        currentPage={currentPage}
+        totalItems={totalItems}
+        totalPages={totalPages}
+        pageSize={itemsPerPage}
+        itemLabel="invoices"
+        onPageChange={handlePageChange}
+        onPageSizeChange={handlePageSizeChange}
+      />
 
       {/* Bulk Update Modal */}
       {isBulkUpdateModalOpen && (

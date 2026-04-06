@@ -3,8 +3,21 @@ import { Search, Bell, User, Building2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useOrgs } from '../../state/orgsContext'
 
+function readStoredOrganizationProfile() {
+  try {
+    const raw = localStorage.getItem("organization_profile");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function Topbar() {
   const { activeOrg } = useOrgs()
+  const storedOrganization = readStoredOrganizationProfile()
+  const orgName = String(storedOrganization?.name || storedOrganization?.organizationName || activeOrg?.name || 'Select Org').trim()
   return (
     <header className="sticky top-0 z-20 h-16 border-b border-slate-200 bg-white/80 backdrop-blur">
       <div className="mx-auto max-w-[1400px] h-full flex items-center gap-4 px-4">
@@ -16,7 +29,7 @@ export default function Topbar() {
         </div>
         <Link to="/orgs" className="hidden md:flex items-center gap-2 text-[12px] rounded-lg border border-slate-200 px-2 py-1 hover:bg-slate-50">
           <Building2 size={16} />
-          <span>{activeOrg?.name || 'Select Org'}</span>
+          <span>{orgName}</span>
         </Link>
         <button className="relative rounded-full p-2 hover:bg-slate-100">
           <Bell size={18} />
