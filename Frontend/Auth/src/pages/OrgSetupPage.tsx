@@ -4,11 +4,76 @@ import { Country, State, type ICountry, type IState } from "country-state-city";
 import { iso6393 } from "iso-639-3";
 import SetupHeader from "../components/SetupHeader";
 import SearchableSelect, { type SelectOption } from "../components/SearchableSelect";
+import SetupProgressBar from "../components/SetupProgressBar";
 import { getAppDisplayName } from "../lib/appBranding";
+import { getAuthApp } from "../lib/appBranding";
 import { TIME_ZONES } from "./timezones";
 import { orgApi } from "../services/orgApi";
 
 type IsoLanguage = (typeof iso6393)[number];
+
+const getAuthDraftKey = () => {
+  if (typeof window === "undefined") return "full";
+  const app = new URLSearchParams(window.location.search).get("app")?.toLowerCase();
+  if (app === "billing") return "billing";
+  if (app === "invoice") return "invoice";
+  return "full";
+};
+
+const ORG_SETUP_DRAFT_KEY = (suffix: string) => `auth:org-setup:draft:${getAuthDraftKey()}:${suffix}`;
+
+const readDraftValue = (key: string) => {
+  if (typeof window === "undefined") return "";
+  try {
+    return localStorage.getItem(key) || "";
+  } catch {
+    return "";
+  }
+};
+
+const hasDraftValue = (key: string) => {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(key) !== null;
+  } catch {
+    return false;
+  }
+};
+
+const writeDraftValue = (key: string, value: string) => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(key, value);
+  } catch {}
+};
+
+const clearDraftPrefix = (prefix: string) => {
+  if (typeof window === "undefined") return;
+  try {
+    const keys: string[] = [];
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (key && key.startsWith(prefix)) {
+        keys.push(key);
+      }
+    }
+    keys.forEach((key) => localStorage.removeItem(key));
+  } catch {}
+};
+
+const clearSessionDraftPrefix = (prefix: string) => {
+  if (typeof window === "undefined") return;
+  try {
+    const keys: string[] = [];
+    for (let index = 0; index < sessionStorage.length; index += 1) {
+      const key = sessionStorage.key(index);
+      if (key && key.startsWith(prefix)) {
+        keys.push(key);
+      }
+    }
+    keys.forEach((key) => sessionStorage.removeItem(key));
+  } catch {}
+};
 
 const COUNTRIES: SelectOption[] = Country.getAllCountries()
   .map((c: ICountry) => ({ value: c.isoCode, label: c.name }))
@@ -218,14 +283,23 @@ const LANGUAGE_OPTIONS: SelectOption[] = iso6393
 
 export default function OrgSetupPage() {
   const appName = getAppDisplayName();
+  const authApp = getAuthApp();
   const location = useLocation();
   const navigate = useNavigate();
+  const locationState = (location.state as { orgName?: unknown; intent?: unknown } | null) || null;
+  const signupStateOrgName =
+    typeof locationState?.orgName === "string" && locationState.orgName.trim() && locationState.intent === "signup"
+      ? locationState.orgName.trim()
+      : "";
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [logoUrl, setLogoUrl] = useState<string>("");
+  const [logoUrl, setLogoUrl] = useState<string>(() => readDraftValue(ORG_SETUP_DRAFT_KEY("logoUrl")));
   const [orgName, setOrgName] = useState(() => {
-    const fromState = (location.state as { orgName?: unknown } | null)?.orgName;
+    if (signupStateOrgName) return signupStateOrgName;
+    const fromDraft = readDraftValue(ORG_SETUP_DRAFT_KEY("orgName"));
+    if (fromDraft.trim()) return fromDraft;
+    const fromState = locationState?.orgName;
     if (typeof fromState === "string" && fromState.trim()) return fromState;
     try {
       const fromStorage = sessionStorage.getItem("orgName");
@@ -233,12 +307,12 @@ export default function OrgSetupPage() {
     } catch {}
     return "";
   });
-  const [countryIso, setCountryIso] = useState(getDefaultCountryIso);
-  const [state, setState] = useState("");
-  const [currency, setCurrency] = useState("SOS - Somali Shilling");
-  const [fiscalYear, setFiscalYear] = useState("January - December");
-  const [language, setLanguage] = useState("eng");
-  const [timeZone, setTimeZone] = useState("Africa/Nairobi");
+  const [countryIso, setCountryIso] = useState(() => readDraftValue(ORG_SETUP_DRAFT_KEY("countryIso")) || getDefaultCountryIso());
+  const [state, setState] = useState(() => readDraftValue(ORG_SETUP_DRAFT_KEY("state")));
+  const [currency, setCurrency] = useState(() => readDraftValue(ORG_SETUP_DRAFT_KEY("currency")) || "SOS - Somali Shilling");
+  const [fiscalYear, setFiscalYear] = useState(() => readDraftValue(ORG_SETUP_DRAFT_KEY("fiscalYear")) || "January - December");
+  const [language, setLanguage] = useState(() => readDraftValue(ORG_SETUP_DRAFT_KEY("language")) || "eng");
+  const [timeZone, setTimeZone] = useState(() => readDraftValue(ORG_SETUP_DRAFT_KEY("timeZone")) || "Africa/Nairobi");
 
   const currencyOptions = useMemo<SelectOption[]>(() => CURRENCIES.map((c: string) => ({ value: c, label: c })), []);
 
@@ -246,6 +320,20 @@ export default function OrgSetupPage() {
     const list = State.getStatesOfCountry(countryIso).map((s: IState) => s.name);
     return list.sort((a: string, b: string) => a.localeCompare(b));
   }, [countryIso]);
+
+  useEffect(() => {
+    writeDraftValue(ORG_SETUP_DRAFT_KEY("orgName"), orgName);
+    writeDraftValue(ORG_SETUP_DRAFT_KEY("logoUrl"), logoUrl);
+    writeDraftValue(ORG_SETUP_DRAFT_KEY("countryIso"), countryIso);
+    writeDraftValue(ORG_SETUP_DRAFT_KEY("state"), state);
+    writeDraftValue(ORG_SETUP_DRAFT_KEY("currency"), currency);
+    writeDraftValue(ORG_SETUP_DRAFT_KEY("fiscalYear"), fiscalYear);
+    writeDraftValue(ORG_SETUP_DRAFT_KEY("language"), language);
+    writeDraftValue(ORG_SETUP_DRAFT_KEY("timeZone"), timeZone);
+    try {
+      sessionStorage.setItem("orgName", orgName);
+    } catch {}
+  }, [orgName, logoUrl, countryIso, state, currency, fiscalYear, language, timeZone]);
 
   useEffect(() => {
     let isMounted = true;
@@ -264,22 +352,19 @@ export default function OrgSetupPage() {
       const storedTimeZone = String(org?.timeZone || "").trim();
       const storedLogoUrl = String(org?.logoUrl || "").trim();
 
-      if (storedName) {
+      if (storedName && !hasDraftValue(ORG_SETUP_DRAFT_KEY("orgName"))) {
         setOrgName(storedName);
-        try {
-          sessionStorage.setItem("orgName", storedName);
-        } catch {}
       }
-      if (storedCountryIso) setCountryIso(storedCountryIso);
-      if (storedState) setState(storedState);
-      if (storedCurrencyCode) {
+      if (storedLogoUrl && !hasDraftValue(ORG_SETUP_DRAFT_KEY("logoUrl"))) setLogoUrl(storedLogoUrl);
+      if (storedCountryIso && !hasDraftValue(ORG_SETUP_DRAFT_KEY("countryIso"))) setCountryIso(storedCountryIso);
+      if (storedState && !hasDraftValue(ORG_SETUP_DRAFT_KEY("state"))) setState(storedState);
+      if (storedCurrencyCode && !hasDraftValue(ORG_SETUP_DRAFT_KEY("currency"))) {
         const matchedCurrency = CURRENCIES.find((entry) => entry.startsWith(`${storedCurrencyCode} - `));
         setCurrency(matchedCurrency || storedCurrencyCode);
       }
-      if (storedFiscalYear) setFiscalYear(storedFiscalYear);
-      if (storedLanguage) setLanguage(storedLanguage);
-      if (storedTimeZone) setTimeZone(storedTimeZone);
-      if (storedLogoUrl) setLogoUrl(storedLogoUrl);
+      if (storedFiscalYear && !hasDraftValue(ORG_SETUP_DRAFT_KEY("fiscalYear"))) setFiscalYear(storedFiscalYear);
+      if (storedLanguage && !hasDraftValue(ORG_SETUP_DRAFT_KEY("language"))) setLanguage(storedLanguage);
+      if (storedTimeZone && !hasDraftValue(ORG_SETUP_DRAFT_KEY("timeZone"))) setTimeZone(storedTimeZone);
     };
 
     void hydrateFromDatabase();
@@ -322,6 +407,12 @@ export default function OrgSetupPage() {
           return;
         }
         setSaving(false);
+        clearDraftPrefix("auth:org-setup:draft:");
+        clearDraftPrefix("auth:signup:draft:");
+        clearSessionDraftPrefix("auth:signup:draft:");
+        try {
+          sessionStorage.removeItem("orgName");
+        } catch {}
         navigate(`/optimize${window.location.search}`);
       })
       .catch(() => {
@@ -338,9 +429,7 @@ export default function OrgSetupPage() {
         </div>
 
         <div className="mb-8">
-          <div className="h-1 w-full rounded-full bg-slate-200">
-            <div className="h-1 w-1/3 rounded-full bg-primary" />
-          </div>
+          <SetupProgressBar value={authApp === "invoice" ? 1 / 3 : 1 / 4} />
         </div>
 
         <div className="mb-7">

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import SearchableSelect, { type SelectOption } from "../components/SearchableSelect";
 import SetupHeader from "../components/SetupHeader";
+import SetupProgressBar from "../components/SetupProgressBar";
 import { useNavigate } from "react-router-dom";
 import { orgApi } from "../services/orgApi";
 
@@ -83,11 +84,7 @@ export default function MovingSystemPage() {
         </div>
 
         <div className="mb-8">
-          <div className="flex gap-1">
-            <div className="h-1 flex-1 rounded-full bg-primary" />
-            <div className="h-1 flex-1 rounded-full bg-primary" />
-            <div className="h-1 flex-1 rounded-full bg-primary" />
-          </div>
+          <SetupProgressBar value={3 / 4} />
         </div>
 
         <div className="mb-7">

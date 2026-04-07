@@ -183,6 +183,8 @@ const findUserByEmail = async (email: string) =>
   (await User.findOne({ email }).lean()) ||
   (await User.findOne({ email: { $regex: new RegExp(`^${escapeRegex(email)}$`, "i") } }).lean());
 
+const hasRealAuthDatabase = () => Boolean(MONGO_URI) && mongoose.connection.readyState === 1;
+
 const verifyEmailVerificationCodeForUser = (user: any, code: string) => {
   const verificationExpiresAt = user?.emailVerificationExpiresAt ? new Date(user.emailVerificationExpiresAt) : null;
   const verificationHash = String(user?.emailVerificationHash || "");
@@ -277,12 +279,14 @@ const sendEmailVerificationCode = async ({
 };
 
 export const signup = async (req: express.Request, res: express.Response) => {
-  if (AUTH_BYPASS) {
+  const realAuthAvailable = hasRealAuthDatabase();
+
+  if (AUTH_BYPASS && !realAuthAvailable) {
     const email = String(req.body?.email ?? "dev@example.com").trim().toLowerCase() || "dev@example.com";
     const devUser = await getDevAuthedUser();
     return res.status(201).json({ success: true, data: { id: devUser.id, name: devUser.name, email, organizationId: devUser.organizationId } });
   }
-  if (!isConfiguredForRealAuth()) {
+  if (!realAuthAvailable) {
     return res.status(500).json({ success: false, message: "Auth/DB not configured", data: null });
   }
 
@@ -362,10 +366,12 @@ export const signup = async (req: express.Request, res: express.Response) => {
 };
 
 export const checkEmailExists = async (req: express.Request, res: express.Response) => {
-  if (AUTH_BYPASS) {
+  const realAuthAvailable = hasRealAuthDatabase();
+
+  if (AUTH_BYPASS && !realAuthAvailable) {
     return res.json({ success: true, data: { exists: false } });
   }
-  if (!isConfiguredForRealAuth()) {
+  if (!realAuthAvailable) {
     return res.status(500).json({ success: false, message: "Auth/DB not configured", data: null });
   }
 

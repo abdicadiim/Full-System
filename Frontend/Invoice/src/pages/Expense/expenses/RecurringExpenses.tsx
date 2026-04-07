@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
 import {
@@ -65,6 +66,7 @@ export default function RecurringExpenses() {
     { key: "wsq", label: "wsq" },
   ];
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { code: baseCurrencyCode, symbol: baseCurrencySymbol } = useCurrency();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -142,84 +144,114 @@ export default function RecurringExpenses() {
     );
   };
 
-  // Load recurring expenses from API
-  const loadExpenses = async () => {
-    try {
-      setIsRefreshing(true);
+  const recurringExpensesQuery = useQuery({
+    queryKey: ["recurring-expenses", "list"],
+    staleTime: 30_000,
+    gcTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
       const response = await recurringExpensesAPI.getAll({ limit: 1000 });
-      if (response && response.code === 0 && response.recurring_expenses) {
-        // Map API response to match component state structure
-        const mappedExpenses = response.recurring_expenses.map((expense: any) => ({
-          id: expense._id || expense.recurring_expense_id,
-          recurringExpenseId: expense.recurring_expense_id || expense._id,
-          profileName: expense.profile_name,
-          location: expense.location || expense.location_name || "",
-          expenseAccount: expense.account_name,
-          vendor: expense.vendor_name || "",
-          repeatEvery: expense.repeat_every,
-          startDate: expense.start_date,
-          amount: expense.amount,
-          taxName: expense.tax_name || expense.taxName || "",
-          taxId: expense.tax_id || expense.taxId || "",
-          taxRate: Number(expense.tax_percentage ?? expense.taxPercentage ?? expense.rate ?? 0),
-          isInclusiveTax: Boolean(expense.is_inclusive_tax),
-          displayAmount: computeRecurringExpenseDisplayAmount(
-            expense.amount,
-            Number(expense.tax_percentage ?? expense.taxPercentage ?? expense.rate ?? 0),
-            Boolean(expense.is_inclusive_tax)
-          ),
-          currency: baseCurrencyCode || expense.currency_code || "USD",
-          status: (expense.status || "active").toUpperCase(),
-          active: expense.status !== 'stopped' && expense.status !== 'expired',
-          createdTime: expense.created_time || expense.createdAt,
-          description: expense.description,
-          customerName: expense.customer_name,
-          nextExpenseDate: expense.next_expense_date,
-          wsq: (() => {
-            const tags = Array.isArray(expense.reporting_tags) ? expense.reporting_tags : [];
-            const wsqTag = tags.find((tag: any) =>
-              String(tag?.name || tag?.tagName || "").trim().toLowerCase() === "wsq"
-            );
-            return wsqTag?.value || expense?.wsq || "";
-          })(),
-        }));
-        setRecurringExpenses(mappedExpenses);
-      } else {
-        setRecurringExpenses([]);
-      }
-
-      // Fetch currencies
-      const cursResp = await currenciesAPI.getAll();
-      const cursList = Array.isArray(cursResp) ? cursResp : (cursResp?.data || []);
-      setCurrencies(cursList);
-
-      try {
-        const primary = await taxesAPI.getForTransactions().catch(() => null);
-        const fallback = await taxesAPI.getAll({ status: "active" }).catch(() => null);
-        const rows = [
-          ...(Array.isArray(primary?.data) ? primary.data : []),
-          ...(Array.isArray(primary?.taxes) ? primary.taxes : []),
-          ...(Array.isArray(fallback?.data) ? fallback.data : []),
-        ];
-        const next: Record<string, number> = {};
-        rows.forEach((tax: any) => {
-          const id = String(tax?._id || tax?.id || tax?.tax_id || tax?.taxId || "").trim();
-          const direct = Number(tax?.taxPercentage ?? tax?.rate ?? tax?.percentage ?? 0);
-          if (id && Number.isFinite(direct) && direct > 0) {
-            next[id] = direct;
-          }
-        });
-        setTaxRatesById(next);
-      } catch (error) {
-        console.error("Error loading tax rates:", error);
-        setTaxRatesById({});
-      }
-    } catch (error) {
-      console.error("Error loading recurring expenses:", error);
-    } finally {
-      setIsRefreshing(false);
+      return response?.recurring_expenses || response?.data || [];
     }
+  });
+
+  const currenciesQuery = useQuery({
+    queryKey: ["currencies", "list", "recurring-expenses"],
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => currenciesAPI.getAll()
+  });
+
+  const taxesQuery = useQuery({
+    queryKey: ["taxes", "list", "recurring-expenses"],
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const primary = await taxesAPI.getForTransactions().catch(() => null);
+      const fallback = await taxesAPI.getAll({ status: "active" }).catch(() => null);
+      return {
+        primary: Array.isArray(primary?.data) ? primary.data : Array.isArray(primary?.taxes) ? primary.taxes : [],
+        fallback: Array.isArray(fallback?.data) ? fallback.data : []
+      };
+    }
+  });
+
+  const mappedRecurringExpenses = useMemo(() => {
+    const rows = Array.isArray(recurringExpensesQuery.data) ? recurringExpensesQuery.data : [];
+    return rows.map((expense: any) => ({
+      id: expense._id || expense.recurring_expense_id,
+      recurringExpenseId: expense.recurring_expense_id || expense._id,
+      profileName: expense.profile_name,
+      location: expense.location || expense.location_name || "",
+      expenseAccount: expense.account_name,
+      vendor: expense.vendor_name || "",
+      repeatEvery: expense.repeat_every,
+      startDate: expense.start_date,
+      amount: expense.amount,
+      taxName: expense.tax_name || expense.taxName || "",
+      taxId: expense.tax_id || expense.taxId || "",
+      taxRate: Number(expense.tax_percentage ?? expense.taxPercentage ?? expense.rate ?? 0),
+      isInclusiveTax: Boolean(expense.is_inclusive_tax),
+      displayAmount: computeRecurringExpenseDisplayAmount(
+        expense.amount,
+        Number(expense.tax_percentage ?? expense.taxPercentage ?? expense.rate ?? 0),
+        Boolean(expense.is_inclusive_tax)
+      ),
+      currency: baseCurrencyCode || expense.currency_code || "USD",
+      status: (expense.status || "active").toUpperCase(),
+      active: expense.status !== "stopped" && expense.status !== "expired",
+      createdTime: expense.created_time || expense.createdAt,
+      description: expense.description,
+      customerName: expense.customer_name,
+      nextExpenseDate: expense.next_expense_date,
+      wsq: (() => {
+        const tags = Array.isArray(expense.reporting_tags) ? expense.reporting_tags : [];
+        const wsqTag = tags.find((tag: any) =>
+          String(tag?.name || tag?.tagName || "").trim().toLowerCase() === "wsq"
+        );
+        return wsqTag?.value || expense?.wsq || "";
+      })(),
+    }));
+  }, [baseCurrencyCode, recurringExpensesQuery.data]);
+
+  const loadExpenses = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["recurring-expenses", "list"] });
   };
+
+  useEffect(() => {
+    setRecurringExpenses(mappedRecurringExpenses);
+  }, [mappedRecurringExpenses]);
+
+  useEffect(() => {
+    const cursResp: any = currenciesQuery.data;
+    const cursList = Array.isArray(cursResp) ? cursResp : (cursResp?.data || []);
+    setCurrencies(cursList);
+  }, [currenciesQuery.data]);
+
+  useEffect(() => {
+    const primary = Array.isArray(taxesQuery.data?.primary) ? taxesQuery.data?.primary : [];
+    const fallback = Array.isArray(taxesQuery.data?.fallback) ? taxesQuery.data?.fallback : [];
+    const rows = [...primary, ...fallback];
+    const next: Record<string, number> = {};
+    rows.forEach((tax: any) => {
+      const id = String(tax?._id || tax?.id || tax?.tax_id || tax?.taxId || "").trim();
+      const direct = Number(tax?.taxPercentage ?? tax?.rate ?? tax?.percentage ?? 0);
+      if (id && Number.isFinite(direct) && direct > 0) {
+        next[id] = direct;
+      }
+    });
+    setTaxRatesById(next);
+  }, [taxesQuery.data]);
+
+  useEffect(() => {
+    setIsRefreshing(
+      recurringExpensesQuery.isFetching ||
+      currenciesQuery.isFetching ||
+      taxesQuery.isFetching
+    );
+  }, [recurringExpensesQuery.isFetching, currenciesQuery.isFetching, taxesQuery.isFetching]);
 
   useEffect(() => {
     loadExpenses();

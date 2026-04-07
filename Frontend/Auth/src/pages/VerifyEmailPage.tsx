@@ -314,7 +314,7 @@ export default function VerifyEmailPage() {
             </span>
             <input
               className={`${inputClassName} pl-12 ${showCodeField ? "cursor-not-allowed bg-slate-100 text-slate-500" : ""}`}
-              placeholder="name@company.com"
+              placeholder="info@taban.so"
               type="email"
               value={email}
               onChange={(event) => {

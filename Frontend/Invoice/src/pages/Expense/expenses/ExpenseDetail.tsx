@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { jsPDF } from "jspdf";
 import {
   ChevronDown,
@@ -32,10 +33,13 @@ const getLS = (k) => {
 export default function ExpenseDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const queryClient = useQueryClient();
   const { code: baseCurrencyCode, symbol: baseCurrencySymbol } = useCurrency();
-  const [expense, setExpense] = useState<any | null>(null);
+  const initialExpense = (location.state as any)?.expense;
+  const [expense, setExpense] = useState<any | null>(() => initialExpense ?? null);
   const [expenses, setExpenses] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(() => !initialExpense);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [exportSubmenuOpen, setExportSubmenuOpen] = useState(false);
   const [uploadMenuOpen, setUploadMenuOpen] = useState(false);
@@ -48,6 +52,19 @@ export default function ExpenseDetail() {
   const moreMenuRef = useRef(null);
   const uploadMenuRef = useRef(null);
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    if (!initialExpense) return;
+    setExpense(initialExpense);
+    if (Array.isArray(initialExpense?.receipts) && initialExpense.receipts.length > 0) {
+      const fileObjects = initialExpense.receipts.map((name: string, index: number) => ({
+        name,
+        size: 0,
+        lastModified: Date.now() - (initialExpense.receipts.length - index) * 1000,
+      }));
+      setUploadedFiles(fileObjects);
+    }
+  }, [initialExpense]);
 
   const normalizeReportingTags = (source: any): Array<{ name: string; value: string }> => {
     const rows = Array.isArray(source)
@@ -81,7 +98,11 @@ export default function ExpenseDetail() {
 
     // Fetch currencies first or concurrently
     try {
-      const cursResp = await currenciesAPI.getAll();
+      const cursResp = await queryClient.fetchQuery({
+        queryKey: ["currencies", "list", "expenses"],
+        staleTime: 5 * 60 * 1000,
+        queryFn: async () => currenciesAPI.getAll()
+      });
       const cursList = Array.isArray(cursResp) ? cursResp : (cursResp?.data || []);
       setCurrencies(cursList);
     } catch (err) {
@@ -90,7 +111,11 @@ export default function ExpenseDetail() {
 
     // Always fetch sidebar expense list from API so the left panel is populated
     try {
-      const listResp: any = await expensesAPI.getAll({ limit: 1000 });
+      const listResp: any = await queryClient.fetchQuery({
+        queryKey: ["expenses", "list"],
+        staleTime: 30_000,
+        queryFn: async () => expensesAPI.getAll({ limit: 1000 })
+      });
       const apiList = Array.isArray(listResp)
         ? listResp
         : (listResp?.expenses || listResp?.data || []);
@@ -151,7 +176,11 @@ export default function ExpenseDetail() {
 
     // If not found locally, fetch from API
     try {
-      const resp = await expensesAPI.getById(id);
+      const resp = await queryClient.fetchQuery({
+        queryKey: ["expenses", "detail", id],
+        staleTime: 30_000,
+        queryFn: async () => expensesAPI.getById(id)
+      });
       // Resp shape may vary; try common fields
       const apiExpense = (resp && (resp.expense || resp.data)) || resp;
       if (apiExpense) {
@@ -159,8 +188,16 @@ export default function ExpenseDetail() {
         let taxesList: any[] = [];
         try {
           const [customersResult, taxesResult] = await Promise.allSettled([
-            customersAPI.getAll({ limit: 1000 }),
-            taxesAPI.getAll({ status: "active" }),
+            queryClient.fetchQuery({
+              queryKey: ["customers", "list", "expenses"],
+              staleTime: 2 * 60 * 1000,
+              queryFn: async () => customersAPI.getAll({ limit: 1000 })
+            }),
+            queryClient.fetchQuery({
+              queryKey: ["taxes", "list", "expenses"],
+              staleTime: 5 * 60 * 1000,
+              queryFn: async () => taxesAPI.getAll({ status: "active" })
+            }),
           ]);
 
         if (customersResult.status === "fulfilled") {
@@ -1054,12 +1091,8 @@ export default function ExpenseDetail() {
     );
   }
 
-  if (isLoading) {
-    return (
-      <div style={{ padding: "24px", minHeight: "100vh", backgroundColor: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <p style={{ fontSize: "16px", color: "#6b7280" }}>Loading...</p>
-      </div>
-    );
+  if (isLoading && !expense) {
+    return <div style={{ minHeight: "100vh", backgroundColor: "#ffffff" }} />;
   }
 
   const getCurrencySymbol = () => {
@@ -1088,12 +1121,8 @@ export default function ExpenseDetail() {
     }
   `;
 
-  if (isLoading || !expense) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        Loading...
-      </div>
-    );
+  if (!expense) {
+    return <div className="flex items-center justify-center h-screen" />;
   }
 
   const locationName = expense?.location || expense?.location_name || "Head Office";
@@ -1126,7 +1155,7 @@ export default function ExpenseDetail() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              className="flex h-8 w-8 items-center justify-center rounded-md border border-[#23b26b] bg-[#23b26b] text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-[#156372] bg-[#156372] text-white hover:border-[#0f4f5a] hover:bg-[#0f4f5a]"
               onClick={() => navigate("/expenses/new")}
             >
               <Plus size={16} />
@@ -1145,7 +1174,7 @@ export default function ExpenseDetail() {
             >
               <input
                 type="checkbox"
-                className="mt-1 h-4 w-4 cursor-pointer"
+                className="mt-1 h-4 w-4 cursor-pointer accent-[#156372]"
                 checked={selectedExpenses.includes(String(exp.id))}
                 onChange={(e) => {
                   if (e.target.checked) {

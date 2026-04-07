@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AuthShell from "../components/AuthShell";
 import { getAppDisplayName, getFallbackUrl } from "../lib/appBranding";
@@ -53,10 +53,15 @@ const handlePasswordInvalid = (event: React.InvalidEvent<HTMLInputElement>) => {
 };
 
 export default function LoginPage() {
+  const emailInputRef = useRef<HTMLInputElement | null>(null);
+  const passwordInputRef = useRef<HTMLInputElement | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [checkingEmail, setCheckingEmail] = useState(false);
+  const [emailMissing, setEmailMissing] = useState(false);
+  const [passwordInvalid, setPasswordInvalid] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const appName = getAppDisplayName();
   const navigate = useNavigate();
@@ -65,7 +70,11 @@ export default function LoginPage() {
   const fieldWrapClass = "w-full max-w-[460px]";
   const inputClassName =
     "h-14 w-full rounded-2xl border border-slate-200 bg-slate-100/80 px-4 py-0 text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-primary/25 focus:bg-white focus:ring-2 focus:ring-primary/20";
+  const invalidInputClass = "border-red-300 bg-red-50/80 focus:border-red-300 focus:ring-red-200";
+  const fieldErrorClass = "mt-2 text-xs font-medium text-red-600";
   const trimmedEmail = email.trim();
+  const emailMissingMessage = "No account found with this email address.";
+  const passwordMismatchMessage = "Incorrect password. Please try again.";
   const otpQuery = (() => {
     const params = new URLSearchParams(search);
     params.delete("logout");
@@ -118,6 +127,51 @@ export default function LoginPage() {
     }
   }, [isLogoutRedirect]);
 
+  useEffect(() => {
+    const input = emailInputRef.current;
+    if (!input) return;
+
+    if (emailMissing) {
+      input.setCustomValidity(emailMissingMessage);
+      return;
+    }
+
+    input.setCustomValidity("");
+  }, [emailMissing, emailMissingMessage]);
+
+  const validateEmailExists = async (candidate: string) => {
+    const nextEmail = candidate.trim();
+    if (!nextEmail) {
+      setEmailMissing(false);
+      emailInputRef.current?.setCustomValidity("");
+      return false;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
+      setEmailMissing(false);
+      emailInputRef.current?.setCustomValidity("");
+      return false;
+    }
+
+    setCheckingEmail(true);
+    try {
+      const result = await authApi.checkEmail(nextEmail).catch(() => null);
+      if (!result?.success) {
+        setEmailMissing(false);
+        emailInputRef.current?.setCustomValidity("");
+        setError(result?.message || "Unable to verify this email right now.");
+        return false;
+      }
+
+      const exists = Boolean(result.data?.exists);
+      setEmailMissing(!exists);
+      emailInputRef.current?.setCustomValidity(exists ? "" : emailMissingMessage);
+      return exists;
+    } finally {
+      setCheckingEmail(false);
+    }
+  };
+
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
@@ -130,6 +184,15 @@ export default function LoginPage() {
       setError("Please enter your password.");
       return;
     }
+
+    const emailExists = await validateEmailExists(nextEmail);
+    if (!emailExists) {
+      setLoading(false);
+      setError(emailMissingMessage);
+      emailInputRef.current?.reportValidity();
+      return;
+    }
+
     setLoading(true);
     try {
       const result = await authApi.login(nextEmail, nextPassword);
@@ -141,7 +204,19 @@ export default function LoginPage() {
           });
           return;
         }
-        setError(failure?.message || "Login failed");
+
+        const badCredentials =
+          failure?.code === 401 ||
+          /invalid username or password/i.test(String(failure?.message || ""));
+
+        if (badCredentials) {
+          setPasswordInvalid(true);
+          passwordInputRef.current?.setCustomValidity(passwordMismatchMessage);
+          passwordInputRef.current?.reportValidity();
+          setError(passwordMismatchMessage);
+        } else {
+          setError(failure?.message || "Login failed");
+        }
       } else {
         persistSession(result);
         goReturnTo(getFallbackUrl());
@@ -192,21 +267,42 @@ export default function LoginPage() {
               <span className="material-symbols-outlined block text-[18px] leading-none">mail</span>
             </span>
             <input
-              className={`${inputClassName} pl-12`}
-              placeholder="name@company.com"
+              className={[
+                inputClassName,
+                "pl-12",
+                emailMissing ? invalidInputClass : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              placeholder="info@taban.so"
               type="email"
               required
               autoComplete="email"
               inputMode="email"
+              ref={emailInputRef}
+              aria-invalid={emailMissing}
+              aria-describedby={emailMissing ? "login-email-error" : undefined}
               value={email}
               onChange={(e) => {
                 setEmail(e.target.value);
                 setError(null);
+                setEmailMissing(false);
+                setCheckingEmail(false);
+                emailInputRef.current?.setCustomValidity("");
               }}
               onInput={clearInputValidationMessage}
+              onBlur={(e) => {
+                void validateEmailExists(e.currentTarget.value);
+              }}
               onInvalid={handleEmailInvalid}
             />
           </div>
+          {checkingEmail ? <p className="mt-2 text-xs text-slate-500">Checking email...</p> : null}
+          {emailMissing ? (
+            <p id="login-email-error" className={fieldErrorClass}>
+              {emailMissingMessage}
+            </p>
+          ) : null}
         </div>
         <div className={fieldWrapClass}>
           <label className="mb-2 block text-sm font-semibold text-slate-700">Password</label>
@@ -215,15 +311,26 @@ export default function LoginPage() {
               <span className="material-symbols-outlined block text-[18px] leading-none">lock</span>
             </span>
             <input
-              className={`${inputClassName} pl-12 pr-12`}
+              className={[
+                inputClassName,
+                "pl-12 pr-12",
+                passwordInvalid ? invalidInputClass : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
               placeholder="Enter your password"
               type={showPassword ? "text" : "password"}
               required
               autoComplete="current-password"
+              aria-invalid={passwordInvalid}
+              aria-describedby={passwordInvalid ? "login-password-error" : undefined}
               value={password}
+              ref={passwordInputRef}
               onChange={(e) => {
                 setPassword(e.target.value);
                 setError(null);
+                setPasswordInvalid(false);
+                passwordInputRef.current?.setCustomValidity("");
               }}
               onInput={clearInputValidationMessage}
               onInvalid={handlePasswordInvalid}
@@ -239,6 +346,11 @@ export default function LoginPage() {
               </span>
             </button>
           </div>
+          {passwordInvalid ? (
+            <p id="login-password-error" className={fieldErrorClass}>
+              {passwordMismatchMessage}
+            </p>
+          ) : null}
         </div>
 
         <div className={`${fieldWrapClass} flex flex-col gap-3 pt-1 text-sm sm:flex-row sm:items-center sm:justify-between sm:pr-1`}>

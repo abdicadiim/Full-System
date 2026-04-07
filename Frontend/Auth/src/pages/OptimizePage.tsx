@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import SearchableSelect, { type SelectOption } from "../components/SearchableSelect";
 import SetupHeader from "../components/SetupHeader";
+import SetupProgressBar from "../components/SetupProgressBar";
 import { getAppDisplayName, getAuthApp } from "../lib/appBranding";
 import { orgApi } from "../services/orgApi";
 
@@ -150,9 +151,7 @@ export default function OptimizePage() {
         </div>
 
         <div className="mb-8">
-          <div className="h-1 w-full rounded-full bg-slate-200">
-            <div className={["h-1 rounded-full bg-primary", authApp === "invoice" ? "w-full" : "w-2/3"].join(" ")} />
-          </div>
+          <SetupProgressBar value={authApp === "invoice" ? 2 / 3 : 1 / 2} />
         </div>
 
         <div className="mb-7">

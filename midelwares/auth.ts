@@ -29,11 +29,8 @@ type SessionClaims = { sub: string; ver: number };
 const normalizeRoleName = (value: unknown) => String(value || "").trim().toLowerCase();
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const STANDARD_ROLE_NAMES = new Set(["admin", "owner", "staff", "member", "staff assigned", "timesheet staff"]);
-<<<<<<< Updated upstream
 const isUserEmailVerified = (user: any) => (user as any)?.emailVerified !== false;
-=======
 const DEV_SCOPE_MODELS = [Customer, Item, Invoice, Quote, SalesReceipt, CreditNote, Expense];
->>>>>>> Stashed changes
 
 export const isStandardRoleName = (value: unknown) => STANDARD_ROLE_NAMES.has(normalizeRoleName(value));
 export const isSuperRoleName = (value: unknown) => ["admin", "owner"].includes(normalizeRoleName(value));
@@ -163,22 +160,7 @@ export const clearSessionCookie = (res: express.Response) => {
 
 export const getAuthedUser = async (req: express.Request): Promise<AuthedUser | null> => {
   if (AUTH_BYPASS) {
-<<<<<<< Updated upstream
-    return {
-      id: "000000000000000000000001",
-      name: "Dev User",
-      email: "dev@example.com",
-      emailVerified: true,
-      organizationId: "00000000000000000000000a",
-      role: "admin",
-      sessionVersion: 0,
-      permissions: null,
-      photoUrl: "",
-      activeTimer: null,
-    };
-=======
     return buildDevAuthedUser();
->>>>>>> Stashed changes
   }
 
   const header = req.headers.authorization;

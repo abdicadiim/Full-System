@@ -11,6 +11,7 @@ const API_BASE_URL = '/api';
 const DEFAULT_SYSTEM_SENDER_EMAIL = "message-service@sender.tabanbooks.com";
 const USER_STORAGE_KEYS = ["user", "current_user", "auth_user"];
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ORGANIZATION_PROFILE_STORAGE_KEYS = ["org_profile", "organization_profile"];
 const LANGUAGE_LABEL_BY_CODE: Record<string, string> = {
   ar: "Arabic",
   de: "German",
@@ -33,6 +34,98 @@ const getStoredUser = () => {
     console.error('Error parsing local user:', error);
     return null;
   }
+};
+
+const safeParseJson = (value: string | null) => {
+  if (!value) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
+
+const readStoredOrganizationProfile = () => {
+  if (typeof localStorage === "undefined") return null;
+
+  const profiles = ORGANIZATION_PROFILE_STORAGE_KEYS
+    .map((key) => safeParseJson(localStorage.getItem(key)))
+    .filter((profile) => profile && typeof profile === "object");
+
+  if (profiles.length === 0) {
+    return null;
+  }
+
+  return profiles.reduceRight((merged: any, profile: any) => {
+    const profileAddress = profile?.address && typeof profile.address === "object" ? profile.address : {};
+    const mergedAddress = merged?.address && typeof merged.address === "object" ? merged.address : {};
+    return {
+      ...profile,
+      ...merged,
+      address: {
+        ...profileAddress,
+        ...mergedAddress,
+      },
+    };
+  }, {});
+};
+
+const getStoredProfileValue = (profile: any, keys: string[], fallback = "") => {
+  if (!profile || typeof profile !== "object") return fallback;
+  const address = profile?.address && typeof profile.address === "object" ? profile.address : {};
+
+  for (const key of keys) {
+    const candidates = [profile?.[key], address?.[key]];
+    for (const candidate of candidates) {
+      if (candidate === undefined || candidate === null) continue;
+      const text = String(candidate).trim();
+      if (text) return text;
+    }
+  }
+
+  return fallback;
+};
+
+const getStoredProfileBoolean = (profile: any, keys: string[], fallback = false) => {
+  if (!profile || typeof profile !== "object") return fallback;
+  const address = profile?.address && typeof profile.address === "object" ? profile.address : {};
+
+  for (const key of keys) {
+    const candidates = [profile?.[key], address?.[key]];
+    for (const candidate of candidates) {
+      if (typeof candidate === "boolean") return candidate;
+      if (typeof candidate === "string") {
+        const normalized = candidate.trim().toLowerCase();
+        if (["true", "1", "yes"].includes(normalized)) return true;
+        if (["false", "0", "no"].includes(normalized)) return false;
+      }
+    }
+  }
+
+  return fallback;
+};
+
+const getStoredAdditionalFields = (profile: any) => {
+  const candidates = [
+    profile?.additionalFields,
+    profile?.custom_fields,
+  ];
+
+  for (const candidate of candidates) {
+    if (!Array.isArray(candidate)) continue;
+
+    const normalized = candidate
+      .map((field: any, index: number) => ({
+        label: String(field?.label || "").trim(),
+        value: String(field?.value || "").trim(),
+        index: Number(field?.index) || index + 1,
+      }))
+      .filter((field: any) => field.label || field.value);
+
+    return normalized.length > 0 ? normalized : [{ label: "", value: "" }];
+  }
+
+  return [{ label: "", value: "" }];
 };
 
 const INDUSTRIES = [
@@ -467,6 +560,7 @@ const normalizeOrganizationPayload = (responsePayload: any) => {
     email: String(payload?.email || "").trim(),
     baseCurrency: String(payload?.baseCurrency || payload?.currency_code || "").trim(),
     fiscalYear: String(payload?.fiscalYear || getFiscalYearLabel(payload?.fiscal_year_start_month)).trim(),
+    startDate: String(payload?.startDate || payload?.start_date || "").trim(),
     reportBasis: String(payload?.reportBasis || "").trim(),
     orgLanguage: String(payload?.orgLanguage || getLanguageLabel(payload?.language_code)).trim(),
     commLanguage: String(payload?.commLanguage || "").trim(),
@@ -1095,68 +1189,36 @@ function DateFormatDropdown({ value, placeholder, onChange }) {
 
 export default function ProfilePage() {
   const navigate = useNavigate();
+  const storedOrgProfile = useMemo(() => readStoredOrganizationProfile(), []);
   const [currencyOptions, setCurrencyOptions] = useState<string[]>(() => readStoredCurrencyOptions());
-  const [orgName, setOrgName] = useState(() => {
-    const local = localStorage.getItem('org_profile');
-    return local ? JSON.parse(local).organizationName : "Taban enterprise";
-  });
-
-  const [businessType, setBusinessType] = useState(() => {
-    const local = localStorage.getItem('org_profile');
-    return local ? JSON.parse(local).businessType : "";
-  });
-
-  const [industry, setIndustry] = useState(() => {
-    const local = localStorage.getItem('org_profile');
-    return local ? JSON.parse(local).industry : "Agriculture";
-  });
-  const [location, setLocation] = useState(() => {
-    const local = localStorage.getItem('org_profile');
-    return local ? JSON.parse(local).location : "Somalia";
-  });
-
-  const [email, setEmail] = useState(() => {
-    const user = localStorage.getItem('user');
-    return user ? JSON.parse(user).email : "";
-  });
+  const [orgName, setOrgName] = useState(() => getStoredProfileValue(storedOrgProfile, ["organizationName", "name"], "Taban enterprise") || "Taban enterprise");
+  const [businessType, setBusinessType] = useState(() => getStoredProfileValue(storedOrgProfile, ["businessType"]));
+  const [industry, setIndustry] = useState(() => getStoredProfileValue(storedOrgProfile, ["industry", "industry_type"], "Agriculture") || "Agriculture");
+  const [location, setLocation] = useState(() => getStoredProfileValue(storedOrgProfile, ["location", "country"], "Somalia") || "Somalia");
+  const [email, setEmail] = useState(() => getStoredProfileValue(storedOrgProfile, ["email"]));
   const [primarySenderName, setPrimarySenderName] = useState(() => {
     const storedUser = getStoredUser();
-    return storedUser?.name || storedUser?.fullName || "Organization Owner";
+    return storedUser?.name || storedUser?.fullName || getStoredProfileValue(storedOrgProfile, ["primarySenderName"], "Organization Owner") || "Organization Owner";
   });
   const [primarySenderEmail, setPrimarySenderEmail] = useState(() => {
     const storedUser = getStoredUser();
-    return storedUser?.email || "";
+    return storedUser?.email || getStoredProfileValue(storedOrgProfile, ["primarySenderEmail"], "");
   });
-  const [logoImage, setLogoImage] = useState(null);
-  const [logoPreview, setLogoPreview] = useState(null);
-  const [loadingProfile, setLoadingProfile] = useState(true);
-  const fileInputRef = useRef(null);
-  const [street1, setStreet1] = useState(() => {
-    const local = localStorage.getItem('org_profile');
-    return local ? JSON.parse(local).street1 : "";
-  });
-  const [street2, setStreet2] = useState(() => {
-    const local = localStorage.getItem('org_profile');
-    return local ? JSON.parse(local).street2 : "";
-  });
-  const [city, setCity] = useState(() => {
-    const local = localStorage.getItem('org_profile');
-    return local ? JSON.parse(local).city : "";
-  });
-  const [zipCode, setZipCode] = useState(() => {
-    const local = localStorage.getItem('org_profile');
-    return local ? JSON.parse(local).zipCode : "";
-  });
-  const [state, setState] = useState(() => {
-    const local = localStorage.getItem('org_profile');
-    return local ? JSON.parse(local).state : "";
-  });
+  const [logoImage, setLogoImage] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(() => getStoredProfileValue(storedOrgProfile, ["logo", "logoUrl"], "") || null);
+  const [loadingProfile, setLoadingProfile] = useState(() => !storedOrgProfile);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [street1, setStreet1] = useState(() => getStoredProfileValue(storedOrgProfile, ["street1", "street_address1"]));
+  const [street2, setStreet2] = useState(() => getStoredProfileValue(storedOrgProfile, ["street2", "street_address2"]));
+  const [city, setCity] = useState(() => getStoredProfileValue(storedOrgProfile, ["city"]));
+  const [zipCode, setZipCode] = useState(() => getStoredProfileValue(storedOrgProfile, ["zipCode", "zip"]));
+  const [state, setState] = useState(() => getStoredProfileValue(storedOrgProfile, ["state"]));
 
-  const [phone, setPhone] = useState("");
-  const [fax, setFax] = useState("");
-  const [website, setWebsite] = useState("");
-  const [showPaymentStubAddress, setShowPaymentStubAddress] = useState(false);
-  const [paymentStubAddress, setPaymentStubAddress] = useState("");
+  const [phone, setPhone] = useState(() => getStoredProfileValue(storedOrgProfile, ["phone"]));
+  const [fax, setFax] = useState(() => getStoredProfileValue(storedOrgProfile, ["fax"]));
+  const [website, setWebsite] = useState(() => getStoredProfileValue(storedOrgProfile, ["website"]));
+  const [showPaymentStubAddress, setShowPaymentStubAddress] = useState(() => getStoredProfileBoolean(storedOrgProfile, ["showPaymentStubAddress"]));
+  const [paymentStubAddress, setPaymentStubAddress] = useState(() => getStoredProfileValue(storedOrgProfile, ["paymentStubAddress"]));
   const [isEditAddressModalOpen, setIsEditAddressModalOpen] = useState(false);
 
   // Additional fields
@@ -1166,33 +1228,21 @@ export default function ProfilePage() {
       return storedBaseSelection;
     }
     const options = readStoredCurrencyOptions();
-    try {
-      const local = localStorage.getItem('org_profile');
-      if (local) {
-        const parsed = JSON.parse(local);
-        const cur = parsed.currency || parsed.baseCurrency;
-        return resolveCurrencySelection(cur, options);
-      }
-    } catch (error) {
-      console.error('Error parsing local org profile currency:', error);
+    const cur = getStoredProfileValue(storedOrgProfile, ["currency", "baseCurrency", "currency_code"]);
+    if (cur) {
+      return resolveCurrencySelection(cur, options);
     }
     return resolveCurrencySelection(null, options);
   });
-  const [fiscalYear, setFiscalYear] = useState("January - December");
-  const [startDate, setStartDate] = useState("1");
-  const [reportBasis, setReportBasis] = useState("Accrual");
-  const [orgLanguage, setOrgLanguage] = useState(() => {
-    const local = localStorage.getItem('org_profile');
-    return local ? JSON.parse(local).language : "English";
-  });
-  const [commLanguage, setCommLanguage] = useState("English");
-  const [timeZone, setTimeZone] = useState(() => {
-    const local = localStorage.getItem('org_profile');
-    return local ? JSON.parse(local).timezone : "(GMT 3:00) Eastern African Time (Africa/Mogadishu)";
-  });
+  const [fiscalYear, setFiscalYear] = useState(() => getStoredProfileValue(storedOrgProfile, ["fiscalYear", "fiscal_year_start_month"], "January - December") || "January - December");
+  const [startDate, setStartDate] = useState(() => getStoredProfileValue(storedOrgProfile, ["startDate"], "1") || "1");
+  const [reportBasis, setReportBasis] = useState(() => getStoredProfileValue(storedOrgProfile, ["reportBasis"], "Accrual") || "Accrual");
+  const [orgLanguage, setOrgLanguage] = useState(() => getStoredProfileValue(storedOrgProfile, ["orgLanguage", "language", "language_code"], "English") || "English");
+  const [commLanguage, setCommLanguage] = useState(() => getStoredProfileValue(storedOrgProfile, ["commLanguage"], "English") || "English");
+  const [timeZone, setTimeZone] = useState(() => getStoredProfileValue(storedOrgProfile, ["timeZone", "time_zone", "timezone"], "(GMT 3:00) Eastern African Time (Africa/Mogadishu)") || "(GMT 3:00) Eastern African Time (Africa/Mogadishu)");
 
-  const [dateFormat, setDateFormat] = useState("dd-MM-yyyy [ 25-12-2025 ]");
-  const [dateSeparator, setDateSeparator] = useState("-");
+  const [dateFormat, setDateFormat] = useState(() => getStoredProfileValue(storedOrgProfile, ["dateFormat", "date_format"], "dd-MM-yyyy [ 25-12-2025 ]") || "dd-MM-yyyy [ 25-12-2025 ]");
+  const [dateSeparator, setDateSeparator] = useState(() => getStoredProfileValue(storedOrgProfile, ["dateSeparator", "field_separator"], "-") || "-");
 
   // Update date format when separator changes
   const handleDateSeparatorChange = (newSeparator) => {
@@ -1201,9 +1251,9 @@ export default function ProfilePage() {
     const updatedFormat = dateFormat.replace(/[-./]/g, newSeparator);
     setDateFormat(updatedFormat);
   };
-  const [companyIdType, setCompanyIdType] = useState("Company ID :");
-  const [companyIdValue, setCompanyIdValue] = useState("");
-  const [additionalFields, setAdditionalFields] = useState<any[]>([{ label: "", value: "" }]);
+  const [companyIdType, setCompanyIdType] = useState(() => getStoredProfileValue(storedOrgProfile, ["companyIdType", "companyid_label", "company_id_label"], "Company ID :") || "Company ID :");
+  const [companyIdValue, setCompanyIdValue] = useState(() => getStoredProfileValue(storedOrgProfile, ["companyIdValue", "companyid_value", "company_id_value"]));
+  const [additionalFields, setAdditionalFields] = useState<any[]>(() => getStoredAdditionalFields(storedOrgProfile));
   const [isSaving, setIsSaving] = useState(false);
   // Save feedback uses react-toastify (see `handleSave`).
   const [isEditCurrencyModalOpen, setIsEditCurrencyModalOpen] = useState(false);
@@ -1275,7 +1325,7 @@ export default function ProfilePage() {
       // Create preview
       const reader = new FileReader();
       reader.onloadend = () => {
-        setLogoPreview(reader.result);
+        setLogoPreview(typeof reader.result === "string" ? reader.result : null);
       };
       reader.readAsDataURL(file);
     }
@@ -1345,39 +1395,23 @@ export default function ProfilePage() {
 
   // Load profile data on mount
   useEffect(() => {
+    let isMounted = true;
+    const applyIfEmpty = (currentValue: string, setter: (value: string) => void, nextValue: string) => {
+      if (!String(currentValue || "").trim() && String(nextValue || "").trim()) {
+        setter(nextValue);
+      }
+    };
+
     const loadProfile = async () => {
-      setLoadingProfile(true);
-      // Priority 1: Load from local storage (onboarding data)
-      const localData = localStorage.getItem('org_profile');
-      if (localData) {
-        try {
-          const lp = JSON.parse(localData);
-          const storedBaseSelection = readStoredBaseCurrencySelection();
-          if (lp.organizationName) setOrgName(lp.organizationName);
-          if (lp.businessType) setBusinessType(lp.businessType);
-          if (lp.industry) setIndustry(lp.industry);
-          if (lp.location) setLocation(lp.location);
-          if (lp.street1) setStreet1(lp.street1);
-          if (lp.street2) setStreet2(lp.street2);
-          if (lp.city) setCity(lp.city);
-          if (lp.zipCode) setZipCode(lp.zipCode);
-          if (lp.state) setState(lp.state);
-          if (storedBaseSelection) {
-            setBaseCurrency(storedBaseSelection);
-          } else if (lp.currency || lp.baseCurrency) {
-            setBaseCurrency(resolveCurrencySelection(lp.currency || lp.baseCurrency, readStoredCurrencyOptions()));
-          }
-          if (lp.language) setOrgLanguage(lp.language);
-          if (lp.timezone) setTimeZone(lp.timezone);
-        } catch (e) {
-          console.error('Error parsing local org profile:', e);
-        }
+      if (!storedOrgProfile) {
+        setLoadingProfile(true);
       }
 
-      // Priority 2: Load from server and merge
       try {
         const token = localStorage.getItem('auth_token');
-        if (!token) return;
+        if (!token) {
+          return;
+        }
 
         const response = await fetch(getOrganizationEndpoint(), {
           headers: {
@@ -1389,50 +1423,67 @@ export default function ProfilePage() {
         if (response.ok) {
           const data = await response.json();
           const p = normalizeOrganizationPayload(data);
-          if (p) {
+          if (p && isMounted) {
             const storedBaseSelection = readStoredBaseCurrencySelection();
-            // Only update if server has non-empty values
-            if (p.name && p.name !== "Taban enterprise") setOrgName(p.name);
-            if (p.businessType) setBusinessType(p.businessType);
-            if (p.industry) setIndustry(p.industry);
-            if (p.country) setLocation(p.country);
-            if (p.email) setEmail(p.email);
-            if (p.website) setWebsite(p.website);
+
+            applyIfEmpty(orgName, setOrgName, p.name);
+            applyIfEmpty(businessType, setBusinessType, p.businessType);
+            applyIfEmpty(industry, setIndustry, p.industry);
+            applyIfEmpty(location, setLocation, p.country);
+            applyIfEmpty(email, setEmail, p.email);
+            applyIfEmpty(website, setWebsite, p.website);
+            applyIfEmpty(street1, setStreet1, p.street1);
+            applyIfEmpty(street2, setStreet2, p.street2);
+            applyIfEmpty(city, setCity, p.city);
+            applyIfEmpty(zipCode, setZipCode, p.zipCode);
+            applyIfEmpty(state, setState, p.state);
+            applyIfEmpty(phone, setPhone, p.phone);
+            applyIfEmpty(fax, setFax, p.fax);
+            applyIfEmpty(paymentStubAddress, setPaymentStubAddress, p.paymentStubAddress);
+            applyIfEmpty(companyIdType, setCompanyIdType, p.companyIdType);
+            applyIfEmpty(companyIdValue, setCompanyIdValue, p.companyIdValue);
+            applyIfEmpty(fiscalYear, setFiscalYear, p.fiscalYear);
+            applyIfEmpty(startDate, setStartDate, p.startDate || "1");
+            applyIfEmpty(reportBasis, setReportBasis, p.reportBasis);
+            applyIfEmpty(orgLanguage, setOrgLanguage, p.orgLanguage);
+            applyIfEmpty(commLanguage, setCommLanguage, p.commLanguage);
+            applyIfEmpty(timeZone, setTimeZone, p.timeZone);
+            applyIfEmpty(dateFormat, setDateFormat, p.dateFormat);
+            applyIfEmpty(dateSeparator, setDateSeparator, p.dateSeparator);
+
             if (storedBaseSelection) {
               setBaseCurrency(storedBaseSelection);
-            } else if (p.baseCurrency) {
+            } else if (!String(baseCurrency || "").trim() && p.baseCurrency) {
               setBaseCurrency(resolveCurrencySelection(p.baseCurrency, readStoredCurrencyOptions()));
             }
-            if (p.fiscalYear) setFiscalYear(p.fiscalYear);
-            if (p.reportBasis) setReportBasis(p.reportBasis);
-            if (p.orgLanguage) setOrgLanguage(p.orgLanguage);
-            if (p.commLanguage) setCommLanguage(p.commLanguage);
-            if (p.timeZone) setTimeZone(p.timeZone);
-            if (p.dateFormat) setDateFormat(p.dateFormat);
-            if (p.dateSeparator) setDateSeparator(p.dateSeparator);
-            if (p.street1) setStreet1(p.street1);
-            if (p.street2) setStreet2(p.street2);
-            if (p.city) setCity(p.city);
-            if (p.zipCode) setZipCode(p.zipCode);
-            if (p.state) setState(p.state);
-            if (p.phone) setPhone(p.phone);
-            if (p.fax) setFax(p.fax);
-            if (p.logo) setLogoPreview(p.logo);
-            if (p.companyIdType) setCompanyIdType(p.companyIdType);
-            if (p.companyIdValue) setCompanyIdValue(p.companyIdValue);
-            if (Array.isArray(p.additionalFields) && p.additionalFields.length > 0) setAdditionalFields(p.additionalFields);
-            if (p.paymentStubAddress) setPaymentStubAddress(p.paymentStubAddress);
-            if (typeof p.showPaymentStubAddress === "boolean") setShowPaymentStubAddress(p.showPaymentStubAddress);
+
+            if (!String(logoPreview || "").trim() && p.logo) {
+              setLogoPreview(p.logo);
+            }
+
+            if (!showPaymentStubAddress && typeof p.showPaymentStubAddress === "boolean") {
+              setShowPaymentStubAddress(p.showPaymentStubAddress);
+            }
+
+            if ((additionalFields.length === 0 || additionalFields.every((field) => !String(field?.label || "").trim() && !String(field?.value || "").trim()))
+              && Array.isArray(p.additionalFields) && p.additionalFields.length > 0) {
+              setAdditionalFields(p.additionalFields);
+            }
           }
         }
       } catch (error) {
         console.error('Error loading profile:', error);
       } finally {
-        setLoadingProfile(false);
+        if (isMounted) {
+          setLoadingProfile(false);
+        }
       }
     };
 
     loadProfile();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -1474,6 +1525,15 @@ export default function ProfilePage() {
   useEffect(() => {
     if (loadingProfile) return;
 
+    const baseCurrencyCode = baseCurrency.split(" - ")[0];
+    const sanitizedAdditionalFields = additionalFields
+      .map((field, index) => ({
+        index: index + 1,
+        label: String(field?.label || "").trim(),
+        value: String(field?.value || "").trim(),
+      }))
+      .filter((field) => field.label || field.value);
+
     const liveOrgProfile = {
       organizationName: orgName,
       name: orgName,
@@ -1484,11 +1544,30 @@ export default function ProfilePage() {
       logoUrl: logoPreview || "",
       email,
       website,
-      baseCurrency: baseCurrency.split(" - ")[0],
+      baseCurrency: baseCurrencyCode,
+      currency_code: baseCurrencyCode,
+      fiscalYear,
+      startDate,
+      reportBasis,
       orgLanguage,
+      commLanguage,
+      language_code: getLanguageCode(orgLanguage) || "en",
       timeZone,
+      time_zone: timeZone,
       dateFormat,
+      date_format: dateFormat,
       dateSeparator,
+      field_separator: dateSeparator,
+      companyIdType,
+      company_id_label: companyIdType,
+      companyid_label: companyIdType,
+      companyIdValue,
+      company_id_value: companyIdValue,
+      companyid_value: companyIdValue,
+      custom_fields: sanitizedAdditionalFields,
+      additionalFields: sanitizedAdditionalFields,
+      paymentStubAddress,
+      showPaymentStubAddress,
       address: {
         street1,
         street2,
@@ -1542,6 +1621,15 @@ export default function ProfilePage() {
     state,
     phone,
     fax,
+    fiscalYear,
+    startDate,
+    reportBasis,
+    commLanguage,
+    companyIdType,
+    companyIdValue,
+    additionalFields,
+    paymentStubAddress,
+    showPaymentStubAddress,
   ]);
 
   const syncBaseCurrencyWithCurrencyTable = async (selectedCurrency: string) => {
@@ -1634,7 +1722,7 @@ export default function ProfilePage() {
               if (result && (result as string).length > 5000000) {
                 reject(new Error('Logo file is too large. Please use an image smaller than 1MB.'));
               } else {
-                resolve(result);
+                resolve(typeof result === "string" ? result : "");
               }
             };
             reader.onerror = reject;
@@ -1655,6 +1743,14 @@ export default function ProfilePage() {
       };
       const monthIdx = monthMap[startMonthName] || 0;
       const fStartDate = new Date(new Date().getFullYear(), monthIdx, parseInt(startDate) || 1);
+      const sanitizedAdditionalFields = additionalFields
+        .map((field, index) => ({
+          index: index + 1,
+          label: String(field?.label || "").trim(),
+          value: String(field?.value || "").trim(),
+        }))
+        .filter((field) => field.label || field.value);
+      const baseCurrencyCode = baseCurrency.split(' - ')[0];
 
       const profileData = {
         name: orgName,
@@ -1674,25 +1770,28 @@ export default function ProfilePage() {
           phone: phone,
           fax: fax,
         },
-        currency_code: baseCurrency.split(' - ')[0],
+        currency_code: baseCurrencyCode,
+        baseCurrency: baseCurrencyCode,
         fiscal_year_start_month: startMonthName.toLowerCase(),
         fiscalYearStart: fStartDate.toISOString(),
+        fiscalYear: fiscalYear,
+        startDate: startDate,
         reportBasis: reportBasis,
         orgLanguage: orgLanguage,
         commLanguage: commLanguage,
         language_code: getLanguageCode(orgLanguage) || "en",
         time_zone: timeZone,
+        timeZone: timeZone,
         date_format: dateFormat,
+        dateFormat: dateFormat,
         field_separator: dateSeparator,
+        dateSeparator: dateSeparator,
         companyid_label: companyIdType,
         companyid_value: companyIdValue,
-        custom_fields: additionalFields
-          .map((field, index) => ({
-            index: index + 1,
-            label: String(field?.label || "").trim(),
-            value: String(field?.value || "").trim(),
-          }))
-          .filter((field) => field.label || field.value),
+        companyIdType: companyIdType,
+        companyIdValue: companyIdValue,
+        custom_fields: sanitizedAdditionalFields,
+        additionalFields: sanitizedAdditionalFields,
         paymentStubAddress: paymentStubAddress,
         showPaymentStubAddress: showPaymentStubAddress,
       };
@@ -1763,10 +1862,29 @@ export default function ProfilePage() {
             email: email,
             website: website,
             baseCurrency: syncedBaseCurrency.split(" - ")[0],
+            currency_code: syncedBaseCurrency.split(" - ")[0],
+            fiscalYear: fiscalYear,
+            startDate: startDate,
+            reportBasis: reportBasis,
             orgLanguage: orgLanguage,
+            commLanguage: commLanguage,
+            language_code: getLanguageCode(orgLanguage) || "en",
             timeZone: timeZone,
+            time_zone: timeZone,
             dateFormat: dateFormat,
+            date_format: dateFormat,
             dateSeparator: dateSeparator,
+            field_separator: dateSeparator,
+            companyIdType: companyIdType,
+            companyid_label: companyIdType,
+            company_id_label: companyIdType,
+            companyIdValue: companyIdValue,
+            companyid_value: companyIdValue,
+            company_id_value: companyIdValue,
+            custom_fields: sanitizedAdditionalFields,
+            additionalFields: sanitizedAdditionalFields,
+            paymentStubAddress: paymentStubAddress,
+            showPaymentStubAddress: showPaymentStubAddress,
             address: {
               ...(existingOrgProfile?.address || {}),
               street1: street1,

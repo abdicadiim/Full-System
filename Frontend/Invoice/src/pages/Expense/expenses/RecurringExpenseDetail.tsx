@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { jsPDF } from "jspdf";
 import {
@@ -69,6 +70,7 @@ const getTaxRate = (tax: any) => {
 export default function RecurringExpenseDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { code: baseCurrencyCode, symbol: baseCurrencySymbol } = useCurrency();
 
   const [profiles, setProfiles] = useState<any[]>([]);
@@ -127,7 +129,11 @@ export default function RecurringExpenseDetail() {
 
   const fetchProfiles = async () => {
     try {
-      const response = await recurringExpensesAPI.getAll({ limit: 1000 });
+      const response = await queryClient.fetchQuery({
+        queryKey: ["recurring-expenses", "list"],
+        staleTime: 30_000,
+        queryFn: async () => recurringExpensesAPI.getAll({ limit: 1000 })
+      });
       const rows = response?.recurring_expenses || [];
       setProfiles(
         rows.map((row: any) => ({
@@ -148,8 +154,16 @@ export default function RecurringExpenseDetail() {
 
   const fetchTaxes = async () => {
     try {
-      const primary = await taxesAPI.getForTransactions().catch(() => null);
-      const fallback = await taxesAPI.getAll({ status: "active" }).catch(() => null);
+      const primary = await queryClient.fetchQuery({
+        queryKey: ["taxes", "list", "recurring-expenses", "primary"],
+        staleTime: 5 * 60 * 1000,
+        queryFn: async () => taxesAPI.getForTransactions().catch(() => null)
+      });
+      const fallback = await queryClient.fetchQuery({
+        queryKey: ["taxes", "list", "recurring-expenses", "fallback"],
+        staleTime: 5 * 60 * 1000,
+        queryFn: async () => taxesAPI.getAll({ status: "active" }).catch(() => null)
+      });
       const rows = [
         ...(Array.isArray(primary?.data) ? primary.data : []),
         ...(Array.isArray(primary?.taxes) ? primary.taxes : []),
@@ -175,7 +189,11 @@ export default function RecurringExpenseDetail() {
       let resolved: any = null;
       for (const candidate of getIdCandidates()) {
         try {
-          const response = await recurringExpensesAPI.getById(candidate);
+          const response = await queryClient.fetchQuery({
+            queryKey: ["recurring-expenses", "detail", candidate],
+            staleTime: 30_000,
+            queryFn: async () => recurringExpensesAPI.getById(candidate)
+          });
           const row = response?.recurring_expense;
           if (row) {
             resolved = {
@@ -238,7 +256,11 @@ export default function RecurringExpenseDetail() {
     try {
       let rows: any[] = [];
       for (const candidate of getIdCandidates(expense)) {
-        const response = await expensesAPI.getAll({ recurring_expense_id: candidate });
+        const response = await queryClient.fetchQuery({
+          queryKey: ["expenses", "list", "recurring", candidate],
+          staleTime: 30_000,
+          queryFn: async () => expensesAPI.getAll({ recurring_expense_id: candidate })
+        });
         const data = response?.expenses || [];
         if (Array.isArray(data) && data.length > 0) {
           rows = data;
@@ -548,15 +570,15 @@ export default function RecurringExpenseDetail() {
 
           <div className="flex items-center gap-2 ml-2">
             <div ref={sidebarCreateMenuRef} className="relative">
-              <div className="inline-flex items-center overflow-hidden rounded-md border border-[#15803d] shadow-sm">
+              <div className="inline-flex items-center overflow-hidden rounded-md border border-[#0f4f5a] shadow-sm">
                 <button
-                  className="px-3 py-2 text-white bg-[#156372] hover:bg-[#0D4A52] cursor-pointer"
+                  className="px-3 py-2 text-white bg-[#156372] hover:bg-[#0f4f5a] cursor-pointer"
                   onClick={() => navigate("/expenses/recurring-expenses/new")}
                 >
                   <Plus size={16} />
                 </button>
                 <button
-                  className="px-2.5 py-2 text-white bg-[#156372] border-l border-[#0D4A52] hover:bg-[#0D4A52] cursor-pointer"
+                  className="px-2.5 py-2 text-white bg-[#156372] border-l border-[#0f4f5a] hover:bg-[#0f4f5a] cursor-pointer"
                   onClick={() => {
                     setSidebarCreateMenuOpen((prev) => !prev);
                     setDropdownOpen(false);

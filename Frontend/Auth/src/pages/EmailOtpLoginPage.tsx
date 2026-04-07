@@ -39,11 +39,16 @@ const markAutoSentOtp = (app: string, email: string) => {
 };
 
 export default function EmailOtpLoginPage() {
+  const emailInputRef = useRef<HTMLInputElement | null>(null);
+  const codeInputRef = useRef<HTMLInputElement | null>(null);
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [codeSent, setCodeSent] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [checkingEmail, setCheckingEmail] = useState(false);
+  const [emailMissing, setEmailMissing] = useState(false);
+  const [codeInvalid, setCodeInvalid] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const appName = getAppDisplayName();
   const search = window.location.search;
@@ -54,6 +59,8 @@ export default function EmailOtpLoginPage() {
   const app = new URLSearchParams(search).get("app") || "";
   const initialEmail = useMemo(() => new URLSearchParams(search).get("email") || "", [search]);
   const autoSendAttemptedRef = useRef(false);
+  const emailMissingMessage = "No account found with this email address.";
+  const codeInvalidMessage = "Please enter the 6-digit code sent to your email.";
 
   useEffect(() => {
     if (isLogoutRedirect) return;
@@ -92,10 +99,61 @@ export default function EmailOtpLoginPage() {
     void requestCode(initialEmail);
   }, [app, isLogoutRedirect, initialEmail]);
 
+  useEffect(() => {
+    const input = emailInputRef.current;
+    if (!input) return;
+
+    if (emailMissing) {
+      input.setCustomValidity(emailMissingMessage);
+      return;
+    }
+
+    input.setCustomValidity("");
+  }, [emailMissing, emailMissingMessage]);
+
+  const validateEmailExists = async (candidate: string) => {
+    const nextEmail = candidate.trim();
+    if (!nextEmail) {
+      setEmailMissing(false);
+      emailInputRef.current?.setCustomValidity("");
+      return false;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
+      setEmailMissing(false);
+      emailInputRef.current?.setCustomValidity("");
+      return false;
+    }
+
+    setCheckingEmail(true);
+    try {
+      const result = await authApi.checkEmail(nextEmail).catch(() => null);
+      if (!result?.success) {
+        setEmailMissing(false);
+        emailInputRef.current?.setCustomValidity("");
+        setError(result?.message || "Unable to verify this email right now.");
+        return false;
+      }
+
+      const exists = Boolean(result.data?.exists);
+      setEmailMissing(!exists);
+      emailInputRef.current?.setCustomValidity(exists ? "" : emailMissingMessage);
+      return exists;
+    } finally {
+      setCheckingEmail(false);
+    }
+  };
+
   const requestCode = async (emailOverride?: string) => {
     const nextEmail = String(emailOverride ?? email).trim();
     if (!nextEmail) {
       setError("Please enter your email address.");
+      return;
+    }
+    const emailExists = await validateEmailExists(nextEmail);
+    if (!emailExists) {
+      setError(emailMissingMessage);
+      emailInputRef.current?.reportValidity();
       return;
     }
     setLoading(true);
@@ -122,14 +180,22 @@ export default function EmailOtpLoginPage() {
     const nextEmail = email.trim();
     const nextOtp = otp.trim();
     if (!nextEmail || !nextOtp) {
+      setCodeInvalid(true);
+      codeInputRef.current?.setCustomValidity(codeInvalidMessage);
+      codeInputRef.current?.reportValidity();
       setError("Please enter both your email and OTP.");
       return;
     }
+    setCodeInvalid(false);
+    codeInputRef.current?.setCustomValidity("");
     setLoading(true);
     setError(null);
     try {
       const result = await authApi.verifyLoginOtp(nextEmail, nextOtp);
       if (!result.success) {
+        setCodeInvalid(true);
+        codeInputRef.current?.setCustomValidity(codeInvalidMessage);
+        codeInputRef.current?.reportValidity();
         setError(result.message || "OTP verification failed");
         return;
       }
@@ -191,15 +257,40 @@ export default function EmailOtpLoginPage() {
               <span className="material-symbols-outlined block text-[18px] leading-none">mail</span>
             </span>
             <input
-              className={`${inputClassName} pl-12 ${codeSent ? "cursor-not-allowed bg-slate-100 text-slate-500" : ""}`}
-              placeholder="name@company.com"
+              className={[
+                inputClassName,
+                "pl-12",
+                codeSent ? "cursor-not-allowed bg-slate-100 text-slate-500" : "",
+                emailMissing ? "border-red-300 bg-red-50/80 focus:border-red-300 focus:ring-red-200" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              placeholder="info@taban.so"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              ref={emailInputRef}
+              aria-invalid={emailMissing}
+              aria-describedby={emailMissing ? "otp-email-error" : undefined}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setEmailMissing(false);
+                setCheckingEmail(false);
+                setError(null);
+                emailInputRef.current?.setCustomValidity("");
+              }}
+              onBlur={(e) => {
+                void validateEmailExists(e.currentTarget.value);
+              }}
               readOnly={codeSent}
               disabled={codeSent}
             />
           </div>
+          {checkingEmail ? <p className="mt-2 text-xs text-slate-500">Checking email...</p> : null}
+          {emailMissing ? (
+            <p id="otp-email-error" className="mt-2 text-xs font-medium text-red-600">
+              {emailMissingMessage}
+            </p>
+          ) : null}
         </div>
 
         {codeSent ? (
@@ -210,14 +301,32 @@ export default function EmailOtpLoginPage() {
                 <span className="material-symbols-outlined block text-[18px] leading-none">password_2</span>
               </span>
               <input
-                className={`${inputClassName} pl-12`}
+                className={[
+                  inputClassName,
+                  "pl-12",
+                  codeInvalid ? "border-red-300 bg-red-50/80 focus:border-red-300 focus:ring-red-200" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
                 placeholder="Enter the 6-digit code"
                 inputMode="numeric"
                 maxLength={6}
                 value={otp}
-                onChange={(e) => setOtp(e.target.value)}
+                ref={codeInputRef}
+                aria-invalid={codeInvalid}
+                aria-describedby={codeInvalid ? "otp-code-error" : undefined}
+                onChange={(e) => {
+                  setOtp(e.target.value);
+                  setCodeInvalid(false);
+                  codeInputRef.current?.setCustomValidity("");
+                }}
               />
             </div>
+            {codeInvalid ? (
+              <p id="otp-code-error" className="mt-2 text-xs font-medium text-red-600">
+                {codeInvalidMessage}
+              </p>
+            ) : null}
             <div className="mt-2 flex items-center justify-between gap-3 text-sm font-medium">
               <p className={remainingSeconds > 0 ? "text-slate-500" : "text-rose-600"}>
                 {remainingSeconds > 0

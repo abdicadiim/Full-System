@@ -31,6 +31,8 @@ const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String
 type Step = "request" | "verify" | "reset";
 
 export default function ForgotPasswordPage() {
+  const emailInputRef = useRef<HTMLInputElement | null>(null);
+  const codeInputRef = useRef<HTMLInputElement | null>(null);
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -41,6 +43,10 @@ export default function ForgotPasswordPage() {
   const [codeSent, setCodeSent] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [emailInvalid, setEmailInvalid] = useState(false);
+  const [codeInvalid, setCodeInvalid] = useState(false);
+  const [newPasswordInvalid, setNewPasswordInvalid] = useState(false);
+  const [confirmPasswordInvalid, setConfirmPasswordInvalid] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const appName = getAppDisplayName();
   const search = window.location.search;
@@ -51,6 +57,10 @@ export default function ForgotPasswordPage() {
   const fieldWrapClass = "w-full max-w-[460px]";
   const inputClassName =
     "h-14 w-full rounded-2xl border border-slate-200 bg-slate-100/80 px-4 py-0 text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-primary/25 focus:bg-white focus:ring-2 focus:ring-primary/20";
+  const invalidInputClass = "border-red-300 bg-red-50/80 focus:border-red-300 focus:ring-red-200";
+  const fieldErrorClass = "mt-2 text-xs font-medium text-red-600";
+  const codeInvalidMessage = isInvitationFlow ? "Please enter the verification code." : "Please enter the reset code.";
+  const passwordMismatchMessage = "Passwords do not match.";
   const initialEmail = useMemo(() => searchParams.get("email") || "", [searchParams]);
   const initialName = useMemo(() => searchParams.get("name") || "", [searchParams]);
   const initialPhotoUrl = useMemo(() => searchParams.get("photoUrl") || "", [searchParams]);
@@ -72,6 +82,18 @@ export default function ForgotPasswordPage() {
       setEmail(initialEmail);
     }
   }, [isLogoutRedirect, initialEmail, email]);
+
+  useEffect(() => {
+    const input = emailInputRef.current;
+    if (!input) return;
+
+    if (emailInvalid) {
+      input.setCustomValidity("No account found with this email address.");
+      return;
+    }
+
+    input.setCustomValidity("");
+  }, [emailInvalid]);
 
   useEffect(() => {
     if (!isInvitationFlow || !initialName || fullName) return;
@@ -114,10 +136,16 @@ export default function ForgotPasswordPage() {
     const nextEmail = email.trim();
     if (!nextEmail) {
       setError("Please enter your email address.");
+      setEmailInvalid(true);
+      emailInputRef.current?.setCustomValidity("Please enter your email address.");
+      emailInputRef.current?.reportValidity();
       return;
     }
     if (!isValidEmail(nextEmail)) {
       setError("Please enter a valid email address.");
+      setEmailInvalid(true);
+      emailInputRef.current?.setCustomValidity("Please enter a valid email address.");
+      emailInputRef.current?.reportValidity();
       return;
     }
     setLoading(true);
@@ -125,10 +153,18 @@ export default function ForgotPasswordPage() {
     try {
       const result = await authApi.requestPasswordReset(nextEmail, app);
       if (!result.success) {
+        setEmailInvalid(true);
+        emailInputRef.current?.setCustomValidity(result.message || "No account found with this email address.");
+        emailInputRef.current?.reportValidity();
         setError(result.message || "Unable to send reset code");
         return;
       }
 
+      setEmailInvalid(false);
+      emailInputRef.current?.setCustomValidity("");
+      setCodeInvalid(false);
+      setNewPasswordInvalid(false);
+      setConfirmPasswordInvalid(false);
       setCode("");
       setNewPassword("");
       setConfirmPassword("");
@@ -146,6 +182,9 @@ export default function ForgotPasswordPage() {
     const nextEmail = email.trim();
     const nextCode = code.trim();
     if (!nextEmail || !nextCode) {
+      setCodeInvalid(true);
+      codeInputRef.current?.setCustomValidity(codeInvalidMessage);
+      codeInputRef.current?.reportValidity();
       setError("Please enter your email address and reset code.");
       return;
     }
@@ -153,11 +192,16 @@ export default function ForgotPasswordPage() {
       setError("Please enter a valid email address.");
       return;
     }
+    setCodeInvalid(false);
+    codeInputRef.current?.setCustomValidity("");
     setLoading(true);
     setError(null);
     try {
       const result = await authApi.verifyPasswordResetCode(nextEmail, nextCode);
       if (!result.success) {
+        setCodeInvalid(true);
+        codeInputRef.current?.setCustomValidity(codeInvalidMessage);
+        codeInputRef.current?.reportValidity();
         setError(result.message || "Reset code verification failed");
         return;
       }
@@ -175,6 +219,9 @@ export default function ForgotPasswordPage() {
     const nextEmail = email.trim();
     const nextCode = code.trim();
     if (!nextEmail || !nextCode || !newPassword) {
+      if (!newPassword) {
+        setNewPasswordInvalid(true);
+      }
       setError("Please enter your email, code, and new password.");
       return;
     }
@@ -183,9 +230,16 @@ export default function ForgotPasswordPage() {
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError("Passwords do not match.");
+      setError(passwordMismatchMessage);
+      setConfirmPasswordInvalid(true);
       return;
     }
+    if (!newPassword) {
+      setError("Please enter a new password.");
+      return;
+    }
+    setNewPasswordInvalid(false);
+    setConfirmPasswordInvalid(false);
     setLoading(true);
     setError(null);
     try {
@@ -294,15 +348,34 @@ export default function ForgotPasswordPage() {
               <span className="material-symbols-outlined block text-[18px] leading-none">mail</span>
             </span>
             <input
-              className={`${inputClassName} pl-12 ${step !== "request" ? "cursor-not-allowed bg-slate-100 text-slate-500" : ""}`}
-              placeholder="name@company.com"
+              className={[
+                inputClassName,
+                "pl-12",
+                step !== "request" ? "cursor-not-allowed bg-slate-100 text-slate-500" : "",
+                emailInvalid ? invalidInputClass : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              placeholder="info@taban.so"
               type="email"
               value={email}
+              ref={emailInputRef}
+              aria-invalid={emailInvalid}
+              aria-describedby={emailInvalid ? "forgot-email-error" : undefined}
               onChange={(e) => handleEmailChange(e.target.value)}
+              onInput={() => {
+                setEmailInvalid(false);
+                emailInputRef.current?.setCustomValidity("");
+              }}
               readOnly={step !== "request"}
               disabled={step !== "request"}
             />
           </div>
+          {emailInvalid ? (
+            <p id="forgot-email-error" className={fieldErrorClass}>
+              No account found with this email address.
+            </p>
+          ) : null}
         </div>
 
         {step === "verify" ? (
@@ -315,14 +388,32 @@ export default function ForgotPasswordPage() {
                 <span className="material-symbols-outlined block text-[18px] leading-none">password_2</span>
               </span>
               <input
-                className={`${inputClassName} pl-12`}
+                className={[
+                  inputClassName,
+                  "pl-12",
+                  codeInvalid ? invalidInputClass : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
                 placeholder="Enter the 6-digit code"
                 inputMode="numeric"
                 maxLength={6}
                 value={code}
-                onChange={(e) => setCode(e.target.value)}
+                ref={codeInputRef}
+                aria-invalid={codeInvalid}
+                aria-describedby={codeInvalid ? "forgot-code-error" : undefined}
+                onChange={(e) => {
+                  setCode(e.target.value);
+                  setCodeInvalid(false);
+                  codeInputRef.current?.setCustomValidity("");
+                }}
               />
             </div>
+            {codeInvalid ? (
+              <p id="forgot-code-error" className={fieldErrorClass}>
+                {codeInvalidMessage}
+              </p>
+            ) : null}
             {codeSent && step === "verify" ? (
               <div className="mt-2 flex items-center justify-between gap-3 text-sm font-medium">
                 <p className={remainingSeconds > 0 ? "text-slate-500" : "text-rose-600"}>
@@ -356,11 +447,21 @@ export default function ForgotPasswordPage() {
                   <span className="material-symbols-outlined block text-[18px] leading-none">lock</span>
                 </span>
                 <input
-                  className={`${inputClassName} pl-12 pr-12`}
+                  className={[
+                    inputClassName,
+                    "pl-12 pr-12",
+                    newPasswordInvalid ? invalidInputClass : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   placeholder="Enter your new password"
                   type={showNewPassword ? "text" : "password"}
                   value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
+                  onChange={(e) => {
+                    setNewPassword(e.target.value);
+                    setNewPasswordInvalid(false);
+                    setConfirmPasswordInvalid(false);
+                  }}
                 />
                 <button
                   aria-label={showNewPassword ? "Hide new password" : "Show new password"}
@@ -381,11 +482,22 @@ export default function ForgotPasswordPage() {
                   <span className="material-symbols-outlined block text-[18px] leading-none">lock_reset</span>
                 </span>
                 <input
-                  className={`${inputClassName} pl-12 pr-12`}
+                  className={[
+                    inputClassName,
+                    "pl-12 pr-12",
+                    confirmPasswordInvalid ? invalidInputClass : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   placeholder="Confirm your new password"
                   type={showConfirmPassword ? "text" : "password"}
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  aria-invalid={confirmPasswordInvalid}
+                  aria-describedby={confirmPasswordInvalid ? "confirm-password-error" : undefined}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    setConfirmPasswordInvalid(false);
+                  }}
                 />
                 <button
                   aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
@@ -398,6 +510,11 @@ export default function ForgotPasswordPage() {
                   </span>
                 </button>
               </div>
+              {confirmPasswordInvalid ? (
+                <p id="confirm-password-error" className={fieldErrorClass}>
+                  {passwordMismatchMessage}
+                </p>
+              ) : null}
             </div>
           </div>
         ) : null}

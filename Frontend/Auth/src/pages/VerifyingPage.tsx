@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import SetupHeader from "../components/SetupHeader";
+import SetupProgressBar from "../components/SetupProgressBar";
 import { getAppDisplayName, getFallbackUrl } from "../lib/appBranding";
 import { goReturnTo } from "../lib/returnTo";
 
@@ -46,9 +47,7 @@ export default function VerifyingPage() {
         </div>
 
         <div className="mb-8">
-          <div className="h-1 w-full rounded-full bg-slate-200">
-            <div className="h-1 w-full rounded-full bg-primary" />
-          </div>
+          <SetupProgressBar value={1} />
         </div>
 
         <div className="mx-auto max-w-xl">

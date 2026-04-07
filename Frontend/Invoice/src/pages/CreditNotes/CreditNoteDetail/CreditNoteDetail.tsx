@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-toastify";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { getCreditNoteById, getCreditNotes, deleteCreditNote, CreditNote, AttachedFile, updateCreditNote } from "../../salesModel";
 import { currenciesAPI, bankAccountsAPI, chartOfAccountsAPI, refundsAPI, creditNotesAPI, invoicesAPI, settingsAPI, customersAPI } from "../../../services/api";
 import ApplyToInvoices from "./ApplyToInvoices";
@@ -40,7 +41,10 @@ interface CreditNoteItem {
 export default function CreditNoteDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [creditNote, setCreditNote] = useState<CreditNote | null>(null);
+  const location = useLocation();
+  const queryClient = useQueryClient();
+  const initialCreditNote = (location.state as any)?.creditNote as CreditNote | undefined;
+  const [creditNote, setCreditNote] = useState<CreditNote | null>(() => initialCreditNote ?? null);
   const [creditNotes, setCreditNotes] = useState<CreditNote[]>([]);
   const [baseCurrency, setBaseCurrency] = useState("USD");
   const [invoicesLookup, setInvoicesLookup] = useState<Record<string, any>>({});
@@ -81,7 +85,9 @@ export default function CreditNoteDetail() {
 
   // Attachments Modal States
   const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
-  const [creditNoteAttachments, setCreditNoteAttachments] = useState<AttachedFile[]>([]);
+  const [creditNoteAttachments, setCreditNoteAttachments] = useState<AttachedFile[]>(() =>
+    Array.isArray((initialCreditNote as any)?.attachedFiles) ? (initialCreditNote as any).attachedFiles : []
+  );
   const [isDragging, setIsDragging] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [showImageViewer, setShowImageViewer] = useState(false);
@@ -89,7 +95,9 @@ export default function CreditNoteDetail() {
 
   // Comments Sidebar States
   const [showCommentsSidebar, setShowCommentsSidebar] = useState(false);
-  const [comments, setComments] = useState<any[]>([]);
+  const [comments, setComments] = useState<any[]>(() =>
+    Array.isArray((initialCreditNote as any)?.comments) ? (initialCreditNote as any).comments : []
+  );
   const [newComment, setNewComment] = useState("");
   const [commentBold, setCommentBold] = useState(false);
   const [commentItalic, setCommentItalic] = useState(false);
@@ -148,6 +156,38 @@ export default function CreditNoteDetail() {
   const customizeDropdownRef = useRef<HTMLDivElement>(null);
   const organizationAddressFileInputRef = useRef<HTMLInputElement>(null);
 
+  const creditNotesListQuery = useQuery({
+    queryKey: ["credit-notes", "list"],
+    staleTime: 30_000,
+    gcTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    initialData: () => queryClient.getQueryData(["credit-notes", "list"]),
+    queryFn: async () => {
+      const notes = await getCreditNotes();
+      return { creditNotes: Array.isArray(notes) ? notes : [] };
+    }
+  });
+
+  useEffect(() => {
+    const data: any = creditNotesListQuery.data;
+    const list = Array.isArray(data?.creditNotes) ? data.creditNotes : Array.isArray(data) ? data : [];
+    setCreditNotes(list);
+  }, [creditNotesListQuery.data]);
+
+  useEffect(() => {
+    if (!initialCreditNote || !id) return;
+    const matches =
+      String((initialCreditNote as any)?.id || (initialCreditNote as any)?._id || "").trim() === String(id).trim();
+    if (!matches) return;
+    setCreditNote(initialCreditNote);
+    setCreditNoteAttachments(
+      Array.isArray((initialCreditNote as any)?.attachedFiles) ? (initialCreditNote as any).attachedFiles : []
+    );
+    setComments(
+      Array.isArray((initialCreditNote as any)?.comments) ? (initialCreditNote as any).comments : []
+    );
+  }, [id, initialCreditNote]);
+
   useEffect(() => {
     const fetchCreditNoteData = async () => {
       try {
@@ -194,8 +234,6 @@ export default function CreditNoteDetail() {
         } else {
           navigate("/sales/credit-notes");
         }
-        const notes = await getCreditNotes();
-        setCreditNotes(notes);
       } catch (error) {
         console.error("Error loading credit note:", error);
       }
@@ -1004,13 +1042,7 @@ Best regards`,
   );
 
   if (!creditNote) {
-    return (
-      <div className="w-full min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="p-10 text-center">
-          <div className="text-lg text-gray-600">Loading...</div>
-        </div>
-      </div>
-    );
+    return <div className="w-full min-h-screen bg-gray-50" />;
   }
 
   return (
@@ -1094,7 +1126,10 @@ Best regards`,
           {creditNotes.map((note) => (
             <div
               key={note.id}
-              onClick={() => note.id && navigate(`/sales/credit-notes/${note.id}`)}
+                            onClick={() => {
+                              if (!note.id) return;
+                              navigate(`/sales/credit-notes/${note.id}`, { state: { creditNote: note } });
+                            }}
               className={`flex items-center gap-3 p-3 cursor-pointer border-b border-gray-100 hover:bg-gray-50 ${note.id === id ? "bg-blue-50 border-l-4 border-l-blue-600" : ""}`}
             >
               <Square size={14} className="text-gray-400" />

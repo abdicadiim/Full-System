@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import PaginationFooter from "../../components/ui/PaginationFooter";
 import { getCreditNotes, getCustomViews, deleteCustomView, getCreditNoteById, updateCreditNote, getCustomers, deleteCreditNote } from "../salesModel";
+import type { CreditNote as SalesCreditNote } from "../salesModel";
 import FieldCustomization from "../shared/FieldCustomization";
 import CreditNotesCustomizeColumnsModal, { CreditNotesColumnOption } from "./CreditNotesCustomizeColumnsModal";
 import { settingsAPI, currenciesAPI } from "../../services/api";
@@ -54,6 +56,7 @@ const CREDIT_NOTES_LIST_COLUMNS: CreditNotesColumnOption[] = [
 ];
 
 const CREDIT_NOTES_COLUMNS_STORAGE_KEY = "invoice_credit_notes_visible_columns_v1";
+const CREDIT_NOTES_CACHE_KEY = "invoice_credit_notes_cache_v1";
 
 interface CreditNote {
   id: string;
@@ -98,6 +101,7 @@ interface CurrencyListItem {
 
 export default function CreditNotes() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [isViewDropdownOpen, setIsViewDropdownOpen] = useState(false);
   const [selectedView, setSelectedView] = useState("All Credit Notes");
   const [selectedStatus, setSelectedStatus] = useState("All");
@@ -106,8 +110,7 @@ export default function CreditNotes() {
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [customViews, setCustomViews] = useState(() => getCustomViews().filter(v => v.type === "credit-notes"));
 
-  // Initialize with empty array, fetch in useEffect
-  const [creditNotes, setCreditNotes] = useState<CreditNote[]>([]);
+  // React Query hydrates the list; keep filtered list in local state.
   const [filteredCreditNotes, setFilteredCreditNotes] = useState<CreditNote[]>([]);
   const [selectedCreditNotes, setSelectedCreditNotes] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -137,10 +140,7 @@ export default function CreditNotes() {
     }
     return CREDIT_NOTES_LIST_COLUMNS.map((c) => c.key);
   });
-  const [availableCurrencies, setAvailableCurrencies] = useState<CurrencyListItem[]>([]);
-  const [organizationProfile, setOrganizationProfile] = useState<any>(null);
   const [customerNameMap, setCustomerNameMap] = useState<Record<string, string>>({});
-  const [baseCurrency, setBaseCurrency] = useState("USD");
   const [isPreferencesModalOpen, setIsPreferencesModalOpen] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [searchType, setSearchType] = useState("Credit Notes");
@@ -234,6 +234,177 @@ export default function CreditNotes() {
     "Export Current View"
   ];
 
+  const isLikelyMongoId = (value: any) => /^[a-f0-9]{24}$/i.test(String(value || "").trim());
+  const pickCustomerDisplayName = (customer: any) => {
+    if (!customer || typeof customer !== "object") return "";
+    const first = String(customer?.firstName || customer?.firstname || "").trim();
+    const last = String(customer?.lastName || customer?.lastname || "").trim();
+    const fullFromParts = [first, last].filter(Boolean).join(" ").trim();
+    const candidates = [
+      customer?.displayName,
+      customer?.customerName,
+      customer?.companyName,
+      customer?.name,
+      customer?.fullName,
+      customer?.contactName,
+      fullFromParts
+    ];
+    const picked = candidates.find((v) => String(v || "").trim() && !isLikelyMongoId(v));
+    return String(picked || "").trim();
+  };
+  const buildCustomerNameMap = (customers: any[]) =>
+    (Array.isArray(customers) ? customers : []).reduce((acc: Record<string, string>, c: any) => {
+      const id = String(c?.id || c?._id || c?.customerId || "").trim();
+      const name = pickCustomerDisplayName(c);
+      if (id && name) acc[id] = name;
+      return acc;
+    }, {});
+
+  const readCachedCreditNotes = () => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = localStorage.getItem(CREDIT_NOTES_CACHE_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_error) {
+      return [];
+    }
+  };
+
+  const creditNotesQuery = useQuery({
+    queryKey: ["credit-notes", "list"],
+    staleTime: 30_000,
+    gcTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    initialData: () => {
+      const cached = readCachedCreditNotes();
+      return cached.length ? { creditNotes: cached } : undefined;
+    },
+    queryFn: async () => {
+      const allCreditNotes = await getCreditNotes();
+      if (Array.isArray(allCreditNotes)) {
+        try {
+          localStorage.setItem(CREDIT_NOTES_CACHE_KEY, JSON.stringify(allCreditNotes));
+        } catch (_error) {
+          // ignore cache write issues
+        }
+      }
+      return {
+        creditNotes: Array.isArray(allCreditNotes) ? allCreditNotes : []
+      };
+    }
+  });
+
+  const creditNotes = useMemo<CreditNote[]>(() => {
+    const data: any = creditNotesQuery.data;
+    if (Array.isArray(data?.creditNotes)) return data.creditNotes;
+    if (Array.isArray(data)) return data;
+    return [];
+  }, [creditNotesQuery.data]);
+
+  const refreshData = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["credit-notes", "list"] });
+  };
+
+  useEffect(() => {
+    if (!creditNotesQuery.data) return;
+    const data: any = creditNotesQuery.data;
+    const allCreditNotes = Array.isArray(data?.creditNotes) ? data.creditNotes : Array.isArray(data) ? data : [];
+    const allCustomViews = getCustomViews().filter(v => v.type === "credit-notes");
+    setCustomViews(allCustomViews);
+    applyFilters(allCreditNotes, selectedStatus, allCustomViews);
+    setHasLoadedOnce(true);
+  }, [creditNotesQuery.data]);
+
+  const customersQuery = useQuery({
+    queryKey: ["customers", "list", "credit-notes"],
+    staleTime: 2 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => getCustomers()
+  });
+
+  useEffect(() => {
+    if (!customersQuery.data) return;
+    const customers = Array.isArray(customersQuery.data) ? customersQuery.data : [];
+    const customerMap = buildCustomerNameMap(customers);
+    setCustomerNameMap(customerMap);
+  }, [customersQuery.data]);
+
+  useEffect(() => {
+    if (!creditNotesQuery.isError) return;
+    console.error("Error loading credit notes:", creditNotesQuery.error);
+    setFilteredCreditNotes([]);
+    setHasLoadedOnce(true);
+  }, [creditNotesQuery.isError, creditNotesQuery.error]);
+
+  useEffect(() => {
+    setIsRefreshing(creditNotesQuery.isFetching);
+  }, [creditNotesQuery.isFetching]);
+
+  useEffect(() => {
+    const handleExternalRefresh = () => {
+      queryClient.invalidateQueries({ queryKey: ["credit-notes", "list"] });
+    };
+
+    window.addEventListener("focus", handleExternalRefresh);
+    window.addEventListener("storage", handleExternalRefresh);
+    return () => {
+      window.removeEventListener("focus", handleExternalRefresh);
+      window.removeEventListener("storage", handleExternalRefresh);
+    };
+  }, [queryClient]);
+
+  const organizationProfileQuery = useQuery({
+    queryKey: ["organization-profile"],
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => settingsAPI.getOrganizationProfile()
+  });
+
+  const currenciesQuery = useQuery({
+    queryKey: ["currencies", "active"],
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => currenciesAPI.getAll({ isActive: true })
+  });
+
+  const organizationProfile = useMemo(() => {
+    const response = organizationProfileQuery.data as any;
+    return response?.success && response.data ? response.data : null;
+  }, [organizationProfileQuery.data]);
+
+  const baseCurrency = useMemo(
+    () => String(organizationProfile?.baseCurrency || "USD").toUpperCase(),
+    [organizationProfile?.baseCurrency]
+  );
+
+  useEffect(() => {
+    if (!organizationProfileQuery.isError) return;
+    console.error("Error loading organization profile for credit note PDF:", organizationProfileQuery.error);
+  }, [organizationProfileQuery.isError, organizationProfileQuery.error]);
+
+  const availableCurrencies = useMemo<CurrencyListItem[]>(() => {
+    try {
+      const response: any = currenciesQuery.data;
+      const rawCurrencies = Array.isArray(response?.data) ? response.data : [];
+
+      return rawCurrencies
+        .map((currency: any) => ({
+          code: String(currency?.code || "").trim().toUpperCase(),
+          name: String(currency?.name || "").trim(),
+          symbol: String(currency?.symbol || "").trim(),
+          isBaseCurrency: Boolean(currency?.isBaseCurrency)
+        }))
+        .filter((currency: CurrencyListItem) => /^[A-Z]{3}$/.test(currency.code));
+    } catch (error) {
+      console.error("Error loading currencies for credit note bulk update:", error);
+      return [];
+    }
+  }, [currenciesQuery.data]);
+
   const currencyDropdownOptions: Array<{ label: string; value: string }> = (() => {
     const normalized = (Array.isArray(availableCurrencies) ? availableCurrencies : [])
       .map((currency) => {
@@ -318,126 +489,10 @@ export default function CreditNotes() {
     return { valid: true, message: "", normalizedValue: trimmed };
   };
 
-  const isLikelyMongoId = (value: any) => /^[a-f0-9]{24}$/i.test(String(value || "").trim());
-  const pickCustomerDisplayName = (customer: any) => {
-    if (!customer || typeof customer !== "object") return "";
-    const first = String(customer?.firstName || customer?.firstname || "").trim();
-    const last = String(customer?.lastName || customer?.lastname || "").trim();
-    const fullFromParts = [first, last].filter(Boolean).join(" ").trim();
-    const candidates = [
-      customer?.displayName,
-      customer?.customerName,
-      customer?.companyName,
-      customer?.name,
-      customer?.fullName,
-      customer?.contactName,
-      fullFromParts
-    ];
-    const picked = candidates.find((v) => String(v || "").trim() && !isLikelyMongoId(v));
-    return String(picked || "").trim();
-  };
-  const buildCustomerNameMap = (customers: any[]) =>
-    (Array.isArray(customers) ? customers : []).reduce((acc: Record<string, string>, c: any) => {
-      const id = String(c?.id || c?._id || c?.customerId || "").trim();
-      const name = pickCustomerDisplayName(c);
-      if (id && name) acc[id] = name;
-      return acc;
-    }, {});
-
-  const refreshData = async () => {
-    setIsRefreshing(true);
-    try {
-      const [allCreditNotes, customers] = await Promise.all([getCreditNotes(), getCustomers()]);
-      const customerMap = buildCustomerNameMap(customers);
-      setCustomerNameMap(customerMap);
-      const allCustomViews = getCustomViews().filter(v => v.type === "credit-notes");
-      setCreditNotes(allCreditNotes);
-      setCustomViews(allCustomViews);
-      applyFilters(allCreditNotes, selectedStatus, allCustomViews);
-    } catch (error) {
-      console.error("Error refreshing data:", error);
-    } finally {
-      setIsRefreshing(false);
-      setHasLoadedOnce(true);
-    }
-  };
-
   useEffect(() => {
-    const initialLoad = async () => {
-      try {
-        const [allCreditNotes, customers] = await Promise.all([getCreditNotes(), getCustomers()]);
-        const customerMap = buildCustomerNameMap(customers);
-        setCustomerNameMap(customerMap);
-        const allCustomViews = getCustomViews().filter(v => v.type === "credit-notes");
-        if (Array.isArray(allCreditNotes)) {
-          setCreditNotes(allCreditNotes);
-          // Only apply filters if we have data
-          applyFilters(allCreditNotes, selectedStatus, allCustomViews);
-        } else {
-          setCreditNotes([]);
-          setFilteredCreditNotes([]);
-        }
-        setCustomViews(allCustomViews);
-
-      } catch (error) {
-        console.error("Error loading credit notes:", error);
-        setCreditNotes([]);
-        setFilteredCreditNotes([]);
-      } finally {
-        setHasLoadedOnce(true);
-      }
-    };
-
-    initialLoad();
-
-    window.addEventListener('focus', initialLoad);
-    window.addEventListener('storage', initialLoad);
-    return () => {
-      window.removeEventListener('focus', initialLoad);
-      window.removeEventListener('storage', initialLoad);
-    };
-  }, [selectedStatus]);
-
-  useEffect(() => {
-    const loadOrganizationProfile = async () => {
-      try {
-        const response = await settingsAPI.getOrganizationProfile();
-        if (response?.success && response.data) {
-          setOrganizationProfile(response.data);
-          if (response.data.baseCurrency) {
-            setBaseCurrency(String(response.data.baseCurrency).toUpperCase());
-          }
-        }
-      } catch (error) {
-        console.error("Error loading organization profile for credit note PDF:", error);
-      }
-    };
-    loadOrganizationProfile();
-  }, []);
-
-  useEffect(() => {
-    const loadCurrencies = async () => {
-      try {
-        const response: any = await currenciesAPI.getAll({ isActive: true });
-        const rawCurrencies = Array.isArray(response?.data) ? response.data : [];
-
-        const parsedCurrencies = rawCurrencies
-          .map((currency: any) => ({
-            code: String(currency?.code || "").trim().toUpperCase(),
-            name: String(currency?.name || "").trim(),
-            symbol: String(currency?.symbol || "").trim(),
-            isBaseCurrency: Boolean(currency?.isBaseCurrency)
-          }))
-          .filter((currency: CurrencyListItem) => /^[A-Z]{3}$/.test(currency.code));
-
-        setAvailableCurrencies(parsedCurrencies);
-      } catch (error) {
-        console.error("Error loading currencies for credit note bulk update:", error);
-      }
-    };
-
-    loadCurrencies();
-  }, []);
+    if (!currenciesQuery.isError) return;
+    console.error("Error loading currencies for credit note bulk update:", currenciesQuery.error);
+  }, [currenciesQuery.isError, currenciesQuery.error]);
 
   useEffect(() => {
     // Re-apply filters when status changes
@@ -551,8 +606,9 @@ export default function CreditNotes() {
     }
   };
 
-  const applyFilters = (allCreditNotes: CreditNote[], status: string, views: any[] = customViews) => {
-    let filtered = allCreditNotes;
+  const applyFilters = (allCreditNotes: CreditNote[] | null | undefined, status: string, views: any[] = customViews) => {
+    const safeNotes = Array.isArray(allCreditNotes) ? allCreditNotes : [];
+    let filtered = safeNotes;
 
     // Check if it's a custom view
     const customView = views.find(v => v.name === status);
@@ -639,7 +695,7 @@ export default function CreditNotes() {
     setIsMoreMenuOpen(false);
 
     // Toggle direction if clicking the same field
-    let newDirection = "desc";
+    let newDirection: "asc" | "desc" = "desc";
     if (activeSortField === sortOption) {
       newDirection = sortDirection === "desc" ? "asc" : "desc";
     }
@@ -673,12 +729,12 @@ export default function CreditNotes() {
           bValue = (b.customerName || b.customer || "").toLowerCase();
           break;
         case "Amount":
-          aValue = parseFloat(a.total || a.amount || 0);
-          bValue = parseFloat(b.total || b.amount || 0);
+          aValue = Number(a.total ?? a.amount ?? 0);
+          bValue = Number(b.total ?? b.amount ?? 0);
           break;
         case "Balance":
-          aValue = parseFloat(a.balance || a.total || a.amount || 0);
-          bValue = parseFloat(b.balance || b.total || b.amount || 0);
+          aValue = Number(a.balance ?? a.total ?? a.amount ?? 0);
+          bValue = Number(b.balance ?? b.total ?? b.amount ?? 0);
           break;
         default:
           return 0;
@@ -794,7 +850,7 @@ export default function CreditNotes() {
     }
   };
 
-  const totalCreditNotePages = Math.max(1, Math.ceil(filteredCreditNotes.length / itemsPerPage));
+  const totalCreditNotePages = Math.max(1, Math.ceil((filteredCreditNotes?.length || 0) / itemsPerPage));
   const safeCurrentPage = Math.min(Math.max(currentPage, 1), totalCreditNotePages);
   const paginatedCreditNotes = useMemo(
     () => filteredCreditNotes.slice((safeCurrentPage - 1) * itemsPerPage, safeCurrentPage * itemsPerPage),
@@ -848,9 +904,7 @@ export default function CreditNotes() {
         throw new Error("None of the selected credit notes could be updated.");
       }
 
-      const refreshed = await getCreditNotes();
-      setCreditNotes(refreshed);
-      applyFilters(refreshed, selectedStatus);
+      await queryClient.invalidateQueries({ queryKey: ["credit-notes", "list"] });
 
       setSelectedCreditNotes([]);
       setIsBulkUpdateModalOpen(false);
@@ -929,7 +983,7 @@ export default function CreditNotes() {
     try {
       const fullNotes = (
         await Promise.all(selectedNotes.map((note) => getCreditNoteById(note.id)))
-      ).filter(Boolean) as CreditNote[];
+      ).filter(Boolean) as SalesCreditNote[];
 
       await downloadCreditNotesPdf({
         notes: fullNotes,
@@ -1513,7 +1567,8 @@ export default function CreditNotes() {
                         onClick={(e) => {
                           const target = e.target as HTMLElement;
                           if (!target.closest('button') && !target.closest('svg')) {
-                            navigate(`/sales/credit-notes/${note.id}`);
+                            const payload = { ...note, customerName: getCreditNoteCustomerName(note) };
+                            navigate(`/sales/credit-notes/${note.id}`, { state: { creditNote: payload } });
                           }
                         }}
                         className="group transition-all hover:bg-slate-50/50 cursor-pointer"
@@ -1549,7 +1604,8 @@ export default function CreditNotes() {
                             className="text-[13px] font-medium text-[#156372] hover:underline cursor-pointer"
                             onClick={(e) => {
                               e.stopPropagation();
-                              navigate(`/sales/credit-notes/${note.id}`);
+                              const payload = { ...note, customerName: getCreditNoteCustomerName(note) };
+                              navigate(`/sales/credit-notes/${note.id}`, { state: { creditNote: payload } });
                             }}
                           >
                             {note.creditNoteNumber || note.id}

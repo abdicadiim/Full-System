@@ -1,15 +1,101 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, X, Building2, Users, Receipt, Settings as SettingsIcon, Palette, Zap, Package, CreditCard, ShoppingCart, ShoppingBag, Puzzle, Plug, Code } from "lucide-react";
 import { useUser } from "../../lib/auth/UserContext";
 import { useSettings } from "../../lib/settings/SettingsContext";
 import { usePermissions } from "../../hooks/usePermissions";
 
+const ORGANIZATION_PROFILE_STORAGE_KEYS = ["org_profile", "organization_profile"];
+
+const safeParseJson = (value: string | null) => {
+  if (!value) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
+
+const readStoredOrganizationProfile = () => {
+  if (typeof localStorage === "undefined") return null;
+
+  const profiles = ORGANIZATION_PROFILE_STORAGE_KEYS
+    .map((key) => safeParseJson(localStorage.getItem(key)))
+    .filter((profile) => profile && typeof profile === "object");
+
+  if (profiles.length === 0) return null;
+
+  return profiles.reduceRight((merged: any, profile: any) => {
+    const profileAddress = profile?.address && typeof profile.address === "object" ? profile.address : {};
+    const mergedAddress = merged?.address && typeof merged.address === "object" ? merged.address : {};
+    return {
+      ...profile,
+      ...merged,
+      address: {
+        ...profileAddress,
+        ...mergedAddress,
+      },
+    };
+  }, {});
+};
+
+const getStoredProfileValue = (profile: any, keys: string[], fallback = "") => {
+  if (!profile || typeof profile !== "object") return fallback;
+  const address = profile?.address && typeof profile.address === "object" ? profile.address : {};
+
+  for (const key of keys) {
+    const candidates = [profile?.[key], address?.[key]];
+    for (const candidate of candidates) {
+      if (candidate === undefined || candidate === null) continue;
+      const text = String(candidate).trim();
+      if (text) return text;
+    }
+  }
+
+  return fallback;
+};
+
+const mergeStoredOrganizationProfile = (nextFields: Record<string, string>) => {
+  if (typeof localStorage === "undefined") return;
+
+  const existing = readStoredOrganizationProfile() || {};
+  const merged = {
+    ...existing,
+    organizationName: nextFields.organizationName,
+    name: nextFields.organizationName,
+    businessType: nextFields.businessType,
+    industry: nextFields.industry,
+    location: nextFields.location,
+    country: nextFields.location,
+    address: {
+      ...(existing as any)?.address,
+      country: nextFields.location,
+    },
+  };
+
+  for (const key of ORGANIZATION_PROFILE_STORAGE_KEYS) {
+    localStorage.setItem(key, JSON.stringify(merged));
+  }
+};
+
 export default function AllSettings() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSetting, setSelectedSetting] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const storedOrgProfile = useMemo(() => readStoredOrganizationProfile(), []);
+  const [organizationNameDraft, setOrganizationNameDraft] = useState(() =>
+    getStoredProfileValue(storedOrgProfile, ["organizationName", "name"], "Taban enterprise") || "Taban enterprise",
+  );
+  const [businessTypeDraft, setBusinessTypeDraft] = useState(() =>
+    getStoredProfileValue(storedOrgProfile, ["businessType"], "Select") || "Select",
+  );
+  const [industryDraft, setIndustryDraft] = useState(() =>
+    getStoredProfileValue(storedOrgProfile, ["industry"], "Agriculture") || "Agriculture",
+  );
+  const [locationDraft, setLocationDraft] = useState(() =>
+    getStoredProfileValue(storedOrgProfile, ["location", "country"], "Algeria") || "Algeria",
+  );
 
   const { user } = useUser();
   const { hasPermission } = usePermissions();
@@ -304,6 +390,20 @@ export default function AllSettings() {
   const filteredOrgSettings = filterItems(orgSettingsVisible, searchQuery);
   const filteredModuleSettings = filterItems(moduleSettingsVisible, searchQuery);
   const filteredExtensionSettings = filterItems(extensionSettingsVisible, searchQuery);
+
+  const persistProfileDraft = (nextDraft?: Partial<{
+    organizationName: string;
+    businessType: string;
+    industry: string;
+    location: string;
+  }>) => {
+    mergeStoredOrganizationProfile({
+      organizationName: nextDraft?.organizationName ?? organizationNameDraft,
+      businessType: nextDraft?.businessType ?? businessTypeDraft,
+      industry: nextDraft?.industry ?? industryDraft,
+      location: nextDraft?.location ?? locationDraft,
+    });
+  };
 
   // Hide sidebar when on settings page
   useEffect(() => {
@@ -633,7 +733,12 @@ export default function AllSettings() {
                         </label>
                         <input
                           type="text"
-                          defaultValue="Taban enterprise"
+                          value={organizationNameDraft}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            setOrganizationNameDraft(next);
+                            persistProfileDraft({ organizationName: next });
+                          }}
                           className="w-full h-10 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
@@ -641,24 +746,65 @@ export default function AllSettings() {
                         <label className="text-sm font-medium text-gray-700">
                           Business Type
                         </label>
-                        <select className="w-full h-10 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                          <option>Select</option>
+                        <select
+                          value={businessTypeDraft}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            setBusinessTypeDraft(next);
+                            persistProfileDraft({ businessType: next });
+                          }}
+                          className="w-full h-10 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="Select">Select</option>
+                          <option value="Sole Proprietorship">Sole Proprietorship</option>
+                          <option value="Partnership">Partnership</option>
+                          <option value="Limited Liability Company (LLC)">Limited Liability Company (LLC)</option>
+                          <option value="Corporation">Corporation</option>
+                          <option value="Non-profit">Non-profit</option>
+                          <option value="Other">Other</option>
                         </select>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] items-center gap-3">
                         <label className="text-sm font-medium text-red-500">
                           Industry <span className="text-red-500">*</span>
                         </label>
-                        <select className="w-full h-10 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                          <option>Agriculture</option>
+                        <select
+                          value={industryDraft}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            setIndustryDraft(next);
+                            persistProfileDraft({ industry: next });
+                          }}
+                          className="w-full h-10 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="Agriculture">Agriculture</option>
+                          <option value="Consulting">Consulting</option>
+                          <option value="Education">Education</option>
+                          <option value="Financial Services">Financial Services</option>
+                          <option value="Health Care">Health Care</option>
+                          <option value="Manufacturing">Manufacturing</option>
+                          <option value="Technology">Technology</option>
                         </select>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] items-center gap-3">
                         <label className="text-sm font-medium text-red-500">
                           Organization Location <span className="text-red-500">*</span>
                         </label>
-                        <select className="w-full h-10 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                          <option>Algeria</option>
+                        <select
+                          value={locationDraft}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            setLocationDraft(next);
+                            persistProfileDraft({ location: next });
+                          }}
+                          className="w-full h-10 px-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="Algeria">Algeria</option>
+                          <option value="Somalia">Somalia</option>
+                          <option value="Kenya">Kenya</option>
+                          <option value="United States">United States</option>
+                          <option value="United Kingdom">United Kingdom</option>
+                          <option value="Canada">Canada</option>
                         </select>
                       </div>
                     </div>
@@ -676,12 +822,19 @@ export default function AllSettings() {
             {selectedSetting === "Profile" && (
               <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
                 <button
-                  onClick={() => setSelectedSetting(null)}
+                  onClick={() => {
+                    persistProfileDraft();
+                    setSelectedSetting(null);
+                  }}
                   className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50"
                 >
                   Cancel
                 </button>
                 <button
+                  onClick={() => {
+                    persistProfileDraft();
+                    setSelectedSetting(null);
+                  }}
                   className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
                 >
                   Save

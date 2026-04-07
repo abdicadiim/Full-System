@@ -1,9 +1,51 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AuthShell from "../components/AuthShell";
 import { getAppDisplayName } from "../lib/appBranding";
 import { prepareAuthViewTransition } from "../lib/authViewTransition";
 import { authApi } from "../services/authApi";
+
+const getAuthDraftKey = () => {
+  if (typeof window === "undefined") return "full";
+  const app = new URLSearchParams(window.location.search).get("app")?.toLowerCase();
+  if (app === "billing") return "billing";
+  if (app === "invoice") return "invoice";
+  return "full";
+};
+
+const SIGNUP_DRAFT_KEY = (suffix: string) => `auth:signup:draft:${getAuthDraftKey()}:${suffix}`;
+
+const readDraftValue = (key: string) => {
+  if (typeof window === "undefined") return "";
+  try {
+    return localStorage.getItem(key) || "";
+  } catch {
+    return "";
+  }
+};
+
+const readSessionDraftValue = (key: string) => {
+  if (typeof window === "undefined") return "";
+  try {
+    return sessionStorage.getItem(key) || "";
+  } catch {
+    return "";
+  }
+};
+
+const writeDraftValue = (key: string, value: string) => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(key, value);
+  } catch {}
+};
+
+const writeSessionDraftValue = (key: string, value: string) => {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(key, value);
+  } catch {}
+};
 
 const persistSession = (result: any) => {
   if (typeof window === "undefined") return;
@@ -59,9 +101,10 @@ const handlePasswordInvalid = (event: React.InvalidEvent<HTMLInputElement>) => {
 };
 
 export default function SignupPage() {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const emailInputRef = useRef<HTMLInputElement | null>(null);
+  const [name, setName] = useState(() => readDraftValue(SIGNUP_DRAFT_KEY("name")));
+  const [email, setEmail] = useState(() => readDraftValue(SIGNUP_DRAFT_KEY("email")));
+  const [password, setPassword] = useState(() => readSessionDraftValue(SIGNUP_DRAFT_KEY("password")));
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [checkingEmail, setCheckingEmail] = useState(false);
@@ -70,10 +113,19 @@ export default function SignupPage() {
   const appName = getAppDisplayName();
   const navigate = useNavigate();
   const search = window.location.search;
+  const draftKey = useMemo(() => SIGNUP_DRAFT_KEY("base"), []);
   const fieldWrapClass = "w-full max-w-[460px]";
   const inputClassName =
     "h-14 w-full rounded-2xl border border-slate-200 bg-slate-100/80 px-4 py-0 text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-primary/25 focus:bg-white focus:ring-2 focus:ring-primary/20";
   const trimmedEmail = email.trim().toLowerCase();
+  const emailExistsMessage = "An account with this email already exists. Please log in.";
+  const emailIsTaken = emailExists && !checkingEmail;
+
+  useEffect(() => {
+    writeDraftValue(SIGNUP_DRAFT_KEY("name"), name);
+    writeDraftValue(SIGNUP_DRAFT_KEY("email"), email);
+    writeSessionDraftValue(SIGNUP_DRAFT_KEY("password"), password);
+  }, [draftKey, email, name, password]);
 
   useEffect(() => {
     let active = true;
@@ -98,6 +150,32 @@ export default function SignupPage() {
     };
   }, [trimmedEmail]);
 
+  useEffect(() => {
+    const input = emailInputRef.current;
+    if (!input) return;
+
+    if (emailExists) {
+      input.setCustomValidity(emailExistsMessage);
+      return;
+    }
+
+    input.setCustomValidity("");
+  }, [emailExists, emailExistsMessage]);
+
+  const validateEmailAvailability = async (candidate: string) => {
+    const nextEmail = candidate.trim().toLowerCase();
+    if (!nextEmail) {
+      setEmailExists(false);
+      return false;
+    }
+
+    const existsResult = await authApi.checkEmail(nextEmail).catch(() => null);
+    const exists = Boolean(existsResult?.success && existsResult.data?.exists);
+    setEmailExists(exists);
+    emailInputRef.current?.setCustomValidity(exists ? emailExistsMessage : "");
+    return exists;
+  };
+
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
@@ -118,11 +196,11 @@ export default function SignupPage() {
     setLoading(true);
 
     const nextEmail = trimmedEmail;
-    const existsResult = nextEmail ? await authApi.checkEmail(nextEmail).catch(() => null) : null;
-    if (existsResult?.success && existsResult.data?.exists) {
-      setEmailExists(true);
+    const emailTaken = await validateEmailAvailability(nextEmail);
+    if (emailTaken) {
       setLoading(false);
-      setError("An account with this email already exists. Please log in.");
+      setError(emailExistsMessage);
+      emailInputRef.current?.reportValidity();
       return;
     }
 
@@ -188,7 +266,7 @@ export default function SignupPage() {
             </span>
             <input
               className={`${inputClassName} pl-12`}
-              placeholder="Acme Corp"
+              placeholder="Taban Enterprise"
               required
               autoComplete="organization"
               value={name}
@@ -203,7 +281,9 @@ export default function SignupPage() {
         </div>
 
         <div className={fieldWrapClass}>
-          <label className="mb-2 block text-sm font-semibold text-slate-700">Email Address</label>
+          <label className="mb-2 block text-sm font-semibold text-slate-700" htmlFor="signup-email">
+            Email Address
+          </label>
           <div className="relative">
             <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-slate-400">
               <span className="material-symbols-outlined block text-[18px] leading-none">mail</span>
@@ -216,24 +296,33 @@ export default function SignupPage() {
               ]
                 .filter(Boolean)
                 .join(" ")}
-              placeholder="name@company.com"
+              placeholder="info@taban.so"
               type="email"
               required
               autoComplete="email"
               inputMode="email"
+              id="signup-email"
+              aria-invalid={emailIsTaken}
+              aria-describedby={emailIsTaken ? "signup-email-error" : "signup-email-help"}
               value={email}
+              ref={emailInputRef}
               onChange={(e) => {
                 setEmail(e.target.value);
                 setError(null);
+                setEmailExists(false);
+                emailInputRef.current?.setCustomValidity("");
               }}
               onInput={clearInputValidationMessage}
+              onBlur={(e) => {
+                void validateEmailAvailability(e.currentTarget.value);
+              }}
               onInvalid={handleEmailInvalid}
             />
           </div>
           {checkingEmail ? <p className="mt-2 text-xs text-slate-500">Checking email...</p> : null}
-          {!checkingEmail && emailExists ? (
-            <p className="mt-2 text-xs text-red-600">
-              An account with this email already exists.{" "}
+          {emailIsTaken ? (
+            <p id="signup-email-error" className="mt-2 text-xs font-medium text-red-600">
+              {emailExistsMessage}{" "}
               <Link className="font-semibold underline" to={`/login${search}`}>
                 Log in
               </Link>

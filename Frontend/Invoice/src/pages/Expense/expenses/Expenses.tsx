@@ -1,5 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getExpenseCustomViews } from "../shared/purchasesModel";
 import { useNavigate, useLocation } from "react-router-dom";
 import BulkUpdateModal from "../shared/BulkUpdateModal";
@@ -66,6 +67,7 @@ const hasAnyAttachment = (expense: any) => {
 export default function Expenses() {
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const { baseCurrency, symbol } = useCurrency();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -301,35 +303,84 @@ export default function Expenses() {
     });
   };
 
-  // Load expenses from API
-  const loadExpenses = async () => {
+  const extractCollection = (response: any): any[] => {
+    if (Array.isArray(response)) return response;
+    if (Array.isArray(response?.data)) return response.data;
+    if (Array.isArray(response?.data?.data)) return response.data.data;
+    if (Array.isArray(response?.vendors)) return response.vendors;
+    if (Array.isArray(response?.customers)) return response.customers;
+    if (Array.isArray(response?.accounts)) return response.accounts;
+    return [];
+  };
+
+  const readCachedExpenses = () => {
+    if (typeof window === "undefined") return [];
     try {
-      setIsRefreshing(true);
-      const extractCollection = (response: any): any[] => {
-        if (Array.isArray(response)) return response;
-        if (Array.isArray(response?.data)) return response.data;
-        if (Array.isArray(response?.data?.data)) return response.data.data;
-        if (Array.isArray(response?.vendors)) return response.vendors;
-        if (Array.isArray(response?.customers)) return response.customers;
-        if (Array.isArray(response?.accounts)) return response.accounts;
-        return [];
-      };
-      // Fetch expenses, contacts and accounts in parallel to ensure we can display names
-      const [response, vendorsResponse, customersResponse, accountsResponse, bankAccountsResponse, cursResp] = await Promise.all([
-        expensesAPI.getAll({ limit: 1000 }),
-        vendorsAPI.getAll({ limit: 1000 }),
-        customersAPI.getAll({ limit: 1000 }),
+      const raw = localStorage.getItem(EXPENSES_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const expensesQuery = useQuery({
+    queryKey: ["expenses", "list"],
+    staleTime: 30_000,
+    gcTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    initialData: () => {
+      const cached = readCachedExpenses();
+      return cached.length ? { expenses: cached } : undefined;
+    },
+    queryFn: async () => {
+      const response = await expensesAPI.getAll({ limit: 1000 });
+      const apiExpenses = response?.expenses || response?.data || [];
+      if (Array.isArray(apiExpenses)) {
+        try {
+          localStorage.setItem(EXPENSES_KEY, JSON.stringify(apiExpenses));
+        } catch {
+          // ignore cache write issues
+        }
+      }
+      return { expenses: Array.isArray(apiExpenses) ? apiExpenses : [] };
+    }
+  });
+
+  const vendorsQuery = useQuery({
+    queryKey: ["vendors", "list", "expenses"],
+    staleTime: 2 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const response = await vendorsAPI.getAll({ limit: 1000 });
+      return extractCollection(response);
+    }
+  });
+
+  const customersQuery = useQuery({
+    queryKey: ["customers", "list", "expenses"],
+    staleTime: 2 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const response = await customersAPI.getAll({ limit: 1000 });
+      return extractCollection(response);
+    }
+  });
+
+  const accountsQuery = useQuery({
+    queryKey: ["accounts", "list", "expenses"],
+    staleTime: 2 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const [accountsResponse, bankAccountsResponse] = await Promise.all([
         chartOfAccountsAPI.getAccounts({ limit: 1000 }),
         bankAccountsAPI.getAll({ limit: 1000 }),
-        currenciesAPI.getAll(),
       ]);
-
-      const vendors = extractCollection(vendorsResponse);
-      const customers = extractCollection(customersResponse);
       const chartAccounts = extractCollection(accountsResponse);
       const bankAccounts = extractCollection(bankAccountsResponse);
-      const cursList = Array.isArray(cursResp) ? cursResp : (cursResp?.data || []);
-
       const mergedAccountsMap = new Map<string, any>();
       [...chartAccounts, ...bankAccounts].forEach((account: any) => {
         const id = String(account?._id || account?.id || "");
@@ -340,123 +391,123 @@ export default function Expenses() {
           mergedAccountsMap.set(mapKey, account);
         }
       });
-      const accounts = Array.from(mergedAccountsMap.values());
-
-      setVendorsList(vendors);
-      setCustomersList(customers);
-      setAccountsList(accounts);
-      setCurrencies(cursList);
-
-      if (response && (response.code === 0 || response.success) && (response.expenses || response.data)) {
-        const apiExpenses = response.expenses || response.data || [];
-
-        // Create quick lookup maps
-        const vendorById = new Map<string, any>(
-          vendors
-            .map((v: any) => [String(v?._id || v?.id || ""), v] as [string, any])
-            .filter(([id]) => Boolean(id))
-        );
-        const customerById = new Map<string, any>(
-          customers
-            .map((c: any) => [String(c?._id || c?.id || ""), c] as [string, any])
-            .filter(([id]) => Boolean(id))
-        );
-        const accountById = new Map<string, any>(
-          accounts
-            .map((a: any) => [String(a?._id || a?.id || ""), a] as [string, any])
-            .filter(([id]) => Boolean(id))
-        );
-
-        const mapped = apiExpenses.map((expense: any) => {
-          const vendor = vendorById.get(String(expense.vendor_id || ""));
-          const customer = customerById.get(String(expense.customer_id || ""));
-          const paidThroughAccount = accountById.get(String(expense.paid_through_account_id || ""));
-          const expenseAccount = accountById.get(String(expense.account_id || ""));
-          const vendorName = expense.vendor_name || expense.vendorName || expense.vendor?.name || vendor?.displayName || vendor?.name || "";
-          const customerName = expense.customer_name || expense.customerName || expense.customer?.name || customer?.displayName || customer?.name || "";
-          const paidThroughName = expense.paid_through_account_name || expense.paidThrough || paidThroughAccount?.accountName || "";
-
-          return {
-            ...expense,
-            id: expense.expense_id || expense._id || expense.id,
-            date: expense.date ? new Date(expense.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : "",
-            expenseAccount: expense.account_name || expenseAccount?.accountName || "",
-            amount: expense.total ?? expense.amount ?? expense.sub_total ?? 0,
-            currency: baseCurrency?.code || expense.currency_code || "USD",
-            currencySymbol: (() => {
-              const currencyStr = baseCurrency?.code || expense.currency_code || "USD";
-              const code = currencyStr.split(" - ")[0];
-              const match = cursList.find((c: any) => c.code === code || c.code === currencyStr);
-              return match ? match.symbol : code || currencyStr;
-            })(),
-            paidThrough: paidThroughName || "",
-            vendor: vendorName || "",
-            reference: expense.reference_number,
-            location: expense.location_name || expense.location || "Head Office",
-            customerName: customerName || "",
-            status: (expense.status || "").toUpperCase(),
-            notes: expense.description,
-            hasAttachment: hasAnyAttachment(expense),
-          };
-        });
-
-        setExpenses(mapped);
-
-        // Backfill missing vendor_name / paid_through_account_name on the server if we could resolve them locally
-        const updates: Array<Promise<any>> = [];
-        mapped.forEach((m) => {
-          const raw = m; // includes raw fields
-          const apiId = raw.expense_id || raw.id;
-          const payload: any = {};
-          let needsUpdate = false;
-          if (!raw.vendor_name && raw.vendor && (raw.vendor_id || vendors.length > 0)) {
-            // try to find vendor id
-            const v = vendors.find((x: any) => (x.displayName || x.name) === raw.vendor || x._id === raw.vendor_id || x.id === raw.vendor_id);
-            if (v) {
-              payload.vendor_id = v._id || v.id;
-              payload.vendor_name = v.displayName || v.name;
-              needsUpdate = true;
-            } else if (raw.vendor) {
-              payload.vendor_name = raw.vendor;
-              needsUpdate = true;
-            }
-          }
-          if (!raw.paid_through_account_name && raw.paidThrough && (raw.paid_through_account_id || accounts.length > 0)) {
-            const a = accounts.find((x: any) => x.accountName === raw.paidThrough || x._id === raw.paid_through_account_id || x.id === raw.paid_through_account_id);
-            if (a) {
-              payload.paid_through_account_id = a._id || a.id;
-              payload.paid_through_account_name = a.accountName;
-              needsUpdate = true;
-            } else if (raw.paidThrough) {
-              payload.paid_through_account_name = raw.paidThrough;
-              needsUpdate = true;
-            }
-          }
-          if (needsUpdate && apiId) {
-            updates.push(expensesAPI.update(apiId, payload).catch((err) => { console.error('Backfill update failed for expense', apiId, err); }));
-          }
-        });
-
-        if (updates.length > 0) {
-          // fire and forget; continue after they settle
-          Promise.allSettled(updates).then(() => {
-            // refresh to reflect server changes
-            loadExpenses();
-          });
-        }
-      } else {
-        setExpenses([]);
-      }
-    } catch (e) {
-      console.error("Error loading expenses:", e);
-      setExpenses([]);
-      setVendorsList([]);
-      setCustomersList([]);
-      setAccountsList([]);
-    } finally {
-      setIsRefreshing(false);
+      return Array.from(mergedAccountsMap.values());
     }
+  });
+
+  const currenciesQuery = useQuery({
+    queryKey: ["currencies", "list", "expenses"],
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    queryFn: async () => currenciesAPI.getAll()
+  });
+
+  const resolveCurrencies = useMemo(() => {
+    const cursResp: any = currenciesQuery.data;
+    return Array.isArray(cursResp) ? cursResp : (cursResp?.data || []);
+  }, [currenciesQuery.data]);
+
+  const mappedExpenses = useMemo(() => {
+    const apiExpenses = Array.isArray(expensesQuery.data?.expenses)
+      ? expensesQuery.data?.expenses
+      : Array.isArray(expensesQuery.data)
+        ? (expensesQuery.data as any)
+        : [];
+    const vendors = Array.isArray(vendorsQuery.data) ? vendorsQuery.data : [];
+    const customers = Array.isArray(customersQuery.data) ? customersQuery.data : [];
+    const accounts = Array.isArray(accountsQuery.data) ? accountsQuery.data : [];
+    const cursList = Array.isArray(resolveCurrencies) ? resolveCurrencies : [];
+
+    const vendorById = new Map<string, any>(
+      vendors
+        .map((v: any) => [String(v?._id || v?.id || ""), v] as [string, any])
+        .filter(([id]) => Boolean(id))
+    );
+    const customerById = new Map<string, any>(
+      customers
+        .map((c: any) => [String(c?._id || c?.id || ""), c] as [string, any])
+        .filter(([id]) => Boolean(id))
+    );
+    const accountById = new Map<string, any>(
+      accounts
+        .map((a: any) => [String(a?._id || a?.id || ""), a] as [string, any])
+        .filter(([id]) => Boolean(id))
+    );
+
+    return apiExpenses.map((expense: any) => {
+      const vendor = vendorById.get(String(expense.vendor_id || ""));
+      const customer = customerById.get(String(expense.customer_id || ""));
+      const paidThroughAccount = accountById.get(String(expense.paid_through_account_id || ""));
+      const expenseAccount = accountById.get(String(expense.account_id || ""));
+      const vendorName = expense.vendor_name || expense.vendorName || expense.vendor?.name || vendor?.displayName || vendor?.name || "";
+      const customerName = expense.customer_name || expense.customerName || expense.customer?.name || customer?.displayName || customer?.name || "";
+      const paidThroughName = expense.paid_through_account_name || expense.paidThrough || paidThroughAccount?.accountName || "";
+
+      return {
+        ...expense,
+        id: expense.expense_id || expense._id || expense.id,
+        date: expense.date ? new Date(expense.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "",
+        expenseAccount: expense.account_name || expenseAccount?.accountName || "",
+        amount: expense.total ?? expense.amount ?? expense.sub_total ?? 0,
+        currency: baseCurrency?.code || expense.currency_code || "USD",
+        currencySymbol: (() => {
+          const currencyStr = baseCurrency?.code || expense.currency_code || "USD";
+          const code = currencyStr.split(" - ")[0];
+          const match = cursList.find((c: any) => c.code === code || c.code === currencyStr);
+          return match ? match.symbol : code || currencyStr;
+        })(),
+        paidThrough: paidThroughName || "",
+        vendor: vendorName || "",
+        reference: expense.reference_number,
+        location: expense.location_name || expense.location || "Head Office",
+        customerName: customerName || "",
+        status: (expense.status || "").toUpperCase(),
+        notes: expense.description,
+        hasAttachment: hasAnyAttachment(expense),
+      };
+    });
+  }, [accountsQuery.data, baseCurrency?.code, customersQuery.data, expensesQuery.data, resolveCurrencies, vendorsQuery.data]);
+
+  const loadExpenses = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["expenses", "list"] });
   };
+
+  useEffect(() => {
+    setExpenses(mappedExpenses);
+  }, [mappedExpenses]);
+
+  useEffect(() => {
+    setVendorsList(Array.isArray(vendorsQuery.data) ? vendorsQuery.data : []);
+  }, [vendorsQuery.data]);
+
+  useEffect(() => {
+    setCustomersList(Array.isArray(customersQuery.data) ? customersQuery.data : []);
+  }, [customersQuery.data]);
+
+  useEffect(() => {
+    setAccountsList(Array.isArray(accountsQuery.data) ? accountsQuery.data : []);
+  }, [accountsQuery.data]);
+
+  useEffect(() => {
+    setCurrencies(Array.isArray(resolveCurrencies) ? resolveCurrencies : []);
+  }, [resolveCurrencies]);
+
+  useEffect(() => {
+    setIsRefreshing(
+      expensesQuery.isFetching ||
+      vendorsQuery.isFetching ||
+      customersQuery.isFetching ||
+      accountsQuery.isFetching ||
+      currenciesQuery.isFetching
+    );
+  }, [
+    expensesQuery.isFetching,
+    vendorsQuery.isFetching,
+    customersQuery.isFetching,
+    accountsQuery.isFetching,
+    currenciesQuery.isFetching
+  ]);
 
   const downloadSampleFile = (type) => {
     const headers = ["Expense Date", "Expense Account", "Amount", "Paid Through", "Vendor Name", "Customer Name", "Reference#", "Description"];
@@ -2027,7 +2078,7 @@ export default function Expenses() {
                           setSelectedExpenses([]);
                         }
                       }}
-                      className="h-4 w-4 cursor-pointer"
+                      className="h-4 w-4 cursor-pointer accent-[#156372]"
                     />
                   </div>
                   {renderResizeHandle("select")}
@@ -2131,7 +2182,7 @@ export default function Expenses() {
                     onClick={(e) => {
                       // Don't navigate if clicking on checkbox
                       if ((e.target as HTMLInputElement).type !== "checkbox") {
-                        navigate(`/expenses/${expense.id}`);
+                        navigate(`/expenses/${expense.id}`, { state: { expense } });
                       }
                     }}
                   >
@@ -2148,7 +2199,7 @@ export default function Expenses() {
                               setSelectedExpenses(selectedExpenses.filter((id) => id !== expense.id));
                             }
                           }}
-                          className="h-4 w-4 cursor-pointer"
+                          className="h-4 w-4 cursor-pointer accent-[#156372]"
                         />
                       </div>
                     </td>
@@ -2213,7 +2264,7 @@ export default function Expenses() {
                         checked={visibleColumnKeys.includes(col.key)}
                         disabled={col.required}
                         onChange={() => toggleVisibleColumn(col.key)}
-                        className="h-4 w-4"
+                        className="h-4 w-4 cursor-pointer accent-[#156372] disabled:cursor-not-allowed disabled:accent-gray-300"
                       />
                       <span>{col.label}</span>
                     </label>
@@ -3284,7 +3335,7 @@ function NewCustomViewModal({ onClose, onSave }: { onClose: () => void; onSave: 
                   checked={formData.markAsFavorite}
                   onChange={handleChange}
                   id="favorite"
-                  style={{ cursor: "pointer" }}
+                  style={{ cursor: "pointer", accentColor: "#156372" }}
                 />
                 <label htmlFor="favorite" style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
                   <Star size={16} style={{ color: formData.markAsFavorite ? "#fbbf24" : "#9ca3af" }} />
