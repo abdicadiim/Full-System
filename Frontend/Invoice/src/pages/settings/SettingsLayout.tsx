@@ -17,7 +17,6 @@ const simpleSettingsNav = [
   { label: "Customers", path: "/settings/customers-vendors", icon: Users },
   { label: "Quotes", path: "/settings/quotes", icon: FileText },
   { label: "Invoices", path: "/settings/invoices", icon: FileText },
-  { label: "Recurring Invoices", path: "/settings/recurring-invoices", icon: FileText },
   { label: "Sales Receipt", path: "/settings/sales-receipts", icon: ShoppingCart },
   { label: "Payments Received", path: "/settings/payments-received", icon: CreditCard },
   { label: "Credit Notes", path: "/settings/credit-notes", icon: FileText },
@@ -124,7 +123,7 @@ export default function SettingsLayout({ children }: { children?: React.ReactNod
       <div className="bg-[#f6f7fb] sticky top-0 z-50">
         <div className="px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-[220px]">
-            <div className="h-10 w-10 rounded-xl border border-[#d9deea] bg-white flex items-center justify-center text-[#2f6fed]">
+            <div className="h-10 w-10 rounded-xl border border-[#0f6e60] bg-white flex items-center justify-center text-[#0f6e60]">
               <SettingsIcon size={20} />
             </div>
             <div>

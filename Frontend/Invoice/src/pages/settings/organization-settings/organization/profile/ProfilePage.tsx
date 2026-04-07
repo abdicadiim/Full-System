@@ -163,15 +163,6 @@ const INDUSTRIES = [
   "Writers"
 ];
 
-const BUSINESS_TYPES = [
-  "Sole Proprietorship",
-  "Partnership",
-  "Limited Liability Company (LLC)",
-  "Corporation",
-  "Non-profit",
-  "Other"
-];
-
 const COUNTRIES = [
   "Aland Islands",
   "Albania",
@@ -553,7 +544,6 @@ const normalizeOrganizationPayload = (responsePayload: any) => {
 
   return {
     name: String(payload?.name || payload?.organizationName || "").trim(),
-    businessType: String(payload?.businessType || "").trim(),
     industry: String(payload?.industry || payload?.industry_type || "").trim(),
     country: String(address?.country || payload?.country || "").trim(),
     website: String(payload?.website || "").trim(),
@@ -1192,7 +1182,6 @@ export default function ProfilePage() {
   const storedOrgProfile = useMemo(() => readStoredOrganizationProfile(), []);
   const [currencyOptions, setCurrencyOptions] = useState<string[]>(() => readStoredCurrencyOptions());
   const [orgName, setOrgName] = useState(() => getStoredProfileValue(storedOrgProfile, ["organizationName", "name"], "Taban enterprise") || "Taban enterprise");
-  const [businessType, setBusinessType] = useState(() => getStoredProfileValue(storedOrgProfile, ["businessType"]));
   const [industry, setIndustry] = useState(() => getStoredProfileValue(storedOrgProfile, ["industry", "industry_type"], "Agriculture") || "Agriculture");
   const [location, setLocation] = useState(() => getStoredProfileValue(storedOrgProfile, ["location", "country"], "Somalia") || "Somalia");
   const [email, setEmail] = useState(() => getStoredProfileValue(storedOrgProfile, ["email"]));
@@ -1427,7 +1416,6 @@ export default function ProfilePage() {
             const storedBaseSelection = readStoredBaseCurrencySelection();
 
             applyIfEmpty(orgName, setOrgName, p.name);
-            applyIfEmpty(businessType, setBusinessType, p.businessType);
             applyIfEmpty(industry, setIndustry, p.industry);
             applyIfEmpty(location, setLocation, p.country);
             applyIfEmpty(email, setEmail, p.email);
@@ -1537,7 +1525,6 @@ export default function ProfilePage() {
     const liveOrgProfile = {
       organizationName: orgName,
       name: orgName,
-      businessType,
       industry,
       location,
       logo: logoPreview || "",
@@ -1603,7 +1590,6 @@ export default function ProfilePage() {
   }, [
     loadingProfile,
     orgName,
-    businessType,
     industry,
     location,
     logoPreview,
@@ -1754,7 +1740,6 @@ export default function ProfilePage() {
 
       const profileData = {
         name: orgName,
-        businessType: businessType,
         industry_type: industry,
         contact_name: primarySenderName || orgName,
         email: email,
@@ -1854,7 +1839,6 @@ export default function ProfilePage() {
             ...existingOrgProfile,
             organizationName: orgName,
             name: orgName,
-            businessType: businessType,
             industry: industry,
             location: location,
             logo: logoBase64,
@@ -2031,60 +2015,124 @@ export default function ProfilePage() {
       <div className="rounded-lg border-0 p-6 mb-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Organization Details</h2>
         <div className="space-y-4">
-          <div className="flex items-center gap-6">
-            <label className="w-56 text-sm font-medium text-red-500">
+          <div className="grid grid-cols-[220px_1fr] items-center gap-6">
+            <label className="text-sm font-medium text-red-500">
               Organization Name <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
               value={orgName}
               onChange={(e) => setOrgName(e.target.value)}
-              className="flex-1 h-10 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          <div className="flex items-center gap-6">
-            <label className="w-56 text-sm font-medium text-gray-700">
-              Business Type
-            </label>
-            <div className="flex-1">
-              <SearchableDropdown
-                value={businessType}
-                placeholder="Select"
-                options={BUSINESS_TYPES}
-                onChange={setBusinessType}
-              />
-            </div>
-          </div>
-          <div className="flex items-center gap-6">
-            <label className="w-56 text-sm font-medium text-red-500">
-              Industry <span className="text-red-500">*</span>{" "}
+          <div className="grid grid-cols-[220px_1fr] items-center gap-6">
+            <label className="text-sm font-medium text-red-500 flex items-center gap-1">
+              Industry <span className="text-red-500">*</span>
               <HelpTooltip text="Select your industry type to help us fine-tune your experience. If you can't find your industry type from the list of options, you can input your own.">
                 <HelpCircle size={14} className="inline text-gray-400 cursor-help" />
               </HelpTooltip>
             </label>
-            <div className="flex-1">
-              <SearchableDropdown
-                value={industry}
-                placeholder="Select Industry"
-                options={INDUSTRIES}
-                onChange={setIndustry}
-              />
-            </div>
+            <SearchableDropdown
+              value={industry}
+              placeholder="Select Industry"
+              options={INDUSTRIES}
+              onChange={setIndustry}
+            />
           </div>
-          <div className="flex items-center gap-6">
-            <label className="w-56 text-sm font-medium text-red-500">
+          <div className="grid grid-cols-[220px_1fr] items-center gap-6">
+            <label className="text-sm font-medium text-red-500">
               Organization Location <span className="text-red-500">*</span>
             </label>
-            <div className="flex-1">
-              <SearchableDropdown
-                value={location}
-                placeholder="Select Country"
-                options={COUNTRIES}
-                onChange={setLocation}
+            <SearchableDropdown
+              value={location}
+              placeholder="Select Country"
+              options={COUNTRIES}
+              onChange={setLocation}
+            />
+          </div>
+          <div className="space-y-3 rounded-2xl p-5">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-gray-700">Organization Address</span>
+              <HelpTooltip text="Street details, city, state, and contact numbers display on PDFs and transaction headers.">
+                <HelpCircle size={14} className="text-gray-400 cursor-help" />
+              </HelpTooltip>
+              <button
+                type="button"
+                className="ml-auto flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
+              >
+                <Edit2 size={16} />
+                Edit
+              </button>
+            </div>
+            <div className="space-y-3">
+              <input
+                type="text"
+                value={street1}
+                onChange={(e) => setStreet1(e.target.value)}
+                placeholder="Street 1"
+                className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <input
+                type="text"
+                value={street2}
+                onChange={(e) => setStreet2(e.target.value)}
+                placeholder="Street 2"
+                className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <div className="grid gap-3 md:grid-cols-2">
+                <input
+                  type="text"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="City"
+                  className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <input
+                  type="text"
+                  value={zipCode}
+                  onChange={(e) => setZipCode(e.target.value)}
+                  placeholder="ZIP/Postal Code"
+                  className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <select
+                  value={state}
+                  onChange={(e) => setState(e.target.value)}
+                  className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-transparent text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">State/Province *</option>
+                  <option value="Banaadir">Banaadir</option>
+                  <option value="Lower Shabelle">Lower Shabelle</option>
+                  <option value="Mogadishu">Mogadishu</option>
+                </select>
+                <input
+                  type="text"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="Phone"
+                  className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <input
+                type="text"
+                value={fax}
+                onChange={(e) => setFax(e.target.value)}
+                placeholder="Fax Number"
+                className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={handleOpenOrganizationAddressFormat}
+                className="text-sm font-medium text-blue-600 hover:text-blue-700"
+              >
+                Organization Address Format &gt;
+              </button>
+            </div>
           </div>
-          {/* Organization Address info card hidden per request */}
           <div className="rounded-lg border border-gray-200 p-4 bg-[#d8dbe0]">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-gray-700">
@@ -2226,6 +2274,45 @@ export default function ProfilePage() {
                 Period: {getFiscalPeriod()}
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t border-gray-200 my-6" />
+
+      {/* Report Basis */}
+      <div className="rounded-lg border-0 p-6 mb-6">
+        <div className="flex items-start gap-6">
+          <label className="w-56 text-sm font-medium text-gray-700 pt-2">Report Basis</label>
+          <div className="flex-1 space-y-3">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="radio"
+                name="reportBasis"
+                value="Accrual"
+                checked={reportBasis === "Accrual"}
+                onChange={() => setReportBasis("Accrual")}
+                className="mt-1 h-4 w-4 accent-[#0f6e60] border-gray-300"
+              />
+              <div>
+                <span className="text-sm font-semibold text-gray-900">Accrual</span>
+                <p className="text-xs text-gray-500">You owe tax as of invoice date</p>
+              </div>
+            </label>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="radio"
+                name="reportBasis"
+                value="Cash"
+                checked={reportBasis === "Cash"}
+                onChange={() => setReportBasis("Cash")}
+                className="mt-1 h-4 w-4 accent-[#0f6e60] border-gray-300"
+              />
+              <div>
+                <span className="text-sm font-semibold text-gray-900">Cash</span>
+                <p className="text-xs text-gray-500">You owe tax upon payment receipt</p>
+              </div>
+            </label>
           </div>
         </div>
       </div>

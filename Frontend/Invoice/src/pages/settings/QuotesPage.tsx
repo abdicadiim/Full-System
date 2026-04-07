@@ -19,6 +19,7 @@ export default function QuotesPage() {
   const [allowEditingAccepted, setAllowEditingAccepted] = useState(false);
   const [allowCustomerAcceptDecline, setAllowCustomerAcceptDecline] = useState(false);
   const [automationOption, setAutomationOption] = useState("dont-convert");
+  const [subscriptionConversionOption, setSubscriptionConversionOption] = useState("dont-convert-subscriptions");
   const [allowProgressInvoice, setAllowProgressInvoice] = useState(false);
   const [hideZeroValueItems, setHideZeroValueItems] = useState(false);
   const [retainCustomerNotes, setRetainCustomerNotes] = useState(false);
@@ -107,6 +108,7 @@ export default function QuotesPage() {
           setAllowEditingAccepted(s.allowEditingAcceptedQuotes ?? false);
           setAllowCustomerAcceptDecline(s.allowCustomerAcceptDecline ?? false);
           setAutomationOption(s.automationOption ?? "dont-convert");
+          setSubscriptionConversionOption(s.subscriptionConversionOption ?? "dont-convert-subscriptions");
           setAllowProgressInvoice(s.allowProgressInvoice ?? false);
           setApprovalType(s.approvalType ?? "no-approval");
           setHideZeroValueItems(s.hideZeroValueItems ?? false);
@@ -182,6 +184,7 @@ export default function QuotesPage() {
     allowEditingAcceptedQuotes: allowEditingAccepted,
     allowCustomerAcceptDecline: allowCustomerAcceptDecline,
     automationOption,
+    subscriptionConversionOption,
     allowProgressInvoice,
     hideZeroValueItems,
     retainFields: {
@@ -200,6 +203,7 @@ export default function QuotesPage() {
     customFields,
     customButtons,
     relatedLists,
+    subscriptionConversionOption,
   });
 
   const handleSaveGeneral = async () => {
@@ -239,21 +243,29 @@ export default function QuotesPage() {
   if (loading) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-[#0f6e60]" />
       </div>
     );
   }
 
   return (
     <div className="p-8 w-full">
-      <h1 className="text-2xl font-semibold text-gray-900 mb-6">Quotes</h1>
+      <div className="mb-6 rounded-lg border border-[#dfe3eb] bg-[#f5f7fb] px-5 py-4 flex items-center gap-4">
+        <div className="h-10 w-10 rounded-full border border-[#0f6e60] bg-white flex items-center justify-center">
+          <Settings className="text-[#0f6e60]" size={18} />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-gray-500 m-0">Settings</p>
+          <h1 className="text-2xl font-semibold text-gray-900 m-0">Quotes</h1>
+        </div>
+      </div>
 
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-gray-200 mb-6">
         <button
           onClick={() => setActiveTab("general")}
           className={`px-4 py-2 text-sm font-medium transition ${activeTab === "general"
-            ? "text-blue-600 border-b-2 border-blue-600"
+            ? "text-[#0f6e60] border-b-2 border-[#0f6e60]"
             : "text-gray-600 hover:text-gray-900"
             }`}
         >
@@ -262,7 +274,7 @@ export default function QuotesPage() {
         <button
           onClick={() => setActiveTab("approvals")}
           className={`px-4 py-2 text-sm font-medium transition ${activeTab === "approvals"
-            ? "text-blue-600 border-b-2 border-blue-600"
+            ? "text-[#0f6e60] border-b-2 border-[#0f6e60]"
             : "text-gray-600 hover:text-gray-900"
             }`}
         >
@@ -271,7 +283,7 @@ export default function QuotesPage() {
         <button
           onClick={() => setActiveTab("field-customization")}
           className={`px-4 py-2 text-sm font-medium transition ${activeTab === "field-customization"
-            ? "text-blue-600 border-b-2 border-blue-600"
+            ? "text-[#0f6e60] border-b-2 border-[#0f6e60]"
             : "text-gray-600 hover:text-gray-900"
             }`}
         >
@@ -280,7 +292,7 @@ export default function QuotesPage() {
         <button
           onClick={() => setActiveTab("validation-rules")}
           className={`px-4 py-2 text-sm font-medium transition ${activeTab === "validation-rules"
-            ? "text-blue-600 border-b-2 border-blue-600"
+            ? "text-[#0f6e60] border-b-2 border-[#0f6e60]"
             : "text-gray-600 hover:text-gray-900"
             }`}
         >
@@ -289,7 +301,7 @@ export default function QuotesPage() {
         <button
           onClick={() => setActiveTab("record-locking")}
           className={`px-4 py-2 text-sm font-medium transition ${activeTab === "record-locking"
-            ? "text-blue-600 border-b-2 border-blue-600"
+            ? "text-[#0f6e60] border-b-2 border-[#0f6e60]"
             : "text-gray-600 hover:text-gray-900"
             }`}
         >
@@ -298,7 +310,7 @@ export default function QuotesPage() {
         <button
           onClick={() => setActiveTab("custom-buttons")}
           className={`px-4 py-2 text-sm font-medium transition ${activeTab === "custom-buttons"
-            ? "text-blue-600 border-b-2 border-blue-600"
+            ? "text-[#0f6e60] border-b-2 border-[#0f6e60]"
             : "text-gray-600 hover:text-gray-900"
             }`}
         >
@@ -307,7 +319,7 @@ export default function QuotesPage() {
         <button
           onClick={() => setActiveTab("related-lists")}
           className={`px-4 py-2 text-sm font-medium transition ${activeTab === "related-lists"
-            ? "text-blue-600 border-b-2 border-blue-600"
+            ? "text-[#0f6e60] border-b-2 border-[#0f6e60]"
             : "text-gray-600 hover:text-gray-900"
             }`}
         >
@@ -317,7 +329,7 @@ export default function QuotesPage() {
 
       {/* General Tab Content */}
       {activeTab === "general" && (
-        <div className="bg-white rounded-lg p-6 space-y-6">
+        <div className="rounded-lg p-6 space-y-6">
           {/* Allow editing of accepted quotes */}
           <div className="pb-6 border-b border-gray-100">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -325,7 +337,7 @@ export default function QuotesPage() {
                 type="checkbox"
                 checked={allowEditingAccepted}
                 onChange={(e) => setAllowEditingAccepted(e.target.checked)}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                className="h-4 w-4 accent-[#0f6e60] focus:ring-[#0f6e60] border-[#0f6e60] rounded checked:bg-[#0f6e60] checked:border-[#0f6e60]"
               />
               <span className="text-sm text-gray-700">Allow editing of accepted quotes</span>
             </label>
@@ -338,7 +350,7 @@ export default function QuotesPage() {
                 type="checkbox"
                 checked={allowCustomerAcceptDecline}
                 onChange={(e) => setAllowCustomerAcceptDecline(e.target.checked)}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                className="h-4 w-4 accent-[#0f6e60] focus:ring-[#0f6e60] border-[#0f6e60] rounded checked:bg-[#0f6e60] checked:border-[#0f6e60]"
               />
               <span className="text-sm text-gray-700">Allow customers to accept or decline the quotes via platforms like Whatsapp, and public link</span>
             </label>
@@ -355,7 +367,7 @@ export default function QuotesPage() {
                   value="dont-convert"
                   checked={automationOption === "dont-convert"}
                   onChange={(e) => setAutomationOption(e.target.value)}
-                  className="mt-1 h-4 w-4"
+                  className="mt-1 h-4 w-4 accent-[#0f6e60] focus:ring-[#0f6e60] border-[#0f6e60]"
                 />
                 <span className="text-sm text-gray-700">Don't convert accepted quotes automatically</span>
               </label>
@@ -366,7 +378,7 @@ export default function QuotesPage() {
                   value="draft-invoice"
                   checked={automationOption === "draft-invoice"}
                   onChange={(e) => setAutomationOption(e.target.value)}
-                  className="mt-1 h-4 w-4"
+                  className="mt-1 h-4 w-4 accent-[#0f6e60] focus:ring-[#0f6e60] border-[#0f6e60]"
                 />
                 <div>
                   <span className="text-sm text-gray-700">Convert accepted quotes to draft invoices</span>
@@ -380,7 +392,7 @@ export default function QuotesPage() {
                   value="send-invoice"
                   checked={automationOption === "send-invoice"}
                   onChange={(e) => setAutomationOption(e.target.value)}
-                  className="mt-1 h-4 w-4"
+                  className="mt-1 h-4 w-4 accent-[#0f6e60] focus:ring-[#0f6e60] border-[#0f6e60]"
                 />
                 <div>
                   <span className="text-sm text-gray-700">Convert accepted quotes to invoices and email it to the customer</span>
@@ -390,11 +402,45 @@ export default function QuotesPage() {
             </div>
           </div>
 
+          {/* Subscription Conversion */}
+          <div className="pb-6 border-b border-gray-100">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">Automatically Convert Subscription Quotes to Subscriptions</h3>
+            <div className="space-y-3">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="subscriptionConversion"
+                  value="dont-convert-subscriptions"
+                  checked={subscriptionConversionOption === "dont-convert-subscriptions"}
+                  onChange={() => setSubscriptionConversionOption("dont-convert-subscriptions")}
+                  className="mt-1 h-4 w-4 accent-[#0f6e60] focus:ring-[#0f6e60] border-[#0f6e60]"
+                />
+                <span className="text-sm text-gray-700">Don't convert quotes to subscriptions automatically</span>
+              </label>
+              <label className="flex flex-col gap-2 cursor-pointer">
+                <div className="flex items-start gap-2">
+                  <input
+                    type="radio"
+                    name="subscriptionConversion"
+                    value="convert-subscriptions"
+                    checked={subscriptionConversionOption === "convert-subscriptions"}
+                    onChange={() => setSubscriptionConversionOption("convert-subscriptions")}
+                    className="mt-1 h-4 w-4 accent-[#0f6e60] focus:ring-[#0f6e60] border-[#0f6e60]"
+                  />
+                  <span className="text-sm text-gray-700">Automatically convert quotes to subscriptions and invoice customers</span>
+                </div>
+                <p className="text-xs text-gray-500 max-w-2xl">
+                  Note: This automatic conversion won't work when you create an autocharge-enabled subscription quote, and the related customer is not associated with a payment method. In these cases, you will need to manually create the subscription.
+                </p>
+              </label>
+            </div>
+          </div>
+
           {/* Progress Invoice */}
           <div className="pb-6 border-b border-gray-100">
             <h3 className="text-sm font-semibold text-gray-900 mb-1 flex items-center gap-2">
               Progress Invoice
-              <a href="#" className="text-[10px] text-blue-600 hover:underline flex items-center gap-1 font-normal uppercase">
+              <a href="#" className="text-[10px] text-[#0f6e60] hover:underline flex items-center gap-1 font-normal uppercase">
                 <Info size={12} />
                 Learn More
               </a>
@@ -404,7 +450,7 @@ export default function QuotesPage() {
                 type="checkbox"
                 checked={allowProgressInvoice}
                 onChange={(e) => setAllowProgressInvoice(e.target.checked)}
-                className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                className="mt-1 h-4 w-4 accent-[#0f6e60] focus:ring-[#0f6e60] border-[#0f6e60] rounded checked:bg-[#0f6e60] checked:border-[#0f6e60]"
               />
               <div>
                 <span className="text-sm text-gray-700">Allow creation of progress invoice from an quote</span>
@@ -423,7 +469,7 @@ export default function QuotesPage() {
                 type="checkbox"
                 checked={hideZeroValueItems}
                 onChange={(e) => setHideZeroValueItems(e.target.checked)}
-                className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                className="mt-1 h-4 w-4 accent-[#0f6e60] focus:ring-[#0f6e60] border-[#0f6e60] rounded checked:bg-[#0f6e60] checked:border-[#0f6e60]"
               />
               <div>
                 <span className="text-sm text-gray-700">Hide zero-value line items</span>
@@ -445,7 +491,7 @@ export default function QuotesPage() {
                   type="checkbox"
                   checked={retainCustomerNotes}
                   onChange={(e) => setRetainCustomerNotes(e.target.checked)}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  className="h-4 w-4 accent-[#0f6e60] focus:ring-[#0f6e60] border-[#0f6e60] rounded checked:bg-[#0f6e60] checked:border-[#0f6e60]"
                 />
                 <span className="text-sm text-gray-700">Customer Notes</span>
               </label>
@@ -454,7 +500,7 @@ export default function QuotesPage() {
                   type="checkbox"
                   checked={retainTermsConditions}
                   onChange={(e) => setRetainTermsConditions(e.target.checked)}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  className="h-4 w-4 accent-[#0f6e60] focus:ring-[#0f6e60] border-[#0f6e60] rounded checked:bg-[#0f6e60] checked:border-[#0f6e60]"
                 />
                 <span className="text-sm text-gray-700">Terms & Conditions</span>
               </label>
@@ -463,7 +509,7 @@ export default function QuotesPage() {
                   type="checkbox"
                   checked={retainAddress}
                   onChange={(e) => setRetainAddress(e.target.checked)}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  className="h-4 w-4 accent-[#0f6e60] focus:ring-[#0f6e60] border-[#0f6e60] rounded checked:bg-[#0f6e60] checked:border-[#0f6e60]"
                 />
                 <span className="text-sm text-gray-700">Address</span>
               </label>
@@ -477,7 +523,7 @@ export default function QuotesPage() {
               value={termsConditions}
               onChange={(e) => setTermsConditions(e.target.value)}
               rows={8}
-              className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none text-sm"
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:ring-[#0f6e60] resize-none text-sm"
               placeholder="Enter terms and conditions"
             />
           </div>
@@ -489,7 +535,7 @@ export default function QuotesPage() {
               value={customerNotes}
               onChange={(e) => setCustomerNotes(e.target.value)}
               rows={8}
-              className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none text-sm"
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:ring-[#0f6e60] resize-none text-sm"
               placeholder="Enter customer notes"
             />
           </div>
@@ -499,7 +545,7 @@ export default function QuotesPage() {
             <button
               onClick={handleSaveGeneral}
               disabled={saving}
-              className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
+              className="px-6 py-2 text-sm font-medium text-white bg-[#0f6e60] rounded-lg hover:bg-[#0f6e60] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
             >
               {saving && <Loader2 size={16} className="animate-spin" />}
               Save
@@ -510,7 +556,7 @@ export default function QuotesPage() {
 
       {/* Approvals Tab Content */}
       {activeTab === "approvals" && (
-        <div className="bg-white rounded-lg p-6">
+        <div className="rounded-lg p-6">
           {/* Approval Type Section */}
           <div className="mb-10">
             <h3 className="text-sm font-semibold text-gray-900 mb-6 font-medium">Approval Type</h3>
@@ -519,7 +565,7 @@ export default function QuotesPage() {
               <div
                 onClick={() => setApprovalType("no-approval")}
                 className={`p-5 border rounded-lg cursor-pointer transition-all relative ${approvalType === "no-approval"
-                  ? "border-blue-500 bg-blue-50 bg-opacity-30"
+                  ? "border-[#0f6e60] bg-[#eaf5f1] bg-opacity-30"
                   : "border-gray-200 hover:border-gray-300"
                   }`}
               >
@@ -530,7 +576,7 @@ export default function QuotesPage() {
                     value="no-approval"
                     checked={approvalType === "no-approval"}
                     onChange={(e) => setApprovalType(e.target.value)}
-                    className="mt-1 h-4 w-4 text-blue-600 border-gray-300"
+                    className="mt-1 h-4 w-4 accent-[#0f6e60] border-[#0f6e60]"
                   />
                   <div>
                     <h4 className="text-[13px] font-semibold text-gray-800 leading-tight">No Approval</h4>
@@ -539,16 +585,13 @@ export default function QuotesPage() {
                     </p>
                   </div>
                 </div>
-                {approvalType === "no-approval" && (
-                  <div className="absolute -bottom-[1px] left-1/2 -translate-x-1/2 w-3 h-3 bg-white border-r border-b border-blue-500 rotate-45 transform translate-y-1/2 z-10" />
-                )}
               </div>
 
               {/* Simple Approval Card */}
               <div
                 onClick={() => setApprovalType("simple")}
                 className={`p-5 border rounded-lg cursor-pointer transition-all relative ${approvalType === "simple"
-                  ? "border-blue-500 bg-blue-50 bg-opacity-30"
+                  ? "border-[#0f6e60] bg-[#eaf5f1] bg-opacity-30"
                   : "border-gray-200 hover:border-gray-300"
                   }`}
               >
@@ -559,7 +602,7 @@ export default function QuotesPage() {
                     value="simple"
                     checked={approvalType === "simple"}
                     onChange={(e) => setApprovalType(e.target.value)}
-                    className="mt-1 h-4 w-4 text-blue-600 border-gray-300"
+                    className="mt-1 h-4 w-4 accent-[#0f6e60] border-[#0f6e60]"
                   />
                   <div>
                     <h4 className="text-[13px] font-semibold text-gray-800 leading-tight">Simple Approval</h4>
@@ -568,16 +611,13 @@ export default function QuotesPage() {
                     </p>
                   </div>
                 </div>
-                {approvalType === "simple" && (
-                  <div className="absolute -bottom-[1px] left-1/2 -translate-x-1/2 w-3 h-3 bg-white border-r border-b border-blue-500 rotate-45 transform translate-y-1/2 z-10" />
-                )}
               </div>
 
               {/* Multi-Level Approval Card */}
               <div
                 onClick={() => setApprovalType("multi-level")}
                 className={`p-5 border rounded-lg cursor-pointer transition-all relative ${approvalType === "multi-level"
-                  ? "border-blue-500 bg-blue-50 bg-opacity-30"
+                  ? "border-[#0f6e60] bg-[#eaf5f1] bg-opacity-30"
                   : "border-gray-200 hover:border-gray-300"
                   }`}
               >
@@ -588,7 +628,7 @@ export default function QuotesPage() {
                     value="multi-level"
                     checked={approvalType === "multi-level"}
                     onChange={(e) => setApprovalType(e.target.value)}
-                    className="mt-1 h-4 w-4 text-blue-600 border-gray-300"
+                    className="mt-1 h-4 w-4 accent-[#0f6e60] border-[#0f6e60]"
                   />
                   <div>
                     <h4 className="text-[13px] font-semibold text-gray-800 leading-tight">Multi-Level Approval</h4>
@@ -597,16 +637,13 @@ export default function QuotesPage() {
                     </p>
                   </div>
                 </div>
-                {approvalType === "multi-level" && (
-                  <div className="absolute -bottom-[1px] left-1/2 -translate-x-1/2 w-3 h-3 bg-white border-r border-b border-blue-500 rotate-45 transform translate-y-1/2 z-10" />
-                )}
               </div>
 
               {/* Custom Approval Card */}
               <div
                 onClick={() => setApprovalType("custom")}
                 className={`p-5 border rounded-lg cursor-pointer transition-all relative ${approvalType === "custom"
-                  ? "border-blue-500 bg-blue-50 bg-opacity-30"
+                  ? "border-[#0f6e60] bg-[#eaf5f1] bg-opacity-30"
                   : "border-gray-200 hover:border-gray-300"
                   }`}
               >
@@ -617,7 +654,7 @@ export default function QuotesPage() {
                     value="custom"
                     checked={approvalType === "custom"}
                     onChange={(e) => setApprovalType(e.target.value)}
-                    className="mt-1 h-4 w-4 text-blue-600 border-gray-300"
+                    className="mt-1 h-4 w-4 accent-[#0f6e60] border-[#0f6e60]"
                   />
                   <div>
                     <h4 className="text-[13px] font-semibold text-gray-800 leading-tight">Custom Approval</h4>
@@ -626,9 +663,6 @@ export default function QuotesPage() {
                     </p>
                   </div>
                 </div>
-                {approvalType === "custom" && (
-                  <div className="absolute -bottom-[1px] left-1/2 -translate-x-1/2 w-3 h-3 bg-white border-r border-b border-blue-500 rotate-45 transform translate-y-1/2 z-10" />
-                )}
               </div>
             </div>
           </div>
@@ -655,7 +689,7 @@ export default function QuotesPage() {
                 /* Multi-Level Approval - Hierarchy Table */
                 <div className="py-8 border-t border-gray-100">
                   <h3 className="text-[11px] font-semibold text-gray-500 mb-4 uppercase tracking-wider">SET THE APPROVAL HIERARCHY</h3>
-                  <div className="border border-gray-200 rounded">
+                  <div className="rounded">
                     <table className="w-full text-left border-collapse">
                       <thead className="bg-[#F9FAFB] border-b border-gray-200">
                         <tr>
@@ -690,7 +724,7 @@ export default function QuotesPage() {
                               }
                             }}
                             onDragEnd={() => setDraggedLevelId(null)}
-                            className={`group hover:bg-gray-50 transition-colors ${activeApproverLevel === level.id ? "relative z-50" : "relative z-0"} ${draggedLevelId === level.id ? "opacity-50 grayscale bg-blue-50" : ""}`}
+                            className={`group hover:bg-gray-50 transition-colors ${activeApproverLevel === level.id ? "relative z-50" : "relative z-0"} ${draggedLevelId === level.id ? "opacity-50 grayscale bg-[#eaf5f1]" : ""}`}
                           >
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-3">
@@ -704,12 +738,12 @@ export default function QuotesPage() {
                                   setActiveApproverLevel(level.id);
                                   setApproverSearch("");
                                 }}
-                                className="w-full flex items-center justify-between border border-gray-200 rounded px-3 py-1.5 text-[13px] bg-white cursor-pointer group hover:border-blue-400 transition-colors"
+                                className="w-full flex items-center justify-between border border-gray-200 rounded px-3 py-1.5 text-[13px] bg-white cursor-pointer group hover:border-[#6eb0a5] transition-colors"
                               >
                                 <span className={level.approver ? "text-gray-800" : "text-gray-400"}>
                                   {level.approver || "Select an approver"}
                                 </span>
-                                <ChevronDown size={14} className="text-gray-400 group-hover:text-blue-500 transition-colors" />
+                                <ChevronDown size={14} className="text-gray-400 group-hover:text-[#0f6e60] transition-colors" />
                               </div>
 
                               {activeApproverLevel === level.id && (
@@ -723,7 +757,7 @@ export default function QuotesPage() {
                                         placeholder="Search..."
                                         value={approverSearch}
                                         onChange={(e) => setApproverSearch(e.target.value)}
-                                        className="w-full pl-9 pr-3 py-1.5 bg-white border border-blue-500 rounded text-[13px] focus:outline-none"
+                                        className="w-full pl-9 pr-3 py-1.5 bg-white border border-[#0f6e60] rounded text-[13px] focus:outline-none"
                                       />
                                       <GripVertical size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hidden" />
                                       {/* Using lucide Search icon or similar */}
@@ -749,12 +783,12 @@ export default function QuotesPage() {
                                           setActiveApproverLevel(null);
                                         }}
                                         className={`px-3 py-2 rounded text-[13px] cursor-pointer transition-colors ${level.approver === user.name
-                                          ? "bg-blue-500 text-white"
-                                          : "text-gray-700 hover:bg-blue-500 hover:text-white"
+                                          ? "bg-[#eaf5f1] text-white"
+                                          : "text-gray-700 hover:bg-[#eaf5f1] hover:text-white"
                                           }`}
                                       >
                                         <div className="font-medium">{user.name}</div>
-                                        <div className={`text-[11px] ${level.approver === user.name ? "text-blue-100" : "text-gray-500"}`}>
+                                        <div className={`text-[11px] ${level.approver === user.name ? "text-[#e7f2ef]" : "text-gray-500"}`}>
                                           [{user.email}]
                                         </div>
                                       </div>
@@ -777,7 +811,7 @@ export default function QuotesPage() {
                           <td colSpan={3} className="px-4 py-3">
                             <button
                               onClick={addApprovalLevel}
-                              className="text-[13px] text-blue-600 hover:text-blue-700 font-medium flex items-center gap-2"
+                              className="text-[13px] text-[#0f6e60] hover:text-[#0f6e60] font-medium flex items-center gap-2"
                             >
                               Add New Level
                             </button>
@@ -804,13 +838,13 @@ export default function QuotesPage() {
                         <h3 className="text-[13px] font-semibold text-gray-900 uppercase tracking-tight">Custom Approval Rules</h3>
                         <button
                           onClick={() => navigate("/settings/quotes/new-custom-approval")}
-                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-[12px] font-semibold rounded shadow-sm transition-all flex items-center gap-2"
+                          className="px-4 py-2 bg-[#0f6e60] hover:bg-[#0f6e60] text-white text-[12px] font-semibold rounded shadow-sm transition-all flex items-center gap-2"
                         >
                           <Plus size={14} />
                           New Custom Approval
                         </button>
                       </div>
-                      <div className="border border-gray-200 rounded overflow-hidden shadow-sm bg-white">
+                      <div className="rounded overflow-hidden shadow-sm">
                         <table className="w-full text-left border-collapse">
                           <thead className="bg-[#F9FAFB] border-b border-gray-200">
                             <tr>
@@ -824,7 +858,7 @@ export default function QuotesPage() {
                           <tbody className="divide-y divide-gray-100">
                             {approvalRules.map((rule) => (
                               <tr key={rule._id} className="group hover:bg-gray-50/50 transition-colors">
-                                <td className="px-6 py-4 text-[13px] font-semibold text-blue-600 hover:underline cursor-pointer">
+                                <td className="px-6 py-4 text-[13px] font-semibold text-[#0f6e60] hover:underline cursor-pointer">
                                   {rule.name}
                                 </td>
                                 <td className="px-6 py-4 text-[13px] text-gray-600">
@@ -851,7 +885,7 @@ export default function QuotesPage() {
                     </div>
                   ) : (
                     <div className="bg-[#F8F9FA]/50 rounded-lg p-12 flex flex-col items-center text-center">
-                      <div className="w-64 h-48 mb-8 flex items-center justify-center text-blue-100">
+                      <div className="w-64 h-48 mb-8 flex items-center justify-center text-[#e7f2ef]">
                         <svg width="256" height="192" viewBox="0 0 256 192" fill="none" xmlns="http://www.w3.org/2000/svg">
                           <rect x="20" y="80" width="40" height="50" rx="4" fill="currentColor" stroke="#3B82F6" strokeWidth="2" />
                           <line x1="60" y1="105" x2="90" y2="105" stroke="#94A3B8" strokeWidth="2" strokeDasharray="4 4" />
@@ -869,7 +903,7 @@ export default function QuotesPage() {
                       </p>
                       <button
                         onClick={() => navigate("/settings/quotes/new-custom-approval")}
-                        className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold rounded shadow-sm transition-all active:scale-95"
+                        className="px-6 py-2 bg-[#eaf5f1] hover:bg-[#0f6e60] text-white text-sm font-semibold rounded shadow-sm transition-all active:scale-95"
                       >
                         New Custom Approval
                       </button>
@@ -898,7 +932,7 @@ export default function QuotesPage() {
                           type="checkbox"
                           checked={sendNotifications}
                           onChange={(e) => setSendNotifications(e.target.checked)}
-                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        className="h-4 w-4 accent-[#0f6e60] focus:ring-[#0f6e60] border-[#0f6e60] rounded checked:bg-[#0f6e60] checked:border-[#0f6e60]"
                         />
                         <span className="text-[13px] text-gray-700 font-medium">Send email and in-app notifications when transactions are submitted for approval</span>
                       </label>
@@ -912,7 +946,7 @@ export default function QuotesPage() {
                               value="non-approver"
                               checked={notificationPreference === "non-approver"}
                               onChange={(e) => setNotificationPreference(e.target.value)}
-                              className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                              className="h-4 w-4 accent-[#0f6e60] text-[#0f6e60] border-gray-300 focus:ring-[#0f6e60]"
                             />
                             <span className="text-[13px] text-gray-600 group-hover:text-gray-900 transition-colors">Notify all approvers when a non-approver submits a transaction</span>
                           </label>
@@ -923,7 +957,7 @@ export default function QuotesPage() {
                               value="all-submitters"
                               checked={notificationPreference === "all-submitters"}
                               onChange={(e) => setNotificationPreference(e.target.value)}
-                              className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                              className="h-4 w-4 accent-[#0f6e60] text-[#0f6e60] border-gray-300 focus:ring-[#0f6e60]"
                             />
                             <span className="text-[13px] text-gray-600 group-hover:text-gray-900 transition-colors">Notify all approvers when an approver/non-approver submits a transaction</span>
                           </label>
@@ -934,7 +968,7 @@ export default function QuotesPage() {
                               value="specific-email"
                               checked={notificationPreference === "specific-email"}
                               onChange={(e) => setNotificationPreference(e.target.value)}
-                              className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                              className="h-4 w-4 accent-[#0f6e60] text-[#0f6e60] border-gray-300 focus:ring-[#0f6e60]"
                             />
                             <span className="text-[13px] text-gray-600 group-hover:text-gray-900 transition-colors">Notify a specific email address</span>
                           </label>
@@ -945,7 +979,7 @@ export default function QuotesPage() {
                                 placeholder="abc@example.com"
                                 value={notificationEmail}
                                 onChange={(e) => setNotificationEmail(e.target.value)}
-                                className="w-full max-w-md px-3 py-2 border border-gray-200 rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder:text-gray-400 shadow-sm"
+                                className="w-full max-w-md px-3 py-2 border border-gray-200 rounded-md text-[13px] focus:outline-none focus:ring-1 focus:ring-[#0f6e60] focus:border-[#0f6e60] transition-all placeholder:text-gray-400 shadow-sm"
                               />
                             </div>
                           )}
@@ -959,7 +993,7 @@ export default function QuotesPage() {
                           type="checkbox"
                           checked={notifySubmitter}
                           onChange={(e) => setNotifySubmitter(e.target.checked)}
-                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                          className="h-4 w-4 accent-[#0f6e60] text-[#0f6e60] border-gray-300 rounded focus:ring-[#0f6e60]"
                         />
                         <span className="text-[13px] text-gray-700 font-medium">Notify the submitter when a transaction is approved or rejected</span>
                       </label>
@@ -975,7 +1009,7 @@ export default function QuotesPage() {
             <button
               onClick={handleSaveApprovals}
               disabled={saving}
-              className="px-4 py-1.5 text-sm font-medium text-white bg-blue-500 rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
+              className="px-4 py-1.5 text-sm font-medium text-white bg-[#eaf5f1] rounded hover:bg-[#0f6e60] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
             >
               {saving && <Loader2 size={16} className="animate-spin" />}
               Save
@@ -1003,7 +1037,7 @@ export default function QuotesPage() {
               </button>
             </div>
 
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="rounded-lg overflow-hidden">
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
@@ -1052,7 +1086,7 @@ export default function QuotesPage() {
               </button>
             </div>
 
-            <div className="bg-white rounded-lg border border-gray-200 p-12">
+            <div className="rounded-lg p-12">
               <div className="text-center">
                 <h3 className="text-xl font-semibold text-gray-900 mb-4">Create Validation Rules</h3>
                 <p className="text-sm text-gray-600 mb-8 max-w-2xl mx-auto">
@@ -1060,20 +1094,20 @@ export default function QuotesPage() {
                 </p>
 
                 <div className="max-w-2xl mx-auto">
-                  <div className="border-2 border-blue-200 rounded-lg p-6 bg-blue-50">
+                  <div className="border-2 border-[#bfe3db] rounded-lg p-6 bg-[#eaf5f1]">
                     <div className="text-left mb-4">
                       <span className="text-sm font-semibold text-gray-900">Validation Rule</span>
                     </div>
 
                     <div className="space-y-4">
                       <div className="flex justify-center">
-                        <div className="w-20 h-20 rounded-full bg-blue-200 border-2 border-blue-400 flex items-center justify-center">
+                        <div className="w-20 h-20 rounded-full bg-[#d7f0ec] border-2 border-[#6eb0a5] flex items-center justify-center">
                           <span className="text-xs font-semibold text-gray-900">WHEN</span>
                         </div>
                       </div>
 
                       <div className="flex justify-center">
-                        <div className="w-0.5 h-8 bg-blue-300"></div>
+                        <div className="w-0.5 h-8 bg-[#cfe8df]"></div>
                       </div>
 
                       <div className="flex items-center justify-center gap-4">
@@ -1083,10 +1117,10 @@ export default function QuotesPage() {
                           <Edit2 size={16} className="text-gray-400" />
                         </div>
 
-                        <button className="w-8 h-8 rounded-full bg-blue-200 border-2 border-blue-400 flex items-center justify-center text-blue-600 hover:bg-blue-300 transition">
+                        <button className="w-8 h-8 rounded-full bg-[#d7f0ec] border-2 border-[#6eb0a5] flex items-center justify-center text-[#0f6e60] hover:bg-[#cfe8df] transition">
                           <Plus size={16} />
                         </button>
-                        <span className="text-xs text-blue-600">+ Add Subrule</span>
+                        <span className="text-xs text-[#0f6e60]">+ Add Subrule</span>
 
                         <div className="border-2 border-blue-300 rounded-lg p-4 bg-white min-w-[200px] flex items-center justify-between">
                           <span className="text-sm text-gray-500">---</span>
@@ -1095,11 +1129,11 @@ export default function QuotesPage() {
                       </div>
 
                       <div className="flex justify-center">
-                        <div className="w-0.5 h-8 bg-blue-300"></div>
+                        <div className="w-0.5 h-8 bg-[#cfe8df]"></div>
                       </div>
 
                       <div className="flex justify-center">
-                        <button className="w-8 h-8 rounded-full bg-blue-200 border-2 border-blue-400 flex items-center justify-center text-blue-600 hover:bg-blue-300 transition">
+                        <button className="w-8 h-8 rounded-full bg-[#d7f0ec] border-2 border-[#6eb0a5] flex items-center justify-center text-[#0f6e60] hover:bg-[#cfe8df] transition">
                           <Plus size={16} />
                         </button>
                       </div>
@@ -1122,10 +1156,10 @@ export default function QuotesPage() {
             <div className="flex items-center justify-between mb-6">
               <div></div>
               <div className="flex items-center gap-3">
-                <button className="text-sm text-blue-600 hover:text-blue-700 hover:underline">
+                <button className="text-sm text-[#0f6e60] hover:text-[#0f6e60] hover:underline">
                   What's this?
                 </button>
-                <button className="text-sm text-blue-600 hover:text-blue-700 hover:underline">
+                <button className="text-sm text-[#0f6e60] hover:text-[#0f6e60] hover:underline">
                   View Logs
                 </button>
                 <div className="relative" ref={newButtonDropdownRef}>
@@ -1146,7 +1180,7 @@ export default function QuotesPage() {
                   </div>
                   {showNewButtonDropdown && (
                     <div className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 z-50 min-w-[200px]">
-                      <button className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600">
+                      <button className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-[#eaf5f1] hover:text-[#0f6e60]">
                         New Button
                       </button>
                     </div>
@@ -1162,7 +1196,7 @@ export default function QuotesPage() {
                   <select
                     value={locationFilter}
                     onChange={(e) => setLocationFilter(e.target.value)}
-                    className="h-9 px-3 pr-8 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
+                    className="h-9 px-3 pr-8 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#0f6e60] appearance-none bg-white"
                   >
                     <option value="All">All</option>
                     <option value="Details Page Menu">Details Page Menu</option>
@@ -1173,7 +1207,7 @@ export default function QuotesPage() {
               </div>
             </div>
 
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="rounded-lg overflow-hidden">
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
@@ -1221,7 +1255,7 @@ export default function QuotesPage() {
               </button>
             </div>
 
-            <div className="bg-white rounded-lg border border-gray-200 p-12">
+            <div className="rounded-lg p-12">
               <div className="flex flex-col items-center justify-center py-12">
                 <div className="relative mb-8 flex items-center justify-center" style={{ width: "200px", height: "200px" }}>
                   <div
@@ -1284,7 +1318,7 @@ export default function QuotesPage() {
                     ></div>
 
                     <div
-                      className="absolute rounded-full border-4 border-blue-500 bg-blue-100"
+                      className="absolute rounded-full border-4 border-[#0f6e60] bg-[#e7f2ef]"
                       style={{
                         width: "50px",
                         height: "50px",
