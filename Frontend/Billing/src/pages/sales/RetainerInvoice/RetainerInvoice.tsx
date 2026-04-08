@@ -24,7 +24,8 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { deleteInvoice, getInvoicesPaginated, Invoice } from "../salesModel";
+import { deleteInvoice, Invoice } from "../salesModel";
+import { useRetainerListQuery } from "./retainerInvoiceQueries";
 import { useOrganizationBranding } from "../../../hooks/useOrganizationBranding";
 
 type RetainerRow = {
@@ -319,26 +320,20 @@ export default function RetainerInvoice() {
   const columnToolsRef = useRef<HTMLTableCellElement>(null);
   const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
 
-  const loadRetainers = async () => {
-    setLoading(true);
-    try {
-      const response = await getInvoicesPaginated({ limit: 1000, sort: "createdAt", order: "desc" });
-      const invoices: Invoice[] = Array.isArray(response?.data) ? response.data : [];
-      const mapped = invoices
-        .filter((invoice) => String(invoice.invoiceNumber || "").toUpperCase().startsWith("RET-"))
-        .map(mapInvoiceToRetainer);
-      setRows(mapped);
-    } catch (error) {
-      console.error("Failed to load retainer invoices:", error);
-      setRows([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const retainerListQuery = useRetainerListQuery();
 
   useEffect(() => {
-    loadRetainers();
-  }, []);
+    if (Array.isArray(retainerListQuery.data) && retainerListQuery.data.length > 0) {
+      setRows(retainerListQuery.data.map(mapInvoiceToRetainer));
+    } else if (!retainerListQuery.isFetching) {
+      setRows([]);
+    }
+  }, [retainerListQuery.data, retainerListQuery.isFetching]);
+
+  useEffect(() => {
+    const hasData = Array.isArray(retainerListQuery.data) && retainerListQuery.data.length > 0;
+    setLoading(retainerListQuery.isFetching && !hasData);
+  }, [retainerListQuery.isFetching, retainerListQuery.data]);
 
   useEffect(() => {
     try {
@@ -537,6 +532,7 @@ export default function RetainerInvoice() {
       setBulkDeleteLoading(true);
       await Promise.all(deleteRetainerIds.map((retainerId) => deleteInvoice(retainerId)));
       setRows((prev) => prev.filter((row) => !deleteRetainerIds.includes(row.id)));
+      await retainerListQuery.refetch();
       setSelectedRowIds(new Set());
       setIsDeleteModalOpen(false);
       setDeleteRetainerIds([]);
@@ -1158,7 +1154,7 @@ export default function RetainerInvoice() {
 
                     <button
                       onClick={() => {
-                        loadRetainers();
+                        retainerListQuery.refetch();
                         setMoreDropdownOpen(false);
                       }}
                       className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors"

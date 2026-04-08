@@ -328,27 +328,12 @@ export const signup = async (req: express.Request, res: express.Response) => {
       // no-op
     }
     const passwordHash = await bcrypt.hash(password, 10);
-    const created = await User.create({
-      name,
-      email,
-      passwordHash,
-      organizationId: org._id,
-      role: "admin",
-      sessionVersion: 0,
-      emailVerified: false,
-      emailVerifiedAt: null,
-    });
-    setSessionCookie(res, String(created._id));
+    const created = await User.create({ name, email, passwordHash, organizationId: org._id, role: "admin", sessionVersion: 0 });    setSessionCookie(res, String(created._id));
     const token = issueSessionToken(String(created._id), Number((created as any).sessionVersion || 0));
     const authUser = await buildAuthUserData(created);
     return res.status(201).json({
       success: true,
-      message: "Account created. Please verify your email to continue.",
-      data: {
-        ...authUser,
-        requiresEmailVerification: true,
-      },
-      token,
+      data: authUser,      token,
     });
   } catch (error: any) {
     if (error?.code === 11000 && error?.keyPattern?.email) {
@@ -366,13 +351,10 @@ export const signup = async (req: express.Request, res: express.Response) => {
 };
 
 export const checkEmailExists = async (req: express.Request, res: express.Response) => {
-  const realAuthAvailable = hasRealAuthDatabase();
-
-  if (AUTH_BYPASS && !realAuthAvailable) {
+  if (AUTH_BYPASS) {
     return res.json({ success: true, data: { exists: false } });
   }
-  if (!realAuthAvailable) {
-    return res.status(500).json({ success: false, message: "Auth/DB not configured", data: null });
+  if (!isConfiguredForRealAuth()) {    return res.status(500).json({ success: false, message: "Auth/DB not configured", data: null });
   }
 
   const email = normalizeEmail(req.body?.email);
@@ -921,3 +903,4 @@ export const updateMe = async (req: express.Request, res: express.Response) => {
     },
   });
 };
+

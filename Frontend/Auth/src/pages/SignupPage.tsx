@@ -122,12 +122,6 @@ export default function SignupPage() {
   const emailIsTaken = emailExists && !checkingEmail;
 
   useEffect(() => {
-    writeDraftValue(SIGNUP_DRAFT_KEY("name"), name);
-    writeDraftValue(SIGNUP_DRAFT_KEY("email"), email);
-    writeSessionDraftValue(SIGNUP_DRAFT_KEY("password"), password);
-  }, [draftKey, email, name, password]);
-
-  useEffect(() => {
     let active = true;
 
     if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
@@ -149,6 +143,12 @@ export default function SignupPage() {
       clearTimeout(timer);
     };
   }, [trimmedEmail]);
+
+  useEffect(() => {
+    writeDraftValue(SIGNUP_DRAFT_KEY("name"), name);
+    writeDraftValue(SIGNUP_DRAFT_KEY("email"), email);
+    writeSessionDraftValue(SIGNUP_DRAFT_KEY("password"), password);
+  }, [draftKey, email, name, password]);
 
   useEffect(() => {
     const input = emailInputRef.current;
@@ -327,7 +327,11 @@ export default function SignupPage() {
                 Log in
               </Link>
             </p>
-          ) : null}
+          ) : (
+            <p id="signup-email-help" className="mt-2 text-xs text-slate-500">
+              We'll let you know if this email is already in use.
+            </p>
+          )}
         </div>
 
         <div className={fieldWrapClass}>
@@ -377,3 +381,4 @@ export default function SignupPage() {
     </AuthShell>
   );
 }
+

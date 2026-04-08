@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
-import { getSalesReceiptById, getSalesReceipts, deleteSalesReceipt, updateSalesReceipt, saveSalesReceipt, SalesReceipt } from "../../salesModel";
+import { getSalesReceipts, deleteSalesReceipt, updateSalesReceipt, saveSalesReceipt, SalesReceipt } from "../../salesModel";
 import { currenciesAPI, salesReceiptsAPI, senderEmailsAPI } from "../../../../services/api";
 import { getCurrentUser } from "../../../../services/auth";
 import { resolveVerifiedPrimarySender } from "../../../../utils/emailSenderDisplay";
@@ -15,6 +15,7 @@ import {
   User, Calendar, Paperclip, MessageSquare, Upload, Pencil, Trash2
 } from "lucide-react";
 import { getStatesByCountry } from "../../../../constants/locationData";
+import { useSalesReceiptQuery } from "../salesReceiptsQueries";
 
 interface DetailedSalesReceipt extends SalesReceipt {
   currency?: string;
@@ -87,6 +88,7 @@ const getSalesReceiptStatusLabel = (value: any) =>
 export default function SalesReceiptDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const receiptQuery = useSalesReceiptQuery(id);
   const [receipt, setReceipt] = useState<DetailedSalesReceipt | null>(null);
   const [receipts, setReceipts] = useState<SalesReceipt[]>([]);
   const [baseCurrency, setBaseCurrency] = useState("USD");
@@ -146,39 +148,42 @@ export default function SalesReceiptDetail() {
   const receiptDocumentRef = useRef<HTMLDivElement>(null);
   const stateOptions = getStatesByCountry(receipt?.organizationProfile?.country || "");
 
-  console.log("SalesReceiptDetail component mounted/rendered with ID:", id);
-
   const periodOptions = ["All", "Today", "This Week", "This Month", "This Quarter", "This Year", "Custom"];
 
   useEffect(() => {
-    const loadReceiptData = async () => {
-      setIsLoading(true);
-      try {
-        const receiptData = await getSalesReceiptById(id!);
-        console.log("SalesReceiptDetail - ID:", id);
-        console.log("SalesReceiptDetail - Receipt Data:", receiptData);
-        if (receiptData) {
-          setReceipt(receiptData);
-          setReceiptAttachments(Array.isArray((receiptData as any).attachments) ? (receiptData as any).attachments : []);
-          setReceiptComments(Array.isArray((receiptData as any).comments) ? (receiptData as any).comments : []);
-        } else {
-          console.warn("SalesReceiptDetail - Receipt not found for ID:", id);
-          navigate("/sales/sales-receipts");
-          return;
-        }
-        const allReceipts = await getSalesReceipts();
-        console.log("SalesReceiptDetail - All receipts:", allReceipts);
-        setReceipts(allReceipts);
-      } catch (error) {
-        console.error("Error loading receipt details:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    setIsLoading(receiptQuery.isLoading);
+  }, [receiptQuery.isLoading]);
 
-    loadReceiptData();
+  useEffect(() => {
+    if (receiptQuery.isLoading) {
+      return;
+    }
 
-    // Fetch Base Currency
+    if (receiptQuery.data) {
+      setReceipt(receiptQuery.data);
+      setReceiptAttachments(
+        Array.isArray((receiptQuery.data as any).attachments)
+          ? (receiptQuery.data as any).attachments
+          : []
+      );
+      setReceiptComments(
+        Array.isArray((receiptQuery.data as any).comments)
+          ? (receiptQuery.data as any).comments
+          : []
+      );
+
+      getSalesReceipts()
+        .then((allReceipts) => setReceipts(allReceipts))
+        .catch((error) => console.error("Error loading sales receipts:", error));
+      return;
+    }
+
+    if (receiptQuery.isError && id) {
+      navigate("/sales/sales-receipts");
+    }
+  }, [receiptQuery.data, receiptQuery.isError, receiptQuery.isLoading, id, navigate]);
+
+  useEffect(() => {
     const fetchBaseCurrency = async () => {
       try {
         const response = await currenciesAPI.getBaseCurrency();
@@ -191,14 +196,12 @@ export default function SalesReceiptDetail() {
     };
     fetchBaseCurrency();
 
-    // Load organization logo from localStorage
-    const savedLogo = localStorage.getItem('organization_logo');
+    const savedLogo = localStorage.getItem("organization_logo");
     if (savedLogo) {
       setLogoPreview(savedLogo);
     }
 
-    // Load organization address data from localStorage
-    const savedAddress = localStorage.getItem('organization_address');
+    const savedAddress = localStorage.getItem("organization_address");
     if (savedAddress) {
       try {
         setOrganizationData(JSON.parse(savedAddress));
@@ -206,7 +209,7 @@ export default function SalesReceiptDetail() {
         console.error("Error loading organization address:", e);
       }
     }
-  }, [id, navigate]);
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

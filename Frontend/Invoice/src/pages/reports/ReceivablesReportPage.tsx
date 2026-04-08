@@ -23,10 +23,7 @@ type ReceivablesReportId =
   | "ar-aging-summary"
   | "ar-aging-details"
   | "invoice-details"
-  | "credit-note-details"
-  | "quote-details"
-  | "receivable-summary"
-  | "receivable-details";
+  | "quote-details";
 
 type ReportRow = { values: Record<string, any> };
 
@@ -58,10 +55,6 @@ type DateRangeKey =
   | "previous-quarter"
   | "previous-year"
   | "custom";
-type DateRangeValue = {
-  start: Date;
-  end: Date;
-};
 type CompareWithKey = "none" | "previous-years" | "previous-periods";
 type ReportPayload = {
   rows: ReportRow[];
@@ -130,16 +123,7 @@ const COMPARATORS = [
 
 const NO_VALUE = new Set(["is-empty", "is-not-empty"]);
 const CURRENCY_CODES = ["SOS", "USD", "EUR", "GBP", "KES"];
-type EntityKey = "invoice" | "credit-note" | "sales-receipt";
-type EntityOption = {
-  key: EntityKey;
-  label: string;
-};
-const ENTITY_OPTIONS: EntityOption[] = [
-  { key: "invoice", label: "Invoice" },
-  { key: "credit-note", label: "Credit Note" },
-  { key: "sales-receipt", label: "Sales Receipt" },
-];
+const ENTITY_OPTIONS = [{ key: "invoice", label: "Invoice" }];
 type AgingByKey = "invoice-due-date" | "invoice-date";
 const AGING_BY_OPTIONS: Array<{ key: AgingByKey; label: string }> = [
   { key: "invoice-due-date", label: "Invoice Due Date" },
@@ -538,144 +522,6 @@ function ReportsDrawer({
   );
 }
 
-const RECEIVABLE_TRANSACTION_TYPE_OPTIONS: FilterOption[] = [
-  { key: "invoice", label: "Invoice" },
-  { key: "credit-note", label: "Credit Note" },
-  { key: "sales-receipt", label: "Sales Receipt" },
-];
-
-const RECEIVABLE_SUMMARY_COLUMN_GROUPS: ColumnGroup[] = [
-  {
-    label: "Reports",
-    options: [
-      {
-        key: "customer-name",
-        label: "Customer Name",
-        kind: "text",
-        locked: true,
-      },
-      { key: "date", label: "Date", kind: "date" },
-      { key: "transaction", label: "Transaction#", kind: "text" },
-      { key: "reference-number", label: "Reference#", kind: "text" },
-      { key: "status", label: "Status", kind: "text" },
-      {
-        key: "transaction-type",
-        label: "Transaction Type",
-        kind: "text",
-      },
-      { key: "total-bcy", label: "Total (BCY)", kind: "currency" },
-      { key: "total-fcy", label: "Total (FCY)", kind: "currency" },
-      { key: "balance-bcy", label: "Balance (BCY)", kind: "currency" },
-      { key: "balance-fcy", label: "Balance (FCY)", kind: "currency" },
-    ],
-  },
-];
-
-const RECEIVABLE_SUMMARY_MORE_FILTER_GROUPS: FilterGroup[] = [
-  {
-    label: "Reports",
-    options: [
-      { key: "customer-name", label: "Customer Name" },
-      { key: "date", label: "Date" },
-      { key: "transaction", label: "Transaction#" },
-      { key: "reference-number", label: "Reference#" },
-      { key: "status", label: "Status" },
-      {
-        key: "transaction-type",
-        label: "Transaction Type",
-        values: RECEIVABLE_TRANSACTION_TYPE_OPTIONS,
-      },
-      { key: "total-bcy", label: "Total (BCY)" },
-      { key: "total-fcy", label: "Total (FCY)" },
-      { key: "balance-bcy", label: "Balance (BCY)" },
-      { key: "balance-fcy", label: "Balance (FCY)" },
-      {
-        key: "currency",
-        label: "Currency",
-        values: CURRENCY_CODES.map((value) => ({ key: value, label: value })),
-      },
-    ],
-  },
-  {
-    label: "Locations",
-    options: [
-      {
-        key: "location",
-        label: "Location",
-        values: [
-          { key: "mogadishu", label: "Mogadishu" },
-          { key: "hargeisa", label: "Hargeisa" },
-        ],
-      },
-    ],
-  },
-];
-
-const RECEIVABLE_SUMMARY_MORE_FILTER_VALUES: Record<string, FilterOption[]> = {
-  "transaction-type": RECEIVABLE_TRANSACTION_TYPE_OPTIONS,
-  currency: CURRENCY_CODES.map((value) => ({ key: value, label: value })),
-  location: [
-    { key: "mogadishu", label: "Mogadishu" },
-    { key: "hargeisa", label: "Hargeisa" },
-  ],
-};
-
-const CREDIT_NOTE_DETAILS_MORE_FILTER_GROUPS: FilterGroup[] = [
-  {
-    label: "Reports",
-    options: [
-      { key: "status", label: "Status" },
-      { key: "invoice-date", label: "Credit Date" },
-      { key: "invoice-number", label: "Credit Note#" },
-      { key: "order-number", label: "Reference#" },
-      { key: "customer-name", label: "Customer Name" },
-      { key: "total", label: "Credit Note Amount" },
-      { key: "balance", label: "Balance Amount" },
-      {
-        key: "currency",
-        label: "Currency",
-        values: CURRENCY_CODES.map((value) => ({ key: value, label: value })),
-      },
-    ],
-  },
-  {
-    label: "Locations",
-    options: [
-      {
-        key: "location",
-        label: "Location",
-        values: [
-          { key: "mogadishu", label: "Mogadishu" },
-          { key: "hargeisa", label: "Hargeisa" },
-        ],
-      },
-    ],
-  },
-];
-
-const CREDIT_NOTE_DETAILS_MORE_FILTER_VALUES: Record<string, FilterOption[]> = {
-  currency: CURRENCY_CODES.map((value) => ({ key: value, label: value })),
-  location: [
-    { key: "mogadishu", label: "Mogadishu" },
-    { key: "hargeisa", label: "Hargeisa" },
-  ],
-};
-
-const CREDIT_NOTE_DETAILS_COLUMN_GROUPS: ColumnGroup[] = [
-  {
-    label: "Reports",
-    options: [
-      { key: "status", label: "Status", kind: "text", locked: true },
-      { key: "invoice-date", label: "Credit Date", kind: "date" },
-      { key: "invoice-number", label: "Credit Note#", kind: "text" },
-      { key: "order-number", label: "Reference#", kind: "text" },
-      { key: "customer-name", label: "Customer Name", kind: "text" },
-      { key: "total", label: "Credit Note Amount", kind: "currency" },
-      { key: "balance", label: "Balance Amount", kind: "currency" },
-    ],
-  },
-];
-
 const RECEIVABLES_CONFIG: Record<ReceivablesReportId, ReportConfig> = {
   "ar-aging-summary": {
     fetcher: reportsAPI.getARAgingSummary,
@@ -1015,40 +861,6 @@ const RECEIVABLES_CONFIG: Record<ReceivablesReportId, ReportConfig> = {
       "balance",
     ],
   },
-  "credit-note-details": {
-    fetcher: reportsAPI.getCreditNoteDetails,
-    title: "Credit Note Details",
-    subtitleMode: "from-to",
-    defaultRange: "this-month",
-    showEntities: false,
-    showReportBy: false,
-    showAgingBy: false,
-    rightControls: [
-      {
-        label: "Group By",
-        state: "groupBy",
-        options: [
-          { key: "none", label: "None" },
-          { key: "customer-name", label: "Customer Name" },
-          { key: "status", label: "Status" },
-          { key: "currency", label: "Currency" },
-          { key: "location", label: "Location" },
-        ],
-      },
-    ],
-    moreFilterGroups: CREDIT_NOTE_DETAILS_MORE_FILTER_GROUPS,
-    moreFilterValues: CREDIT_NOTE_DETAILS_MORE_FILTER_VALUES,
-    columns: CREDIT_NOTE_DETAILS_COLUMN_GROUPS,
-    defaultColumns: [
-      "status",
-      "invoice-date",
-      "invoice-number",
-      "order-number",
-      "customer-name",
-      "total",
-      "balance",
-    ],
-  },
   "quote-details": {
     fetcher: reportsAPI.getQuoteDetails,
     title: "Quote Details",
@@ -1168,82 +980,6 @@ const RECEIVABLES_CONFIG: Record<ReceivablesReportId, ReportConfig> = {
       "quote-amount",
     ],
   },
-  "receivable-summary": {
-    fetcher: reportsAPI.getReceivableSummary,
-    title: "Receivable Summary",
-    subtitleMode: "from-to",
-    defaultRange: "this-month",
-    showEntities: true,
-    showReportBy: false,
-    showAgingBy: false,
-    rightControls: [
-      {
-        label: "Group By",
-        state: "groupBy",
-        options: [
-          { key: "none", label: "None" },
-          { key: "customer-name", label: "Customer Name" },
-          { key: "status", label: "Status" },
-          { key: "transaction-type", label: "Transaction Type" },
-          { key: "currency", label: "Currency" },
-          { key: "location", label: "Location" },
-        ],
-      },
-    ],
-    moreFilterGroups: RECEIVABLE_SUMMARY_MORE_FILTER_GROUPS,
-    moreFilterValues: RECEIVABLE_SUMMARY_MORE_FILTER_VALUES,
-    columns: RECEIVABLE_SUMMARY_COLUMN_GROUPS,
-    defaultColumns: [
-      "customer-name",
-      "date",
-      "transaction",
-      "reference-number",
-      "status",
-      "transaction-type",
-      "total-bcy",
-      "total-fcy",
-      "balance-bcy",
-      "balance-fcy",
-    ],
-  },
-  "receivable-details": {
-    fetcher: reportsAPI.getReceivableSummary,
-    title: "Receivable Details",
-    subtitleMode: "from-to",
-    defaultRange: "this-month",
-    showEntities: true,
-    showReportBy: false,
-    showAgingBy: false,
-    rightControls: [
-      {
-        label: "Group By",
-        state: "groupBy",
-        options: [
-          { key: "none", label: "None" },
-          { key: "customer-name", label: "Customer Name" },
-          { key: "status", label: "Status" },
-          { key: "transaction-type", label: "Transaction Type" },
-          { key: "currency", label: "Currency" },
-          { key: "location", label: "Location" },
-        ],
-      },
-    ],
-    moreFilterGroups: RECEIVABLE_SUMMARY_MORE_FILTER_GROUPS,
-    moreFilterValues: RECEIVABLE_SUMMARY_MORE_FILTER_VALUES,
-    columns: RECEIVABLE_SUMMARY_COLUMN_GROUPS,
-    defaultColumns: [
-      "customer-name",
-      "date",
-      "transaction",
-      "reference-number",
-      "status",
-      "transaction-type",
-      "total-bcy",
-      "total-fcy",
-      "balance-bcy",
-      "balance-fcy",
-    ],
-  },
 };
 
 const columnLookup = (reportId: ReceivablesReportId, key: string) =>
@@ -1265,12 +1001,10 @@ const makeFilterRow = (): FilterRow => ({
 
 export default function ReceivablesReportPage({
   reportId,
-  categoryId = "receivables",
 }: {
   reportId: ReceivablesReportId;
-  categoryId?: string;
 }) {
-  if (!getReportById(categoryId, reportId))
+  if (!getReportById("receivables", reportId))
     return <Navigate to="/reports" replace />;
   return <ReceivablesReportShell reportId={reportId} />;
 }
@@ -1294,7 +1028,6 @@ function ReceivablesReportShell({
       window.location.search.includes("debug=1"));
 
   const dateRangeRef = useRef<HTMLDivElement | null>(null);
-  const entityRef = useRef<HTMLDivElement | null>(null);
   const [dateRangeKey, setDateRangeKey] = useState<DateRangeKey>(
     config.defaultRange,
   );
@@ -1315,13 +1048,7 @@ function ReceivablesReportShell({
     { key: "invoice-date", label: "Invoice Date" },
     { key: "due-date", label: "Due Date" },
   ];
-  const [entityKeys, setEntityKeys] = useState<EntityKey[]>(() =>
-    reportId === "receivable-summary" || reportId === "receivable-details"
-      ? ENTITY_OPTIONS.map((option) => option.key)
-      : ["invoice"],
-  );
-  const [isEntityOpen, setIsEntityOpen] = useState(false);
-  const [entitySearch, setEntitySearch] = useState("");
+  const [entities, setEntities] = useState("invoice");
   const agingByRef = useRef<HTMLDivElement | null>(null);
   const [agingByOpen, setAgingByOpen] = useState(false);
   const [agingBy, setAgingBy] = useState<AgingByKey>("invoice-due-date");
@@ -1394,20 +1121,6 @@ function ReceivablesReportShell({
   );
   const rows = (payload?.rows ?? []) as ReportRow[];
   const totals = payload?.totals ?? null;
-  const filteredEntityOptions = useMemo(() => {
-    const query = entitySearch.trim().toLowerCase();
-    return ENTITY_OPTIONS.filter((option) =>
-      option.label.toLowerCase().includes(query),
-    );
-  }, [entitySearch]);
-  const getEntitySelectionLabel = (keys: EntityKey[]) => {
-    if (keys.length === 0) return "None";
-    if (keys.length === ENTITY_OPTIONS.length) return "All";
-    return ENTITY_OPTIONS.filter((option) => keys.includes(option.key))
-      .map((option) => option.label)
-      .join(", ");
-  };
-  const entityLabel = getEntitySelectionLabel(entityKeys);
 
   useEffect(() => {
     const load = async () => {
@@ -1426,9 +1139,7 @@ function ReceivablesReportShell({
           showBy,
           agingIntervals,
         };
-        if (config.showEntities && entityKeys.length > 0) {
-          params.entities = entityKeys.join(",");
-        }
+        if (config.showEntities) params.entities = entities;
         if (config.showAgingBy) params.agingBy = agingBy;
         if (config.showReportBy) params.reportBy = reportBy;
         if (debugReceivables) {
@@ -1453,7 +1164,7 @@ function ReceivablesReportShell({
     agingBy,
     agingIntervals,
     config,
-    entityKeys,
+    entities,
     groupBy,
     moreFilters,
     selectedDateRange.end.getTime(),
@@ -1503,23 +1214,6 @@ function ReceivablesReportShell({
     return String(value);
   };
 
-  const formatCellForRow = (
-    column: ColumnOption,
-    value: any,
-    rowValues?: Record<string, any>,
-  ) => {
-    if (value === null || value === undefined || value === "") return "—";
-    if (column.kind === "currency") {
-      const currency = column.key.endsWith("-fcy")
-        ? String(rowValues?.currency || payload?.currency || "SOS")
-        : String(payload?.currency || "SOS");
-      return currencyValue(value, currency);
-    }
-    if (column.kind === "number") return numberValue(value);
-    if (column.kind === "date") return dateValue(value);
-    return String(value);
-  };
-
   const addFilterRow = () =>
     setMoreFilters((rows) => [...rows, makeFilterRow()]);
   const updateFilterRow = (id: string, patch: Partial<FilterRow>) =>
@@ -1531,8 +1225,6 @@ function ReceivablesReportShell({
   const openColumns = () => {
     setColumnDraft(selectedColumns);
     setColumnsOpen(true);
-    setIsEntityOpen(false);
-    setMoreFiltersOpen(false);
     setDateRangeOpen(false);
     setIsCustomDateRangeOpen(false);
     setAgingByOpen(false);
@@ -1549,8 +1241,6 @@ function ReceivablesReportShell({
     setCompareWithDraftKey(compareWithKey);
     setCompareWithDraftCount(compareWithKey === "none" ? 1 : compareWithCount);
     setCompareWithDraftArrangeLatest(compareWithArrangeLatest);
-    setIsEntityOpen(false);
-    setMoreFiltersOpen(false);
     setDateRangeOpen(false);
     setIsCustomDateRangeOpen(false);
     setAgingByOpen(false);
@@ -1559,25 +1249,12 @@ function ReceivablesReportShell({
   };
 
   const openAgingByDropdown = () => {
-    setIsEntityOpen(false);
-    setMoreFiltersOpen(false);
     setDateRangeOpen(false);
     setIsCustomDateRangeOpen(false);
     setColumnsOpen(false);
     setCompareWithOpen(false);
     setCompareWithCountOpen(false);
     setAgingByOpen((prev) => !prev);
-  };
-
-  const openEntityDropdown = () => {
-    setDateRangeOpen(false);
-    setIsCustomDateRangeOpen(false);
-    setColumnsOpen(false);
-    setMoreFiltersOpen(false);
-    setAgingByOpen(false);
-    setCompareWithOpen(false);
-    setCompareWithCountOpen(false);
-    setIsEntityOpen((prev) => !prev);
   };
 
   const applyCompareWith = () => {
@@ -1602,15 +1279,12 @@ function ReceivablesReportShell({
     if (dateRangeOpen) {
       setDateRangeOpen(false);
       setIsCustomDateRangeOpen(false);
-      setIsEntityOpen(false);
       setAgingByOpen(false);
       return;
     }
 
     const currentRange =
       dateRangeKey === "custom" ? customDateRange : getRange(dateRangeKey);
-    setIsEntityOpen(false);
-    setMoreFiltersOpen(false);
     setDateRangeDraftKey(dateRangeKey);
     setCustomDateRangeDraft(currentRange);
     setCustomDateRangeMonth(getStartOfMonth(currentRange.start));
@@ -1683,30 +1357,6 @@ function ReceivablesReportShell({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [dateRangeOpen, cancelDateRangeSelection]);
-
-  useEffect(() => {
-    if (!isEntityOpen) return;
-
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (!entityRef.current?.contains(target)) {
-        setIsEntityOpen(false);
-      }
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setIsEntityOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isEntityOpen]);
 
   useEffect(() => {
     if (!agingByOpen) return;
@@ -2212,7 +1862,7 @@ function ReceivablesReportShell({
                             className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
                               isSelected
                                 ? "font-medium text-[#0f172a]"
-                                : "text-[#334155] hover:bg-[#f8fafc]"
+                                : "text-[#334155]"
                             }`}
                           >
                             <span>{option.label}</span>
@@ -2229,113 +1879,25 @@ function ReceivablesReportShell({
             ) : null}
 
             {config.showEntities ? (
-              <div ref={entityRef} className="relative inline-flex">
-                <button
-                  type="button"
-                  onClick={openEntityDropdown}
-                  className={`relative inline-flex h-8 w-[184px] items-center overflow-hidden rounded border px-3 pr-12 text-sm text-[#334155] hover:bg-white ${
-                    isEntityOpen
-                      ? "border-[#1b6f7b] bg-white"
-                      : "border-[#cfd6e4] bg-[#f8fafc]"
-                  }`}
-                  aria-haspopup="menu"
-                  aria-expanded={isEntityOpen}
+              <label className="inline-flex h-8 items-center gap-2 rounded border border-[#cfd6e4] bg-[#f8fafc] px-3 text-sm text-[#334155]">
+                <span>Entities :</span>
+                <select
+                  value={entities}
+                  onChange={(event) => setEntities(event.target.value)}
+                  className="bg-transparent outline-none"
                 >
-                  <span className="shrink-0 whitespace-nowrap">Entities :</span>
-                  <span className="min-w-0 flex-1 truncate text-left font-medium whitespace-nowrap">
-                    {entityLabel}
-                  </span>
-                  <ChevronDown
-                    size={14}
-                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#334155]"
-                  />
-                </button>
-
-                {entityKeys.length > 0 ? (
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setEntityKeys([]);
-                    }}
-                    className="absolute right-6 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-[#ef4444] hover:bg-[#fef2f2]"
-                    aria-label="Clear selected entities"
-                  >
-                    <X size={12} />
-                  </button>
-                ) : null}
-
-                {isEntityOpen ? (
-                  <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-[168px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
-                    <div className="border-b border-[#eef2f7] p-2">
-                      <div className="relative">
-                        <input
-                          value={entitySearch}
-                          onChange={(event) =>
-                            setEntitySearch(event.target.value)
-                          }
-                          placeholder="Search"
-                          className="h-9 w-full rounded-md border border-[#1b6f7b] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
-                        />
-                        <Search
-                          size={14}
-                          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="max-h-[220px] overflow-y-auto py-1">
-                      {filteredEntityOptions.length > 0 ? (
-                        filteredEntityOptions.map((option) => {
-                          const isSelected = entityKeys.includes(option.key);
-                          return (
-                            <button
-                              key={option.key}
-                              type="button"
-                              onClick={() => {
-                                setEntityKeys((prev) =>
-                                  prev.includes(option.key)
-                                    ? prev.filter((key) => key !== option.key)
-                                    : [...prev, option.key],
-                                );
-                              }}
-                              className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm ${
-                                isSelected
-                                  ? "bg-[#f1f5f9] font-medium text-[#0f172a]"
-                                  : "text-[#334155] hover:bg-[#f8fafc]"
-                              }`}
-                            >
-                              <span className="inline-flex h-4 w-4 items-center justify-center rounded border border-[#c7d0de] bg-white">
-                                {isSelected ? (
-                                  <Check size={12} className="text-[#0f172a]" />
-                                ) : null}
-                              </span>
-                              <span>{option.label}</span>
-                            </button>
-                          );
-                        })
-                      ) : (
-                        <div className="px-4 py-3 text-sm text-[#64748b]">
-                          No results.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
+                  {ENTITY_OPTIONS.map((option) => (
+                    <option key={option.key} value={option.key}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             ) : null}
 
             <button
               type="button"
-              onClick={() => {
-                setIsEntityOpen(false);
-                setDateRangeOpen(false);
-                setIsCustomDateRangeOpen(false);
-                setAgingByOpen(false);
-                setCompareWithOpen(false);
-                setCompareWithCountOpen(false);
-                setMoreFiltersOpen((value) => !value);
-              }}
+              onClick={() => setMoreFiltersOpen((value) => !value)}
               className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
             >
               <Plus size={14} className="text-[#1b6f7b]" /> More Filters
@@ -2754,11 +2316,7 @@ function ReceivablesReportShell({
                               key={column.key}
                               className={`px-4 py-3 text-sm ${columnIndex === 0 ? "font-medium text-[#0f172a]" : "text-[#2563eb]"}`}
                             >
-                              {formatCellForRow(
-                                column,
-                                row.values[column.key],
-                                row.values,
-                              )}
+                              {formatCell(column, row.values[column.key])}
                             </td>
                           ))}
                         </tr>

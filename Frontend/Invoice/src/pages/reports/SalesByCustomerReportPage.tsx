@@ -287,19 +287,6 @@ const getReportColumnGroupLabel = (key: ReportColumnKey) => {
   return group?.label ?? "Reports";
 };
 
-const getReportColumnOptionForReport = (
-  key: ReportColumnKey,
-  reportId: SalesReportId,
-) => {
-  const option = getReportColumnOption(key);
-  const labelOverride =
-    REPORT_MODE_COLUMN_LABEL_OVERRIDES[reportId]?.[key] ?? option.label;
-  return {
-    ...option,
-    label: labelOverride,
-  };
-};
-
 const DATE_RANGE_OPTIONS: DateRangeOption[] = [
   { key: "today", label: "Today" },
   { key: "this-week", label: "This Week" },
@@ -331,11 +318,6 @@ const COMPARE_WITH_NUMBER_OPTIONS = Array.from({ length: 35 }, (_, index) =>
 );
 
 type ReportColumnKey = string;
-type SalesReportId =
-  | "sales-by-customer"
-  | "customer-balance-summary"
-  | "bad-debts"
-  | "bank-charges";
 type ReportColumnKind = "text" | "number" | "currency";
 
 type ReportColumnOption = {
@@ -348,30 +330,6 @@ type ReportColumnOption = {
 type ReportColumnGroup = {
   label: string;
   options: ReportColumnOption[];
-};
-
-const REPORT_MODE_COLUMN_LABEL_OVERRIDES: Record<
-  SalesReportId,
-  Partial<Record<ReportColumnKey, string>>
-> = {
-  "sales-by-customer": {},
-  "customer-balance-summary": {
-    "invoice-amount": "Invoiced Amount",
-    "invoice-amount-fcy": "Invoiced Amount (FCY)",
-    "amount-received": "Amount Received",
-    "amount-received-fcy": "Amount Received (FCY)",
-    "closing-balance": "Closing Balance",
-    "closing-balance-fcy": "Closing Balance (FCY)",
-  },
-  "bad-debts": {
-    sales: "Write Off Amount (FCY)",
-    "sales-with-tax": "Write Off Amount (BCY)",
-  },
-  "bank-charges": {
-    sales: "Bank Charges (FCY)",
-    "sales-with-tax": "Bank Charges (BCY)",
-    "invoice-count": "Payment Count",
-  },
 };
 
 const REPORT_COLUMN_GROUPS: ReportColumnGroup[] = [
@@ -402,26 +360,6 @@ const REPORT_COLUMN_GROUPS: ReportColumnGroup[] = [
       {
         key: "invoice-amount-fcy",
         label: "Invoice Amount (FCY)",
-        kind: "currency",
-      },
-      {
-        key: "amount-received",
-        label: "Amount Received",
-        kind: "currency",
-      },
-      {
-        key: "amount-received-fcy",
-        label: "Amount Received (FCY)",
-        kind: "currency",
-      },
-      {
-        key: "closing-balance",
-        label: "Closing Balance",
-        kind: "currency",
-      },
-      {
-        key: "closing-balance-fcy",
-        label: "Closing Balance (FCY)",
         kind: "currency",
       },
       {
@@ -612,12 +550,6 @@ type SalesByCustomerRow = {
 
 const formatCurrency = (value: number, currency = "SOS") =>
   `${currency}${value.toFixed(2)}`;
-
-const formatBalanceCurrency = (value: number, currency = "SOS") => {
-  const absolute = Math.abs(value).toFixed(2);
-  if (value === 0) return `${currency}${absolute}`;
-  return `${currency}${absolute} ${value < 0 ? "Cr" : "Dr"}`;
-};
 
 type ReportsDrawerSection = {
   id: string;
@@ -944,7 +876,6 @@ function ReportActivityDrawer({
 function SalesByCustomerReportView({
   categoryName,
   reportName,
-  reportId,
   menuButtonRef,
   onMenuClick,
   onRunReport,
@@ -953,7 +884,6 @@ function SalesByCustomerReportView({
 }: {
   categoryName: string;
   reportName: string;
-  reportId: SalesReportId;
   menuButtonRef: React.RefObject<HTMLButtonElement | null>;
   onMenuClick: () => void;
   onRunReport: () => void;
@@ -966,33 +896,20 @@ function SalesByCustomerReportView({
   const compareWithCountRef = useRef<HTMLDivElement | null>(null);
   const moreFiltersRef = useRef<HTMLDivElement | null>(null);
   const exportRef = useRef<HTMLDivElement | null>(null);
-  const isSalesByCustomerReport = reportId === "sales-by-customer";
-  const isCustomerBalanceSummaryReport =
-    reportId === "customer-balance-summary";
-  const isBadDebtsReport = reportId === "bad-debts";
-  const isBankChargesReport = reportId === "bank-charges";
-  const defaultDateRangeKey: DateRangeKey = isSalesByCustomerReport
-    ? "this-week"
-    : "this-month";
-  const [dateRangeKey, setDateRangeKey] =
-    useState<DateRangeKey>(defaultDateRangeKey);
+  const [dateRangeKey, setDateRangeKey] = useState<DateRangeKey>("this-week");
   const [dateRangeDraftKey, setDateRangeDraftKey] =
-    useState<DateRangeKey>(defaultDateRangeKey);
+    useState<DateRangeKey>("this-week");
   const [isDateRangeOpen, setIsDateRangeOpen] = useState(false);
   const [isCustomDateRangeOpen, setIsCustomDateRangeOpen] = useState(false);
   const [customDateRange, setCustomDateRange] = useState<DateRangeValue>(() =>
-    getDateRangeValue(defaultDateRangeKey),
+    getDateRangeValue("this-week"),
   );
   const [customDateRangeDraft, setCustomDateRangeDraft] =
-    useState<DateRangeValue>(() => getDateRangeValue(defaultDateRangeKey));
+    useState<DateRangeValue>(() => getDateRangeValue("this-week"));
   const [customDateRangeMonth, setCustomDateRangeMonth] = useState<Date>(() =>
-    getStartOfMonth(getDateRangeValue(defaultDateRangeKey).start),
+    getStartOfMonth(getDateRangeValue("this-week").start),
   );
-  const [entityKeys, setEntityKeys] = useState<EntityKey[]>(
-    isCustomerBalanceSummaryReport
-      ? ENTITY_OPTIONS.map((option) => option.key)
-      : [],
-  );
+  const [entityKeys, setEntityKeys] = useState<EntityKey[]>([]);
   const [isEntityOpen, setIsEntityOpen] = useState(false);
   const [entitySearch, setEntitySearch] = useState("");
   const [compareWithKey, setCompareWithKey] = useState<CompareWithKey>("none");
@@ -1015,17 +932,15 @@ function SalesByCustomerReportView({
   >("general");
   const customizeDateRangeRef = useRef<HTMLDivElement | null>(null);
   const [customizeDateRangeDraftKey, setCustomizeDateRangeDraftKey] =
-    useState<DateRangeKey>(defaultDateRangeKey);
+    useState<DateRangeKey>("this-week");
   const [isCustomizeDateRangeOpen, setIsCustomizeDateRangeOpen] =
     useState(false);
   const [isCustomizeCustomDateRangeOpen, setIsCustomizeCustomDateRangeOpen] =
     useState(false);
   const [customizeCustomDateRangeDraft, setCustomizeCustomDateRangeDraft] =
-    useState<DateRangeValue>(() => getDateRangeValue(defaultDateRangeKey));
+    useState<DateRangeValue>(() => getDateRangeValue("this-week"));
   const [customizeCustomDateRangeMonth, setCustomizeCustomDateRangeMonth] =
-    useState<Date>(() =>
-      getStartOfMonth(getDateRangeValue(defaultDateRangeKey).start),
-    );
+    useState<Date>(() => getStartOfMonth(getDateRangeValue("this-week").start));
   const [customizeColumnsSearch, setCustomizeColumnsSearch] = useState("");
   const customizeCompareRef = useRef<HTMLDivElement | null>(null);
   const customizeCompareCountRef = useRef<HTMLDivElement | null>(null);
@@ -1049,19 +964,14 @@ function SalesByCustomerReportView({
   >([]);
   const [selectedReportColumns, setSelectedReportColumns] = useState<
     ReportColumnKey[]
-  >(isSalesByCustomerReport
-    ? ["name", "invoice-count", "sales", "sales-with-tax"]
-    : isCustomerBalanceSummaryReport
-      ? ["name", "invoice-amount", "amount-received", "closing-balance"]
-      : ["name", "sales", "sales-with-tax"]);
+  >(["name", "invoice-count", "sales", "sales-with-tax"]);
   const [customizeDraftSelectedColumns, setCustomizeDraftSelectedColumns] =
-    useState<ReportColumnKey[]>(
-      isSalesByCustomerReport
-        ? ["name", "invoice-count", "sales", "sales-with-tax"]
-        : isCustomerBalanceSummaryReport
-          ? ["name", "invoice-amount", "amount-received", "closing-balance"]
-          : ["name", "sales", "sales-with-tax"],
-    );
+    useState<ReportColumnKey[]>([
+      "name",
+      "invoice-count",
+      "sales",
+      "sales-with-tax",
+    ]);
   const { settings } = useSettings();
   const organizationName = String(
     settings?.general?.companyDisplayName ||
@@ -1529,35 +1439,28 @@ function SalesByCustomerReportView({
 
   const selectedCustomizeColumns = useMemo(
     () =>
-      customizeDraftSelectedColumns.map((key) =>
-        getReportColumnOptionForReport(key, reportId),
-      ),
-    [customizeDraftSelectedColumns, reportId],
+      customizeDraftSelectedColumns.map((key) => getReportColumnOption(key)),
+    [customizeDraftSelectedColumns],
   );
 
   const filteredCustomizeGroups = useMemo(() => {
     const query = customizeColumnsSearch.trim().toLowerCase();
-    return REPORT_COLUMN_GROUPS.map((group) => {
-      const options = group.options
-        .map((option) => getReportColumnOptionForReport(option.key, reportId))
-        .filter((option) => {
-          if (customizeDraftSelectedColumns.includes(option.key)) return false;
-          if (!query) return true;
-          return (
-            option.label.toLowerCase().includes(query) ||
-            group.label.toLowerCase().includes(query)
-          );
-        });
-      return { label: group.label, options };
-    }).filter((group) => group.options.length > 0);
-  }, [customizeColumnsSearch, customizeDraftSelectedColumns, reportId]);
+    return REPORT_COLUMN_GROUPS.map((group) => ({
+      label: group.label,
+      options: group.options.filter((option) => {
+        if (customizeDraftSelectedColumns.includes(option.key)) return false;
+        if (!query) return true;
+        return (
+          option.label.toLowerCase().includes(query) ||
+          group.label.toLowerCase().includes(query)
+        );
+      }),
+    })).filter((group) => group.options.length > 0);
+  }, [customizeColumnsSearch, customizeDraftSelectedColumns]);
 
   const visibleReportColumns = useMemo(
-    () =>
-      selectedReportColumns.map((key) =>
-        getReportColumnOptionForReport(key, reportId),
-      ),
-    [selectedReportColumns, reportId],
+    () => selectedReportColumns.map((key) => getReportColumnOption(key)),
+    [selectedReportColumns],
   );
 
   const formatReportColumnValue = (
@@ -1566,11 +1469,6 @@ function SalesByCustomerReportView({
   ) => {
     if (value === undefined || value === null || value === "") return "—";
     const option = getReportColumnOption(key);
-    if (
-      (key === "closing-balance" || key === "closing-balance-fcy") &&
-      typeof value === "number"
-    )
-      return formatBalanceCurrency(value, reportCurrency || "SOS");
     if (option.kind === "currency" && typeof value === "number")
       return formatCurrency(value, reportCurrency || "SOS");
     return String(value);
@@ -1585,11 +1483,6 @@ function SalesByCustomerReportView({
           return typeof value === "number" ? sum + value : sum;
         }, 0);
         if (option.kind === "number") return total;
-        if (
-          option.key === "closing-balance" ||
-          option.key === "closing-balance-fcy"
-        )
-          return formatBalanceCurrency(total, reportCurrency || "SOS");
         if (option.kind === "currency")
           return formatCurrency(total, reportCurrency || "SOS");
         return "";
@@ -1641,14 +1534,9 @@ function SalesByCustomerReportView({
       setReportError("");
 
       try {
-        const query = buildSalesByCustomerQuery();
-        const response = isCustomerBalanceSummaryReport
-          ? await reportsAPI.getCustomerBalanceSummary(query)
-          : isBankChargesReport
-            ? await reportsAPI.getBankCharges(query)
-            : isBadDebtsReport
-              ? await reportsAPI.getBadDebts(query)
-              : await reportsAPI.getSalesByCustomer(query);
+        const response = await reportsAPI.getSalesByCustomer(
+          buildSalesByCustomerQuery(),
+        );
         if (cancelled) return;
 
         const data = response?.data || {};
@@ -1679,12 +1567,7 @@ function SalesByCustomerReportView({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    isBadDebtsReport,
-    isBankChargesReport,
-    isCustomerBalanceSummaryReport,
-    reportRefreshTick,
-  ]);
+  }, [reportRefreshTick]);
 
   const closeAllOpenPanels = () => {
     setIsCompareWithOpen(false);
@@ -5006,12 +4889,7 @@ export default function ReportDetailPage() {
     : null;
   const calculatorPrecision = report.calculator?.precision ?? 2;
 
-  if (
-    report.id === "sales-by-customer" ||
-    report.id === "customer-balance-summary" ||
-    report.id === "bad-debts" ||
-    report.id === "bank-charges"
-  ) {
+  if (report.id === "sales-by-customer") {
     return (
       <div className="relative min-h-[calc(100vh-64px)] pt-3">
         <ReportsDrawer
@@ -5031,10 +4909,8 @@ export default function ReportDetailPage() {
           } ${isReportActivityOpen ? "lg:pr-[300px]" : ""}`}
         >
           <SalesByCustomerReportView
-            key={report.id}
             categoryName={category.name}
             reportName={report.name}
-            reportId={report.id as SalesReportId}
             menuButtonRef={reportsMenuButtonRef}
             onMenuClick={() => setIsReportsDrawerOpen((prev) => !prev)}
             onActivityClick={() => setIsReportActivityOpen((prev) => !prev)}

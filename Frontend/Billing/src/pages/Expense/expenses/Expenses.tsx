@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { getExpenseCustomViews } from "../shared/purchasesModel";
 import { useNavigate, useLocation } from "react-router-dom";
 import BulkUpdateModal from "../shared/BulkUpdateModal";
@@ -12,8 +12,9 @@ import {
   customersAPI,
   chartOfAccountsAPI,
   bankAccountsAPI,
-  currenciesAPI
+  currenciesAPI,
 } from "../../../services/api";
+import { useExpensesQuery } from "./expensesQueries";
 import { useCurrency } from "../../../hooks/useCurrency";
 import {
   ChevronDown,
@@ -182,6 +183,15 @@ export default function Expenses() {
   const uploadMenuRef = useRef(null);
   const fileInputRef = useRef(null);
   const [hoveredMenuItem, setHoveredMenuItem] = useState(null);
+  const expensesQuery = useExpensesQuery({ baseCurrencyCode: baseCurrency?.code });
+  const refreshData = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await expensesQuery.refetch();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [expensesQuery]);
   const resizingRef = useRef<{ key: string; startX: number; startWidth: number } | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
     const defaults = {
@@ -302,163 +312,6 @@ export default function Expenses() {
     });
   };
 
-  // Load expenses from API
-  const loadExpenses = async () => {
-    try {
-      setIsRefreshing(true);
-      const extractCollection = (response: any): any[] => {
-        if (Array.isArray(response)) return response;
-        if (Array.isArray(response?.data)) return response.data;
-        if (Array.isArray(response?.data?.data)) return response.data.data;
-        if (Array.isArray(response?.vendors)) return response.vendors;
-        if (Array.isArray(response?.customers)) return response.customers;
-        if (Array.isArray(response?.accounts)) return response.accounts;
-        return [];
-      };
-      // Fetch expenses, contacts and accounts in parallel to ensure we can display names
-      const [response, vendorsResponse, customersResponse, accountsResponse, bankAccountsResponse, cursResp] = await Promise.all([
-        expensesAPI.getAll({ limit: 1000 }),
-        vendorsAPI.getAll({ limit: 1000 }),
-        customersAPI.getAll({ limit: 1000 }),
-        chartOfAccountsAPI.getAccounts({ limit: 1000 }),
-        bankAccountsAPI.getAll({ limit: 1000 }),
-        currenciesAPI.getAll(),
-      ]);
-
-      const vendors = extractCollection(vendorsResponse);
-      const customers = extractCollection(customersResponse);
-      const chartAccounts = extractCollection(accountsResponse);
-      const bankAccounts = extractCollection(bankAccountsResponse);
-      const cursList = Array.isArray(cursResp) ? cursResp : (cursResp?.data || []);
-
-      const mergedAccountsMap = new Map<string, any>();
-      [...chartAccounts, ...bankAccounts].forEach((account: any) => {
-        const id = String(account?._id || account?.id || "");
-        const name = String(account?.accountName || account?.name || "").trim();
-        const mapKey = id || name.toLowerCase();
-        if (!mapKey) return;
-        if (!mergedAccountsMap.has(mapKey)) {
-          mergedAccountsMap.set(mapKey, account);
-        }
-      });
-      const accounts = Array.from(mergedAccountsMap.values());
-
-      setVendorsList(vendors);
-      setCustomersList(customers);
-      setAccountsList(accounts);
-      setCurrencies(cursList);
-
-      if (response && (response.code === 0 || response.success) && (response.expenses || response.data)) {
-        const apiExpenses = response.expenses || response.data || [];
-
-        // Create quick lookup maps
-        const vendorById = new Map<string, any>(
-          vendors
-            .map((v: any) => [String(v?._id || v?.id || ""), v] as [string, any])
-            .filter(([id]) => Boolean(id))
-        );
-        const customerById = new Map<string, any>(
-          customers
-            .map((c: any) => [String(c?._id || c?.id || ""), c] as [string, any])
-            .filter(([id]) => Boolean(id))
-        );
-        const accountById = new Map<string, any>(
-          accounts
-            .map((a: any) => [String(a?._id || a?.id || ""), a] as [string, any])
-            .filter(([id]) => Boolean(id))
-        );
-
-        const mapped = apiExpenses.map((expense: any) => {
-          const vendor = vendorById.get(String(expense.vendor_id || ""));
-          const customer = customerById.get(String(expense.customer_id || ""));
-          const paidThroughAccount = accountById.get(String(expense.paid_through_account_id || ""));
-          const expenseAccount = accountById.get(String(expense.account_id || ""));
-          const vendorName = expense.vendor_name || expense.vendorName || expense.vendor?.name || vendor?.displayName || vendor?.name || "";
-          const customerName = expense.customer_name || expense.customerName || expense.customer?.name || customer?.displayName || customer?.name || "";
-          const paidThroughName = expense.paid_through_account_name || expense.paidThrough || paidThroughAccount?.accountName || "";
-
-          return {
-            ...expense,
-            id: expense.expense_id || expense._id || expense.id,
-            date: expense.date ? new Date(expense.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : "",
-            expenseAccount: expense.account_name || expenseAccount?.accountName || "",
-            amount: expense.total ?? expense.amount ?? expense.sub_total ?? 0,
-            currency: baseCurrency?.code || expense.currency_code || "USD",
-            currencySymbol: (() => {
-              const currencyStr = baseCurrency?.code || expense.currency_code || "USD";
-              const code = currencyStr.split(" - ")[0];
-              const match = cursList.find((c: any) => c.code === code || c.code === currencyStr);
-              return match ? match.symbol : code || currencyStr;
-            })(),
-            paidThrough: paidThroughName || "",
-            vendor: vendorName || "",
-            reference: expense.reference_number,
-            location: expense.location_name || expense.location || "Head Office",
-            customerName: customerName || "",
-            status: (expense.status || "").toUpperCase(),
-            notes: expense.description,
-            hasAttachment: hasAnyAttachment(expense),
-          };
-        });
-
-        setExpenses(mapped);
-
-        // Backfill missing vendor_name / paid_through_account_name on the server if we could resolve them locally
-        const updates: Array<Promise<any>> = [];
-        mapped.forEach((m) => {
-          const raw = m; // includes raw fields
-          const apiId = raw.expense_id || raw.id;
-          const payload: any = {};
-          let needsUpdate = false;
-          if (!raw.vendor_name && raw.vendor && (raw.vendor_id || vendors.length > 0)) {
-            // try to find vendor id
-            const v = vendors.find((x: any) => (x.displayName || x.name) === raw.vendor || x._id === raw.vendor_id || x.id === raw.vendor_id);
-            if (v) {
-              payload.vendor_id = v._id || v.id;
-              payload.vendor_name = v.displayName || v.name;
-              needsUpdate = true;
-            } else if (raw.vendor) {
-              payload.vendor_name = raw.vendor;
-              needsUpdate = true;
-            }
-          }
-          if (!raw.paid_through_account_name && raw.paidThrough && (raw.paid_through_account_id || accounts.length > 0)) {
-            const a = accounts.find((x: any) => x.accountName === raw.paidThrough || x._id === raw.paid_through_account_id || x.id === raw.paid_through_account_id);
-            if (a) {
-              payload.paid_through_account_id = a._id || a.id;
-              payload.paid_through_account_name = a.accountName;
-              needsUpdate = true;
-            } else if (raw.paidThrough) {
-              payload.paid_through_account_name = raw.paidThrough;
-              needsUpdate = true;
-            }
-          }
-          if (needsUpdate && apiId) {
-            updates.push(expensesAPI.update(apiId, payload).catch((err) => { console.error('Backfill update failed for expense', apiId, err); }));
-          }
-        });
-
-        if (updates.length > 0) {
-          // fire and forget; continue after they settle
-          Promise.allSettled(updates).then(() => {
-            // refresh to reflect server changes
-            loadExpenses();
-          });
-        }
-      } else {
-        setExpenses([]);
-      }
-    } catch (e) {
-      console.error("Error loading expenses:", e);
-      setExpenses([]);
-      setVendorsList([]);
-      setCustomersList([]);
-      setAccountsList([]);
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
-
   const downloadSampleFile = (type) => {
     const headers = ["Expense Date", "Expense Account", "Amount", "Paid Through", "Vendor Name", "Customer Name", "Reference#", "Description"];
     const sampleData = [
@@ -492,7 +345,7 @@ export default function Expenses() {
   };
 
   const handleRefresh = () => {
-    loadExpenses();
+    void refreshData();
   };
 
   const handleAttachFromDesktop = () => {
@@ -520,14 +373,51 @@ export default function Expenses() {
     }
   };
 
-  useEffect(() => {
-    loadExpenses();
-  }, []);
 
-  // Reload expenses when location changes (e.g., coming back from new expense page)
   useEffect(() => {
-    loadExpenses();
-  }, [location.pathname]);
+    const reload = () => {
+      void refreshData();
+    };
+    window.addEventListener("storage", reload);
+    const visibilityHandler = () => {
+      if (!document.hidden) {
+        void refreshData();
+      }
+    };
+    document.addEventListener("visibilitychange", visibilityHandler);
+
+    return () => {
+      window.removeEventListener("storage", reload);
+      document.removeEventListener("visibilitychange", visibilityHandler);
+    };
+  }, [refreshData]);
+
+  useEffect(() => {
+    if (expensesQuery.isLoading) {
+      setIsLoading(true);
+      return;
+    }
+
+    setIsLoading(false);
+
+    if (expensesQuery.data) {
+      const { expenses: fetchedExpenses, vendors, customers, accounts, currencies: cursList } = expensesQuery.data;
+      setExpenses(fetchedExpenses);
+      setVendorsList(vendors);
+      setCustomersList(customers);
+      setAccountsList(accounts);
+      setCurrencies(cursList);
+      return;
+    }
+
+    if (expensesQuery.isError) {
+      setExpenses([]);
+      setVendorsList([]);
+      setCustomersList([]);
+      setAccountsList([]);
+      setCurrencies([]);
+    }
+  }, [expensesQuery.data, expensesQuery.isLoading, expensesQuery.isError]);
 
   // Handle Esc key to clear selection
   useEffect(() => {
@@ -588,7 +478,7 @@ export default function Expenses() {
       const failed = results.filter(r => !r.success).length;
 
       // Refresh expenses from database
-      await loadExpenses();
+      await refreshData();
 
       // Show success/error notification
       if (failed === 0) {
@@ -843,12 +733,12 @@ export default function Expenses() {
       setSelectedExpenses([]);
       window.dispatchEvent(new Event("expensesUpdated"));
       window.dispatchEvent(new Event("storage"));
-      await loadExpenses();
+      await refreshData();
     } catch (err) {
       console.error("Bulk update error", err);
       setNotification("Bulk update failed");
       setTimeout(() => setNotification(null), 3000);
-      await loadExpenses();
+      await refreshData();
     }
   };
 

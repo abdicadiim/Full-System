@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -471,53 +471,40 @@ export default function Quotes() {
     };
   }, []);
 
-  const refreshData = async () => {
-    setIsRefreshing(true);
+  const loadMetadata = useCallback(async () => {
     try {
-      const [loadedQuotes, loadedCustomers, loadedSalespersons, loadedProjects] = await Promise.all([
-        getQuotes(),
+      const [loadedCustomers, loadedSalespersons, loadedProjects] = await Promise.all([
         getCustomers(),
         getSalespersons(),
         getProjects()
       ]);
-      setQuotes(Array.isArray(loadedQuotes) ? loadedQuotes : []);
       setCustomers(Array.isArray(loadedCustomers) ? loadedCustomers : []);
       setSalespersons(Array.isArray(loadedSalespersons) ? loadedSalespersons : []);
       setProjects(Array.isArray(loadedProjects) ? loadedProjects : []);
       setCustomViews(getCustomViews().filter(v => v.type === "quotes"));
     } catch (error) {
+      console.error("Error refreshing quotes metadata:", error);
+      setCustomers([]);
+      setSalespersons([]);
+      setProjects([]);
+    }
+  }, []);
+
+  const refreshData = async () => {
+    setIsRefreshing(true);
+    try {
+      await loadMetadata();
+      await invalidateQuoteQueries(queryClient);
+    } catch (error) {
       console.error("Error refreshing quotes:", error);
-      setQuotes([]);
     } finally {
       setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
-    const loadData = async () => {
-      setQuotesLoading(true);
-      try {
-        const [loadedQuotes, loadedCustomers, loadedSalespersons, loadedProjects] = await Promise.all([
-          getQuotes(),
-          getCustomers(),
-          getSalespersons(),
-          getProjects()
-        ]);
-        setQuotes(Array.isArray(loadedQuotes) ? loadedQuotes : []);
-        setCustomers(Array.isArray(loadedCustomers) ? loadedCustomers : []);
-        setSalespersons(Array.isArray(loadedSalespersons) ? loadedSalespersons : []);
-        setProjects(Array.isArray(loadedProjects) ? loadedProjects : []);
-        setCustomViews(getCustomViews().filter(v => v.type === "quotes"));
-      } catch (error) {
-        console.error("Error loading quotes:", error);
-        setQuotes([]);
-      } finally {
-        setQuotesLoading(false);
-      }
-    };
-
-    loadData();
-  }, [location.pathname]);
+    void loadMetadata();
+  }, [loadMetadata, location.pathname]);
 
   const resolveCustomerName = (q: Quote) => {
     // If it's already an object with a name, use it
@@ -1129,8 +1116,7 @@ export default function Quotes() {
       await Promise.all(
         selectedQuotes.map(quoteId => updateQuote(quoteId, { status: "approved" }))
       );
-      const loadedQuotes = await getQuotes();
-      setQuotes(Array.isArray(loadedQuotes) ? loadedQuotes : []);
+      await invalidateQuoteQueries(queryClient);
       setSelectedQuotes([]);
     } catch (error) {
       console.error("Error submitting quotes for approval:", error);
@@ -1145,8 +1131,7 @@ export default function Quotes() {
         selectedQuotes.map(quoteId => updateQuote(quoteId, { status: "sent" }))
       );
       // Reload quotes
-      const loadedQuotes = await getQuotes();
-      setQuotes(Array.isArray(loadedQuotes) ? loadedQuotes : []);
+      await invalidateQuoteQueries(queryClient);
       setSelectedQuotes([]);
       setIsMarkAsSentModalOpen(false);
     } catch (error) {
@@ -1178,9 +1163,8 @@ export default function Quotes() {
 
   const handleAdvancedSearchSubmit = async () => {
     try {
-      // Get fresh quotes from API
-      let filtered = await getQuotes();
-      if (!Array.isArray(filtered)) filtered = [];
+      const baseQuotes = Array.isArray(quotesListQuery.data) ? quotesListQuery.data : [];
+      let filtered = [...baseQuotes];
 
       // Filter by quote number
       if (advancedSearchData.quoteNumber) {
@@ -1296,8 +1280,9 @@ export default function Quotes() {
     });
     // Reload all quotes
     try {
-      const loadedQuotes = await getQuotes();
-      setQuotes(Array.isArray(loadedQuotes) ? loadedQuotes : []);
+      const baseQuotes = Array.isArray(quotesListQuery.data) ? quotesListQuery.data : [];
+      setQuotes(baseQuotes);
+      await invalidateQuoteQueries(queryClient);
     } catch (error) {
       console.error("Error reloading quotes:", error);
       setQuotes([]);
@@ -1348,10 +1333,11 @@ export default function Quotes() {
   // Get all quotes for the Quote# dropdown
   const getAllQuotesForDropdown = async () => {
     try {
-      const allQuotes = await getQuotes();
-      if (!Array.isArray(allQuotes)) return [];
-      if (!advancedSearchData.quoteNumber.trim()) return allQuotes;
-      return allQuotes.filter(q =>
+      const currentData = Array.isArray(quotesListQuery.data)
+        ? quotesListQuery.data
+        : (await quotesListQuery.refetch()).data ?? [];
+      if (!advancedSearchData.quoteNumber.trim()) return currentData;
+      return currentData.filter(q =>
         (q.quoteNumber || q.id || "").toLowerCase().includes(advancedSearchData.quoteNumber.toLowerCase())
       );
     } catch (error) {
@@ -1446,8 +1432,7 @@ export default function Quotes() {
     try {
       setIsDeletingQuotes(true);
       await deleteQuotes(selectedQuotes);
-      const loadedQuotes = await getQuotes();
-      setQuotes(Array.isArray(loadedQuotes) ? loadedQuotes : []);
+      await invalidateQuoteQueries(queryClient);
       setSelectedQuotes([]);
       setIsDeleteConfirmModalOpen(false);
     } catch (error) {
@@ -1482,8 +1467,7 @@ export default function Quotes() {
       );
 
       // Reload quotes
-      const loadedQuotes = await getQuotes();
-      setQuotes(Array.isArray(loadedQuotes) ? loadedQuotes : []);
+      await invalidateQuoteQueries(queryClient);
 
       // Reset and close modal
       setBulkUpdateField("");
@@ -2471,7 +2455,7 @@ export default function Quotes() {
           </div>
         )}
 
-        {quotesLoading ? (
+        {isQuotesLoading ? (
           <div
             className="flex-1 overflow-auto bg-white min-h-0"
           >

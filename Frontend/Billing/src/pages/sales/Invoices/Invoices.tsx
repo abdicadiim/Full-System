@@ -41,12 +41,13 @@ import {
   FileDown,
   RotateCcw
 } from "lucide-react";
-import { getInvoices, getInvoicesPaginated, getInvoiceById, updateInvoice, deleteInvoice, Invoice } from "../salesModel";
+import { getInvoiceById, updateInvoice, deleteInvoice, Invoice } from "../salesModel";
 import { getInvoiceStatusDisplay } from "../../../utils/invoiceUtils";
 import { useCurrency } from "../../../hooks/useCurrency";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
+import { useInvoicesListQuery } from "./invoiceQueries";
 
 const invoiceViews = [
   "All Invoices",
@@ -193,22 +194,15 @@ export default function Invoices() {
     customerNotes: "Thank you for the payment. You just made our day."
   });
   // Refresh data when returning to page
-  const refreshData = async (page = currentPage, limit = itemsPerPage) => {
-    setIsRefreshing(true);
-    try {
-      const response = await getInvoicesPaginated({
-        page,
-        limit,
-        status: selectedStatus !== "All" ? selectedStatus.toLowerCase() : undefined,
-        search: searchQuery
-      });
-      setInvoices(stripRetainerInvoices(response.data));
-      setTotalItems(response.pagination.total);
-      setTotalPages(response.pagination.pages);
-    } catch (error) {
-      console.error("Error refreshing invoices:", error);
-    } finally {
-      setIsRefreshing(false);
+  const refreshData = (page = currentPage, limit = itemsPerPage) => {
+    if (page !== currentPage) {
+      setCurrentPage(page);
+    }
+    if (limit !== itemsPerPage) {
+      setItemsPerPage(limit);
+    }
+    if (page === currentPage && limit === itemsPerPage) {
+      invoiceListQuery.refetch();
     }
   };
 
@@ -428,6 +422,27 @@ export default function Invoices() {
   const [itemsPerPage, setItemsPerPage] = useState(50);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  const [viewFilterParams, setViewFilterParams] = useState<Record<string, string>>({});
+  const invoiceListQuery = useInvoicesListQuery({
+    page: currentPage,
+    limit: itemsPerPage,
+    search: searchQuery,
+    sort: sortConfig.key,
+    order: sortConfig.direction,
+    status: selectedStatus !== "All" ? selectedStatus.toLowerCase() : undefined,
+    ...viewFilterParams,
+  });
+
+  useEffect(() => {
+    if (!invoiceListQuery.data) return;
+    setInvoices(stripRetainerInvoices(invoiceListQuery.data.data));
+    setTotalItems(invoiceListQuery.data.pagination.total);
+    setTotalPages(invoiceListQuery.data.pagination.pages);
+  }, [invoiceListQuery.data]);
+
+  useEffect(() => {
+    setIsRefreshing(invoiceListQuery.isFetching);
+  }, [invoiceListQuery.isFetching]);
 
   // Share Modal States
   const [showShareModal, setShowShareModal] = useState(false);
@@ -450,65 +465,46 @@ export default function Invoices() {
   const actionDropdownRef = useRef(null);
 
   useEffect(() => {
-    const loadData = async () => {
-      setIsRefreshing(true);
-      const statusFromUrl = searchParams.get('status');
-      const pageFromUrl = parseInt(searchParams.get('page')) || 1;
+    const statusFromUrl = searchParams.get('status');
+    const pageFromUrl = parseInt(searchParams.get('page') || "") || 1;
 
-      setCurrentPage(pageFromUrl);
+    setCurrentPage(pageFromUrl);
 
-      let currentStatus = selectedStatus;
-      if (statusFromUrl) {
-        const statusMap: { [key: string]: string } = {
-          "all": "All",
-          "draft": "Draft",
-          "unpaid": "Unpaid",
-          "overdue": "Overdue",
-          "partially_paid": "Partially Paid",
-          "customer_viewed": "Customer Viewed",
-          "approved": "Approved",
-          "pending_approval": "Pending Approval",
-          "locked": "Locked"
-        };
-        currentStatus = statusMap[statusFromUrl] || statusFromUrl;
-        setSelectedStatus(currentStatus);
-      }
-
-      const params: any = {
-        page: pageFromUrl,
-        limit: itemsPerPage,
-        search: searchQuery,
-        sort: sortConfig.key,
-        order: sortConfig.direction
+    if (statusFromUrl) {
+      const statusMap: { [key: string]: string } = {
+        "all": "All",
+        "draft": "Draft",
+        "unpaid": "Unpaid",
+        "overdue": "Overdue",
+        "partially_paid": "Partially Paid",
+        "customer_viewed": "Customer Viewed",
+        "approved": "Approved",
+        "pending_approval": "Pending Approval",
+        "locked": "Locked"
       };
-
-      if (currentStatus !== "All") {
-        params.status = currentStatus.toLowerCase();
-      }
-
-      const response = await getInvoicesPaginated(params);
-
-      setInvoices(stripRetainerInvoices(response.data));
-      setTotalItems(response.pagination.total);
-      setTotalPages(response.pagination.pages);
-      setIsRefreshing(false);
-    };
-
-    loadData();
+      const mappedStatus = statusMap[statusFromUrl] || statusFromUrl;
+      setSelectedStatus(mappedStatus);
+    }
 
     const handleVisibilityChange = () => {
-      if (!document.hidden) loadData();
+      if (!document.hidden) {
+        invoiceListQuery.refetch();
+      }
     };
 
-    window.addEventListener("storage", loadData);
+    const handleStorage = () => {
+      invoiceListQuery.refetch();
+    };
+
+    window.addEventListener("storage", handleStorage);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      window.removeEventListener("storage", loadData);
+      window.removeEventListener("storage", handleStorage);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, itemsPerPage, searchQuery, selectedStatus]);
+  }, [searchParams, invoiceListQuery.refetch]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -601,75 +597,50 @@ export default function Invoices() {
     }
   };
 
-  const applyFilters = async (view: string, status: string) => {
-    setIsRefreshing(true);
-    try {
-      const params: any = {
-        page: 1, // Always reset to page 1 when filtering
-        limit: itemsPerPage,
-        search: searchQuery,
-        sort: sortConfig.key,
-        order: sortConfig.direction
-      };
+  const applyFilters = (view: string, status: string) => {
+    const nextFilters: Record<string, string> = {};
 
-      // Handle Status Dropdown
-      if (status && status !== "All") {
-        params.status = status.toLowerCase();
-      }
-
-      // Handle View Selection (Overwrites status if specific view)
-      if (view !== "All Invoices") {
-        switch (view) {
-          case "Draft":
-          case "Locked":
-          case "Pending Approval":
-          case "Approved":
-          case "Partially Paid":
-          case "Paid":
-          case "Void":
-          case "Overdue":
-            params.status = view.toLowerCase().replace(" ", "_"); // e.g. "Pending Approval" -> "pending_approval"
-            if (view === "Overdue") params.status = "overdue";
-            if (view === "Partially Paid") params.status = "partially paid"; // Backend expects space? Let's check. 
-            // Model says 'partially paid'. 
-            // Wait, 'Pending Approval' -> 'pending_approval' usually.
-            if (view === "Pending Approval") params.status = "pending_approval";
-            if ((view as string) === "Payment Initiated") params.status = "payment_initiated";
-            break;
-          case "Unpaid":
-          case "Unpaid Invoices":
-            params.status_ne = "paid";
-            break;
-          case "Customer Viewed":
-            // Not supported server-side yet, might return all. 
-            // Ideally we add backend support.
-            break;
-          case "Debit Note":
-            // Filter by type? Backend has no type filter in query yet.
-            break;
-          case "Write Off":
-            params.status = "write_off";
-            break;
-          case "Sent":
-            params.status = "sent";
-            break;
-          default:
-            // Custom view? 
-            break;
-        }
-      }
-
-      const response = await getInvoicesPaginated(params);
-      setInvoices(stripRetainerInvoices(response.data));
-      setTotalItems(response.pagination.total);
-      setTotalPages(response.pagination.pages);
-      setCurrentPage(1); // Update current page state
-
-    } catch (error) {
-      console.error("Error applying filters:", error);
-    } finally {
-      setIsRefreshing(false);
+    if (status && status !== "All") {
+      nextFilters.status = status.toLowerCase();
     }
+
+    if (view !== "All Invoices") {
+      switch (view) {
+        case "Draft":
+        case "Locked":
+        case "Pending Approval":
+        case "Approved":
+        case "Partially Paid":
+        case "Paid":
+        case "Void":
+        case "Overdue":
+          nextFilters.status = view.toLowerCase().replace(" ", "_");
+          if (view === "Overdue") nextFilters.status = "overdue";
+          if (view === "Partially Paid") nextFilters.status = "partially paid";
+          if (view === "Pending Approval") nextFilters.status = "pending_approval";
+          if (view === "Payment Initiated") nextFilters.status = "payment_initiated";
+          break;
+        case "Unpaid":
+        case "Unpaid Invoices":
+          nextFilters.status_ne = "paid";
+          break;
+        case "Customer Viewed":
+          break;
+        case "Debit Note":
+          break;
+        case "Write Off":
+          nextFilters.status = "write_off";
+          break;
+        case "Sent":
+          nextFilters.status = "sent";
+          break;
+        default:
+          break;
+      }
+    }
+
+    setViewFilterParams(nextFilters);
+    setCurrentPage(1);
   };
 
   const handleStatusSelect = (status: string) => {
@@ -1906,8 +1877,7 @@ export default function Invoices() {
       }
 
       // Refresh the invoices list
-      const allInvoices = await getInvoices();
-      setInvoices(stripRetainerInvoices(allInvoices as any[]));
+      await invoiceListQuery.refetch();
 
       setIsMarkAsSentModalOpen(false);
       setSelectedInvoices(new Set());
@@ -2086,24 +2056,14 @@ export default function Invoices() {
   };
 
   const handleRefreshList = async () => {
-    // Reload invoices
-    const allInvoices = await getInvoices();
-    setInvoices(stripRetainerInvoices(allInvoices as any[]));
+    await invoiceListQuery.refetch();
     setIsMoreMenuOpen(false);
   };
 
   const handleSummaryRefresh = async () => {
     setIsSummaryRefreshing(true);
     try {
-      const response = await getInvoicesPaginated({
-        page: currentPage,
-        limit: itemsPerPage,
-        status: selectedStatus !== "All" ? selectedStatus.toLowerCase() : undefined,
-        search: searchQuery
-      });
-      setInvoices(stripRetainerInvoices(response.data));
-      setTotalItems(response.pagination.total);
-      setTotalPages(response.pagination.pages);
+      await invoiceListQuery.refetch();
     } catch (error) {
       console.error("Error refreshing payment summary:", error);
     } finally {
@@ -2135,7 +2095,8 @@ export default function Invoices() {
     setIsDeletingInvoices(true);
     try {
       await Promise.all(invoiceIds.map((invoiceId) => deleteInvoice(invoiceId)));
-      await applyFilters(selectedView, selectedStatus);
+      applyFilters(selectedView, selectedStatus);
+      await invoiceListQuery.refetch();
       setSelectedInvoices(new Set());
       setIsDeleteConfirmModalOpen(false);
       toast(`${invoiceIds.length} invoice(s) deleted successfully.`);

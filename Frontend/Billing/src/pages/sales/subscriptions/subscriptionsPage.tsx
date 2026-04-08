@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useEffect, useLayoutEffect, useState } from "react";
+import React, { useMemo, useRef, useEffect, useLayoutEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useOrganizationBranding } from "../../../hooks/useOrganizationBranding";
 import { subscriptionsAPI } from "../../../services/api";
+import { useSubscriptionsListQuery } from "./subscriptionsQueries";
 
 const SUBSCRIPTIONS_STORAGE_KEY = "taban_subscriptions_v1";
 
@@ -133,45 +134,69 @@ const SubscriptionsPage = () => {
         localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(columns));
     }, [columns]);
 
-    const loadSubscriptions = async () => {
-        setIsLoading(true);
-        try {
-            const res: any = await subscriptionsAPI.getAll({ limit: 10000 });
-            if (res?.success) {
-                const rows = Array.isArray(res.data) ? res.data : [];
-                setSubscriptions(rows);
-                setIsLoading(false);
-                return;
-            }
-        } catch {
-            // fallback below
-        }
+    const subscriptionsListQuery = useSubscriptionsListQuery();
+    const [storageFallbackLoaded, setStorageFallbackLoaded] = useState(false);
+
+    const loadFromLocalStorage = useCallback(() => {
         try {
             const raw = localStorage.getItem(SUBSCRIPTIONS_STORAGE_KEY);
             const parsed = raw ? JSON.parse(raw) : [];
-            setSubscriptions(Array.isArray(parsed) ? parsed : []);
+            return Array.isArray(parsed) ? parsed : [];
         } catch {
-            setSubscriptions([]);
-        } finally {
-            setIsLoading(false);
+            return [];
         }
-    };
+    }, []);
 
     useEffect(() => {
-        void loadSubscriptions();
-        const onStorage = (event: StorageEvent) => {
+        if (subscriptionsListQuery.isFetching && !subscriptionsListQuery.data) {
+            setIsLoading(true);
+            return;
+        }
+
+    if (subscriptionsListQuery.data) {
+        const rows = Array.isArray(subscriptionsListQuery.data) ? subscriptionsListQuery.data : [];
+        setSubscriptions(rows);
+        setIsLoading(false);
+        setStorageFallbackLoaded(false);
+        try {
+            localStorage.setItem(SUBSCRIPTIONS_STORAGE_KEY, JSON.stringify(rows));
+        } catch {
+            // ignore
+        }
+        return;
+    }
+
+        if (subscriptionsListQuery.isError && !storageFallbackLoaded) {
+            setSubscriptions(loadFromLocalStorage());
+            setIsLoading(false);
+            setStorageFallbackLoaded(true);
+        }
+    }, [
+        subscriptionsListQuery.data,
+        subscriptionsListQuery.isFetching,
+        subscriptionsListQuery.isError,
+        loadFromLocalStorage,
+        storageFallbackLoaded,
+    ]);
+
+    useEffect(() => {
+        const handleStorage = (event: StorageEvent) => {
             if (!event.key || event.key === SUBSCRIPTIONS_STORAGE_KEY) {
-                void loadSubscriptions();
+                subscriptionsListQuery.refetch();
             }
         };
-        const onFocus = () => void loadSubscriptions();
-        window.addEventListener("storage", onStorage);
-        window.addEventListener("focus", onFocus);
-        return () => {
-            window.removeEventListener("storage", onStorage);
-            window.removeEventListener("focus", onFocus);
+
+        const handleFocus = () => {
+            subscriptionsListQuery.refetch();
         };
-    }, []);
+
+        window.addEventListener("storage", handleStorage);
+        window.addEventListener("focus", handleFocus);
+        return () => {
+            window.removeEventListener("storage", handleStorage);
+            window.removeEventListener("focus", handleFocus);
+        };
+    }, [subscriptionsListQuery]);
 
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
@@ -456,7 +481,7 @@ const SubscriptionsPage = () => {
                     }
                 }
 
-                await loadSubscriptions();
+                await subscriptionsListQuery.refetch();
             } catch {
                 // keep local state when API is unavailable
             }
@@ -953,7 +978,13 @@ const SubscriptionsPage = () => {
 
                             {moreDropdownOpen && (
                                 <div className="absolute top-full right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-2xl z-30 py-1">
-                                    <button className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                                    <button
+                                        onClick={() => {
+                                            subscriptionsListQuery.refetch();
+                                            setMoreDropdownOpen(false);
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                    >
                                         <RefreshCw size={14} /> Refresh
                                     </button>
                                     <button className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">

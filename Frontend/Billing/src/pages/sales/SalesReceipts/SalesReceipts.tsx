@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useLocation } from "react-router-dom";
 import LoadingSpinner from "../../../components/LoadingSpinner";
-import { getSalesReceipts, getSalesReceiptsPaginated, deleteSalesReceipt, updateSalesReceipt, getSalesReceiptById, getCustomers, getSalespersons, getTaxes, getProjects, getItemsFromAPI, getCustomViews, deleteCustomView } from "../salesModel";
+import { getSalesReceipts, deleteSalesReceipt, updateSalesReceipt, getSalesReceiptById, getCustomers, getSalespersons, getTaxes, getProjects, getItemsFromAPI, getCustomViews, deleteCustomView } from "../salesModel";
 // import { sampleItems } from "../../items/itemsModel";
 import { toast } from "react-toastify";
 import html2canvas from "html2canvas";
@@ -35,6 +35,7 @@ import {
   Mail
 } from "lucide-react";
 import SalesReceiptsCustomizeColumnsModal, { SalesReceiptsColumnOption } from "./SalesReceiptsCustomizeColumnsModal";
+import { useSalesReceiptsListQuery } from "./salesReceiptsQueries";
 
 // import FieldCustomization from "../shared/FieldCustomization";
 
@@ -52,6 +53,30 @@ const viewStatusMap = {
   Paid: "paid",
   Void: "void"
 };
+
+const mapSortOptionToField = (option: string) => {
+  switch (option) {
+    case "Date (Newest First)":
+    case "Date (Oldest First)":
+      return "date";
+    case "Receipt # (Ascending)":
+    case "Receipt # (Descending)":
+      return "receiptNumber";
+    case "Amount (High to Low)":
+    case "Amount (Low to High)":
+      return "total";
+    case "Customer Name (A-Z)":
+    case "Customer Name (Z-A)":
+      return "customerName";
+    default:
+      return "date";
+  }
+};
+
+const isSortDescendingOption = (option: string) =>
+  option.includes("Descending") ||
+  option.includes("Newest") ||
+  option.includes("High to Low");
 
 const normalizeSalesReceiptStatus = (value: any) => {
   const status = String(value || "").trim().toLowerCase();
@@ -181,6 +206,17 @@ export default function SalesReceipts() {
   const [taxes, setTaxes] = useState([]);
   const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 50, pages: 0 });
   const [currentPage, setCurrentPage] = useState(1);
+  const receiptQueryParams = useMemo(() => {
+    const sortField = mapSortOptionToField(activeSort);
+    return {
+      page: currentPage,
+      limit: 50,
+      status: selectedStatus === "All" ? undefined : selectedStatus,
+      sortBy: sortField,
+      sortOrder: isSortDescendingOption(activeSort) ? "desc" : "asc",
+    };
+  }, [activeSort, currentPage, selectedStatus]);
+  const salesReceiptsQuery = useSalesReceiptsListQuery(receiptQueryParams);
 
   const viewDropdownRef = useRef(null);
   const moreMenuRef = useRef(null);
@@ -425,49 +461,16 @@ export default function SalesReceipts() {
   const bulkUpdateFieldOptions = bulkFieldConfigs.map((config) => config.label);
   const selectedBulkFieldConfig = bulkFieldConfigs.find((config) => config.label === bulkUpdateField) || null;
 
-  const mapSortOptionToField = (option) => {
-    switch (option) {
-      case "Date (Newest First)":
-      case "Date (Oldest First)": return "date";
-      case "Receipt # (Ascending)":
-      case "Receipt # (Descending)": return "receiptNumber";
-      case "Amount (High to Low)":
-      case "Amount (Low to High)": return "total";
-      case "Customer Name (A-Z)":
-      case "Customer Name (Z-A)": return "customerName";
-      default: return "date";
+  const refreshData = (page = currentPage) => {
+    if (page !== currentPage) {
+      setCurrentPage(page);
     }
-  };
-
-  const refreshData = async (page = currentPage) => {
-    setIsRefreshing(true);
-    try {
-      const isDesc = activeSort.includes("Descending") || activeSort.includes("Newest") || activeSort.includes("High to Low");
-      const response = await getSalesReceiptsPaginated({
-        page,
-        limit: 50,
-        status: selectedStatus === "All" ? undefined : selectedStatus,
-        sortBy: mapSortOptionToField(activeSort),
-        sortOrder: isDesc ? "desc" : "asc"
-      });
-
-      setSalesReceipts(response.data);
-      setFilteredSalesReceipts(response.data);
-      setPagination(response.pagination);
-
-      const allCustomViews = getCustomViews().filter(v => v.type === "sales-receipts");
-      setCustomViews(allCustomViews);
-    } catch (error) {
-      console.error("Error refreshing data:", error);
-    } finally {
-      setIsRefreshing(false);
-      setHasLoadedOnce(true);
-    }
+    salesReceiptsQuery.refetch();
   };
 
   useEffect(() => {
-    refreshData(currentPage);
-  }, [selectedStatus, activeSort, currentPage]);
+    setCurrentPage(1);
+  }, [selectedStatus, activeSort]);
 
   useEffect(() => {
     const initialLoad = async () => {
@@ -483,16 +486,24 @@ export default function SalesReceipts() {
 
     initialLoad();
 
-    window.addEventListener("storage", () => refreshData(currentPage));
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) refreshData(currentPage);
-    });
+    const handleStorage = () => {
+      salesReceiptsQuery.refetch();
+    };
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        salesReceiptsQuery.refetch();
+      }
+    };
+
+    window.addEventListener("storage", handleStorage);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      window.removeEventListener("storage", () => refreshData(currentPage));
-      document.removeEventListener("visibilitychange", () => refreshData(currentPage));
+      window.removeEventListener("storage", handleStorage);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, []);
+  }, [salesReceiptsQuery.refetch]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -591,7 +602,7 @@ export default function SalesReceipts() {
     }
   };
 
-  const applyFilters = (allReceipts, status, views = customViews, sortOption = activeSort) => {
+  const applyFilters = useCallback((allReceipts, status, views = customViews, sortOption = activeSort) => {
     let filtered = Array.isArray(allReceipts) ? allReceipts : [];
 
     // Check if it's a custom view
@@ -644,7 +655,20 @@ export default function SalesReceipts() {
     }
 
     setFilteredSalesReceipts(sorted);
-  };
+  }, [customViews, activeSort]);
+
+  useEffect(() => {
+    if (!salesReceiptsQuery.data) return;
+    const rows = salesReceiptsQuery.data.data;
+    setSalesReceipts(rows);
+    setPagination(salesReceiptsQuery.data.pagination);
+    applyFilters(rows, selectedStatus);
+    setHasLoadedOnce(true);
+  }, [salesReceiptsQuery.data, selectedStatus, applyFilters]);
+
+  useEffect(() => {
+    setIsRefreshing(salesReceiptsQuery.isFetching);
+  }, [salesReceiptsQuery.isFetching]);
 
   const formatDate = (dateString) => {
     if (!dateString) return "-";

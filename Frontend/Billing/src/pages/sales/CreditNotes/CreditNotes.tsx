@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import LoadingSpinner from "../../../components/LoadingSpinner";
-import { getCreditNotes, getCustomViews, deleteCustomView, getCreditNoteById, updateCreditNote, getCustomers, deleteCreditNote } from "../salesModel";
+import { getCustomViews, deleteCustomView, getCreditNoteById, updateCreditNote, getCustomers, deleteCreditNote } from "../salesModel";
 import FieldCustomization from "../../shared/FieldCustomization";
 import CreditNotesCustomizeColumnsModal, { CreditNotesColumnOption } from "./CreditNotesCustomizeColumnsModal";
 import { settingsAPI, currenciesAPI } from "../../../services/api";
@@ -30,6 +30,7 @@ import {
   Check,
   SlidersHorizontal
 } from "lucide-react";
+import { useCreditNotesListQuery } from "./creditNoteQueries";
 
 const defaultCreditNoteViews = [
   "All",
@@ -193,6 +194,75 @@ export default function CreditNotes() {
   const moreMenuRef = useRef<HTMLDivElement>(null);
   const bulkUpdateFieldDropdownRef = useRef<HTMLDivElement>(null);
 
+  const getCreditNoteReferenceNumber = (note: any) =>
+    String(
+      note?.referenceNumber ??
+      note?.reference ??
+      note?.referenceNo ??
+      note?.refNumber ??
+      note?.ref ??
+      ""
+    ).trim();
+
+  const getCreditNoteFieldValue = React.useCallback(
+    (note: CreditNote, fieldName: string) => {
+    const fieldMap: Record<string, any> = {
+      "Date": note.creditNoteDate || note.date || "",
+      "Credit Note#": note.creditNoteNumber || note.id || "",
+      "Reference Number": getCreditNoteReferenceNumber(note),
+      "Customer Name": note.customerName || note.customer || "",
+      "Invoice#": note.invoiceNumber || "",
+      "Status": note.status || "open",
+      "Amount": note.total || note.amount || 0,
+      "Balance": note.balance || note.total || note.amount || 0
+    };
+    return fieldMap[fieldName] !== undefined ? fieldMap[fieldName] : "";
+  }, [customerNameMap]);
+
+  const evaluateCriterion = React.useCallback((fieldValue: any, comparator: string, value: any) => {
+    const fieldStr = String(fieldValue || "").toLowerCase();
+    const valueStr = String(value || "").toLowerCase();
+
+    switch (comparator) {
+      case "is": return fieldStr === valueStr;
+      case "is not": return fieldStr !== valueStr;
+      case "starts with": return fieldStr.startsWith(valueStr);
+      case "contains": return fieldStr.includes(valueStr);
+      case "doesn't contain": return !fieldStr.includes(valueStr);
+      case "is in": return valueStr.split(",").map(v => v.trim()).includes(fieldStr);
+      case "is not in": return !valueStr.split(",").map(v => v.trim()).includes(fieldStr);
+      case "is empty": return !fieldValue || fieldStr === "";
+      case "is not empty": return fieldValue && fieldStr !== "";
+      default: return true;
+    }
+  }, []);
+
+  const applyFilters = React.useCallback(
+    (allCreditNotes: CreditNote[], status: string, views: any[] = customViews) => {
+    let filtered = allCreditNotes;
+
+    const customView = views.find(v => v.name === status);
+    if (customView && customView.criteria) {
+      filtered = filtered.filter(note => {
+        return customView.criteria.every((criterion: any) => {
+          if (!criterion.field || !criterion.comparator) return true;
+          const fieldValue = getCreditNoteFieldValue(note, criterion.field);
+          return evaluateCriterion(fieldValue, criterion.comparator, criterion.value);
+        });
+      });
+      setFilteredCreditNotes(filtered);
+      return;
+    }
+
+    if (status !== "All") {
+      filtered = filtered.filter(note => {
+        const noteStatus = (note.status || "open").toLowerCase();
+        return noteStatus === status.toLowerCase();
+      });
+    }
+    setFilteredCreditNotes(filtered);
+  }, [evaluateCriterion, getCreditNoteFieldValue]);
+
   // Credit Notes search dropdowns
   const [isItemNameCreditNoteDropdownOpen, setIsItemNameCreditNoteDropdownOpen] = useState(false);
   const itemNameCreditNoteDropdownRef = useRef<HTMLDivElement>(null);
@@ -341,59 +411,72 @@ export default function CreditNotes() {
       return acc;
     }, {});
 
+  const creditNotesQuery = useCreditNotesListQuery();
+
   const refreshData = async () => {
-    setIsRefreshing(true);
-    try {
-      const [allCreditNotes, customers] = await Promise.all([getCreditNotes(), getCustomers()]);
-      const customerMap = buildCustomerNameMap(customers);
-      setCustomerNameMap(customerMap);
-      const allCustomViews = getCustomViews().filter(v => v.type === "credit-notes");
-      setCreditNotes(allCreditNotes);
-      setCustomViews(allCustomViews);
-      applyFilters(allCreditNotes, selectedStatus, allCustomViews);
-    } catch (error) {
-      console.error("Error refreshing data:", error);
-    } finally {
-      setIsRefreshing(false);
-      setHasLoadedOnce(true);
-    }
+    if (creditNotesQuery.isFetching) return;
+    await creditNotesQuery.refetch();
   };
 
   useEffect(() => {
-    const initialLoad = async () => {
+    const loadCustomers = async () => {
       try {
-        const [allCreditNotes, customers] = await Promise.all([getCreditNotes(), getCustomers()]);
-        const customerMap = buildCustomerNameMap(customers);
-        setCustomerNameMap(customerMap);
-        const allCustomViews = getCustomViews().filter(v => v.type === "credit-notes");
-        if (Array.isArray(allCreditNotes)) {
-          setCreditNotes(allCreditNotes);
-          // Only apply filters if we have data
-          applyFilters(allCreditNotes, selectedStatus, allCustomViews);
-        } else {
-          setCreditNotes([]);
-          setFilteredCreditNotes([]);
-        }
-        setCustomViews(allCustomViews);
-
-      } catch (error) {
-        console.error("Error loading credit notes:", error);
-        setCreditNotes([]);
-        setFilteredCreditNotes([]);
-      } finally {
-        setHasLoadedOnce(true);
+        const customers = await getCustomers();
+        setCustomerNameMap(buildCustomerNameMap(customers));
+      } catch (_error) {
+        console.error("Failed to load customers for credit notes");
       }
     };
 
-    initialLoad();
+    void loadCustomers();
+  }, []);
 
-    window.addEventListener('focus', initialLoad);
-    window.addEventListener('storage', initialLoad);
-    return () => {
-      window.removeEventListener('focus', initialLoad);
-      window.removeEventListener('storage', initialLoad);
+  useEffect(() => {
+    const handleStorage = (_event: StorageEvent) => {
+      creditNotesQuery.refetch();
     };
-  }, [selectedStatus]);
+
+    const handleFocus = () => creditNotesQuery.refetch();
+
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [creditNotesQuery]);
+
+  useEffect(() => {
+    if (creditNotesQuery.isFetching) {
+      setIsRefreshing(true);
+      return;
+    }
+
+    const data = Array.isArray(creditNotesQuery.data) ? creditNotesQuery.data : [];
+    if (creditNotesQuery.data) {
+      const views = getCustomViews().filter((v) => v.type === "credit-notes");
+      const hasCustomViewDiff =
+        views.length !== customViews.length ||
+        views.some((view, index) => String(view?.id || view?.name) !== String(customViews[index]?.id || customViews[index]?.name));
+      if (hasCustomViewDiff) {
+        setCustomViews(views);
+      }
+      setCreditNotes(data);
+      applyFilters(data, selectedStatus, views);
+      setHasLoadedOnce(true);
+      setIsRefreshing(false);
+    } else if (creditNotesQuery.isError) {
+      setIsRefreshing(false);
+      setCreditNotes([]);
+      setFilteredCreditNotes([]);
+    }
+  }, [creditNotesQuery.data, creditNotesQuery.isFetching, creditNotesQuery.isError, selectedStatus, applyFilters, customViews]);
+
+  useEffect(() => {
+    if (creditNotes.length > 0) {
+      applyFilters(creditNotes, selectedStatus, customViews);
+    }
+  }, [creditNotes, selectedStatus, customViews, applyFilters]);
 
   useEffect(() => {
     const loadOrganizationProfile = async () => {
@@ -516,64 +599,6 @@ export default function CreditNotes() {
     };
   }, [selectedCreditNotes]);
 
-  const getCreditNoteFieldValue = (note: CreditNote, fieldName: string) => {
-    const fieldMap: Record<string, any> = {
-      "Date": note.creditNoteDate || note.date || "",
-      "Credit Note#": note.creditNoteNumber || note.id || "",
-      "Reference Number": getCreditNoteReferenceNumber(note),
-      "Customer Name": note.customerName || note.customer || "",
-      "Invoice#": note.invoiceNumber || "",
-      "Status": note.status || "open",
-      "Amount": note.total || note.amount || 0,
-      "Balance": note.balance || note.total || note.amount || 0
-    };
-    return fieldMap[fieldName] !== undefined ? fieldMap[fieldName] : "";
-  };
-
-  const evaluateCriterion = (fieldValue: any, comparator: string, value: any) => {
-    const fieldStr = String(fieldValue || "").toLowerCase();
-    const valueStr = String(value || "").toLowerCase();
-
-    switch (comparator) {
-      case "is": return fieldStr === valueStr;
-      case "is not": return fieldStr !== valueStr;
-      case "starts with": return fieldStr.startsWith(valueStr);
-      case "contains": return fieldStr.includes(valueStr);
-      case "doesn't contain": return !fieldStr.includes(valueStr);
-      case "is in": return valueStr.split(",").map(v => v.trim()).includes(fieldStr);
-      case "is not in": return !valueStr.split(",").map(v => v.trim()).includes(fieldStr);
-      case "is empty": return !fieldValue || fieldStr === "";
-      case "is not empty": return fieldValue && fieldStr !== "";
-      default: return true;
-    }
-  };
-
-  const applyFilters = (allCreditNotes: CreditNote[], status: string, views: any[] = customViews) => {
-    let filtered = allCreditNotes;
-
-    // Check if it's a custom view
-    const customView = views.find(v => v.name === status);
-    if (customView && customView.criteria) {
-      filtered = filtered.filter(note => {
-        return customView.criteria.every((criterion: any) => {
-          if (!criterion.field || !criterion.comparator) return true;
-          const fieldValue = getCreditNoteFieldValue(note, criterion.field);
-          return evaluateCriterion(fieldValue, criterion.comparator, criterion.value);
-        });
-      });
-      setFilteredCreditNotes(filtered);
-      return;
-    }
-
-    if (status !== "All") {
-      filtered = filtered.filter(note => {
-        const noteStatus = (note.status || "open").toLowerCase();
-        return noteStatus === status.toLowerCase();
-      });
-    }
-    setFilteredCreditNotes(filtered);
-  };
-
   const formatDate = (dateString: any) => {
     if (!dateString) return "-";
     try {
@@ -614,16 +639,6 @@ export default function CreditNotes() {
     ).trim();
     return customerNameMap[customerId] || "-";
   };
-
-  const getCreditNoteReferenceNumber = (note: any) =>
-    String(
-      note?.referenceNumber ??
-      note?.reference ??
-      note?.referenceNo ??
-      note?.refNumber ??
-      note?.ref ??
-      ""
-    ).trim();
 
   const handleRefreshList = () => {
     if (!isRefreshing) {
@@ -837,9 +852,7 @@ export default function CreditNotes() {
         throw new Error("None of the selected credit notes could be updated.");
       }
 
-      const refreshed = await getCreditNotes();
-      setCreditNotes(refreshed);
-      applyFilters(refreshed, selectedStatus);
+      await refreshData();
 
       setSelectedCreditNotes([]);
       setIsBulkUpdateModalOpen(false);

@@ -354,6 +354,9 @@ export default function OrgSetupPage() {
 
       if (storedName && !hasDraftValue(ORG_SETUP_DRAFT_KEY("orgName"))) {
         setOrgName(storedName);
+        try {
+          sessionStorage.setItem("orgName", storedName);
+        } catch {}
       }
       if (storedLogoUrl && !hasDraftValue(ORG_SETUP_DRAFT_KEY("logoUrl"))) setLogoUrl(storedLogoUrl);
       if (storedCountryIso && !hasDraftValue(ORG_SETUP_DRAFT_KEY("countryIso"))) setCountryIso(storedCountryIso);
@@ -615,3 +618,4 @@ export default function OrgSetupPage() {
     </div>
   );
 }
+

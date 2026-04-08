@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "react-router-dom";
 import { Info, Settings, ExternalLink, Search, ChevronUp, ChevronDown, Settings2, X, Loader2 } from "lucide-react";
@@ -460,7 +460,7 @@ export default function GeneralSettingsPage() {
               <ul className="space-y-1 text-sm text-gray-700">
                 {["Item Groups", "Composite Items", "Packages", "Picklists", "Shipments", "Purchase Receive", "Sales Returns", "Transfer Orders"].map((item) => (
                   <li key={item} className="flex items-center gap-2">
-                    <span className="text-green-600">âœ“</span>
+                    <span className="text-green-600">✓</span>
                     {item}
                   </li>
                 ))}
@@ -1209,6 +1209,7 @@ export default function GeneralSettingsPage() {
     </div>
   );
 }
+
 
 
 

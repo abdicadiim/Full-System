@@ -17,16 +17,31 @@ const PERSISTED_QUERY_ROOT_KEYS = new Set([
   "plans",
   "coupons",
   "price-lists",
+  "retainer-invoices",
+  "invoices",
+  "sales-receipts",
+  "subscriptions",
+  "credit-notes",
 ]);
+
+const wrapPersisterWithPromises = (persister: ReturnType<typeof createSyncStoragePersister>) => ({
+  ...persister,
+  persistClient: (client: Parameters<typeof persister.persistClient>[0]) =>
+    Promise.resolve(persister.persistClient(client)),
+  restoreClient: () => Promise.resolve(persister.restoreClient()),
+  removeClient: () => Promise.resolve(persister.removeClient()),
+});
 
 const createCustomerPersister = () => {
   if (typeof window === "undefined") return null;
 
-  return createSyncStoragePersister({
+  const basePersister = createSyncStoragePersister({
     storage: window.localStorage,
     key: CUSTOMER_QUERY_PERSIST_KEY,
     throttleTime: 1000,
   });
+
+  return wrapPersisterWithPromises(basePersister);
 };
 
 export function BillingQueryProvider({ children }: { children: React.ReactNode }) {

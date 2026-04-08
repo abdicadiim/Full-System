@@ -25,6 +25,7 @@ import { getReportColumnGroups } from "./reportColumnSetup";
 import { getCategoryById, getReportById, REPORTS, REPORT_CATEGORIES } from "./reportsCatalog";
 import { getPayments } from "../sales/salesModel";
 import { API_BASE_URL, getToken } from "../../services/auth";
+import { useSettings } from "../../lib/settings/SettingsContext";
 
 type CellValue = string | number;
 
@@ -1942,6 +1943,11 @@ const renderCell = (value: CellValue) => (
 export default function ReportDetailPage() {
   const navigate = useNavigate();
   const { categoryId, reportId } = useParams();
+  const { settings } = useSettings();
+  const organizationName =
+    settings?.general?.companyDisplayName ||
+    settings?.general?.schoolDisplayName ||
+    settings?.general?.shortName;
   const savedCustomReports = useMemo(() => loadJson<SavedCustomReport[]>(CUSTOM_REPORTS_KEY, []), []);
   const customReport = useMemo(() => savedCustomReports.find((item) => item.id === reportId), [savedCustomReports, reportId]);
   const resolvedCategoryId = customReport?.categoryId || categoryId || "";
@@ -1950,6 +1956,11 @@ export default function ReportDetailPage() {
   const isTimeToGetPaidReport = resolvedReportId === "time-to-get-paid";
   const category = getCategoryById(resolvedCategoryId);
   const report = getReportById(resolvedCategoryId, resolvedReportId);
+  const organizationName =
+    settings?.general?.companyDisplayName ||
+    settings?.general?.schoolDisplayName ||
+    settings?.general?.shortName || "";
+  const reportDisplayName = customReport?.name || report?.name || "Report";
   const filterDropdownRef = useRef<HTMLDivElement>(null);
   const compareButtonRef = useRef<HTMLButtonElement>(null);
   const nextMoreFilterRowId = useRef(2);
@@ -1980,8 +1991,12 @@ export default function ReportDetailPage() {
   const [customRange, setCustomRange] = useState<RangeDate>(() => DEFAULT_CUSTOM_RANGE);
   const [livePreview, setLivePreview] = useState<PreviewTableConfig | null>(null);
   const [livePreviewLoading, setLivePreviewLoading] = useState(false);
+  const [reportRefreshTick, setReportRefreshTick] = useState(0);
+<<<<<<< Updated upstream
   const agingByLabel = getAgingByLabel(agingBy);
   const reportDisplayName = customReport?.name || (isAgingReport ? `${report?.name || (resolvedReportId === "ar-aging-details" ? "AR Aging Details" : "AR Aging Summary")} By ${agingByLabel}` : report?.name || "Report");
+=======
+>>>>>>> Stashed changes
 
   const dateLabel = useMemo(() => {
     if (selectedDateRange === "Custom") {
@@ -2098,10 +2113,14 @@ export default function ReportDetailPage() {
     setVisibleColumns(customReport?.selectedColumns?.length ? customReport.selectedColumns : []);
     void loadPreview();
 
-      return () => {
-        cancelled = true;
-      };
-  }, [agingBy, category.name, customReport, reportDisplayName, resolvedReportId, selectedEntities]);
+    return () => {
+      cancelled = true;
+    };
+<<<<<<< Updated upstream
+  }, [agingBy, category.name, customReport, reportDisplayName, reportRefreshTick, resolvedReportId, selectedEntities]);
+=======
+  }, [category.name, customReport, reportDisplayName, resolvedReportId]);
+>>>>>>> Stashed changes
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
@@ -2215,6 +2234,22 @@ export default function ReportDetailPage() {
   const visiblePreviewColumns = effectiveVisibleColumns;
   const visiblePreviewRows = previewRows;
   const visiblePreviewTotals = previewTotals;
+  const runReport = () => {
+    setActiveFilterDropdown(null);
+    setMoreFiltersOpen(false);
+    setOpenMoreFilterFieldRowId(null);
+    setOpenMoreFilterComparatorRowId(null);
+    setLivePreview(null);
+    setLivePreviewLoading(true);
+    setReportRefreshTick((value) => value + 1);
+  };
+  const renderPreviewHeading = (title: string) => (
+    <div className="border-b border-[#eef2f7] px-4 py-10 text-center">
+      {organizationName ? <p className="text-sm text-[#6b7280]">{organizationName}</p> : null}
+      <h2 className="mt-2 text-[22px] font-semibold text-[#111827]">{title}</h2>
+      <p className="mt-1 text-sm text-[#475569]">{dateLabel}</p>
+    </div>
+  );
 
   return (
     <div className="relative flex h-full min-h-0 flex-col gap-3 overflow-hidden">
@@ -2330,11 +2365,10 @@ export default function ReportDetailPage() {
             </button>
 
             <div className="min-w-0">
-              <p className="text-[14px] font-medium leading-none text-[#5a6781]">{category.name.replace(" Reports", "")}</p>
-              <h1 className="mt-1 flex flex-wrap items-center gap-2 text-[18px] font-semibold leading-tight text-[#0f172a]">
+              <p className="text-sm font-medium text-[#1b6f7b]">{category.name}</p>
+              <h1 className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[24px] font-semibold leading-tight text-[#0f172a]">
                 <span>{reportDisplayName}</span>
-                <span className="text-[#0f172a]">•</span>
-                <span className="text-[14px] font-normal text-[#0f172a]">{dateLabel}</span>
+                <span className="text-sm font-normal text-[#475569]">- {dateLabel}</span>
               </h1>
             </div>
           </div>
@@ -2449,15 +2483,34 @@ export default function ReportDetailPage() {
             )}
             {filterButtonLabel}
           </button>
+<<<<<<< Updated upstream
           {!isTimeToGetPaidReport ? (
             <button
               type="button"
-              onClick={() => toast.success(`Report refreshed: ${reportDisplayName}`)}
-              className="inline-flex h-8 items-center gap-1 rounded bg-[#156372] px-4 text-sm font-semibold text-white hover:bg-[#0f4f5b]"
+              onClick={runReport}
+              disabled={livePreviewLoading}
+              className="inline-flex h-8 items-center gap-1 rounded bg-[#156372] px-4 text-sm font-semibold text-white hover:bg-[#0f4f5b] disabled:cursor-wait disabled:bg-[#156372]/80"
             >
-              <CalendarDays size={14} /> Run Report <ChevronDown size={14} />
+              {livePreviewLoading ? (
+                "Loading..."
+              ) : (
+                <>
+                  <CalendarDays size={14} />
+                  Run Report
+                  <ChevronDown size={14} />
+                </>
+              )}
             </button>
           ) : null}
+=======
+          <button
+            type="button"
+            onClick={() => toast.success(`Report refreshed: ${reportDisplayName}`)}
+            className="inline-flex h-8 items-center gap-1 rounded bg-[#156372] px-4 text-sm font-semibold text-white hover:bg-[#0f4f5b]"
+          >
+            <CalendarDays size={14} /> Run Report <ChevronDown size={14} />
+          </button>
+>>>>>>> Stashed changes
 
           {!isTimeToGetPaidReport && isDateRangeOpen ? (
             <div
@@ -2826,13 +2879,11 @@ export default function ReportDetailPage() {
               <div className="flex items-center gap-3 border-t border-[#edf1f7] px-4 py-3">
                 <button
                   type="button"
-                  onClick={() => {
-                    toast.success(`Report refreshed: ${reportDisplayName}`);
-                    setMoreFiltersOpen(false);
-                  }}
-                  className="inline-flex h-8 items-center rounded bg-[#156372] px-4 text-sm font-semibold text-white hover:bg-[#0f4f5b]"
+                  onClick={runReport}
+                  disabled={livePreviewLoading}
+                  className="inline-flex h-8 items-center rounded bg-[#156372] px-4 text-sm font-semibold text-white hover:bg-[#0f4f5b] disabled:cursor-wait disabled:bg-[#156372]/80"
                 >
-                  Run Report
+                  {livePreviewLoading ? "Loading..." : "Run Report"}
                 </button>
                 <button
                   type="button"
@@ -2878,42 +2929,35 @@ export default function ReportDetailPage() {
 
         <div className="flex-1 overflow-auto px-4 py-4">
           {livePreviewLoading ? (
-            <div className="mx-auto max-w-5xl">
-              <div className="animate-pulse text-center">
-                <div className="mx-auto h-6 w-56 rounded bg-slate-200" />
-                <div className="mx-auto mt-3 h-4 w-40 rounded bg-slate-100" />
+            <>
+              <div className="mx-auto mt-6 max-w-5xl overflow-hidden rounded-[12px] border border-[#e8edf5]">
+                {renderPreviewHeading(reportDisplayName)}
+                <table className="w-full border-collapse">
+                  {visiblePreviewColumns.length ? (
+                    <thead>
+                      <tr className="border-b border-[#e8edf5] bg-[#fafbfe]">
+                        {visiblePreviewColumns.map((column) => (
+                          <th key={column} className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">
+                            {column}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                  ) : null}
+                  <tbody>
+                    <tr className="border-b border-[#edf1f7]">
+                      <td className="px-4 py-8 text-center text-sm text-[#64748b]" colSpan={Math.max(visiblePreviewColumns.length, 1)}>
+                        Loading report data...
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
-
-              <div className="mt-6 overflow-hidden rounded-[12px] border border-[#e8edf5] bg-white">
-                <div className="border-b border-[#e8edf5] bg-[#fafbfe] px-4 py-3">
-                  <div className="grid grid-cols-4 gap-3">
-                    {Array.from({ length: 4 }).map((_, index) => (
-                      <div key={`skeleton-head-${index}`} className="h-3 rounded bg-slate-200/80" />
-                    ))}
-                  </div>
-                </div>
-                <div className="space-y-0">
-                  {Array.from({ length: 8 }).map((_, rowIndex) => (
-                    <div key={`skeleton-row-${rowIndex}`} className="grid grid-cols-4 gap-3 border-b border-[#edf1f7] px-4 py-4">
-                      {Array.from({ length: 4 }).map((__, cellIndex) => (
-                        <div
-                          key={`skeleton-cell-${rowIndex}-${cellIndex}`}
-                          className={`h-3 rounded bg-slate-100 ${cellIndex === 0 ? "w-3/4" : "w-11/12"}`}
-                        />
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+            </>
           ) : preview ? (
             <>
-              <div className="mx-auto max-w-5xl text-center">
-                <h2 className="mt-1 text-[22px] font-semibold text-[#0f172a]">{preview.title}</h2>
-                <p className="mt-1 text-sm text-[#475569]">{preview.subtitle || dateLabel}</p>
-              </div>
-
-              <div className="mt-6 overflow-hidden rounded-[12px] border border-[#e8edf5]">
+              <div className="mx-auto mt-6 max-w-5xl overflow-hidden rounded-[12px] border border-[#e8edf5]">
+                {renderPreviewHeading(preview.title)}
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="border-b border-[#e8edf5] bg-[#fafbfe]">
@@ -2962,11 +3006,14 @@ export default function ReportDetailPage() {
             </>
           ) : (
             <div className="mx-auto max-w-5xl">
-              <div className="rounded-[12px] border border-dashed border-[#dbe3ef] bg-[#fbfcfe] px-6 py-10 text-center">
-                <h2 className="text-[20px] font-semibold text-[#0f172a]">No live data available yet</h2>
-                <p className="mt-2 text-sm text-[#64748b]">
-                  This report will show real database data once the query returns rows for the selected report.
-                </p>
+              <div className="overflow-hidden rounded-[12px] border border-[#e8edf5] bg-white">
+                {renderPreviewHeading(reportDisplayName)}
+                <div className="bg-[#fbfcfe] px-6 py-10 text-center">
+                  <h2 className="text-[20px] font-semibold text-[#0f172a]">No live data available yet</h2>
+                  <p className="mt-2 text-sm text-[#64748b]">
+                    This report will show real database data once the query returns rows for the selected report.
+                  </p>
+                </div>
               </div>
             </div>
           )}

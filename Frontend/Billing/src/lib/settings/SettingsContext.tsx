@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import { useUser } from '../auth/UserContext';
+import { settingsAPI } from '../../services/api';
 
 const SettingsContext = createContext(null);
 
@@ -309,38 +310,33 @@ export function SettingsProvider({ children }) {
       if (cached) applyOrganizationProfileToSettings(JSON.parse(cached));
     } catch {}
 
-    const token = localStorage.getItem("auth_token") || localStorage.getItem("token") || "";
-    fetch("/api/settings/organization/profile", {
-      credentials: "include",
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    })
-      .then((res) => res.json().catch(() => null))
-      .then((payload) => {
-        const profile = payload?.success ? payload?.data : null;
-        if (!profile) return;
+    void (async () => {
+      try {
+        const res = await settingsAPI.getOrganizationProfile();
+        if (!res?.success || !res?.data) return;
         try {
-          localStorage.setItem("organization_profile", JSON.stringify(profile));
+          localStorage.setItem("organization_profile", JSON.stringify(res.data));
         } catch {}
-        applyOrganizationProfileToSettings(profile);
-      })
-      .catch(() => {});
+        applyOrganizationProfileToSettings(res.data);
+      } catch (error) {
+        console.error("Failed to load organization profile", error);
+      }
+    })();
   }, [hasChecked, user?.id]);
 
   useEffect(() => {
     if (!hasChecked || !user) return;
 
-    const token = localStorage.getItem("auth_token") || localStorage.getItem("token") || "";
-    fetch("/api/settings/general", {
-      credentials: "include",
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    })
-      .then((res) => res.json().catch(() => null))
-      .then((payload) => {
-        const generalSettings = payload?.success ? payload?.data?.settings : null;
-        if (!generalSettings) return;
+    void (async () => {
+      try {
+        const res = await settingsAPI.getGeneralSettings();
+        if (!res?.success || !res?.data) return;
+        const generalSettings = res.data?.settings || res.data;
         applyGeneralSettingsToSettings(generalSettings);
-      })
-      .catch(() => {});
+      } catch (error) {
+        console.error("Failed to load general settings", error);
+      }
+    })();
   }, [hasChecked, user?.id]);
 
   useEffect(() => {
@@ -351,21 +347,19 @@ export function SettingsProvider({ children }) {
       if (cached) applyBrandingToSettings(JSON.parse(cached));
     } catch {}
 
-    const token = localStorage.getItem("auth_token") || localStorage.getItem("token") || "";
-    fetch("/api/settings/organization/branding", {
-      credentials: "include",
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    })
-      .then((res) => res.json().catch(() => null))
-      .then((payload) => {
-        const branding = payload?.success ? payload?.data : null;
+    void (async () => {
+      try {
+        const res = await settingsAPI.getOrganizationProfile();
+        const branding = res?.success ? res?.data?.branding : null;
         if (!branding || brandingUpdatedLocallyRef.current) return;
         try {
           localStorage.setItem("organization_branding", JSON.stringify(branding));
         } catch {}
         applyBrandingToSettings(branding);
-      })
-      .catch(() => {});
+      } catch (error) {
+        console.error("Failed to load organization branding", error);
+      }
+    })();
   }, [hasChecked, user?.id]);
 
   useEffect(() => {

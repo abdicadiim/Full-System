@@ -224,3 +224,4 @@ export const getReportColumnGroups = (reportId: string, categoryId: string): Col
 
   return DEFAULT_COLUMN_GROUPS;
 };
+

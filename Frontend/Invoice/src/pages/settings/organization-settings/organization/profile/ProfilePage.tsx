@@ -9,123 +9,15 @@ import { currenciesAPI } from "../../../../../services/api";
 
 const API_BASE_URL = '/api';
 const DEFAULT_SYSTEM_SENDER_EMAIL = "message-service@sender.tabanbooks.com";
-const USER_STORAGE_KEYS = ["user", "current_user", "auth_user"];
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const ORGANIZATION_PROFILE_STORAGE_KEYS = ["org_profile", "organization_profile"];
-const LANGUAGE_LABEL_BY_CODE: Record<string, string> = {
-  ar: "Arabic",
-  de: "German",
-  en: "English",
-  es: "Spanish",
-  fr: "French",
-  hi: "Hindi",
-  zh: "Chinese",
-};
 
 const getStoredUser = () => {
   try {
-    for (const key of USER_STORAGE_KEYS) {
-      const user = localStorage.getItem(key);
-      if (!user) continue;
-      return JSON.parse(user);
-    }
-    return null;
+    const user = localStorage.getItem('user');
+    return user ? JSON.parse(user) : null;
   } catch (error) {
     console.error('Error parsing local user:', error);
     return null;
   }
-};
-
-const safeParseJson = (value: string | null) => {
-  if (!value) return null;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
-};
-
-const readStoredOrganizationProfile = () => {
-  if (typeof localStorage === "undefined") return null;
-
-  const profiles = ORGANIZATION_PROFILE_STORAGE_KEYS
-    .map((key) => safeParseJson(localStorage.getItem(key)))
-    .filter((profile) => profile && typeof profile === "object");
-
-  if (profiles.length === 0) {
-    return null;
-  }
-
-  return profiles.reduceRight((merged: any, profile: any) => {
-    const profileAddress = profile?.address && typeof profile.address === "object" ? profile.address : {};
-    const mergedAddress = merged?.address && typeof merged.address === "object" ? merged.address : {};
-    return {
-      ...profile,
-      ...merged,
-      address: {
-        ...profileAddress,
-        ...mergedAddress,
-      },
-    };
-  }, {});
-};
-
-const getStoredProfileValue = (profile: any, keys: string[], fallback = "") => {
-  if (!profile || typeof profile !== "object") return fallback;
-  const address = profile?.address && typeof profile.address === "object" ? profile.address : {};
-
-  for (const key of keys) {
-    const candidates = [profile?.[key], address?.[key]];
-    for (const candidate of candidates) {
-      if (candidate === undefined || candidate === null) continue;
-      const text = String(candidate).trim();
-      if (text) return text;
-    }
-  }
-
-  return fallback;
-};
-
-const getStoredProfileBoolean = (profile: any, keys: string[], fallback = false) => {
-  if (!profile || typeof profile !== "object") return fallback;
-  const address = profile?.address && typeof profile.address === "object" ? profile.address : {};
-
-  for (const key of keys) {
-    const candidates = [profile?.[key], address?.[key]];
-    for (const candidate of candidates) {
-      if (typeof candidate === "boolean") return candidate;
-      if (typeof candidate === "string") {
-        const normalized = candidate.trim().toLowerCase();
-        if (["true", "1", "yes"].includes(normalized)) return true;
-        if (["false", "0", "no"].includes(normalized)) return false;
-      }
-    }
-  }
-
-  return fallback;
-};
-
-const getStoredAdditionalFields = (profile: any) => {
-  const candidates = [
-    profile?.additionalFields,
-    profile?.custom_fields,
-  ];
-
-  for (const candidate of candidates) {
-    if (!Array.isArray(candidate)) continue;
-
-    const normalized = candidate
-      .map((field: any, index: number) => ({
-        label: String(field?.label || "").trim(),
-        value: String(field?.value || "").trim(),
-        index: Number(field?.index) || index + 1,
-      }))
-      .filter((field: any) => field.label || field.value);
-
-    return normalized.length > 0 ? normalized : [{ label: "", value: "" }];
-  }
-
-  return [{ label: "", value: "" }];
 };
 
 const INDUSTRIES = [
@@ -161,6 +53,15 @@ const INDUSTRIES = [
   "Web Designing",
   "Web Development",
   "Writers"
+];
+
+const BUSINESS_TYPES = [
+  "Sole Proprietorship",
+  "Partnership",
+  "Limited Liability Company (LLC)",
+  "Corporation",
+  "Non-profit",
+  "Other"
 ];
 
 const COUNTRIES = [
@@ -473,168 +374,6 @@ const ALL_DATE_FORMATS = [
 ];
 const FISCAL_YEARS = ["January - December", "February - January", "March - February", "April - March"];
 const START_DATES = Array.from({ length: 31 }, (_, i) => i + 1);
-const MONTH_OPTIONS = [
-  "january",
-  "february",
-  "march",
-  "april",
-  "may",
-  "june",
-  "july",
-  "august",
-  "september",
-  "october",
-  "november",
-  "december",
-];
-
-const getOrganizationEndpoint = () => {
-  const organizationId = String(getStoredUser()?.organizationId || "").trim();
-  return organizationId ? `${API_BASE_URL}/organizations/${organizationId}` : `${API_BASE_URL}/settings/organization/profile`;
-};
-
-const extractOrganizationResponse = (payload: any) => payload?.organization || payload?.data || null;
-
-const getLanguageLabel = (value: string | null | undefined) => {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  const normalized = raw.toLowerCase();
-  return LANGUAGE_LABEL_BY_CODE[normalized] || raw;
-};
-
-const getLanguageCode = (value: string | null | undefined) => {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  const normalized = raw.toLowerCase();
-  const found = Object.entries(LANGUAGE_LABEL_BY_CODE).find(([, label]) => label.toLowerCase() === normalized);
-  return found?.[0] || normalized;
-};
-
-const getFiscalYearLabel = (value: string | number | null | undefined) => {
-  const raw = String(value ?? "").trim().toLowerCase();
-  if (!raw) return "";
-
-  let monthIndex = MONTH_OPTIONS.indexOf(raw);
-  if (monthIndex < 0) {
-    const numericValue = Number(raw);
-    if (Number.isInteger(numericValue) && numericValue >= 0 && numericValue < MONTH_OPTIONS.length) {
-      monthIndex = numericValue;
-    }
-  }
-
-  if (monthIndex < 0) {
-    return String(value || "");
-  }
-
-  const start = MONTH_OPTIONS[monthIndex];
-  const end = MONTH_OPTIONS[(monthIndex + 11) % MONTH_OPTIONS.length];
-  return `${start.charAt(0).toUpperCase()}${start.slice(1)} - ${end.charAt(0).toUpperCase()}${end.slice(1)}`;
-};
-
-const normalizeOrganizationPayload = (responsePayload: any) => {
-  const payload = extractOrganizationResponse(responsePayload);
-  if (!payload || typeof payload !== "object") return null;
-
-  const address = payload?.address && typeof payload.address === "object" ? payload.address : {};
-  const customFields = Array.isArray(payload?.custom_fields)
-    ? payload.custom_fields
-    : Array.isArray(payload?.additionalFields)
-      ? payload.additionalFields
-      : [];
-
-  return {
-    name: String(payload?.name || payload?.organizationName || "").trim(),
-    industry: String(payload?.industry || payload?.industry_type || "").trim(),
-    country: String(address?.country || payload?.country || "").trim(),
-    website: String(payload?.website || "").trim(),
-    email: String(payload?.email || "").trim(),
-    baseCurrency: String(payload?.baseCurrency || payload?.currency_code || "").trim(),
-    fiscalYear: String(payload?.fiscalYear || getFiscalYearLabel(payload?.fiscal_year_start_month)).trim(),
-    startDate: String(payload?.startDate || payload?.start_date || "").trim(),
-    reportBasis: String(payload?.reportBasis || "").trim(),
-    orgLanguage: String(payload?.orgLanguage || getLanguageLabel(payload?.language_code)).trim(),
-    commLanguage: String(payload?.commLanguage || "").trim(),
-    timeZone: String(payload?.timeZone || payload?.time_zone || "").trim(),
-    dateFormat: String(payload?.dateFormat || payload?.date_format || "").trim(),
-    dateSeparator: String(payload?.dateSeparator || payload?.field_separator || "").trim(),
-    street1: String(address?.street1 || address?.street_address1 || "").trim(),
-    street2: String(address?.street2 || address?.street_address2 || "").trim(),
-    city: String(address?.city || "").trim(),
-    zipCode: String(address?.zipCode || address?.zip || "").trim(),
-    state: String(address?.state || "").trim(),
-    phone: String(address?.phone || payload?.phone || "").trim(),
-    fax: String(address?.fax || payload?.fax || "").trim(),
-    logo: String(payload?.logo || payload?.logoUrl || "").trim(),
-    companyIdType: String(payload?.companyIdType || payload?.company_id_label || payload?.companyid_label || "").trim(),
-    companyIdValue: String(payload?.companyIdValue || payload?.company_id_value || payload?.companyid_value || "").trim(),
-    additionalFields: customFields.map((field: any, index: number) => ({
-      label: String(field?.label || "").trim(),
-      value: String(field?.value || "").trim(),
-      index: Number(field?.index) || index + 1,
-    })),
-    paymentStubAddress: String(payload?.paymentStubAddress || "").trim(),
-    showPaymentStubAddress: Boolean(payload?.showPaymentStubAddress),
-  };
-};
-
-const isValidWebsite = (value: string) => {
-  if (!value) return true;
-  try {
-    const url = new URL(value.startsWith("http://") || value.startsWith("https://") ? value : `https://${value}`);
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
-};
-
-const validateProfileForm = (input: {
-  orgName: string;
-  industry: string;
-  location: string;
-  email: string;
-  website: string;
-  baseCurrency: string;
-  timeZone: string;
-  paymentStubAddress: string;
-  companyIdType: string;
-  companyIdValue: string;
-  additionalFields: Array<{ label?: string; value?: string }>;
-}) => {
-  if (!input.orgName.trim()) return "Organization name is required.";
-  if (!input.industry.trim()) return "Industry is required.";
-  if (!input.location.trim()) return "Organization location is required.";
-  if (!extractCurrencyCode(input.baseCurrency)) return "Base currency is required.";
-  if (!input.timeZone.trim()) return "Time zone is required.";
-
-  const normalizedEmail = input.email.trim().toLowerCase();
-  if (normalizedEmail && !EMAIL_REGEX.test(normalizedEmail)) {
-    return "Enter a valid organization email address.";
-  }
-
-  if (input.website.trim() && !isValidWebsite(input.website.trim())) {
-    return "Enter a valid website URL.";
-  }
-
-  if ((input.companyIdType.trim() && !input.companyIdValue.trim()) || (!input.companyIdType.trim() && input.companyIdValue.trim())) {
-    return "Company ID type and value must be entered together.";
-  }
-
-  const incompleteAdditionalField = input.additionalFields.find((field) => {
-    const label = String(field?.label || "").trim();
-    const value = String(field?.value || "").trim();
-    return (label || value) && (!label || !value);
-  });
-
-  if (incompleteAdditionalField) {
-    return "Each additional field needs both a label and a value.";
-  }
-
-  if (input.paymentStubAddress.trim().length > 255) {
-    return "Payment stub address cannot exceed 255 characters.";
-  }
-
-  return "";
-};
 
 const isBaseCurrencyRecord = (currency: any) => {
   const flag = currency?.isBase ?? currency?.isBaseCurrency ?? currency?.is_base_currency ?? currency?.baseCurrency ?? currency?.base_currency;
@@ -1179,35 +918,68 @@ function DateFormatDropdown({ value, placeholder, onChange }) {
 
 export default function ProfilePage() {
   const navigate = useNavigate();
-  const storedOrgProfile = useMemo(() => readStoredOrganizationProfile(), []);
   const [currencyOptions, setCurrencyOptions] = useState<string[]>(() => readStoredCurrencyOptions());
-  const [orgName, setOrgName] = useState(() => getStoredProfileValue(storedOrgProfile, ["organizationName", "name"], "Taban enterprise") || "Taban enterprise");
-  const [industry, setIndustry] = useState(() => getStoredProfileValue(storedOrgProfile, ["industry", "industry_type"], "Agriculture") || "Agriculture");
-  const [location, setLocation] = useState(() => getStoredProfileValue(storedOrgProfile, ["location", "country"], "Somalia") || "Somalia");
-  const [email, setEmail] = useState(() => getStoredProfileValue(storedOrgProfile, ["email"]));
+  const [orgName, setOrgName] = useState(() => {
+    const local = localStorage.getItem('org_profile');
+    return local ? JSON.parse(local).organizationName : "Taban enterprise";
+  });
+
+  const [businessType, setBusinessType] = useState(() => {
+    const local = localStorage.getItem('org_profile');
+    return local ? JSON.parse(local).businessType : "";
+  });
+
+  const [industry, setIndustry] = useState(() => {
+    const local = localStorage.getItem('org_profile');
+    return local ? JSON.parse(local).industry : "Agriculture";
+  });
+  const [location, setLocation] = useState(() => {
+    const local = localStorage.getItem('org_profile');
+    return local ? JSON.parse(local).location : "Somalia";
+  });
+
+  const [email, setEmail] = useState(() => {
+    const user = localStorage.getItem('user');
+    return user ? JSON.parse(user).email : "";
+  });
   const [primarySenderName, setPrimarySenderName] = useState(() => {
     const storedUser = getStoredUser();
-    return storedUser?.name || storedUser?.fullName || getStoredProfileValue(storedOrgProfile, ["primarySenderName"], "Organization Owner") || "Organization Owner";
+    return storedUser?.name || storedUser?.fullName || "Organization Owner";
   });
   const [primarySenderEmail, setPrimarySenderEmail] = useState(() => {
     const storedUser = getStoredUser();
-    return storedUser?.email || getStoredProfileValue(storedOrgProfile, ["primarySenderEmail"], "");
+    return storedUser?.email || "";
   });
-  const [logoImage, setLogoImage] = useState<File | null>(null);
-  const [logoPreview, setLogoPreview] = useState<string | null>(() => getStoredProfileValue(storedOrgProfile, ["logo", "logoUrl"], "") || null);
-  const [loadingProfile, setLoadingProfile] = useState(() => !storedOrgProfile);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [street1, setStreet1] = useState(() => getStoredProfileValue(storedOrgProfile, ["street1", "street_address1"]));
-  const [street2, setStreet2] = useState(() => getStoredProfileValue(storedOrgProfile, ["street2", "street_address2"]));
-  const [city, setCity] = useState(() => getStoredProfileValue(storedOrgProfile, ["city"]));
-  const [zipCode, setZipCode] = useState(() => getStoredProfileValue(storedOrgProfile, ["zipCode", "zip"]));
-  const [state, setState] = useState(() => getStoredProfileValue(storedOrgProfile, ["state"]));
+  const [logoImage, setLogoImage] = useState(null);
+  const [logoPreview, setLogoPreview] = useState(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const fileInputRef = useRef(null);
+  const [street1, setStreet1] = useState(() => {
+    const local = localStorage.getItem('org_profile');
+    return local ? JSON.parse(local).street1 : "";
+  });
+  const [street2, setStreet2] = useState(() => {
+    const local = localStorage.getItem('org_profile');
+    return local ? JSON.parse(local).street2 : "";
+  });
+  const [city, setCity] = useState(() => {
+    const local = localStorage.getItem('org_profile');
+    return local ? JSON.parse(local).city : "";
+  });
+  const [zipCode, setZipCode] = useState(() => {
+    const local = localStorage.getItem('org_profile');
+    return local ? JSON.parse(local).zipCode : "";
+  });
+  const [state, setState] = useState(() => {
+    const local = localStorage.getItem('org_profile');
+    return local ? JSON.parse(local).state : "";
+  });
 
-  const [phone, setPhone] = useState(() => getStoredProfileValue(storedOrgProfile, ["phone"]));
-  const [fax, setFax] = useState(() => getStoredProfileValue(storedOrgProfile, ["fax"]));
-  const [website, setWebsite] = useState(() => getStoredProfileValue(storedOrgProfile, ["website"]));
-  const [showPaymentStubAddress, setShowPaymentStubAddress] = useState(() => getStoredProfileBoolean(storedOrgProfile, ["showPaymentStubAddress"]));
-  const [paymentStubAddress, setPaymentStubAddress] = useState(() => getStoredProfileValue(storedOrgProfile, ["paymentStubAddress"]));
+  const [phone, setPhone] = useState("");
+  const [fax, setFax] = useState("");
+  const [website, setWebsite] = useState("");
+  const [showPaymentStubAddress, setShowPaymentStubAddress] = useState(false);
+  const [paymentStubAddress, setPaymentStubAddress] = useState("");
   const [isEditAddressModalOpen, setIsEditAddressModalOpen] = useState(false);
 
   // Additional fields
@@ -1217,21 +989,33 @@ export default function ProfilePage() {
       return storedBaseSelection;
     }
     const options = readStoredCurrencyOptions();
-    const cur = getStoredProfileValue(storedOrgProfile, ["currency", "baseCurrency", "currency_code"]);
-    if (cur) {
-      return resolveCurrencySelection(cur, options);
+    try {
+      const local = localStorage.getItem('org_profile');
+      if (local) {
+        const parsed = JSON.parse(local);
+        const cur = parsed.currency || parsed.baseCurrency;
+        return resolveCurrencySelection(cur, options);
+      }
+    } catch (error) {
+      console.error('Error parsing local org profile currency:', error);
     }
     return resolveCurrencySelection(null, options);
   });
-  const [fiscalYear, setFiscalYear] = useState(() => getStoredProfileValue(storedOrgProfile, ["fiscalYear", "fiscal_year_start_month"], "January - December") || "January - December");
-  const [startDate, setStartDate] = useState(() => getStoredProfileValue(storedOrgProfile, ["startDate"], "1") || "1");
-  const [reportBasis, setReportBasis] = useState(() => getStoredProfileValue(storedOrgProfile, ["reportBasis"], "Accrual") || "Accrual");
-  const [orgLanguage, setOrgLanguage] = useState(() => getStoredProfileValue(storedOrgProfile, ["orgLanguage", "language", "language_code"], "English") || "English");
-  const [commLanguage, setCommLanguage] = useState(() => getStoredProfileValue(storedOrgProfile, ["commLanguage"], "English") || "English");
-  const [timeZone, setTimeZone] = useState(() => getStoredProfileValue(storedOrgProfile, ["timeZone", "time_zone", "timezone"], "(GMT 3:00) Eastern African Time (Africa/Mogadishu)") || "(GMT 3:00) Eastern African Time (Africa/Mogadishu)");
+  const [fiscalYear, setFiscalYear] = useState("January - December");
+  const [startDate, setStartDate] = useState("1");
+  const [reportBasis, setReportBasis] = useState("Accrual");
+  const [orgLanguage, setOrgLanguage] = useState(() => {
+    const local = localStorage.getItem('org_profile');
+    return local ? JSON.parse(local).language : "English";
+  });
+  const [commLanguage, setCommLanguage] = useState("English");
+  const [timeZone, setTimeZone] = useState(() => {
+    const local = localStorage.getItem('org_profile');
+    return local ? JSON.parse(local).timezone : "(GMT 3:00) Eastern African Time (Africa/Mogadishu)";
+  });
 
-  const [dateFormat, setDateFormat] = useState(() => getStoredProfileValue(storedOrgProfile, ["dateFormat", "date_format"], "dd-MM-yyyy [ 25-12-2025 ]") || "dd-MM-yyyy [ 25-12-2025 ]");
-  const [dateSeparator, setDateSeparator] = useState(() => getStoredProfileValue(storedOrgProfile, ["dateSeparator", "field_separator"], "-") || "-");
+  const [dateFormat, setDateFormat] = useState("dd-MM-yyyy [ 25-12-2025 ]");
+  const [dateSeparator, setDateSeparator] = useState("-");
 
   // Update date format when separator changes
   const handleDateSeparatorChange = (newSeparator) => {
@@ -1240,9 +1024,9 @@ export default function ProfilePage() {
     const updatedFormat = dateFormat.replace(/[-./]/g, newSeparator);
     setDateFormat(updatedFormat);
   };
-  const [companyIdType, setCompanyIdType] = useState(() => getStoredProfileValue(storedOrgProfile, ["companyIdType", "companyid_label", "company_id_label"], "Company ID :") || "Company ID :");
-  const [companyIdValue, setCompanyIdValue] = useState(() => getStoredProfileValue(storedOrgProfile, ["companyIdValue", "companyid_value", "company_id_value"]));
-  const [additionalFields, setAdditionalFields] = useState<any[]>(() => getStoredAdditionalFields(storedOrgProfile));
+  const [companyIdType, setCompanyIdType] = useState("Company ID :");
+  const [companyIdValue, setCompanyIdValue] = useState("");
+  const [additionalFields, setAdditionalFields] = useState<any[]>([{ label: "", value: "" }]);
   const [isSaving, setIsSaving] = useState(false);
   // Save feedback uses react-toastify (see `handleSave`).
   const [isEditCurrencyModalOpen, setIsEditCurrencyModalOpen] = useState(false);
@@ -1314,7 +1098,7 @@ export default function ProfilePage() {
       // Create preview
       const reader = new FileReader();
       reader.onloadend = () => {
-        setLogoPreview(typeof reader.result === "string" ? reader.result : null);
+        setLogoPreview(reader.result);
       };
       reader.readAsDataURL(file);
     }
@@ -1384,25 +1168,41 @@ export default function ProfilePage() {
 
   // Load profile data on mount
   useEffect(() => {
-    let isMounted = true;
-    const applyIfEmpty = (currentValue: string, setter: (value: string) => void, nextValue: string) => {
-      if (!String(currentValue || "").trim() && String(nextValue || "").trim()) {
-        setter(nextValue);
-      }
-    };
-
     const loadProfile = async () => {
-      if (!storedOrgProfile) {
-        setLoadingProfile(true);
+      setLoadingProfile(true);
+      // Priority 1: Load from local storage (onboarding data)
+      const localData = localStorage.getItem('org_profile');
+      if (localData) {
+        try {
+          const lp = JSON.parse(localData);
+          const storedBaseSelection = readStoredBaseCurrencySelection();
+          if (lp.organizationName) setOrgName(lp.organizationName);
+          if (lp.businessType) setBusinessType(lp.businessType);
+          if (lp.industry) setIndustry(lp.industry);
+          if (lp.location) setLocation(lp.location);
+          if (lp.street1) setStreet1(lp.street1);
+          if (lp.street2) setStreet2(lp.street2);
+          if (lp.city) setCity(lp.city);
+          if (lp.zipCode) setZipCode(lp.zipCode);
+          if (lp.state) setState(lp.state);
+          if (storedBaseSelection) {
+            setBaseCurrency(storedBaseSelection);
+          } else if (lp.currency || lp.baseCurrency) {
+            setBaseCurrency(resolveCurrencySelection(lp.currency || lp.baseCurrency, readStoredCurrencyOptions()));
+          }
+          if (lp.language) setOrgLanguage(lp.language);
+          if (lp.timezone) setTimeZone(lp.timezone);
+        } catch (e) {
+          console.error('Error parsing local org profile:', e);
+        }
       }
 
+      // Priority 2: Load from server and merge
       try {
         const token = localStorage.getItem('auth_token');
-        if (!token) {
-          return;
-        }
+        if (!token) return;
 
-        const response = await fetch(getOrganizationEndpoint(), {
+        const response = await fetch(`${API_BASE_URL}/settings/organization/profile`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
@@ -1411,67 +1211,51 @@ export default function ProfilePage() {
 
         if (response.ok) {
           const data = await response.json();
-          const p = normalizeOrganizationPayload(data);
-          if (p && isMounted) {
+          if (data.success && data.data) {
+            const p = data.data;
             const storedBaseSelection = readStoredBaseCurrencySelection();
-
-            applyIfEmpty(orgName, setOrgName, p.name);
-            applyIfEmpty(industry, setIndustry, p.industry);
-            applyIfEmpty(location, setLocation, p.country);
-            applyIfEmpty(email, setEmail, p.email);
-            applyIfEmpty(website, setWebsite, p.website);
-            applyIfEmpty(street1, setStreet1, p.street1);
-            applyIfEmpty(street2, setStreet2, p.street2);
-            applyIfEmpty(city, setCity, p.city);
-            applyIfEmpty(zipCode, setZipCode, p.zipCode);
-            applyIfEmpty(state, setState, p.state);
-            applyIfEmpty(phone, setPhone, p.phone);
-            applyIfEmpty(fax, setFax, p.fax);
-            applyIfEmpty(paymentStubAddress, setPaymentStubAddress, p.paymentStubAddress);
-            applyIfEmpty(companyIdType, setCompanyIdType, p.companyIdType);
-            applyIfEmpty(companyIdValue, setCompanyIdValue, p.companyIdValue);
-            applyIfEmpty(fiscalYear, setFiscalYear, p.fiscalYear);
-            applyIfEmpty(startDate, setStartDate, p.startDate || "1");
-            applyIfEmpty(reportBasis, setReportBasis, p.reportBasis);
-            applyIfEmpty(orgLanguage, setOrgLanguage, p.orgLanguage);
-            applyIfEmpty(commLanguage, setCommLanguage, p.commLanguage);
-            applyIfEmpty(timeZone, setTimeZone, p.timeZone);
-            applyIfEmpty(dateFormat, setDateFormat, p.dateFormat);
-            applyIfEmpty(dateSeparator, setDateSeparator, p.dateSeparator);
-
+            // Only update if server has non-empty values
+            if (p.name && p.name !== "Taban enterprise") setOrgName(p.name);
+            if (p.businessType) setBusinessType(p.businessType);
+            if (p.industry) setIndustry(p.industry);
+            if (p.address?.country) setLocation(p.address.country);
+            if (p.website) setWebsite(p.website);
             if (storedBaseSelection) {
               setBaseCurrency(storedBaseSelection);
-            } else if (!String(baseCurrency || "").trim() && p.baseCurrency) {
+            } else if (p.baseCurrency) {
               setBaseCurrency(resolveCurrencySelection(p.baseCurrency, readStoredCurrencyOptions()));
             }
+            if (p.fiscalYear) setFiscalYear(p.fiscalYear);
+            if (p.reportBasis) setReportBasis(p.reportBasis);
+            if (p.orgLanguage) setOrgLanguage(p.orgLanguage);
+            if (p.commLanguage) setCommLanguage(p.commLanguage);
+            if (p.timeZone) setTimeZone(p.timeZone);
+            if (p.dateFormat) setDateFormat(p.dateFormat);
+            if (p.dateSeparator) setDateSeparator(p.dateSeparator);
 
-            if (!String(logoPreview || "").trim() && p.logo) {
+            if (p.address) {
+              if (p.address.street1) setStreet1(p.address.street1);
+              if (p.address.street2) setStreet2(p.address.street2);
+              if (p.address.city) setCity(p.address.city);
+              if (p.address.zipCode) setZipCode(p.address.zipCode);
+              if (p.address.state) setState(p.address.state);
+              if (p.address.phone) setPhone(p.address.phone);
+              if (p.address.fax) setFax(p.address.fax);
+            }
+
+            if (p.logo) {
               setLogoPreview(p.logo);
-            }
-
-            if (!showPaymentStubAddress && typeof p.showPaymentStubAddress === "boolean") {
-              setShowPaymentStubAddress(p.showPaymentStubAddress);
-            }
-
-            if ((additionalFields.length === 0 || additionalFields.every((field) => !String(field?.label || "").trim() && !String(field?.value || "").trim()))
-              && Array.isArray(p.additionalFields) && p.additionalFields.length > 0) {
-              setAdditionalFields(p.additionalFields);
             }
           }
         }
       } catch (error) {
         console.error('Error loading profile:', error);
       } finally {
-        if (isMounted) {
-          setLoadingProfile(false);
-        }
+        setLoadingProfile(false);
       }
     };
 
     loadProfile();
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
   useEffect(() => {
@@ -1513,48 +1297,21 @@ export default function ProfilePage() {
   useEffect(() => {
     if (loadingProfile) return;
 
-    const baseCurrencyCode = baseCurrency.split(" - ")[0];
-    const sanitizedAdditionalFields = additionalFields
-      .map((field, index) => ({
-        index: index + 1,
-        label: String(field?.label || "").trim(),
-        value: String(field?.value || "").trim(),
-      }))
-      .filter((field) => field.label || field.value);
-
     const liveOrgProfile = {
       organizationName: orgName,
       name: orgName,
+      businessType,
       industry,
       location,
       logo: logoPreview || "",
       logoUrl: logoPreview || "",
       email,
       website,
-      baseCurrency: baseCurrencyCode,
-      currency_code: baseCurrencyCode,
-      fiscalYear,
-      startDate,
-      reportBasis,
+      baseCurrency: baseCurrency.split(" - ")[0],
       orgLanguage,
-      commLanguage,
-      language_code: getLanguageCode(orgLanguage) || "en",
       timeZone,
-      time_zone: timeZone,
       dateFormat,
-      date_format: dateFormat,
       dateSeparator,
-      field_separator: dateSeparator,
-      companyIdType,
-      company_id_label: companyIdType,
-      companyid_label: companyIdType,
-      companyIdValue,
-      company_id_value: companyIdValue,
-      companyid_value: companyIdValue,
-      custom_fields: sanitizedAdditionalFields,
-      additionalFields: sanitizedAdditionalFields,
-      paymentStubAddress,
-      showPaymentStubAddress,
       address: {
         street1,
         street2,
@@ -1590,6 +1347,7 @@ export default function ProfilePage() {
   }, [
     loadingProfile,
     orgName,
+    businessType,
     industry,
     location,
     logoPreview,
@@ -1607,15 +1365,6 @@ export default function ProfilePage() {
     state,
     phone,
     fax,
-    fiscalYear,
-    startDate,
-    reportBasis,
-    commLanguage,
-    companyIdType,
-    companyIdValue,
-    additionalFields,
-    paymentStubAddress,
-    showPaymentStubAddress,
   ]);
 
   const syncBaseCurrencyWithCurrencyTable = async (selectedCurrency: string) => {
@@ -1676,26 +1425,6 @@ export default function ProfilePage() {
         return;
       }
 
-      const validationError = validateProfileForm({
-        orgName,
-        industry,
-        location,
-        email,
-        website,
-        baseCurrency,
-        timeZone,
-        paymentStubAddress,
-        companyIdType,
-        companyIdValue,
-        additionalFields,
-      });
-
-      if (validationError) {
-        toast.error(validationError);
-        setIsSaving(false);
-        return;
-      }
-
       // Convert logo to base64 if image file is selected
       let logoBase64 = logoPreview || "";
       if (logoImage) {
@@ -1708,7 +1437,7 @@ export default function ProfilePage() {
               if (result && (result as string).length > 5000000) {
                 reject(new Error('Logo file is too large. Please use an image smaller than 1MB.'));
               } else {
-                resolve(typeof result === "string" ? result : "");
+                resolve(result);
               }
             };
             reader.onerror = reject;
@@ -1729,61 +1458,43 @@ export default function ProfilePage() {
       };
       const monthIdx = monthMap[startMonthName] || 0;
       const fStartDate = new Date(new Date().getFullYear(), monthIdx, parseInt(startDate) || 1);
-      const sanitizedAdditionalFields = additionalFields
-        .map((field, index) => ({
-          index: index + 1,
-          label: String(field?.label || "").trim(),
-          value: String(field?.value || "").trim(),
-        }))
-        .filter((field) => field.label || field.value);
-      const baseCurrencyCode = baseCurrency.split(' - ')[0];
 
       const profileData = {
         name: orgName,
-        industry_type: industry,
-        contact_name: primarySenderName || orgName,
+        businessType: businessType,
+        industry: industry,
         email: email,
         website: website,
         logo: logoBase64,
         address: {
-          street_address1: street1,
-          street_address2: street2,
+          street1: street1,
+          street2: street2,
           city: city,
-          zip: zipCode,
+          zipCode: zipCode,
           state: state,
           country: location,
           phone: phone,
           fax: fax,
         },
-        currency_code: baseCurrencyCode,
-        baseCurrency: baseCurrencyCode,
-        fiscal_year_start_month: startMonthName.toLowerCase(),
-        fiscalYearStart: fStartDate.toISOString(),
+        baseCurrency: baseCurrency.split(' - ')[0],
         fiscalYear: fiscalYear,
-        startDate: startDate,
+        fiscalYearStart: fStartDate.toISOString(),
         reportBasis: reportBasis,
         orgLanguage: orgLanguage,
         commLanguage: commLanguage,
-        language_code: getLanguageCode(orgLanguage) || "en",
-        time_zone: timeZone,
         timeZone: timeZone,
-        date_format: dateFormat,
         dateFormat: dateFormat,
-        field_separator: dateSeparator,
         dateSeparator: dateSeparator,
-        companyid_label: companyIdType,
-        companyid_value: companyIdValue,
         companyIdType: companyIdType,
         companyIdValue: companyIdValue,
-        custom_fields: sanitizedAdditionalFields,
-        additionalFields: sanitizedAdditionalFields,
+        additionalFields: additionalFields,
         paymentStubAddress: paymentStubAddress,
         showPaymentStubAddress: showPaymentStubAddress,
       };
 
       console.log('Saving profile data:', profileData);
 
-      const response = await fetch(getOrganizationEndpoint(), {
+      const response = await fetch(`${API_BASE_URL}/settings/organization/profile`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -1816,7 +1527,7 @@ export default function ProfilePage() {
         return;
       }
 
-      if (response.ok && (data?.success || data?.code === 0)) {
+      if (response.ok && data.success) {
         let syncedBaseCurrency = baseCurrency;
         try {
           syncedBaseCurrency = await syncBaseCurrencyWithCurrencyTable(baseCurrency);
@@ -1839,6 +1550,7 @@ export default function ProfilePage() {
             ...existingOrgProfile,
             organizationName: orgName,
             name: orgName,
+            businessType: businessType,
             industry: industry,
             location: location,
             logo: logoBase64,
@@ -1846,29 +1558,10 @@ export default function ProfilePage() {
             email: email,
             website: website,
             baseCurrency: syncedBaseCurrency.split(" - ")[0],
-            currency_code: syncedBaseCurrency.split(" - ")[0],
-            fiscalYear: fiscalYear,
-            startDate: startDate,
-            reportBasis: reportBasis,
             orgLanguage: orgLanguage,
-            commLanguage: commLanguage,
-            language_code: getLanguageCode(orgLanguage) || "en",
             timeZone: timeZone,
-            time_zone: timeZone,
             dateFormat: dateFormat,
-            date_format: dateFormat,
             dateSeparator: dateSeparator,
-            field_separator: dateSeparator,
-            companyIdType: companyIdType,
-            companyid_label: companyIdType,
-            company_id_label: companyIdType,
-            companyIdValue: companyIdValue,
-            companyid_value: companyIdValue,
-            company_id_value: companyIdValue,
-            custom_fields: sanitizedAdditionalFields,
-            additionalFields: sanitizedAdditionalFields,
-            paymentStubAddress: paymentStubAddress,
-            showPaymentStubAddress: showPaymentStubAddress,
             address: {
               ...(existingOrgProfile?.address || {}),
               street1: street1,
@@ -2015,124 +1708,60 @@ export default function ProfilePage() {
       <div className="rounded-lg border-0 p-6 mb-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Organization Details</h2>
         <div className="space-y-4">
-          <div className="grid grid-cols-[220px_1fr] items-center gap-6">
-            <label className="text-sm font-medium text-red-500">
+          <div className="flex items-center gap-6">
+            <label className="w-56 text-sm font-medium text-red-500">
               Organization Name <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
               value={orgName}
               onChange={(e) => setOrgName(e.target.value)}
-              className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 h-10 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          <div className="grid grid-cols-[220px_1fr] items-center gap-6">
-            <label className="text-sm font-medium text-red-500 flex items-center gap-1">
-              Industry <span className="text-red-500">*</span>
+          <div className="flex items-center gap-6">
+            <label className="w-56 text-sm font-medium text-gray-700">
+              Business Type
+            </label>
+            <div className="flex-1">
+              <SearchableDropdown
+                value={businessType}
+                placeholder="Select"
+                options={BUSINESS_TYPES}
+                onChange={setBusinessType}
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-6">
+            <label className="w-56 text-sm font-medium text-red-500">
+              Industry <span className="text-red-500">*</span>{" "}
               <HelpTooltip text="Select your industry type to help us fine-tune your experience. If you can't find your industry type from the list of options, you can input your own.">
                 <HelpCircle size={14} className="inline text-gray-400 cursor-help" />
               </HelpTooltip>
             </label>
-            <SearchableDropdown
-              value={industry}
-              placeholder="Select Industry"
-              options={INDUSTRIES}
-              onChange={setIndustry}
-            />
+            <div className="flex-1">
+              <SearchableDropdown
+                value={industry}
+                placeholder="Select Industry"
+                options={INDUSTRIES}
+                onChange={setIndustry}
+              />
+            </div>
           </div>
-          <div className="grid grid-cols-[220px_1fr] items-center gap-6">
-            <label className="text-sm font-medium text-red-500">
+          <div className="flex items-center gap-6">
+            <label className="w-56 text-sm font-medium text-red-500">
               Organization Location <span className="text-red-500">*</span>
             </label>
-            <SearchableDropdown
-              value={location}
-              placeholder="Select Country"
-              options={COUNTRIES}
-              onChange={setLocation}
-            />
-          </div>
-          <div className="space-y-3 rounded-2xl p-5">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-gray-700">Organization Address</span>
-              <HelpTooltip text="Street details, city, state, and contact numbers display on PDFs and transaction headers.">
-                <HelpCircle size={14} className="text-gray-400 cursor-help" />
-              </HelpTooltip>
-              <button
-                type="button"
-                className="ml-auto flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
-              >
-                <Edit2 size={16} />
-                Edit
-              </button>
-            </div>
-            <div className="space-y-3">
-              <input
-                type="text"
-                value={street1}
-                onChange={(e) => setStreet1(e.target.value)}
-                placeholder="Street 1"
-                className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+            <div className="flex-1">
+              <SearchableDropdown
+                value={location}
+                placeholder="Select Country"
+                options={COUNTRIES}
+                onChange={setLocation}
               />
-              <input
-                type="text"
-                value={street2}
-                onChange={(e) => setStreet2(e.target.value)}
-                placeholder="Street 2"
-                className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <div className="grid gap-3 md:grid-cols-2">
-                <input
-                  type="text"
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                  placeholder="City"
-                  className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <input
-                  type="text"
-                  value={zipCode}
-                  onChange={(e) => setZipCode(e.target.value)}
-                  placeholder="ZIP/Postal Code"
-                  className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <select
-                  value={state}
-                  onChange={(e) => setState(e.target.value)}
-                  className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-transparent text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">State/Province *</option>
-                  <option value="Banaadir">Banaadir</option>
-                  <option value="Lower Shabelle">Lower Shabelle</option>
-                  <option value="Mogadishu">Mogadishu</option>
-                </select>
-                <input
-                  type="text"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="Phone"
-                  className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <input
-                type="text"
-                value={fax}
-                onChange={(e) => setFax(e.target.value)}
-                placeholder="Fax Number"
-                className="w-full h-10 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={handleOpenOrganizationAddressFormat}
-                className="text-sm font-medium text-blue-600 hover:text-blue-700"
-              >
-                Organization Address Format &gt;
-              </button>
             </div>
           </div>
+          {/* Organization Address info card hidden per request */}
           <div className="rounded-lg border border-gray-200 p-4 bg-[#d8dbe0]">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-gray-700">
@@ -2274,45 +1903,6 @@ export default function ProfilePage() {
                 Period: {getFiscalPeriod()}
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="border-t border-gray-200 my-6" />
-
-      {/* Report Basis */}
-      <div className="rounded-lg border-0 p-6 mb-6">
-        <div className="flex items-start gap-6">
-          <label className="w-56 text-sm font-medium text-gray-700 pt-2">Report Basis</label>
-          <div className="flex-1 space-y-3">
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="radio"
-                name="reportBasis"
-                value="Accrual"
-                checked={reportBasis === "Accrual"}
-                onChange={() => setReportBasis("Accrual")}
-                className="mt-1 h-4 w-4 accent-[#0f6e60] border-gray-300"
-              />
-              <div>
-                <span className="text-sm font-semibold text-gray-900">Accrual</span>
-                <p className="text-xs text-gray-500">You owe tax as of invoice date</p>
-              </div>
-            </label>
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="radio"
-                name="reportBasis"
-                value="Cash"
-                checked={reportBasis === "Cash"}
-                onChange={() => setReportBasis("Cash")}
-                className="mt-1 h-4 w-4 accent-[#0f6e60] border-gray-300"
-              />
-              <div>
-                <span className="text-sm font-semibold text-gray-900">Cash</span>
-                <p className="text-xs text-gray-500">You owe tax upon payment receipt</p>
-              </div>
-            </label>
           </div>
         </div>
       </div>
@@ -2704,4 +2294,5 @@ export default function ProfilePage() {
     </div >
   );
 }
+
 

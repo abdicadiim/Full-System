@@ -38,6 +38,7 @@ import {
   GripVertical,
   Lock
 } from "lucide-react";
+import { usePaymentsReceivedListQuery } from "./paymentsReceivedQueries";
 
 const statusFilterOptions = [
   "All Payments",
@@ -332,42 +333,46 @@ export default function PaymentsReceived() {
     loadBulkFieldOptions();
   }, []);
 
-  const refreshData = () => {
+  const paymentsQuery = usePaymentsReceivedListQuery();
+
+  const refreshData = async () => {
     setIsRefreshing(true);
-    setTimeout(async () => {
-      const allPayments = await getPayments();
-      const allCustomViews = getCustomViews().filter(v => v.type === "payments-received");
-      setPayments(allPayments);
-      setCustomViews(allCustomViews);
-      applyFilters(allPayments, selectedStatus, allCustomViews);
+    try {
+      await paymentsQuery.refetch();
+    } finally {
       setIsRefreshing(false);
-    }, 1000);
+    }
   };
 
   useEffect(() => {
-    const initialLoad = async () => {
+    if (paymentsQuery.isLoading) {
       setIsLoading(true);
-      const allPayments = await getPayments();
-      // Ensure we have CustomView[] from imported module
+      return;
+    }
+
+    setIsLoading(false);
+
+    if (paymentsQuery.data) {
+      const allPayments = paymentsQuery.data;
       const allCustomViews = getCustomViews().filter(v => v.type === "payments-received");
       setPayments(allPayments);
       setCustomViews(allCustomViews);
       applyFilters(allPayments, selectedStatus, allCustomViews);
-      setIsLoading(false);
-    };
+    }
+  }, [paymentsQuery.data, paymentsQuery.isLoading, selectedStatus, applyFilters]);
 
-    initialLoad();
-
-    window.addEventListener("storage", initialLoad);
+  useEffect(() => {
+    const refill = () => paymentsQuery.refetch();
+    window.addEventListener("storage", refill);
     document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) initialLoad();
+      if (!document.hidden) refill();
     });
 
     return () => {
-      window.removeEventListener("storage", initialLoad);
-      document.removeEventListener("visibilitychange", initialLoad);
+      window.removeEventListener("storage", refill);
+      document.removeEventListener("visibilitychange", refill);
     };
-  }, [selectedStatus, sortConfig]);
+  }, [paymentsQuery]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -731,15 +736,8 @@ export default function PaymentsReceived() {
 
   const handleRefreshList = async () => {
     setIsMoreMenuOpen(false);
-    // Force reload payments from storage
-    const allPayments = await getPayments();
-    setPayments(allPayments);
-    // Reset filters and reapply
-    applyFilters(allPayments, selectedStatus);
-    // Clear selected payments
+    await refreshData();
     setSelectedPayments(new Set());
-    // Show feedback
-    console.log("Payments list refreshed. Total payments:", allPayments.length);
   };
 
   const handleStatusFilter = (status: string) => {
@@ -871,9 +869,7 @@ export default function PaymentsReceived() {
         return;
       }
 
-      const allPayments = await getPayments();
-      setPayments(allPayments);
-      applyFilters(allPayments, selectedStatus);
+      await refreshData();
       setIsBulkUpdateModalOpen(false);
       setBulkUpdateField("");
       setBulkUpdateValue("");
@@ -1170,9 +1166,7 @@ export default function PaymentsReceived() {
       const successCount = results.filter((result) => result.status === "fulfilled").length;
       const failedCount = selectedIds.length - successCount;
 
-      const allPayments = await getPayments();
-      setPayments(allPayments);
-      applyFilters(allPayments, selectedStatus);
+      await refreshData();
       setSelectedPayments(new Set());
       setIsDeleteModalOpen(false);
 

@@ -80,3 +80,4 @@ export const authApi = {
     request<AuthUser & { requiresEmailVerification: true }>("/auth/signup", { name, email, password }),
 };
 
+
