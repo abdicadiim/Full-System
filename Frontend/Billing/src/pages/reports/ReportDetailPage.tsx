@@ -1944,10 +1944,6 @@ export default function ReportDetailPage() {
   const navigate = useNavigate();
   const { categoryId, reportId } = useParams();
   const { settings } = useSettings();
-  const organizationName =
-    settings?.general?.companyDisplayName ||
-    settings?.general?.schoolDisplayName ||
-    settings?.general?.shortName;
   const savedCustomReports = useMemo(() => loadJson<SavedCustomReport[]>(CUSTOM_REPORTS_KEY, []), []);
   const customReport = useMemo(() => savedCustomReports.find((item) => item.id === reportId), [savedCustomReports, reportId]);
   const resolvedCategoryId = customReport?.categoryId || categoryId || "";
@@ -1960,7 +1956,6 @@ export default function ReportDetailPage() {
     settings?.general?.companyDisplayName ||
     settings?.general?.schoolDisplayName ||
     settings?.general?.shortName || "";
-  const reportDisplayName = customReport?.name || report?.name || "Report";
   const filterDropdownRef = useRef<HTMLDivElement>(null);
   const compareButtonRef = useRef<HTMLButtonElement>(null);
   const nextMoreFilterRowId = useRef(2);
@@ -1992,11 +1987,8 @@ export default function ReportDetailPage() {
   const [livePreview, setLivePreview] = useState<PreviewTableConfig | null>(null);
   const [livePreviewLoading, setLivePreviewLoading] = useState(false);
   const [reportRefreshTick, setReportRefreshTick] = useState(0);
-<<<<<<< Updated upstream
   const agingByLabel = getAgingByLabel(agingBy);
   const reportDisplayName = customReport?.name || (isAgingReport ? `${report?.name || (resolvedReportId === "ar-aging-details" ? "AR Aging Details" : "AR Aging Summary")} By ${agingByLabel}` : report?.name || "Report");
-=======
->>>>>>> Stashed changes
 
   const dateLabel = useMemo(() => {
     if (selectedDateRange === "Custom") {
@@ -2116,11 +2108,7 @@ export default function ReportDetailPage() {
     return () => {
       cancelled = true;
     };
-<<<<<<< Updated upstream
   }, [agingBy, category.name, customReport, reportDisplayName, reportRefreshTick, resolvedReportId, selectedEntities]);
-=======
-  }, [category.name, customReport, reportDisplayName, resolvedReportId]);
->>>>>>> Stashed changes
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
@@ -2483,26 +2471,22 @@ export default function ReportDetailPage() {
             )}
             {filterButtonLabel}
           </button>
-<<<<<<< Updated upstream
-          {!isTimeToGetPaidReport ? (
-            <button
-              type="button"
-              onClick={runReport}
-              disabled={livePreviewLoading}
-              className="inline-flex h-8 items-center gap-1 rounded bg-[#156372] px-4 text-sm font-semibold text-white hover:bg-[#0f4f5b] disabled:cursor-wait disabled:bg-[#156372]/80"
-            >
-              {livePreviewLoading ? (
-                "Loading..."
-              ) : (
-                <>
-                  <CalendarDays size={14} />
-                  Run Report
-                  <ChevronDown size={14} />
-                </>
-              )}
-            </button>
-          ) : null}
-=======
+          <button
+            type="button"
+            onClick={runReport}
+            disabled={livePreviewLoading}
+            className="inline-flex h-8 items-center gap-1 rounded bg-[#156372] px-4 text-sm font-semibold text-white hover:bg-[#0f4f5b] disabled:cursor-wait disabled:bg-[#156372]/80"
+          >
+            {livePreviewLoading ? (
+              "Loading..."
+            ) : (
+              <>
+                <CalendarDays size={14} />
+                Run Report
+                <ChevronDown size={14} />
+              </>
+            )}
+          </button>
           <button
             type="button"
             onClick={() => toast.success(`Report refreshed: ${reportDisplayName}`)}
@@ -2510,7 +2494,6 @@ export default function ReportDetailPage() {
           >
             <CalendarDays size={14} /> Run Report <ChevronDown size={14} />
           </button>
->>>>>>> Stashed changes
 
           {!isTimeToGetPaidReport && isDateRangeOpen ? (
             <div
