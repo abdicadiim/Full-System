@@ -239,6 +239,7 @@ const MORE_FILTER_FIELDS_BY_REPORT: Record<string, string[]> = {
   "sales-by-coupon": ["Coupon", "Invoice", "Quantity Sold", "Discount Amount", "Date"],
   "sales-by-sales-person": ["Sales Person", "Invoice", "Credit Note", "Date", "Amount"],
   "sales-summary": ["Invoice", "Credit Note", "Sales Receipt", "Date", "Amount"],
+  "projects-revenue-summary": ["Project", "Project Description", "Customer Name", "Budget Amount", "Actual Revenue", "Status", "Billing Method", "Rate"],
   "ar-aging-summary": ["Customer Name", "Current", "1-15 Days", "16-30 Days", "31-45 Days", "> 45 Days", "Total"],
   "ar-aging-details": ["Invoice", "Customer", "Due Date", "Aging Bucket", "Amount", "Status"],
   "invoice-details": ["Invoice", "Customer", "Invoice Date", "Due Date", "Amount", "Balance", "Status"],
@@ -308,6 +309,11 @@ const MORE_FILTER_FIELD_GROUPS_BY_REPORT: Record<string, MoreFilterFieldGroup[]>
     { label: "Reports", items: ["Invoice", "Credit Note", "Sales Receipt", "Date", "Amount"] },
     { label: "Locations", items: ["Location"] },
     { label: "Reporting Tag", items: ["dffg", "dedfe"] },
+  ],
+  "projects-revenue-summary": [
+    { label: "Reports", items: ["Project", "Project Description", "Customer Name", "Budget Amount", "Actual Revenue"] },
+    { label: "Project", items: ["Status", "Billing Method", "Start Date", "End Date", "Rate"] },
+    { label: "Customer", items: ["Customer Name"] },
   ],
 };
 
@@ -508,6 +514,18 @@ const getPreviewTable = (reportId: string, reportName: string, categoryName: str
         ],
         totals: ["Total", 12, 1, 7, "SOS-71.00", "SOS-71.00"],
       };
+    case "projects-revenue-summary":
+      return {
+        title: "Projects Revenue Summary",
+        subtitle: "From 01 Apr 2026 To 30 Jun 2026",
+        columns: ["Project", "Project Description", "Budget Amount", "Customer Name", "Actual Revenue"],
+        rows: [
+          ["Brochure Designing", "Brochure design work", "$0.00", "US Grand Stores", "$0.00"],
+          ["Cleaning", "Office cleaning", "$0.00", "Jack Wilson", "$0.00"],
+          ["dd", "-", "SOS20.00", "ss", "SOS0.00"],
+          ["Event Organizing", "Event planning and coordination", "$0.00", "US Grand Stores", "$0.00"],
+        ],
+      };
     case "ar-aging-summary":
       return {
         title: "AR Aging Summary By Invoice Due Date",
@@ -668,6 +686,33 @@ const formatHours = (minutes: any) => {
 };
 
 const normalizeText = (value: unknown) => String(value ?? "").trim().toLowerCase();
+
+const getProjectBudgetAmount = (project: any) =>
+  Number(
+    project?.revenueBudget ??
+      project?.budget ??
+      project?.totalProjectCost ??
+      project?.costBudget ??
+      project?.amount ??
+      0
+  ) || 0;
+
+const getProjectBillingRate = (project: any) => Number(project?.billingRate ?? project?.rate ?? project?.revenueRate ?? 0) || 0;
+
+const getProjectCurrency = (project: any) => String(project?.currency || project?.billingCurrency || "USD").trim() || "USD";
+
+const getProjectKey = (project: any) =>
+  String(project?.id || project?._id || project?.projectId || project?.name || project?.projectName || "").trim();
+
+const getTimeEntryProjectKey = (entry: any) =>
+  String(
+    entry?.projectId ||
+      entry?.project?._id ||
+      entry?.project?.id ||
+      entry?.project ||
+      entry?.projectName ||
+      ""
+  ).trim();
 
 const isActiveSubscriptionStatus = (status: unknown) => {
   const text = normalizeText(status);
@@ -1461,25 +1506,6 @@ const buildDatabasePreview = async (
     }
   }
 
-  if (reportId === "tax-summary") {
-    const taxes = await fetchCollectionRows("/taxes");
-    if (taxes.length === 0) return null;
-    const rows = taxes.map((row: any) => [
-      row.name || "-",
-      row.kind || "tax",
-      row.type || "-",
-      `${Number(row.rate ?? 0).toFixed(2)}%`,
-      row.isActive ? "Active" : "Inactive",
-    ]);
-    return {
-      title: "Tax Summary",
-      subtitle: liveSubtitle,
-      columns: ["Tax Name", "Kind", "Type", "Rate", "Status"],
-      rows,
-      totals: ["Total", taxes.length, "-", "-", "-"],
-    };
-  }
-
   if (reportId === "sales-by-sales-person") {
     const invoices = await fetchCollectionRows("/invoices");
     const grouped = new Map<string, { count: number; sales: number; tax: number; currency: string }>();
@@ -2073,7 +2099,13 @@ export default function ReportDetailPage() {
     const loadPreview = async () => {
       setLivePreviewLoading(true);
       try {
-        const nextPreview = await buildDatabasePreview(resolvedReportId, reportDisplayName, category.name, agingBy, selectedEntities);
+        const nextPreview = await buildDatabasePreview(
+          resolvedReportId,
+          reportDisplayName,
+          category.name,
+          agingBy,
+          selectedEntities,
+        );
         if (!cancelled) {
           const useCustomSubtitle = Boolean(customReport) && !isAgingReport;
           const nextColumns =
@@ -2107,7 +2139,19 @@ export default function ReportDetailPage() {
     return () => {
       cancelled = true;
     };
+<<<<<<< Updated upstream
   }, [category.name, customReport, reportDisplayName, resolvedReportId, agingBy, selectedEntities, reportRefreshTick]);
+=======
+  }, [
+    agingBy,
+    category.name,
+    customReport,
+    reportDisplayName,
+    reportRefreshTick,
+    resolvedReportId,
+    selectedEntities,
+  ]);
+>>>>>>> Stashed changes
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {

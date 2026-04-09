@@ -1,5 +1,5 @@
 import React from "react";
-import { CalendarDays, ChevronDown, Menu, Plus, RefreshCw, SlidersHorizontal, X } from "lucide-react";
+import { CalendarDays, ChevronDown, Menu, Plus, RefreshCw, X } from "lucide-react";
 
 interface ReportFilterChip {
   key: string;
@@ -14,7 +14,6 @@ interface ReportDetailHeaderProps {
   filters?: ReportFilterChip[];
   menuButtonRef?: React.RefObject<HTMLButtonElement | null>;
   onMenuClick?: () => void;
-  onCustomizeClick?: () => void;
   onRunReport?: () => void;
   onClosePage?: () => void;
 }
@@ -32,7 +31,6 @@ export default function ReportDetailHeader({
   filters = defaultFilters,
   menuButtonRef,
   onMenuClick,
-  onCustomizeClick,
   onRunReport,
   onClosePage,
 }: ReportDetailHeaderProps) {
@@ -61,17 +59,6 @@ export default function ReportDetailHeader({
         </div>
 
         <div className="flex items-center gap-2">
-          {onCustomizeClick ? (
-            <button
-              type="button"
-              onClick={onCustomizeClick}
-              className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]"
-              aria-label="Customize report"
-              title="Customize report"
-            >
-              <SlidersHorizontal size={15} />
-            </button>
-          ) : null}
           <button
             type="button"
             className="inline-flex h-8 items-center gap-1 rounded border border-[#d4d9e4] bg-white px-3 text-sm font-medium text-[#1e293b] hover:bg-[#f8fafc]"

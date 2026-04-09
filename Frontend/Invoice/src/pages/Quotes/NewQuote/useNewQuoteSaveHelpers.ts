@@ -130,9 +130,29 @@ export function useNewQuoteSaveHelpers(controller: any) {
   handleNewItemImageUpload, handleSaveNewItem, handleCancelNewItem, filteredProjects, handleProjectSelect, handleNewProjectChange, handleAddProjectTask, handleRemoveProjectTask,
   handleProjectTaskChange, handleAddProjectUser, handleRemoveProjectUser, handleSaveNewProject, handleCancelNewProject, handleOpenNewProjectModal, handleContactPersonChange, handleContactPersonImageUpload,
   handleSaveDraft, handleSaveAndSend, handleCancel, handleOtherAction
-} = controller as any;  const handleSaveContactPerson = () => {
+} = controller as any;
+
+  const formatAddressSnapshot = (address: any) => {
+    if (!address) return "";
+    if (typeof address === "string") return address.trim();
+
+    const attention = String(address?.attention || "").trim();
+    const street1 = String(address?.street1 || "").trim();
+    const street2 = String(address?.street2 || "").trim();
+    const city = String(address?.city || "").trim();
+    const state = String(address?.state || "").trim();
+    const zipCode = String(address?.zipCode || "").trim();
+    const country = String(address?.country || "").trim();
+    const cityStateZip = [city, state, zipCode].filter(Boolean).join(", ");
+
+    return [attention, street1, street2, cityStateZip, country].filter(Boolean).join(", ");
+  };
+
+  const hasAddressSnapshot = (address: any) => Boolean(formatAddressSnapshot(address));
+
+  const handleSaveContactPerson = () => {
     if (!contactPersonData.firstName.trim() || !contactPersonData.email.trim()) {
-      alert("First Name and Email are required");
+      toast.error("First Name and Email are required");
       return;
     }
 
@@ -203,6 +223,12 @@ export function useNewQuoteSaveHelpers(controller: any) {
 
     if (!selectedCustomer || (!selectedCustomer.id && !selectedCustomer._id)) {
       errors.customerName = "Please select a customer";
+    }
+
+    const billingCandidate = billingAddress || (selectedCustomer as any)?.billingAddress;
+    const shippingCandidate = shippingAddress || (selectedCustomer as any)?.shippingAddress;
+    if (!hasAddressSnapshot(billingCandidate) && !hasAddressSnapshot(shippingCandidate)) {
+      errors.customerAddress = "Please add a billing or shipping address for the selected customer";
     }
 
     if (!formData.quoteNumber || !formData.quoteNumber.trim()) {
@@ -324,33 +350,49 @@ export function useNewQuoteSaveHelpers(controller: any) {
     let quoteNumber = formData.quoteNumber;
     if (quoteNumberMode !== "auto") return quoteNumber;
 
-    const seriesId = String(quoteSeriesRow?.id || quoteSeriesRow?._id || "").trim();
-    if (seriesId) {
-      try {
+    try {
+      const quoteNumberResponse: any = await quotesAPI.getNextNumber(quotePrefix);
+      if (quoteNumberResponse && quoteNumberResponse.success && quoteNumberResponse.data) {
+        const quoteNumberData: any = quoteNumberResponse.data || {};
+        const serverQuoteNumber = String(quoteNumberData.quoteNumber || quoteNumberData.nextNumber || "").trim();
+        if (serverQuoteNumber) return serverQuoteNumber;
+      }
+    } catch (error) {
+      console.error("Error getting next quote number from quotes endpoint:", error);
+    }
+
+    try {
+      const seriesId = String(quoteSeriesRow?.id || quoteSeriesRow?._id || "").trim();
+      if (seriesId) {
         const seriesResponse: any = await transactionNumberSeriesAPI.getNextNumber(seriesId);
         if (seriesResponse && seriesResponse.success && seriesResponse.data) {
           const serverQuoteNumber = String(seriesResponse.data.nextNumber || seriesResponse.data.next_number || "").trim();
           if (serverQuoteNumber) return serverQuoteNumber;
         }
-      } catch (error) {
-        console.error("Error getting next quote number from series:", error);
-      }
-    }
-
-    try {
-      const quoteNumberResponse = await quotesAPI.getNextNumber(quotePrefix);
-      if (quoteNumberResponse && quoteNumberResponse.success && quoteNumberResponse.data) {
-        const quoteNumberData: any = quoteNumberResponse.data || {};
-        const serverQuoteNumber = String(quoteNumberData.quoteNumber || quoteNumberData.nextNumber || "").trim();
-        const resolvedPrefix = deriveQuotePrefixFromNumber(serverQuoteNumber, quotePrefix);
-        const resolvedNextDigits = extractQuoteDigits(quoteNumberData.nextNumber || serverQuoteNumber) || quoteNextNumber;
-        quoteNumber = buildQuoteNumber(resolvedPrefix, resolvedNextDigits);
       }
     } catch (error) {
-      console.error('Error getting next quote number:', error);
-      const existingQuotes = await getQuotes();
-      quoteNumber = buildQuoteNumber(quotePrefix, String(existingQuotes.length + 1));
+      console.error("Error getting next quote number from series:", error);
     }
+
+    const existingQuotes = await getQuotes();
+    const normalizedPrefix = sanitizeQuotePrefix(quotePrefix);
+    const highestQuoteNumber = (Array.isArray(existingQuotes) ? existingQuotes : []).reduce(
+      (max, quote: any) => {
+        const quotePrefixValue = deriveQuotePrefixFromNumber(quote?.quoteNumber, normalizedPrefix);
+        if (quotePrefixValue !== normalizedPrefix) return max;
+
+        const digits = parseInt(extractQuoteDigits(quote?.quoteNumber), 10);
+        if (!Number.isFinite(digits) || digits <= max) return max;
+        return digits;
+      },
+      0,
+    );
+    const widthSource = extractQuoteDigits(quoteNextNumber || formData.quoteNumber) || "1";
+    const width = widthSource.length >= 2 ? widthSource.length : 6;
+    quoteNumber = buildQuoteNumber(
+      normalizedPrefix,
+      String(highestQuoteNumber + 1).padStart(width, "0"),
+    );
 
     return quoteNumber;
   };

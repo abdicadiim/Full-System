@@ -20,6 +20,7 @@ import { Country, State } from "country-state-city";
 import NewTaxModal from "../../../../components/modals/NewTaxModal";
 import { buildTaxOptionGroups, taxLabel, normalizeCreatedTaxPayload, isTaxActive } from "../../../hooks/Taxdropdownstyle";
 import { readTaxesLocal, createTaxLocal, isTaxGroupRecord } from "../../settings/organization-settings/taxes-compliance/TAX/storage";
+import { countryPhoneCodes } from "../../Customers/NewCustomer/countriesData";
 
 // taxOptions REMOVED: Now fetching from backend API
 
@@ -254,18 +255,31 @@ export function useNewQuoteCustomerAddress(controller: any) {
 
   const handleCustomerSelect = (customer) => {
     const customerId = customer.id || customer._id;
-    const customerName = customer.name || customer.displayName || customer.companyName;
-    const previousDefaultTaxId = customerDefaultTaxId;
-    const currentPriceListName = normalizeSelectedPriceListName(formData.selectedPriceList);
+    const customerName = customer.name || customer.displayName || customer.companyName || "";
+    const safeAvailableItems = Array.isArray(availableItems) ? availableItems : [];
 
+    // Always apply the basic selection first so the UI updates even if later logic fails.
+    setSelectedCustomer(customer);
+    setIsCustomerDropdownOpen(false);
+    setCustomerSearch("");
+    setFormData(prev => ({
+      ...prev,
+      customerName: customerName || prev.customerName
+    }));
+
+    try {
+      const previousDefaultTaxId = customerDefaultTaxId;
+      const currentPriceListName = normalizeSelectedPriceListName(formData.selectedPriceList);
+
+    const safeCatalogPriceLists = Array.isArray(catalogPriceListsRaw) ? catalogPriceListsRaw : [];
     const customerPriceListId = String(customer?.priceListId || customer?.priceListID || customer?.price_list_id || "").trim();
     const customerPriceListNameRaw = String(customer?.priceListName || customer?.priceList || customer?.price_list || "").trim();
     const resolvedPriceList =
       (customerPriceListId
-        ? catalogPriceListsRaw.find((row: any) => String(row?.id || row?._id || "").trim() === customerPriceListId)
+        ? safeCatalogPriceLists.find((row: any) => String(row?.id || row?._id || "").trim() === customerPriceListId)
         : null) ||
       (customerPriceListNameRaw
-        ? catalogPriceListsRaw.find((row: any) => String(row?.name || "").trim() === customerPriceListNameRaw)
+        ? safeCatalogPriceLists.find((row: any) => String(row?.name || "").trim() === customerPriceListNameRaw)
         : null) ||
       null;
     const nextPriceListName = resolvedPriceList ? String(resolvedPriceList.name || "").trim() : customerPriceListNameRaw;
@@ -288,180 +302,210 @@ export function useNewQuoteCustomerAddress(controller: any) {
       ? String((matchedTax as any).id || (matchedTax as any)._id || "")
       : (typeof rawCustomerTax === "string" ? rawCustomerTax : "");
 
-    setSelectedCustomer(customer);
-    setCustomerDefaultTaxId(resolvedCustomerTaxId);
+      setCustomerDefaultTaxId(resolvedCustomerTaxId);
 
-    setFormData(prev => {
-      const customerCurrency = (customer.currency || prev.currency || "USD").split(' - ')[0];
-      const nextCurrency = shouldPromptForPriceListChange
-        ? prev.currency
-        : (resolvedPriceList?.currency ? String(resolvedPriceList.currency).trim() : customerCurrency);
+      setFormData(prev => {
+        const prevItems = Array.isArray(prev.items) ? prev.items : [];
+        try {
+          const customerCurrency = (customer.currency || prev.currency || "USD").split(' - ')[0];
+          const nextCurrency = shouldPromptForPriceListChange
+            ? prev.currency
+            : (resolvedPriceList?.currency ? String(resolvedPriceList.currency).trim() : customerCurrency);
 
-      const updatedItems = prev.items.map((item: any) => {
-        if (item.itemType === "header") return item;
+          const updatedItems = prevItems.map((item: any) => {
+            if (item.itemType === "header") return item;
 
-        // If the selected customer has a tax, it must take priority over any existing item/default tax.
-        if (resolvedCustomerTaxId) {
-          const selectedTaxObj: any = getTaxBySelection(resolvedCustomerTaxId) || matchedTax;
-          const quantity = parseFloat(item.quantity) || 0;
-          const rate = parseFloat(item.rate) || 0;
+            // If the selected customer has a tax, it must take priority over any existing item/default tax.
+            if (resolvedCustomerTaxId) {
+              const selectedTaxObj: any = getTaxBySelection(resolvedCustomerTaxId) || matchedTax;
+              const quantity = parseFloat(item.quantity) || 0;
+              const rate = parseFloat(item.rate) || 0;
+              return {
+                ...item,
+                tax: resolvedCustomerTaxId,
+                taxRate: selectedTaxObj ? parseTaxRate((selectedTaxObj as any).rate) : parseTaxRate(item?.taxRate),
+                amount: quantity * rate
+              };
+            }
+
+            const currentTax = String(item?.tax || "");
+            const shouldOverride =
+              !currentTax ||
+              (previousDefaultTaxId && currentTax === previousDefaultTaxId);
+            if (!shouldOverride) return item;
+
+            let effectiveTaxId = resolvedCustomerTaxId;
+            let selectedTaxObj: any = null;
+
+            if (effectiveTaxId) {
+              selectedTaxObj = getTaxBySelection(effectiveTaxId) || matchedTax;
+            } else {
+              const rowItemId = String(item?.itemId || "").trim();
+              const catalogEntry = rowItemId
+                ? safeAvailableItems.find((entry: any) => {
+                  const sourceId = String(entry?.sourceId || "").trim();
+                  const id = String(entry?.id || "").trim();
+                  return sourceId === rowItemId || id === rowItemId;
+                })
+                : null;
+              const itemTaxId = catalogEntry ? resolveItemTaxId(catalogEntry) : "";
+              effectiveTaxId = itemTaxId || defaultTaxId || "";
+              selectedTaxObj = effectiveTaxId ? getTaxBySelection(effectiveTaxId) : null;
+            }
+
+            if (!effectiveTaxId) return item;
+
+            const quantity = parseFloat(item.quantity) || 0;
+            const rate = parseFloat(item.rate) || 0;
+
+            return {
+              ...item,
+              tax: effectiveTaxId,
+              taxRate: selectedTaxObj ? parseTaxRate((selectedTaxObj as any).rate) : parseTaxRate(item?.taxRate),
+              amount: quantity * rate
+            };
+          });
+
+          const nextForm = {
+            ...prev,
+            customerName: customerName,
+            selectedPriceList: shouldPromptForPriceListChange
+              ? (normalizeSelectedPriceListName(prev.selectedPriceList) || "Select Price List")
+              : (nextCustomerPriceListName || normalizeSelectedPriceListName(prev.selectedPriceList) || "Select Price List"),
+            currency: nextCurrency,
+            items: updatedItems
+          };
+          const totals = calculateAllTotals(updatedItems, nextForm);
           return {
-            ...item,
-            tax: resolvedCustomerTaxId,
-            taxRate: selectedTaxObj ? parseTaxRate((selectedTaxObj as any).rate) : parseTaxRate(item?.taxRate),
-            amount: quantity * rate
+            ...nextForm,
+            ...totals
+          };
+        } catch (err) {
+          console.error("Customer select update failed:", err);
+          return {
+            ...prev,
+            customerName: customerName || prev.customerName
           };
         }
-
-        const currentTax = String(item?.tax || "");
-        const shouldOverride =
-          !currentTax ||
-          (previousDefaultTaxId && currentTax === previousDefaultTaxId);
-        if (!shouldOverride) return item;
-
-        let effectiveTaxId = resolvedCustomerTaxId;
-        let selectedTaxObj: any = null;
-
-        if (effectiveTaxId) {
-          selectedTaxObj = getTaxBySelection(effectiveTaxId) || matchedTax;
-        } else {
-          const rowItemId = String(item?.itemId || "").trim();
-          const catalogEntry = rowItemId
-            ? availableItems.find((entry: any) => {
-              const sourceId = String(entry?.sourceId || "").trim();
-              const id = String(entry?.id || "").trim();
-              return sourceId === rowItemId || id === rowItemId;
-            })
-            : null;
-          const itemTaxId = catalogEntry ? resolveItemTaxId(catalogEntry) : "";
-          effectiveTaxId = itemTaxId || defaultTaxId || "";
-          selectedTaxObj = effectiveTaxId ? getTaxBySelection(effectiveTaxId) : null;
-        }
-
-        if (!effectiveTaxId) return item;
-
-        const quantity = parseFloat(item.quantity) || 0;
-        const rate = parseFloat(item.rate) || 0;
-
-        return {
-          ...item,
-          tax: effectiveTaxId,
-          taxRate: selectedTaxObj ? parseTaxRate((selectedTaxObj as any).rate) : parseTaxRate(item?.taxRate),
-          amount: quantity * rate
-        };
       });
 
-      const nextForm = {
-        ...prev,
-        customerName: customerName,
-        selectedPriceList: shouldPromptForPriceListChange
-          ? (normalizeSelectedPriceListName(prev.selectedPriceList) || "Select Price List")
-          : (nextCustomerPriceListName || normalizeSelectedPriceListName(prev.selectedPriceList) || "Select Price List"),
-        currency: nextCurrency,
-        items: updatedItems
-      };
-      const totals = calculateAllTotals(updatedItems, nextForm);
-      return {
-        ...nextForm,
-        ...totals
-      };
-    });
-
-    if (shouldPromptForPriceListChange) {
-      setPriceListSwitchDialog({
-        customerName,
-        currentPriceListName,
-        nextPriceListName: nextCustomerPriceListName,
-        customerCurrency: String(customer?.currency || formData.currency || "USD").split(" - ")[0],
-        nextPriceListCurrency: String(resolvedPriceList?.currency || "").trim(),
-      });
-    } else {
-      setPriceListSwitchDialog(null);
-    }
-
-    setIsCustomerDropdownOpen(false);
-    setCustomerSearch("");
-
-    // Clear validation error if any
-    if (formErrors.customerName) {
-      setFormErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors.customerName;
-        return newErrors;
-      });
-    }
-
-
-    // Auto-fill billing address if customer has one
-    if (customer.billingAddress) {
-      setBillingAddress({
-        attention: customer.billingAddress.attention || customer.billingAttention || "",
-        street1: customer.billingAddress.street1 || customer.billingStreet1 || "",
-        street2: customer.billingAddress.street2 || customer.billingStreet2 || "",
-        city: customer.billingAddress.city || customer.billingCity || "",
-        state: customer.billingAddress.state || customer.billingState || "",
-        zipCode: customer.billingAddress.zipCode || customer.billingZipCode || "",
-        country: customer.billingAddress.country || customer.billingCountry || "",
-        phone: customer.billingAddress.phone || customer.billingPhone || ""
-      });
-    } else if (customer.billingStreet1 || customer.billingCity || customer.billingCountry) {
-      // Fallback: check if billing fields are directly on customer object
-      setBillingAddress({
-        attention: customer.billingAttention || "",
-        street1: customer.billingStreet1 || "",
-        street2: customer.billingStreet2 || "",
-        city: customer.billingCity || "",
-        state: customer.billingState || "",
-        zipCode: customer.billingZipCode || "",
-        country: customer.billingCountry || "",
-        phone: customer.billingPhone || ""
-      });
-    } else {
-      setBillingAddress(null);
-    }
-
-    // Auto-fill shipping address if customer has one
-    if (customer.shippingAddress) {
-      setShippingAddress({
-        attention: customer.shippingAddress.attention || customer.shippingAttention || "",
-        street1: customer.shippingAddress.street1 || customer.shippingStreet1 || "",
-        street2: customer.shippingAddress.street2 || customer.shippingStreet2 || "",
-        city: customer.shippingAddress.city || customer.shippingCity || "",
-        state: customer.shippingAddress.state || customer.shippingState || "",
-        zipCode: customer.shippingAddress.zipCode || customer.shippingZipCode || "",
-        country: customer.shippingAddress.country || customer.shippingCountry || "",
-        phone: customer.shippingAddress.phone || customer.shippingPhone || ""
-      });
-    } else if (customer.shippingStreet1 || customer.shippingCity || customer.shippingCountry) {
-      // Fallback: check if shipping fields are directly on customer object
-      setShippingAddress({
-        attention: customer.shippingAttention || "",
-        street1: customer.shippingStreet1 || "",
-        street2: customer.shippingStreet2 || "",
-        city: customer.shippingCity || "",
-        state: customer.shippingState || "",
-        zipCode: customer.shippingZipCode || "",
-        country: customer.shippingCountry || "",
-        phone: customer.shippingPhone || ""
-      });
-    } else {
-      setShippingAddress(null);
-    }
-
-    // Load contact persons for this customer
-    if (customerId) {
-      loadCustomerContactPersons(customerId);
-    } else {
-      setContactPersons([]);
-    }
-
-    // Load projects for this customer so the dropdown is populated
-    if (customerId) {
-      try {
-        loadProjectsForCustomer(customerId);
-      } catch (err) {
-        console.error("Error loading customer projects:", err);
+      if (shouldPromptForPriceListChange) {
+        setPriceListSwitchDialog({
+          customerName,
+          currentPriceListName,
+          nextPriceListName: nextCustomerPriceListName,
+          customerCurrency: String(customer?.currency || formData.currency || "USD").split(" - ")[0],
+          nextPriceListCurrency: String(resolvedPriceList?.currency || "").trim(),
+        });
+      } else {
+        setPriceListSwitchDialog(null);
       }
+
+      // Clear validation error if any
+      if (formErrors.customerName) {
+        setFormErrors(prev => {
+          const newErrors = { ...prev };
+          delete newErrors.customerName;
+          return newErrors;
+        });
+      }
+
+      // Auto-fill billing address if customer has one
+      if (customer.billingAddress) {
+        setBillingAddress({
+          attention: customer.billingAddress.attention || customer.billingAttention || "",
+          street1: customer.billingAddress.street1 || customer.billingStreet1 || "",
+          street2: customer.billingAddress.street2 || customer.billingStreet2 || "",
+          city: customer.billingAddress.city || customer.billingCity || "",
+          state: customer.billingAddress.state || customer.billingState || "",
+          zipCode: customer.billingAddress.zipCode || customer.billingZipCode || "",
+          country: customer.billingAddress.country || customer.billingCountry || "",
+          phone: customer.billingAddress.phone || customer.billingPhone || ""
+        });
+      } else if (customer.billingStreet1 || customer.billingCity || customer.billingCountry) {
+        // Fallback: check if billing fields are directly on customer object
+        setBillingAddress({
+          attention: customer.billingAttention || "",
+          street1: customer.billingStreet1 || "",
+          street2: customer.billingStreet2 || "",
+          city: customer.billingCity || "",
+          state: customer.billingState || "",
+          zipCode: customer.billingZipCode || "",
+          country: customer.billingCountry || "",
+          phone: customer.billingPhone || ""
+        });
+      } else {
+        setBillingAddress(null);
+      }
+
+      // Auto-fill shipping address if customer has one
+      if (customer.shippingAddress) {
+        setShippingAddress({
+          attention: customer.shippingAddress.attention || customer.shippingAttention || "",
+          street1: customer.shippingAddress.street1 || customer.shippingStreet1 || "",
+          street2: customer.shippingAddress.street2 || customer.shippingStreet2 || "",
+          city: customer.shippingAddress.city || customer.shippingCity || "",
+          state: customer.shippingAddress.state || customer.shippingState || "",
+          zipCode: customer.shippingAddress.zipCode || customer.shippingZipCode || "",
+          country: customer.shippingAddress.country || customer.shippingCountry || "",
+          phone: customer.shippingAddress.phone || customer.shippingPhone || ""
+        });
+      } else if (customer.shippingStreet1 || customer.shippingCity || customer.shippingCountry) {
+        // Fallback: check if shipping fields are directly on customer object
+        setShippingAddress({
+          attention: customer.shippingAttention || "",
+          street1: customer.shippingStreet1 || "",
+          street2: customer.shippingStreet2 || "",
+          city: customer.shippingCity || "",
+          state: customer.shippingState || "",
+          zipCode: customer.shippingZipCode || "",
+          country: customer.shippingCountry || "",
+          phone: customer.shippingPhone || ""
+        });
+      } else {
+        setShippingAddress(null);
+      }
+
+      const hasCustomerAddress =
+        Boolean(customer.billingAddress || customer.shippingAddress) ||
+        Boolean(
+          customer.billingStreet1 ||
+          customer.billingCity ||
+          customer.billingCountry ||
+          customer.shippingStreet1 ||
+          customer.shippingCity ||
+          customer.shippingCountry
+        );
+      if (hasCustomerAddress) {
+        setFormErrors((prev: Record<string, string>) => {
+          if (!prev.customerAddress) return prev;
+          const next = { ...prev };
+          delete next.customerAddress;
+          return next;
+        });
+      }
+
+      // Load contact persons for this customer
+      if (customerId) {
+        loadCustomerContactPersons(customerId);
+      } else {
+        setContactPersons([]);
+      }
+
+      // Load projects for this customer so the dropdown is populated
+      if (customerId) {
+        try {
+          loadProjectsForCustomer(customerId);
+        } catch (err) {
+          console.error("Error loading customer projects:", err);
+        }
+      }
+    } catch (error) {
+      console.error("Customer select failed:", error);
+      setFormData(prev => ({
+        ...prev,
+        customerName: customerName || prev.customerName
+      }));
     }
   };
 
@@ -476,7 +520,7 @@ export function useNewQuoteCustomerAddress(controller: any) {
       city: source?.city || "",
       state: source?.state || "",
       zipCode: source?.zipCode || "",
-      phoneCountryCode: source?.phoneCountryCode || "",
+      phoneCountryCode: source?.phoneCountryCode || "+252",
       phone: source?.phone || "",
       fax: source?.fax || ""
     });
@@ -494,6 +538,7 @@ export function useNewQuoteCustomerAddress(controller: any) {
     if (!selectedCustomer) return;
     const customerId = String((selectedCustomer as any).id || (selectedCustomer as any)._id || "");
     if (!customerId) return;
+    const phoneCountryCode = String(addressFormData.phoneCountryCode || "+252").trim();
 
     const addressPayload = {
       attention: String(addressFormData.attention || "").trim(),
@@ -503,9 +548,9 @@ export function useNewQuoteCustomerAddress(controller: any) {
       city: String(addressFormData.city || "").trim(),
       state: String(addressFormData.state || "").trim(),
       zipCode: String(addressFormData.zipCode || "").trim(),
-      phone: `${String(addressFormData.phoneCountryCode || "").trim()} ${String(addressFormData.phone || "").trim()}`.trim(),
+      phone: `${phoneCountryCode} ${String(addressFormData.phone || "").trim()}`.trim(),
       fax: String(addressFormData.fax || "").trim(),
-      phoneCountryCode: String(addressFormData.phoneCountryCode || "").trim()
+      phoneCountryCode
     };
 
     setIsAddressSaving(true);
@@ -543,10 +588,17 @@ export function useNewQuoteCustomerAddress(controller: any) {
       if (addressModalType === "billing") setBillingAddress(addressPayload);
       else setShippingAddress(addressPayload);
 
+      setFormErrors((prev: Record<string, string>) => {
+        if (!prev.customerAddress) return prev;
+        const next = { ...prev };
+        delete next.customerAddress;
+        return next;
+      });
+
       setIsAddressModalOpen(false);
     } catch (error) {
       console.error(`Failed to save ${addressModalType} address:`, error);
-      alert("Failed to save address. Please try again.");
+      toast.error("Failed to save address. Please try again.");
     } finally {
       setIsAddressSaving(false);
     }
@@ -554,15 +606,12 @@ export function useNewQuoteCustomerAddress(controller: any) {
 
   const countryOptions = useMemo(() => Country.getAllCountries(), []);
   const phoneCountryOptions = useMemo(
-    () =>
-      countryOptions
-        .filter((country: any) => String(country.phonecode || "").trim().length > 0)
-        .map((country: any) => ({
-          name: String(country.name || ""),
-          isoCode: String(country.isoCode || ""),
-          phoneCode: `+${String(country.phonecode || "").trim()}`
-        })),
-    [countryOptions]
+    () => countryPhoneCodes.map((country: any) => ({
+      name: String(country.name || ""),
+      phoneCode: String(country.code || ""),
+      isoCode: String(country.name || "").replace(/\s+/g, "-").toUpperCase()
+    })),
+    []
   );
   const filteredPhoneCountryOptions = useMemo(() => {
     const query = String(phoneCodeSearch || "").trim().toLowerCase();

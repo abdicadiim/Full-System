@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
+import { jsPDF } from "jspdf";
 import {
   CalendarDays,
   Check,
@@ -13,7 +14,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  SlidersHorizontal,
   X,
 } from "lucide-react";
 import ReportDetailHeader from "./ReportDetailHeader";
@@ -124,6 +124,7 @@ type DateRangeKey =
   | "previous-month"
   | "previous-quarter"
   | "previous-year"
+  | "all-time"
   | "custom";
 
 type DateRangeOption = {
@@ -287,6 +288,19 @@ const getReportColumnGroupLabel = (key: ReportColumnKey) => {
   return group?.label ?? "Reports";
 };
 
+const getReportColumnOptionForReport = (
+  key: ReportColumnKey,
+  reportId: SalesReportId,
+) => {
+  const option = getReportColumnOption(key);
+  const labelOverride =
+    REPORT_MODE_COLUMN_LABEL_OVERRIDES[reportId]?.[key] ?? option.label;
+  return {
+    ...option,
+    label: labelOverride,
+  };
+};
+
 const DATE_RANGE_OPTIONS: DateRangeOption[] = [
   { key: "today", label: "Today" },
   { key: "this-week", label: "This Week" },
@@ -298,6 +312,7 @@ const DATE_RANGE_OPTIONS: DateRangeOption[] = [
   { key: "previous-month", label: "Previous Month" },
   { key: "previous-quarter", label: "Previous Quarter" },
   { key: "previous-year", label: "Previous Year" },
+  { key: "all-time", label: "All Time" },
   { key: "custom", label: "Custom" },
 ];
 
@@ -318,6 +333,11 @@ const COMPARE_WITH_NUMBER_OPTIONS = Array.from({ length: 35 }, (_, index) =>
 );
 
 type ReportColumnKey = string;
+type SalesReportId =
+  | "sales-by-customer"
+  | "customer-balance-summary"
+  | "bad-debts"
+  | "bank-charges";
 type ReportColumnKind = "text" | "number" | "currency";
 
 type ReportColumnOption = {
@@ -330,6 +350,30 @@ type ReportColumnOption = {
 type ReportColumnGroup = {
   label: string;
   options: ReportColumnOption[];
+};
+
+const REPORT_MODE_COLUMN_LABEL_OVERRIDES: Record<
+  SalesReportId,
+  Partial<Record<ReportColumnKey, string>>
+> = {
+  "sales-by-customer": {},
+  "customer-balance-summary": {
+    "invoice-amount": "Invoiced Amount",
+    "invoice-amount-fcy": "Invoiced Amount (FCY)",
+    "amount-received": "Amount Received",
+    "amount-received-fcy": "Amount Received (FCY)",
+    "closing-balance": "Closing Balance",
+    "closing-balance-fcy": "Closing Balance (FCY)",
+  },
+  "bad-debts": {
+    sales: "Write Off Amount (FCY)",
+    "sales-with-tax": "Write Off Amount (BCY)",
+  },
+  "bank-charges": {
+    sales: "Bank Charges (FCY)",
+    "sales-with-tax": "Bank Charges (BCY)",
+    "invoice-count": "Payment Count",
+  },
 };
 
 const REPORT_COLUMN_GROUPS: ReportColumnGroup[] = [
@@ -360,6 +404,26 @@ const REPORT_COLUMN_GROUPS: ReportColumnGroup[] = [
       {
         key: "invoice-amount-fcy",
         label: "Invoice Amount (FCY)",
+        kind: "currency",
+      },
+      {
+        key: "amount-received",
+        label: "Amount Received",
+        kind: "currency",
+      },
+      {
+        key: "amount-received-fcy",
+        label: "Amount Received (FCY)",
+        kind: "currency",
+      },
+      {
+        key: "closing-balance",
+        label: "Closing Balance",
+        kind: "currency",
+      },
+      {
+        key: "closing-balance-fcy",
+        label: "Closing Balance (FCY)",
         kind: "currency",
       },
       {
@@ -537,6 +601,8 @@ const getDateRangeValue = (
         start: new Date(referenceDate.getFullYear() - 1, 0, 1),
         end: new Date(referenceDate.getFullYear() - 1, 11, 31),
       };
+    case "all-time":
+      return { start: new Date(1970, 0, 1), end: getEndOfDay(referenceDate) };
     case "custom":
       return { start: today, end: today };
     default:
@@ -550,6 +616,28 @@ type SalesByCustomerRow = {
 
 const formatCurrency = (value: number, currency = "SOS") =>
   `${currency}${value.toFixed(2)}`;
+
+const formatBalanceCurrency = (value: number, currency = "SOS") => {
+  const absolute = Math.abs(value).toFixed(2);
+  if (value === 0) return `${currency}${absolute}`;
+  return `${currency}${absolute} ${value < 0 ? "Cr" : "Dr"}`;
+};
+
+const escapeCsvValue = (value: unknown) => {
+  const textValue = String(value ?? "");
+  if (/[",\n]/.test(textValue)) {
+    return `"${textValue.replace(/"/g, '""')}"`;
+  }
+  return textValue;
+};
+
+const escapeHtml = (value: unknown) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 
 type ReportsDrawerSection = {
   id: string;
@@ -876,6 +964,7 @@ function ReportActivityDrawer({
 function SalesByCustomerReportView({
   categoryName,
   reportName,
+  reportId,
   menuButtonRef,
   onMenuClick,
   onRunReport,
@@ -884,6 +973,7 @@ function SalesByCustomerReportView({
 }: {
   categoryName: string;
   reportName: string;
+  reportId: SalesReportId;
   menuButtonRef: React.RefObject<HTMLButtonElement | null>;
   onMenuClick: () => void;
   onRunReport: () => void;
@@ -896,20 +986,33 @@ function SalesByCustomerReportView({
   const compareWithCountRef = useRef<HTMLDivElement | null>(null);
   const moreFiltersRef = useRef<HTMLDivElement | null>(null);
   const exportRef = useRef<HTMLDivElement | null>(null);
-  const [dateRangeKey, setDateRangeKey] = useState<DateRangeKey>("this-week");
+  const isSalesByCustomerReport = reportId === "sales-by-customer";
+  const isCustomerBalanceSummaryReport =
+    reportId === "customer-balance-summary";
+  const isBadDebtsReport = reportId === "bad-debts";
+  const isBankChargesReport = reportId === "bank-charges";
+  const defaultDateRangeKey: DateRangeKey = isSalesByCustomerReport
+    ? "all-time"
+    : "this-month";
+  const [dateRangeKey, setDateRangeKey] =
+    useState<DateRangeKey>(defaultDateRangeKey);
   const [dateRangeDraftKey, setDateRangeDraftKey] =
-    useState<DateRangeKey>("this-week");
+    useState<DateRangeKey>(defaultDateRangeKey);
   const [isDateRangeOpen, setIsDateRangeOpen] = useState(false);
   const [isCustomDateRangeOpen, setIsCustomDateRangeOpen] = useState(false);
   const [customDateRange, setCustomDateRange] = useState<DateRangeValue>(() =>
-    getDateRangeValue("this-week"),
+    getDateRangeValue(defaultDateRangeKey),
   );
   const [customDateRangeDraft, setCustomDateRangeDraft] =
-    useState<DateRangeValue>(() => getDateRangeValue("this-week"));
+    useState<DateRangeValue>(() => getDateRangeValue(defaultDateRangeKey));
   const [customDateRangeMonth, setCustomDateRangeMonth] = useState<Date>(() =>
-    getStartOfMonth(getDateRangeValue("this-week").start),
+    getStartOfMonth(getDateRangeValue(defaultDateRangeKey).start),
   );
-  const [entityKeys, setEntityKeys] = useState<EntityKey[]>([]);
+  const [entityKeys, setEntityKeys] = useState<EntityKey[]>(
+    isSalesByCustomerReport || isCustomerBalanceSummaryReport
+      ? ENTITY_OPTIONS.map((option) => option.key)
+      : [],
+  );
   const [isEntityOpen, setIsEntityOpen] = useState(false);
   const [entitySearch, setEntitySearch] = useState("");
   const [compareWithKey, setCompareWithKey] = useState<CompareWithKey>("none");
@@ -932,15 +1035,17 @@ function SalesByCustomerReportView({
   >("general");
   const customizeDateRangeRef = useRef<HTMLDivElement | null>(null);
   const [customizeDateRangeDraftKey, setCustomizeDateRangeDraftKey] =
-    useState<DateRangeKey>("this-week");
+    useState<DateRangeKey>(defaultDateRangeKey);
   const [isCustomizeDateRangeOpen, setIsCustomizeDateRangeOpen] =
     useState(false);
   const [isCustomizeCustomDateRangeOpen, setIsCustomizeCustomDateRangeOpen] =
     useState(false);
   const [customizeCustomDateRangeDraft, setCustomizeCustomDateRangeDraft] =
-    useState<DateRangeValue>(() => getDateRangeValue("this-week"));
+    useState<DateRangeValue>(() => getDateRangeValue(defaultDateRangeKey));
   const [customizeCustomDateRangeMonth, setCustomizeCustomDateRangeMonth] =
-    useState<Date>(() => getStartOfMonth(getDateRangeValue("this-week").start));
+    useState<Date>(() =>
+      getStartOfMonth(getDateRangeValue(defaultDateRangeKey).start),
+    );
   const [customizeColumnsSearch, setCustomizeColumnsSearch] = useState("");
   const customizeCompareRef = useRef<HTMLDivElement | null>(null);
   const customizeCompareCountRef = useRef<HTMLDivElement | null>(null);
@@ -964,14 +1069,19 @@ function SalesByCustomerReportView({
   >([]);
   const [selectedReportColumns, setSelectedReportColumns] = useState<
     ReportColumnKey[]
-  >(["name", "invoice-count", "sales", "sales-with-tax"]);
+  >(isSalesByCustomerReport
+    ? ["name", "invoice-count", "sales", "sales-with-tax"]
+    : isCustomerBalanceSummaryReport
+      ? ["name", "invoice-amount", "amount-received", "closing-balance"]
+      : ["name", "sales", "sales-with-tax"]);
   const [customizeDraftSelectedColumns, setCustomizeDraftSelectedColumns] =
-    useState<ReportColumnKey[]>([
-      "name",
-      "invoice-count",
-      "sales",
-      "sales-with-tax",
-    ]);
+    useState<ReportColumnKey[]>(
+      isSalesByCustomerReport
+        ? ["name", "invoice-count", "sales", "sales-with-tax"]
+        : isCustomerBalanceSummaryReport
+          ? ["name", "invoice-amount", "amount-received", "closing-balance"]
+          : ["name", "sales", "sales-with-tax"],
+    );
   const { settings } = useSettings();
   const organizationName = String(
     settings?.general?.companyDisplayName ||
@@ -1439,28 +1549,35 @@ function SalesByCustomerReportView({
 
   const selectedCustomizeColumns = useMemo(
     () =>
-      customizeDraftSelectedColumns.map((key) => getReportColumnOption(key)),
-    [customizeDraftSelectedColumns],
+      customizeDraftSelectedColumns.map((key) =>
+        getReportColumnOptionForReport(key, reportId),
+      ),
+    [customizeDraftSelectedColumns, reportId],
   );
 
   const filteredCustomizeGroups = useMemo(() => {
     const query = customizeColumnsSearch.trim().toLowerCase();
-    return REPORT_COLUMN_GROUPS.map((group) => ({
-      label: group.label,
-      options: group.options.filter((option) => {
-        if (customizeDraftSelectedColumns.includes(option.key)) return false;
-        if (!query) return true;
-        return (
-          option.label.toLowerCase().includes(query) ||
-          group.label.toLowerCase().includes(query)
-        );
-      }),
-    })).filter((group) => group.options.length > 0);
-  }, [customizeColumnsSearch, customizeDraftSelectedColumns]);
+    return REPORT_COLUMN_GROUPS.map((group) => {
+      const options = group.options
+        .map((option) => getReportColumnOptionForReport(option.key, reportId))
+        .filter((option) => {
+          if (customizeDraftSelectedColumns.includes(option.key)) return false;
+          if (!query) return true;
+          return (
+            option.label.toLowerCase().includes(query) ||
+            group.label.toLowerCase().includes(query)
+          );
+        });
+      return { label: group.label, options };
+    }).filter((group) => group.options.length > 0);
+  }, [customizeColumnsSearch, customizeDraftSelectedColumns, reportId]);
 
   const visibleReportColumns = useMemo(
-    () => selectedReportColumns.map((key) => getReportColumnOption(key)),
-    [selectedReportColumns],
+    () =>
+      selectedReportColumns.map((key) =>
+        getReportColumnOptionForReport(key, reportId),
+      ),
+    [selectedReportColumns, reportId],
   );
 
   const formatReportColumnValue = (
@@ -1469,6 +1586,11 @@ function SalesByCustomerReportView({
   ) => {
     if (value === undefined || value === null || value === "") return "—";
     const option = getReportColumnOption(key);
+    if (
+      (key === "closing-balance" || key === "closing-balance-fcy") &&
+      typeof value === "number"
+    )
+      return formatBalanceCurrency(value, reportCurrency || "SOS");
     if (option.kind === "currency" && typeof value === "number")
       return formatCurrency(value, reportCurrency || "SOS");
     return String(value);
@@ -1483,6 +1605,11 @@ function SalesByCustomerReportView({
           return typeof value === "number" ? sum + value : sum;
         }, 0);
         if (option.kind === "number") return total;
+        if (
+          option.key === "closing-balance" ||
+          option.key === "closing-balance-fcy"
+        )
+          return formatBalanceCurrency(total, reportCurrency || "SOS");
         if (option.kind === "currency")
           return formatCurrency(total, reportCurrency || "SOS");
         return "";
@@ -1497,7 +1624,7 @@ function SalesByCustomerReportView({
       compare_count: String(compareWithCount),
     };
 
-    if (dateRangeKey === "custom") {
+    if (dateRangeKey === "custom" || dateRangeKey === "all-time") {
       query.from_date = selectedDateRange.start.toISOString();
       query.to_date = selectedDateRange.end.toISOString();
     }
@@ -1534,9 +1661,14 @@ function SalesByCustomerReportView({
       setReportError("");
 
       try {
-        const response = await reportsAPI.getSalesByCustomer(
-          buildSalesByCustomerQuery(),
-        );
+        const query = buildSalesByCustomerQuery();
+        const response = isCustomerBalanceSummaryReport
+          ? await reportsAPI.getCustomerBalanceSummary(query)
+          : isBankChargesReport
+            ? await reportsAPI.getBankCharges(query)
+            : isBadDebtsReport
+              ? await reportsAPI.getBadDebts(query)
+              : await reportsAPI.getSalesByCustomer(query);
         if (cancelled) return;
 
         const data = response?.data || {};
@@ -1567,7 +1699,12 @@ function SalesByCustomerReportView({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reportRefreshTick]);
+  }, [
+    isBadDebtsReport,
+    isBankChargesReport,
+    isCustomerBalanceSummaryReport,
+    reportRefreshTick,
+  ]);
 
   const closeAllOpenPanels = () => {
     setIsCompareWithOpen(false);
@@ -1641,7 +1778,191 @@ function SalesByCustomerReportView({
 
   const handleExportAction = (label: string) => {
     setIsExportOpen(false);
-    toast.success(`Export option selected: ${label}`);
+    const normalizedLabel = label.toLowerCase();
+    const fileBase = `sales-by-customer-${new Date().toISOString().split("T")[0]}`;
+    const exportHeaders = visibleReportColumns.map((column) => column.label);
+    const exportRows = reportRows.map((row) =>
+      visibleReportColumns.map((column) =>
+        formatReportColumnValue(column.key, row.values[column.key]),
+      ),
+    );
+    const exportTotals = reportColumnTotals.map((value) => String(value ?? ""));
+
+    const downloadText = (content: string, fileName: string, mimeType: string) => {
+      const blob = new Blob([content], { type: mimeType });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    };
+
+    const exportPdf = () => {
+      const doc = new jsPDF("landscape", "mm", "a4");
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 10;
+      const colWidth = (pageWidth - margin * 2) / Math.max(visibleReportColumns.length, 1);
+      let y = 18;
+
+      doc.setFontSize(16);
+      doc.text(reportName, pageWidth / 2, y, { align: "center" });
+      y += 8;
+      doc.setFontSize(10);
+      doc.text(`From ${formatDate(selectedDateRange.start)} To ${formatDate(selectedDateRange.end)}`, pageWidth / 2, y, { align: "center" });
+      y += 10;
+
+      doc.setFillColor(248, 250, 252);
+      doc.rect(margin, y, pageWidth - margin * 2, 8, "F");
+      doc.setFontSize(9);
+      visibleReportColumns.forEach((column, index) => {
+        const x = margin + index * colWidth + 2;
+        doc.text(column.label, x, y + 5);
+      });
+      y += 8;
+
+      const rowsForPdf = [...exportRows, exportTotals];
+      rowsForPdf.forEach((rowValues, rowIndex) => {
+        const wrapped = rowValues.map((value) => doc.splitTextToSize(String(value ?? ""), colWidth - 4));
+        const rowHeight = Math.max(...wrapped.map((lines) => Math.max(lines.length, 1))) * 5 + 2;
+
+        if (y + rowHeight > pageHeight - margin) {
+          doc.addPage();
+          y = margin;
+          doc.setFillColor(248, 250, 252);
+          doc.rect(margin, y, pageWidth - margin * 2, 8, "F");
+          visibleReportColumns.forEach((column, index) => {
+            const x = margin + index * colWidth + 2;
+            doc.text(column.label, x, y + 5);
+          });
+          y += 8;
+        }
+
+        if (rowIndex === rowsForPdf.length - 1) {
+          doc.setFillColor(250, 251, 255);
+          doc.rect(margin, y, pageWidth - margin * 2, rowHeight, "F");
+        }
+
+        rowValues.forEach((value, index) => {
+          const lines = wrapped[index];
+          doc.text(lines[0] || "", margin + index * colWidth + 2, y + 5);
+        });
+        y += rowHeight;
+      });
+
+      doc.save(`${fileBase}.pdf`);
+    };
+
+    const exportSpreadsheet = async (bookType: "xlsx" | "xls", suffix: string) => {
+      const XLSX = await import("xlsx");
+      const worksheet = XLSX.utils.aoa_to_sheet([
+        exportHeaders,
+        ...exportRows,
+        exportTotals,
+      ]);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Sales by Customer");
+      XLSX.writeFile(workbook, `${fileBase}.${suffix}`, {
+        bookType,
+        compression: true,
+      });
+    };
+
+    const openPrintWindow = () => {
+      const printWindow = window.open("", "_blank", "noopener,noreferrer,width=1200,height=800");
+      if (!printWindow) {
+        throw new Error("Unable to open the print dialog.");
+      }
+
+      const styles = `
+        <style>
+          body { font-family: Arial, sans-serif; margin: 24px; color: #0f172a; }
+          h1 { font-size: 20px; margin: 0 0 6px; text-align: center; }
+          p { margin: 0 0 16px; text-align: center; color: #475569; }
+          table { width: 100%; border-collapse: collapse; }
+          th, td { border-bottom: 1px solid #e5e7eb; padding: 8px 10px; font-size: 12px; }
+          th { text-align: left; background: #f8fafc; text-transform: uppercase; font-size: 10px; letter-spacing: .08em; color: #64748b; }
+          td.num { text-align: center; }
+          tr.total td { font-weight: 600; background: #fafbff; }
+        </style>
+      `;
+      const headerCells = exportHeaders.map((header) => `<th>${escapeHtml(header)}</th>`).join("");
+      const bodyRows = exportRows
+        .map(
+          (row) =>
+            `<tr>${row
+              .map((cell, index) => `<td class="${index === 0 ? "" : "num"}">${escapeHtml(cell)}</td>`)
+              .join("")}</tr>`,
+        )
+        .join("");
+      const totalRow = `<tr class="total">${exportTotals
+        .map((cell, index) => `<td class="${index === 0 ? "" : "num"}">${escapeHtml(cell)}</td>`)
+        .join("")}</tr>`;
+
+      printWindow.document.open();
+      printWindow.document.write(`
+        <!doctype html>
+        <html>
+          <head>
+            <title>${escapeHtml(reportName)}</title>
+            ${styles}
+          </head>
+          <body>
+            <h1>${escapeHtml(reportName)}</h1>
+            <p>From ${escapeHtml(formatDate(selectedDateRange.start))} To ${escapeHtml(formatDate(selectedDateRange.end))}</p>
+            <table>
+              <thead><tr>${headerCells}</tr></thead>
+              <tbody>${bodyRows}${totalRow}</tbody>
+            </table>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.onafterprint = () => {
+        printWindow.close();
+      };
+      setTimeout(() => {
+        printWindow.print();
+      }, 250);
+    };
+
+    void (async () => {
+      try {
+        if (normalizedLabel === "pdf") {
+          exportPdf();
+        } else if (normalizedLabel === "xlsx (microsoft excel)") {
+          await exportSpreadsheet("xlsx", "xlsx");
+        } else if (
+          normalizedLabel === "xls (microsoft excel 1997-2004 compatible)"
+        ) {
+          await exportSpreadsheet("xls", "xls");
+        } else if (normalizedLabel === "csv (comma separated value)") {
+          const csv = [
+            exportHeaders.map(escapeCsvValue).join(","),
+            ...exportRows.map((row) => row.map(escapeCsvValue).join(",")),
+            exportTotals.map(escapeCsvValue).join(","),
+          ].join("\n");
+          downloadText(csv, `${fileBase}.csv`, "text/csv;charset=utf-8;");
+        } else if (normalizedLabel === "export to zoho sheet") {
+          await exportSpreadsheet("xlsx", "xlsx");
+        } else if (
+          normalizedLabel === "print" ||
+          normalizedLabel === "print preference"
+        ) {
+          openPrintWindow();
+        }
+        toast.success(`Export option selected: ${label}`);
+      } catch (error) {
+        console.error("Failed to export Sales by Customer report:", error);
+        toast.error(`Unable to export ${label}`);
+      } finally {
+        setIsExportOpen(false);
+      }
+    })();
   };
 
   const openCustomizeColumnsModal = () => {
@@ -1918,18 +2239,6 @@ function SalesByCustomerReportView({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              openCustomizeColumnsModal();
-            }}
-            className="inline-flex h-9 w-9 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]"
-            aria-label="Customize report columns"
-            title="Customize report columns"
-          >
-            <SlidersHorizontal size={15} />
-          </button>
           <div ref={exportRef} className="relative">
             <button
               type="button"
@@ -4889,7 +5198,12 @@ export default function ReportDetailPage() {
     : null;
   const calculatorPrecision = report.calculator?.precision ?? 2;
 
-  if (report.id === "sales-by-customer") {
+  if (
+    report.id === "sales-by-customer" ||
+    report.id === "customer-balance-summary" ||
+    report.id === "bad-debts" ||
+    report.id === "bank-charges"
+  ) {
     return (
       <div className="relative min-h-[calc(100vh-64px)] pt-3">
         <ReportsDrawer
@@ -4909,8 +5223,10 @@ export default function ReportDetailPage() {
           } ${isReportActivityOpen ? "lg:pr-[300px]" : ""}`}
         >
           <SalesByCustomerReportView
+            key={report.id}
             categoryName={category.name}
             reportName={report.name}
+            reportId={report.id as SalesReportId}
             menuButtonRef={reportsMenuButtonRef}
             onMenuClick={() => setIsReportsDrawerOpen((prev) => !prev)}
             onActivityClick={() => setIsReportActivityOpen((prev) => !prev)}
@@ -5065,11 +5381,6 @@ export default function ReportDetailPage() {
             dateLabel={dateLabel}
             menuButtonRef={reportsMenuButtonRef}
             onMenuClick={() => setIsReportsDrawerOpen((prev) => !prev)}
-            onCustomizeClick={() =>
-              toast.info(
-                "Customize report columns is available on the detailed report pages.",
-              )
-            }
             onRunReport={() =>
               toast.success(`Report refreshed: ${report.name}`)
             }

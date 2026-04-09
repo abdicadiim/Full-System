@@ -69,31 +69,31 @@ export default function NewQuoteStickyFooter({ controller }: Props) {
   return (
     <>
       {/* Sticky Footer */}
-      <div className="fixed bottom-0 left-0 right-0 lg:left-[240px] bg-white py-4 z-50">
-        <div className="flex items-center gap-3 px-8">
-          <button
-            onClick={handleSaveDraft}
-            disabled={saveLoading !== null}
-            className={`px-6 py-2 bg-white border border-gray-300 text-gray-700 rounded text-sm font-semibold hover:bg-gray-50 transition-colors flex items-center gap-2 ${saveLoading !== null ? "opacity-70 cursor-not-allowed" : ""}`}
-          >
-            {saveLoading === "draft" ? <Loader2 size={16} className="animate-spin" /> : null}
-            {saveLoading === "draft" ? "Saving..." : "Save as Draft"}
-          </button>
-          <button
-            onClick={handleSaveAndSend}
-            disabled={saveLoading !== null}
-            className={`px-6 py-2 bg-[#156372] text-white rounded text-sm font-semibold hover:bg-[#0D4A52] transition-colors flex items-center gap-2 ${saveLoading !== null ? "opacity-70 cursor-not-allowed" : ""}`}
-          >
-            {saveLoading === "send" ? <Loader2 size={16} className="animate-spin" /> : null}
-            {saveLoading === "send" ? "Saving..." : "Save and Send"}
-          </button>
-          <button
-            onClick={handleCancel}
-            className="px-6 py-2 bg-white border border-gray-300 text-gray-700 rounded text-sm font-semibold hover:bg-gray-50 transition-colors"
-          >
-            Cancel
-          </button>
-        </div>
+      <div className="fixed bottom-0 left-0 right-0 lg:left-[240px] bg-white py-4 z-50 border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
+          <div className="flex items-center gap-3 px-8">
+            <button
+              onClick={handleSaveDraft}
+              disabled={saveLoading !== null}
+              className={`px-6 py-2 bg-white border border-gray-300 text-gray-700 rounded text-sm font-semibold hover:bg-gray-50 transition-colors flex items-center gap-2 ${saveLoading !== null ? "opacity-70 cursor-not-allowed" : ""}`}
+            >
+              {saveLoading === "draft" ? <Loader2 size={16} className="animate-spin" /> : null}
+              {saveLoading === "draft" ? "Saving..." : (isEditMode ? "Update" : "Save as Draft")}
+            </button>
+            <button
+              onClick={handleSaveAndSend}
+              disabled={saveLoading !== null}
+              className={`px-6 py-2 bg-[#156372] text-white rounded text-sm font-semibold hover:bg-[#0D4A52] transition-colors flex items-center gap-2 ${saveLoading !== null ? "opacity-70 cursor-not-allowed" : ""}`}
+            >
+              {saveLoading === "send" ? <Loader2 size={16} className="animate-spin" /> : null}
+              {saveLoading === "send" ? "Saving..." : (isEditMode ? "Update and Send" : "Save and Send")}
+            </button>
+            <button
+              onClick={handleCancel}
+              className="px-6 py-2 bg-white border border-gray-300 text-gray-700 rounded text-sm font-semibold hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
       </div>
 
     </>

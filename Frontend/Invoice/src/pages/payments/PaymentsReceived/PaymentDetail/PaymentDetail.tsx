@@ -12,7 +12,7 @@ import {
   ChevronDown, ChevronUp, ChevronRight, ChevronLeft, Plus, Filter,
   ArrowUpDown, CheckSquare, Square, Search, Star, Link2, Mail,
   User, Calendar, ChevronDown as ChevronDownIcon, Paperclip, MessageCircle, RotateCcw,
-  FileUp, Download, Upload, Layers, Monitor, RefreshCw
+  FileUp, Download, Upload, Layers, Monitor, RefreshCw, ExternalLink, Loader2, Trash2
 } from "lucide-react";
 
 export default function PaymentDetail() {
@@ -52,9 +52,11 @@ export default function PaymentDetail() {
   const [refundDateCalendar, setRefundDateCalendar] = useState(new Date());
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
   const [refunds, setRefunds] = useState<any[]>([]);
-  const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
+  const [showAttachmentsPopover, setShowAttachmentsPopover] = useState(false);
+  const [attachmentMenuIndex, setAttachmentMenuIndex] = useState<number | null>(null);
+  const [attachmentDeleteConfirmIndex, setAttachmentDeleteConfirmIndex] = useState<number | null>(null);
   const [paymentAttachments, setPaymentAttachments] = useState<any[]>([]);
-  const [isDragging, setIsDragging] = useState(false);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [showCommentsSidebar, setShowCommentsSidebar] = useState(false);
@@ -391,15 +393,6 @@ export default function PaymentDetail() {
     };
   }, [isMoreMenuOpen, isSidebarMoreMenuOpen, isAllPaymentsDropdownOpen, isPdfDropdownOpen, isEmailModalOpen,
     isRefundModalOpen, isPaymentModeDropdownOpen, isFromAccountDropdownOpen, isRefundDatePickerOpen]);
-
-  // Handle file input change
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length > 0) {
-      handleFileUpload(files as File[]);
-    }
-    e.target.value = ''; // Reset input
-  };
 
   const formatCurrency = (amount: number | string, currency = symbol || baseCurrency?.code || "USD") => {
     return `${currency}${parseFloat(amount || 0).toLocaleString('en-US', {
@@ -845,8 +838,10 @@ export default function PaymentDetail() {
       toast.error("Maximum 5 files allowed. Please remove some files first.");
       return;
     }
+    if (validFiles.length === 0) return;
 
     try {
+      setIsUploadingAttachment(true);
       const newAttachments: any[] = [];
 
       for (const file of validFiles) {
@@ -868,6 +863,8 @@ export default function PaymentDetail() {
     } catch (error) {
       console.error("Error processing uploaded files:", error);
       toast.error("Failed to upload files. Please try again.");
+    } finally {
+      setIsUploadingAttachment(false);
     }
   };
 
@@ -894,23 +891,44 @@ export default function PaymentDetail() {
     await persistPaymentMeta(updated, comments);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const files = Array.from(e.dataTransfer.files || []);
-    if (files.length > 0) {
-      handleFileUpload(files);
-    }
+  const attachments = Array.isArray(paymentAttachments) ? paymentAttachments : [];
+
+  const formatFileSize = (bytes: number | string | undefined) => {
+    const size = Number(bytes) || 0;
+    if (!size) return "0 B";
+    const units = ["B", "KB", "MB", "GB"];
+    const index = Math.min(Math.floor(Math.log(size) / Math.log(1024)), units.length - 1);
+    const value = size / Math.pow(1024, index);
+    return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
+  const isPdfAttachment = (fileName: string) => /\.pdf$/i.test(fileName || "");
+
+  const handleDownloadAttachment = (file: any) => {
+    const url = file?.preview || file?.url || "";
+    if (!url) return;
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = file?.name || "attachment";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
+  const handleOpenAttachmentInNewTab = (file: any) => {
+    const url = file?.preview || file?.url || "";
+    if (!url) return;
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  const handleRequestRemoveAttachment = (index: number) => {
+    setAttachmentMenuIndex(index);
+    setAttachmentDeleteConfirmIndex(index);
+  };
+
+  const handleCancelRemoveAttachment = () => {
+    setAttachmentMenuIndex(null);
+    setAttachmentDeleteConfirmIndex(null);
   };
 
   // More Menu Handlers
@@ -1256,24 +1274,139 @@ export default function PaymentDetail() {
             </div>
             {/* Top Right Icons */}
             <div className="flex items-center gap-2">
-              <button
-                className={`relative h-9 w-9 rounded-md border border-gray-300 bg-gray-100 transition-colors flex items-center justify-center ${showAttachmentsModal
-                  ? "bg-gray-200 text-gray-900"
-                  : "hover:bg-gray-100 text-gray-600"
-                  }`}
-                title="Attachments"
-                onClick={() => {
-                  setShowAttachmentsModal(true);
-                  setShowCommentsSidebar(false);
-                }}
-              >
-                <Paperclip size={18} />
-                {paymentAttachments.length > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-blue-600 text-white text-[10px] rounded-full flex items-center justify-center font-bold">
-                    {paymentAttachments.length}
-                  </span>
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    setShowAttachmentsPopover((prev) => !prev);
+                    setShowCommentsSidebar(false);
+                  }}
+                  className="h-8 min-w-8 rounded border border-gray-200 bg-white px-2 cursor-pointer flex items-center justify-center gap-1 text-gray-600 hover:bg-gray-50"
+                  aria-label="Attachments"
+                  title="Attachments"
+                >
+                  <Paperclip size={14} strokeWidth={2} />
+                  <span className="text-[12px] font-medium leading-none">{attachments.length}</span>
+                </button>
+                {showAttachmentsPopover && (
+                  <div className="absolute right-0 top-full mt-2 w-[286px] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg z-[220]">
+                    <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                      <h3 className="text-[15px] font-semibold text-slate-900">Attachments</h3>
+                      <button
+                        type="button"
+                        onClick={() => setShowAttachmentsPopover(false)}
+                        className="h-6 w-6 rounded text-red-500 flex items-center justify-center hover:bg-red-50"
+                        aria-label="Close attachments"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                    <div className="px-4 py-4">
+                      {attachments.length === 0 ? (
+                        <div className="py-3 text-center text-[14px] text-slate-700">No Files Attached</div>
+                      ) : (
+                        <div className="space-y-2">
+                          {attachments.map((file, index) => (
+                            <div key={file.id || `${file.name}-${index}`}>
+                              <div
+                                className={`group relative cursor-pointer rounded-md px-3 py-2 pr-16 text-[13px] transition-colors ${
+                                  attachmentMenuIndex === index
+                                    ? "w-full bg-[#eef2ff] hover:bg-[#e5e7eb]"
+                                    : "w-full bg-white hover:bg-slate-100"
+                                }`}
+                              >
+                                <div className="flex items-start gap-2">
+                                  <div className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-sm ${isPdfAttachment(file.name) ? "bg-red-50 text-red-500" : "bg-slate-50 text-slate-400"}`}>
+                                    <FileText size={12} />
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="truncate text-[13px] text-slate-700">{file.name}</div>
+                                    <div className="text-[12px] text-slate-500">File Size: {formatFileSize(file.size)}</div>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRequestRemoveAttachment(index)}
+                                  className="absolute right-8 top-1/2 -translate-y-1/2 rounded p-1 text-red-500 opacity-0 transition-opacity hover:bg-red-50 group-hover:opacity-100"
+                                  aria-label="Remove attachment"
+                                  title="Remove"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setAttachmentMenuIndex((current) => (current === index ? null : index))}
+                                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-600 opacity-0 transition-opacity group-hover:opacity-100"
+                                  aria-label="Attachment actions"
+                                  title="More"
+                                >
+                                  <MoreVertical size={14} />
+                                </button>
+                                {attachmentMenuIndex === index && (
+                                  <div className="mt-2 flex items-center gap-5 px-8 text-[12px] font-medium text-blue-600">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        handleDownloadAttachment(file);
+                                        setAttachmentMenuIndex(null);
+                                      }}
+                                      className="hover:text-blue-700"
+                                    >
+                                      Download
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRequestRemoveAttachment(index)}
+                                      className="hover:text-blue-700"
+                                    >
+                                      Remove
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenAttachmentInNewTab(file)}
+                                      className="rounded p-1 text-blue-600 hover:bg-blue-50"
+                                      aria-label="Open attachment"
+                                      title="Open"
+                                    >
+                                      <ExternalLink size={13} />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="mt-4 text-center">
+                        {isUploadingAttachment ? (
+                          <div className="flex h-[58px] w-full items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 text-[14px] font-medium text-slate-400">
+                            <Loader2 size={16} className="animate-spin text-blue-400" />
+                            <span>Uploading...</span>
+                          </div>
+                        ) : (
+                          <label className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#156372] px-4 py-3 text-[14px] font-semibold text-white shadow-sm hover:opacity-95">
+                            <Upload size={16} />
+                            <span>Upload your Files</span>
+                            <input
+                              ref={attachmentsFileInputRef}
+                              type="file"
+                              multiple
+                              className="hidden"
+                              onChange={(e) => {
+                                const files = Array.from(e.target.files || []);
+                                if (files.length > 0) {
+                                  handleFileUpload(files as File[]);
+                                }
+                                e.currentTarget.value = "";
+                              }}
+                            />
+                          </label>
+                        )}
+                        <p className="mt-2 text-[11px] text-slate-500">You can upload a maximum of 5 files, 10MB each</p>
+                      </div>
+                    </div>
+                  </div>
                 )}
-              </button>
+              </div>
               <button
                 className={`relative h-9 w-9 rounded-md border border-gray-300 bg-gray-100 transition-colors flex items-center justify-center ${showCommentsSidebar
                   ? "bg-gray-200 text-gray-900"
@@ -1282,7 +1415,7 @@ export default function PaymentDetail() {
                 title="Comments"
                 onClick={() => {
                   setShowCommentsSidebar(true);
-                  setShowAttachmentsModal(false);
+                  setShowAttachmentsPopover(false);
                 }}
               >
                 <MessageCircle size={18} />
@@ -2045,130 +2178,48 @@ export default function PaymentDetail() {
         </div>
       )}
 
-      {/* Attachments Modal */}
-      {showAttachmentsModal && (
+      {attachmentDeleteConfirmIndex !== null && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setShowAttachmentsModal(false);
-            }
-          }}
+          className="fixed inset-0 z-[10000] flex items-start justify-center bg-black/40 px-4 pt-4"
+          onClick={handleCancelRemoveAttachment}
         >
           <div
-            className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col"
+            className="w-full max-w-[520px] overflow-hidden rounded-lg bg-white shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Attachments ({paymentAttachments.length})</h2>
-              <button
-                className="p-2 hover:bg-gray-100 rounded-md text-gray-600 hover:text-gray-900 cursor-pointer"
-                onClick={() => setShowAttachmentsModal(false)}
-              >
-                <X size={20} />
-              </button>
+            <div className="flex items-start gap-3 px-5 py-4">
+              <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+                <AlertTriangle size={18} />
+              </div>
+              <p className="text-[14px] leading-6 text-slate-700">
+                This action will permanently delete the attachment. Are you sure you want to proceed?
+              </p>
             </div>
-
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-6">
-              {paymentAttachments.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-gray-600 mb-4">No Files Attached</p>
-                  <div
-                    className={`border-2 border-dashed rounded-lg p-8 cursor-pointer transition-colors ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
-                      }`}
-                    onDrop={handleDrop}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onClick={() => attachmentsFileInputRef.current?.click()}
-                  >
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                        <FileUp size={24} className="text-gray-400" />
-                      </div>
-                      <div className="flex items-center gap-1 text-sm text-gray-700">
-                        <span>Upload your</span>
-                        <span className="text-blue-600 font-medium">Files</span>
-                        <ChevronDown size={14} />
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-4">
-                    You can upload a maximum of 5 files, 10MB each.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {paymentAttachments.map((attachment) => {
-                    const isImage = attachment.type && attachment.type.startsWith('image/');
-                    return (
-                      <div
-                        key={attachment.id}
-                        className="p-3 rounded-lg bg-gray-50 border border-gray-200 flex items-center gap-3 cursor-pointer hover:bg-gray-100"
-                        onClick={() => handleFileClick(attachment)}
-                      >
-                        {isImage && attachment.preview ? (
-                          <img
-                            src={attachment.preview}
-                            alt={attachment.name}
-                            className="w-12 h-12 object-cover rounded"
-                          />
-                        ) : (
-                          <div className="w-12 h-12 bg-gray-200 rounded flex items-center justify-center">
-                            <FileText size={20} className="text-gray-500" />
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm text-gray-900 font-medium truncate">
-                            {attachment.name}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {(attachment.size / 1024).toFixed(2)} KB
-                          </div>
-                        </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveAttachment(attachment.id);
-                          }}
-                          className="p-1 hover:bg-red-100 rounded text-red-600"
-                        >
-                          <X size={16} />
-                        </button>
-                      </div>
-                    );
-                  })}
-                  {paymentAttachments.length < 5 && (
-                    <div
-                      className={`border-2 border-dashed rounded-lg p-6 cursor-pointer transition-colors ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
-                        }`}
-                      onDrop={handleDrop}
-                      onDragOver={handleDragOver}
-                      onDragLeave={handleDragLeave}
-                      onClick={() => attachmentsFileInputRef.current?.click()}
-                    >
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-                          <FileUp size={20} className="text-gray-400" />
-                        </div>
-                        <div className="flex items-center gap-1 text-sm text-gray-700">
-                          <span>Upload your</span>
-                          <span className="text-blue-600 font-medium">Files</span>
-                          <ChevronDown size={12} />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-              <input
-                ref={attachmentsFileInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                onChange={handleFileSelect}
-              />
+            <div className="border-t border-slate-200 px-5 py-4">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (attachmentDeleteConfirmIndex !== null) {
+                      const attachment = attachments[attachmentDeleteConfirmIndex];
+                      if (attachment?.id) {
+                        void handleRemoveAttachment(attachment.id);
+                      }
+                    }
+                    handleCancelRemoveAttachment();
+                  }}
+                  className="rounded-md bg-blue-500 px-4 py-2 text-[14px] font-medium text-white hover:bg-blue-600"
+                >
+                  Proceed
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelRemoveAttachment}
+                  className="rounded-md border border-slate-300 bg-white px-4 py-2 text-[14px] font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -78,6 +78,7 @@ type PriceListSwitchDialogState = {
 
 
 export function useNewQuoteCustomerSearch(controller: any) {
+  const quoteNumberInitializedRef = useRef(false);
   const {
   navigate, location, baseCurrencyCode, quoteId, isEditMode, clonedDataFromState, saveLoading, setSaveLoading,
   taxes, setTaxes, enabledSettings, setEnabledSettings, formData, setFormData, hasAppliedCloneRef, discountMode,
@@ -129,9 +130,20 @@ export function useNewQuoteCustomerSearch(controller: any) {
   handleProjectSelect, handleNewProjectChange, handleAddProjectTask, handleRemoveProjectTask, handleProjectTaskChange, handleAddProjectUser, handleRemoveProjectUser, handleSaveNewProject,
   handleCancelNewProject, handleOpenNewProjectModal, handleContactPersonChange, handleContactPersonImageUpload, handleSaveContactPerson, uploadQuoteFiles, validateForm, buildQuoteFinancialsAndItems,
   extractSavedQuoteId, getNextQuoteNumberForSave, persistQuoteSeriesPreferences, handleSaveDraft, handleSaveAndSend, handleCancel, handleOtherAction
-} = controller as any;  const handleCustomerSearch = () => {
+} = controller as any;
+
+  const preloadedQuote = location?.state?.preloadedQuote || null;
+
+  const handleCustomerSearch = () => {
     const searchTerm = customerSearchTerm.toLowerCase();
     let results: Customer[] = [];
+
+    if (!searchTerm.trim()) {
+      results = customers;
+      setCustomerSearchResults(results);
+      setCustomerSearchPage(1);
+      return;
+    }
 
     if (customerSearchCriteria === "Display Name") {
       results = customers.filter(customer => {
@@ -159,8 +171,16 @@ export function useNewQuoteCustomerSearch(controller: any) {
     setCustomerSearchPage(1);
   };
 
+  useEffect(() => {
+    if (!customerSearchModalOpen) return;
+
+    const allCustomers = Array.isArray(customers) ? customers : [];
+    setCustomerSearchResults(allCustomers);
+    setCustomerSearchPage(1);
+  }, [customerSearchModalOpen, customers, setCustomerSearchPage, setCustomerSearchResults]);
+
   // Pagination calculations
-  const customerResultsPerPage = 10;
+  const customerResultsPerPage = 5;
   const customerStartIndex = (customerSearchPage - 1) * customerResultsPerPage;
   const customerEndIndex = customerStartIndex + customerResultsPerPage;
   const customerPaginatedResults = customerSearchResults.slice(customerStartIndex, customerEndIndex);
@@ -313,6 +333,36 @@ export function useNewQuoteCustomerSearch(controller: any) {
   useEffect(() => {
     const loadData = async () => {
       try {
+        const normalizeSalesperson = (s: any) => ({
+          ...s,
+          id: s?._id || s?.id,
+          name: s?.name || s?.displayName || "Unknown",
+        });
+        const isSalespersonActive = (s: any) => {
+          const status = String(s?.status ?? s?.salespersonStatus ?? "").trim().toLowerCase();
+          if (status) return status === "active";
+          const rawIsActive = s?.isActive ?? s?.active ?? s?.enabled;
+          if (typeof rawIsActive === "boolean") return rawIsActive;
+          if (typeof rawIsActive === "number") return rawIsActive === 1;
+          return true;
+        };
+
+        try {
+          const localSalespersonsResponse = await salespersonsAPI.local.getAll();
+          const localSalespersons = Array.isArray((localSalespersonsResponse as any)?.data)
+            ? (localSalespersonsResponse as any).data
+            : [];
+          if (localSalespersons.length > 0) {
+            setSalespersons(
+              localSalespersons
+                .map(normalizeSalesperson)
+                .filter(isSalespersonActive)
+            );
+          }
+        } catch (error) {
+          console.error("Error loading local salespersons:", error);
+        }
+
         // Load heavy dropdown data in parallel.
         const [
           projectsResult,
@@ -346,11 +396,9 @@ export function useNewQuoteCustomerSearch(controller: any) {
         }
 
         if (salespersonsResult.status === "fulfilled") {
-          const normalizedSalespersons = (salespersonsResult.value || []).map((s: any) => ({
-            ...s,
-            id: s._id || s.id,
-            name: s.name || s.displayName || "Unknown"
-          }));
+          const normalizedSalespersons = (salespersonsResult.value || [])
+            .map(normalizeSalesperson)
+            .filter(isSalespersonActive);
           setSalespersons(normalizedSalespersons);
         } else {
           console.error("Error loading salespersons:", salespersonsResult.reason);
@@ -437,7 +485,10 @@ export function useNewQuoteCustomerSearch(controller: any) {
             const resolvedNextDigits = resolveSeriesNextDigits(resolvedSeriesRow);
             setQuotePrefix(resolvedPrefix);
             setQuoteNextNumber(resolvedNextDigits);
-            setFormData(prev => ({ ...prev, quoteNumber: buildQuoteNumber(resolvedPrefix, resolvedNextDigits) }));
+            if (!isEditMode && !quoteNumberInitializedRef.current && !String(formData.quoteNumber || "").trim()) {
+              quoteNumberInitializedRef.current = true;
+              setFormData(prev => ({ ...prev, quoteNumber: buildQuoteNumber(resolvedPrefix, resolvedNextDigits) }));
+            }
           }
         } else {
           console.error("Error loading transaction number series:", txSeriesResult.reason);
@@ -448,31 +499,14 @@ export function useNewQuoteCustomerSearch(controller: any) {
           const fallbackDigits = "000001";
           setQuotePrefix(fallbackPrefix);
           setQuoteNextNumber(fallbackDigits);
-          setFormData(prev => ({ ...prev, quoteNumber: buildQuoteNumber(fallbackPrefix, fallbackDigits) }));
+          if (!isEditMode && !quoteNumberInitializedRef.current && !String(formData.quoteNumber || "").trim()) {
+            quoteNumberInitializedRef.current = true;
+            setFormData(prev => ({ ...prev, quoteNumber: buildQuoteNumber(fallbackPrefix, fallbackDigits) }));
+          }
         }
 
         if (!isEditMode && resolvedSeriesRow && !quoteSeriesSyncRef.current) {
-          const listResponse: any = quoteListResult.status === "fulfilled" ? quoteListResult.value : null;
-          const totalQuotes =
-            Number(listResponse?.pagination?.total ?? listResponse?.data?.pagination?.total ?? 0) ||
-            Number(listResponse?.data?.length ?? 0) ||
-            0;
-          const currentPrefix = String(resolvedSeriesRow?.prefix || "QT-");
-          const needsPrefixFix = !currentPrefix.startsWith("QT-");
-          const needsReset = totalQuotes === 0 && Number(resolvedSeriesRow?.nextNumber || 0) > 1;
-          if (needsPrefixFix || needsReset) {
-            quoteSeriesSyncRef.current = true;
-            const desiredPrefix = "QT-";
-            const desiredDigits = needsReset ? "000001" : resolveSeriesNextDigits(resolvedSeriesRow);
-            setQuotePrefix(desiredPrefix);
-            setQuoteNextNumber(desiredDigits);
-            setFormData(prev => ({ ...prev, quoteNumber: buildQuoteNumber(desiredPrefix, desiredDigits) }));
-            try {
-              await persistQuoteSeriesPreferences({ prefix: desiredPrefix, nextDigits: desiredDigits });
-            } catch (error) {
-              console.error("Failed to sync quote number series:", error);
-            }
-          }
+          quoteSeriesSyncRef.current = true;
         }
 
         if (currenciesResult.status === "fulfilled") {
@@ -585,7 +619,427 @@ export function useNewQuoteCustomerSearch(controller: any) {
   useEffect(() => {
     const loadQuote = async () => {
       if (isEditMode && quoteId && salespersons.length >= 0) {
+        const cachedDetailKey = quoteId ? `quote_detail_${quoteId}` : "";
+        const quotesListKey = "taban_quotes_list_v1";
+        const readCachedDetail = () => {
+          if (!cachedDetailKey) return null;
+          try {
+            const raw = localStorage.getItem(cachedDetailKey);
+            return raw ? JSON.parse(raw) : null;
+          } catch {
+            return null;
+          }
+        };
+        const readCachedListMatch = () => {
+          try {
+            const raw = localStorage.getItem(quotesListKey);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            const list = Array.isArray(parsed) ? parsed : [];
+            return (
+              list.find((q) => String(q?.id || q?._id || "") === String(quoteId)) ||
+              list.find((q) => String(q?.quoteNumber || "") === String(quoteId)) ||
+              null
+            );
+          } catch {
+            return null;
+          }
+        };
+
+        const resolveText = (value: any): string => {
+          if (value === null || value === undefined) return "";
+          if (typeof value === "string") return value.trim();
+          if (typeof value === "number" || typeof value === "boolean") return String(value).trim();
+          if (typeof value === "object") {
+            return String(
+              value?.displayName ||
+              value?.name ||
+              value?.companyName ||
+              value?.title ||
+              value?.label ||
+              value?.quoteNumber ||
+              value?._id ||
+              value?.id ||
+              ""
+            ).trim();
+          }
+          return String(value).trim();
+        };
+
+        const normalizeAddressState = (address: any, fallbackLine = "") => {
+          const fallback = String(fallbackLine || "").trim();
+          if (!address && !fallback) return null;
+          if (typeof address === "string") {
+            const street1 = String(address || fallback).trim();
+            if (!street1) return null;
+            return {
+              attention: "",
+              street1,
+              street2: "",
+              city: "",
+              state: "",
+              zipCode: "",
+              country: "",
+              phone: "",
+            };
+          }
+          if (address && typeof address === "object") {
+            return {
+              attention: String(address?.attention || "").trim(),
+              street1: String(address?.street1 || fallback || "").trim(),
+              street2: String(address?.street2 || "").trim(),
+              city: String(address?.city || "").trim(),
+              state: String(address?.state || "").trim(),
+              zipCode: String(address?.zipCode || "").trim(),
+              country: String(address?.country || "").trim(),
+              phone: String(address?.phone || "").trim(),
+              phoneCountryCode: String(address?.phoneCountryCode || "").trim(),
+            };
+          }
+          if (!fallback) return null;
+          return {
+            attention: "",
+            street1: fallback,
+            street2: "",
+            city: "",
+            state: "",
+            zipCode: "",
+            country: "",
+            phone: "",
+          };
+        };
+
+        const buildFallbackCustomer = (quote: any, contactPersonRows: any[], billingAddressState: any, shippingAddressState: any) => {
+          const quoteCustomer = typeof quote?.customer === "object" && quote?.customer ? quote.customer : null;
+          const quoteCustomerName =
+            resolveText(quote?.customerName) ||
+            resolveText(quoteCustomer?.displayName || quoteCustomer?.name || quoteCustomer?.companyName || quoteCustomer);
+          const quoteCustomerId =
+            resolveText(quote?.customerId || quoteCustomer?._id || quoteCustomer?.id || quote?.customer || "");
+
+          return {
+            ...(quoteCustomer || {}),
+            id: quoteCustomerId || quoteCustomer?._id || quoteCustomer?.id || "",
+            _id: quoteCustomerId || quoteCustomer?._id || quoteCustomer?.id || "",
+            name: quoteCustomerName,
+            displayName: quoteCustomerName,
+            companyName: quoteCustomer?.companyName || quoteCustomerName,
+            email: resolveText(quote?.customerEmail || quoteCustomer?.email || quoteCustomer?.primaryEmail || ""),
+            workPhone: resolveText(quoteCustomer?.workPhone || quoteCustomer?.mobile || quoteCustomer?.phone || ""),
+            phone: resolveText(quoteCustomer?.phone || quoteCustomer?.mobile || quoteCustomer?.workPhone || ""),
+            currency: resolveText(quote?.currency || quoteCustomer?.currency || ""),
+            billingAddress: billingAddressState || quoteCustomer?.billingAddress || null,
+            shippingAddress: shippingAddressState || quoteCustomer?.shippingAddress || null,
+            contactPersons: Array.isArray(contactPersonRows) ? contactPersonRows : [],
+          };
+        };
+
+        const buildFallbackSalesperson = (quote: any) => {
+          const quoteSalesperson = typeof quote?.salesperson === "object" && quote?.salesperson ? quote.salesperson : null;
+          const salespersonName =
+            resolveText(quoteSalesperson?.name || quoteSalesperson?.displayName || quote?.salesperson) ||
+            resolveText(quote?.salespersonName);
+          const salespersonId = resolveText(quote?.salespersonId || quoteSalesperson?._id || quoteSalesperson?.id || "");
+          if (!salespersonName && !salespersonId) return null;
+          return {
+            ...(quoteSalesperson || {}),
+            id: salespersonId || quoteSalesperson?._id || quoteSalesperson?.id || "",
+            _id: salespersonId || quoteSalesperson?._id || quoteSalesperson?.id || "",
+            name: salespersonName,
+            displayName: salespersonName,
+          };
+        };
+
+        const buildFallbackProject = (quote: any) => {
+          const quoteProject = typeof quote?.project === "object" && quote?.project ? quote.project : null;
+          const projectName =
+            resolveText(quote?.projectName) ||
+            resolveText(quoteProject?.projectName || quoteProject?.name || quoteProject);
+          const projectId = resolveText(quote?.projectId || quoteProject?._id || quoteProject?.id || "");
+          if (!projectName && !projectId) return null;
+          return {
+            ...(quoteProject || {}),
+            id: projectId || quoteProject?._id || quoteProject?.id || "",
+            _id: projectId || quoteProject?._id || quoteProject?.id || "",
+            name: projectName,
+            projectName,
+          };
+        };
+
+        const applyQuoteToForm = async (quote) => {
+          if (!quote) return;
+
+          const formatDateForInput = (dateString) => {
+            if (!dateString) return "";
+            try {
+              const date = new Date(dateString);
+              if (isNaN(date.getTime())) return "";
+              const day = String(date.getDate()).padStart(2, "0");
+              const month = String(date.getMonth() + 1).padStart(2, "0");
+              const year = date.getFullYear();
+              return `${day}/${month}/${year}`;
+            } catch (error) {
+              console.error("Error formatting date:", error);
+              return "";
+            }
+          };
+
+          const mappedItems = (quote.items || []).map((item, index) => {
+            const quantity = parseFloat(item.quantity) || 1;
+            const rate = parseFloat(item.unitPrice || item.rate || item.price) || 0;
+            const amount = parseFloat(item.total || item.amount || (quantity * rate)) || 0;
+            const rawTaxSource =
+              item?.taxId ??
+              (item?.tax && typeof item.tax === "object"
+                ? (
+                  item.tax?._id ||
+                  item.tax?.id ||
+                  item.tax?.taxId ||
+                  item.tax?.name ||
+                  item.tax?.taxName ||
+                  item.tax?.rate ||
+                  (typeof item.tax?.toString === "function" ? item.tax.toString() : "")
+                )
+                : item?.tax) ??
+              item?.taxName ??
+              item?.taxLabel ??
+              item?.salesTaxRate ??
+              item?.taxRate ??
+              "";
+            const normalizedRawTax = String(rawTaxSource || "").trim() === "[object Object]" ? "" : rawTaxSource;
+            const parsedTaxRate = parseFloat(String(
+              item?.taxRate ??
+              item?.salesTaxRate ??
+              (item?.tax && typeof item.tax === "object" ? item.tax?.rate : item?.tax) ??
+              0
+            )) || 0;
+            const explicitTaxAmount = parseFloat(String(item?.taxAmount ?? 0)) || 0;
+            const derivedTaxRate = parsedTaxRate > 0
+              ? parsedTaxRate
+              : (amount > 0 && explicitTaxAmount > 0 ? (explicitTaxAmount / amount) * 100 : 0);
+            const matchedTax = (() => {
+              const candidate = String(normalizedRawTax || "").trim();
+              if (!candidate) return null;
+              const byId = taxes.find((t: any) => String(t.id || t._id) === candidate);
+              if (byId) return byId;
+              const byName = taxes.find((t: any) => String(t.name || t.taxName || "").toLowerCase() === candidate.toLowerCase());
+              if (byName) return byName;
+              const asRate = parseFloat(candidate.replace("%", ""));
+              if (Number.isFinite(asRate) && asRate > 0) {
+                return taxes.find((t: any) => Number(t.rate || 0) === asRate) || null;
+              }
+              return null;
+            })();
+            const resolvedTaxId = matchedTax ? String((matchedTax as any).id || (matchedTax as any)._id || "") : "";
+            const resolvedTaxRate = matchedTax ? (Number((matchedTax as any).rate) || derivedTaxRate) : derivedTaxRate;
+
+            return {
+              id: item.item?._id || item.item?.id || item.item || item._id || item.id || index + 1,
+              itemType: item.itemType || "item",
+              itemDetails: item.item?.name || item.item?.itemName || item.name || item.itemName || item.itemDetails || "",
+              name: item.item?.name || item.item?.itemName || item.name || item.itemName || "",
+              quantity,
+              rate,
+              tax: String(resolvedTaxId || normalizedRawTax || (resolvedTaxRate > 0 ? resolvedTaxRate : "")),
+              taxRate: resolvedTaxRate,
+              amount,
+              description: item.description || "",
+              reportingTags: Array.isArray((item as any).reportingTags) ? (item as any).reportingTags : []
+            };
+          });
+
+          const subTotalValue = resolveSubtotalFromQuoteLike(quote, mappedItems);
+          const totalTaxValue = toNumberSafe(quote.totalTax ?? quote.taxAmount ?? quote.tax);
+          const normalizedDiscount = normalizeDiscountForForm(quote, subTotalValue, totalTaxValue);
+          const quoteCustomer = typeof (quote as any).customer === "object" && (quote as any).customer ? (quote as any).customer : null;
+          const customerName = resolveText((quote as any).customerName) || resolveText(quoteCustomer);
+          const quoteLocation = resolveText((quote as any).selectedLocation || (quote as any).location) || "Head Office";
+          const quotePriceList = resolveText((quote as any).selectedPriceList || (quote as any).priceList?.name || (quote as any).priceListName) || "Select Price List";
+          const salespersonName = resolveText((quote as any).salesperson?.name || (quote as any).salesperson || (quote as any).salespersonName);
+          const salespersonId = resolveText((quote as any).salespersonId || (quote as any).salesperson?._id || (quote as any).salesperson?.id);
+          const projectName = resolveText((quote as any).projectName || (quote as any).project?.projectName || (quote as any).project?.name);
+          const projectId = resolveText((quote as any).projectId || (quote as any).project?._id || (quote as any).project?.id);
+          const quoteContactPersons = Array.isArray((quote as any).contactPersons)
+            ? (quote as any).contactPersons
+            : Array.isArray((quote as any).customer?.contactPersons)
+              ? (quote as any).customer.contactPersons
+              : [];
+          const quoteBillingAddress = normalizeAddressState(
+            (quote as any).billingAddress,
+            (quote as any).customer?.billingAddress?.street1 || (quote as any).customer?.billingStreet1 || ""
+          );
+          const quoteShippingAddress = normalizeAddressState(
+            (quote as any).shippingAddress,
+            (quote as any).customer?.shippingAddress?.street1 || (quote as any).customer?.shippingStreet1 || ""
+          );
+          const fallbackCustomer = buildFallbackCustomer(quote, quoteContactPersons, quoteBillingAddress, quoteShippingAddress);
+          const fallbackSalesperson = buildFallbackSalesperson(quote);
+          const fallbackProject = buildFallbackProject(quote);
+
+          setFormData(prev => ({
+            ...prev,
+            customerName,
+            selectedLocation: quoteLocation,
+            selectedPriceList: quotePriceList,
+            quoteNumber: resolveText(quote.quoteNumber || quote.id),
+            referenceNumber: resolveText(quote.referenceNumber),
+            quoteDate: formatDateForInput(quote.quoteDate || quote.date),
+            expiryDate: formatDateForInput(quote.expiryDate),
+            salesperson: salespersonName,
+            salespersonId,
+            projectName,
+            subject: resolveText(quote.subject),
+            taxExclusive: resolveText(quote.taxExclusive) || "Tax Exclusive",
+            discountAccount: resolveText(quote.discountAccount) || "General Income",
+            items: mappedItems,
+            subTotal: subTotalValue,
+            totalTax: totalTaxValue,
+            discount: normalizedDiscount.discountValue ?? 0,
+            discountType: normalizedDiscount.discountTypeValue ?? "percent",
+            shippingCharges: Number(quote.shippingCharges || 0) || 0,
+            shippingChargeTax: resolveText((quote as any).shippingChargeTax || (quote as any).shippingTax || ""),
+            adjustment: Number(quote.adjustment || 0) || 0,
+            roundOff: Number(quote.roundOff || 0) || 0,
+            total: Number(quote.total || quote.amount || 0) || 0,
+            currency: resolveText(quote.currency) || baseCurrencyCode || prev.currency,
+            status: resolveText(quote.status) || "Draft",
+            customerNotes: resolveText(quote.customerNotes || quote.notes),
+            termsAndConditions: resolveText(quote.termsAndConditions || quote.terms),
+            attachedFiles: Array.isArray((quote as any).attachedFiles) ? (quote as any).attachedFiles : [],
+            reportingTags: Array.isArray((quote as any).reportingTags) ? (quote as any).reportingTags : []
+          }));
+
+          setContactPersons(quoteContactPersons);
+          setSelectedContactPersons(quoteContactPersons);
+          setBillingAddress(quoteBillingAddress || (fallbackCustomer as any)?.billingAddress || null);
+          setShippingAddress(quoteShippingAddress || (fallbackCustomer as any)?.shippingAddress || null);
+
+          const quoteCustomerId = resolveText((quote as any).customerId || (quote as any).customer?._id || (quote as any).customer?.id || "");
+          const loadedCustomers = await getCustomers();
+          const customer = loadedCustomers.find((c: any) =>
+            (quoteCustomerId && String(c.id || c._id || "") === quoteCustomerId) ||
+            c.name === customerName ||
+            c.name === (quote as any).customer ||
+            c.name === (quote as any).customerName
+          );
+          const effectiveCustomer = customer
+            ? {
+              ...customer,
+              billingAddress: quoteBillingAddress || (customer as any).billingAddress || null,
+              shippingAddress: quoteShippingAddress || (customer as any).shippingAddress || null,
+              contactPersons: quoteContactPersons.length > 0
+                ? quoteContactPersons
+                : Array.isArray((customer as any).contactPersons) ? (customer as any).contactPersons : [],
+            }
+            : fallbackCustomer;
+
+          setSelectedCustomer(effectiveCustomer as any);
+          setSelectedCustomerIdForProjects(quoteCustomerId || String((effectiveCustomer as any)?.id || (effectiveCustomer as any)?._id || ""));
+
+          const rawCustomerTax =
+            (effectiveCustomer as any)?.taxRate ??
+            (effectiveCustomer as any)?.taxId ??
+            (effectiveCustomer as any)?.defaultTaxId ??
+            (effectiveCustomer as any)?.taxName ??
+            (effectiveCustomer as any)?.tax ??
+            "";
+          const matchedTax = getTaxBySelection(rawCustomerTax);
+          const resolvedCustomerTaxId = matchedTax
+            ? String((matchedTax as any).id || (matchedTax as any)._id || "")
+            : (typeof rawCustomerTax === "string" ? rawCustomerTax : "");
+          setCustomerDefaultTaxId(resolvedCustomerTaxId);
+
+          const customerId = String((effectiveCustomer as any)?.id || (effectiveCustomer as any)?._id || quoteCustomerId || "");
+          if (customerId && !quoteContactPersons.length) {
+            await loadCustomerContactPersons(customerId);
+          }
+          if (customerId) {
+            try {
+              const customerProjectsResponse = await projectsAPI.getByCustomer(customerId);
+              if (customerProjectsResponse && customerProjectsResponse.success && customerProjectsResponse.data) {
+                setProjects(customerProjectsResponse.data);
+              } else {
+                const allProjectsResponse = await projectsAPI.getAll();
+                if (allProjectsResponse && allProjectsResponse.success && allProjectsResponse.data) {
+                  const customerProjects = allProjectsResponse.data.filter(p =>
+                    p.customer?._id === customerId || p.customer === customerId || p.customerId === customerId
+                  );
+                  setProjects(customerProjects);
+                }
+              }
+            } catch (err) {
+              console.error("Error loading customer projects in edit:", err);
+            }
+          }
+
+          if (salespersonName || salespersonId) {
+            const salesperson = salespersons.find((s: any) =>
+              (s.name === salespersonName) ||
+              (s._id === salespersonId) ||
+              (s.id === salespersonId)
+            );
+            if (salesperson) {
+              setSelectedSalesperson(salesperson);
+            } else if (fallbackSalesperson) {
+              setSelectedSalesperson(fallbackSalesperson as any);
+            }
+          }
+
+          if (projectName || projectId) {
+            try {
+              const projectsResponse = await projectsAPI.getAll();
+              if (projectsResponse && projectsResponse.success && projectsResponse.data) {
+                const project = projectsResponse.data.find((p: any) =>
+                  (projectId && (p._id === projectId || p.id === projectId)) ||
+                  ((p.projectName || p.name) === projectName)
+                );
+                if (project) {
+                  setSelectedProject(project);
+                } else if (fallbackProject) {
+                  setSelectedProject(fallbackProject as any);
+                }
+              } else {
+                const loadedProjects = await getProjects();
+                const project = loadedProjects.find((p: any) =>
+                  (projectId && (p._id === projectId || p.id === projectId)) ||
+                  ((p.projectName || p.name) === projectName)
+                );
+                if (project) {
+                  setSelectedProject(project);
+                } else if (fallbackProject) {
+                  setSelectedProject(fallbackProject as any);
+                }
+              }
+            } catch (error) {
+              console.error("Error loading projects for matching:", error);
+              const loadedProjects = await getProjects();
+              const project = loadedProjects.find((p: any) =>
+                (projectId && (p._id === projectId || p.id === projectId)) ||
+                ((p.projectName || p.name) === projectName)
+              );
+              if (project) {
+                setSelectedProject(project);
+              } else if (fallbackProject) {
+                setSelectedProject(fallbackProject as any);
+              }
+            }
+          }
+
+          const parsedQuoteDate = new Date(quote.quoteDate || quote.date);
+          if (!isNaN(parsedQuoteDate.getTime())) setQuoteDateCalendar(parsedQuoteDate);
+
+          if (quote.expiryDate) {
+            const parsedExpiryDate = new Date(quote.expiryDate);
+            if (!isNaN(parsedExpiryDate.getTime())) setExpiryDateCalendar(parsedExpiryDate);
+          }
+        };
+
         try {
+          const cachedQuote = preloadedQuote || readCachedDetail() || readCachedListMatch();
+          if (cachedQuote) {
+            await applyQuoteToForm(cachedQuote);
+          }
+
           let quote = await getQuoteById(quoteId);
 
           // Try numeric ID if not found
@@ -600,237 +1054,7 @@ export function useNewQuoteCustomerSearch(controller: any) {
           }
 
           if (quote) {
-            // Format dates for display
-            const formatDateForInput = (dateString) => {
-              if (!dateString) return "";
-              try {
-                const date = new Date(dateString);
-                if (isNaN(date.getTime())) return "";
-                const day = String(date.getDate()).padStart(2, "0");
-                const month = String(date.getMonth() + 1).padStart(2, "0");
-                const year = date.getFullYear();
-                return `${day}/${month}/${year}`;
-              } catch (error) {
-                console.error("Error formatting date:", error);
-                return "";
-              }
-            };
-
-            // Map quote items to form items format
-            // Map quote items to form items format
-            const mappedItems = (quote.items || []).map((item, index) => {
-              const quantity = parseFloat(item.quantity) || 1;
-              const rate = parseFloat(item.unitPrice || item.rate || item.price) || 0;
-              const amount = parseFloat(item.total || item.amount || (quantity * rate)) || 0;
-              const rawTaxSource =
-                item?.taxId ??
-                (item?.tax && typeof item.tax === "object"
-                  ? (
-                    item.tax?._id ||
-                    item.tax?.id ||
-                    item.tax?.taxId ||
-                    item.tax?.name ||
-                    item.tax?.taxName ||
-                    item.tax?.rate ||
-                    (typeof item.tax?.toString === "function" ? item.tax.toString() : "")
-                  )
-                  : item?.tax) ??
-                item?.taxName ??
-                item?.taxLabel ??
-                item?.salesTaxRate ??
-                item?.taxRate ??
-                "";
-              const normalizedRawTax = String(rawTaxSource || "").trim() === "[object Object]" ? "" : rawTaxSource;
-              const parsedTaxRate = parseFloat(String(
-                item?.taxRate ??
-                item?.salesTaxRate ??
-                (item?.tax && typeof item.tax === "object" ? item.tax?.rate : item?.tax) ??
-                0
-              )) || 0;
-              const explicitTaxAmount = parseFloat(String(item?.taxAmount ?? 0)) || 0;
-              const derivedTaxRate = parsedTaxRate > 0
-                ? parsedTaxRate
-                : (amount > 0 && explicitTaxAmount > 0 ? (explicitTaxAmount / amount) * 100 : 0);
-              const matchedTax = (() => {
-                const candidate = String(normalizedRawTax || "").trim();
-                if (!candidate) return null;
-                const byId = taxes.find((t: any) => String(t.id || t._id) === candidate);
-                if (byId) return byId;
-                const byName = taxes.find((t: any) => String(t.name || t.taxName || "").toLowerCase() === candidate.toLowerCase());
-                if (byName) return byName;
-                const asRate = parseFloat(candidate.replace("%", ""));
-                if (Number.isFinite(asRate) && asRate > 0) {
-                  return taxes.find((t: any) => Number(t.rate || 0) === asRate) || null;
-                }
-                return null;
-              })();
-              const resolvedTaxId = matchedTax ? String((matchedTax as any).id || (matchedTax as any)._id || "") : "";
-              const resolvedTaxRate = matchedTax ? (Number((matchedTax as any).rate) || derivedTaxRate) : derivedTaxRate;
-
-              return {
-                id: item.item?._id || item.item?.id || item.item || item._id || item.id || index + 1, // Map product ID if available
-                itemType: item.itemType || "item",
-                itemDetails: item.item?.name || item.item?.itemName || item.name || item.itemName || item.itemDetails || "",
-                name: item.item?.name || item.item?.itemName || item.name || item.itemName || "",
-                quantity,
-                rate,
-                tax: String(resolvedTaxId || normalizedRawTax || (resolvedTaxRate > 0 ? resolvedTaxRate : "")),
-                taxRate: resolvedTaxRate,
-                amount,
-                description: item.description || "",
-                reportingTags: Array.isArray((item as any).reportingTags) ? (item as any).reportingTags : []
-              };
-            });
-
-            const subTotalValue = resolveSubtotalFromQuoteLike(quote, mappedItems);
-            const totalTaxValue = toNumberSafe(quote.totalTax ?? quote.taxAmount ?? quote.tax);
-            const normalizedDiscount = normalizeDiscountForForm(quote, subTotalValue, totalTaxValue);
-
-            // Get customer name - check both customer and customerName fields
-            const customerName = quote.customerName || quote.customer || "";
-
-            setFormData(prev => ({
-              ...prev,
-              customerName: customerName,
-              selectedLocation: (quote as any).selectedLocation || (quote as any).location || prev.selectedLocation,
-              selectedPriceList: (quote as any).selectedPriceList || (quote as any).priceList || (quote as any).priceListName || prev.selectedPriceList,
-              quoteNumber: quote.quoteNumber || quote.id || "",
-              referenceNumber: quote.referenceNumber || "",
-              quoteDate: formatDateForInput(quote.quoteDate || quote.date),
-              expiryDate: formatDateForInput(quote.expiryDate),
-              salesperson: quote.salesperson || prev.salesperson,
-              salespersonId: quote.salespersonId || prev.salespersonId,
-              projectName: quote.projectName || prev.projectName,
-              subject: quote.subject || prev.subject,
-              taxExclusive: quote.taxExclusive || prev.taxExclusive,
-              items: mappedItems.length > 0 ? mappedItems : [{ id: 1, itemType: "item", itemDetails: "", quantity: 1, rate: 0, tax: "", amount: 0, reportingTags: [] }],
-              subTotal: subTotalValue,
-              totalTax: totalTaxValue,
-              discount: normalizedDiscount.discountValue,
-              discountType: normalizedDiscount.discountTypeValue,
-              shippingCharges: Number(quote.shippingCharges || 0),
-              shippingChargeTax: String((quote as any).shippingChargeTax || (quote as any).shippingTax || ""),
-              adjustment: Number(quote.adjustment || 0),
-              roundOff: Number(quote.roundOff || 0),
-              total: Number(quote.total || quote.amount || 0),
-              currency: quote.currency || prev.currency,
-              customerNotes: quote.customerNotes || quote.notes || prev.customerNotes,
-              termsAndConditions: quote.termsAndConditions || quote.terms || prev.termsAndConditions,
-              attachedFiles: quote.attachedFiles || prev.attachedFiles,
-
-              reportingTags: Array.isArray((quote as any).reportingTags) ? (quote as any).reportingTags : prev.reportingTags
-            }));
-
-            // Sync calendar state with the loaded dates
-            const parsedQuoteDate = new Date(quote.quoteDate || quote.date);
-            if (!isNaN(parsedQuoteDate.getTime())) setQuoteDateCalendar(parsedQuoteDate);
-
-            if (quote.expiryDate) {
-              const parsedExpiryDate = new Date(quote.expiryDate);
-              if (!isNaN(parsedExpiryDate.getTime())) setExpiryDateCalendar(parsedExpiryDate);
-            }
-
-            // Set selected customer if exists - check both customer and customerName
-            if (customerName) {
-              const loadedCustomers = await getCustomers();
-              const customer = loadedCustomers.find(c =>
-                c.name === customerName || c.name === quote.customer || c.name === quote.customerName
-              );
-              if (customer) {
-                setSelectedCustomer(customer);
-
-                // Keep a default tax ready for new line items, without overriding loaded quote taxes.
-                const rawCustomerTax =
-                  (customer as any)?.taxRate ??
-                  (customer as any)?.taxId ??
-                  (customer as any)?.defaultTaxId ??
-                  (customer as any)?.taxName ??
-                  (customer as any)?.tax ??
-                  "";
-                const matchedTax = getTaxBySelection(rawCustomerTax);
-                const resolvedCustomerTaxId = matchedTax
-                  ? String((matchedTax as any).id || (matchedTax as any)._id || "")
-                  : (typeof rawCustomerTax === "string" ? rawCustomerTax : "");
-                setCustomerDefaultTaxId(resolvedCustomerTaxId);
-
-                // Load projects for this customer so the dropdown is populated
-                const customerId = customer.id || customer._id;
-                if (customerId) {
-                  try {
-                    // Try fetching for specific customer first
-                    const customerProjectsResponse = await projectsAPI.getByCustomer(customerId);
-                    if (customerProjectsResponse && customerProjectsResponse.success && customerProjectsResponse.data) {
-                      setProjects(customerProjectsResponse.data);
-                    } else {
-                      // Fallback: fetch all and filter
-                      const allProjectsResponse = await projectsAPI.getAll();
-                      if (allProjectsResponse && allProjectsResponse.success && allProjectsResponse.data) {
-                        const customerProjects = allProjectsResponse.data.filter(p =>
-                          p.customer?._id === customerId || p.customer === customerId || p.customerId === customerId
-                        );
-                        setProjects(customerProjects);
-                      }
-                    }
-                  } catch (err) {
-                    console.error("Error loading customer projects in edit:", err);
-                  }
-                }
-              }
-            }
-
-            // Set selected salesperson if exists
-            if (quote.salesperson || quote.salespersonId) {
-              // Ensure salespersons are loaded or use the one from quote if needed
-              const salesperson = salespersons.find(s =>
-                (s.name === quote.salesperson) ||
-                (s._id === quote.salespersonId) ||
-                (s.id === quote.salespersonId)
-              );
-              if (salesperson) {
-                setSelectedSalesperson(salesperson);
-              } else if (quote.salesperson) {
-                setSelectedSalesperson({ name: quote.salesperson, _id: quote.salespersonId });
-              }
-            }
-
-            // Set selected project if exists
-            if (quote.projectName || quote.projectId) {
-              // Load projects and find matching project
-              try {
-                const projectsResponse = await projectsAPI.getAll();
-                if (projectsResponse && projectsResponse.success && projectsResponse.data) {
-                  const project = projectsResponse.data.find(p =>
-                    (quote.projectId && (p._id === quote.projectId || p.id === quote.projectId)) ||
-                    ((p.projectName || p.name) === quote.projectName)
-                  );
-                  if (project) {
-                    setSelectedProject(project);
-                    setFormData(prev => ({ ...prev, projectName: project.projectName || project.name }));
-                  }
-                } else {
-                  const loadedProjects = await getProjects();
-                  const project = loadedProjects.find(p =>
-                    (quote.projectId && (p._id === quote.projectId || p.id === quote.projectId)) ||
-                    ((p.projectName || p.name) === quote.projectName)
-                  );
-                  if (project) {
-                    setSelectedProject(project);
-                    setFormData(prev => ({ ...prev, projectName: project.projectName || project.name }));
-                  }
-                }
-              } catch (error) {
-                console.error("Error loading projects for matching:", error);
-                const loadedProjects = await getProjects();
-                const project = loadedProjects.find(p =>
-                  (quote.projectId && (p._id === quote.projectId || p.id === quote.projectId)) ||
-                  ((p.projectName || p.name) === quote.projectName)
-                );
-                if (project) {
-                  setSelectedProject(project);
-                  setFormData(prev => ({ ...prev, projectName: project.projectName || project.name }));
-                }
-              }
-            }
+            await applyQuoteToForm(quote);
           } else {
             console.error("Quote not found with ID:", quoteId);
           }

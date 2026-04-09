@@ -260,11 +260,15 @@ export default function NewQuoteItemModal({ controller }: Props) {
                     </div>
 
                     {/* Sales Description */}
-                    <div className="new-item-field-group">
+                    <div
+                      className="new-item-field-group new-item-field-group-description"
+                      style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: "6px" }}
+                    >
                       <label className="new-item-label">Description</label>
                       <textarea
                         name="salesDescription"
                         className="new-item-textarea"
+                        style={{ width: "100%", minWidth: 0 }}
                         value={newItemData.salesDescription}
                         onChange={handleNewItemChange}
                         rows={3}
@@ -349,11 +353,15 @@ export default function NewQuoteItemModal({ controller }: Props) {
                     </div>
 
                     {/* Purchase Description */}
-                    <div className="new-item-field-group">
+                    <div
+                      className="new-item-field-group new-item-field-group-description"
+                      style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: "6px" }}
+                    >
                       <label className="new-item-label">Description</label>
                       <textarea
                         name="purchaseDescription"
                         className="new-item-textarea"
+                        style={{ width: "100%", minWidth: 0 }}
                         value={newItemData.purchaseDescription}
                         onChange={handleNewItemChange}
                         rows={3}

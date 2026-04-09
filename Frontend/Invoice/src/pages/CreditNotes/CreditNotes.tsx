@@ -22,7 +22,6 @@ import {
   Star,
   Grid3x3,
   X,
-  FileText,
   Square,
   CheckSquare,
   Upload,
@@ -978,12 +977,23 @@ export default function CreditNotes() {
 
     // Show active state
     setIsPdfButtonActive(true);
-    setTimeout(() => setIsPdfButtonActive(false), 300);
 
     try {
-      const fullNotes = (
-        await Promise.all(selectedNotes.map((note) => getCreditNoteById(note.id)))
-      ).filter(Boolean) as SalesCreditNote[];
+      const noteResults = await Promise.allSettled(
+        selectedNotes.map((note) => getCreditNoteById(note.id))
+      );
+      const fullNotes = noteResults
+        .filter((result): result is PromiseFulfilledResult<SalesCreditNote | null> => result.status === "fulfilled" && Boolean(result.value))
+        .map((result) => result.value as SalesCreditNote);
+
+      if (fullNotes.length === 0) {
+        toast("Unable to load the selected credit notes for download.");
+        return;
+      }
+
+      if (fullNotes.length !== selectedNotes.length) {
+        toast("Some selected credit notes could not be loaded. Downloading the available records.");
+      }
 
       await downloadCreditNotesPdf({
         notes: fullNotes,
@@ -994,6 +1004,8 @@ export default function CreditNotes() {
     } catch (error) {
       console.error("Error downloading credit notes PDF:", error);
       toast("Failed to generate PDF. Please try again.");
+    } finally {
+      setIsPdfButtonActive(false);
     }
   };
 
@@ -1091,11 +1103,18 @@ export default function CreditNotes() {
               Bulk Update
             </button>
             <button
-              className="p-2 bg-white border border-gray-200 text-gray-700 rounded-md cursor-pointer hover:bg-gray-50 hover:border-gray-300"
+              type="button"
+              className={`p-2 bg-white border border-gray-200 text-gray-700 rounded-md transition-colors ${
+                isPdfButtonActive
+                  ? "cursor-wait opacity-70"
+                  : "cursor-pointer hover:bg-gray-50 hover:border-gray-300"
+              }`}
               onClick={handleDownloadPDF}
-              title="Read PDF"
+              title="Download PDF"
+              aria-label="Download selected credit notes as PDF"
+              disabled={isPdfButtonActive}
             >
-              <FileText size={16} />
+              <Download size={16} />
             </button>
             <button
               className="px-4 py-2 bg-white border border-red-300 text-red-600 rounded-md text-sm font-medium cursor-pointer hover:bg-red-50 hover:border-red-300 flex items-center gap-2"

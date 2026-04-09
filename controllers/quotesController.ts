@@ -19,6 +19,21 @@ const normalizeEmail = (value: unknown) => {
 };
 const asNumber = (v: unknown) => (typeof v === "number" ? v : 0);
 const asDate = (v: unknown) => (v ? new Date(String(v)) : null);
+const normalizeAddressSnapshot = (address: any) => {
+  if (!address) return "";
+  if (typeof address === "string") return address.trim();
+
+  const attention = String(address?.attention || "").trim();
+  const street1 = String(address?.street1 || "").trim();
+  const street2 = String(address?.street2 || "").trim();
+  const city = String(address?.city || "").trim();
+  const state = String(address?.state || "").trim();
+  const zipCode = String(address?.zipCode || "").trim();
+  const country = String(address?.country || "").trim();
+
+  const cityStateZip = [city, state, zipCode].filter(Boolean).join(", ");
+  return [attention, street1, street2, cityStateZip, country].filter(Boolean).join(", ");
+};
 
 const requireOrgId = (req: express.Request, res: express.Response) => {
   const orgId = req.user?.organizationId;
@@ -142,22 +157,50 @@ export const createQuote: express.RequestHandler = async (req, res) => {
 
   let customerName = asString(req.body?.customerName).trim();
   const customerId = asString(req.body?.customerId).trim();
-  
+  if (!customerId) {
+    return res.status(400).json({ success: false, message: "Customer is required", data: null });
+  }
+
+  let customerRecord: any = null;
   if (customerId && (!customerName || customerName === customerId)) {
     try {
-      const cust = await findCustomerByAnyId(orgId, customerId);
-      if (cust) {
-        customerName = (cust as any).displayName || (cust as any).name || (cust as any).companyName || customerName;
+      customerRecord = await findCustomerByAnyId(orgId, customerId);
+      if (customerRecord) {
+        customerName = (customerRecord as any).displayName || (customerRecord as any).name || (customerRecord as any).companyName || customerName;
       }
     } catch (e) {
       // ignore
     }
   }
 
+  if (!customerRecord) {
+    try {
+      customerRecord = await findCustomerByAnyId(orgId, customerId);
+    } catch (e) {
+      customerRecord = null;
+    }
+  }
+
+  if (!customerRecord) {
+    return res.status(404).json({ success: false, message: "Customer not found", data: null });
+  }
+
+  const billingAddress = normalizeAddressSnapshot(req.body?.billingAddress || customerRecord?.billingAddress);
+  const shippingAddress = normalizeAddressSnapshot(req.body?.shippingAddress || customerRecord?.shippingAddress);
+  if (!billingAddress && !shippingAddress) {
+    return res.status(400).json({
+      success: false,
+      message: "Customer must have at least one address before creating a quote",
+      data: null
+    });
+  }
+
   const payload: any = {
     organizationId: orgId,
     ...req.body,
     customerName,
+    billingAddress,
+    shippingAddress,
     quoteDate: asDate(req.body?.quoteDate) || new Date(),
     expiryDate: asDate(req.body?.expiryDate)
   };
@@ -184,6 +227,8 @@ export const updateQuote: express.RequestHandler = async (req, res) => {
   const patch: any = { ...req.body };
   if (patch.quoteDate) patch.quoteDate = asDate(patch.quoteDate);
   if (patch.expiryDate) patch.expiryDate = asDate(patch.expiryDate);
+  if (patch.billingAddress !== undefined) patch.billingAddress = normalizeAddressSnapshot(patch.billingAddress);
+  if (patch.shippingAddress !== undefined) patch.shippingAddress = normalizeAddressSnapshot(patch.shippingAddress);
 
   if (patch.customerId && (!patch.customerName || patch.customerName === patch.customerId)) {
     try {

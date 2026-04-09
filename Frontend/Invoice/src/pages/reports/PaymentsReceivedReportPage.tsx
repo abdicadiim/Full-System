@@ -11,7 +11,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  SlidersHorizontal,
   X,
 } from "lucide-react";
 import { useCurrency } from "../../hooks/useCurrency";
@@ -1163,7 +1162,6 @@ export default function PaymentsReceivedReportView({
             onClick={openCustomize}
             className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
           >
-            <SlidersHorizontal size={14} className="text-[#64748b]" />
             Customize Report Columns
             <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#d9eff1] px-1 text-[11px] font-semibold text-[#1b6f7b]">
               {selectedColumns.length}

@@ -76,6 +76,31 @@ type PriceListSwitchDialogState = {
   nextPriceListCurrency: string;
 };
 
+const getQuoteSaveErrorMessage = (error: unknown) => {
+  const raw =
+    String((error as any)?.message || (error as any)?.response?.data?.message || "").trim() ||
+    "Failed to save quote. Please try again.";
+  const normalized = raw.toLowerCase();
+
+  if (normalized.includes("quote number already exists") || normalized.includes("duplicate")) {
+    return "Quote number already exists. Open the quote number settings and generate a new number.";
+  }
+  if (normalized.includes("customer is required")) {
+    return "Select a customer before saving the quote.";
+  }
+  if (normalized.includes("customer not found")) {
+    return "The selected customer could not be found. Please re-select the customer.";
+  }
+  if (normalized.includes("customer must have at least one address")) {
+    return "Add a billing or shipping address before saving the quote.";
+  }
+
+  if (raw.startsWith("Failed to save quote:")) {
+    return raw;
+  }
+  return raw.includes("Failed to save quote") ? raw : `Failed to save quote: ${raw}`;
+};
+
 
 export function useNewQuoteSaveActions(controller: any) {
   const {
@@ -130,12 +155,71 @@ export function useNewQuoteSaveActions(controller: any) {
   handleNewItemImageUpload, handleSaveNewItem, handleCancelNewItem, filteredProjects, handleProjectSelect, handleNewProjectChange, handleAddProjectTask, handleRemoveProjectTask,
   handleProjectTaskChange, handleAddProjectUser, handleRemoveProjectUser, handleSaveNewProject, handleCancelNewProject, handleOpenNewProjectModal, handleContactPersonChange, handleContactPersonImageUpload,
   handleSaveContactPerson, uploadQuoteFiles, validateForm, buildQuoteFinancialsAndItems, extractSavedQuoteId, getNextQuoteNumberForSave, persistQuoteSeriesPreferences
-} = controller as any;  const handleSaveDraft = async () => {
+} = controller as any;
+
+  const formatAddressSnapshot = (address: any) => {
+    if (!address) return "";
+    if (typeof address === "string") return address.trim();
+
+    const attention = String(address?.attention || "").trim();
+    const street1 = String(address?.street1 || "").trim();
+    const street2 = String(address?.street2 || "").trim();
+    const city = String(address?.city || "").trim();
+    const state = String(address?.state || "").trim();
+    const zipCode = String(address?.zipCode || "").trim();
+    const country = String(address?.country || "").trim();
+    const cityStateZip = [city, state, zipCode].filter(Boolean).join(", ");
+
+    return [attention, street1, street2, cityStateZip, country].filter(Boolean).join(", ");
+  };
+
+  const refreshQuoteSeriesPreview = async () => {
+    try {
+      const nextResponse: any = await quotesAPI.getNextNumber(quotePrefix);
+      const refreshedQuoteNumber = String(
+        nextResponse?.data?.nextNumber ||
+          nextResponse?.data?.next_number ||
+          nextResponse?.data?.quoteNumber ||
+          nextResponse?.nextNumber ||
+          "",
+      ).trim();
+      if (!refreshedQuoteNumber) return;
+
+      const refreshedPrefix = deriveQuotePrefixFromNumber(refreshedQuoteNumber, quotePrefix || "QT-");
+      const refreshedNextDigits = extractQuoteDigits(refreshedQuoteNumber) || quoteNextNumber || "000001";
+
+      setQuotePrefix(refreshedPrefix);
+      setQuoteNextNumber(refreshedNextDigits);
+      if (quoteSeriesRow) {
+        setQuoteSeriesRow((prev: any) => (prev ? { ...prev, prefix: refreshedPrefix, nextNumber: refreshedNextDigits } : prev));
+      }
+      setQuoteSeriesRows((prev: any[]) =>
+        (prev || []).map((row: any) => {
+          if (!isQuoteSeriesRow(row)) return row;
+          return {
+            ...row,
+            prefix: refreshedPrefix,
+            nextNumber: refreshedNextDigits,
+          };
+        }),
+      );
+      if (quoteNumberMode === "auto") {
+        setFormData((prev: any) => ({
+          ...prev,
+          quoteNumber: refreshedQuoteNumber,
+        }));
+      }
+    } catch (error) {
+      console.error("Error refreshing quote series preview:", error);
+    }
+  };
+
+  const handleSaveDraft = async () => {
     if (saveLoading) return;
 
     if (!validateForm()) {
       const firstError = Object.values(formErrors)[0] || "Please fill in all required fields marked with *";
-      alert(firstError);
+      toast.error(String(firstError));
       return;
     }
 
@@ -162,12 +246,19 @@ export function useNewQuoteSaveActions(controller: any) {
       if (!isEditMode) quoteNumber = await getNextQuoteNumberForSave();
 
       // Prepare quote data
+      const currentQuoteStatus = String(formData.status || "").trim();
       const quoteData = {
         quoteNumber: quoteNumber,
         referenceNumber: formData.referenceNumber,
         customerName: formData.customerName,
         customer: selectedCustomer?.id || selectedCustomer?._id || formData.customerName,
         customerId: selectedCustomer?.id || selectedCustomer?._id || null,
+        contactPersons: Array.isArray(selectedContactPersons) && selectedContactPersons.length > 0
+          ? selectedContactPersons
+          : contactPersons,
+        location: formData.selectedLocation,
+        billingAddress: formatAddressSnapshot(billingAddress || (selectedCustomer as any)?.billingAddress),
+        shippingAddress: formatAddressSnapshot(shippingAddress || (selectedCustomer as any)?.shippingAddress),
         quoteDate: convertToISODate(formData.quoteDate),
         expiryDate: convertToISODate(formData.expiryDate),
         salesperson: formData.salesperson,
@@ -212,7 +303,9 @@ export function useNewQuoteSaveActions(controller: any) {
         })) || [],
 
         // Status
-        status: "Draft"
+        status: isEditMode
+          ? (currentQuoteStatus || "Draft")
+          : "Draft"
       };
 
       // Save or update quote
@@ -228,6 +321,9 @@ export function useNewQuoteSaveActions(controller: any) {
       // Handle URL change to detect if we should show a specific modal
       // Navigate back to quotes page or quote detail
       if (savedQuote) {
+        if (!isEditMode && quoteNumberMode === "auto") {
+          await refreshQuoteSeriesPreview();
+        }
         const id = extractSavedQuoteId(savedQuote) || quoteId || "";
         if (id) {
           navigate(`/sales/quotes/${id}`, { replace: true });
@@ -237,7 +333,7 @@ export function useNewQuoteSaveActions(controller: any) {
       navigate("/sales/quotes", { replace: true });
     } catch (error) {
       console.error("Error saving quote as draft:", error);
-      alert("Failed to save quote. Please try again.");
+      toast.error(getQuoteSaveErrorMessage(error));
     } finally {
       setSaveLoading(null);
     }
@@ -248,7 +344,7 @@ export function useNewQuoteSaveActions(controller: any) {
 
     if (!validateForm()) {
       const firstError = Object.values(formErrors)[0] || "Please fill in all required fields marked with *";
-      alert(firstError);
+      toast.error(String(firstError));
       return;
     }
 
@@ -271,15 +367,22 @@ export function useNewQuoteSaveActions(controller: any) {
         finalTotal
       } = buildQuoteFinancialsAndItems();
 
+      const currentQuoteStatus = String(formData.status || "").trim();
       let quoteNumber = formData.quoteNumber;
       if (!isEditMode) quoteNumber = await getNextQuoteNumberForSave();
 
-      const quoteData = {
+        const quoteData = {
         quoteNumber: quoteNumber,
         referenceNumber: formData.referenceNumber,
         customerName: formData.customerName,
         customer: selectedCustomer?.id || selectedCustomer?._id || formData.customerName,
         customerId: selectedCustomer?.id || selectedCustomer?._id || null,
+        contactPersons: Array.isArray(selectedContactPersons) && selectedContactPersons.length > 0
+          ? selectedContactPersons
+          : contactPersons,
+        location: formData.selectedLocation,
+        billingAddress: formatAddressSnapshot(billingAddress || (selectedCustomer as any)?.billingAddress),
+        shippingAddress: formatAddressSnapshot(shippingAddress || (selectedCustomer as any)?.shippingAddress),
         quoteDate: convertToISODate(formData.quoteDate),
         expiryDate: convertToISODate(formData.expiryDate),
         salesperson: formData.salesperson,
@@ -316,7 +419,9 @@ export function useNewQuoteSaveActions(controller: any) {
           size: file.size,
           url: file.url
         })) || [],
-        status: "Draft", // Save as draft first
+        status: isEditMode
+          ? (currentQuoteStatus.toLowerCase() === "draft" ? "Sent" : (currentQuoteStatus || "Sent"))
+          : "Draft",
         date: formData.quoteDate
       };
 
@@ -329,6 +434,9 @@ export function useNewQuoteSaveActions(controller: any) {
 
       // Step 2: Navigate to email page
       if (savedQuote) {
+        if (!isEditMode && quoteNumberMode === "auto") {
+          await refreshQuoteSeriesPreview();
+        }
         const id = savedQuote._id || savedQuote.id || quoteId;
         console.log("Quote saved as draft, navigating to email:", id);
         navigate(`/sales/quotes/${id}/email`, {
@@ -342,7 +450,7 @@ export function useNewQuoteSaveActions(controller: any) {
       }
     } catch (error) {
       console.error("Error in handleSaveAndSend:", error);
-      alert("Failed to save quote. Please try again.");
+      toast.error(getQuoteSaveErrorMessage(error));
     } finally {
       setSaveLoading(null);
     }

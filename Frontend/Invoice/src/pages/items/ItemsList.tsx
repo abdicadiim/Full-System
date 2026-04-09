@@ -425,7 +425,7 @@ const ItemsList = ({
                     }
                   }}
                   disabled={isBulkDeleteLoading}
-                  className="h-9 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50 transition-colors shadow-sm flex items-center gap-2 disabled:opacity-60"
+                  className="h-9 px-3 rounded-md border border-red-200 bg-red-50 text-sm text-red-700 hover:bg-red-100 transition-colors shadow-sm flex items-center gap-2 disabled:opacity-60"
                 >
                   {isBulkDeleteLoading && <RefreshCw size={14} className="animate-spin" />}
                   Delete
@@ -524,14 +524,13 @@ const ItemsList = ({
                   <div className="relative">
                     <button
                       onClick={() => { setSortSubMenuOpen(!sortSubMenuOpen); setExportSubMenuOpen(false); }}
-                      className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${sortSubMenuOpen ? 'text-white rounded-md mx-2 w-[calc(100%-16px)] shadow-sm' : 'text-slate-600 hover:bg-[#1b5e6a] hover:text-white'}`}
-                      style={sortSubMenuOpen ? { backgroundColor: '#1b5e6a' } : {}}
+                      className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${sortSubMenuOpen ? 'text-slate-700 rounded-md mx-2 w-[calc(100%-16px)]' : 'text-slate-600 hover:bg-gray-50 hover:text-slate-700'}`}
                     >
                       <div className="flex items-center gap-3">
-                        <ArrowUpDown size={16} className={sortSubMenuOpen ? 'text-white' : ''} style={!sortSubMenuOpen ? { color: '#1b5e6a' } : {}} />
+                        <ArrowUpDown size={16} style={{ color: '#1b5e6a' }} />
                         <span className="font-medium">Sort by</span>
                       </div>
-                      <ChevronRight size={14} className={sortSubMenuOpen ? 'text-white' : 'text-slate-400'} />
+                      <ChevronRight size={14} className="text-slate-400" />
                     </button>
 
                     {sortSubMenuOpen && (
@@ -543,10 +542,10 @@ const ItemsList = ({
                             <button
                               key={option}
                               onClick={() => { setSortKey(keyMap[option]); setSortSubMenuOpen(false); }}
-                              className={`w-full flex items-center justify-between px-4 py-2 text-sm transition-colors ${isActive ? 'bg-[#1b5e6a] text-white font-bold' : 'text-slate-600 hover:bg-teal-50/50'}`}
+                              className={`w-full flex items-center justify-between px-4 py-2 text-sm transition-colors ${isActive ? 'text-slate-800 font-semibold' : 'text-slate-600 hover:bg-gray-50 hover:text-slate-700'}`}
                             >
-                              <span style={isActive ? { color: 'white', fontWeight: 'bold' } : {}}>{option}</span>
-                              {isActive && <Plus size={14} className="rotate-45" style={{ color: 'white' }} />}
+                              <span>{option}</span>
+                              {isActive && <Plus size={14} className="rotate-45" style={{ color: '#1b5e6a' }} />}
                             </button>
                           );
                         })}
@@ -558,37 +557,36 @@ const ItemsList = ({
 
                   {/* Import Items */}
                   <button
-                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
+                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-gray-50 hover:text-slate-700 transition-colors"
                     onClick={() => { navigate('/products/items/import'); setMoreDropdownOpen(false); }}
                   >
-                    <Upload size={16} className="text-teal-600 group-hover:text-white" />
+                    <Upload size={16} className="text-teal-600" />
                     <span className="font-medium">Import Items</span>
                   </button>
 
                   {/* Export */}
                   <div className="relative">
-                    <button
-                      onClick={() => { setExportSubMenuOpen(!exportSubMenuOpen); setSortSubMenuOpen(false); }}
-                      className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${exportSubMenuOpen ? 'text-white rounded-md mx-2 w-[calc(100%-16px)] shadow-sm' : 'text-slate-600 hover:bg-[#1b5e6a] hover:text-white'}`}
-                      style={exportSubMenuOpen ? { backgroundColor: '#1b5e6a' } : {}}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Download size={16} className={exportSubMenuOpen ? 'text-white' : ''} style={!exportSubMenuOpen ? { color: '#1b5e6a' } : {}} />
-                        <span className="font-medium">Export</span>
-                      </div>
-                      <ChevronRight size={14} className={exportSubMenuOpen ? 'text-white' : 'text-slate-400'} />
-                    </button>
+                  <button
+                    onClick={() => { setExportSubMenuOpen(!exportSubMenuOpen); setSortSubMenuOpen(false); }}
+                    className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${exportSubMenuOpen ? 'text-slate-700 rounded-md mx-2 w-[calc(100%-16px)]' : 'text-slate-600 hover:bg-gray-50 hover:text-slate-700'}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Download size={16} style={{ color: '#1b5e6a' }} />
+                      <span className="font-medium">Export</span>
+                    </div>
+                    <ChevronRight size={14} className="text-slate-400" />
+                  </button>
 
                     {exportSubMenuOpen && (
                       <div className="md:absolute md:top-0 md:right-full md:mr-2 md:w-52 relative w-full bg-white md:border border-gray-100 rounded-lg md:shadow-xl py-2 z-[115] md:animate-in md:fade-in md:slide-in-from-right-1 duration-200">
                         <button
-                          className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white font-medium transition-colors"
+                          className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-gray-50 hover:text-slate-700 font-medium transition-colors"
                           onClick={() => { setIsExportModalOpen(true); setExportSubMenuOpen(false); setMoreDropdownOpen(false); }}
                         >
                           Export Items
                         </button>
                         <button
-                          className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white font-medium transition-colors"
+                          className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-gray-50 hover:text-slate-700 font-medium transition-colors"
                           onClick={() => { setIsExportCurrentViewModalOpen(true); setExportSubMenuOpen(false); setMoreDropdownOpen(false); }}
                         >
                           Export Current View
@@ -601,31 +599,31 @@ const ItemsList = ({
 
                   {/* Preferences */}
                   <button
-                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
+                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-gray-50 hover:text-slate-700 transition-colors"
                     onClick={() => navigate('/settings/items')}
                   >
-                    <SlidersHorizontal size={16} className="text-teal-600 group-hover:text-white" />
+                    <SlidersHorizontal size={16} className="text-teal-600" />
                     <span className="font-medium">Preferences</span>
                   </button>
 
                   {/* Refresh List */}
                   <button
-                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
+                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-gray-50 hover:text-slate-700 transition-colors"
                     onClick={() => { onRefresh(); setMoreDropdownOpen(false); }}
                   >
-                    <RefreshCw size={16} className="text-teal-600 group-hover:text-white" />
+                    <RefreshCw size={16} className="text-teal-600" />
                     <span className="font-medium">Refresh List</span>
                   </button>
 
                   {/* Reset Column Width */}
                   <button
-                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
+                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-gray-50 hover:text-slate-700 transition-colors"
                     onClick={() => {
                       setColumns(DEFAULT_COLUMNS);
                       setMoreDropdownOpen(false);
                     }}
                   >
-                    <RotateCcw size={16} className="group-hover:text-white" style={{ color: accentColor }} />
+                    <RotateCcw size={16} style={{ color: accentColor }} />
                     <span className="font-medium">Reset Column Width</span>
                   </button>
                 </div>
@@ -659,7 +657,7 @@ const ItemsList = ({
                     type="checkbox"
                     checked={selectedIds.length === filteredItems.length && filteredItems.length > 0}
                     onChange={toggleSelectAll}
-                    style={{ accentColor: accentColor }}
+                    style={{ accentColor: "#1b5e6a" }}
                     className="cursor-pointer h-4 w-4 rounded border-gray-300 transition-all focus:ring-0"
                   />
                 </div>
@@ -725,7 +723,7 @@ const ItemsList = ({
                           checked={isSelected}
                           onChange={() => toggleSelectOne(id)}
                           onClick={(e) => e.stopPropagation()}
-                          style={{ accentColor: '#1b5e6a' }}
+                          style={{ accentColor: "#1b5e6a" }}
                           className="cursor-pointer h-4 w-4 rounded border-gray-300 transition-all focus:ring-0"
                         />
                       </div>
@@ -823,7 +821,11 @@ const ItemsList = ({
                   .map((col) => (
                     <div
                       key={col.key}
-                      className="flex items-center justify-between p-2 rounded-lg group transition-colors hover:bg-slate-50"
+                      className={`flex items-center justify-between p-2 rounded-lg group transition-colors hover:bg-slate-50 ${col.key === "name" ? "cursor-not-allowed" : "cursor-pointer"}`}
+                      onClick={() => {
+                        if (col.key === "name") return;
+                        handleToggleColumn(col.key);
+                      }}
                     >
                       <div className="flex items-center gap-3">
                         <div className="text-slate-300">
@@ -833,8 +835,13 @@ const ItemsList = ({
                           type="checkbox"
                           checked={col.visible}
                           disabled={col.key === 'name'}
-                          onChange={() => handleToggleColumn(col.key)}
-                          className="cursor-pointer h-4 w-4 rounded border-gray-300 text-teal-700 focus:ring-teal-700 disabled:opacity-50"
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            handleToggleColumn(col.key);
+                          }}
+                          style={{ accentColor: "#1b5e6a" }}
+                          className="cursor-pointer h-4 w-4 rounded border-gray-300 focus:ring-0 disabled:opacity-50"
                         />
                         <div className="flex items-center gap-2">
                           {col.key === 'name' && <Lock size={12} className="text-slate-400" />}

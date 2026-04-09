@@ -38,7 +38,7 @@ export default function NewQuoteCustomerSearchModal({ controller }: Props) {
     setIsNewProjectQuickActionOpen, projectQuickActionFrameKey, setProjectQuickActionFrameKey, customerQuickActionBaseIds, setCustomerQuickActionBaseIds, projectQuickActionBaseIds, setProjectQuickActionBaseIds, isRefreshingCustomersQuickAction, setIsRefreshingCustomersQuickAction, isRefreshingProjectsQuickAction, setIsRefreshingProjectsQuickAction, isReloadingCustomerFrame,
     setIsReloadingCustomerFrame, isReloadingProjectFrame, setIsReloadingProjectFrame, isAutoSelectingCustomerFromQuickAction, setIsAutoSelectingCustomerFromQuickAction, isAutoSelectingProjectFromQuickAction, setIsAutoSelectingProjectFromQuickAction, isSalespersonDropdownOpen, setIsSalespersonDropdownOpen, salespersonSearch, setSalespersonSearch, selectedSalesperson,
     setSelectedSalesperson, isManageSalespersonsOpen, setIsManageSalespersonsOpen, manageSalespersonSearch, setManageSalespersonSearch, manageSalespersonMenuOpen, setManageSalespersonMenuOpen, selectedSalespersonIds, setSelectedSalespersonIds, menuPosition, setMenuPosition, isNewSalespersonFormOpen,
-    setIsNewSalespersonFormOpen, isAddContactPersonModalOpen, setIsAddContactPersonModalOpen, contactPersonData, setContactPersonData, newSalespersonData, setNewSalespersonData, salespersons, setSalespersons, openItemDropdowns, setOpenItemDropdowns, itemSearches,
+    setIsNewSalespersonFormOpen, editingSalespersonId, isAddContactPersonModalOpen, setIsAddContactPersonModalOpen, contactPersonData, setContactPersonData, newSalespersonData, setNewSalespersonData, salespersons, setSalespersons, openItemDropdowns, setOpenItemDropdowns, itemSearches,
     setItemSearches, openTaxDropdowns, setOpenTaxDropdowns, isNewTaxQuickModalOpen, setIsNewTaxQuickModalOpen, newTaxTargetItemId, setNewTaxTargetItemId, taxSearches, setTaxSearches, selectedItemIds, setSelectedItemIds, itemDropdownRefs,
     taxDropdownRefs, taxOptionGroups, getFilteredTaxGroups, openItemMenuId, setOpenItemMenuId, itemMenuRefs, isBulkAddModalOpen, setIsBulkAddModalOpen, bulkAddInsertIndex, setBulkAddInsertIndex, bulkAddSearch, setBulkAddSearch,
     bulkSelectedItems, setBulkSelectedItems, bulkSelectedItemIds, setBulkSelectedItemIds, isTheseDropdownOpen, setIsTheseDropdownOpen, showAdditionalInformation, setShowAdditionalInformation, additionalInfoItemIds, setAdditionalInfoItemIds, useSimplifiedView, setUseSimplifiedView,
@@ -57,7 +57,7 @@ export default function NewQuoteCustomerSearchModal({ controller }: Props) {
     handleCustomerSearch, customerResultsPerPage, customerStartIndex, customerEndIndex, customerPaginatedResults, customerTotalPages, formatDate, getDateOnly, isPastDate, formatDateForDisplay, convertToISODate, getDaysInMonth,
     handleDateSelect, navigateMonth, handleChange, handleCustomerSelect, openAddressModal, handleAddressFieldChange, handleSaveAddress, countryOptions, phoneCountryOptions, filteredPhoneCountryOptions, selectedAddressCountryIso, stateOptions,
     reloadCustomersForQuote, reloadProjectsForQuote, getEntityId, pickNewestEntity, openCustomerQuickAction, closeCustomerQuickAction, openProjectQuickAction, tryAutoSelectNewCustomerFromQuickAction, tryAutoSelectNewProjectFromQuickAction, handleQuickActionCustomerCreated, handleQuickActionProjectCreated, loadCustomerContactPersons,
-    loadVendorContactPersons, loadProjectsForCustomer, handleSalespersonSelect, filteredCustomers, filteredSalespersons, filteredManageSalespersons, handleNewSalespersonChange, handleSaveAndSelectSalesperson, handleDeleteSalesperson, handleCancelNewSalesperson, handleOpenReportingTagsModal, handleSaveReportingTags,
+    loadVendorContactPersons, loadProjectsForCustomer, handleSalespersonSelect, filteredCustomers, filteredSalespersons, filteredManageSalespersons, handleNewSalespersonChange, handleStartNewSalesperson, handleStartEditSalesperson, handleSaveAndSelectSalesperson, handleDeleteSalesperson, handleCancelNewSalesperson, handleSetSalespersonStatus, handleBulkSalespersonStatusChange, handleBulkDeleteSalespersons, handleOpenReportingTagsModal, handleSaveReportingTags,
     getItemReportingTagsSummaryLabel, getFilteredItems, resolveItemTaxId, getFilteredTaxes, parseTaxRate, getTaxBySelection, getTaxMetaFromItem, isTaxInclusiveMode, defaultTaxId, calculateLineTaxAmount, computeDiscountAmount, applyDiscountShare,
     taxBreakdown, handleItemSelect, toggleItemDropdown, calculateAllTotals, handleItemChange, handleTaxCreatedFromModal, handleAddItem, handleInsertHeader, handleRemoveItem, handleDuplicateItem, getBulkFilteredItems, handleBulkItemToggle,
     handleBulkItemQuantityChange, handleAddBulkItems, handleCancelBulkAdd, handleSelectAllItems, handleDeselectAllItems, handleToggleItemSelection, handleDeleteSelectedItems, handleFileUpload, handleRemoveFile, parseFileSize, handleUploadClick, handleNewItemChange,
@@ -65,6 +65,20 @@ export default function NewQuoteCustomerSearchModal({ controller }: Props) {
     handleCancelNewProject, handleOpenNewProjectModal, handleContactPersonChange, handleContactPersonImageUpload, handleSaveContactPerson, uploadQuoteFiles, validateForm, buildQuoteFinancialsAndItems, extractSavedQuoteId, getNextQuoteNumberForSave, persistQuoteSeriesPreferences, handleSaveDraft,
     handleSaveAndSend, handleCancel, handleOtherAction
   } = controller as any;
+  const manageSalespersonsPageSize = 3;
+  const [manageSalespersonsPage, setManageSalespersonsPage] = useState(1);
+  const manageSalespersonsTotalPages = Math.max(1, Math.ceil(filteredManageSalespersons.length / manageSalespersonsPageSize));
+  const manageSalespersonsCurrentPage = Math.min(manageSalespersonsPage, manageSalespersonsTotalPages);
+  const paginatedManageSalespersons = useMemo(() => {
+    const startIndex = (manageSalespersonsCurrentPage - 1) * manageSalespersonsPageSize;
+    return filteredManageSalespersons.slice(startIndex, startIndex + manageSalespersonsPageSize);
+  }, [filteredManageSalespersons, manageSalespersonsCurrentPage]);
+
+  useEffect(() => {
+    if (isManageSalespersonsOpen) {
+      setManageSalespersonsPage(1);
+    }
+  }, [isManageSalespersonsOpen, manageSalespersonSearch]);
 
   return (
     <>
@@ -72,7 +86,7 @@ export default function NewQuoteCustomerSearchModal({ controller }: Props) {
       {
         customerSearchModalOpen && typeof document !== 'undefined' && document.body && createPortal(
           <div
-            className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center"
+            className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-start justify-center pt-16"
             onClick={() => setCustomerSearchModalOpen(false)}
           >
             <div
@@ -85,7 +99,7 @@ export default function NewQuoteCustomerSearchModal({ controller }: Props) {
                 <button
                   type="button"
                   onClick={() => setCustomerSearchModalOpen(false)}
-                  className="w-8 h-8 bg-[#156372] text-white rounded flex items-center justify-center "
+                  className="w-8 h-8 text-[#156372] rounded flex items-center justify-center hover:bg-[#e6f4f7]"
                 >
                   <X size={16} />
                 </button>
@@ -105,7 +119,7 @@ export default function NewQuoteCustomerSearchModal({ controller }: Props) {
                     </button>
                     {customerSearchCriteriaOpen && (
                       <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-10 min-w-[150px]">
-                        {["Display Name", "Email", "Company Name", "Phone"].map((criteria) => (
+                        {["Customer Number", "Display Name", "Company Name", "First Name", "Last Name", "Email", "Phone"].map((criteria) => (
                           <button
                             key={criteria}
                             type="button"
@@ -113,7 +127,7 @@ export default function NewQuoteCustomerSearchModal({ controller }: Props) {
                               setCustomerSearchCriteria(criteria);
                               setCustomerSearchCriteriaOpen(false);
                             }}
-                            className="w-full px-4 py-2 text-sm text-left text-gray-700 "
+                            className="w-full px-4 py-2 text-sm text-left text-gray-700 hover:bg-gray-100"
                           >
                             {criteria}
                           </button>
@@ -132,7 +146,7 @@ export default function NewQuoteCustomerSearchModal({ controller }: Props) {
                   <button
                     type="button"
                     onClick={handleCustomerSearch}
-                    className="px-6 py-2 bg-red-600 text-white rounded-md  font-medium"
+                    className="px-6 py-2 bg-[#156372] text-white rounded-md font-medium hover:bg-[#0f5260] transition-colors"
                   >
                     Search
                   </button>
@@ -162,7 +176,7 @@ export default function NewQuoteCustomerSearchModal({ controller }: Props) {
                         <tr
                           key={customer.id || customer.name}
                           className=" cursor-pointer"
-                          onMouseDown={(e) => {
+                          onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
                             handleCustomerSelect(customer);
@@ -335,14 +349,16 @@ export default function NewQuoteCustomerSearchModal({ controller }: Props) {
       {/* New Salesperson Modal */}
       {
         isNewSalespersonFormOpen && !isManageSalespersonsOpen && createPortal(
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10000]" onClick={() => setIsNewSalespersonFormOpen(false)}>
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center pt-4 z-[10000]">
             <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
               {/* Modal Header */}
-              <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                <h2 className="text-xl font-bold text-gray-900">Add New Salesperson</h2>
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                <h2 className="text-[18px] leading-none font-semibold text-gray-900">
+                  {editingSalespersonId ? "Edit Salesperson" : "Add New Salesperson"}
+                </h2>
                 <button
-                  onClick={() => setIsNewSalespersonFormOpen(false)}
-                  className="p-2  rounded-lg text-gray-400 "
+                  onClick={handleCancelNewSalesperson}
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-colors"
                 >
                   <X size={20} />
                 </button>
@@ -374,12 +390,12 @@ export default function NewQuoteCustomerSearchModal({ controller }: Props) {
                     />
                   </div>
                   <div className="flex gap-2 pt-4">
-                    <button
-                      onClick={handleSaveAndSelectSalesperson}
-                      className="flex-1 px-4 py-2 bg-[#156372] text-white rounded-md "
-                    >
-                      Add
-                    </button>
+                      <button
+                        onClick={handleSaveAndSelectSalesperson}
+                          className="flex-1 px-4 py-2 bg-[#156372] text-white rounded-md "
+                        >
+                      {editingSalespersonId ? "Save Changes" : "Add"}
+                      </button>
                     <button
                       onClick={handleCancelNewSalesperson}
                       className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-md "
@@ -398,14 +414,17 @@ export default function NewQuoteCustomerSearchModal({ controller }: Props) {
       {/* Manage Salespersons Modal */}
       {
         isManageSalespersonsOpen && createPortal(
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10000]" onClick={() => setIsManageSalespersonsOpen(false)}>
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center pt-4 z-[10000]">
             <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
               {/* Modal Header */}
-              <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                <h2 className="text-xl font-bold text-gray-900">Manage Salespersons</h2>
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                <h2 className="text-[18px] leading-none font-semibold text-gray-900">Manage Salespersons</h2>
                 <button
-                  onClick={() => setIsManageSalespersonsOpen(false)}
-                  className="p-2  rounded-lg text-gray-400 "
+                  onClick={() => {
+                    handleCancelNewSalesperson();
+                    setIsManageSalespersonsOpen(false);
+                  }}
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-colors"
                 >
                   <X size={20} />
                 </button>
@@ -453,7 +472,7 @@ export default function NewQuoteCustomerSearchModal({ controller }: Props) {
                   </div>
                   <button
                     onClick={() => {
-                      setIsNewSalespersonFormOpen(true);
+                      handleStartNewSalesperson();
                       setManageSalespersonSearch("");
                     }}
                     className="flex items-center gap-2 px-4 py-2 bg-[#156372] text-white rounded-md "
@@ -468,7 +487,9 @@ export default function NewQuoteCustomerSearchModal({ controller }: Props) {
               <div className="flex-1 overflow-y-auto p-6">
                 {isNewSalespersonFormOpen ? (
                   <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-4">Add New Salesperson</h3>
+                    <h3 className="text-sm font-semibold text-gray-900 mb-4">
+                      {editingSalespersonId ? "Edit Salesperson" : "Add New Salesperson"}
+                    </h3>
                     <div className="space-y-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
@@ -497,7 +518,7 @@ export default function NewQuoteCustomerSearchModal({ controller }: Props) {
                           onClick={handleSaveAndSelectSalesperson}
                           className="flex-1 px-4 py-2 bg-[#156372] text-white rounded-md "
                         >
-                          Add
+                          {editingSalespersonId ? "Save Changes" : "Add"}
                         </button>
                         <button
                           onClick={handleCancelNewSalesperson}
@@ -517,12 +538,23 @@ export default function NewQuoteCustomerSearchModal({ controller }: Props) {
                         <input
                           type="checkbox"
                           className="rounded border-gray-300 text-[#156372] focus:ring-[#156372]"
-                          checked={filteredManageSalespersons.length > 0 && selectedSalespersonIds.length === filteredManageSalespersons.length}
+                          checked={
+                            paginatedManageSalespersons.length > 0 &&
+                            paginatedManageSalespersons.every((sp: any) =>
+                              selectedSalespersonIds.includes(String(sp.id || sp._id || ""))
+                            )
+                          }
                           onChange={(e) => {
                             if (e.target.checked) {
-                              setSelectedSalespersonIds(filteredManageSalespersons.map(s => s.id || s._id));
+                              setSelectedSalespersonIds(
+                                paginatedManageSalespersons.map((s: any) => String(s.id || s._id || ""))
+                              );
                             } else {
-                              setSelectedSalespersonIds([]);
+                              setSelectedSalespersonIds(
+                                selectedSalespersonIds.filter(
+                                  (id) => !paginatedManageSalespersons.some((sp: any) => String(sp.id || sp._id || "") === String(id))
+                                )
+                              );
                             }
                           }}
                         />
@@ -540,8 +572,8 @@ export default function NewQuoteCustomerSearchModal({ controller }: Props) {
                         </td>
                       </tr>
                     ) : (
-                      filteredManageSalespersons.map(salesperson => {
-                        const salespersonId = salesperson.id || salesperson._id;
+                      paginatedManageSalespersons.map(salesperson => {
+                        const salespersonId = String(salesperson.id || salesperson._id || "");
                         return (
                           <tr key={salespersonId} className="group hover:bg-gray-50">
                             <td className="px-4 py-3">
@@ -572,6 +604,10 @@ export default function NewQuoteCustomerSearchModal({ controller }: Props) {
                             <td className="px-4 py-3 text-right">
                               <div className="hidden group-hover:flex items-center justify-end gap-2">
                                 <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleStartEditSalesperson(salesperson);
+                                  }}
                                   className="p-1 text-gray-500 hover:text-[#156372] hover:bg-gray-100 rounded"
                                   title="Edit"
                                 >
@@ -596,6 +632,31 @@ export default function NewQuoteCustomerSearchModal({ controller }: Props) {
                     )}
                   </tbody>
                 </table>
+                {manageSalespersonsTotalPages > 1 && (
+                  <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
+                    <span>
+                      Page {manageSalespersonsCurrentPage} of {manageSalespersonsTotalPages}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setManageSalespersonsPage(prev => Math.max(1, prev - 1))}
+                        disabled={manageSalespersonsCurrentPage === 1}
+                        className="px-3 py-1.5 rounded border border-gray-300 bg-white text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                      >
+                        Prev
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setManageSalespersonsPage(prev => Math.min(manageSalespersonsTotalPages, prev + 1))}
+                        disabled={manageSalespersonsCurrentPage >= manageSalespersonsTotalPages}
+                        className="px-3 py-1.5 rounded border border-gray-300 bg-white text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -616,23 +677,20 @@ export default function NewQuoteCustomerSearchModal({ controller }: Props) {
                   {manageSalespersonMenuOpen === "BULK_ACTIONS" ? (
                     <>
                       <button
-                        onClick={() => setManageSalespersonMenuOpen(null)}
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                        onClick={() => handleBulkSalespersonStatusChange("active")}
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
                       >
                         Mark as Active
                       </button>
                       <button
-                        onClick={() => setManageSalespersonMenuOpen(null)}
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                        onClick={() => handleBulkSalespersonStatusChange("inactive")}
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
                       >
                         Mark as Inactive
                       </button>
                       <button
-                        onClick={() => {
-                          // Handle bulk delete if needed
-                          setManageSalespersonMenuOpen(null);
-                        }}
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                        onClick={() => handleBulkDeleteSalespersons()}
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
                       >
                         Delete
                       </button>
@@ -641,18 +699,34 @@ export default function NewQuoteCustomerSearchModal({ controller }: Props) {
                     <>
                       <button
                         onClick={() => {
+                          const salesperson = salespersons.find((sp: any) => String(sp.id || sp._id || "") === String(manageSalespersonMenuOpen || ""));
+                          if (salesperson) {
+                            handleStartEditSalesperson(salesperson);
+                          }
                           setManageSalespersonMenuOpen(null);
                         }}
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
                       >
-                        Mark as Inactive
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => {
+                          const salesperson = salespersons.find((sp: any) => String(sp.id || sp._id || "") === String(manageSalespersonMenuOpen || ""));
+                          const nextStatus = String(salesperson?.status || "active").toLowerCase() === "inactive" ? "active" : "inactive";
+                          handleSetSalespersonStatus(String(manageSalespersonMenuOpen || ""), nextStatus as "active" | "inactive");
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+                      >
+                        {String((salespersons.find((sp: any) => String(sp.id || sp._id || "") === String(manageSalespersonMenuOpen || ""))?.status || "active")).toLowerCase() === "inactive"
+                          ? "Mark as Active"
+                          : "Mark as Inactive"}
                       </button>
                       <button
                         onClick={() => {
                           handleDeleteSalesperson(manageSalespersonMenuOpen);
                           setManageSalespersonMenuOpen(null);
                         }}
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
                       >
                         Delete
                       </button>

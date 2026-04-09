@@ -328,12 +328,27 @@ export const signup = async (req: express.Request, res: express.Response) => {
       // no-op
     }
     const passwordHash = await bcrypt.hash(password, 10);
-    const created = await User.create({ name, email, passwordHash, organizationId: org._id, role: "admin", sessionVersion: 0 });    setSessionCookie(res, String(created._id));
+    const created = await User.create({
+      name,
+      email,
+      passwordHash,
+      organizationId: org._id,
+      role: "admin",
+      sessionVersion: 0,
+      emailVerified: false,
+      emailVerifiedAt: null,
+    });
+    setSessionCookie(res, String(created._id));
     const token = issueSessionToken(String(created._id), Number((created as any).sessionVersion || 0));
     const authUser = await buildAuthUserData(created);
     return res.status(201).json({
       success: true,
-      data: authUser,      token,
+      message: "Account created. Please verify your email to continue.",
+      data: {
+        ...authUser,
+        requiresEmailVerification: true,
+      },
+      token,
     });
   } catch (error: any) {
     if (error?.code === 11000 && error?.keyPattern?.email) {
@@ -351,10 +366,15 @@ export const signup = async (req: express.Request, res: express.Response) => {
 };
 
 export const checkEmailExists = async (req: express.Request, res: express.Response) => {
-  if (AUTH_BYPASS) {
-    return res.json({ success: true, data: { exists: false } });
-  }
-  if (!isConfiguredForRealAuth()) {    return res.status(500).json({ success: false, message: "Auth/DB not configured", data: null });
+  const realAuthAvailable = hasRealAuthDatabase();
+
+  if (!realAuthAvailable) {
+    // Avoid hard-failing the login UX when auth DB isn't configured in local/dev.
+    return res.json({
+      success: true,
+      message: AUTH_BYPASS ? "Auth bypass enabled" : "Auth/DB not configured",
+      data: { exists: false },
+    });
   }
 
   const email = normalizeEmail(req.body?.email);
@@ -385,14 +405,28 @@ export const login = async (req: express.Request, res: express.Response) => {
   const user =
     (await User.findOne({ email }).lean()) ||
     (await User.findOne({ email: { $regex: new RegExp(`^${escapeRegex(email)}$`, "i") } }).lean());
-  if (!user) return res.status(200).json({ success: false, message: "Invalid Username or Password", data: null, code: 401 });
+  if (!user) {
+    return res.status(200).json({
+      success: false,
+      message: "Email address not found.",
+      data: null,
+      code: 404,
+    });
+  }
 
   if ((user as any).status === "Inactive") {
     return res.status(200).json({ success: false, message: "User is inactive", data: null, code: 403 });
   }
 
   const ok = await bcrypt.compare(password, user.passwordHash).catch(() => false) || password === user.passwordHash;
-  if (!ok) return res.status(200).json({ success: false, message: "Invalid Username or Password", data: null, code: 401 });
+  if (!ok) {
+    return res.status(200).json({
+      success: false,
+      message: "Incorrect password.",
+      data: null,
+      code: 401,
+    });
+  }
 
   if (!isUserEmailVerified(user)) {
     return res.status(200).json({
@@ -903,4 +937,3 @@ export const updateMe = async (req: express.Request, res: express.Response) => {
     },
   });
 };
-

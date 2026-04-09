@@ -516,14 +516,14 @@ export function useNewQuoteItemActions(controller: any) {
 
     // Validate file count
     if (formData.attachedFiles.length + files.length > 5) {
-      alert("You can upload a maximum of 5 files");
+      toast.error("You can upload a maximum of 5 files");
       return;
     }
 
     // Validate file sizes (10MB each)
     const invalidFiles = files.filter(file => file.size > 10 * 1024 * 1024);
     if (invalidFiles.length > 0) {
-      alert(`Some files exceed 10MB limit. Maximum file size is 10MB.`);
+      toast.error("Some files exceed 10MB limit. Maximum file size is 10MB.");
       return;
     }
 
@@ -621,11 +621,11 @@ export function useNewQuoteItemActions(controller: any) {
 
   const handleSaveNewItem = () => {
     if (!newItemData.name.trim()) {
-      alert("Please enter item name");
+      toast.error("Please enter item name");
       return;
     }
     if (!newItemData.sellingPrice) {
-      alert("Please enter selling price");
+      toast.error("Please enter selling price");
       return;
     }
 
@@ -811,7 +811,7 @@ export function useNewQuoteItemActions(controller: any) {
 
   const handleSaveNewProject = () => {
     if (!newProjectData.projectName.trim()) {
-      alert("Please enter project name");
+      toast.error("Please enter project name");
       return;
     }
 

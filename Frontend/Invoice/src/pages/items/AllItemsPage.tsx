@@ -269,7 +269,7 @@ export default function AllItemsPage() {
           <thead className="sticky top-0 z-20 bg-gray-50">
             <tr className="border-b border-gray-200">
               <th className="p-2 px-6 text-left w-10">
-                <input type="checkbox" className="cursor-pointer" />
+                <input type="checkbox" className="cursor-pointer" style={{ accentColor: "#1b5e6a" }} />
               </th>
               <th className="p-2 px-6 text-left text-xs font-semibold text-gray-500 uppercase">
                 NAME
@@ -306,7 +306,7 @@ export default function AllItemsPage() {
                   onClick={() => navigate(`/items/${item.id}`)}
                 >
                   <td className="p-3 px-6">
-                    <input type="checkbox" className="cursor-pointer" />
+                    <input type="checkbox" className="cursor-pointer" style={{ accentColor: "#1b5e6a" }} />
                   </td>
                   <td className="p-3 px-6 text-sm text-blue-600 font-medium">
                     {item.name}

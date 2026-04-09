@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
+import { jsPDF } from "jspdf";
 import {
   CalendarDays,
   Check,
@@ -12,7 +13,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  SlidersHorizontal,
   X,
 } from "lucide-react";
 import { getReportById, REPORTS_BY_CATEGORY } from "./reportsCatalog";
@@ -23,7 +23,10 @@ type ReceivablesReportId =
   | "ar-aging-summary"
   | "ar-aging-details"
   | "invoice-details"
-  | "quote-details";
+  | "credit-note-details"
+  | "quote-details"
+  | "receivable-summary"
+  | "receivable-details";
 
 type ReportRow = { values: Record<string, any> };
 
@@ -54,7 +57,12 @@ type DateRangeKey =
   | "previous-month"
   | "previous-quarter"
   | "previous-year"
+  | "all-time"
   | "custom";
+type DateRangeValue = {
+  start: Date;
+  end: Date;
+};
 type CompareWithKey = "none" | "previous-years" | "previous-periods";
 type ReportPayload = {
   rows: ReportRow[];
@@ -66,7 +74,7 @@ type ReportConfig = {
   fetcher: (params?: Record<string, any>) => Promise<any>;
   title: string;
   subtitleMode: "as-of" | "from-to";
-  defaultRange: "today" | "this-month";
+  defaultRange: "today" | "this-month" | "all-time";
   showEntities: boolean;
   showReportBy: boolean;
   showAgingBy: boolean;
@@ -94,6 +102,7 @@ const DATE_RANGE_OPTIONS = [
   { key: "previous-month", label: "Previous Month" },
   { key: "previous-quarter", label: "Previous Quarter" },
   { key: "previous-year", label: "Previous Year" },
+  { key: "all-time", label: "All Time" },
   { key: "custom", label: "Custom" },
 ] as const;
 
@@ -203,6 +212,17 @@ const dateValue = (value: any) => {
   const date = new Date(String(value ?? ""));
   return Number.isNaN(date.getTime()) ? String(value ?? "") : formatDate(date);
 };
+const escapeHtml = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+const escapeCsvValue = (value: any) => {
+  const text = String(value ?? "");
+  return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+};
 
 const startOf = (d: Date) =>
   new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -265,6 +285,11 @@ const getRange = (key: string) => {
     return {
       start: new Date(today.getFullYear() - 1, 0, 1),
       end: new Date(today.getFullYear() - 1, 11, 31),
+    };
+  if (key === "all-time")
+    return {
+      start: new Date(1970, 0, 1),
+      end: endOf(today),
     };
   return { start: startOf(today), end: endOf(today) };
 };
@@ -522,7 +547,10 @@ function ReportsDrawer({
   );
 }
 
-const RECEIVABLES_CONFIG: Record<ReceivablesReportId, ReportConfig> = {
+const RECEIVABLES_CONFIG_BASE: Record<
+  "ar-aging-summary" | "ar-aging-details" | "invoice-details" | "credit-note-details" | "quote-details",
+  ReportConfig
+> = {
   "ar-aging-summary": {
     fetcher: reportsAPI.getARAgingSummary,
     title: "AR Aging Summary By Invoice Due Date",
@@ -861,6 +889,87 @@ const RECEIVABLES_CONFIG: Record<ReceivablesReportId, ReportConfig> = {
       "balance",
     ],
   },
+  "credit-note-details": {
+    fetcher: reportsAPI.getCreditNoteDetails,
+    title: "Credit Note Details",
+    subtitleMode: "from-to",
+    defaultRange: "all-time",
+    showEntities: false,
+    showReportBy: false,
+    showAgingBy: false,
+    rightControls: [
+      {
+        label: "Group By",
+        state: "groupBy",
+        options: [
+          { key: "none", label: "None" },
+          { key: "customer-name", label: "Customer Name" },
+          { key: "status", label: "Status" },
+        ],
+      },
+    ],
+    moreFilterGroups: [
+      {
+        label: "Reports",
+        options: [
+          {
+            key: "status",
+            label: "Status",
+            values: [
+              { key: "open", label: "Open" },
+              { key: "approved", label: "Approved" },
+              { key: "void", label: "Void" },
+            ],
+          },
+          { key: "invoice-date", label: "Credit Date" },
+          { key: "invoice-number", label: "Credit Note#" },
+          { key: "order-number", label: "Reference Number" },
+          { key: "customer-name", label: "Customer Name" },
+          { key: "total", label: "Credit Note Amount" },
+          { key: "balance", label: "Balance Amount" },
+          {
+            key: "currency",
+            label: "Currency",
+            values: CURRENCY_CODES.map((value) => ({
+              key: value,
+              label: value,
+            })),
+          },
+        ],
+      },
+    ],
+    moreFilterValues: {
+      status: [
+        { key: "open", label: "Open" },
+        { key: "approved", label: "Approved" },
+        { key: "void", label: "Void" },
+      ],
+      currency: CURRENCY_CODES.map((value) => ({ key: value, label: value })),
+    },
+    columns: [
+      {
+        label: "Reports",
+        options: [
+          { key: "status", label: "Status", kind: "text", locked: true },
+          { key: "invoice-date", label: "Credit Date", kind: "date" },
+          { key: "invoice-number", label: "Credit Note#", kind: "text" },
+          { key: "order-number", label: "Reference Number", kind: "text" },
+          { key: "customer-name", label: "Customer Name", kind: "text" },
+          { key: "total", label: "Credit Note Amount", kind: "currency" },
+          { key: "balance", label: "Balance Amount", kind: "currency" },
+        ],
+      },
+    ],
+    defaultColumns: [
+      "status",
+      "invoice-date",
+      "invoice-number",
+      "order-number",
+      "customer-name",
+      "total",
+      "balance",
+    ],
+  },
   "quote-details": {
     fetcher: reportsAPI.getQuoteDetails,
     title: "Quote Details",
@@ -982,8 +1091,14 @@ const RECEIVABLES_CONFIG: Record<ReceivablesReportId, ReportConfig> = {
   },
 };
 
+const RECEIVABLES_CONFIG: Record<ReceivablesReportId, ReportConfig> = {
+  ...RECEIVABLES_CONFIG_BASE,
+  "receivable-summary": RECEIVABLES_CONFIG_BASE["ar-aging-summary"],
+  "receivable-details": RECEIVABLES_CONFIG_BASE["ar-aging-details"],
+};
+
 const columnLookup = (reportId: ReceivablesReportId, key: string) =>
-  RECEIVABLES_CONFIG[reportId].columns
+  RECEIVABLES_CONFIG[resolveReceivablesReportId(reportId)].columns
     .flatMap((group) => group.options)
     .find((option) => option.key === key);
 
@@ -999,12 +1114,25 @@ const makeFilterRow = (): FilterRow => ({
   value: "",
 });
 
+const resolveReceivablesReportId = (reportId: ReceivablesReportId) => {
+  switch (reportId) {
+    case "receivable-summary":
+      return "ar-aging-summary";
+    case "receivable-details":
+      return "ar-aging-details";
+    default:
+      return reportId;
+  }
+};
+
 export default function ReceivablesReportPage({
   reportId,
+  categoryId = "receivables",
 }: {
   reportId: ReceivablesReportId;
+  categoryId?: string;
 }) {
-  if (!getReportById("receivables", reportId))
+  if (!getReportById(categoryId, reportId))
     return <Navigate to="/reports" replace />;
   return <ReceivablesReportShell reportId={reportId} />;
 }
@@ -1014,7 +1142,8 @@ function ReceivablesReportShell({
 }: {
   reportId: ReceivablesReportId;
 }) {
-  const config = RECEIVABLES_CONFIG[reportId];
+  const resolvedReportId = resolveReceivablesReportId(reportId);
+  const config = RECEIVABLES_CONFIG[resolvedReportId];
   const navigate = useNavigate();
   const { settings } = useSettings();
   const organizationName = String(
@@ -1098,10 +1227,13 @@ function ReceivablesReportShell({
   const reportsMenuButtonRef = React.useRef<HTMLButtonElement | null>(null);
   const compareWithRef = React.useRef<HTMLDivElement | null>(null);
   const compareWithCountRef = React.useRef<HTMLDivElement | null>(null);
+  const exportRef = useRef<HTMLDivElement | null>(null);
+  const [isExportOpen, setIsExportOpen] = useState(false);
 
   const selectedDateRange = useMemo(() => {
     return dateRangeKey === "custom" ? customDateRange : getRange(dateRangeKey);
   }, [customDateRange, dateRangeKey]);
+  const activeReportId = resolvedReportId;
   const dateRangeLabel =
     DATE_RANGE_OPTIONS.find((option) => option.key === dateRangeKey)?.label ??
     "Today";
@@ -1115,9 +1247,9 @@ function ReceivablesReportShell({
   const visibleColumns = useMemo(
     () =>
       selectedColumns
-        .map((key) => columnLookup(reportId, key))
+        .map((key) => columnLookup(activeReportId, key))
         .filter(Boolean) as ColumnOption[],
-    [reportId, selectedColumns],
+    [activeReportId, selectedColumns],
   );
   const rows = (payload?.rows ?? []) as ReportRow[];
   const totals = payload?.totals ?? null;
@@ -1205,6 +1337,30 @@ function ReceivablesReportShell({
     };
   }, [compareWithOpen]);
 
+  useEffect(() => {
+    if (!isExportOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!exportRef.current?.contains(target)) {
+        setIsExportOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsExportOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isExportOpen]);
+
   const formatCell = (column: ColumnOption, value: any) => {
     if (value === null || value === undefined || value === "") return "—";
     if (column.kind === "currency")
@@ -1232,7 +1388,7 @@ function ReceivablesReportShell({
     setCompareWithCountOpen(false);
   };
   const applyColumns = () => {
-    const next = columnDraft.filter((key) => columnLookup(reportId, key));
+    const next = columnDraft.filter((key) => columnLookup(activeReportId, key));
     setSelectedColumns(next.length ? next : config.defaultColumns);
     setColumnsOpen(false);
   };
@@ -1386,6 +1542,209 @@ function ReceivablesReportShell({
     setCustomDateRangeMonth(addMonths(new Date(year, monthIndex, 1), -1));
   };
 
+  const handleExportAction = (label: string) => {
+    setIsExportOpen(false);
+    const normalizedLabel = label.toLowerCase();
+    const fileBase = `ar-aging-summary-${new Date().toISOString().split("T")[0]}`;
+    const exportHeaders = visibleColumns.map((column) => column.label);
+    const exportRows = rows.map((row) =>
+      visibleColumns.map((column) => formatCell(column, row.values[column.key])),
+    );
+    const hasTotals = Boolean(totals && Object.keys(totals).length > 0);
+    const exportTotals = hasTotals
+      ? visibleColumns.map((column) => formatCell(column, totals?.[column.key]))
+      : [];
+
+    const downloadText = (content: string, fileName: string, mimeType: string) => {
+      const blob = new Blob([content], { type: mimeType });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    };
+
+    const exportPdf = () => {
+      const doc = new jsPDF("landscape", "mm", "a4");
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 10;
+      const colWidth = (pageWidth - margin * 2) / Math.max(visibleColumns.length, 1);
+      let y = 18;
+
+      doc.setFontSize(16);
+      doc.text(config.title, pageWidth / 2, y, { align: "center" });
+      y += 8;
+      doc.setFontSize(10);
+      doc.text(dateLabel, pageWidth / 2, y, { align: "center" });
+      y += 10;
+
+      doc.setFillColor(248, 250, 252);
+      doc.rect(margin, y, pageWidth - margin * 2, 8, "F");
+      doc.setFontSize(9);
+      visibleColumns.forEach((column, index) => {
+        doc.text(column.label, margin + index * colWidth + 2, y + 5);
+      });
+      y += 8;
+
+      const rowsForPdf = hasTotals ? [...exportRows, exportTotals] : exportRows;
+      rowsForPdf.forEach((rowValues, rowIndex) => {
+        const wrapped = rowValues.map((value) =>
+          doc.splitTextToSize(String(value ?? ""), colWidth - 4),
+        );
+        const rowHeight =
+          Math.max(...wrapped.map((lines) => Math.max(lines.length, 1))) * 5 + 2;
+
+        if (y + rowHeight > pageHeight - margin) {
+          doc.addPage();
+          y = margin;
+          doc.setFillColor(248, 250, 252);
+          doc.rect(margin, y, pageWidth - margin * 2, 8, "F");
+          visibleColumns.forEach((column, index) => {
+            doc.text(column.label, margin + index * colWidth + 2, y + 5);
+          });
+          y += 8;
+        }
+
+        if (hasTotals && rowIndex === rowsForPdf.length - 1) {
+          doc.setFillColor(250, 251, 255);
+          doc.rect(margin, y, pageWidth - margin * 2, rowHeight, "F");
+        }
+
+        rowValues.forEach((value, index) => {
+          const lines = wrapped[index];
+          doc.text(lines[0] || "", margin + index * colWidth + 2, y + 5);
+        });
+        y += rowHeight;
+      });
+
+      doc.save(`${fileBase}.pdf`);
+    };
+
+    const exportSpreadsheet = async (bookType: "xlsx" | "xls", suffix: string) => {
+      const XLSX = await import("xlsx");
+      const worksheet = XLSX.utils.aoa_to_sheet([
+        exportHeaders,
+        ...exportRows,
+        ...(hasTotals ? [exportTotals] : []),
+      ]);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "AR Aging Summary");
+      XLSX.writeFile(workbook, `${fileBase}.${suffix}`, {
+        bookType,
+        compression: true,
+      });
+    };
+
+    const openPrintWindow = () => {
+      const printWindow = window.open(
+        "",
+        "_blank",
+        "noopener,noreferrer,width=1200,height=800",
+      );
+      if (!printWindow) {
+        throw new Error("Unable to open the print dialog.");
+      }
+
+      const styles = `
+        <style>
+          body { font-family: Arial, sans-serif; margin: 24px; color: #0f172a; }
+          h1 { font-size: 20px; margin: 0 0 6px; text-align: center; }
+          p { margin: 0 0 16px; text-align: center; color: #475569; }
+          table { width: 100%; border-collapse: collapse; }
+          th, td { border-bottom: 1px solid #e5e7eb; padding: 8px 10px; font-size: 12px; }
+          th { text-align: left; background: #f8fafc; text-transform: uppercase; font-size: 10px; letter-spacing: .08em; color: #64748b; }
+          td.num { text-align: center; }
+          tr.total td { font-weight: 600; background: #fafbff; }
+        </style>
+      `;
+      const headerCells = exportHeaders
+        .map((header) => `<th>${escapeHtml(header)}</th>`)
+        .join("");
+      const bodyRows = exportRows
+        .map(
+          (row) =>
+            `<tr>${row
+              .map(
+                (cell, index) =>
+                  `<td class="${index === 0 ? "" : "num"}">${escapeHtml(String(cell))}</td>`,
+              )
+              .join("")}</tr>`,
+        )
+        .join("");
+      const totalRow = hasTotals
+        ? `<tr class="total">${exportTotals
+            .map(
+              (cell, index) =>
+                `<td class="${index === 0 ? "" : "num"}">${escapeHtml(String(cell))}</td>`,
+            )
+            .join("")}</tr>`
+        : "";
+
+      printWindow.document.open();
+      printWindow.document.write(`
+        <!doctype html>
+        <html>
+          <head>
+            <title>${escapeHtml(config.title)}</title>
+            ${styles}
+          </head>
+          <body>
+            <h1>${escapeHtml(config.title)}</h1>
+            <p>${escapeHtml(dateLabel)}</p>
+            <table>
+              <thead><tr>${headerCells}</tr></thead>
+              <tbody>${bodyRows}${totalRow}</tbody>
+            </table>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.onafterprint = () => {
+        printWindow.close();
+      };
+      setTimeout(() => {
+        printWindow.print();
+      }, 250);
+    };
+
+    void (async () => {
+      try {
+        if (normalizedLabel === "pdf") {
+          exportPdf();
+        } else if (normalizedLabel === "xlsx (microsoft excel)") {
+          await exportSpreadsheet("xlsx", "xlsx");
+        } else if (
+          normalizedLabel === "xls (microsoft excel 1997-2004 compatible)"
+        ) {
+          await exportSpreadsheet("xls", "xls");
+        } else if (normalizedLabel === "csv (comma separated value)") {
+          const csv = [
+            exportHeaders.map(escapeCsvValue).join(","),
+            ...exportRows.map((row) => row.map(escapeCsvValue).join(",")),
+            ...(hasTotals ? [exportTotals.map(escapeCsvValue).join(",")] : []),
+          ].join("\n");
+          downloadText(csv, `${fileBase}.csv`, "text/csv;charset=utf-8;");
+        } else if (normalizedLabel === "export to zoho sheet") {
+          await exportSpreadsheet("xlsx", "xlsx");
+        } else if (
+          normalizedLabel === "print" ||
+          normalizedLabel === "print preference"
+        ) {
+          openPrintWindow();
+        }
+      } catch (error) {
+        console.error("Failed to export AR Aging Summary report:", error);
+      } finally {
+        setIsExportOpen(false);
+      }
+    })();
+  };
+
   return (
     <div className="relative min-h-[calc(100vh-64px)] pt-3">
       <ReportsDrawer
@@ -1428,20 +1787,72 @@ function ReceivablesReportShell({
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={openColumns}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]"
-                  title="Customize report columns"
-                >
-                  <SlidersHorizontal size={15} />
-                </button>
-                <button
-                  type="button"
-                  className="inline-flex h-8 items-center gap-1 rounded border border-[#d4d9e4] bg-white px-3 text-sm font-medium text-[#1e293b] hover:bg-[#f8fafc]"
-                >
-                  Export <ChevronDown size={14} />
-                </button>
+                <div ref={exportRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsExportOpen((prev) => !prev);
+                      setDateRangeOpen(false);
+                      setIsCustomDateRangeOpen(false);
+                      setAgingByOpen(false);
+                      setColumnsOpen(false);
+                      setCompareWithOpen(false);
+                      setCompareWithCountOpen(false);
+                    }}
+                    className={`inline-flex h-8 items-center gap-1 rounded border bg-white px-3 text-sm font-medium text-[#1e293b] hover:bg-[#f8fafc] ${
+                      isExportOpen ? "border-[#1b6f7b]" : "border-[#d4d9e4]"
+                    }`}
+                    aria-haspopup="menu"
+                    aria-expanded={isExportOpen}
+                  >
+                    Export{" "}
+                    <ChevronDown
+                      size={14}
+                      className={`transition-transform duration-150 ${isExportOpen ? "rotate-180" : ""}`}
+                    />
+                  </button>
+
+                  {isExportOpen ? (
+                    <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-[252px] overflow-visible rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                      <div className="border-b border-[#eef2f7] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">
+                        Export As
+                      </div>
+                      <div className="py-1">
+                        {[
+                          "PDF",
+                          "XLSX (Microsoft Excel)",
+                          "XLS (Microsoft Excel 1997-2004 Compatible)",
+                          "CSV (Comma Separated Value)",
+                          "Export to Zoho Sheet",
+                        ].map((label) => (
+                          <button
+                            key={label}
+                            type="button"
+                            onClick={() => handleExportAction(label)}
+                            className="flex w-full items-center px-4 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="border-t border-[#eef2f7] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">
+                        Print
+                      </div>
+                      <div className="py-1">
+                        {["Print", "Print Preference"].map((label) => (
+                          <button
+                            key={label}
+                            type="button"
+                            onClick={() => handleExportAction(label)}
+                            className="flex w-full items-center px-4 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
                 <button
                   type="button"
                   onClick={() => setRefreshTick((value) => value + 1)}
@@ -2444,7 +2855,7 @@ function ReceivablesReportShell({
                   </div>
                   <div className="min-h-[420px] rounded border border-[#cfd6e4] bg-white p-2">
                     {columnDraft.map((key) => {
-                      const option = columnLookup(reportId, key);
+                      const option = columnLookup(activeReportId, key);
                       if (!option) return null;
                       return (
                         <div
@@ -2457,7 +2868,7 @@ function ReceivablesReportShell({
                             </span>
                             <span className="ml-1 text-xs text-[#94a3b8]">
                               (
-                              {RECEIVABLES_CONFIG[reportId].columns.find(
+                              {RECEIVABLES_CONFIG[activeReportId].columns.find(
                                 (group) =>
                                   group.options.some(
                                     (item) => item.key === key,

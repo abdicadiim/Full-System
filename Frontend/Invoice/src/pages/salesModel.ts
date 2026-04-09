@@ -1565,6 +1565,9 @@ export interface Quote {
   priceListId?: string;
   priceListName?: string;
   customerEmail?: string;
+  billingAddress?: string;
+  shippingAddress?: string;
+  location?: string;
   salesperson?: any;
   salespersonId?: string;
   project?: any;
@@ -1599,6 +1602,7 @@ export interface Quote {
   taxExclusive?: string;
   referenceNumber?: string;
   attachedFiles?: AttachedFile[];
+  contactPersons?: ContactPerson[];
   comments?: QuoteComment[];
   createdAt?: string;
   updatedAt?: string;
@@ -1656,7 +1660,61 @@ const mapQuoteComments = (quote: any): QuoteComment[] => {
     }));
 };
 
-const mapQuoteFromApi = (quote: any): Quote => {
+const resolveQuoteItems = (quote: any) => {
+  const direct = Array.isArray(quote?.items) ? quote.items : null;
+  const candidates = [
+    direct,
+    Array.isArray(quote?.lineItems) ? quote.lineItems : null,
+    Array.isArray(quote?.itemDetails) ? quote.itemDetails : null,
+    Array.isArray(quote?.quoteItems) ? quote.quoteItems : null,
+    Array.isArray(quote?.products) ? quote.products : null,
+    Array.isArray(quote?.services) ? quote.services : null,
+    Array.isArray(quote?.items?.items) ? quote.items.items : null,
+    Array.isArray(quote?.items?.lines) ? quote.items.lines : null,
+  ];
+  const rawItems = (candidates.find((list) => Array.isArray(list)) as any[]) || [];
+  return rawItems.map((entry) => {
+    if (!entry || typeof entry !== "object") {
+      const label = String(entry || "").trim();
+      return {
+        name: label || "Item",
+        description: "",
+        quantity: 1,
+        rate: 0,
+        amount: 0,
+      };
+    }
+    const next = { ...entry } as any;
+    if (!next.name && typeof next.itemDetails === "string") {
+      next.name = next.itemDetails;
+    }
+    if (!next.name && next.item?.name) {
+      next.name = next.item.name;
+    }
+    if (!next.description && typeof next.itemDescription === "string") {
+      next.description = next.itemDescription;
+    }
+    return next;
+  });
+};
+
+const normalizeAddressSnapshot = (address: any): string => {
+  if (!address) return "";
+  if (typeof address === "string") return address.trim();
+
+  const attention = String(address?.attention || "").trim();
+  const street1 = String(address?.street1 || "").trim();
+  const street2 = String(address?.street2 || "").trim();
+  const city = String(address?.city || "").trim();
+  const state = String(address?.state || "").trim();
+  const zipCode = String(address?.zipCode || "").trim();
+  const country = String(address?.country || "").trim();
+
+  const cityStateZip = [city, state, zipCode].filter(Boolean).join(", ");
+  return [attention, street1, street2, cityStateZip, country].filter(Boolean).join(", ");
+};
+
+export const mapQuoteFromApi = (quote: any): Quote => {
   const customerId =
     quote?.customerId ||
     quote?.customer?._id ||
@@ -1683,6 +1741,10 @@ const mapQuoteFromApi = (quote: any): Quote => {
     customerId: customerId ? String(customerId) : "",
     customerName: customerName,
     customerEmail: String(quote?.customerEmail || quote?.email || quote?.customer?.email || quote?.customer?.primaryEmail || "").trim(),
+    billingAddress: normalizeAddressSnapshot(quote?.billingAddress || quote?.customer?.billingAddress),
+    shippingAddress: normalizeAddressSnapshot(quote?.shippingAddress || quote?.customer?.shippingAddress),
+    selectedLocation: String(quote?.selectedLocation || quote?.location || "").trim(),
+    location: String(quote?.location || quote?.selectedLocation || "").trim(),
     priceListId: String(quote?.priceListId || quote?.priceList?._id || quote?.priceList?.id || ""),
     priceListName: String(quote?.priceListName || quote?.priceList?.name || ""),
     customer: quote?.customer,
@@ -1694,7 +1756,7 @@ const mapQuoteFromApi = (quote: any): Quote => {
     date: quote?.quoteDate || quote?.date || quote?.createdAt,
     quoteDate: quote?.quoteDate || quote?.date || quote?.createdAt,
     expiryDate: quote?.expiryDate,
-    items: quote?.items || [],
+    items: resolveQuoteItems(quote),
     subTotal: subtotalValue,
     subtotal: subtotalValue,
     tax: taxValue,
@@ -1716,6 +1778,11 @@ const mapQuoteFromApi = (quote: any): Quote => {
     termsAndConditions: quote?.termsAndConditions || quote?.terms || '',
     referenceNumber: quote?.referenceNumber || '',
     taxExclusive: taxExclusive,
+    contactPersons: Array.isArray(quote?.contactPersons)
+      ? quote.contactPersons
+      : Array.isArray(quote?.customer?.contactPersons)
+        ? quote.customer.contactPersons
+        : [],
     attachedFiles: mapQuoteAttachedFiles(quote),
     comments: mapQuoteComments(quote),
     createdAt: quote?.createdAt,
@@ -1802,12 +1869,15 @@ export const saveQuote = async (quoteData: Partial<Quote>, retryCount = 0): Prom
       quoteNumber: String(quoteData.quoteNumber || ''),
       customer: quoteData.customerId || quoteData.customer, // Use ID as priority
       customerId: quoteData.customerId || quoteData.customer,
-      customerName:
+    customerName:
         quoteData.customerName ||
         (typeof (quoteData as any).customer === "object" && (quoteData as any).customer
           ? ((quoteData as any).customer.displayName || (quoteData as any).customer.name || (quoteData as any).customer.companyName || "")
           : ""),
-      priceListId: String((quoteData as any).priceListId || ""),
+      billingAddress: normalizeAddressSnapshot((quoteData as any).billingAddress),
+      shippingAddress: normalizeAddressSnapshot((quoteData as any).shippingAddress),
+    location: String((quoteData as any).location || (quoteData as any).selectedLocation || ""),
+    priceListId: String((quoteData as any).priceListId || ""),
       priceListName: String((quoteData as any).priceListName || ""),
       date: toISO(quoteData.quoteDate || quoteData.date) || new Date().toISOString(),
       quoteDate: toISO(quoteData.quoteDate || quoteData.date) || new Date().toISOString(),
@@ -1823,6 +1893,7 @@ export const saveQuote = async (quoteData: Partial<Quote>, retryCount = 0): Prom
       shippingChargeTax: String(quoteData.shippingChargeTax || ''),
       adjustment: parseFloat(String(quoteData.adjustment || 0)) || 0,
       taxExclusive: quoteData.taxExclusive || 'Tax Exclusive',
+      location: String((quoteData as any).location || (quoteData as any).selectedLocation || ""),
       total: parseFloat(String(quoteData.total || 0)) || 0,
       status: quoteData.status || 'draft'
     };
@@ -1968,12 +2039,24 @@ export const updateQuote = async (quoteId: string, quoteData: Partial<Quote>): P
     if (quoteData.customerName !== undefined) {
       apiData.customerName = String(quoteData.customerName || "");
     }
+    if ((quoteData as any).billingAddress !== undefined) {
+      apiData.billingAddress = normalizeAddressSnapshot((quoteData as any).billingAddress);
+    }
+    if ((quoteData as any).shippingAddress !== undefined) {
+      apiData.shippingAddress = normalizeAddressSnapshot((quoteData as any).shippingAddress);
+    }
 
     if ((quoteData as any).priceListId !== undefined) {
       apiData.priceListId = String((quoteData as any).priceListId || "");
     }
     if ((quoteData as any).priceListName !== undefined) {
       apiData.priceListName = String((quoteData as any).priceListName || "");
+    }
+    if ((quoteData as any).selectedLocation !== undefined || (quoteData as any).location !== undefined) {
+      apiData.location = String((quoteData as any).location || (quoteData as any).selectedLocation || "");
+    }
+    if (Array.isArray((quoteData as any).contactPersons)) {
+      apiData.contactPersons = (quoteData as any).contactPersons;
     }
 
     if (quoteData.discountType !== undefined) {

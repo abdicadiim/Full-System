@@ -28,6 +28,7 @@ type Props = {
 };
 
 export default function NewQuoteItemsSummarySection({ controller }: Props) {
+  const [draggedRowId, setDraggedRowId] = useState<string | number | null>(null);
   const {
     navigate, location, baseCurrencyCode, quoteId, isEditMode, clonedDataFromState, saveLoading, setSaveLoading, taxes, setTaxes, enabledSettings, setEnabledSettings,
     formData, setFormData, hasAppliedCloneRef, discountMode, showTransactionDiscount, showShippingCharges, showAdjustment, taxMode, toNumberSafe, resolveSubtotalFromQuoteLike, normalizeDiscountForForm, isDiscountAccountOpen,
@@ -73,6 +74,44 @@ export default function NewQuoteItemsSummarySection({ controller }: Props) {
     return String(value ?? "");
   };
 
+  const handleRowDragStart = (rowId: string | number) => {
+    setDraggedRowId(rowId);
+  };
+
+  const handleRowDragOver = (event: React.DragEvent<HTMLTableRowElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  };
+
+  const handleRowDrop = (targetRowId: string | number) => {
+    if (draggedRowId === null || String(draggedRowId) === String(targetRowId)) {
+      setDraggedRowId(null);
+      return;
+    }
+
+    setFormData((prev: any) => {
+      const nextItems = Array.isArray(prev.items) ? [...prev.items] : [];
+      const fromIndex = nextItems.findIndex((row) => String(row?.id) === String(draggedRowId));
+      const toIndex = nextItems.findIndex((row) => String(row?.id) === String(targetRowId));
+      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return prev;
+
+      const [movedRow] = nextItems.splice(fromIndex, 1);
+      nextItems.splice(toIndex, 0, movedRow);
+      const totals = calculateAllTotals(nextItems, prev);
+      return {
+        ...prev,
+        items: nextItems,
+        ...totals,
+      };
+    });
+
+    setDraggedRowId(null);
+  };
+
+  const handleRowDragEnd = () => {
+    setDraggedRowId(null);
+  };
+
   return (
     <>
             {/* Item Table Section */}
@@ -95,24 +134,63 @@ export default function NewQuoteItemsSummarySection({ controller }: Props) {
                   </thead>
                   <tbody>
                     {formData.items.map((item) => (
-                      <tr key={item.id} className="border-b border-gray-200 group">
-                        <td className="py-2 px-3" colSpan={item.itemType === "header" ? 5 : 1}>
+                      <tr
+                        key={item.id}
+                        className={`border-b border-gray-200 group ${draggedRowId === item.id ? "bg-[#f0f7f8]" : ""}`}
+                        onDragOver={handleRowDragOver}
+                        onDrop={() => handleRowDrop(item.id)}
+                      >
+                        <td className="py-2 px-3 align-middle" colSpan={item.itemType === "header" ? 6 : 1}>
                           {item.itemType === "header" ? (
-                            <input
-                              type="text"
-                              value={item.itemDetails}
-                              onChange={(e) => handleItemChange(item.id, 'itemDetails', e.target.value)}
-                              placeholder="Header Title"
-                              className="w-full px-2 py-1.5 border border-[#156372] bg-white rounded outline-none text-sm font-bold"
-                            />
+                            <div className="flex items-center gap-3">
+                              <div
+                                draggable
+                                onDragStart={(e) => {
+                                  e.dataTransfer.effectAllowed = "move";
+                                  e.dataTransfer.setData("text/plain", String(item.id));
+                                  handleRowDragStart(item.id);
+                                }}
+                                onDragEnd={handleRowDragEnd}
+                                className="flex h-8 w-7 items-center justify-center rounded border border-transparent text-gray-400 cursor-grab active:cursor-grabbing hover:text-gray-600 hover:bg-gray-50"
+                                title="Drag to reorder"
+                                aria-label="Drag to reorder header"
+                                >
+                                  <GripVertical size={14} />
+                              </div>
+                              <input
+                                type="text"
+                                value={item.itemDetails}
+                                onChange={(e) => handleItemChange(item.id, 'itemDetails', e.target.value)}
+                                placeholder="Add New Header"
+                                className="flex-1 min-w-0 px-2 py-1.5 border border-transparent hover:border-gray-300 focus:border-[#156372] rounded outline-none text-sm bg-transparent font-medium text-gray-900"
+                              />
+                              <button
+                                type="button"
+                                className="flex h-8 w-8 shrink-0 items-center justify-center text-red-500 hover:text-red-600 transition-colors"
+                                onClick={() => handleRemoveItem(item.id)}
+                              >
+                                <X size={16} />
+                              </button>
+                            </div>
                           ) : (
 
-                            <div className="flex gap-3 items-start">
-                              <div className="pt-2 text-gray-300">
+                            <div className="flex gap-3 items-center">
+                              <div
+                                draggable
+                                onDragStart={(e) => {
+                                  e.dataTransfer.effectAllowed = "move";
+                                  e.dataTransfer.setData("text/plain", String(item.id));
+                                  handleRowDragStart(item.id);
+                                }}
+                                onDragEnd={handleRowDragEnd}
+                                className="flex h-8 w-7 items-center justify-center text-gray-300 cursor-grab active:cursor-grabbing hover:text-gray-500"
+                                title="Drag to reorder"
+                                aria-label="Drag to reorder item"
+                              >
                                 <GripVertical size={14} />
                               </div>
                               {/* Image Placeholder */}
-                              <div className="w-9 h-9 bg-gray-100 rounded border border-gray-200 flex items-center justify-center text-gray-400 mt-1 flex-shrink-0">
+                              <div className="w-9 h-9 bg-gray-100 rounded border border-gray-200 flex items-center justify-center text-gray-400 flex-shrink-0">
                                 <ImageIcon size={18} />
                               </div>
 
@@ -140,7 +218,7 @@ export default function NewQuoteItemsSummarySection({ controller }: Props) {
                                     className="w-full px-2 py-1.5 border border-transparent hover:border-gray-300 focus:border-[#156372] rounded outline-none text-sm bg-transparent font-medium text-gray-900"
                                   />
                                   {openItemDropdowns[item.id] && (
-                                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl z-[60] w-[560px]">
+                                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl z-[60] w-[300px] max-w-[90vw]">
                                       <div className="p-2 border-b border-gray-100 bg-white rounded-t-lg">
                                         <div className="flex items-center gap-2 px-2 py-1.5 bg-gray-50 rounded">
                                           <Search size={14} className="text-gray-400" />
@@ -174,7 +252,7 @@ export default function NewQuoteItemsSummarySection({ controller }: Props) {
                                                 key={availItem.id}
                                                 className={[
                                                   "px-4 py-3 cursor-pointer border-b border-gray-100 last:border-b-0",
-                                                  isSelected ? "bg-[#3b82f6] text-white" : "text-gray-800 hover:bg-gray-50"
+                                                  isSelected ? "bg-[#f0f7f8] text-gray-900" : "text-gray-800 hover:bg-gray-50"
                                                 ].join(" ")}
                                                 onClick={() => handleItemSelect(item.id, availItem)}
                                               >
@@ -183,10 +261,13 @@ export default function NewQuoteItemsSummarySection({ controller }: Props) {
                                                     <div className="text-sm font-semibold truncate">
                                                       {availItem.name}
                                                     </div>
-                                                    <div className={["text-xs mt-0.5", isSelected ? "text-white/90" : "text-gray-500"].join(" ")}>
+                                                    <div className={["text-xs mt-0.5", isSelected ? "text-[#2a6670]" : "text-gray-500"].join(" ")}>
                                                       {codeLabel}: {codeValue} <span className="mx-1">|</span> Rate: {formatMoneyForDropdown(availItem.rate)}
                                                     </div>
                                                   </div>
+                                                  {isSelected ? (
+                                                    <Check size={16} className="text-[#156372] flex-shrink-0 mt-0.5" />
+                                                  ) : null}
                                                 </div>
                                               </div>
                                             );
@@ -360,32 +441,35 @@ export default function NewQuoteItemsSummarySection({ controller }: Props) {
                             </td>
                           </>
                         )}
-                        <td className="py-2 px-3 text-center align-top">
+                        {item.itemType !== "header" && (
+                          <td className="py-2 px-3 text-center align-middle">
                           <div
-                            className="relative inline-flex items-center gap-2 py-1.5"
+                            className="relative inline-flex h-8 items-center gap-2"
                             ref={(el) => {
                               itemMenuRefs.current[String(item.id)] = el;
                             }}
                           >
+                            {item.itemType !== "header" && (
+                              <button
+                                type="button"
+                                className="flex h-8 w-8 items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenItemMenuId(openItemMenuId === item.id ? null : item.id);
+                                }}
+                              >
+                                <MoreVertical size={16} />
+                              </button>
+                            )}
                             <button
                               type="button"
-                              className="text-gray-400 hover:text-gray-600 transition-colors"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setOpenItemMenuId(openItemMenuId === item.id ? null : item.id);
-                              }}
-                            >
-                              <MoreVertical size={16} />
-                            </button>
-                            <button
-                              type="button"
-                              className="text-red-500 hover:text-red-600 transition-colors"
+                              className="flex h-8 w-8 items-center justify-center text-red-500 hover:text-red-600 transition-colors"
                               onClick={() => handleRemoveItem(item.id)}
                             >
                               <X size={16} />
                             </button>
 
-                            {openItemMenuId === item.id && (
+                            {item.itemType !== "header" && openItemMenuId === item.id && (
                               <div className="absolute top-full right-0 mt-1.5 w-[176px] bg-white border border-gray-200 rounded-lg shadow-[0_16px_32px_rgba(15,23,42,0.12)] z-[80] p-1">
                                 <button
                                   type="button"
@@ -441,7 +525,8 @@ export default function NewQuoteItemsSummarySection({ controller }: Props) {
                               </div>
                             )}
                           </div>
-                        </td>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -450,7 +535,7 @@ export default function NewQuoteItemsSummarySection({ controller }: Props) {
 
               {/* Add Row Buttons */}
               <div className="mt-4 flex items-center gap-3 w-full justify-start self-start">
-                <div className="relative inline-flex items-center overflow-hidden rounded-md border border-[#d7deef] bg-[#eef3ff]">
+                <div className="relative inline-flex items-center overflow-visible rounded-md border border-[#d7deef] bg-[#eef3ff]">
                   <button
                     type="button"
                     className="flex h-10 items-center gap-2 px-4 text-[#1f3f79] text-sm font-medium hover:bg-[#e7eefb] transition-colors"
@@ -744,8 +829,8 @@ export default function NewQuoteItemsSummarySection({ controller }: Props) {
                 </div>
 
                 {!useSimplifiedView && (
-                  <div className="border border-gray-200 rounded-md bg-gray-50 p-4 grid grid-cols-1 xl:grid-cols-[1fr_330px] gap-8">
-                    <div>
+                  <div className="border border-gray-200 rounded-md bg-gray-50 p-4 grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-12 items-start">
+                    <div className="min-w-0">
                       <label className="block text-sm text-gray-700 mb-2 font-medium">Terms & Conditions</label>
                       <textarea
                         name="termsAndConditions"
@@ -756,7 +841,7 @@ export default function NewQuoteItemsSummarySection({ controller }: Props) {
                       />
                     </div>
 
-                    <div>
+                    <div className="xl:justify-self-center xl:w-full xl:max-w-[360px]">
                       <label className="block text-sm text-gray-700 mb-2 font-medium">Attach File(s) to Quote</label>
                       <div className="relative flex items-center gap-2" ref={uploadDropdownRef}>
                         <button

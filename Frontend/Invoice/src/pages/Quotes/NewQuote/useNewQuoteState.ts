@@ -121,6 +121,7 @@ export function useNewQuoteState() {
     selectedLocation: "Head Office",
     selectedPriceList: "Select Price List",
     quoteNumber: "QT-000002",
+    status: "Draft",
     referenceNumber: "",
     quoteDate: new Date().toLocaleDateString("en-GB"), // DD/MM/YYYY format which our salesModel now handles
     expiryDate: "",
@@ -370,6 +371,7 @@ export function useNewQuoteState() {
   const [selectedSalespersonIds, setSelectedSalespersonIds] = useState<string[]>([]);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [isNewSalespersonFormOpen, setIsNewSalespersonFormOpen] = useState(false);
+  const [editingSalespersonId, setEditingSalespersonId] = useState<string | null>(null);
   const [isAddContactPersonModalOpen, setIsAddContactPersonModalOpen] = useState(false);
   const [contactPersonData, setContactPersonData] = useState({
     salutation: "",
@@ -743,7 +745,12 @@ export function useNewQuoteState() {
       setLocationOptions(nextOptions);
       setFormData(prev => ({
         ...prev,
-        selectedLocation: nextOptions.includes(prev.selectedLocation) ? prev.selectedLocation : nextOptions[0]
+        selectedLocation:
+          nextOptions.includes(prev.selectedLocation)
+            ? prev.selectedLocation
+            : (isEditMode && String(prev.selectedLocation || "").trim()
+              ? prev.selectedLocation
+              : nextOptions[0])
       }));
     } catch {
       setIsLocationFeatureEnabled(false);
@@ -955,7 +962,7 @@ export function useNewQuoteState() {
     setIsNewProjectQuickActionOpen, projectQuickActionFrameKey, setProjectQuickActionFrameKey, customerQuickActionBaseIds, setCustomerQuickActionBaseIds, projectQuickActionBaseIds, setProjectQuickActionBaseIds, isRefreshingCustomersQuickAction, setIsRefreshingCustomersQuickAction, isRefreshingProjectsQuickAction, setIsRefreshingProjectsQuickAction, isReloadingCustomerFrame,
     setIsReloadingCustomerFrame, isReloadingProjectFrame, setIsReloadingProjectFrame, isAutoSelectingCustomerFromQuickAction, setIsAutoSelectingCustomerFromQuickAction, isAutoSelectingProjectFromQuickAction, setIsAutoSelectingProjectFromQuickAction, isSalespersonDropdownOpen, setIsSalespersonDropdownOpen, salespersonSearch, setSalespersonSearch, selectedSalesperson,
     setSelectedSalesperson, isManageSalespersonsOpen, setIsManageSalespersonsOpen, manageSalespersonSearch, setManageSalespersonSearch, manageSalespersonMenuOpen, setManageSalespersonMenuOpen, selectedSalespersonIds, setSelectedSalespersonIds, menuPosition, setMenuPosition, isNewSalespersonFormOpen,
-    setIsNewSalespersonFormOpen, isAddContactPersonModalOpen, setIsAddContactPersonModalOpen, contactPersonData, setContactPersonData, newSalespersonData, setNewSalespersonData, salespersons, setSalespersons, openItemDropdowns, setOpenItemDropdowns, itemSearches,
+    setIsNewSalespersonFormOpen, editingSalespersonId, setEditingSalespersonId, isAddContactPersonModalOpen, setIsAddContactPersonModalOpen, contactPersonData, setContactPersonData, newSalespersonData, setNewSalespersonData, salespersons, setSalespersons, openItemDropdowns, setOpenItemDropdowns, itemSearches,
     setItemSearches, openTaxDropdowns, setOpenTaxDropdowns, isNewTaxQuickModalOpen, setIsNewTaxQuickModalOpen, newTaxTargetItemId, setNewTaxTargetItemId, taxSearches, setTaxSearches, selectedItemIds, setSelectedItemIds, itemDropdownRefs,
     taxDropdownRefs, taxOptionGroups, getFilteredTaxGroups, openItemMenuId, setOpenItemMenuId, itemMenuRefs, isBulkAddModalOpen, setIsBulkAddModalOpen, bulkAddInsertIndex, setBulkAddInsertIndex, bulkAddSearch, setBulkAddSearch,
     bulkSelectedItems, setBulkSelectedItems, bulkSelectedItemIds, setBulkSelectedItemIds, isTheseDropdownOpen, setIsTheseDropdownOpen, showAdditionalInformation, setShowAdditionalInformation, additionalInfoItemIds, setAdditionalInfoItemIds, useSimplifiedView, setUseSimplifiedView,

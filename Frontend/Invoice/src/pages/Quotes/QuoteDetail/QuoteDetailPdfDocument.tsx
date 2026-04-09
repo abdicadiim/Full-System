@@ -18,6 +18,25 @@ const QuoteDetailPdfDocument = ({
   setIsQuoteDocumentHovered,
   setIsCustomizeDropdownOpen,
 }: Props) => {
+  const formatQuoteAddressSnapshot = (address: any) => {
+    if (!address) return "";
+    if (typeof address === "string") return address.trim();
+
+    const attention = String(address?.attention || "").trim();
+    const street1 = String(address?.street1 || "").trim();
+    const street2 = String(address?.street2 || "").trim();
+    const city = String(address?.city || "").trim();
+    const state = String(address?.state || "").trim();
+    const zipCode = String(address?.zipCode || "").trim();
+    const country = String(address?.country || "").trim();
+    const cityStateZip = [city, state, zipCode].filter(Boolean).join(", ");
+
+    return [attention, street1, street2, cityStateZip, country].filter(Boolean).join(", ");
+  };
+
+  const billingAddressDisplay = formatQuoteAddressSnapshot(quote.billingAddress || quote.customer?.billingAddress);
+  const shippingAddressDisplay = formatQuoteAddressSnapshot(quote.shippingAddress || quote.customer?.shippingAddress);
+
   return (
     <>
       <div
@@ -107,6 +126,11 @@ const QuoteDetailPdfDocument = ({
             <div style={{ fontSize: "15px", color: "#2563eb", fontWeight: "600", lineHeight: "1.2" }}>
               {quote.customerName || "N/A"}
             </div>
+            {billingAddressDisplay ? (
+              <div style={{ marginTop: "8px", fontSize: "11px", color: "#4b5563", lineHeight: "1.5" }}>
+                {billingAddressDisplay}
+              </div>
+            ) : null}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "22px" }}>
             <div style={{ fontSize: "16px", color: "#6b7280", lineHeight: "1" }}>:</div>
@@ -118,6 +142,17 @@ const QuoteDetailPdfDocument = ({
             </div>
           </div>
         </div>
+
+        {shippingAddressDisplay ? (
+          <div style={{ marginBottom: "18px", padding: "10px 12px", border: "1px solid #e5e7eb", borderRadius: "8px", backgroundColor: "#fafafa" }}>
+            <div style={{ fontSize: "11px", fontWeight: "700", color: "#374151", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Shipping Address
+            </div>
+            <div style={{ fontSize: "11px", color: "#4b5563", lineHeight: "1.5" }}>
+              {shippingAddressDisplay}
+            </div>
+          </div>
+        ) : null}
 
         <div className="mb-6">
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -274,4 +309,3 @@ const QuoteDetailPdfDocument = ({
 };
 
 export default QuoteDetailPdfDocument;
-

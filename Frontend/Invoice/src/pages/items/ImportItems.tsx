@@ -1247,7 +1247,8 @@ export default function ImportItems() {
                   type="checkbox"
                   checked={saveSelections}
                   onChange={(e) => setSaveSelections(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  className="w-4 h-4 border-gray-300 rounded focus:ring-0"
+                  style={{ accentColor: "#1b5e6a" }}
                 />
                 <span className="text-sm text-gray-700">Save these selections for use during future imports.</span>
               </label>
@@ -1771,7 +1772,8 @@ export default function ImportItems() {
                               checked={selectedDocuments.includes(doc.id)}
                               onChange={() => { }}
                               onClick={(e) => e.stopPropagation()}
-                              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                              className="w-4 h-4 border-gray-300 rounded focus:ring-0"
+                              style={{ accentColor: "#1b5e6a" }}
                             />
                             <div className="flex items-center gap-2">
                               <FileText size={18} className="text-gray-400" />

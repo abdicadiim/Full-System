@@ -2023,8 +2023,10 @@ export default function Expenses() {
               <button
                 onClick={handleDownloadReceipt}
                 className="flex items-center justify-center rounded-md border border-gray-300 bg-white p-1.5 text-sm text-gray-700 hover:bg-gray-100"
+                title={selectedExpenses.length > 0 ? "Download selected attachments" : "Export expenses"}
+                aria-label={selectedExpenses.length > 0 ? "Download selected expense attachments" : "Open expense export options"}
               >
-                <FileText size={16} />
+                <Download size={16} />
               </button>
 
               <button

@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import { itemsAPI, tagAssignmentsAPI } from "../../services/api";
 import { Item, DeleteConfirmModal } from "./itemsModel";
 import { useLocation, useNavigate } from "react-router-dom";
+import { X } from "lucide-react";
 
 // Import extracted components
 import ItemsList from "./ItemsList";
@@ -18,6 +19,34 @@ import { waitForBackendReady } from "../../services/backendReady";
 import { buildCloneName } from "./utils/cloneName";
 
 const ITEM_THUMBNAIL_CACHE = new Map<string, string>();
+const ITEM_THUMBNAIL_STORAGE_KEY = "inv_item_thumbs_v1";
+const ITEM_THUMBNAIL_STORE: Record<string, string> = (() => {
+  if (typeof window === "undefined" || !window.localStorage) return {};
+  try {
+    const raw = window.localStorage.getItem(ITEM_THUMBNAIL_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+})();
+
+const getStoredThumbnail = (source: string) => {
+  if (!source) return "";
+  return ITEM_THUMBNAIL_STORE[source] || "";
+};
+
+const setStoredThumbnail = (source: string, thumbnail: string) => {
+  if (!source || !thumbnail) return;
+  ITEM_THUMBNAIL_STORE[source] = thumbnail;
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    window.localStorage.setItem(ITEM_THUMBNAIL_STORAGE_KEY, JSON.stringify(ITEM_THUMBNAIL_STORE));
+  } catch {
+    // ignore storage errors
+  }
+};
 
 function getPrimaryItemImage(item: any) {
   const sources = [
@@ -37,6 +66,11 @@ function getPrimaryItemImage(item: any) {
 function createThumbnailFromImage(source: string, size = 48): Promise<string> {
   const cached = ITEM_THUMBNAIL_CACHE.get(source);
   if (cached) return Promise.resolve(cached);
+  const stored = getStoredThumbnail(source);
+  if (stored) {
+    ITEM_THUMBNAIL_CACHE.set(source, stored);
+    return Promise.resolve(stored);
+  }
 
   return new Promise((resolve) => {
     const img = new Image();
@@ -60,6 +94,7 @@ function createThumbnailFromImage(source: string, size = 48): Promise<string> {
         ctx.drawImage(img, x, y, drawWidth, drawHeight);
         const thumbnail = canvas.toDataURL("image/png", 0.82);
         ITEM_THUMBNAIL_CACHE.set(source, thumbnail);
+        setStoredThumbnail(source, thumbnail);
         resolve(thumbnail);
       } catch {
         resolve(source);
@@ -91,6 +126,7 @@ function ItemsPageContent() {
   const navigate = useNavigate();
 
   const ITEMS_STORAGE_KEY = "inv_items_v1";
+  const ITEMS_SELECTED_KEY = "inv_items_selected_id_v1";
   const readStoredItems = (): Item[] => {
     try {
       const raw = localStorage.getItem(ITEMS_STORAGE_KEY);
@@ -101,11 +137,28 @@ function ItemsPageContent() {
       return [];
     }
   };
+  const readStoredSelectedId = (): string | null => {
+    try {
+      const raw = localStorage.getItem(ITEMS_SELECTED_KEY);
+      return raw ? String(raw) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const initialHash = String(location.hash || "").replace("#", "");
+  const initialView =
+    initialHash === "detail" || initialHash === "new" || initialHash === "edit"
+      ? initialHash
+      : "list";
+  const initialSelectedId =
+    initialView === "detail" || initialView === "edit" ? readStoredSelectedId() : null;
 
   const [items, setItems] = useState<Item[]>(() => readStoredItems());
   const [loading, setLoading] = useState<boolean>(() => readStoredItems().length === 0);
-  const [view, setView] = useState<string>("list"); // list | new | detail | edit
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [view, setView] = useState<string>(initialView); // list | new | detail | edit
+  const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
+  const [detailSnapshot, setDetailSnapshot] = useState<Item | null>(null);
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<DeleteConfirmModal>({
     open: false, itemId: null, itemName: null, count: 1, itemIds: null
   });
@@ -120,13 +173,17 @@ function ItemsPageContent() {
   const canEditItems = canEdit();
   const canDeleteItems = canDelete();
 
-  const normalizeItemForList = (item: Item) => ({
-    ...item,
-    images: collectItemImages(item),
-    id: item.id || item._id,
-    active: item.active !== undefined ? item.active : item.isActive,
-    thumbnail: getPrimaryItemImage(item) || (item as any).thumbnail || ""
-  });
+  const normalizeItemForList = (item: Item) => {
+    const primaryImage = getPrimaryItemImage(item) || (item as any).thumbnail || "";
+    const cachedThumb = primaryImage ? getStoredThumbnail(primaryImage) : "";
+    return {
+      ...item,
+      images: collectItemImages(item),
+      id: item.id || item._id,
+      active: item.active !== undefined ? item.active : item.isActive,
+      thumbnail: cachedThumb || primaryImage || ""
+    };
+  };
 
   const extractItemRows = (response: any): Item[] => {
     const rows = Array.isArray(response?.data)
@@ -200,6 +257,12 @@ function ItemsPageContent() {
     () => items.find((x: Item) => x.id === selectedId || x._id === selectedId) || null,
     [items, selectedId]
   );
+  const detailItem = selectedItem || detailSnapshot;
+
+  useEffect(() => {
+    if (!selectedItem) return;
+    setDetailSnapshot(selectedItem);
+  }, [selectedItem]);
 
   const handleCreateItem = async (
     data: any,
@@ -251,7 +314,7 @@ function ItemsPageContent() {
 
       if (!options?.stayOnCurrent) {
         if (view === "detail") {
-          setSelectedId(String(newItem._id || newItem.id));
+          rememberSelectedId(String(newItem._id || newItem.id));
         } else {
           setView("list");
         }
@@ -285,14 +348,50 @@ function ItemsPageContent() {
       return;
     }
     if (!selectedId) return;
+    const targetId = String(selectedId);
+    const prevItems = items;
+    const optimisticUpdate = (list: Item[]) =>
+      list.map((row: any) =>
+        String(row?.id || row?._id) === targetId ? { ...row, ...data } : row
+      );
     try {
+      // Optimistic update so the UI (including Mark as Active/Inactive label) updates immediately.
+      setItems((prev) => optimisticUpdate(prev));
+      setDetailSnapshot((prev) => (prev && (String(prev.id || (prev as any)._id) === targetId) ? { ...prev, ...data } : prev));
+      try {
+        const raw = localStorage.getItem(ITEMS_STORAGE_KEY);
+        const existing = raw ? JSON.parse(raw) : [];
+        const rows = Array.isArray(existing) ? existing : [];
+        const nextRows = optimisticUpdate(rows as Item[]);
+        localStorage.setItem(ITEMS_STORAGE_KEY, JSON.stringify(nextRows));
+      } catch {
+        // ignore storage errors
+      }
+
+      const toastId = toast.success("Item updated successfully");
+
       await itemsAPI.update(selectedId, data);
       await fetchItems();
       setView("detail");
-      toast.success("Item updated successfully");
+      toast.update(toastId, { render: "Item updated successfully", type: "success", autoClose: 2000 });
     } catch (error: any) {
       console.error("Failed to update item:", error);
-      toast.error("Failed to update item: " + (error.message || "Unknown error"));
+      setItems(prevItems);
+      setDetailSnapshot((prev) => {
+        if (!prev) return prev;
+        const restore = prevItems.find((row: any) => String(row?.id || row?._id) === targetId);
+        return restore ? (restore as Item) : prev;
+      });
+      try {
+        localStorage.setItem(ITEMS_STORAGE_KEY, JSON.stringify(prevItems));
+      } catch {
+        // ignore storage errors
+      }
+      toast.update(toastId, {
+        render: "Failed to update item: " + (error.message || "Unknown error"),
+        type: "error",
+        autoClose: 3000,
+      });
     }
   };
 
@@ -311,16 +410,39 @@ function ItemsPageContent() {
       return;
     }
     if (!deleteConfirmModal.itemId) return;
+    const deleteId = deleteConfirmModal.itemId;
+    const prevItems = items;
     try {
-      await itemsAPI.delete(deleteConfirmModal.itemId);
-      await fetchItems();
-      if (selectedId === deleteConfirmModal.itemId) {
-        setSelectedId(null);
-        setView("list");
+      // Optimistic UI update
+      setItems((prev) => prev.filter((row: any) => String(row?.id || row?._id) !== String(deleteId)));
+      try {
+        const raw = localStorage.getItem(ITEMS_STORAGE_KEY);
+        const existing = raw ? JSON.parse(raw) : [];
+        const rows = Array.isArray(existing) ? existing : [];
+        const nextRows = rows.filter((row: any) => String(row?.id || row?._id) !== String(deleteId));
+        localStorage.setItem(ITEMS_STORAGE_KEY, JSON.stringify(nextRows));
+      } catch {
+        // ignore storage errors
       }
-      toast.success("Item deleted successfully");
+
+      if (selectedId === deleteId) {
+        rememberSelectedId(null);
+        setView("list");
+        setDetailSnapshot(null);
+      }
       setDeleteConfirmModal({ open: false, itemId: null, itemName: null, count: 1, itemIds: null });
+      toast.success("Item deleted successfully");
+
+      await itemsAPI.delete(deleteId);
+      void fetchItems();
     } catch (error: any) {
+      // Restore on failure
+      setItems(prevItems);
+      try {
+        localStorage.setItem(ITEMS_STORAGE_KEY, JSON.stringify(prevItems));
+      } catch {
+        // ignore storage errors
+      }
       toast.error("Failed to delete item");
     }
   };
@@ -331,12 +453,38 @@ function ItemsPageContent() {
       return;
     }
     if (!deleteConfirmModal.itemIds || deleteConfirmModal.itemIds.length === 0) return;
+    const idsToDelete = deleteConfirmModal.itemIds.map((id) => String(id));
+    const prevItems = items;
     try {
-      await Promise.all(deleteConfirmModal.itemIds.map(id => itemsAPI.delete(id)));
-      await fetchItems();
-      toast.success(`${deleteConfirmModal.itemIds.length} item(s) deleted successfully`);
+      // Optimistic UI update
+      setItems((prev) => prev.filter((row: any) => !idsToDelete.includes(String(row?.id || row?._id))));
+      try {
+        const raw = localStorage.getItem(ITEMS_STORAGE_KEY);
+        const existing = raw ? JSON.parse(raw) : [];
+        const rows = Array.isArray(existing) ? existing : [];
+        const nextRows = rows.filter((row: any) => !idsToDelete.includes(String(row?.id || row?._id)));
+        localStorage.setItem(ITEMS_STORAGE_KEY, JSON.stringify(nextRows));
+      } catch {
+        // ignore storage errors
+      }
+
+      if (selectedId && idsToDelete.includes(String(selectedId))) {
+        rememberSelectedId(null);
+        setView("list");
+        setDetailSnapshot(null);
+      }
       setDeleteConfirmModal({ open: false, itemId: null, itemName: null, count: 1, itemIds: null });
+      toast.success(`${idsToDelete.length} item(s) deleted successfully`);
+
+      await Promise.all(idsToDelete.map(id => itemsAPI.delete(id)));
+      void fetchItems();
     } catch (error: any) {
+      setItems(prevItems);
+      try {
+        localStorage.setItem(ITEMS_STORAGE_KEY, JSON.stringify(prevItems));
+      } catch {
+        // ignore storage errors
+      }
       toast.error("Bulk delete failed");
     }
   };
@@ -384,8 +532,22 @@ function ItemsPageContent() {
 
   const handleBackToList = () => {
     setView("list");
-    setSelectedId(null);
+    rememberSelectedId(null);
     setClonedItem(null);
+    setDetailSnapshot(null);
+  };
+
+  const rememberSelectedId = (id: string | null) => {
+    setSelectedId(id);
+    try {
+      if (id) {
+        localStorage.setItem(ITEMS_SELECTED_KEY, String(id));
+      } else {
+        localStorage.removeItem(ITEMS_SELECTED_KEY);
+      }
+    } catch {
+      // ignore storage errors
+    }
   };
 
   // Keep a tiny URL signal while inside the Items module.
@@ -407,6 +569,18 @@ function ItemsPageContent() {
     handleBackToList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.hash]);
+
+  // Restore detail/edit view on refresh when hash is present
+  useEffect(() => {
+    const hash = String(location.hash || "");
+    if (hash !== "#detail" && hash !== "#edit") return;
+    if (selectedId) return;
+    const storedId = readStoredSelectedId();
+    if (!storedId) return;
+    setView(hash === "#edit" ? "edit" : "detail");
+    rememberSelectedId(storedId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.hash, selectedId]);
 
   const handleCloneItem = async (data: any) => {
     if (!canCreateItems) {
@@ -433,19 +607,101 @@ function ItemsPageContent() {
     delete clonedPayload.createdAt;
     delete clonedPayload.updatedAt;
 
-    await handleCreateItem(clonedPayload, [], { stayOnCurrent: true });
+    const optimisticId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const optimisticItem = normalizeItemForList({
+      ...clonedPayload,
+      id: optimisticId,
+      _id: optimisticId,
+    } as Item);
+
+    // Optimistically update list and local storage for instant feedback.
+    setItems((prev) => {
+      const withoutCurrent = prev.filter(
+        (row: any) => String(row?.id || row?._id) !== optimisticId
+      );
+      return [optimisticItem, ...withoutCurrent];
+    });
+    try {
+      const raw = localStorage.getItem(ITEMS_STORAGE_KEY);
+      const existing = raw ? JSON.parse(raw) : [];
+      const rows = Array.isArray(existing) ? existing : [];
+      const withoutCurrent = rows.filter((row: any) => String(row?.id || row?._id) !== optimisticId);
+      localStorage.setItem(ITEMS_STORAGE_KEY, JSON.stringify([optimisticItem, ...withoutCurrent]));
+    } catch {
+      // ignore storage errors
+    }
+
+    const toastId = toast.success("Item cloned successfully");
+
+    try {
+      const response = await itemsAPI.create(clonedPayload);
+      if (response && "success" in response && response.success === false) {
+        throw new Error((response as any).message || "Failed to save item");
+      }
+      const newItem = response.data || response;
+      const createImages = collectItemImages({ ...(newItem || {}), ...(clonedPayload || {}) });
+      const createThumbnailSource = createImages[0] || "";
+      const normalizedItem = normalizeItemForList({
+        ...(newItem as any),
+        ...(clonedPayload || {}),
+        images: createImages.length > 0 ? createImages : collectItemImages(newItem),
+        thumbnail: createThumbnailSource,
+      } as Item);
+      const normalizedId = String(normalizedItem.id || normalizedItem._id || "");
+
+      setItems((prev) =>
+        prev.map((row: any) =>
+          String(row?.id || row?._id) === optimisticId ? normalizedItem : row
+        )
+      );
+
+      try {
+        const raw = localStorage.getItem(ITEMS_STORAGE_KEY);
+        const existing = raw ? JSON.parse(raw) : [];
+        const rows = Array.isArray(existing) ? existing : [];
+        const nextRows = rows.map((row: any) =>
+          String(row?.id || row?._id) === optimisticId ? normalizedItem : row
+        );
+        localStorage.setItem(ITEMS_STORAGE_KEY, JSON.stringify(nextRows));
+      } catch {
+        // ignore storage errors
+      }
+
+      if (selectedId === optimisticId && normalizedId) {
+        rememberSelectedId(normalizedId);
+      }
+
+      void fetchItems();
+    } catch (error: any) {
+      console.error("Failed to clone item:", error);
+      setItems((prev) => prev.filter((row: any) => String(row?.id || row?._id) !== optimisticId));
+      try {
+        const raw = localStorage.getItem(ITEMS_STORAGE_KEY);
+        const existing = raw ? JSON.parse(raw) : [];
+        const rows = Array.isArray(existing) ? existing : [];
+        const nextRows = rows.filter((row: any) => String(row?.id || row?._id) !== optimisticId);
+        localStorage.setItem(ITEMS_STORAGE_KEY, JSON.stringify(nextRows));
+      } catch {
+        // ignore storage errors
+      }
+      toast.update(toastId, {
+        render: "Failed to clone item",
+        type: "error",
+        autoClose: 3000,
+      });
+    }
   };
 
   return (
     <div className="w-full h-full">
-      {view === "detail" && selectedItem ? (
+      {view === "detail" && detailItem ? (
         <div className="flex flex-col md:flex-row gap-0 h-full">
           <div className="hidden md:flex w-full md:w-1/5 border-r border-gray-200 bg-white flex-col z-20">
             <ItemSidebar
               items={items}
               selectedId={selectedId}
-              onSelect={(id: string) => { setSelectedId(id); setView("detail"); window.scrollTo(0, 0); }}
-              onNew={() => { if (canCreateItems) { setView("new"); setSelectedId(null); } }}
+              onSelect={(id: string) => { rememberSelectedId(id); setView("detail"); window.scrollTo(0, 0); }}
+              onNew={() => { if (canCreateItems) { setView("new"); rememberSelectedId(null); } }}
               baseCurrency={baseCurrency}
               onBulkMarkActive={handleBulkMarkActive}
               onBulkMarkInactive={handleBulkMarkInactive}
@@ -458,14 +714,14 @@ function ItemsPageContent() {
           </div>
           <div className="flex-1 bg-white overflow-auto w-full">
             <ItemDetails
-              item={selectedItem as Item}
+              item={detailItem as Item}
               onBack={handleBackToList}
               onEdit={() => { if (canEditItems) setView("edit"); }}
               onUpdate={handleUpdateItem}
               items={items}
               setItems={setItems}
               onDelete={handleDeleteItem}
-              setSelectedId={setSelectedId}
+              setSelectedId={rememberSelectedId}
               setView={setView}
               onClone={handleCloneItem}
               baseCurrency={baseCurrency}
@@ -480,8 +736,8 @@ function ItemsPageContent() {
           {view === "list" && (
             <ItemsList
               items={items}
-              onSelect={(id: string) => { setSelectedId(id); setView("detail"); window.scrollTo(0, 0); }}
-              onNew={() => { if (canCreateItems) { setView("new"); setSelectedId(null); } }}
+              onSelect={(id: string) => { rememberSelectedId(id); setView("detail"); window.scrollTo(0, 0); }}
+              onNew={() => { if (canCreateItems) { setView("new"); rememberSelectedId(null); } }}
               onDelete={handleDeleteItem}
               onBulkDelete={async (ids: string[]) => setDeleteConfirmModal({ open: true, itemId: null, itemName: null, count: ids.length, itemIds: ids })}
               onBulkUpdate={(ids: string[]) => setBulkUpdateModal({ open: true, itemIds: ids })}
@@ -526,30 +782,43 @@ function ItemsPageContent() {
 
       {/* Delete Confirmation Modal */}
       {deleteConfirmModal.open && (
-        <div className="fixed inset-0 bg-black/60 z-[10000] flex items-start justify-center pt-4 px-6 pb-6 overflow-y-auto">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Delete Item{deleteConfirmModal.count > 1 ? 's' : ''}
-            </h2>
-            <p className="text-sm text-gray-600 mb-6">
-              Are you sure you want to delete {deleteConfirmModal.count > 1
-                ? `${deleteConfirmModal.count} item(s)?`
-                : `"${deleteConfirmModal.itemName}"?`}
-              <br />
-              <span className="text-red-600 font-medium">This action cannot be undone.</span>
-            </p>
-            <div className="flex justify-end gap-3">
+        <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-2xl border border-slate-200">
+            <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+              <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-[12px] font-bold">
+                !
+              </div>
+              <h3 className="text-[15px] font-semibold text-slate-800 flex-1">
+                Delete {deleteConfirmModal.count > 1 ? `${deleteConfirmModal.count} item(s)` : "item"}?
+              </h3>
               <button
+                type="button"
+                className="h-7 w-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
                 onClick={() => setDeleteConfirmModal({ open: false, itemId: null, itemName: null, count: 1, itemIds: null })}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                aria-label="Close"
               >
-                Cancel
+                <X size={14} />
               </button>
+            </div>
+            <div className="px-5 py-3 text-[13px] text-slate-600">
+              {deleteConfirmModal.count > 1
+                ? "You cannot retrieve these items once they have been deleted."
+                : "You cannot retrieve this item once it has been deleted."}
+            </div>
+            <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
               <button
+                type="button"
+                className="px-4 py-1.5 rounded-md bg-blue-600 text-white text-[12px] hover:bg-blue-700"
                 onClick={() => deleteConfirmModal.itemIds ? confirmBulkDelete() : confirmDeleteItem()}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors"
               >
                 Delete
+              </button>
+              <button
+                type="button"
+                className="px-4 py-1.5 rounded-md border border-slate-300 text-[12px] text-slate-700 hover:bg-slate-50"
+                onClick={() => setDeleteConfirmModal({ open: false, itemId: null, itemName: null, count: 1, itemIds: null })}
+              >
+                Cancel
               </button>
             </div>
           </div>

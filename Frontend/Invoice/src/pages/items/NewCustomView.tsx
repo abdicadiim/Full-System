@@ -334,6 +334,7 @@ export default function NewCustomView() {
                   onChange={handleChange}
                   id="favorite"
                   className="cursor-pointer"
+                  style={{ accentColor: "#1b5e6a" }}
                 />
                 <label
                   htmlFor="favorite"

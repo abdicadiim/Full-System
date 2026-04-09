@@ -2472,33 +2472,40 @@ const QuoteDetail = () => {
 
     setIsUploadingAttachment(true);
     try {
-      const uploadedAttachments = [];
+      const uploadedAttachments = (await Promise.allSettled(
+        validFiles.map(async (file, index) => {
+          const uploadResponse = await documentsAPI.upload(file, {
+            name: file.name,
+            type: "quote",
+            module: "sales",
+            relatedToType: "quote",
+            relatedToId: quote.id || quote._id || quoteId,
+            description: `Quote attachment for ${quote.quoteNumber || quote.id || quoteId}`
+          });
 
-      for (const file of validFiles) {
-        const uploadResponse = await documentsAPI.upload(file, {
-          name: file.name,
-          type: "quote",
-          module: "sales",
-          relatedToType: "quote",
-          relatedToId: quote.id || quote._id || quoteId,
-          description: `Quote attachment for ${quote.quoteNumber || quote.id || quoteId}`
-        });
+          const uploadedDocument = uploadResponse?.data || {};
+          const fileUrl = uploadedDocument.url || "";
+          return normalizeAttachmentFromQuote({
+            id: uploadedDocument._id || uploadedDocument.id || Date.now() + Math.random(),
+            documentId: uploadedDocument._id || uploadedDocument.id,
+            name: uploadedDocument.name || file.name,
+            size: uploadedDocument.fileSize || file.size,
+            type: uploadedDocument.mimeType || file.type,
+            mimeType: uploadedDocument.mimeType || file.type,
+            url: fileUrl,
+            preview: (uploadedDocument.mimeType || file.type || "").startsWith("image/") ? fileUrl : null,
+            uploadedAt: uploadedDocument.createdAt || new Date().toISOString()
+          }, index);
+        })
+      )).reduce((items: any[], result: PromiseSettledResult<any>) => {
+        if (result.status === "fulfilled" && result.value) {
+          items.push(result.value);
+        }
+        return items;
+      }, []);
 
-        const uploadedDocument = uploadResponse?.data || {};
-        const fileUrl = uploadedDocument.url || "";
-        const attachment = normalizeAttachmentFromQuote({
-          id: uploadedDocument._id || uploadedDocument.id || Date.now() + Math.random(),
-          documentId: uploadedDocument._id || uploadedDocument.id,
-          name: uploadedDocument.name || file.name,
-          size: uploadedDocument.fileSize || file.size,
-          type: uploadedDocument.mimeType || file.type,
-          mimeType: uploadedDocument.mimeType || file.type,
-          url: fileUrl,
-          preview: (uploadedDocument.mimeType || file.type || "").startsWith("image/") ? fileUrl : null,
-          uploadedAt: uploadedDocument.createdAt || new Date().toISOString()
-        }, uploadedAttachments.length);
-
-        uploadedAttachments.push(attachment);
+      if (uploadedAttachments.length === 0) {
+        throw new Error("No attachments were uploaded.");
       }
 
       const updatedAttachments = [...quoteAttachments, ...uploadedAttachments];
@@ -2517,14 +2524,26 @@ const QuoteDetail = () => {
           uploadedAt: attachment.uploadedAt || new Date().toISOString()
         }));
 
-      const updatedQuote = await updateQuote(quoteId, { attachedFiles: attachedFilesPayload });
-      setQuote(updatedQuote);
-      await appendActivityLog(
+      void updateQuote(quoteId, { attachedFiles: attachedFilesPayload })
+        .then((updatedQuote) => {
+          if (updatedQuote) {
+            setQuote(updatedQuote);
+          }
+        })
+        .catch((error) => {
+          console.error("Error persisting quote attachments:", error);
+        });
+
+      void appendActivityLog(
         "Attachment Added",
         `${uploadedAttachments.length} attachment(s) uploaded.`,
         "success"
       );
-      toast.success(`${uploadedAttachments.length} attachment(s) uploaded.`);
+      if (uploadedAttachments.length < validFiles.length) {
+        toast.success(`${uploadedAttachments.length} attachment(s) uploaded. ${validFiles.length - uploadedAttachments.length} file(s) failed.`);
+      } else {
+        toast.success(`${uploadedAttachments.length} attachment(s) uploaded.`);
+      }
     } catch (error) {
       console.error("Error uploading quote attachment:", error);
       toast.error("Failed to upload attachment. Please try again.");
@@ -2574,9 +2593,17 @@ const QuoteDetail = () => {
           uploadedAt: attachment.uploadedAt || new Date().toISOString()
         }));
 
-      const updatedQuote = await updateQuote(quoteId, { attachedFiles: attachedFilesPayload });
-      setQuote(updatedQuote);
-      await appendActivityLog("Attachment Removed", "An attachment was removed.", "warning");
+      void updateQuote(quoteId, { attachedFiles: attachedFilesPayload })
+        .then((updatedQuote) => {
+          if (updatedQuote) {
+            setQuote(updatedQuote);
+          }
+        })
+        .catch((error) => {
+          console.error("Error persisting quote attachments:", error);
+        });
+
+      void appendActivityLog("Attachment Removed", "An attachment was removed.", "warning");
       toast.success("Attachment removed.");
     } catch (error) {
       console.error("Error removing quote attachment:", error);

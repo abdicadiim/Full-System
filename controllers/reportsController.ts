@@ -61,7 +61,7 @@ const endOfDay = (date: Date) =>
 const cloneDate = (date: Date) => new Date(date.getTime());
 
 const requireOrgId = (req: express.Request, res: express.Response) => {
-  const orgId = req.user?.organizationId;
+  const orgId = (req as any)?.user?.organizationId;
   if (!orgId) {
     res
       .status(401)
@@ -118,6 +118,95 @@ const parseMoreFilters = (value: unknown): MoreFilterRow[] => {
     return [];
   }
 };
+
+const getPaymentAllocationEntries = (payment: any) => {
+  const entries: Array<{
+    invoiceId: string;
+    invoiceNumber: string;
+    amount: number;
+    invoice?: any;
+    invoiceDate?: string;
+    date?: string;
+    appliedAt?: string;
+  }> = [];
+  const seen = new Set<string>();
+
+  const pushEntry = (
+    invoiceId: unknown,
+    invoiceNumber: unknown,
+    amount: unknown,
+    extras: Partial<{
+      invoice: any;
+      invoiceDate: string;
+      date: string;
+      appliedAt: string;
+    }> = {},
+  ) => {
+    const normalizedInvoiceId = String(invoiceId ?? "").trim();
+    const normalizedInvoiceNumber = String(invoiceNumber ?? "").trim();
+    const normalizedAmount = asNumber(amount, 0);
+    const key = normalizedInvoiceId || normalizedInvoiceNumber;
+    if (!key || normalizedAmount <= 0 || seen.has(key)) return;
+    seen.add(key);
+    entries.push({
+      invoiceId: normalizedInvoiceId,
+      invoiceNumber: normalizedInvoiceNumber,
+      amount: normalizedAmount,
+      ...extras,
+    });
+  };
+
+  if (payment?.invoicePayments && typeof payment.invoicePayments === "object" && !Array.isArray(payment.invoicePayments)) {
+    Object.entries(payment.invoicePayments).forEach(([invoiceId, amount]) => {
+      pushEntry(invoiceId, "", amount);
+    });
+    if (entries.length > 0) return entries;
+  }
+
+  if (Array.isArray(payment?.allocations)) {
+    payment.allocations.forEach((allocation: any) => {
+      const invoiceId =
+        allocation?.invoiceId ||
+        allocation?.invoice?._id ||
+        allocation?.invoice?.id ||
+        allocation?.invoice;
+      const invoiceNumber =
+        allocation?.invoiceNumber || allocation?.invoice?.invoiceNumber || "";
+      pushEntry(invoiceId, invoiceNumber, allocation?.amount ?? allocation?.appliedAmount ?? allocation?.amountReceived ?? payment?.amountReceived ?? payment?.amount ?? 0, {
+        invoice: allocation?.invoice || null,
+        invoiceDate: allocation?.invoiceDate || allocation?.invoice?.date || allocation?.invoice?.invoiceDate,
+        date: allocation?.date || allocation?.appliedAt,
+        appliedAt: allocation?.appliedAt,
+      });
+    });
+    if (entries.length > 0) return entries;
+  }
+
+  const directInvoiceId = String(payment?.invoiceId || "").trim();
+  const directInvoiceNumber = String(payment?.invoiceNumber || "").trim();
+  const directAppliedAmount = asNumber(
+    payment?.amountUsedForPayments ??
+      payment?.appliedAmount ??
+      payment?.amountApplied ??
+      payment?.amount ??
+      payment?.amountReceived ??
+      0,
+  );
+  if (directInvoiceId || directInvoiceNumber) {
+    pushEntry(directInvoiceId, directInvoiceNumber, directAppliedAmount);
+  }
+
+  return entries;
+};
+
+const getTimeToGetPaidBucketLabel = (days: number) => {
+  if (days <= 15) return "0 - 15 Days";
+  if (days <= 30) return "16 - 30 Days";
+  if (days <= 45) return "31 - 45 Days";
+  return "Above 45 Days";
+};
+
+const formatPercent = (value: number) => `${Math.round(value)}%`;
 
 const compareValue = (left: string, comparator: string, right: string) => {
   const lhs = normalizeText(left);
@@ -244,6 +333,12 @@ const getDateRangeFromQuery = (req: express.Request) => {
       return {
         start: new Date(now.getFullYear() - 1, 0, 1),
         end: endOfDay(new Date(now.getFullYear() - 1, 11, 31)),
+      };
+    case "alltime":
+    case "all-time":
+      return {
+        start: new Date(1970, 0, 1),
+        end: endOfDay(now),
       };
     default:
       return { start: startOfDay(now), end: endOfDay(now) };
@@ -1099,6 +1194,46 @@ const buildRows = (
   const groupMap = new Map<string, any>();
   let currency = "";
 
+  const ensureCustomerRow = (customer: any, fallbackName = "") => {
+    const customerContext = buildCustomerContext(customer, fallbackName);
+    const key = String(
+      customerContext["customer-id"] || customerContext.name || "unassigned",
+    )
+      .trim()
+      .toLowerCase();
+
+    if (!groupMap.has(key)) {
+      const rowCurrency =
+        String(customer?.currency || customer?.baseCurrency || "SOS").trim() ||
+        "SOS";
+      groupMap.set(key, {
+        values: {
+          ...customerContext,
+          location: "",
+          currency: rowCurrency,
+          "invoice-count": 0,
+          sales: 0,
+          "sales-with-tax": 0,
+          "sales-without-discount": 0,
+          "sales-fcy": 0,
+          "sales-with-tax-fcy": 0,
+          "sales-without-discount-fcy": 0,
+          "invoice-amount": 0,
+          "invoice-amount-fcy": 0,
+          "credit-note-amount": 0,
+          "credit-note-amount-fcy": 0,
+        },
+      });
+      if (!currency) currency = rowCurrency;
+    }
+
+    return groupMap.get(key);
+  };
+
+  for (const customer of customers || []) {
+    ensureCustomerRow(customer);
+  }
+
   for (const item of rows || []) {
     const source = item?.source || "invoice";
     const row = item?.row || {};
@@ -1140,33 +1275,22 @@ const buildRows = (
 
     if (!matchesMoreFilters(baseValues, moreFilters)) continue;
 
-    const key = String(
-      baseValues["customer-id"] || baseValues.name || "unassigned",
-    )
-      .trim()
-      .toLowerCase();
-    if (!groupMap.has(key)) {
-      groupMap.set(key, {
-        values: {
-          ...baseValues,
-          "invoice-count": 0,
-          sales: 0,
-          "sales-with-tax": 0,
-          "sales-without-discount": 0,
-          "sales-fcy": 0,
-          "sales-with-tax-fcy": 0,
-          "sales-without-discount-fcy": 0,
-          "invoice-amount": 0,
-          "invoice-amount-fcy": 0,
-          "credit-note-amount": 0,
-          "credit-note-amount-fcy": 0,
-        },
-      });
-      if (!currency) currency = rowCurrency;
-    }
-
-    const target = groupMap.get(key);
+    const target = ensureCustomerRow(customer, fallbackName);
     const amounts = getTransactionAmount(row, source);
+    target.values.location =
+      location || String(target.values.location || "").trim();
+    target.values.name = baseValues.name || String(target.values.name || "");
+    target.values["company-name"] =
+      baseValues["company-name"] || String(target.values["company-name"] || "");
+    target.values["customer-id"] =
+      baseValues["customer-id"] || String(target.values["customer-id"] || "");
+    target.values["customer-number"] =
+      baseValues["customer-number"] ||
+      String(target.values["customer-number"] || "");
+    target.values["customer-email"] =
+      baseValues["customer-email"] || String(target.values["customer-email"] || "");
+    target.values["customer-type"] =
+      baseValues["customer-type"] || String(target.values["customer-type"] || "");
     target.values["invoice-count"] =
       asNumber(target.values["invoice-count"], 0) + 1;
     target.values.sales = asNumber(target.values.sales, 0) + amounts.sales;
@@ -1194,14 +1318,16 @@ const buildRows = (
       rowCurrency || String(target.values.currency || "");
   }
 
-  const groupedRows = [...groupMap.values()].sort((left, right) => {
-    const salesDelta =
-      asNumber(right.values.sales, 0) - asNumber(left.values.sales, 0);
-    if (salesDelta !== 0) return salesDelta;
-    return String(left.values.name || "").localeCompare(
-      String(right.values.name || ""),
-    );
-  });
+  const groupedRows = [...groupMap.values()]
+    .filter((item) => matchesMoreFilters(item.values, moreFilters))
+    .sort((left, right) => {
+      const salesDelta =
+        asNumber(right.values.sales, 0) - asNumber(left.values.sales, 0);
+      if (salesDelta !== 0) return salesDelta;
+      return String(left.values.name || "").localeCompare(
+        String(right.values.name || ""),
+      );
+    });
 
   return {
     rows: groupedRows,
@@ -2558,7 +2684,10 @@ export const getSalesByCustomerReport: express.RequestHandler = async (
     1,
     Number(req.query.compareCount ?? req.query.compare_count ?? 1) || 1,
   );
-  const entities = parseEntities(req.query.entities ?? req.query.entity_list);
+  const entitiesQuery = req.query.entities ?? req.query.entity_list;
+  const entities = String(entitiesQuery ?? "").trim()
+    ? parseEntities(entitiesQuery)
+    : ["invoice", "credit-note", "sales-receipt"];
   const moreFilters = parseMoreFilters(
     req.query.moreFilters ?? req.query.more_filters ?? req.query.filter_rows,
   );
@@ -2622,6 +2751,188 @@ export const getSalesByCustomerReport: express.RequestHandler = async (
         compareCount,
         entities,
         moreFilters,
+      },
+    },
+  });
+};
+
+export const getTimeToGetPaidReport: express.RequestHandler = async (
+  req,
+  res,
+) => {
+  const orgId = requireOrgId(req, res);
+  if (!orgId) return;
+
+  const range = getDateRangeFromQuery(req);
+
+  const [customers, invoices, payments] = await Promise.all([
+    Customer.find({ organizationId: orgId }).lean(),
+    Invoice.find({ organizationId: orgId }).lean(),
+    PaymentReceived.find({ organizationId: orgId }).lean(),
+  ]);
+
+  const invoiceById = new Map<string, any>();
+  const invoiceByNumber = new Map<string, any>();
+  const rows = new Map<
+    string,
+    {
+      name: string;
+      total: number;
+      bucket0to15: number;
+      bucket16to30: number;
+      bucket31to45: number;
+      bucketAbove45: number;
+    }
+  >();
+
+  const ensureRow = (key: string, name: string) => {
+    const normalizedKey = String(key || "").trim();
+    const normalizedName = String(name || "Unknown Customer").trim() || "Unknown Customer";
+    if (!rows.has(normalizedKey)) {
+      rows.set(normalizedKey, {
+        name: normalizedName,
+        total: 0,
+        bucket0to15: 0,
+        bucket16to30: 0,
+        bucket31to45: 0,
+        bucketAbove45: 0,
+      });
+    } else {
+      const current = rows.get(normalizedKey)!;
+      if (!current.name && normalizedName) current.name = normalizedName;
+    }
+    return rows.get(normalizedKey)!;
+  };
+
+  (customers || []).forEach((customer: any) => {
+    const customerId = String(customer?._id || customer?.id || customer?.customerId || "").trim();
+    const customerName =
+      String(
+        customer?.displayName ||
+          customer?.companyName ||
+          customer?.name ||
+          customer?.customerName ||
+          "",
+      ).trim() || "Unknown Customer";
+    const key = customerId || normalizeText(customerName) || customerName;
+    ensureRow(key, customerName);
+  });
+
+  (invoices || []).forEach((invoice: any) => {
+    const invoiceId = String(invoice?._id || invoice?.id || "").trim();
+    const invoiceNumber = String(invoice?.invoiceNumber || "").trim().toLowerCase();
+    if (invoiceId) invoiceById.set(invoiceId, invoice);
+    if (invoiceNumber) invoiceByNumber.set(invoiceNumber, invoice);
+  });
+
+  for (const payment of payments || []) {
+    const paymentDate = asDate(
+      (payment as any)?.date || (payment as any)?.paymentDate || (payment as any)?.createdAt,
+    );
+    if (!paymentDate || paymentDate < range.start || paymentDate > range.end) continue;
+
+    const allocations = getPaymentAllocationEntries(payment);
+    if (allocations.length === 0) continue;
+
+    for (const allocation of allocations) {
+      const invoice =
+        invoiceById.get(String(allocation.invoiceId || "").trim()) ||
+        invoiceByNumber.get(String(allocation.invoiceNumber || "").trim().toLowerCase()) ||
+        allocation.invoice ||
+        null;
+
+      const invoiceDate = asDate(
+        allocation.invoiceDate ||
+          allocation.date ||
+          allocation.appliedAt ||
+          invoice?.invoiceDate ||
+          invoice?.date ||
+          invoice?.createdAt ||
+          invoice?.dueDate,
+      );
+      if (!invoiceDate) continue;
+
+      const amount = asNumber(allocation.amount, 0);
+      if (amount <= 0) continue;
+
+      const customerId = String(
+        invoice?.customerId ||
+          invoice?.customer?._id ||
+          invoice?.customer?.id ||
+          invoice?.customer ||
+          payment?.customerId ||
+          "",
+      ).trim();
+      const customerName =
+        String(
+          invoice?.customerName ||
+            invoice?.customer?.displayName ||
+            invoice?.customer?.companyName ||
+            invoice?.customer?.name ||
+            payment?.customerName ||
+            "",
+        ).trim() || "Unknown Customer";
+      const key = customerId || normalizeText(customerName) || customerName;
+      const row = ensureRow(key, customerName);
+
+      const days = Math.max(
+        0,
+        Math.round((paymentDate.getTime() - invoiceDate.getTime()) / (1000 * 60 * 60 * 24)),
+      );
+      const bucket = getTimeToGetPaidBucketLabel(days);
+
+      row.total += amount;
+      if (bucket === "0 - 15 Days") row.bucket0to15 += amount;
+      else if (bucket === "16 - 30 Days") row.bucket16to30 += amount;
+      else if (bucket === "31 - 45 Days") row.bucket31to45 += amount;
+      else row.bucketAbove45 += amount;
+    }
+  }
+
+  const sortedRows = [...rows.values()]
+    .filter((row) => row.total > 0)
+    .sort(
+    (left, right) => right.total - left.total || left.name.localeCompare(right.name),
+    );
+  const grandTotal = sortedRows.reduce((sum, row) => sum + row.total, 0);
+  const total0to15 = sortedRows.reduce((sum, row) => sum + row.bucket0to15, 0);
+  const total16to30 = sortedRows.reduce((sum, row) => sum + row.bucket16to30, 0);
+  const total31to45 = sortedRows.reduce((sum, row) => sum + row.bucket31to45, 0);
+  const totalAbove45 = sortedRows.reduce((sum, row) => sum + row.bucketAbove45, 0);
+
+  return res.json({
+    success: true,
+    data: {
+      title: "Time to Get Paid",
+      subtitle: `As of ${range.end.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })}`,
+      columns: [
+        "Customer Name",
+        "0 - 15 Days",
+        "16 - 30 Days",
+        "31 - 45 Days",
+        "Above 45 Days",
+      ],
+      rows: sortedRows.map((row) => [
+        row.name,
+        formatPercent(row.total > 0 ? (row.bucket0to15 / row.total) * 100 : 0),
+        formatPercent(row.total > 0 ? (row.bucket16to30 / row.total) * 100 : 0),
+        formatPercent(row.total > 0 ? (row.bucket31to45 / row.total) * 100 : 0),
+        formatPercent(row.total > 0 ? (row.bucketAbove45 / row.total) * 100 : 0),
+      ]),
+      totals: [
+        "Total",
+        formatPercent(grandTotal > 0 ? (total0to15 / grandTotal) * 100 : 0),
+        formatPercent(grandTotal > 0 ? (total16to30 / grandTotal) * 100 : 0),
+        formatPercent(grandTotal > 0 ? (total31to45 / grandTotal) * 100 : 0),
+        formatPercent(grandTotal > 0 ? (totalAbove45 / grandTotal) * 100 : 0),
+      ],
+      appliedFilters: {
+        fromDate: range.start.toISOString(),
+        toDate: range.end.toISOString(),
       },
     },
   });

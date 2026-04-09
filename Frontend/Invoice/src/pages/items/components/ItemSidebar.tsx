@@ -102,7 +102,8 @@ export default function ItemSidebar({
                                 if (selectedIds.length === filteredItems.length) setSelectedIds([]);
                                 else setSelectedIds(filteredItems.map(it => it.id || it._id || ""));
                             }}
-                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            className="h-4 w-4 rounded border-gray-300 focus:ring-0"
+                            style={{ accentColor: "#1b5e6a" }}
                         />
                         {(canCreate || canEdit || canDelete) && (
                             <div className="relative" ref={bulkDropdownRef}>
@@ -328,7 +329,8 @@ export default function ItemSidebar({
                             <div className="flex items-start gap-3">
                                 <input
                                     type="checkbox"
-                                    className="h-4 w-4 rounded border-gray-300 pointer-events-auto mt-1 accent-blue-600"
+                                    className="h-4 w-4 rounded border-gray-300 pointer-events-auto mt-1 focus:ring-0"
+                                    style={{ accentColor: "#1b5e6a" }}
                                     checked={isChecked}
                                     onChange={(e) => {
                                         e.stopPropagation();

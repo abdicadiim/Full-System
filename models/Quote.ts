@@ -40,6 +40,8 @@ const QuoteSchema = new mongoose.Schema(
 
     customerId: { type: String, required: true, index: true },
     customerName: { type: String, required: true, index: true },
+    billingAddress: { type: String, default: "" },
+    shippingAddress: { type: String, default: "" },
     
     salespersonId: { type: String, default: "" },
     salespersonName: { type: String, default: "" },

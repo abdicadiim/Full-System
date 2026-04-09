@@ -92,7 +92,7 @@ export function useNewQuoteSalesProject(controller: any) {
   setIsRefreshingCustomersQuickAction, isRefreshingProjectsQuickAction, setIsRefreshingProjectsQuickAction, isReloadingCustomerFrame, setIsReloadingCustomerFrame, isReloadingProjectFrame, setIsReloadingProjectFrame, isAutoSelectingCustomerFromQuickAction,
   setIsAutoSelectingCustomerFromQuickAction, isAutoSelectingProjectFromQuickAction, setIsAutoSelectingProjectFromQuickAction, isSalespersonDropdownOpen, setIsSalespersonDropdownOpen, salespersonSearch, setSalespersonSearch, selectedSalesperson,
   setSelectedSalesperson, isManageSalespersonsOpen, setIsManageSalespersonsOpen, manageSalespersonSearch, setManageSalespersonSearch, manageSalespersonMenuOpen, setManageSalespersonMenuOpen, selectedSalespersonIds,
-  setSelectedSalespersonIds, menuPosition, setMenuPosition, isNewSalespersonFormOpen, setIsNewSalespersonFormOpen, isAddContactPersonModalOpen, setIsAddContactPersonModalOpen, contactPersonData,
+  setSelectedSalespersonIds, menuPosition, setMenuPosition, isNewSalespersonFormOpen, setIsNewSalespersonFormOpen, editingSalespersonId, setEditingSalespersonId, isAddContactPersonModalOpen, setIsAddContactPersonModalOpen, contactPersonData,
   setContactPersonData, newSalespersonData, setNewSalespersonData, salespersons, setSalespersons, openItemDropdowns, setOpenItemDropdowns, itemSearches,
   setItemSearches, openTaxDropdowns, setOpenTaxDropdowns, isNewTaxQuickModalOpen, setIsNewTaxQuickModalOpen, newTaxTargetItemId, setNewTaxTargetItemId, taxSearches,
   setTaxSearches, selectedItemIds, setSelectedItemIds, itemDropdownRefs, taxDropdownRefs, taxOptionGroups, getFilteredTaxGroups, openItemMenuId,
@@ -147,7 +147,15 @@ export function useNewQuoteSalesProject(controller: any) {
       email.toLowerCase().includes(customerSearch.toLowerCase());
   });
 
+  const isSalespersonActive = (salesperson: any) => {
+    const status = String(salesperson?.status || "").toLowerCase().trim();
+    if (status === "inactive") return false;
+    if (salesperson?.isActive === false || salesperson?.active === false) return false;
+    return true;
+  };
+
   const filteredSalespersons = salespersons.filter(salesperson =>
+    isSalespersonActive(salesperson) &&
     salesperson.name.toLowerCase().includes(salespersonSearch.toLowerCase())
   );
 
@@ -155,6 +163,36 @@ export function useNewQuoteSalesProject(controller: any) {
     salesperson.name.toLowerCase().includes(manageSalespersonSearch.toLowerCase()) ||
     (salesperson.email && salesperson.email.toLowerCase().includes(manageSalespersonSearch.toLowerCase()))
   );
+
+  const refreshSalespersonsList = async () => {
+    try {
+      const salespersonsResponse = await salespersonsAPI.getAll();
+      if (salespersonsResponse && salespersonsResponse.success && salespersonsResponse.data) {
+        setSalespersons(salespersonsResponse.data);
+        return salespersonsResponse.data;
+      }
+    } catch (error) {
+      console.error("Error reloading salespersons:", error);
+    }
+    return null;
+  };
+
+  const handleStartNewSalesperson = () => {
+    setEditingSalespersonId(null);
+    setNewSalespersonData({ name: "", email: "" });
+    setIsNewSalespersonFormOpen(true);
+  };
+
+  const handleStartEditSalesperson = (salesperson: any) => {
+    const salespersonId = String(salesperson?.id || salesperson?._id || "").trim();
+    setEditingSalespersonId(salespersonId || null);
+    setNewSalespersonData({
+      name: String(salesperson?.name || ""),
+      email: String(salesperson?.email || "")
+    });
+    setIsNewSalespersonFormOpen(true);
+    setManageSalespersonMenuOpen(null);
+  };
 
   const handleNewSalespersonChange = (e) => {
     const { name, value } = e.target;
@@ -165,56 +203,117 @@ export function useNewQuoteSalesProject(controller: any) {
   };
 
   const handleSaveAndSelectSalesperson = async () => {
-    if (!newSalespersonData.name.trim()) {
-      alert("Please enter a name for the salesperson");
+    const trimmedName = String(newSalespersonData.name || "").trim();
+    const trimmedEmail = String(newSalespersonData.email || "").trim();
+    const normalizedName = trimmedName.toLowerCase();
+    const normalizedEmail = trimmedEmail.toLowerCase();
+    const editingId = String(editingSalespersonId || "").trim();
+
+    if (!trimmedName) {
+      toast.error("Please enter a name for the salesperson");
+      return;
+    }
+
+    const duplicateSalesperson = salespersons.find((sp: any) => {
+      const spId = String(sp.id || sp._id || "").trim();
+      if (editingId && spId === editingId) return false;
+      const existingName = String(sp.name || "").trim().toLowerCase();
+      const existingEmail = String(sp.email || "").trim().toLowerCase();
+      return (
+        (existingName && existingName === normalizedName) ||
+        (normalizedEmail && existingEmail && existingEmail === normalizedEmail)
+      );
+    });
+
+    if (duplicateSalesperson) {
+      const existingName = String(duplicateSalesperson.name || "").trim();
+      const existingEmail = String(duplicateSalesperson.email || "").trim();
+      if (existingName.toLowerCase() === normalizedName && normalizedName) {
+        toast.error(`A salesperson named "${trimmedName}" already exists.`);
+      } else if (normalizedEmail && existingEmail.toLowerCase() === normalizedEmail) {
+        toast.error(`A salesperson with email "${trimmedEmail}" already exists.`);
+      } else {
+        toast.error("This salesperson already exists.");
+      }
       return;
     }
 
     try {
-      // Save the new salesperson to backend
-      const response = await salespersonsAPI.create({
-        name: newSalespersonData.name.trim(),
-        email: newSalespersonData.email.trim() || "",
+      const payload = {
+        name: trimmedName,
+        email: trimmedEmail || "",
         phone: ""
-      });
+      };
 
-      if (response && response.success && response.data) {
-        const savedSalesperson = response.data;
+      const isEditing = Boolean(editingId);
+      const savedSalesperson = isEditing
+        ? await updateSalesperson(editingId, payload)
+        : await salespersonsAPI.create(payload).then((response: any) => {
+            if (response && response.success && response.data) {
+              return response.data;
+            }
+            throw new Error((response as any)?.message || "Failed to save salesperson");
+          });
 
-        // Reload salespersons from backend to get updated list
-        try {
-          const salespersonsResponse = await salespersonsAPI.getAll();
-          if (salespersonsResponse && salespersonsResponse.success && salespersonsResponse.data) {
-            setSalespersons(salespersonsResponse.data);
-          } else {
-            // Fallback: add to existing list
-            setSalespersons(prev => [...prev, savedSalesperson]);
-          }
-        } catch (error) {
-          console.error('Error reloading salespersons:', error);
-          // Fallback: add to existing list
-          setSalespersons(prev => [...prev, savedSalesperson]);
+      if (savedSalesperson) {
+        const savedSalespersonId = String(savedSalesperson.id || savedSalesperson._id || editingId || "").trim();
+
+        // Update local list immediately, then refresh in the background.
+        setSalespersons(prev => {
+          if (!isEditing) return [savedSalesperson, ...prev];
+          return prev.map(sp => {
+            const spId = String(sp.id || sp._id || "");
+            return spId === editingId ? savedSalesperson : sp;
+          });
+        });
+        void refreshSalespersonsList();
+
+        const currentSelectedSalespersonId = String(selectedSalesperson?.id || selectedSalesperson?._id || "");
+        const quoteSelectedSalespersonId = String(formData.salespersonId || "");
+
+        // Keep the quote selection in sync when editing the current salesperson.
+        if (!isEditing) {
+          setSelectedSalesperson(savedSalesperson);
+          setFormData(prev => ({
+            ...prev,
+            salesperson: savedSalesperson.name,
+            salespersonId: savedSalesperson.id || savedSalesperson._id || null
+          }));
+        } else if (currentSelectedSalespersonId && currentSelectedSalespersonId === editingId) {
+          setSelectedSalesperson(savedSalesperson);
+          setFormData(prev => ({
+            ...prev,
+            salesperson: savedSalesperson.name,
+            salespersonId: savedSalesperson.id || savedSalesperson._id || prev.salespersonId || null
+          }));
+        } else if (quoteSelectedSalespersonId === editingId) {
+          setFormData(prev => ({
+            ...prev,
+            salesperson: savedSalesperson.name,
+            salespersonId: savedSalespersonId || prev.salespersonId || null
+          }));
         }
-
-        // Select the new salesperson
-        setSelectedSalesperson(savedSalesperson);
-        setFormData(prev => ({
-          ...prev,
-          salesperson: savedSalesperson.name
-        }));
 
         // Reset form and close
         setNewSalespersonData({ name: "", email: "" });
+        setEditingSalespersonId(null);
         setIsNewSalespersonFormOpen(false);
         setIsManageSalespersonsOpen(false);
         setIsSalespersonDropdownOpen(false);
+        toast.success(isEditing ? "Salesperson updated successfully" : "Salesperson added successfully");
       } else {
-        alert("Failed to save salesperson: " + ((response as any)?.message || "Unknown error"));
+        toast.error("Failed to save salesperson: Unknown error");
       }
     } catch (error) {
       console.error("Error saving salesperson:", error);
-      alert("Error saving salesperson: " + (error.message || "Unknown error"));
+      toast.error("Error saving salesperson: " + (error.message || "Unknown error"));
     }
+  };
+
+  const handleCancelNewSalesperson = () => {
+    setNewSalespersonData({ name: "", email: "" });
+    setEditingSalespersonId(null);
+    setIsNewSalespersonFormOpen(false);
   };
 
   const handleDeleteSalesperson = async (salespersonId) => {
@@ -248,18 +347,214 @@ export function useNewQuoteSalesProject(controller: any) {
             salesperson: ""
           }));
         }
+        if (editingSalespersonId && editingSalespersonId === salespersonId) {
+          handleCancelNewSalesperson();
+        }
       } else {
-        alert("Failed to delete salesperson: " + ((response as any)?.message || "Unknown error"));
+        toast.error("Failed to delete salesperson: " + ((response as any)?.message || "Unknown error"));
       }
     } catch (error) {
       console.error("Error deleting salesperson:", error);
-      alert("Error deleting salesperson: " + (error.message || "Unknown error"));
+      toast.error("Error deleting salesperson: " + (error.message || "Unknown error"));
     }
   };
 
-  const handleCancelNewSalesperson = () => {
-    setNewSalespersonData({ name: "", email: "" });
-    setIsNewSalespersonFormOpen(false);
+  const applySalespersonStatusLocally = (ids: string[], nextStatus: "active" | "inactive") => {
+    const normalizedIds = new Set(ids.map((id) => String(id || "").trim()).filter(Boolean));
+    const isActive = nextStatus === "active";
+    setSalespersons(prev => prev.map((sp: any) => {
+      const spId = String(sp.id || sp._id || "").trim();
+      if (!normalizedIds.has(spId)) return sp;
+      return {
+        ...sp,
+        status: nextStatus,
+        active: isActive,
+        isActive
+      };
+    }));
+  };
+
+  const handleSetSalespersonStatus = async (salespersonId: string, nextStatus: "active" | "inactive") => {
+    const normalizedId = String(salespersonId || "").trim();
+    if (!normalizedId) return;
+
+    const salesperson = salespersons.find((sp: any) => String(sp.id || sp._id || "") === normalizedId);
+    if (!salesperson) {
+      toast.error("Salesperson not found");
+      return;
+    }
+
+    const previousSalespersons = salespersons;
+    const previousSelectedSalesperson = selectedSalesperson;
+    const previousSalespersonName = formData.salesperson;
+    const previousSalespersonId = formData.salespersonId;
+    const nextIsActive = nextStatus === "active";
+
+    setSalespersons(prev => prev.map((sp: any) => {
+      const spId = String(sp.id || sp._id || "");
+      if (spId !== normalizedId) return sp;
+      return {
+        ...sp,
+        status: nextStatus,
+        active: nextIsActive,
+        isActive: nextIsActive
+      };
+    }));
+
+    if (selectedSalesperson && String(selectedSalesperson.id || selectedSalesperson._id || "") === normalizedId) {
+      setSelectedSalesperson({
+        ...selectedSalesperson,
+        status: nextStatus,
+        active: nextIsActive,
+        isActive: nextIsActive
+      });
+    }
+
+    if (String(formData.salespersonId || "") === normalizedId) {
+      setFormData((prev: any) => ({
+        ...prev,
+        salesperson: String(salesperson.name || prev.salesperson || ""),
+        salespersonId: String(salesperson.id || salesperson._id || prev.salespersonId || "")
+      }));
+    }
+
+    setManageSalespersonMenuOpen(null);
+    toast.success(nextStatus === "inactive" ? "Salesperson marked inactive" : "Salesperson marked active");
+
+    try {
+      const response = await updateSalesperson(normalizedId, {
+        name: String(salesperson.name || "").trim(),
+        email: String(salesperson.email || "").trim(),
+        phone: String((salesperson as any).phone || ""),
+        status: nextStatus
+      });
+
+      if (response) {
+        const updatedSalesperson = {
+          ...salesperson,
+          ...response,
+          status: nextStatus
+        };
+
+        if (selectedSalesperson && String(selectedSalesperson.id || selectedSalesperson._id || "") === normalizedId) {
+          setSelectedSalesperson(updatedSalesperson);
+        }
+
+        if (String(formData.salespersonId || "") === normalizedId) {
+          setFormData((prev: any) => ({
+            ...prev,
+            salesperson: String(updatedSalesperson.name || prev.salesperson || ""),
+            salespersonId: String(updatedSalesperson.id || updatedSalesperson._id || prev.salespersonId || "")
+          }));
+        }
+
+        void refreshSalespersonsList();
+        return;
+      }
+
+      setSalespersons(previousSalespersons);
+      setSelectedSalesperson(previousSelectedSalesperson);
+      setFormData((prev: any) => ({
+        ...prev,
+        salesperson: previousSalespersonName,
+        salespersonId: previousSalespersonId
+      }));
+      void refreshSalespersonsList();
+      toast.error("Failed to update salesperson status");
+    } catch (error: any) {
+      console.error("Error updating salesperson status:", error);
+      setSalespersons(previousSalespersons);
+      setSelectedSalesperson(previousSelectedSalesperson);
+      setFormData((prev: any) => ({
+        ...prev,
+        salesperson: previousSalespersonName,
+        salespersonId: previousSalespersonId
+      }));
+      void refreshSalespersonsList();
+      toast.error("Error updating salesperson: " + (error?.message || "Unknown error"));
+    }
+  };
+
+  const handleBulkSalespersonStatusChange = async (nextStatus: "active" | "inactive") => {
+    const ids = Array.from(new Set(
+      selectedSalespersonIds
+        .map((id: any) => String(id || "").trim())
+        .filter(Boolean)
+    ));
+
+    if (ids.length === 0) {
+      toast.error("Please select at least one salesperson");
+      return;
+    }
+
+    const previousSalespersons = salespersons;
+    applySalespersonStatusLocally(ids, nextStatus);
+    setSelectedSalespersonIds([]);
+    setManageSalespersonMenuOpen(null);
+    toast.success(
+      nextStatus === "inactive"
+        ? `${ids.length} salesperson${ids.length === 1 ? "" : "s"} marked inactive`
+        : `${ids.length} salesperson${ids.length === 1 ? "" : "s"} marked active`
+    );
+
+    try {
+      await Promise.all(ids.map(async (salespersonId) => {
+        const salesperson = salespersons.find((sp: any) => String(sp.id || sp._id || "") === salespersonId);
+        if (!salesperson) return;
+        await updateSalesperson(salespersonId, {
+          name: String(salesperson.name || "").trim(),
+          email: String(salesperson.email || "").trim(),
+          phone: String((salesperson as any).phone || ""),
+          status: nextStatus
+        });
+      }));
+
+      void refreshSalespersonsList();
+    } catch (error: any) {
+      console.error("Error updating salesperson statuses:", error);
+      setSalespersons(previousSalespersons);
+      void refreshSalespersonsList();
+      toast.error("Error updating salespersons: " + (error?.message || "Unknown error"));
+    }
+  };
+
+  const handleBulkDeleteSalespersons = async () => {
+    const ids = Array.from(new Set(
+      selectedSalespersonIds
+        .map((id: any) => String(id || "").trim())
+        .filter(Boolean)
+    ));
+
+    if (ids.length === 0) {
+      toast.error("Please select at least one salesperson");
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to delete ${ids.length} salesperson${ids.length === 1 ? "" : "s"}?`)) {
+      return;
+    }
+
+    try {
+      await Promise.all(ids.map((salespersonId) => salespersonsAPI.delete(salespersonId)));
+      await refreshSalespersonsList();
+      setSelectedSalespersonIds([]);
+      setManageSalespersonMenuOpen(null);
+
+      const selectedId = String(selectedSalesperson?.id || selectedSalesperson?._id || "");
+      if (ids.includes(selectedId)) {
+        setSelectedSalesperson(null);
+        setFormData((prev: any) => ({
+          ...prev,
+          salesperson: "",
+          salespersonId: null
+        }));
+      }
+
+      toast.success(`${ids.length} salesperson${ids.length === 1 ? "" : "s"} deleted`);
+    } catch (error: any) {
+      console.error("Error deleting salespersons:", error);
+      toast.error("Error deleting salespersons: " + (error?.message || "Unknown error"));
+    }
   };
 
   const handleOpenReportingTagsModal = (itemId: string | number) => {
@@ -501,7 +796,7 @@ export function useNewQuoteSalesProject(controller: any) {
 
 
   return {
-    handleSalespersonSelect, filteredCustomers, filteredSalespersons, filteredManageSalespersons, handleNewSalespersonChange, handleSaveAndSelectSalesperson, handleDeleteSalesperson, handleCancelNewSalesperson, handleOpenReportingTagsModal, handleSaveReportingTags, getItemReportingTagsSummaryLabel, getFilteredItems,
+    handleSalespersonSelect, filteredCustomers, filteredSalespersons, filteredManageSalespersons, handleNewSalespersonChange, handleStartNewSalesperson, handleStartEditSalesperson, handleSaveAndSelectSalesperson, handleDeleteSalesperson, handleCancelNewSalesperson, handleSetSalespersonStatus, handleBulkSalespersonStatusChange, handleBulkDeleteSalespersons, handleOpenReportingTagsModal, handleSaveReportingTags, getItemReportingTagsSummaryLabel, getFilteredItems,
     resolveItemTaxId, getFilteredTaxes, parseTaxRate, getTaxBySelection, getTaxMetaFromItem, isTaxInclusiveMode, defaultTaxId, calculateLineTaxAmount, computeDiscountAmount, applyDiscountShare, taxBreakdown
   };
 }

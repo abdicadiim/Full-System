@@ -1144,7 +1144,7 @@ const ALL_REPORTS: ReportDefinition[] = [
   {
     id: "expenses-by-category",
     categoryId: "purchases-expenses",
-    name: "Expenses by Category",
+    name: "Expense Summary by Category",
     summary: "Category-level expense summary and totals.",
     howItHelps: "Find major spend drivers and optimize cost controls.",
     functionSupport: support("filter", "sort", "share", "export", "print"),
@@ -1359,7 +1359,7 @@ const ALL_REPORTS: ReportDefinition[] = [
   {
     id: "tds-receivables",
     categoryId: "taxes",
-    name: "TDS Receivables",
+    name: "TDS Receivables Summary",
     summary: "Receivable tax balances and withholding-related amounts.",
     howItHelps: "Track tax receivables due from deductions and collections.",
     functionSupport: support(

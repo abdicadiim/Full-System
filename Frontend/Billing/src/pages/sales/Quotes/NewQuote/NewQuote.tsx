@@ -6141,11 +6141,15 @@ const NewQuote = () => {
                     </div>
 
                     {/* Sales Description */}
-                    <div className="new-item-field-group">
+                    <div
+                      className="new-item-field-group new-item-field-group-description"
+                      style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: "6px" }}
+                    >
                       <label className="new-item-label">Description</label>
                       <textarea
                         name="salesDescription"
                         className="new-item-textarea"
+                        style={{ width: "100%", minWidth: 0 }}
                         value={newItemData.salesDescription}
                         onChange={handleNewItemChange}
                         rows={3}
@@ -6230,11 +6234,15 @@ const NewQuote = () => {
                     </div>
 
                     {/* Purchase Description */}
-                    <div className="new-item-field-group">
+                    <div
+                      className="new-item-field-group new-item-field-group-description"
+                      style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: "6px" }}
+                    >
                       <label className="new-item-label">Description</label>
                       <textarea
                         name="purchaseDescription"
                         className="new-item-textarea"
+                        style={{ width: "100%", minWidth: 0 }}
                         value={newItemData.purchaseDescription}
                         onChange={handleNewItemChange}
                         rows={3}
@@ -8245,7 +8253,7 @@ const NewQuote = () => {
       {/* Manage Salespersons Modal */}
       {
         isManageSalespersonsOpen && createPortal(
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10000]" onClick={() => setIsManageSalespersonsOpen(false)}>
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10000]">
             <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
               {/* Modal Header */}
               <div className="flex items-center justify-between p-6 border-b border-gray-200">

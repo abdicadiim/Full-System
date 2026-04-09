@@ -2,17 +2,20 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
-  CalendarDays,
+  Check,
   ChevronDown,
+  Columns3,
   Filter,
+  Menu,
   RefreshCw,
-  Table2,
   X,
 } from "lucide-react";
 import ReportCustomizeColumnsModal, {
   type ColumnGroup,
 } from "./ReportCustomizeColumnsModal";
 import { getCategoryById, getReportById } from "./reportsCatalog";
+import { reportsAPI } from "../../services/api";
+import { useSettings } from "../../lib/settings/SettingsContext";
 import {
   getInvoices,
   getPayments,
@@ -444,16 +447,24 @@ export default function TimeToGetPaidReportPage() {
     }
   }, []);
 
-  const [selectedDateRange, setSelectedDateRange] = useState<DateRangePreset>("This Month");
+  const [selectedDateRange, setSelectedDateRange] = useState<DateRangePreset>("Today");
   const [isDateRangeOpen, setIsDateRangeOpen] = useState(false);
-  const [dateRangeDraftKey, setDateRangeDraftKey] = useState<DateRangePreset>("This Month");
+  const [dateRangeDraftKey, setDateRangeDraftKey] = useState<DateRangePreset>("Today");
   const [customDateRange, setCustomDateRange] = useState<RangeDate>(() => getDefaultCustomRange());
   const [customDateRangeDraft, setCustomDateRangeDraft] = useState<RangeDate>(() => getDefaultCustomRange());
   const [selectedColumns, setSelectedColumns] = useState<string[]>(REPORT_COLUMNS);
   const [customizeColumnsOpen, setCustomizeColumnsOpen] = useState(false);
   const [preview, setPreview] = useState<PreviewTableConfig | null>(null);
+  const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [groupByKey, setGroupByKey] = useState<"none">("none");
+  const [groupByOpen, setGroupByOpen] = useState(false);
+  const { settings } = useSettings();
+  const organizationName = String(
+    settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "",
+  ).trim();
 
   const selectedRangeBounds = useMemo(
     () => getDateRangeBounds(selectedDateRange, customDateRange),
@@ -499,33 +510,45 @@ export default function TimeToGetPaidReportPage() {
 
     const load = async () => {
       setIsLoading(true);
+      setError("");
       try {
-        const [payments, invoices] = await Promise.all([getPayments(), getInvoices()]);
+        const response = await reportsAPI.getTimeToGetPaid({
+          fromDate: selectedRangeBounds.start.toISOString(),
+          toDate: selectedRangeBounds.end.toISOString(),
+        });
         if (cancelled) return;
         if (debugEnabled) {
           console.debug("[reports][time-to-get-paid] load", {
-            payments: payments.length,
-            invoices: invoices.length,
             range: selectedDateRange,
             bounds: {
               start: selectedRangeBounds.start.toISOString(),
               end: selectedRangeBounds.end.toISOString(),
             },
+            rows: Array.isArray(response?.data?.rows) ? response.data.rows.length : 0,
+            columns: Array.isArray(response?.data?.columns) ? response.data.columns.length : 0,
           });
         }
-        const nextPreview = buildPreview(payments, invoices, selectedRangeBounds, selectedDateRange, debugEnabled);
+        setPreview(
+          response?.data
+            ? {
+                title: String(response.data.title || "Time to Get Paid"),
+                subtitle: String(response.data.subtitle || dateLabel),
+                columns: Array.isArray(response.data.columns) ? response.data.columns : REPORT_COLUMNS,
+                rows: Array.isArray(response.data.rows) ? response.data.rows : [],
+                totals: Array.isArray(response.data.totals) ? response.data.totals : undefined,
+              }
+            : null,
+        );
         if (debugEnabled) {
           console.debug("[reports][time-to-get-paid] load result", {
-            hasPreview: Boolean(nextPreview),
-            rows: nextPreview?.rows.length || 0,
-            columns: nextPreview?.columns.length || 0,
+            hasPreview: Boolean(response?.data),
             range: selectedDateRange,
           });
         }
-        setPreview(nextPreview);
       } catch (error) {
         if (cancelled) return;
         setPreview(null);
+        setError(error instanceof Error ? error.message : "Failed to load Time to Get Paid report");
         console.error("Failed to load Time to Get Paid report", error);
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -538,7 +561,7 @@ export default function TimeToGetPaidReportPage() {
     return () => {
       cancelled = true;
     };
-  }, [refreshTick, selectedRangeBounds.end.getTime(), selectedRangeBounds.start.getTime(), selectedDateRange]);
+  }, [dateLabel, debugEnabled, refreshTick, selectedRangeBounds.end.getTime(), selectedRangeBounds.start.getTime(), selectedDateRange]);
 
   if (!category || !report) {
     return <Navigate to="/reports" replace />;
@@ -565,27 +588,38 @@ export default function TimeToGetPaidReportPage() {
   return (
     <div className="relative min-h-[calc(100vh-64px)] pt-3">
       <div className="mx-auto w-full px-3 pb-6">
-        <section className="rounded-[16px] border border-[#d7dce7] bg-white shadow-sm">
+        <section className="relative overflow-visible rounded-[18px] border border-[#d7dce7] bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3">
             <div className="min-w-0">
-              <p className="text-[14px] font-medium leading-none text-[#5a6781]">{categoryDisplayName}</p>
-              <h1 className="mt-1 flex flex-wrap items-center gap-2 text-[18px] font-semibold leading-tight text-[#0f172a]">
-                <span>{reportDisplayName}</span>
-                <span className="text-[14px] font-normal text-[#0f172a]">{dateLabel}</span>
-              </h1>
+              <div className="mb-1 text-[14px] font-medium leading-none text-[#1d6d79]">
+                {categoryDisplayName}
+              </div>
+              <div className="flex min-w-0 items-baseline gap-2">
+                <button
+                  type="button"
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-[#d4d9e4] bg-white text-[#334155] hover:bg-[#f8fafc]"
+                  aria-label="Open reports menu"
+                >
+                  <Menu size={15} />
+                </button>
+                <div className="flex min-w-0 items-baseline gap-2">
+                  <h1 className="truncate text-[24px] font-semibold leading-tight text-[#0f172a]">
+                    {reportDisplayName}
+                  </h1>
+                  <span className="truncate text-[14px] font-normal text-[#475569]">
+                    {dateLabel}
+                  </span>
+                </div>
+              </div>
             </div>
 
             <div className="flex shrink-0 items-center gap-2">
               <button
                 type="button"
-                onClick={() => setCustomizeColumnsOpen(true)}
-                className="inline-flex h-8 items-center gap-1 rounded border border-[#d4d9e4] bg-white px-3 text-sm font-medium text-[#156372] hover:bg-[#156372]/10"
+                onClick={() => setExportOpen((current) => !current)}
+                className="inline-flex h-8 items-center gap-1 rounded border border-[#d4d9e4] bg-white px-3 text-sm font-medium text-[#1e293b] hover:bg-[#f8fafc]"
               >
-                <Table2 size={14} />
-                Customize Report Columns
-                <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#dff1ef] px-1.5 text-[11px] font-semibold text-[#156372]">
-                  {visiblePreviewColumns.length}
-                </span>
+                Export <ChevronDown size={14} />
               </button>
               <button
                 type="button"
@@ -593,7 +627,7 @@ export default function TimeToGetPaidReportPage() {
                   setRefreshTick((current) => current + 1);
                   toast.success(`Report refreshed: ${reportDisplayName}`);
                 }}
-                className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] text-[#156372] hover:bg-[#156372]/10"
+                className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]"
                 aria-label="Refresh report"
               >
                 <RefreshCw size={15} />
@@ -611,39 +645,19 @@ export default function TimeToGetPaidReportPage() {
 
           <div
             ref={filtersRef}
-            className="relative flex flex-wrap items-center gap-2 border-t border-[#e6e9f0] px-4 py-2"
+            className="relative border-t border-[#e6e9f0] px-4 py-2"
           >
-            <span className="inline-flex items-center gap-1 text-sm text-[#334155]">
-              <Filter size={14} />
-              Filters :
-            </span>
-
             <button
               type="button"
               onClick={openDateRangePicker}
-              className={`inline-flex h-8 items-center gap-1 rounded border px-3 text-sm transition-colors ${
-                isDateRangeOpen
-                  ? "border-[#156372] bg-white text-[#156372] shadow-sm"
-                  : "border-[#cfd6e4] bg-white text-[#334155] hover:border-[#156372] hover:text-[#156372]"
-              }`}
+              className="inline-flex items-center gap-1 text-sm font-medium text-[#1d4ed8] hover:underline"
             >
-              Date Range : <span className="font-medium">{selectedDateRange === "Custom" ? "Custom" : selectedDateRange}</span>
-              <ChevronDown size={14} />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setRefreshTick((current) => current + 1);
-                toast.success(`Report refreshed: ${reportDisplayName}`);
-              }}
-              className="inline-flex h-8 items-center gap-1 rounded bg-[#156372] px-4 text-sm font-semibold text-white hover:bg-[#0f4f5b]"
-            >
-              <CalendarDays size={14} /> Run Report
+              <Filter size={14} />
+              Apply Filter
             </button>
 
             {isDateRangeOpen ? (
-              <div className="absolute left-12 top-[calc(100%+8px)] z-30 w-[280px] overflow-hidden rounded-[10px] border border-[#d7dce7] bg-white shadow-[0_10px_30px_rgba(15,23,42,0.18)]">
+              <div className="absolute left-4 top-[calc(100%+8px)] z-30 w-[280px] overflow-hidden rounded-[10px] border border-[#d7dce7] bg-white shadow-[0_10px_30px_rgba(15,23,42,0.18)]">
                 <div className="max-h-[300px] overflow-auto p-1">
                   {DATE_RANGE_PRESETS.map((preset) => {
                     const isActive = selectedDateRange === preset;
@@ -740,75 +754,113 @@ export default function TimeToGetPaidReportPage() {
               </div>
             ) : null}
           </div>
-        </section>
 
-        <section className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[16px] border border-[#d7dce7] bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-[#e8edf5] px-4 py-3">
-            <h2 className="text-[16px] font-semibold text-[#0f172a]">Report Data</h2>
-            <span className="text-sm text-[#64748b]">{visiblePreviewColumns.length} columns</span>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-auto">
-            {isLoading ? (
-              <div className="mx-auto max-w-5xl p-4">
-                <div className="animate-pulse text-center">
-                  <div className="mx-auto h-6 w-56 rounded bg-slate-200" />
-                  <div className="mx-auto mt-3 h-4 w-40 rounded bg-slate-100" />
-                </div>
-
-                <div className="mt-6 overflow-hidden rounded-[12px] border border-[#e8edf5] bg-white">
-                  <div className="border-b border-[#e8edf5] bg-[#fafbfe] px-4 py-3">
-                    <div className="grid grid-cols-5 gap-3">
-                      {Array.from({ length: 5 }).map((_, index) => (
-                        <div key={`skeleton-head-${index}`} className="h-3 rounded bg-slate-200/80" />
-                      ))}
-                    </div>
+          <div className="border-t border-[#eef2f7] px-4 py-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setGroupByOpen((current) => !current)}
+                  className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <Columns3 size={14} className="text-[#64748b]" />
+                    Group By :
+                    <strong className="text-[#0f172a]">{groupByKey === "none" ? "None" : "None"}</strong>
+                  </span>
+                  <ChevronDown size={14} />
+                </button>
+                {groupByOpen ? (
+                  <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-[220px] rounded-lg border border-[#d7dce7] bg-white p-2 shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGroupByKey("none");
+                        setGroupByOpen(false);
+                      }}
+                      className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-[#f8fafc]"
+                    >
+                      <span>None</span>
+                      {groupByKey === "none" ? <Check size={14} className="text-[#64748b]" /> : null}
+                    </button>
                   </div>
-                  <div className="space-y-0">
-                    {Array.from({ length: 8 }).map((_, rowIndex) => (
-                      <div key={`skeleton-row-${rowIndex}`} className="grid grid-cols-5 gap-3 border-b border-[#edf1f7] px-4 py-4">
-                        {Array.from({ length: 5 }).map((__, cellIndex) => (
-                          <div
-                            key={`skeleton-cell-${rowIndex}-${cellIndex}`}
-                            className={`h-3 rounded bg-slate-100 ${cellIndex === 0 ? "w-3/4" : "w-11/12"}`}
-                          />
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                ) : null}
               </div>
-            ) : preview ? (
-              <>
-                <div className="mx-auto max-w-5xl px-4 pt-6 text-center">
-                  <h2 className="text-[22px] font-semibold text-[#0f172a]">{preview.title}</h2>
-                  <p className="mt-1 text-sm text-[#475569]">{preview.subtitle}</p>
-                </div>
 
-                <div className="mt-6 overflow-hidden border-t border-[#e8edf5]">
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr className="border-b border-[#e8edf5] bg-[#fafbfe]">
-                        {visiblePreviewColumns.map((column) => (
-                          <th
-                            key={column}
-                            className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]"
-                          >
+              <button
+                type="button"
+                onClick={() => setCustomizeColumnsOpen(true)}
+                className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
+              >
+                <Columns3 size={14} className="text-[#64748b]" />
+                Customize Report Columns
+                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#d9eff1] px-1 text-[11px] font-semibold text-[#1b6f7b]">
+                  {selectedColumns.length}
+                </span>
+              </button>
+            </div>
+
+            <div className="border-t border-[#eef2f7] px-4 py-10 text-center">
+              {organizationName ? (
+                <div className="mb-1 text-sm text-[#64748b]">{organizationName}</div>
+              ) : null}
+              <div className="text-[20px] font-semibold text-[#0f172a]">{reportDisplayName}</div>
+              <div className="mt-1 text-sm text-[#2563eb]">{dateLabel}</div>
+            </div>
+
+            <div className="overflow-x-auto border-t border-[#eef2f7]">
+              <table className="min-w-full border-collapse text-left">
+                <thead>
+                  <tr className="border-b border-[#eef2f7]">
+                    {visiblePreviewColumns.map((column, index) => (
+                      <th
+                        key={column}
+                        className={`px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#475569] ${
+                          index === 0 ? "text-left" : "text-center"
+                        }`}
+                      >
+                        {index === 0 ? (
+                          <span className="inline-flex items-center gap-1">
                             {column}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
+                            <ChevronDown size={10} className="text-[#94a3b8]" />
+                          </span>
+                        ) : (
+                          column
+                        )}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {isLoading ? (
+                    <tr>
+                      <td className="px-4 py-10 text-center text-sm text-[#64748b]" colSpan={visiblePreviewColumns.length}>
+                        Loading report data...
+                      </td>
+                    </tr>
+                  ) : error ? (
+                    <tr>
+                      <td className="px-4 py-10 text-center text-sm text-[#b91c1c]" colSpan={visiblePreviewColumns.length}>
+                        {error}
+                      </td>
+                    </tr>
+                  ) : previewRows.length === 0 ? (
+                    <tr>
+                      <td className="px-4 py-10 text-center text-sm text-[#64748b]" colSpan={visiblePreviewColumns.length}>
+                        No report rows found for the selected filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    <>
                       {previewRows.map((row, rowIndex) => (
-                        <tr key={`${preview.title}-${rowIndex}`} className="border-b border-[#edf1f7] hover:bg-[#fcfdff]">
+                        <tr key={`${preview?.title || "time-to-get-paid"}-${rowIndex}`} className="border-b border-[#edf1f7] hover:bg-[#fcfdff]">
                           {visiblePreviewColumns.map((column, cellIndex) => {
                             const cell = getPreviewCell(row, column);
                             return (
                               <td
                                 key={`${rowIndex}-${cellIndex}`}
                                 className={`px-4 py-3 text-[14px] ${
-                                  cellIndex === 0 ? "text-[#2563eb]" : "text-[#334155]"
+                                  cellIndex === 0 ? "font-medium text-[#2563eb]" : "text-center text-[#334155]"
                                 }`}
                               >
                                 {cell}
@@ -826,7 +878,7 @@ export default function TimeToGetPaidReportPage() {
                               <td
                                 key={`total-${cellIndex}`}
                                 className={`px-4 py-3 text-[14px] ${
-                                  cellIndex === 0 ? "font-medium text-[#0f172a]" : "text-[#0f172a]"
+                                  cellIndex === 0 ? "font-semibold text-[#0f172a]" : "text-center text-[#0f172a]"
                                 }`}
                               >
                                 {cell}
@@ -835,23 +887,32 @@ export default function TimeToGetPaidReportPage() {
                           })}
                         </tr>
                       ) : null}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            ) : (
-              <div className="mx-auto max-w-5xl px-4 py-10">
-                <div className="rounded-[12px] border border-dashed border-[#dbe3ef] bg-[#fbfcfe] px-6 py-10 text-center">
-                  <h2 className="text-[20px] font-semibold text-[#0f172a]">No live data available yet</h2>
-                  <p className="mt-2 text-sm text-[#64748b]">
-                    The selected period does not contain any payments that can be matched to invoices.
-                  </p>
-                </div>
-              </div>
-            )}
+                    </>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
       </div>
+
+      {exportOpen ? (
+        <div className="absolute right-6 top-16 z-40 w-[240px] rounded-lg border border-[#d7dce7] bg-white p-2 shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+          {["PDF", "XLSX (Microsoft Excel)", "CSV (Comma Separated Value)", "Print"].map((label) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => {
+                setExportOpen(false);
+                toast.success(`Export ${label} started`);
+              }}
+              className="flex w-full items-center rounded-md px-3 py-2 text-left text-sm text-[#0f172a] hover:bg-[#f8fafc]"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <ReportCustomizeColumnsModal
         open={customizeColumnsOpen}

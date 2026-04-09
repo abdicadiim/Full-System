@@ -330,6 +330,7 @@ export const getDashboardSummary: express.RequestHandler = async (req, res) => {
       rows: [],
     },
     organization: {
+      id: String(orgId),
       name: String(organization?.name || "").trim(),
       baseCurrency: String(organization?.baseCurrency || "").trim(),
     },

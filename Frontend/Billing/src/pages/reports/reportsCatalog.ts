@@ -684,7 +684,7 @@ export const REPORTS: ReportDefinition[] = [
     name: "Projects Revenue Summary",
     summary: "Project budget amount vs actual earned revenue.",
     howItHelps: "Compare budget expectations against realized revenue.",
-    functionSupport: support("filter", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
+    functionSupport: support("filter", "compare", "customizeColumns", "sort", "schedule", "share", "export", "print", "custom"),
   },
 
   {

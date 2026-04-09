@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo, useLayoutEffect } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useNavigate, useLocation } from "react-router-dom";
 import { getQuotes, deleteQuotes, updateQuote, getCustomers, getProjects, getSalespersons, getCustomViews, deleteCustomView } from "../salesModel";
+import { generateQuoteHTMLForQuote as generateQuoteDetailHtml } from "./QuoteDetail/QuoteDetail.utils";
+import { useQuotesListQuery } from "./quoteQueries";
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import {
@@ -25,7 +26,6 @@ import {
   Filter,
   X,
   Printer,
-  FileDown,
   Trash2,
   ArrowUpDown,
   Download,
@@ -116,26 +116,8 @@ export default function Quotes() {
   const [isNewQuoteMenuOpen, setIsNewQuoteMenuOpen] = useState(false);
   const [viewSearchQuery, setViewSearchQuery] = useState("");
   const [customViews, setCustomViews] = useState<CustomView[]>(() => getCustomViews().filter(v => v.type === "quotes"));
-  const QUOTES_STORAGE_KEY = "taban_quotes_list_v1";
-  const readStoredQuotes = (): Quote[] => {
-    try {
-      const raw = localStorage.getItem(QUOTES_STORAGE_KEY);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  };
-  const storeQuotes = (rows: Quote[]) => {
-    try {
-      localStorage.setItem(QUOTES_STORAGE_KEY, JSON.stringify(rows));
-    } catch {
-      // best effort only
-    }
-  };
-  const [quotes, setQuotes] = useState<Quote[]>(() => readStoredQuotes());
-  const [quotesLoading, setQuotesLoading] = useState(() => readStoredQuotes().length === 0);
+  const [quotes, setQuotes] = useState<Quote[]>([]);
+  const [quotesLoading, setQuotesLoading] = useState(true);
   const [sortConfig, setSortConfig] = useState({ key: "createdTime", direction: "desc" as "asc" | "desc" });
   const [selectedQuotes, setSelectedQuotes] = useState<string[]>([]);
   const [isBulkUpdateModalOpen, setIsBulkUpdateModalOpen] = useState(false);
@@ -271,18 +253,7 @@ export default function Quotes() {
       setProjects([]);
     }
   };
-  const quotesQuery = useQuery({
-    queryKey: ["quotes", "list"],
-    placeholderData: keepPreviousData,
-    staleTime: 2 * 60 * 1000,
-    initialData: readStoredQuotes().length > 0 ? readStoredQuotes() : undefined,
-    queryFn: async () => {
-      const loadedQuotes = await getQuotes();
-      const rows = Array.isArray(loadedQuotes) ? loadedQuotes : [];
-      storeQuotes(rows);
-      return rows;
-    }
-  });
+  const quotesListQuery = useQuotesListQuery();
   const [exportQuotesData, setExportQuotesData] = useState({
     module: "Quotes",
     status: "All",
@@ -547,7 +518,7 @@ export default function Quotes() {
       ]);
       setCustomViews(getCustomViews().filter(v => v.type === "quotes"));
       void supportDataPromise.then(applySupportData);
-      await quotesQuery.refetch();
+      await quotesListQuery.refetch();
     } catch (error) {
       console.error("Error refreshing quotes:", error);
     } finally {
@@ -581,17 +552,14 @@ export default function Quotes() {
   }, [location.pathname]);
 
   useEffect(() => {
-    const nextQuotes = quotesQuery.data || [];
+    const nextQuotes = quotesListQuery.data || [];
     setQuotes(nextQuotes);
-    setQuotesLoading(Boolean(quotesQuery.isLoading && nextQuotes.length === 0));
-    if (nextQuotes.length > 0) {
-      storeQuotes(nextQuotes);
-    }
-  }, [quotesQuery.data, quotesQuery.isLoading]);
+    setQuotesLoading(Boolean((quotesListQuery.isPending || quotesListQuery.isFetching) && nextQuotes.length === 0));
+  }, [quotesListQuery.data, quotesListQuery.isPending, quotesListQuery.isFetching]);
 
   useEffect(() => {
-    setIsRefreshing(quotesQuery.isFetching);
-  }, [quotesQuery.isFetching]);
+    setIsRefreshing(quotesListQuery.isFetching);
+  }, [quotesListQuery.isFetching]);
 
   const resolveCustomerName = (q: Quote) => {
     // If it's already an object with a name, use it
@@ -1962,141 +1930,45 @@ export default function Quotes() {
       orgProfile?.phone ||
       organization?.phone ||
       "";
-    const street = [
-      address?.street1,
-      address?.street2,
-      orgProfile?.street1,
-      orgProfile?.street2
-    ].filter(Boolean).join(" ").trim();
+    const street1 = address?.street1 || orgProfile?.street1 || "";
+    const street2 = address?.street2 || orgProfile?.street2 || "";
     const city = address?.city || orgProfile?.city || "";
     const state = address?.state || address?.stateProvince || orgProfile?.state || "";
     const country = address?.country || orgProfile?.country || orgProfile?.location || "";
+    const zipCode = address?.zipCode || orgProfile?.zipCode || "";
 
-    return { name, email, phone, street, city, state, country };
+    return {
+      name,
+      email,
+      phone,
+      address: {
+        street1,
+        street2,
+        city,
+        state,
+        zipCode,
+        country,
+      },
+    };
   };
 
   // Helper function to generate HTML for a single quote
   const generateQuoteHTMLForQuote = (quote: Quote) => {
     if (!quote) return '';
-
-    const itemsHTML = quote.items && quote.items.length > 0 ? quote.items.map((item: any, index: number) => {
-      const rate = parseFloat(item.rate || item.price || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const amount = parseFloat(item.amount || (item.quantity * (item.rate || item.price || 0))).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const qty = parseFloat(item.quantity || 0).toFixed(2);
-      const unit = item.unit || 'pcs';
-      const itemName = item.name || item.itemName || item.itemDetails || 'N/A';
-      return `
-        <tr style="border-bottom: 1px solid #e5e7eb;">
-          <td style="padding: 12px; font-size: 14px; color: #111;">${index + 1}</td>
-          <td style="padding: 12px; font-size: 14px; color: #111;">${itemName}</td>
-          <td style="padding: 12px; font-size: 14px; color: #111; text-align: right;">${qty} ${unit}</td>
-          <td style="padding: 12px; font-size: 14px; color: #111; text-align: right;">${formatCurrency(item.rate || item.price || 0, quote.currency)}</td>
-          <td style="padding: 12px; font-size: 14px; color: #111; text-align: right;">${formatCurrency(item.amount || (item.quantity * (item.rate || item.price || 0)), quote.currency)}</td>
-        </tr>
-      `;
-    }).join('') : '<tr><td colspan="5" style="padding: 24px; text-align: center; color: #666; font-size: 14px;">No items added</td></tr>';
-
-    const quoteDate = quote.quoteDate || quote.date || new Date().toISOString();
-    const formattedDate = (() => {
-      const date = new Date(quoteDate);
-      const day = String(date.getDate()).padStart(2, '0');
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const year = date.getFullYear();
-      return `${day}/${month}/${year}`;
-    })();
-    const getCustomerName = (q) => {
-      if (q.customerName) return q.customerName;
-      if (typeof q.customer === 'object' && q.customer) {
-        return q.customer.displayName || q.customer.name || 'N/A';
-      }
-      return q.customer || 'N/A';
-    };
-    const customerName = getCustomerName(quote);
-    const total = formatCurrency(quote.total || quote.amount || 0, quote.currency || 'KES');
-    const notes = quote.customerNotes || 'Looking forward for your business.';
     const profile = getOrganizationProfileForPdf();
-    const organizationName = quote.organizationName || quote.companyName || quote.businessName || profile.name || 'Your Company';
-    const organizationEmail = quote.organizationEmail || quote.companyEmail || quote.email || profile.email || '';
-    const organizationStreet = quote.organizationStreet || quote.street || profile.street || '';
-    const organizationCity = quote.organizationCity || quote.city || profile.city || '';
-    const organizationState = quote.organizationState || quote.state || profile.state || '';
-    const organizationCountry = quote.organizationCountry || quote.country || profile.country || '';
-    const organizationPhone = quote.organizationPhone || quote.phone || profile.phone || '';
-    const hasSentRibbon = (quote.status || '').toLowerCase() === 'sent';
-    const subTotal = quote.subTotal || quote.subtotal || quote.total || quote.amount || 0;
-
-    return `
-      <div style="width:794px; min-height:1123px; background:#fff; color:#111; font-family:Arial, sans-serif; position:relative; padding:50px;">
-        ${hasSentRibbon ? `
-        <div style="position:absolute; top:20px; left:-40px; transform:rotate(-45deg); background:#2563eb; color:#fff; font-size:11px; font-weight:700; padding:6px 50px;">
-          SENT
-        </div>
-        ` : ''}
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:34px;">
-          <div style="max-width:55%;">
-            <div style="font-size:34px; font-weight:700; color:#111; margin-bottom:6px;">${organizationName}</div>
-            ${organizationStreet ? `<div style="font-size:14px; color:#475569; line-height:1.45;">${organizationStreet}</div>` : ''}
-            ${(organizationCity || organizationState) ? `<div style="font-size:14px; color:#475569; line-height:1.45;">${organizationCity}${organizationCity && organizationState ? ', ' : ''}${organizationState}</div>` : ''}
-            ${organizationCountry ? `<div style="font-size:14px; color:#475569; line-height:1.45;">${organizationCountry}</div>` : ''}
-            ${organizationPhone ? `<div style="font-size:14px; color:#475569; line-height:1.45;">${organizationPhone}</div>` : ''}
-            ${organizationEmail ? `<div style="font-size:14px; color:#475569; line-height:1.45;">${organizationEmail}</div>` : ''}
-          </div>
-          <div style="text-align:right; min-width:210px;">
-            <div style="font-size:52px; font-weight:800; letter-spacing:0.5px; line-height:1;">QUOTE</div>
-            <div style="font-size:22px; color:#111; font-weight:700; margin-top:8px;">#${quote.quoteNumber || quote.id}</div>
-            <div style="font-size:14px; color:#475569; margin-top:38px;">${formattedDate}</div>
-          </div>
-        </div>
-
-        <div style="margin-bottom:26px;">
-          <div style="font-size:14px; font-weight:700; color:#111; margin-bottom:6px;">Bill To</div>
-          <div style="font-size:28px; color:#2563eb; font-weight:600;">${customerName}</div>
-        </div>
-
-        <table style="width:100%; border-collapse:collapse; margin-bottom:30px;">
-          <thead>
-            <tr>
-              <th style="padding:12px; text-align:left; color:#fff; font-size:12px; font-weight:700; background-color:#475569;">#</th>
-              <th style="padding:12px; text-align:left; color:#fff; font-size:12px; font-weight:700; background-color:#475569;">Item & Description</th>
-              <th style="padding:12px; text-align:right; color:#fff; font-size:12px; font-weight:700; background-color:#475569;">Qty</th>
-              <th style="padding:12px; text-align:right; color:#fff; font-size:12px; font-weight:700; background-color:#475569;">Rate</th>
-              <th style="padding:12px; text-align:right; color:#fff; font-size:12px; font-weight:700; background-color:#475569;">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${itemsHTML}
-          </tbody>
-        </table>
-
-        <div style="width:320px; margin-left:auto; margin-bottom:34px;">
-          <div style="display:flex; justify-content:space-between; padding:8px 0; font-size:14px; color:#475569;">
-            <span>Sub Total</span>
-            <span style="font-weight:600; color:#111;">${formatCurrency(subTotal, quote.currency)}</span>
-          </div>
-          ${quote.discount > 0 ? `
-          <div style="display:flex; justify-content:space-between; padding:8px 0; font-size:14px; color:#475569;">
-            <span>Discount</span>
-            <span style="font-weight:600; color:#111;">-${formatCurrency(quote.discount || 0, quote.currency)}</span>
-          </div>
-          ` : ''}
-          ${quote.taxAmount > 0 ? `
-          <div style="display:flex; justify-content:space-between; padding:8px 0; font-size:14px; color:#475569;">
-            <span>${quote.taxName || "Tax"}</span>
-            <span style="font-weight:600; color:#111;">${formatCurrency(quote.taxAmount || 0, quote.currency)}</span>
-          </div>
-          ` : ''}
-          <div style="display:flex; justify-content:space-between; padding:12px 0; border-top:2px solid #111; margin-top:8px; font-size:26px; font-weight:700; color:#111;">
-            <span>Total</span>
-            <span>${total}</span>
-          </div>
-        </div>
-
-        <div>
-          <div style="font-size:14px; font-weight:700; color:#111; margin-bottom:6px;">Notes</div>
-          <div style="font-size:14px; color:#475569; line-height:1.6;">${notes}</div>
-        </div>
-      </div>
-    `;
+    const organizationProfile = {
+      organizationName: profile.name,
+      name: profile.name,
+      email: profile.email,
+      address: profile.address,
+    };
+    const ownerEmail = profile.email ? { email: profile.email } : null;
+    const fullHtml = generateQuoteDetailHtml(quote, organizationProfile, ownerEmail);
+    const styleMatch = fullHtml.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+    const bodyMatch = fullHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    const styles = styleMatch ? `<style>${styleMatch[1]}</style>` : "";
+    const body = bodyMatch ? bodyMatch[1] : fullHtml;
+    return `${styles}${body}`;
   };
 
 
@@ -2258,13 +2130,6 @@ export default function Quotes() {
         >
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <span className="flex items-center justify-center min-w-[24px] h-6 px-2 bg-[#156372] rounded text-[13px] font-semibold text-white">
-                {selectedQuotes.length}
-              </span>
-              <span className="text-sm text-gray-700">Selected</span>
-            </div>
-            <div className="h-6 w-px bg-gray-200 mx-1 flex-shrink-0" />
-            <div className="flex items-center gap-2">
               <button
                 className="h-9 px-3 border border-gray-200 bg-white text-sm font-medium text-gray-700 rounded-md hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm"
                 onClick={handleBulkUpdate}
@@ -2276,7 +2141,7 @@ export default function Quotes() {
                 onClick={handleExportPDF}
                 title="Download PDF"
               >
-                <FileDown size={16} className="text-gray-500" />
+                <Download size={16} className="text-gray-500" />
               </button>
               <button
                 className="h-9 px-3 border border-gray-200 bg-white text-sm font-medium text-gray-700 rounded-md hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm"
@@ -2285,11 +2150,18 @@ export default function Quotes() {
                 Mark As Sent
               </button>
               <button
-                className="h-9 px-3 border border-gray-200 bg-white text-sm font-medium text-gray-700 rounded-md hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm"
+                className="h-9 px-3 border border-red-200 bg-red-50 text-sm font-medium text-red-600 rounded-md hover:bg-red-100 hover:border-red-300 transition-all shadow-sm"
                 onClick={handleBulkDelete}
               >
                 Delete
               </button>
+            </div>
+            <div className="h-6 w-px bg-gray-200 mx-1 flex-shrink-0" />
+            <div className="flex items-center gap-2">
+              <span className="flex items-center justify-center min-w-[24px] h-6 px-2 bg-[#156372] rounded text-[13px] font-semibold text-white">
+                {selectedQuotes.length}
+              </span>
+              <span className="text-sm text-gray-700">Selected</span>
             </div>
           </div>
 
@@ -2629,7 +2501,8 @@ export default function Quotes() {
                       <div className="h-5 w-px bg-gray-200" />
                       <input
                         type="checkbox"
-                        className="w-4 h-4 rounded border-gray-300 text-[#156372] focus:ring-0 cursor-pointer"
+                        className="w-4 h-4 rounded border-gray-300 focus:ring-0 cursor-pointer"
+                        style={{ accentColor: "#1b5e6a" }}
                         checked={selectedQuotes.length === sortedQuotes.length && sortedQuotes.length > 0}
                         onChange={(e) => {
                           if (e.target.checked) {
@@ -2669,7 +2542,7 @@ export default function Quotes() {
                   return (
                   <tr
                     key={quote.id}
-                    className={`text-[13px] h-[50px] group transition-all hover:bg-[#f8fafc] border-b border-[#eef1f6] cursor-pointer ${selectedQuotes.includes(quote.id) ? 'bg-[#156372]/5' : ''}`}
+                    className={`text-[13px] h-[50px] group transition-all hover:bg-[#f8fafc] border-b border-[#eef1f6] cursor-pointer ${selectedQuotes.includes(quote.id) ? 'bg-[#eef3ff]' : ''}`}
                     onClick={() =>
                       navigate(`/sales/quotes/${quote.id}`, {
                         state: { preloadedQuote: quote, preloadedQuotes: sortedQuotes },
@@ -2682,7 +2555,8 @@ export default function Quotes() {
                         <div className="h-5 w-px bg-transparent shrink-0" />
                         <input
                           type="checkbox"
-                          className="w-4 h-4 rounded border-gray-300 text-[#156372] focus:ring-0 cursor-pointer"
+                          className="w-4 h-4 rounded border-gray-300 focus:ring-0 cursor-pointer"
+                          style={{ accentColor: "#1b5e6a" }}
                           checked={selectedQuotes.includes(quote.id)}
                           onChange={() => {
                             setSelectedQuotes(prev =>
@@ -2818,7 +2692,7 @@ export default function Quotes() {
                 <button
                   onClick={handleConfirmBulkDelete}
                   disabled={isDeletingQuotes}
-                  className={`px-4 py-1.5 rounded-md bg-[#156372] text-white text-[12px] hover:bg-[#0D4A52] ${isDeletingQuotes ? "opacity-70 cursor-not-allowed" : ""}`}
+                  className={`px-4 py-1.5 rounded-md bg-red-600 text-white text-[12px] hover:bg-red-700 ${isDeletingQuotes ? "opacity-70 cursor-not-allowed" : ""}`}
                 >
                   {isDeletingQuotes ? "Deleting..." : "Delete"}
                 </button>
@@ -4262,7 +4136,7 @@ export default function Quotes() {
       {/* Customize Columns Modal */}
       {
         isCustomizeColumnsModalOpen && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] flex items-start justify-center z-[3000] pt-[10vh] overflow-y-auto px-4 py-6" onClick={() => setIsCustomizeColumnsModalOpen(false)}>
+          <div className="fixed inset-0 bg-black/40 flex items-start justify-center z-[3000] pt-6 pb-6 overflow-y-auto px-4" onClick={() => setIsCustomizeColumnsModalOpen(false)}>
             <div className="bg-white rounded-lg shadow-2xl w-full max-w-[500px] overflow-hidden" onClick={e => e.stopPropagation()}>
               {/* Modal Header */}
               <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-[#f9fafb]">
@@ -4274,7 +4148,7 @@ export default function Quotes() {
                   <span className="text-xs text-gray-500 font-medium">{tempVisibleColumns.length} of {allColumnOptions.length} Selected</span>
                   <button
                     onClick={() => setIsCustomizeColumnsModalOpen(false)}
-                    className="w-7 h-7 flex items-center justify-center border border-blue-200 rounded shadow-sm hover:bg-gray-50 transition-colors group"
+                    className="w-7 h-7 flex items-center justify-center rounded shadow-sm hover:bg-gray-50 transition-colors group"
                   >
                     <X size={16} className="text-red-500 group-hover:text-red-600" />
                   </button>
@@ -4332,8 +4206,8 @@ export default function Quotes() {
                               type="checkbox"
                               checked={isChecked}
                               onChange={() => { }} // Handled by div click
-                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 pointer-events-none"
-                            />
+                               className="w-4 h-4 rounded border-gray-300 accent-[#156372] focus:ring-[#156372] pointer-events-none"
+                             />
                           )}
                           <span className={`text-[13.5px] ${isChecked ? 'text-gray-900 font-medium' : 'text-gray-600'}`}>{col.label}</span>
                         </div>
@@ -4351,7 +4225,7 @@ export default function Quotes() {
                     setVisibleColumns(tempColumnOrder.filter((key) => normalizedVisible.includes(key)));
                     setIsCustomizeColumnsModalOpen(false);
                   }}
-                  className="px-6 py-2 bg-blue-500 text-white rounded text-[13px] font-medium hover:bg-blue-600 transition-colors shadow-sm"
+                  className="px-6 py-2 bg-[#156372] text-white rounded text-[13px] font-medium hover:bg-[#0D4A52] transition-colors shadow-sm"
                 >
                   Save
                 </button>

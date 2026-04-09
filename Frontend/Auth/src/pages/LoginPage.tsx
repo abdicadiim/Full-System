@@ -74,7 +74,7 @@ export default function LoginPage() {
   const fieldErrorClass = "mt-2 text-xs font-medium text-red-600";
   const trimmedEmail = email.trim();
   const emailMissingMessage = "No account found with this email address.";
-  const passwordMismatchMessage = "Incorrect password. Please try again.";
+  const passwordMismatchMessage = "Email or password is incorrect.";
   const otpQuery = (() => {
     const params = new URLSearchParams(search);
     params.delete("logout");
@@ -205,9 +205,27 @@ export default function LoginPage() {
           return;
         }
 
+        const emailNotFound =
+          failure?.code === 404 || /email address not found/i.test(String(failure?.message || ""));
+
+        if (emailNotFound) {
+          setEmailMissing(true);
+          emailInputRef.current?.setCustomValidity(emailMissingMessage);
+          emailInputRef.current?.reportValidity();
+          setError(emailMissingMessage);
+          return;
+        }
+
+        const failureMessage = String(failure?.message || "");
         const badCredentials =
           failure?.code === 401 ||
-          /invalid username or password/i.test(String(failure?.message || ""));
+          /incorrect password/i.test(failureMessage) ||
+          /invalid username or password/i.test(failureMessage) ||
+          /invalid credentials/i.test(failureMessage) ||
+          (!failure?.code &&
+            !/email address not found/i.test(failureMessage) &&
+            !/verify your email/i.test(failureMessage) &&
+            !/inactive/i.test(failureMessage));
 
         if (badCredentials) {
           setPasswordInvalid(true);

@@ -625,13 +625,13 @@ export default function ItemDetails({
                                 <ChevronDown size={16} className="text-gray-500" />
                             </button>
                             {moreDropdownOpen && (
-                                <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-xl z-50 py-1 overflow-hidden">
-                                    <div className="p-2 flex flex-col gap-1">
-                                        <button onClick={handleClone} className="w-full px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 rounded-md transition-colors font-medium">Clone Item</button>
-                                        <button onClick={handleToggleActive} disabled={isActionLoading} className="w-full px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 rounded-md transition-colors font-medium">
+                                <div className="absolute right-0 mt-2 w-max min-w-[160px] max-w-[220px] bg-white border border-gray-200 rounded-lg shadow-xl z-50 py-1 overflow-hidden">
+                                    <div className="p-1 flex flex-col gap-1">
+                                        <button onClick={handleClone} className="w-full px-2 py-1.5 text-[13px] text-left text-gray-700 hover:bg-gray-50 rounded-md transition-colors font-medium">Clone Item</button>
+                                        <button onClick={handleToggleActive} disabled={isActionLoading} className="w-full px-2 py-1.5 text-[13px] text-left text-gray-700 hover:bg-gray-50 rounded-md transition-colors font-medium">
                                             {(item.active === false || item.isActive === false || item.status === "Inactive") ? "Mark as Active" : "Mark as Inactive"}
                                         </button>
-                                        <button onClick={() => { onDelete(item.id || item._id || ""); setMoreDropdownOpen(false); }} className="w-full px-3 py-2 text-sm text-left text-gray-700 hover:bg-gray-50 rounded-md transition-colors font-medium text-red-600">Delete</button>
+                                        <button onClick={() => { onDelete(item.id || item._id || ""); setMoreDropdownOpen(false); }} className="w-full px-2 py-1.5 text-[13px] text-left text-gray-700 hover:bg-gray-50 rounded-md transition-colors font-medium text-red-600">Delete</button>
                                     </div>
                                 </div>
                             )}

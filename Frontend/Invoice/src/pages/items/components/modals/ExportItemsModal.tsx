@@ -333,7 +333,8 @@ const ExportItemsModal = ({ isOpen, onClose, data, accounts = [] }: ExportItemsM
                         <div className="flex items-start gap-2">
                             <input
                                 type="checkbox"
-                                className="mt-1 w-4 h-4 rounded border-gray-300 text-[#156372] focus:ring-[#156372]"
+                                className="mt-1 w-4 h-4 rounded border-gray-300 focus:ring-0"
+                                style={{ accentColor: "#1b5e6a" }}
                             />
                             <span className="text-sm text-slate-600">
                                 Include Sensitive Personally Identifiable Information (PII) while exporting.

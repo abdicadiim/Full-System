@@ -24,7 +24,13 @@ const request = async <T, F = unknown>(path: string, body?: unknown, method = "P
     credentials: "include",
   });
   const payload = await res.json().catch(() => null);
-  return payload ?? { success: false, message: "Bad response" };
+  if (!payload) {
+    return { success: false, message: "Bad response", code: res.status };
+  }
+  if (payload.success === false && typeof payload.code !== "number") {
+    return { ...payload, code: res.status };
+  }
+  return payload;
 };
 
 export const authApi = {

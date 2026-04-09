@@ -240,9 +240,9 @@ const documentSearch = "";
 const [bulkAddSearch, setBulkAddSearch] = useState("");
 const [bulkAccountSearch, setBulkAccountSearch] = useState("");
 const [shippingTaxSearch, setShippingTaxSearch] = useState("");
-const invoicePrefix = "INV-";
-const invoiceNextNumber = "000001";
-const invoiceNumberMode = "auto";
+const [invoicePrefix, setInvoicePrefix] = useState("INV-");
+const [invoiceNextNumber, setInvoiceNextNumber] = useState("000001");
+const [invoiceNumberMode, setInvoiceNumberMode] = useState<"auto" | "manual">("auto");
 const modalSelectedCustomerId = "";
 const [selectedBulkAccount, setSelectedBulkAccount] = useState("");
 const selectedCloudProvider = "zoho";
@@ -689,11 +689,6 @@ const setCustomerSearchPage = noop;
 const setCustomerSearchResults = noop;
 const setCustomerSearchTerm = noop;
 const setDocumentSearch = noop;
-const setInvoiceNextNumber = noop;
-const setInvoiceNumberMode = noop;
-const setInvoicePrefix = noop;
- 
- 
 const setIsBulkAddModalOpen = noop;
  
 const setIsCloudPickerOpen = noop;
@@ -807,6 +802,31 @@ useEffect(() => {
             "",
         });
       }
+
+      const savedInvoiceNumber = String((invoiceData as any)?.invoiceNumber || "").trim();
+      const savedSeriesPrefix = String(
+        (invoiceData as any)?.transactionNumberSeriesPrefix ||
+        (invoiceData as any)?.seriesPrefix ||
+        ""
+      ).trim();
+      const numberMatch = savedInvoiceNumber.match(/^(\D*?)(\d+)$/);
+      const derivedPrefix = savedSeriesPrefix || numberMatch?.[1] || "INV-";
+      const derivedNextNumber = numberMatch?.[2] || "000001";
+      const savedMode = String((invoiceData as any)?.invoiceNumberMode || (invoiceData as any)?.numberMode || "").trim().toLowerCase();
+      const hasSeriesMeta = Boolean(
+        (invoiceData as any)?.transactionNumberSeriesId ||
+        (invoiceData as any)?.transactionNumberSeriesName ||
+        savedSeriesPrefix
+      );
+
+      setInvoicePrefix(derivedPrefix);
+      setInvoiceNextNumber(derivedNextNumber);
+      setInvoiceNumberMode(savedMode === "manual" ? "manual" : hasSeriesMeta ? "auto" : "manual");
+      invoiceSeriesRef.current = {
+        id: String((invoiceData as any)?.transactionNumberSeriesId || "").trim(),
+        name: String((invoiceData as any)?.transactionNumberSeriesName || "Invoice").trim(),
+        prefix: derivedPrefix,
+      };
     } catch (error) {
       console.error("Failed to load invoice for edit:", error);
       toast.error("Failed to load invoice data.");
@@ -3063,7 +3083,7 @@ return (
                               }}
                             >
                               <span className="truncate">{option.displayLabel}</span>
-                              {isSelected ? <Check size={14} /> : null}
+                               {isSelected ? <Check size={14} className="text-[#156372]" /> : null}
                             </button>
                           );
                         })

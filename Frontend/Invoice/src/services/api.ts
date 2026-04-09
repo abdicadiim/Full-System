@@ -136,9 +136,32 @@ const getPathPrefixes = (path: string) => {
 };
 
 const invalidateRequestPath = async (path: string) => {
-  const prefixes = getPathPrefixes(path);
+  const normalized = String(path || "").startsWith("/") ? String(path || "") : `/${String(path || "")}`;
+  const prefixes = new Set(getPathPrefixes(normalized));
+
+  const dashboardInvalidators = [
+    "/customers",
+    "/contacts",
+    "/invoices",
+    "/payments-received",
+    "/expenses",
+    "/subscriptions",
+  ];
+  if (dashboardInvalidators.some((prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`))) {
+    prefixes.add("/dashboard/summary");
+    void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
+  }
+
+  if (normalized === "/quotes" || normalized.startsWith("/quotes/")) {
+    void queryClient.invalidateQueries({ queryKey: ["quotes", "list"] });
+  }
+
+  if (normalized === "/invoices" || normalized.startsWith("/invoices/")) {
+    void queryClient.invalidateQueries({ queryKey: ["invoices"] });
+  }
+
   await Promise.all(
-    prefixes.map((prefix) =>
+    [...prefixes].map((prefix) =>
       queryClient.invalidateQueries({ queryKey: ["api", prefix] }),
     ),
   );
@@ -2018,6 +2041,18 @@ export const quotesAPI = {
   update: (id: string, data: any) => quotesBase.update(id, data),
   delete: (id: string) => quotesBase.delete(id),
   getNextNumber: async (prefixOrLookup?: string | Record<string, any>) => {
+    const prefix =
+      typeof prefixOrLookup === "string"
+        ? prefixOrLookup
+        : String((prefixOrLookup as any)?.prefix || "");
+    try {
+      const res: any = await request({ path: "/quotes/next-number", params: { prefix } });
+      if (res?.success) return res as any;
+      if (typeof res?.status === "number") return res as any;
+    } catch {
+      // fall back
+    }
+
     try {
       const txRes: any = await transactionNumberSeriesAPI.getNextNumber({
         module: "Quote",
@@ -2043,10 +2078,7 @@ export const quotesAPI = {
     } catch {
       // fall back
     }
-    const prefix =
-      typeof prefixOrLookup === "string"
-        ? prefixOrLookup
-        : String((prefixOrLookup as any)?.prefix || "");
+
     return request({ path: "/quotes/next-number", params: { prefix } });
   },
   bulkDelete: (ids: string[]) =>
@@ -3076,6 +3108,16 @@ export const reportsAPI = {
       throw new Error(
         res?.message || "Failed to fetch sales by sales person report",
       );
+    }
+    return res as any;
+  },
+  getTimeToGetPaid: async (params?: Record<string, any>) => {
+    const res = await request({
+      path: "/reports/time-to-get-paid",
+      params,
+    });
+    if (!res?.success) {
+      throw new Error(res?.message || "Failed to fetch time to get paid report");
     }
     return res as any;
   },

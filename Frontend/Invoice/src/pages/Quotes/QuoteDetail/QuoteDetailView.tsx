@@ -145,6 +145,11 @@ const QuoteDetailView = (props: any) => {
           setIsQuoteDocumentHovered={props.setIsQuoteDocumentHovered}
           isCustomizeDropdownOpen={props.isCustomizeDropdownOpen}
           setIsCustomizeDropdownOpen={props.setIsCustomizeDropdownOpen}
+          quoteAttachments={props.quoteAttachments}
+          isUploadingAttachment={props.isUploadingAttachment}
+          attachmentsFileInputRef={props.attachmentsFileInputRef}
+          handleFileUpload={props.handleFileUpload}
+          handleRemoveAttachment={props.handleRemoveAttachment}
         />
 
         {props.showCommentsSidebar && (

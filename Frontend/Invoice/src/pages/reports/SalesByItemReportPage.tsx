@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
-import { CalendarDays, Check, ChevronDown, ChevronRight, Columns3, Filter, Folder, Menu, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
+import { jsPDF } from "jspdf";
+import { CalendarDays, Check, ChevronDown, ChevronRight, Columns3, Filter, Folder, Menu, Plus, RefreshCw, Search, X } from "lucide-react";
 import { REPORTS_BY_CATEGORY } from "./reportsCatalog";
 import { useSettings } from "../../lib/settings/SettingsContext";
 import { locationsAPI, reportsAPI, reportingTagsAPI } from "../../services/api";
@@ -22,6 +23,22 @@ const fromInputDateValue = (value: string) => {
 
 const formatPickerDate = (value: Date) =>
   value.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
+
+const escapeCsvValue = (value: unknown) => {
+  const textValue = String(value ?? "");
+  if (/[",\n]/.test(textValue)) {
+    return `"${textValue.replace(/"/g, '""')}"`;
+  }
+  return textValue;
+};
+
+const escapeHtml = (value: unknown) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -67,6 +84,7 @@ type DateRangeKey =
   | "previous-month"
   | "previous-quarter"
   | "previous-year"
+  | "all-time"
   | "custom";
 
 type DateRangeOption = {
@@ -244,6 +262,7 @@ const DATE_RANGE_OPTIONS: DateRangeOption[] = [
   { key: "previous-month", label: "Previous Month" },
   { key: "previous-quarter", label: "Previous Quarter" },
   { key: "previous-year", label: "Previous Year" },
+  { key: "all-time", label: "All Time" },
   { key: "custom", label: "Custom" },
 ];
 
@@ -373,6 +392,8 @@ const getDateRangeValue = (key: DateRangeKey, referenceDate = new Date()): DateR
     }
     case "previous-year":
       return { start: new Date(referenceDate.getFullYear() - 1, 0, 1), end: new Date(referenceDate.getFullYear() - 1, 11, 31) };
+    case "all-time":
+      return { start: new Date(1970, 0, 1), end: getEndOfDay(referenceDate) };
     case "custom":
       return { start: today, end: today };
     default:
@@ -670,13 +691,14 @@ export default function SalesByItemReportView({
   const compareWithCountRef = useRef<HTMLDivElement | null>(null);
   const moreFiltersRef = useRef<HTMLDivElement | null>(null);
   const exportRef = useRef<HTMLDivElement | null>(null);
-  const [dateRangeKey, setDateRangeKey] = useState<DateRangeKey>("this-week");
-  const [dateRangeDraftKey, setDateRangeDraftKey] = useState<DateRangeKey>("this-week");
+  const defaultDateRangeKey: DateRangeKey = "all-time";
+  const [dateRangeKey, setDateRangeKey] = useState<DateRangeKey>(defaultDateRangeKey);
+  const [dateRangeDraftKey, setDateRangeDraftKey] = useState<DateRangeKey>(defaultDateRangeKey);
   const [isDateRangeOpen, setIsDateRangeOpen] = useState(false);
   const [isCustomDateRangeOpen, setIsCustomDateRangeOpen] = useState(false);
-  const [customDateRange, setCustomDateRange] = useState<DateRangeValue>(() => getDateRangeValue("this-week"));
-  const [customDateRangeDraft, setCustomDateRangeDraft] = useState<DateRangeValue>(() => getDateRangeValue("this-week"));
-  const [customDateRangeMonth, setCustomDateRangeMonth] = useState<Date>(() => getStartOfMonth(getDateRangeValue("this-week").start));
+  const [customDateRange, setCustomDateRange] = useState<DateRangeValue>(() => getDateRangeValue(defaultDateRangeKey));
+  const [customDateRangeDraft, setCustomDateRangeDraft] = useState<DateRangeValue>(() => getDateRangeValue(defaultDateRangeKey));
+  const [customDateRangeMonth, setCustomDateRangeMonth] = useState<Date>(() => getStartOfMonth(getDateRangeValue(defaultDateRangeKey).start));
   const [entityKeys, setEntityKeys] = useState<EntityKey[]>(() => ENTITY_OPTIONS.map((option) => option.key));
   const [isEntityOpen, setIsEntityOpen] = useState(false);
   const [entitySearch, setEntitySearch] = useState("");
@@ -694,14 +716,14 @@ export default function SalesByItemReportView({
   const [isCustomizeColumnsOpen, setIsCustomizeColumnsOpen] = useState(false);
   const [customizeReportTab, setCustomizeReportTab] = useState<"general" | "columns">("general");
   const customizeDateRangeRef = useRef<HTMLDivElement | null>(null);
-  const [customizeDateRangeDraftKey, setCustomizeDateRangeDraftKey] = useState<DateRangeKey>("this-week");
+  const [customizeDateRangeDraftKey, setCustomizeDateRangeDraftKey] = useState<DateRangeKey>(defaultDateRangeKey);
   const [isCustomizeDateRangeOpen, setIsCustomizeDateRangeOpen] = useState(false);
   const [isCustomizeCustomDateRangeOpen, setIsCustomizeCustomDateRangeOpen] = useState(false);
   const [customizeCustomDateRangeDraft, setCustomizeCustomDateRangeDraft] = useState<DateRangeValue>(() =>
-    getDateRangeValue("this-week")
+    getDateRangeValue(defaultDateRangeKey)
   );
   const [customizeCustomDateRangeMonth, setCustomizeCustomDateRangeMonth] = useState<Date>(() =>
-    getStartOfMonth(getDateRangeValue("this-week").start)
+    getStartOfMonth(getDateRangeValue(defaultDateRangeKey).start)
   );
   const [customizeColumnsSearch, setCustomizeColumnsSearch] = useState("");
   const customizeCompareRef = useRef<HTMLDivElement | null>(null);
@@ -806,6 +828,10 @@ export default function SalesByItemReportView({
   const customizeDateRangeLabel = DATE_RANGE_OPTIONS.find((option) => option.key === customizeDateRangeDraftKey)?.label ?? "Today";
   const customizeSelectedDateRange =
     customizeDateRangeDraftKey === "custom" ? customizeCustomDateRangeDraft : getDateRangeValue(customizeDateRangeDraftKey);
+  const getCustomPickerSeedRange = (currentRange: DateRangeValue, currentKey: DateRangeKey) =>
+    currentKey === "all-time" && currentRange.start.getTime() === getDateRangeValue("all-time").start.getTime()
+      ? getDateRangeValue("this-month")
+      : currentRange;
   const getEntitySelectionLabel = (keys: EntityKey[]) => {
     if (keys.length === 0) return "None";
     if (keys.length === ENTITY_OPTIONS.length) return "All";
@@ -878,7 +904,10 @@ export default function SalesByItemReportView({
       return;
     }
 
-    const currentRange = dateRangeKey === "custom" ? customDateRange : getDateRangeValue(dateRangeKey);
+    const currentRange = getCustomPickerSeedRange(
+      dateRangeKey === "custom" ? customDateRange : getDateRangeValue(dateRangeKey),
+      dateRangeKey
+    );
     setDateRangeDraftKey(dateRangeKey);
     setCustomDateRangeDraft(currentRange);
     setCustomDateRangeMonth(getStartOfMonth(currentRange.start));
@@ -888,8 +917,12 @@ export default function SalesByItemReportView({
 
   function cancelDateRangeSelection() {
     setDateRangeDraftKey(dateRangeKey);
-    setCustomDateRangeDraft(customDateRange);
-    setCustomDateRangeMonth(getStartOfMonth(dateRangeKey === "custom" ? customDateRange.start : getDateRangeValue(dateRangeKey).start));
+    const currentRange = getCustomPickerSeedRange(
+      dateRangeKey === "custom" ? customDateRange : getDateRangeValue(dateRangeKey),
+      dateRangeKey
+    );
+    setCustomDateRangeDraft(currentRange);
+    setCustomDateRangeMonth(getStartOfMonth(currentRange.start));
     setIsCustomDateRangeOpen(false);
     setIsDateRangeOpen(false);
   }
@@ -1258,12 +1291,9 @@ export default function SalesByItemReportView({
       filter_by: dateRangeKey,
       compare_with: compareWithKey,
       compare_count: String(compareWithCount),
+      from_date: selectedDateRange.start.toISOString(),
+      to_date: selectedDateRange.end.toISOString(),
     };
-
-    if (dateRangeKey === "custom") {
-      query.from_date = selectedDateRange.start.toISOString();
-      query.to_date = selectedDateRange.end.toISOString();
-    }
 
     if (entityKeys.length > 0) {
       query.entities = entityKeys.join(",");
@@ -1404,47 +1434,175 @@ export default function SalesByItemReportView({
 
   const handleExportAction = (label: string) => {
     setIsExportOpen(false);
-    toast.success(`Export option selected: ${label}`);
-  };
-
-  const openCustomizeColumnsModal = () => {
-    if (typeof window !== "undefined" && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)) {
-      console.debug("[reports] openCustomizeColumnsModal");
-    }
-    setCustomizeReportTab("general");
-    setCustomizeDraftSelectedColumns(selectedReportColumns);
-    setCustomizeColumnsSearch("");
-    setCustomizeActiveAvailableColumn("");
-    const currentCustomizeRange = dateRangeKey === "custom" ? customDateRange : selectedDateRange;
-    setCustomizeDateRangeDraftKey(dateRangeKey);
-    setCustomizeCustomDateRangeDraft(currentCustomizeRange);
-    setCustomizeCustomDateRangeMonth(getStartOfMonth(currentCustomizeRange.start));
-    setIsCustomizeDateRangeOpen(false);
-    setIsCustomizeCustomDateRangeOpen(dateRangeKey === "custom");
-    setCompareWithDraftKey(compareWithKey === "none" ? "previous-years" : compareWithKey);
-    setCompareWithDraftCount(compareWithKey === "none" ? 1 : compareWithCount);
-    setCompareWithDraftArrangeLatest(compareWithArrangeLatest);
-    setCustomizeEntityDraftKeys(entityKeys.length > 0 ? entityKeys : ENTITY_OPTIONS.map((option) => option.key));
-    setCustomizeEntitySearch("");
-    setCustomizeMoreFilterRows(
-      moreFilterRows.filter((row) => row.field || row.comparator || row.value.trim()).map((row) => ({ ...row }))
+    const normalizedLabel = label.toLowerCase();
+    const fileBase = `sales-by-item-${new Date().toISOString().split("T")[0]}`;
+    const exportHeaders = visibleReportColumns.map((column) => column.label);
+    const exportRows = reportRows.map((row) =>
+      visibleReportColumns.map((column) => formatReportColumnValue(column.key, row.values[column.key])),
     );
-    setCustomizeMoreFilterDropdown(null);
-    setCustomizeCompareSearch("");
-    setCustomizeCompareCountSearch("");
-    setIsCustomizeCompareOpen(false);
-    setIsCustomizeCompareCountOpen(false);
-    setIsCustomizeEntityOpen(false);
-    setIsCompareWithOpen(false);
-    setIsCompareWithSelectOpen(false);
-    setIsCompareWithCountOpen(false);
-    setIsExportOpen(false);
-    setIsMoreFiltersOpen(false);
-    setIsEntityOpen(false);
-    setIsDateRangeOpen(false);
-    setIsCustomDateRangeOpen(false);
-    closeMoreFilterDropdown();
-    setIsCustomizeColumnsOpen(true);
+    const exportTotals = reportColumnTotals.map((value) => String(value ?? ""));
+
+    const downloadText = (content: string, fileName: string, mimeType: string) => {
+      const blob = new Blob([content], { type: mimeType });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    };
+
+    const exportPdf = () => {
+      const doc = new jsPDF("landscape", "mm", "a4");
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 10;
+      const colWidth = (pageWidth - margin * 2) / Math.max(visibleReportColumns.length, 1);
+      let y = 18;
+
+      doc.setFontSize(16);
+      doc.text(reportName, pageWidth / 2, y, { align: "center" });
+      y += 8;
+      doc.setFontSize(10);
+      doc.text(`From ${formatDate(selectedDateRange.start)} To ${formatDate(selectedDateRange.end)}`, pageWidth / 2, y, { align: "center" });
+      y += 10;
+
+      doc.setFillColor(248, 250, 252);
+      doc.rect(margin, y, pageWidth - margin * 2, 8, "F");
+      doc.setFontSize(9);
+      visibleReportColumns.forEach((column, index) => {
+        doc.text(column.label, margin + index * colWidth + 2, y + 5);
+      });
+      y += 8;
+
+      const rowsForPdf = [...exportRows, exportTotals];
+      rowsForPdf.forEach((rowValues, rowIndex) => {
+        const wrapped = rowValues.map((value) => doc.splitTextToSize(String(value ?? ""), colWidth - 4));
+        const rowHeight = Math.max(...wrapped.map((lines) => Math.max(lines.length, 1))) * 5 + 2;
+
+        if (y + rowHeight > pageHeight - margin) {
+          doc.addPage();
+          y = margin;
+          doc.setFillColor(248, 250, 252);
+          doc.rect(margin, y, pageWidth - margin * 2, 8, "F");
+          visibleReportColumns.forEach((column, index) => {
+            doc.text(column.label, margin + index * colWidth + 2, y + 5);
+          });
+          y += 8;
+        }
+
+        if (rowIndex === rowsForPdf.length - 1) {
+          doc.setFillColor(250, 251, 255);
+          doc.rect(margin, y, pageWidth - margin * 2, rowHeight, "F");
+        }
+
+        rowValues.forEach((value, index) => {
+          const lines = wrapped[index];
+          doc.text(lines[0] || "", margin + index * colWidth + 2, y + 5);
+        });
+        y += rowHeight;
+      });
+
+      doc.save(`${fileBase}.pdf`);
+    };
+
+    const exportSpreadsheet = async (bookType: "xlsx" | "xls", suffix: string) => {
+      const XLSX = await import("xlsx");
+      const worksheet = XLSX.utils.aoa_to_sheet([
+        exportHeaders,
+        ...exportRows,
+        exportTotals,
+      ]);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Sales by Item");
+      XLSX.writeFile(workbook, `${fileBase}.${suffix}`, {
+        bookType,
+        compression: true,
+      });
+    };
+
+    const openPrintWindow = () => {
+      const printWindow = window.open("", "_blank", "noopener,noreferrer,width=1200,height=800");
+      if (!printWindow) {
+        throw new Error("Unable to open the print dialog.");
+      }
+      const styles = `
+        <style>
+          body { font-family: Arial, sans-serif; margin: 24px; color: #0f172a; }
+          h1 { font-size: 20px; margin: 0 0 6px; text-align: center; }
+          p { margin: 0 0 16px; text-align: center; color: #475569; }
+          table { width: 100%; border-collapse: collapse; }
+          th, td { border-bottom: 1px solid #e5e7eb; padding: 8px 10px; font-size: 12px; }
+          th { text-align: left; background: #f8fafc; text-transform: uppercase; font-size: 10px; letter-spacing: .08em; color: #64748b; }
+          td.num { text-align: center; }
+          tr.total td { font-weight: 600; background: #fafbff; }
+        </style>
+      `;
+      const headerCells = exportHeaders.map((header) => `<th>${escapeHtml(header)}</th>`).join("");
+      const bodyRows = exportRows
+        .map(
+          (row) =>
+            `<tr>${row.map((cell, index) => `<td class="${index === 0 ? "" : "num"}">${escapeHtml(cell)}</td>`).join("")}</tr>`,
+        )
+        .join("");
+      const totalRow = `<tr class="total">${exportTotals.map((cell, index) => `<td class="${index === 0 ? "" : "num"}">${escapeHtml(cell)}</td>`).join("")}</tr>`;
+
+      printWindow.document.open();
+      printWindow.document.write(`
+        <!doctype html>
+        <html>
+          <head>
+            <title>${escapeHtml(reportName)}</title>
+            ${styles}
+          </head>
+          <body>
+            <h1>${escapeHtml(reportName)}</h1>
+            <p>From ${escapeHtml(formatDate(selectedDateRange.start))} To ${escapeHtml(formatDate(selectedDateRange.end))}</p>
+            <table>
+              <thead><tr>${headerCells}</tr></thead>
+              <tbody>${bodyRows}${totalRow}</tbody>
+            </table>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.onafterprint = () => {
+        printWindow.close();
+      };
+      setTimeout(() => {
+        printWindow.print();
+      }, 250);
+    };
+
+    void (async () => {
+      try {
+        if (normalizedLabel === "pdf") {
+          exportPdf();
+        } else if (normalizedLabel === "xlsx (microsoft excel)") {
+          await exportSpreadsheet("xlsx", "xlsx");
+        } else if (normalizedLabel === "xls (microsoft excel 1997-2004 compatible)") {
+          await exportSpreadsheet("xls", "xls");
+        } else if (normalizedLabel === "csv (comma separated value)") {
+          const csv = [
+            exportHeaders.map(escapeCsvValue).join(","),
+            ...exportRows.map((row) => row.map(escapeCsvValue).join(",")),
+            exportTotals.map(escapeCsvValue).join(","),
+          ].join("\n");
+          downloadText(csv, `${fileBase}.csv`, "text/csv;charset=utf-8;");
+        } else if (normalizedLabel === "export to zoho sheet") {
+          await exportSpreadsheet("xlsx", "xlsx");
+        } else if (normalizedLabel === "print" || normalizedLabel === "print preference") {
+          openPrintWindow();
+        }
+        toast.success(`Export option selected: ${label}`);
+      } catch (error) {
+        console.error("Failed to export Sales by Item report:", error);
+        toast.error(`Unable to export ${label}`);
+      }
+    })();
   };
 
   const openCustomizeReportColumnsModal = () => {
@@ -1454,7 +1612,10 @@ export default function SalesByItemReportView({
     setCustomizeDraftSelectedColumns(selectedReportColumns);
     setCustomizeColumnsSearch("");
     setCustomizeActiveAvailableColumn("");
-    const currentCustomizeRange = dateRangeKey === "custom" ? customDateRange : selectedDateRange;
+    const currentCustomizeRange = getCustomPickerSeedRange(
+      dateRangeKey === "custom" ? customDateRange : selectedDateRange,
+      dateRangeKey
+    );
     setCustomizeDateRangeDraftKey(dateRangeKey);
     setCustomizeCustomDateRangeDraft(currentCustomizeRange);
     setCustomizeCustomDateRangeMonth(getStartOfMonth(currentCustomizeRange.start));
@@ -1516,8 +1677,12 @@ export default function SalesByItemReportView({
     setCustomizeReportTab("general");
     setCustomizeDateRangeDraftKey(dateRangeKey);
     setIsCustomizeDateRangeOpen(false);
-    setCustomizeCustomDateRangeDraft(dateRangeKey === "custom" ? customDateRange : getDateRangeValue(dateRangeKey));
-    setCustomizeCustomDateRangeMonth(getStartOfMonth((dateRangeKey === "custom" ? customDateRange : getDateRangeValue(dateRangeKey)).start));
+    const currentCustomizeRange = getCustomPickerSeedRange(
+      dateRangeKey === "custom" ? customDateRange : getDateRangeValue(dateRangeKey),
+      dateRangeKey
+    );
+    setCustomizeCustomDateRangeDraft(currentCustomizeRange);
+    setCustomizeCustomDateRangeMonth(getStartOfMonth(currentCustomizeRange.start));
     setIsCustomizeCustomDateRangeOpen(false);
     setCustomizeEntityDraftKeys(entityKeys.length > 0 ? entityKeys : ENTITY_OPTIONS.map((option) => option.key));
     setCustomizeEntitySearch("");
@@ -1619,18 +1784,6 @@ export default function SalesByItemReportView({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              openCustomizeColumnsModal();
-            }}
-            className="inline-flex h-9 w-9 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]"
-            aria-label="Customize report columns"
-            title="Customize report columns"
-          >
-            <SlidersHorizontal size={15} />
-          </button>
           <div ref={exportRef} className="relative">
             <button
               type="button"
@@ -1740,7 +1893,10 @@ export default function SalesByItemReportView({
                           type="button"
                           onClick={() => {
                             if (option.key === "custom") {
-                              const currentRange = dateRangeKey === "custom" ? customDateRange : selectedDateRange;
+                              const currentRange = getCustomPickerSeedRange(
+                                dateRangeKey === "custom" ? customDateRange : selectedDateRange,
+                                dateRangeKey
+                              );
                               setDateRangeDraftKey("custom");
                               setCustomDateRangeDraft(currentRange);
                               setIsCustomDateRangeOpen(true);
@@ -2727,10 +2883,12 @@ export default function SalesByItemReportView({
                                           type="button"
                                           onClick={() => {
                                             if (option.key === "custom") {
-                                              const currentRange =
+                                              const currentRange = getCustomPickerSeedRange(
                                                 customizeDateRangeDraftKey === "custom"
                                                   ? customizeCustomDateRangeDraft
-                                                  : getDateRangeValue(customizeDateRangeDraftKey);
+                                                  : getDateRangeValue(customizeDateRangeDraftKey),
+                                                customizeDateRangeDraftKey
+                                              );
                                               setCustomizeDateRangeDraftKey("custom");
                                               setCustomizeCustomDateRangeDraft(currentRange);
                                               setCustomizeCustomDateRangeMonth(getStartOfMonth(currentRange.start));

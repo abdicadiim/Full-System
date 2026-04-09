@@ -25,8 +25,17 @@ export const useQuoteDetailQuoteActions = (ctx: any) => {
     setStatusSuccessMessage,
   } = ctx;
 
-  const handleEdit = () => {
-    navigate(`/sales/quotes/${quoteId}/edit`);
+  const handleEdit = async () => {
+    let preload = quote;
+    try {
+      const fresh = await getQuoteByIdDep(String(quoteId || ""));
+      if (fresh) preload = fresh;
+    } catch {
+      // best effort only
+    }
+    navigate(`/sales/quotes/${quoteId}/edit`, {
+      state: { preloadedQuote: preload },
+    });
   };
 
   const handleConvertToInvoice = () => {

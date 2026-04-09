@@ -66,13 +66,20 @@ export default function NewQuoteBulkAddModal({ controller }: Props) {
     handleSaveAndSend, handleCancel, handleOtherAction
   } = controller as any;
 
+  const handleBulkItemQuantityStep = (itemId: string | number, delta: number) => {
+    const currentItem = bulkSelectedItems.find((item) => String(item.id) === String(itemId));
+    const currentQuantity = Number(currentItem?.quantity || 1);
+    const nextQuantity = Math.max(1, currentQuantity + delta);
+    handleBulkItemQuantityChange(itemId, String(nextQuantity));
+  };
+
   return (
     <>
       {/* Add Items in Bulk Modal */}
       {
         isBulkAddModalOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center pt-5 z-50" onClick={handleCancelBulkAdd}>
-            <div className="bg-white rounded-lg shadow-xl w-[94vw] max-w-5xl h-[80vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white rounded-lg shadow-xl w-[78vw] max-w-3xl h-[60vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
                 <h2 className="text-[16px] font-medium text-gray-900">Add Items in Bulk</h2>
                 <button
@@ -83,9 +90,9 @@ export default function NewQuoteBulkAddModal({ controller }: Props) {
                 </button>
               </div>
 
-              <div className="flex flex-1 overflow-hidden">
+              <div className="flex flex-1 min-h-0 overflow-hidden">
                 {/* Left Pane - Item Search and List */}
-                <div className="w-[42%] border-r border-gray-200 flex flex-col">
+                <div className="w-[42%] border-r border-gray-200 flex min-h-0 flex-col">
                   <div className="px-4 py-3 border-b border-gray-200">
                     <div className="relative">
                       <Search size={15} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
@@ -98,7 +105,7 @@ export default function NewQuoteBulkAddModal({ controller }: Props) {
                       />
                     </div>
                   </div>
-                  <div className="flex-1 overflow-y-auto">
+                  <div className="flex-1 min-h-0 overflow-y-auto">
                     {getBulkFilteredItems().map(item => {
                       const isSelected = bulkSelectedItems.find(selected => selected.id === item.id);
                       return (
@@ -130,19 +137,21 @@ export default function NewQuoteBulkAddModal({ controller }: Props) {
                 </div>
 
                 {/* Right Pane - Selected Items */}
-                <div className="w-[58%] flex flex-col">
+                <div className="w-[58%] flex min-h-0 flex-col">
                   <div className="px-4 py-3 border-b border-gray-200">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-[14px] font-medium text-gray-700">Selected Items</span>
-                      <span className="px-2 py-0.5 bg-gray-200 text-gray-700 rounded-full text-[11px] font-medium">
-                        {bulkSelectedItems.length}
-                      </span>
-                    </div>
-                    <div className="text-[12px] text-gray-600">
-                      Total Quantity: {bulkSelectedItems.reduce((sum, item) => sum + (item.quantity || 1), 0)}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[14px] font-medium text-gray-700">Selected Items</span>
+                        <span className="px-2 py-0.5 bg-gray-200 text-gray-700 rounded-full text-[11px] font-medium">
+                          {bulkSelectedItems.length}
+                        </span>
+                      </div>
+                      <div className="text-[12px] text-gray-600">
+                        Total Quantity: {bulkSelectedItems.reduce((sum, item) => sum + (item.quantity || 1), 0)}
+                      </div>
                     </div>
                   </div>
-                  <div className="flex-1 overflow-y-auto">
+                  <div className="flex-1 min-h-0 overflow-y-auto">
                     {bulkSelectedItems.length === 0 ? (
                       <div className="p-8 text-center text-gray-500 text-[13px]">
                         Click the item names from the left pane to select them.
@@ -150,28 +159,49 @@ export default function NewQuoteBulkAddModal({ controller }: Props) {
                     ) : (
                       <div className="p-4 space-y-2">
                         {bulkSelectedItems.map(selectedItem => (
-                          <div key={selectedItem.id} className="p-3 bg-gray-50 rounded border border-gray-200 flex items-center justify-between">
+                          <div key={selectedItem.id} className="p-4 bg-white rounded-md border border-gray-200 flex items-center justify-between gap-4 shadow-sm">
                             <div className="flex-1">
                               <div className="text-[14px] font-medium text-gray-900">{selectedItem.name}</div>
                               <div className="text-[12px] text-gray-500 mt-1">
                                 {selectedItem.entityType === "plan" ? "Code" : "SKU"}: {selectedItem.code || selectedItem.sku || "-"} • {formData.currency}{Number(selectedItem.rate || 0).toFixed(2)}
                               </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                min="1"
-                                value={selectedItem.quantity || 1}
-                                onChange={(e) => handleBulkItemQuantityChange(selectedItem.id, e.target.value)}
-                                className="w-14 px-2 py-1 border border-gray-300 rounded text-[13px] focus:outline-none focus:ring-2 focus:ring-[#156372]"
-                                onClick={(e) => e.stopPropagation()}
-                              />
+                            <div className="flex items-center gap-2 shrink-0">
+                              <div className="inline-flex h-8 items-stretch overflow-hidden rounded-md border border-gray-300 bg-white">
+                                <button
+                                  type="button"
+                                  className="flex w-8 items-center justify-center text-gray-500 hover:bg-gray-100"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleBulkItemQuantityStep(selectedItem.id, -1);
+                                  }}
+                                  aria-label={`Decrease quantity for ${selectedItem.name}`}
+                                >
+                                  <Minus size={14} />
+                                </button>
+                                <div className="flex min-w-[36px] items-center justify-center px-2 text-[13px] font-medium text-gray-900">
+                                  {selectedItem.quantity || 1}
+                                </div>
+                                <button
+                                  type="button"
+                                  className="flex w-8 items-center justify-center text-gray-500 hover:bg-gray-100"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleBulkItemQuantityStep(selectedItem.id, 1);
+                                  }}
+                                  aria-label={`Increase quantity for ${selectedItem.name}`}
+                                >
+                                  <Plus size={14} />
+                                </button>
+                              </div>
                               <button
+                                type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleBulkItemToggle(selectedItem);
                                 }}
-                                className="p-1 text-red-500  rounded"
+                                className="flex h-7 w-7 items-center justify-center border-0 bg-transparent p-0 text-red-500 shadow-none outline-none appearance-none hover:text-red-600 focus:outline-none focus:ring-0 focus:ring-offset-0"
+                                aria-label={`Remove ${selectedItem.name} from selected items`}
                               >
                                 <X size={16} />
                               </button>

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getQuoteById, getQuotes, getCustomers, getSalespersons, getProjects, getInvoices, updateQuote } from "../../salesModel";
+import { quoteQueryKeys } from "../quoteQueries";
+import { queryClient } from "../../../lib/queryClient";
 import { resolveVerifiedPrimarySender } from "../../../utils/emailSenderDisplay";
 import { senderEmailsAPI } from "../../../services/api";
 import {
@@ -28,6 +30,42 @@ type QuoteDetailDeps = {
   resolveVerifiedPrimarySender?: typeof resolveVerifiedPrimarySender;
 };
 
+const mergeQuoteDetail = (prev: any, next: any) => {
+  if (!next) return prev;
+  if (!prev) return next;
+
+  const merged = { ...prev, ...next };
+  const prevItems = Array.isArray(prev?.items) ? prev.items : [];
+  const nextItems = Array.isArray(next?.items) ? next.items : [];
+  if (prevItems.length > 0 && nextItems.length === 0) {
+    merged.items = prevItems;
+  }
+
+  if (!merged.customerName && prev?.customerName) merged.customerName = prev.customerName;
+  if (!merged.customer && prev?.customer) merged.customer = prev.customer;
+  if (!merged.customerEmail && prev?.customerEmail) merged.customerEmail = prev.customerEmail;
+
+  const prevStatus = String(prev?.status || "").toLowerCase();
+  const nextStatus = String(next?.status || "").toLowerCase();
+  if (prevStatus && prevStatus !== "draft" && (!nextStatus || nextStatus === "draft")) {
+    merged.status = prev.status;
+  }
+
+  const prevTotal = Number(prev?.total || 0);
+  const nextTotal = Number(next?.total || 0);
+  if (prevTotal > 0 && nextTotal === 0) {
+    merged.total = prev.total;
+  }
+  const prevSubTotal = Number(prev?.subTotal || prev?.subtotal || 0);
+  const nextSubTotal = Number(next?.subTotal || next?.subtotal || 0);
+  if (prevSubTotal > 0 && nextSubTotal === 0) {
+    merged.subTotal = prev.subTotal ?? prev.subtotal;
+    merged.subtotal = prev.subtotal ?? prev.subTotal;
+  }
+
+  return merged;
+};
+
 export const useQuoteDetailState = (
   args: QuoteDetailStateArgs,
   deps: QuoteDetailDeps,
@@ -35,6 +73,32 @@ export const useQuoteDetailState = (
   const quoteId = String(args.quoteId || "");
   const preloadedQuote = args.preloadedQuote || null;
   const preloadedQuotes = Array.isArray(args.preloadedQuotes) ? args.preloadedQuotes : [];
+  const QUOTE_DETAIL_STORAGE_KEY = quoteId ? `quote_detail_${quoteId}` : "";
+  const readStoredQuoteDetail = (): any | null => {
+    if (!QUOTE_DETAIL_STORAGE_KEY || typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem(QUOTE_DETAIL_STORAGE_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  };
+  const cachedQuotes = preloadedQuotes.length > 0
+    ? preloadedQuotes
+    : queryClient
+        .getQueriesData<any[]>({ queryKey: quoteQueryKeys.lists() })
+        .flatMap(([, rows]) => (Array.isArray(rows) ? rows : []));
+  const cachedDetail = preloadedQuote ? null : readStoredQuoteDetail();
+  const cachedQuote =
+    preloadedQuote ||
+    cachedDetail ||
+    queryClient.getQueryData<any>(quoteQueryKeys.detail(quoteId)) ||
+    cachedQuotes.find((q: any) => {
+      const candidateId = String(q?.id || q?._id || "");
+      return Boolean(candidateId) && candidateId === quoteId;
+    }) ||
+    null;
 
   const getQuoteByIdDep = deps.getQuoteById || getQuoteById;
   const getQuotesDep = deps.getQuotes || getQuotes;
@@ -46,9 +110,9 @@ export const useQuoteDetailState = (
   const senderEmailsAPIDep = deps.senderEmailsAPI || senderEmailsAPI;
   const resolveVerifiedPrimarySenderDep = deps.resolveVerifiedPrimarySender || resolveVerifiedPrimarySender;
 
-  const [quote, setQuote] = useState<any>(preloadedQuote);
-  const [allQuotes, setAllQuotes] = useState<any[]>(preloadedQuotes);
-  const [loading, setLoading] = useState(!preloadedQuote);
+  const [quote, setQuote] = useState<any>(cachedQuote);
+  const [allQuotes, setAllQuotes] = useState<any[]>(cachedQuotes);
+  const [loading, setLoading] = useState(!cachedQuote);
   const [baseCurrency, setBaseCurrency] = useState("USD");
   const [activeTab, setActiveTab] = useState("details");
   const [showPdfView, setShowPdfView] = useState(true);
@@ -308,15 +372,25 @@ export const useQuoteDetailState = (
   };
 
   useEffect(() => {
-    if (preloadedQuote) setQuote(preloadedQuote);
-    if (preloadedQuotes.length > 0) setAllQuotes(preloadedQuotes);
-  }, [preloadedQuote, preloadedQuotes, quoteId]);
+    if (preloadedQuote) {
+      setQuote(preloadedQuote);
+    } else if (cachedDetail) {
+      setQuote(cachedDetail);
+    } else if (cachedQuote) {
+      setQuote(cachedQuote);
+    }
+    if (preloadedQuotes.length > 0) {
+      setAllQuotes(preloadedQuotes);
+    } else if (cachedQuotes.length > 0) {
+      setAllQuotes(cachedQuotes);
+    }
+  }, [preloadedQuote, preloadedQuotes, cachedQuote, cachedDetail, cachedQuotes, quoteId]);
 
   useEffect(() => {
     let cancelled = false;
 
     const init = async () => {
-      setLoading(!preloadedQuote);
+      setLoading(!cachedQuote && !cachedDetail);
       fetchOrganizationProfile();
       fetchOwnerEmail();
 
@@ -350,7 +424,15 @@ export const useQuoteDetailState = (
       if (quoteResult.status === "fulfilled") {
         const quoteData = quoteResult.value;
         if (quoteData) {
-          setQuote(quoteData);
+          const mergedQuote = mergeQuoteDetail(quote, quoteData);
+          setQuote(mergedQuote);
+          if (QUOTE_DETAIL_STORAGE_KEY && typeof window !== "undefined") {
+            try {
+              localStorage.setItem(QUOTE_DETAIL_STORAGE_KEY, JSON.stringify(mergedQuote));
+            } catch {
+              // best effort only
+            }
+          }
 
           const dbAttachments = Array.isArray(quoteData.attachedFiles)
             ? quoteData.attachedFiles.map((attachment: any, index: number) => normalizeAttachmentFromQuote(attachment, index))
@@ -761,4 +843,3 @@ export const useQuoteDetailState = (
     resolveVerifiedPrimarySenderDep,
   };
 };
-

@@ -3072,7 +3072,7 @@ export default function SubscriptionQuote() {
       )}
 
       {isManageSalespersonsOpen && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40 p-4" onClick={() => setIsManageSalespersonsOpen(false)}>
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
               <h3 className="text-[18px] font-semibold text-slate-900">Manage Salespersons</h3>

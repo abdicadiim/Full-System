@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
-import { CalendarDays, Check, ChevronDown, ChevronRight, Columns3, Filter, Folder, Menu, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
+import { jsPDF } from "jspdf";
+import { CalendarDays, Check, ChevronDown, ChevronRight, Columns3, Filter, Folder, Menu, Plus, RefreshCw, Search, X } from "lucide-react";
 import ReportDetailHeader from "./ReportDetailHeader";
 import SalesByItemReportView from "./SalesByItemReportPage";
 import { getCategoryById, getReportById, REPORT_FUNCTION_LABELS, REPORTS_BY_CATEGORY } from "./reportsCatalog";
@@ -328,6 +329,22 @@ type SalesBySalesPersonRow = {
 };
 
 const formatCurrency = (value: number, currency = "SOS") => `${currency}${value.toFixed(2)}`;
+
+const escapeCsvValue = (value: unknown) => {
+  const textValue = String(value ?? "");
+  if (/[",\n]/.test(textValue)) {
+    return `"${textValue.replace(/"/g, '""')}"`;
+  }
+  return textValue;
+};
+
+const escapeHtml = (value: unknown) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 
 type ReportsDrawerSection = {
   id: string;
@@ -1270,47 +1287,176 @@ export function SalesBySalesPersonReportView({
 
   const handleExportAction = (label: string) => {
     setIsExportOpen(false);
-    toast.success(`Export option selected: ${label}`);
-  };
-
-  const openCustomizeColumnsModal = () => {
-    if (typeof window !== "undefined" && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)) {
-      console.debug("[reports] openCustomizeColumnsModal");
-    }
-    setCustomizeReportTab("general");
-    setCustomizeDraftSelectedColumns(selectedReportColumns);
-    setCustomizeColumnsSearch("");
-    setCustomizeActiveAvailableColumn("");
-    const currentCustomizeRange = dateRangeKey === "custom" ? customDateRange : selectedDateRange;
-    setCustomizeDateRangeDraftKey(dateRangeKey);
-    setCustomizeCustomDateRangeDraft(currentCustomizeRange);
-    setCustomizeCustomDateRangeMonth(getStartOfMonth(currentCustomizeRange.start));
-    setIsCustomizeDateRangeOpen(false);
-    setIsCustomizeCustomDateRangeOpen(dateRangeKey === "custom");
-    setCompareWithDraftKey(compareWithKey === "none" ? "previous-years" : compareWithKey);
-    setCompareWithDraftCount(compareWithKey === "none" ? 1 : compareWithCount);
-    setCompareWithDraftArrangeLatest(compareWithArrangeLatest);
-    setCustomizeEntityDraftKeys(entityKeys.length > 0 ? entityKeys : ENTITY_OPTIONS.map((option) => option.key));
-    setCustomizeEntitySearch("");
-    setCustomizeMoreFilterRows(
-      moreFilterRows.filter((row) => row.field || row.comparator || row.value.trim()).map((row) => ({ ...row }))
+    const normalizedLabel = label.toLowerCase();
+    const fileBase = `sales-by-sales-person-${new Date().toISOString().split("T")[0]}`;
+    const exportHeaders = visibleReportColumns.map((column) => column.label);
+    const exportRows = reportRows.map((row) =>
+      visibleReportColumns.map((column) => formatReportColumnValue(column.key, row.values[column.key])),
     );
-    setCustomizeMoreFilterDropdown(null);
-    setCustomizeCompareSearch("");
-    setCustomizeCompareCountSearch("");
-    setIsCustomizeCompareOpen(false);
-    setIsCustomizeCompareCountOpen(false);
-    setIsCustomizeEntityOpen(false);
-    setIsCompareWithOpen(false);
-    setIsCompareWithSelectOpen(false);
-    setIsCompareWithCountOpen(false);
-    setIsExportOpen(false);
-    setIsMoreFiltersOpen(false);
-    setIsEntityOpen(false);
-    setIsDateRangeOpen(false);
-    setIsCustomDateRangeOpen(false);
-    closeMoreFilterDropdown();
-    setIsCustomizeColumnsOpen(true);
+    const exportTotals = reportColumnTotals.map((value) => String(value ?? ""));
+
+    const downloadText = (content: string, fileName: string, mimeType: string) => {
+      const blob = new Blob([content], { type: mimeType });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    };
+
+    const exportPdf = () => {
+      const doc = new jsPDF("landscape", "mm", "a4");
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 10;
+      const colWidth = (pageWidth - margin * 2) / Math.max(visibleReportColumns.length, 1);
+      let y = 18;
+
+      doc.setFontSize(16);
+      doc.text(reportName, pageWidth / 2, y, { align: "center" });
+      y += 8;
+      doc.setFontSize(10);
+      doc.text(`From ${formatDate(selectedDateRange.start)} To ${formatDate(selectedDateRange.end)}`, pageWidth / 2, y, { align: "center" });
+      y += 10;
+
+      doc.setFillColor(248, 250, 252);
+      doc.rect(margin, y, pageWidth - margin * 2, 8, "F");
+      doc.setFontSize(9);
+      visibleReportColumns.forEach((column, index) => {
+        doc.text(column.label, margin + index * colWidth + 2, y + 5);
+      });
+      y += 8;
+
+      const rowsForPdf = [...exportRows, exportTotals];
+      rowsForPdf.forEach((rowValues, rowIndex) => {
+        const wrapped = rowValues.map((value) => doc.splitTextToSize(String(value ?? ""), colWidth - 4));
+        const rowHeight = Math.max(...wrapped.map((lines) => Math.max(lines.length, 1))) * 5 + 2;
+
+        if (y + rowHeight > pageHeight - margin) {
+          doc.addPage();
+          y = margin;
+          doc.setFillColor(248, 250, 252);
+          doc.rect(margin, y, pageWidth - margin * 2, 8, "F");
+          visibleReportColumns.forEach((column, index) => {
+            doc.text(column.label, margin + index * colWidth + 2, y + 5);
+          });
+          y += 8;
+        }
+
+        if (rowIndex === rowsForPdf.length - 1) {
+          doc.setFillColor(250, 251, 255);
+          doc.rect(margin, y, pageWidth - margin * 2, rowHeight, "F");
+        }
+
+        rowValues.forEach((value, index) => {
+          const lines = wrapped[index];
+          doc.text(lines[0] || "", margin + index * colWidth + 2, y + 5);
+        });
+        y += rowHeight;
+      });
+
+      doc.save(`${fileBase}.pdf`);
+    };
+
+    const exportSpreadsheet = async (bookType: "xlsx" | "xls", suffix: string) => {
+      const XLSX = await import("xlsx");
+      const worksheet = XLSX.utils.aoa_to_sheet([
+        exportHeaders,
+        ...exportRows,
+        exportTotals,
+      ]);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Sales by Sales Person");
+      XLSX.writeFile(workbook, `${fileBase}.${suffix}`, {
+        bookType,
+        compression: true,
+      });
+    };
+
+    const openPrintWindow = () => {
+      const printWindow = window.open("", "_blank", "noopener,noreferrer,width=1200,height=800");
+      if (!printWindow) {
+        throw new Error("Unable to open the print dialog.");
+      }
+
+      const styles = `
+        <style>
+          body { font-family: Arial, sans-serif; margin: 24px; color: #0f172a; }
+          h1 { font-size: 20px; margin: 0 0 6px; text-align: center; }
+          p { margin: 0 0 16px; text-align: center; color: #475569; }
+          table { width: 100%; border-collapse: collapse; }
+          th, td { border-bottom: 1px solid #e5e7eb; padding: 8px 10px; font-size: 12px; }
+          th { text-align: left; background: #f8fafc; text-transform: uppercase; font-size: 10px; letter-spacing: .08em; color: #64748b; }
+          td.num { text-align: center; }
+          tr.total td { font-weight: 600; background: #fafbff; }
+        </style>
+      `;
+      const headerCells = exportHeaders.map((header) => `<th>${escapeHtml(header)}</th>`).join("");
+      const bodyRows = exportRows
+        .map(
+          (row) =>
+            `<tr>${row.map((cell, index) => `<td class="${index === 0 ? "" : "num"}">${escapeHtml(cell)}</td>`).join("")}</tr>`,
+        )
+        .join("");
+      const totalRow = `<tr class="total">${exportTotals.map((cell, index) => `<td class="${index === 0 ? "" : "num"}">${escapeHtml(cell)}</td>`).join("")}</tr>`;
+
+      printWindow.document.open();
+      printWindow.document.write(`
+        <!doctype html>
+        <html>
+          <head>
+            <title>${escapeHtml(reportName)}</title>
+            ${styles}
+          </head>
+          <body>
+            <h1>${escapeHtml(reportName)}</h1>
+            <p>From ${escapeHtml(formatDate(selectedDateRange.start))} To ${escapeHtml(formatDate(selectedDateRange.end))}</p>
+            <table>
+              <thead><tr>${headerCells}</tr></thead>
+              <tbody>${bodyRows}${totalRow}</tbody>
+            </table>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.onafterprint = () => {
+        printWindow.close();
+      };
+      setTimeout(() => {
+        printWindow.print();
+      }, 250);
+    };
+
+    void (async () => {
+      try {
+        if (normalizedLabel === "pdf") {
+          exportPdf();
+        } else if (normalizedLabel === "xlsx (microsoft excel)") {
+          await exportSpreadsheet("xlsx", "xlsx");
+        } else if (normalizedLabel === "xls (microsoft excel 1997-2004 compatible)") {
+          await exportSpreadsheet("xls", "xls");
+        } else if (normalizedLabel === "csv (comma separated value)") {
+          const csv = [
+            exportHeaders.map(escapeCsvValue).join(","),
+            ...exportRows.map((row) => row.map(escapeCsvValue).join(",")),
+            exportTotals.map(escapeCsvValue).join(","),
+          ].join("\n");
+          downloadText(csv, `${fileBase}.csv`, "text/csv;charset=utf-8;");
+        } else if (normalizedLabel === "export to zoho sheet") {
+          await exportSpreadsheet("xlsx", "xlsx");
+        } else if (normalizedLabel === "print" || normalizedLabel === "print preference") {
+          openPrintWindow();
+        }
+        toast.success(`Export option selected: ${label}`);
+      } catch (error) {
+        console.error("Failed to export Sales by Sales Person report:", error);
+        toast.error(`Unable to export ${label}`);
+      }
+    })();
   };
 
   const openCustomizeReportColumnsModal = () => {
@@ -1485,18 +1631,6 @@ export function SalesBySalesPersonReportView({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              openCustomizeColumnsModal();
-            }}
-            className="inline-flex h-9 w-9 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]"
-            aria-label="Customize report columns"
-            title="Customize report columns"
-          >
-            <SlidersHorizontal size={15} />
-          </button>
           <div ref={exportRef} className="relative">
             <button
               type="button"
@@ -3267,7 +3401,6 @@ export default function ReportDetailPage() {
             dateLabel={dateLabel}
             menuButtonRef={reportsMenuButtonRef}
             onMenuClick={() => setIsReportsDrawerOpen((prev) => !prev)}
-            onCustomizeClick={() => toast.info("Customize report columns is available on the detailed report pages.")}
             onRunReport={() => toast.success(`Report refreshed: ${report.name}`)}
             onClosePage={() => navigate("/reports")}
           />

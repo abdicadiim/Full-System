@@ -173,6 +173,7 @@ const QuoteDetailDesktopSidebar = ({
               type="checkbox"
               className="w-4 h-4 cursor-pointer"
               checked={selectedQuotes.includes(q.id)}
+              style={{ accentColor: "#1b5e6a" }}
               onChange={() => handleSelectQuote(q.id)}
               onClick={(e) => e.stopPropagation()}
             />

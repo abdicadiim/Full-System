@@ -44,7 +44,7 @@ type Props = {
 export default function NewQuoteView({ controller }: Props) {
   return (
     <>
-      <div className="w-full min-h-full bg-white">
+      <div className="w-full min-h-full bg-white pb-24">
         <NewQuoteFormSection controller={controller} />
         <NewQuoteItemsSummarySection controller={controller} />
       </div>

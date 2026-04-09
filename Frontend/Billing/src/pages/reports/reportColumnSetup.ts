@@ -74,6 +74,11 @@ const COLUMN_GROUPS_BY_REPORT: Record<string, ColumnGroup[]> = {
     { label: "Reports", items: ["Date", "Name", "Invoices", "Credit Notes", "Sales Receipts", "Sales", "Sales With Tax"] },
     { label: "Locations", items: ["Location"] },
   ],
+  "projects-revenue-summary": [
+    { label: "Reports", items: ["Project", "Project Description", "Budget Amount", "Customer Name", "Actual Revenue"] },
+    { label: "Project", items: ["Status", "Billing Method", "Start Date", "End Date", "Rate"] },
+    { label: "Customer", items: ["Customer Name"] },
+  ],
   "time-to-get-paid": [
     { label: "Reports", items: ["Customer Name", "0 - 15 Days", "16 - 30 Days", "31 - 45 Days", "Above 45 Days"] },
   ],

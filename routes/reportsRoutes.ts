@@ -13,6 +13,7 @@ import {
   getSalesByCustomerReport,
   getSalesByItemReport,
   getSalesBySalesPersonReport,
+  getTimeToGetPaidReport,
 } from "../controllers/reportsController.js";
 
 export const reportsRoutes = Router();
@@ -21,6 +22,7 @@ reportsRoutes.use(requireAuth);
 reportsRoutes.get("/sales-by-customer", getSalesByCustomerReport);
 reportsRoutes.get("/sales-by-item", getSalesByItemReport);
 reportsRoutes.get("/sales-by-sales-person", getSalesBySalesPersonReport);
+reportsRoutes.get("/time-to-get-paid", getTimeToGetPaidReport);
 reportsRoutes.get("/ar-aging-summary", getARAgingSummaryReport);
 reportsRoutes.get("/ar-aging-details", getARAgingDetailsReport);
 reportsRoutes.get("/invoice-details", getInvoiceDetailsReport);

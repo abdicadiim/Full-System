@@ -116,7 +116,6 @@ export default function Invoices() {
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isNewDropdownOpen, setIsNewDropdownOpen] = useState(false);
-  const [isDownloadDropdownOpen, setIsDownloadDropdownOpen] = useState(false);
   const [sortSubMenuOpen, setSortSubMenuOpen] = useState(false);
   const [exportSubMenuOpen, setExportSubMenuOpen] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState("All");
@@ -547,7 +546,6 @@ export default function Invoices() {
   const statusDropdownRef = useRef(null);
   const moreMenuRef = useRef(null);
   const newDropdownRef = useRef(null);
-  const downloadDropdownRef = useRef(null);
   const actionDropdownRef = useRef(null);
 
   useEffect(() => {
@@ -591,9 +589,6 @@ export default function Invoices() {
       if (newDropdownRef.current && !newDropdownRef.current.contains(event.target as Node)) {
         setIsNewDropdownOpen(false);
       }
-      if (downloadDropdownRef.current && !downloadDropdownRef.current.contains(event.target as Node)) {
-        setIsDownloadDropdownOpen(false);
-      }
       if (bulkUpdateFieldDropdownRef.current && !bulkUpdateFieldDropdownRef.current.contains(event.target as Node)) {
         setIsBulkUpdateFieldDropdownOpen(false);
       }
@@ -611,14 +606,14 @@ export default function Invoices() {
       }
     };
 
-    if (isInvoiceDropdownOpen || isStatusDropdownOpen || isMoreMenuOpen || isNewDropdownOpen || isDownloadDropdownOpen || isBulkUpdateFieldDropdownOpen || isBulkUpdateValueDropdownOpen || isDecimalFormatDropdownOpen || activeActionInvoiceId || isVisibilityDropdownOpen) {
+    if (isInvoiceDropdownOpen || isStatusDropdownOpen || isMoreMenuOpen || isNewDropdownOpen || isBulkUpdateFieldDropdownOpen || isBulkUpdateValueDropdownOpen || isDecimalFormatDropdownOpen || activeActionInvoiceId || isVisibilityDropdownOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isInvoiceDropdownOpen, isStatusDropdownOpen, isMoreMenuOpen, isNewDropdownOpen, isDownloadDropdownOpen, isBulkUpdateFieldDropdownOpen, isBulkUpdateValueDropdownOpen, isDecimalFormatDropdownOpen, activeActionInvoiceId, isVisibilityDropdownOpen]);
+  }, [isInvoiceDropdownOpen, isStatusDropdownOpen, isMoreMenuOpen, isNewDropdownOpen, isBulkUpdateFieldDropdownOpen, isBulkUpdateValueDropdownOpen, isDecimalFormatDropdownOpen, activeActionInvoiceId, isVisibilityDropdownOpen]);
 
   const handleViewSelect = async (view: string) => {
     setIsInvoiceDropdownOpen(false);
@@ -1639,7 +1634,6 @@ export default function Invoices() {
     if (!singleInvoice && selectedInvoices.size === 0) return;
     if (isGeneratingPdf) return;
 
-    setIsDownloadDropdownOpen(false);
     setIsGeneratingPdf(true);
 
     try {
@@ -2195,34 +2189,16 @@ export default function Invoices() {
                 Bulk Update
               </button>
 
-              <div className="relative" ref={downloadDropdownRef}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!isGeneratingPdf) setIsDownloadDropdownOpen(!isDownloadDropdownOpen);
-                  }}
-                  className={`h-9 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50 transition-colors shadow-sm flex items-center gap-2 ${isGeneratingPdf ? "opacity-60 cursor-not-allowed" : ""}`}
-                  title="Export Options"
-                  disabled={isGeneratingPdf}
-                >
-                  {isGeneratingPdf ? <RefreshCw size={14} className="animate-spin" /> : <Download size={16} className="text-gray-500" />}
-                  <span>Export PDF</span>
-                  <ChevronDown size={14} className="text-gray-400" />
-                </button>
-                {isDownloadDropdownOpen && (
-                  <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 min-w-[180px] py-1">
-                    <button
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                      onClick={() => {
-                        handleDownloadPDF();
-                        setIsDownloadDropdownOpen(false);
-                      }}
-                    >
-                      Download as PDF
-                    </button>
-                  </div>
-                )}
-              </div>
+              <button
+                type="button"
+                onClick={handleDownloadPDF}
+                className={`h-9 w-9 rounded-md border border-gray-200 bg-white text-sm text-gray-700 hover:bg-gray-50 transition-colors shadow-sm flex items-center justify-center ${isGeneratingPdf ? "opacity-60 cursor-not-allowed" : ""}`}
+                title="Export PDF"
+                aria-label="Export PDF"
+                disabled={isGeneratingPdf}
+              >
+                {isGeneratingPdf ? <RefreshCw size={14} className="animate-spin" /> : <Download size={16} className="text-gray-500" />}
+              </button>
 
               <button
                 type="button"
@@ -2789,7 +2765,9 @@ export default function Invoices() {
                                   className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-700 text-left transition-colors hover:bg-slate-50"
                                   onClick={() => {
                                     setActiveActionInvoiceId(null);
-                                    navigate(`/sales/invoices/${invoice.id}/edit`);
+                                    const editId = String((invoice as any)?.id || (invoice as any)?._id || "").trim();
+                                    if (!editId) return;
+                                    navigate(`/sales/invoices/${editId}/edit`);
                                   }}
                                 >
                                   <Pencil size={16} className="text-slate-500" />
@@ -4316,7 +4294,7 @@ export default function Invoices() {
       )}
       {/* Customize Columns Modal */}
       {isCustomizeColumnsModalOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] flex items-start justify-center z-[3000] overflow-y-auto pt-6 pb-6 px-4">
+        <div className="fixed inset-0 bg-black/40 flex items-start justify-center z-[3000] overflow-y-auto pt-6 pb-6 px-4">
           <div className="bg-white rounded-lg shadow-2xl w-full max-w-[500px] overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-[#f9fafb]">
               <div className="flex items-center gap-3">
@@ -4327,7 +4305,7 @@ export default function Invoices() {
                 <span className="text-xs text-gray-500 font-medium">{tempVisibleColumns.length} of {invoiceColumnOptions.length} Selected</span>
                 <button
                   onClick={() => setIsCustomizeColumnsModalOpen(false)}
-                  className="w-7 h-7 flex items-center justify-center border border-blue-200 rounded shadow-sm hover:bg-gray-50 transition-colors group"
+                  className="w-7 h-7 flex items-center justify-center rounded shadow-sm hover:bg-gray-50 transition-colors group"
                 >
                   <X size={16} className="text-red-500 group-hover:text-red-600" />
                 </button>
@@ -4396,7 +4374,7 @@ export default function Invoices() {
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => { }}
-                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 pointer-events-none"
+                            className="w-4 h-4 rounded border-gray-300 accent-[#156372] focus:ring-[#156372] pointer-events-none"
                           />
                         )}
                         <span className={`text-[13.5px] ${isChecked ? 'text-gray-900 font-medium' : 'text-gray-600'}`}>{col.label}</span>
