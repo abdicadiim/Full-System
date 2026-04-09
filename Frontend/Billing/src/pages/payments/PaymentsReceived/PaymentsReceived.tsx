@@ -342,8 +342,8 @@ export default function PaymentsReceived() {
     } finally {
       setIsRefreshing(false);
     }
-  };
-
+  }
+ 
   useEffect(() => {
     if (paymentsQuery.isLoading) {
       setIsLoading(true);
@@ -496,7 +496,7 @@ export default function PaymentsReceived() {
     }
   };
 
-  const applyFilters = (allPayments: Payment[], status: string, views: CustomView[] = customViews) => {
+  function applyFilters(allPayments: Payment[], status: string, views: CustomView[] = customViews) {
     let filtered = Array.isArray(allPayments) ? allPayments : [];
 
     // Check if it's a custom view

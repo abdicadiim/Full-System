@@ -687,6 +687,9 @@ export default function ExpenseDetail() {
     }
   };
 
+  const statusValue = expense ? String(expense.status || "").toLowerCase() : "";
+  const isBillableExpense = Boolean(expense?.is_billable) || statusValue === "billable" || statusValue === "unbilled";
+
   const handleMakeRecurring = () => {
     if (!expense) return;
 
@@ -703,24 +706,69 @@ export default function ExpenseDetail() {
     });
   };
 
+  const buildInvoiceItemsFromExpense = (sourceExpense: any) => {
+    const rows =
+      Array.isArray(sourceExpense?.line_items) && sourceExpense.line_items.length > 0
+        ? sourceExpense.line_items
+        : Array.isArray(sourceExpense?.lineItems)
+          ? sourceExpense.lineItems
+          : [];
+    const normalizeLine = (line: any, index: number) => {
+      const quantity = Number(line?.quantity ?? line?.qty ?? 1) || 1;
+      const amount = Number(line?.amount ?? line?.total ?? line?.rate ?? 0) || 0;
+      const rate = quantity ? amount / quantity : amount;
+      return {
+        id: line?.id || line?._id || `expense-item-${index}-${Date.now()}`,
+        itemDetails: String(line?.description || line?.itemDetails || sourceExpense.expenseAccount || "Expense").trim(),
+        description: String(line?.description || line?.notes || ""),
+        quantity,
+        rate,
+        amount,
+        tax: String(line?.tax || line?.taxName || ""),
+        account: String(line?.account_name || line?.account || sourceExpense.expenseAccount || ""),
+        reportingTags: Array.isArray(line?.reportingTags) ? line.reportingTags : [],
+      };
+    };
+
+    if (rows.length === 0) {
+      const amount = Number(sourceExpense.amount || sourceExpense.total || 0) || 0;
+      return [
+        {
+          id: `expense-item-${sourceExpense.expense_id || sourceExpense.id || Date.now()}`,
+          itemDetails: String(sourceExpense.expenseAccount || sourceExpense.notes || "Expense"),
+          description: String(sourceExpense.notes || sourceExpense.description || ""),
+          quantity: 1,
+          rate: amount,
+          amount,
+          tax: String(sourceExpense.tax || ""),
+          account: String(sourceExpense.expenseAccount || ""),
+          reportingTags: Array.isArray(sourceExpense.reportingTags) ? sourceExpense.reportingTags : [],
+        },
+      ];
+    }
+
+    return rows.map(normalizeLine);
+  };
+
   const handleConvertToInvoice = () => {
     if (!expense) return;
 
     const hasCustomer = Boolean(expense.customer_id || expense.customerName);
-    const statusValue = String(expense.status || "").toLowerCase();
-    const isBillable = Boolean(expense.is_billable) || statusValue === "billable" || statusValue === "unbilled";
 
-    if (!hasCustomer || !isBillable) {
+    if (!hasCustomer || !isBillableExpense) {
       alert("This expense must be billable and linked to a customer before you can convert it to an invoice.");
       return;
     }
 
+    const expenseItems = buildInvoiceItemsFromExpense(expense);
     navigate("/sales/invoices/new", {
       state: {
+        source: "expense",
         customerId: expense.customer_id || "",
         customerName: expense.customerName || "",
         fromExpenseId: expense.expense_id || expense.id || id || "",
         fromExpense: expense,
+        expenseItems,
       },
     });
   };
@@ -1197,11 +1245,15 @@ export default function ExpenseDetail() {
               <Edit size={14} />
               Edit
             </button>
-            <div className="w-px h-4 bg-gray-200 mx-0.5" />
-            <button className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-gray-700 bg-transparent border-none cursor-pointer font-medium" onClick={handleConvertToInvoice}>
-              <RotateCw size={14} />
-              Convert to Invoice
-            </button>
+            {isBillableExpense && (
+              <>
+                <div className="w-px h-4 bg-gray-200 mx-0.5" />
+                <button className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-gray-700 bg-transparent border-none cursor-pointer font-medium" onClick={handleConvertToInvoice}>
+                  <RotateCw size={14} />
+                  Convert to Invoice
+                </button>
+              </>
+            )}
             <div className="w-px h-4 bg-gray-200 mx-0.5" />
             <button className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-gray-700 bg-transparent border-none cursor-pointer font-medium" onClick={handleMakeRecurring}>
               <RotateCw size={14} />
@@ -1267,7 +1319,13 @@ export default function ExpenseDetail() {
 
                   <div className="mt-4">
                     <div className="mb-1 text-base text-[#596a8b]">Customer</div>
-                    <div className="text-[14px] text-[#2f66d0]">{expense.customerName || "-"}</div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-[14px] text-[#2f66d0]">{expense.customerName || "-"}</div>
+                      <label className="inline-flex items-center gap-1 text-[12px] text-[#4b5c7d]">
+                        <input type="checkbox" className="h-4 w-4 border-gray-300" checked={isBillableExpense} readOnly />
+                        <span>{isBillableExpense ? "Billable" : "Not Billable"}</span>
+                      </label>
+                    </div>
                   </div>
 
                   <div className="mt-4">

@@ -3767,7 +3767,7 @@ export default function RecordExpense() {
 
                   <div className="grid grid-cols-[160px_1fr] items-center gap-4">
                     <label className="text-sm font-medium text-gray-900">Customer Name</label>
-                    <div className="max-w-[560px] flex items-center gap-0">
+                    <div className="max-w-[560px] flex items-center gap-2">
                       <div className="flex-1 relative" ref={customerRef}>
                         <button
                           type="button"
@@ -3858,9 +3858,20 @@ export default function RecordExpense() {
                           </div>
                         )}
                       </div>
-                      <button onClick={() => setCustomerSearchModalOpen(true)} className="h-[38px] px-3 bg-[#156372] text-white rounded-r-md rounded-l-none hover:bg-[#0D4A52] transition-colors" type="button"><Search size={16} /></button>
-                    </div>
+                    <button onClick={() => setCustomerSearchModalOpen(true)} className="h-[38px] px-3 bg-[#156372] text-white rounded-r-md rounded-l-none hover:bg-[#0D4A52] transition-colors" type="button"><Search size={16} /></button>
+                    {formData.customer_id && (
+                      <label className="flex items-center gap-2 text-sm text-gray-700 whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          checked={formData.billable}
+                          onChange={(event) => setFormData((prev) => ({ ...prev, billable: event.target.checked }))}
+                          className="h-4 w-4 rounded-sm border border-gray-300 text-[#156372] focus:ring-[#156372]"
+                        />
+                        Billable
+                      </label>
+                    )}
                   </div>
+                </div>
 
                   {formData.customer_id && (
                     <div className="grid grid-cols-[160px_1fr] items-center gap-4">

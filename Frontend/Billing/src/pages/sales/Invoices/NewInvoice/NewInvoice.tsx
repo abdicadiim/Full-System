@@ -1200,6 +1200,51 @@ const calculateInvoiceTotalsFromData = (data: InvoiceFormState) => {
   };
 };
 
+const mapExpenseToInvoiceItems = (sourceExpense: any) => {
+  const rows =
+    Array.isArray(sourceExpense?.line_items) && sourceExpense.line_items.length > 0
+      ? sourceExpense.line_items
+      : Array.isArray(sourceExpense?.lineItems)
+        ? sourceExpense.lineItems
+        : [];
+
+  const normalizeLine = (line: any, index: number) => {
+    const quantity = Number(line?.quantity ?? line?.qty ?? 1) || 1;
+    const amount = Number(line?.amount ?? line?.total ?? line?.rate ?? 0) || 0;
+    const rate = quantity ? amount / quantity : amount;
+    return {
+      id: line?.id || line?._id || `expense-item-${index}-${Date.now()}`,
+      itemDetails: String(line?.description || line?.itemDetails || sourceExpense.expenseAccount || "Expense").trim(),
+      description: String(line?.description || line?.notes || ""),
+      quantity,
+      rate,
+      amount,
+      tax: String(line?.tax || line?.taxName || ""),
+      account: String(line?.account_name || line?.account || sourceExpense.expenseAccount || ""),
+      reportingTags: Array.isArray(line?.reportingTags) ? line.reportingTags : [],
+    };
+  };
+
+  if (rows.length === 0) {
+    const amount = Number(sourceExpense.amount || sourceExpense.total || 0) || 0;
+    return [
+      {
+        id: `expense-item-${sourceExpense.expense_id || sourceExpense.id || Date.now()}`,
+        itemDetails: String(sourceExpense.expenseAccount || sourceExpense.notes || "Expense"),
+        description: String(sourceExpense.notes || sourceExpense.description || ""),
+        quantity: 1,
+        rate: amount,
+        amount,
+        tax: String(sourceExpense.tax || ""),
+        account: String(sourceExpense.expenseAccount || ""),
+        reportingTags: Array.isArray(sourceExpense.reportingTags) ? sourceExpense.reportingTags : [],
+      },
+    ];
+  }
+
+  return rows.map(normalizeLine);
+};
+
 useEffect(() => {
   // Re-apply selected price list to invoice lines (keeps rates consistent)
   const list = selectedPriceList;
@@ -1361,6 +1406,76 @@ useEffect(() => {
   };
   loadProjects();
 }, []);
+
+useEffect(() => {
+  if (prefillAppliedRef.current) return;
+  if (isEditMode) return;
+
+  const state = location.state as any;
+  if (!state || state.source !== "expense") return;
+  const expense = state.fromExpense || state.expense;
+  if (!expense) return;
+
+  const customerId = String(
+    state.customerId ||
+      expense.customer_id ||
+      expense.customerId ||
+      expense.customer?._id ||
+      expense.customer?.id ||
+      ""
+  ).trim();
+  const customerName = String(
+    state.customerName ||
+      expense.customerName ||
+      expense.customer?.displayName ||
+      expense.customer?.companyName ||
+      expense.customer?.name ||
+      ""
+  ).trim();
+
+  const matchedCustomer =
+    (customerId
+      ? customers.find((customer: any) => String(customer?.id || customer?._id) === customerId)
+      : null) ||
+    customers.find(
+      (customer: any) =>
+        String(customer?.name || customer?.displayName || "").trim().toLowerCase() ===
+        customerName.toLowerCase()
+    );
+  if (matchedCustomer) {
+    setSelectedCustomer(matchedCustomer);
+  } else if (customerName) {
+    setSelectedCustomer({ id: customerId || undefined, name: customerName, displayName: customerName });
+  }
+
+  const invoiceItems =
+    Array.isArray(state.expenseItems) && state.expenseItems.length > 0
+      ? state.expenseItems
+      : mapExpenseToInvoiceItems(expense);
+
+  setFormData((prev) => {
+    const nextItems = invoiceItems.length > 0 ? invoiceItems : prev.items;
+    const cleanedCustomerName = customerName || prev.customerName;
+    const nextState = {
+      ...prev,
+      customerName: cleanedCustomerName,
+      selectedLocation: expense.location || prev.selectedLocation,
+      invoiceDate: formatDate(expense.date || expense.expenseDate || expense.raw_date || expense.createdAt || new Date()),
+      currency: resolveInvoiceCurrency(expense.currency || prev.currency || baseCurrencyCode || "USD"),
+      items: nextItems,
+      customerNotes: String(expense.notes || prev.customerNotes || ""),
+    } as InvoiceFormState;
+    const totals = calculateInvoiceTotalsFromData(nextState);
+    return {
+      ...nextState,
+      subTotal: totals.subTotal,
+      roundOff: totals.roundOff,
+      total: totals.total,
+    };
+  });
+
+  prefillAppliedRef.current = true;
+}, [location.state, customers, isEditMode, baseCurrencyCode]);
 
 useEffect(() => {
   if (prefillAppliedRef.current) return;

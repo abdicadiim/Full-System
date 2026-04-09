@@ -78,6 +78,8 @@ type PriceListSwitchDialogState = {
 const inputClass =
   "h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-[13px] text-slate-800 outline-none transition focus:border-[#3b82f6]";
 const requiredLabelClass = "text-[16px] font-normal text-red-600";
+const primaryActionBg = "#0d4a52";
+const primaryActionHover = "#0b3b43";
 
 export default function SubscriptionQuote() {
   const navigate = useNavigate();
@@ -2691,7 +2693,8 @@ export default function SubscriptionQuote() {
           <button
             type="button"
             onClick={() => setIsSummaryModalOpen(true)}
-            className="rounded-md bg-[#22c55e] px-6 py-2 text-[14px] font-medium text-white hover:bg-[#16a34a]"
+            className={`rounded-md px-6 py-2 text-[14px] font-medium text-white hover:bg-[${primaryActionHover}]`}
+            style={{ backgroundColor: primaryActionBg }}
           >
             Continue
           </button>
@@ -3245,7 +3248,8 @@ export default function SubscriptionQuote() {
                 type="button"
                 disabled={saveLoading !== null}
                 onClick={handleSaveAsDraft}
-                className="rounded bg-[#22c55e] px-4 py-2 text-[12px] font-medium text-white hover:bg-[#16a34a] disabled:cursor-not-allowed disabled:opacity-60"
+                className={`rounded px-4 py-2 text-[12px] font-medium text-white hover:bg-[${primaryActionHover}] disabled:cursor-not-allowed disabled:opacity-60`}
+                style={{ backgroundColor: primaryActionBg }}
               >
                 Save as Draft
               </button>
@@ -3256,7 +3260,8 @@ export default function SubscriptionQuote() {
                   setIsSummaryModalOpen(false);
                   setIsSendApprovalModalOpen(true);
                 }}
-                className="rounded border border-slate-300 bg-white px-4 py-2 text-[12px] text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                className={`rounded px-4 py-2 text-[12px] font-medium text-white hover:bg-[${primaryActionHover}] disabled:cursor-not-allowed disabled:opacity-60`}
+                style={{ backgroundColor: primaryActionBg }}
               >
                 Save and Send
               </button>
@@ -3282,14 +3287,15 @@ export default function SubscriptionQuote() {
               </div>
             </div>
             <div className="flex items-center gap-2 border-t border-slate-200 px-5 py-3">
-              <button
-                type="button"
-                disabled={saveLoading !== null}
-                onClick={handleSaveAndSend}
-                className="rounded bg-[#22c55e] px-4 py-1.5 text-[12px] font-medium text-white hover:bg-[#16a34a] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                OK
-              </button>
+            <button
+              type="button"
+              disabled={saveLoading !== null}
+              onClick={handleSaveAndSend}
+              className={`rounded px-4 py-1.5 text-[12px] font-medium text-white hover:bg-[${primaryActionHover}] disabled:cursor-not-allowed disabled:opacity-60`}
+              style={{ backgroundColor: primaryActionBg }}
+            >
+              OK
+            </button>
               <button
                 type="button"
                 disabled={saveLoading !== null}

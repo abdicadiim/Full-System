@@ -38,6 +38,31 @@ import { computeRecurringExpenseDisplayAmount } from "../shared/recurringExpense
 import { recurringExpensesAPI, currenciesAPI, taxesAPI } from "../../../services/api";
 import { useCurrency } from "../../../hooks/useCurrency";
 
+const resolveRecurringExpenseRows = (payload: unknown): any[] => {
+  if (!payload) {
+    return [];
+  }
+
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (typeof payload !== "object") {
+    return [];
+  }
+
+  const candidateKeys = ["recurring_expenses", "data", "rows", "items"];
+  for (const key of candidateKeys) {
+    const next = (payload as Record<string, unknown>)[key];
+    const resolved = resolveRecurringExpenseRows(next);
+    if (resolved.length > 0) {
+      return resolved;
+    }
+  }
+
+  return [];
+};
+
 export default function RecurringExpenses() {
   const RECURRING_VISIBLE_COLUMNS_KEY = "recurring_expenses_visible_columns_v1";
   const defaultVisibleColumnKeys = [
@@ -147,46 +172,46 @@ export default function RecurringExpenses() {
     try {
       setIsRefreshing(true);
       const response = await recurringExpensesAPI.getAll({ limit: 1000 });
-      if (response && response.code === 0 && response.recurring_expenses) {
-        // Map API response to match component state structure
-        const mappedExpenses = response.recurring_expenses.map((expense: any) => ({
-          id: expense._id || expense.recurring_expense_id,
-          recurringExpenseId: expense.recurring_expense_id || expense._id,
-          profileName: expense.profile_name,
-          location: expense.location || expense.location_name || "",
-          expenseAccount: expense.account_name,
-          vendor: expense.vendor_name || "",
-          repeatEvery: expense.repeat_every,
-          startDate: expense.start_date,
-          amount: expense.amount,
-          taxName: expense.tax_name || expense.taxName || "",
-          taxId: expense.tax_id || expense.taxId || "",
-          taxRate: Number(expense.tax_percentage ?? expense.taxPercentage ?? expense.rate ?? 0),
-          isInclusiveTax: Boolean(expense.is_inclusive_tax),
-          displayAmount: computeRecurringExpenseDisplayAmount(
-            expense.amount,
-            Number(expense.tax_percentage ?? expense.taxPercentage ?? expense.rate ?? 0),
-            Boolean(expense.is_inclusive_tax)
-          ),
-          currency: baseCurrencyCode || expense.currency_code || "USD",
-          status: (expense.status || "active").toUpperCase(),
-          active: expense.status !== 'stopped' && expense.status !== 'expired',
-          createdTime: expense.created_time || expense.createdAt,
-          description: expense.description,
-          customerName: expense.customer_name,
-          nextExpenseDate: expense.next_expense_date,
-          wsq: (() => {
-            const tags = Array.isArray(expense.reporting_tags) ? expense.reporting_tags : [];
-            const wsqTag = tags.find((tag: any) =>
-              String(tag?.name || tag?.tagName || "").trim().toLowerCase() === "wsq"
-            );
-            return wsqTag?.value || expense?.wsq || "";
-          })(),
-        }));
-        setRecurringExpenses(mappedExpenses);
-      } else {
-        setRecurringExpenses([]);
-      }
+      const rowsFromResponse = resolveRecurringExpenseRows(response);
+      const expenseRows =
+        rowsFromResponse.length > 0 ? rowsFromResponse : resolveRecurringExpenseRows(response?.data);
+
+      // Map API response to match component state structure
+      const mappedExpenses = expenseRows.map((expense: any) => ({
+        id: expense._id || expense.recurring_expense_id,
+        recurringExpenseId: expense.recurring_expense_id || expense._id,
+        profileName: expense.profile_name,
+        location: expense.location || expense.location_name || "",
+        expenseAccount: expense.account_name,
+        vendor: expense.vendor_name || "",
+        repeatEvery: expense.repeat_every,
+        startDate: expense.start_date,
+        amount: expense.amount,
+        taxName: expense.tax_name || expense.taxName || "",
+        taxId: expense.tax_id || expense.taxId || "",
+        taxRate: Number(expense.tax_percentage ?? expense.taxPercentage ?? expense.rate ?? 0),
+        isInclusiveTax: Boolean(expense.is_inclusive_tax),
+        displayAmount: computeRecurringExpenseDisplayAmount(
+          expense.amount,
+          Number(expense.tax_percentage ?? expense.taxPercentage ?? expense.rate ?? 0),
+          Boolean(expense.is_inclusive_tax)
+        ),
+        currency: baseCurrencyCode || expense.currency_code || "USD",
+        status: (expense.status || "active").toUpperCase(),
+        active: expense.status !== 'stopped' && expense.status !== 'expired',
+        createdTime: expense.created_time || expense.createdAt,
+        description: expense.description,
+        customerName: expense.customer_name,
+        nextExpenseDate: expense.next_expense_date,
+        wsq: (() => {
+          const tags = Array.isArray(expense.reporting_tags) ? expense.reporting_tags : [];
+          const wsqTag = tags.find((tag: any) =>
+            String(tag?.name || tag?.tagName || "").trim().toLowerCase() === "wsq"
+          );
+          return wsqTag?.value || expense?.wsq || "";
+        })(),
+      }));
+      setRecurringExpenses(mappedExpenses);
 
       // Fetch currencies
       const cursResp = await currenciesAPI.getAll();

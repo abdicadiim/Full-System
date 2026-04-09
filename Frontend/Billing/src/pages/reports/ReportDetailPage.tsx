@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
+  ArrowUpRight,
   CalendarDays,
   Clock3,
   Check,
@@ -1944,6 +1945,9 @@ export default function ReportDetailPage() {
   const navigate = useNavigate();
   const { categoryId, reportId } = useParams();
   const { settings } = useSettings();
+  const organizationName = String(
+    settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || ""
+  ).trim();
   const savedCustomReports = useMemo(() => loadJson<SavedCustomReport[]>(CUSTOM_REPORTS_KEY, []), []);
   const customReport = useMemo(() => savedCustomReports.find((item) => item.id === reportId), [savedCustomReports, reportId]);
   const resolvedCategoryId = customReport?.categoryId || categoryId || "";
@@ -1952,10 +1956,7 @@ export default function ReportDetailPage() {
   const isTimeToGetPaidReport = resolvedReportId === "time-to-get-paid";
   const category = getCategoryById(resolvedCategoryId);
   const report = getReportById(resolvedCategoryId, resolvedReportId);
-  const organizationName =
-    settings?.general?.companyDisplayName ||
-    settings?.general?.schoolDisplayName ||
-    settings?.general?.shortName || "";
+  const reportDisplayName = customReport?.name || report?.name || "Report";
   const filterDropdownRef = useRef<HTMLDivElement>(null);
   const compareButtonRef = useRef<HTMLButtonElement>(null);
   const nextMoreFilterRowId = useRef(2);
@@ -1975,6 +1976,7 @@ export default function ReportDetailPage() {
   const [moreFilterRows, setMoreFilterRows] = useState<MoreFilterRow[]>([{ id: 1, field: "", comparator: "", value: "" }]);
   const [openMoreFilterFieldRowId, setOpenMoreFilterFieldRowId] = useState<number | null>(null);
   const [openMoreFilterComparatorRowId, setOpenMoreFilterComparatorRowId] = useState<number | null>(null);
+  const [reportRefreshTick, setReportRefreshTick] = useState(0);
   const [selectedDateRange, setSelectedDateRange] = useState<DateRangePreset>(
     isAgingReport ? "Today" : "This Month"
   );
@@ -1986,9 +1988,6 @@ export default function ReportDetailPage() {
   const [customRange, setCustomRange] = useState<RangeDate>(() => DEFAULT_CUSTOM_RANGE);
   const [livePreview, setLivePreview] = useState<PreviewTableConfig | null>(null);
   const [livePreviewLoading, setLivePreviewLoading] = useState(false);
-  const [reportRefreshTick, setReportRefreshTick] = useState(0);
-  const agingByLabel = getAgingByLabel(agingBy);
-  const reportDisplayName = customReport?.name || (isAgingReport ? `${report?.name || (resolvedReportId === "ar-aging-details" ? "AR Aging Details" : "AR Aging Summary")} By ${agingByLabel}` : report?.name || "Report");
 
   const dateLabel = useMemo(() => {
     if (selectedDateRange === "Custom") {
@@ -2108,7 +2107,7 @@ export default function ReportDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [agingBy, category.name, customReport, reportDisplayName, reportRefreshTick, resolvedReportId, selectedEntities]);
+  }, [category.name, customReport, reportDisplayName, resolvedReportId, agingBy, selectedEntities, reportRefreshTick]);
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
@@ -2230,6 +2229,9 @@ export default function ReportDetailPage() {
     setLivePreview(null);
     setLivePreviewLoading(true);
     setReportRefreshTick((value) => value + 1);
+  };
+  const handleExportReport = () => {
+    toast.info("Exporting report...");
   };
   const renderPreviewHeading = (title: string) => (
     <div className="border-b border-[#eef2f7] px-4 py-10 text-center">
@@ -2378,14 +2380,11 @@ export default function ReportDetailPage() {
             </button>
             <button
               type="button"
-              onClick={() => setCustomizeColumnsOpen(true)}
-              className="inline-flex h-8 items-center gap-1 rounded border border-[#d4d9e4] bg-white px-3 text-sm font-medium text-[#156372] hover:bg-[#156372]/10"
+              onClick={handleExportReport}
+              className="inline-flex h-8 items-center gap-2 rounded border border-[#d4d9e4] bg-white px-3 text-sm font-medium text-[#156372] hover:bg-[#f8fafc]"
             >
-              <Table2 size={14} />
-              Customize Report Columns
-              <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#dff1ef] px-1.5 text-[11px] font-semibold text-[#156372]">
-                {visiblePreviewColumns.length}
-              </span>
+              <ArrowUpRight size={14} />
+              Export
             </button>
             <button
               type="button"
@@ -2489,10 +2488,11 @@ export default function ReportDetailPage() {
           </button>
           <button
             type="button"
-            onClick={() => toast.success(`Report refreshed: ${reportDisplayName}`)}
-            className="inline-flex h-8 items-center gap-1 rounded bg-[#156372] px-4 text-sm font-semibold text-white hover:bg-[#0f4f5b]"
+            onClick={runReport}
+            disabled={livePreviewLoading}
+            className="inline-flex h-8 items-center gap-1 rounded bg-[#156372] px-4 text-sm font-semibold text-white hover:bg-[#0f4f5b] disabled:cursor-wait disabled:bg-[#156372]/80"
           >
-            <CalendarDays size={14} /> Run Report <ChevronDown size={14} />
+            {livePreviewLoading ? "Loading..." : <><CalendarDays size={14} /> Run Report <ChevronDown size={14} /></>}
           </button>
 
           {!isTimeToGetPaidReport && isDateRangeOpen ? (
@@ -2913,7 +2913,7 @@ export default function ReportDetailPage() {
         <div className="flex-1 overflow-auto px-4 py-4">
           {livePreviewLoading ? (
             <>
-              <div className="mx-auto mt-6 max-w-5xl overflow-hidden rounded-[12px] border border-[#e8edf5]">
+              <div className="mt-6 w-full overflow-hidden rounded-[12px] border border-[#e8edf5]">
                 {renderPreviewHeading(reportDisplayName)}
                 <table className="w-full border-collapse">
                   {visiblePreviewColumns.length ? (
@@ -2939,7 +2939,7 @@ export default function ReportDetailPage() {
             </>
           ) : preview ? (
             <>
-              <div className="mx-auto mt-6 max-w-5xl overflow-hidden rounded-[12px] border border-[#e8edf5]">
+              <div className="mt-6 w-full overflow-hidden rounded-[12px] border border-[#e8edf5]">
                 {renderPreviewHeading(preview.title)}
                 <table className="w-full border-collapse">
                   <thead>
@@ -2988,7 +2988,7 @@ export default function ReportDetailPage() {
               </div>
             </>
           ) : (
-            <div className="mx-auto max-w-5xl">
+            <div className="w-full">
               <div className="overflow-hidden rounded-[12px] border border-[#e8edf5] bg-white">
                 {renderPreviewHeading(reportDisplayName)}
                 <div className="bg-[#fbfcfe] px-6 py-10 text-center">

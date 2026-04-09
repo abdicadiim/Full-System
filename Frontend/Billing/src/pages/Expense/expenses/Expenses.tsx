@@ -88,6 +88,7 @@ export default function Expenses() {
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [showCustomizeColumnsModal, setShowCustomizeColumnsModal] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [currencies, setCurrencies] = useState<any[]>([]);
   const [searchType, setSearchType] = useState("Expenses");
   const searchTypeOptions = [
