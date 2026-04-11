@@ -23,6 +23,15 @@ import { preloadCustomersIndexRoute } from "../../pages/Customers/customerRouteL
 const OFFICIAL_COMPANY_NAME = "Taban Enterprise";
 const SYSTEM_VERSION = "0.0.0.1";
 
+const isSafeImageSrc = (value: unknown) => {
+  const src = String(value || "").trim();
+  if (!src) return false;
+  if (src.startsWith("/") || src.startsWith("blob:")) return true;
+  if (/^https?:\/\//i.test(src)) return true;
+  if (/^data:image\/(png|jpe?g|gif|webp|bmp|svg\+xml);base64,[A-Za-z0-9+/=]+$/i.test(src)) return true;
+  return false;
+};
+
 const SIDEBAR_MODULE_BY_PATH: Record<string, string[]> = {
   "/sales/quotes": ["quotes"],
   "/sales/sales-receipts": ["salesReceipts"],
@@ -440,7 +449,8 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
   const [companyPrimaryRaw, ...companySecondaryParts] = companyName.split(/\s+/).filter(Boolean);
   const companyPrimary = companyPrimaryRaw || "Billing";
   const companySecondary = companySecondaryParts.join(" ");
-  const sidebarLogoSrc = String(settings?.branding?.logoUrl || settings?.branding?.logoFile || "").trim();
+  const sidebarLogoCandidate = String(settings?.branding?.logoUrl || settings?.branding?.logoFile || "").trim();
+  const sidebarLogoSrc = isSafeImageSrc(sidebarLogoCandidate) ? sidebarLogoCandidate : "";
   const companyInitials = (companyName.match(/[A-Za-z0-9]/g) || []).slice(0, 2).join("").toUpperCase() || "CO";
 
   // === ROLE-BASED NAVIGATION ===

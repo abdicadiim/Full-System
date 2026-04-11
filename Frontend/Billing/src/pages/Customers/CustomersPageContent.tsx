@@ -1,5 +1,5 @@
 ﻿import React from "react";
-import { ArrowUpDown, Check, ChevronDown, ChevronRight, ChevronUp, Download, Eye, Loader2, MoreVertical, Plus, Search, SlidersHorizontal, Star, Trash2, X } from "lucide-react";
+import { ArrowUpDown, Check, ChevronDown, ChevronRight, ChevronUp, Download, Eye, Info, Loader2, MoreVertical, Plus, Search, SlidersHorizontal, Star, Trash2, X } from "lucide-react";
 
 import { preloadCustomerDetailRoute } from "./customerRouteLoaders";
 

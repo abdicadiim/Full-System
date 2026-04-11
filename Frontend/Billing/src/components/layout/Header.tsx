@@ -15,6 +15,15 @@ import { useUser } from "../../lib/auth/UserContext";
 import { useSettings } from "../../lib/settings/SettingsContext";
 import { calculateElapsedTime } from "../../lib/timeTracking/timerService";
 
+const isSafeImageSrc = (value: unknown) => {
+  const src = String(value || "").trim();
+  if (!src) return false;
+  if (src.startsWith("/") || src.startsWith("blob:")) return true;
+  if (/^https?:\/\//i.test(src)) return true;
+  if (/^data:image\/(png|jpe?g|gif|webp|bmp|svg\+xml);base64,[A-Za-z0-9+/=]+$/i.test(src)) return true;
+  return false;
+};
+
 function Header({ onToggleSidebar }) {
   const { user, logout } = useUser();
   const { settings } = useSettings();
@@ -38,9 +47,9 @@ function Header({ onToggleSidebar }) {
   const defaultLogoUrl = "/logo-DxLi_Ek_.png";
   const systemName = "Taban Billing";
   const avatarInitial = displayName.trim().charAt(0).toUpperCase() || "A";
-  const avatarSrc = String(
-    settings?.branding?.logoUrl || settings?.branding?.logoFile || user?.photoUrl || defaultLogoUrl,
-  ).trim();
+  const avatarSrc = isSafeImageSrc(settings?.branding?.logoUrl || settings?.branding?.logoFile || user?.photoUrl)
+    ? String(settings?.branding?.logoUrl || settings?.branding?.logoFile || user?.photoUrl).trim()
+    : defaultLogoUrl;
   const unreadMessages = user?.unreadMessages ?? 0;
   const unreadNotifications = user?.unreadNotifications ?? 0;
 
