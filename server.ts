@@ -64,6 +64,30 @@ if (AUTH_BYPASS) {
 const app = express();
 let server: Server | null = null;
 
+const logServerError = (label: string, error: unknown) => {
+  if (error instanceof Error) {
+    // eslint-disable-next-line no-console
+    console.error(`[${label}] ${error.message}`);
+    if (error.stack) {
+      // eslint-disable-next-line no-console
+      console.error(error.stack);
+    }
+    return;
+  }
+
+  // eslint-disable-next-line no-console
+  console.error(`[${label}]`, error);
+};
+
+process.on("unhandledRejection", (reason) => {
+  logServerError("UnhandledRejection", reason);
+});
+
+process.on("uncaughtException", (error) => {
+  logServerError("UncaughtException", error);
+  process.exit(1);
+});
+
 const shutdownServer = async (signal: string) => {
   // eslint-disable-next-line no-console
   console.log(`Received ${signal}. Shutting down API server...`);
@@ -189,8 +213,7 @@ app.use("/api", (_req, res) => {
 });
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  // eslint-disable-next-line no-console
-  console.error(err);
+  logServerError("ExpressError", err);
   res.status(500).json({ success: false, message: "Server error", data: null });
 });
 
