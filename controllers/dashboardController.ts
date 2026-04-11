@@ -1,4 +1,5 @@
 import type express from "express";
+import { createHash } from "node:crypto";
 import mongoose from "mongoose";
 import { Customer } from "../models/Customer.js";
 import { Expense } from "../models/Expense.js";
@@ -28,6 +29,35 @@ const monthLabel = (date: Date) =>
 const monthLabelLine = (date: Date) => {
   const [month, year] = monthLabel(date).split(" ");
   return `${month}\n${year}`;
+};
+
+const toValidDate = (value: unknown) => {
+  if (!value) return null;
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const getLatestDateFromRows = (rows: any[], fields: string[]) => {
+  let latest = 0;
+  for (const row of rows || []) {
+    for (const field of fields) {
+      const date = toValidDate(row?.[field]);
+      if (!date) continue;
+      latest = Math.max(latest, date.getTime());
+    }
+  }
+  return latest;
+};
+
+const hashToUuid = (value: string) => {
+  const hash = createHash("sha256").update(value).digest("hex");
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
+};
+
+const normalizeHttpDate = (value: unknown) => {
+  if (!value) return null;
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
 };
 
 const isOpenInvoice = (row: any) => !["draft", "void", "cancelled", "canceled"].includes(normalizeText(row?.status));
@@ -95,7 +125,7 @@ const toMonthlyCounts = (rows: any[], buckets: Array<{ start: Date; end: Date }>
   toMonthlySeries(rows, buckets, getDate, () => 1);
 
 export const getDashboardSummary: express.RequestHandler = async (req, res) => {
-  const orgId = req.user?.organizationId;
+  const orgId = (req as any).user?.organizationId;
   if (!orgId) {
     return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
   }
@@ -245,7 +275,17 @@ export const getDashboardSummary: express.RequestHandler = async (req, res) => {
     .sort((a, b) => b.value - a.value)
     .slice(0, 5);
 
-  const responseData = {
+  const latestUpdatedAt = Math.max(
+    getLatestDateFromRows(customers || [], ["updatedAt", "createdAt"]),
+    getLatestDateFromRows(invoices || [], ["updatedAt", "createdAt", "date", "dueDate"]),
+    getLatestDateFromRows(payments || [], ["updatedAt", "createdAt", "date"]),
+    getLatestDateFromRows(expenses || [], ["updatedAt", "createdAt", "date"]),
+    getLatestDateFromRows(subscriptions || [], ["updatedAt", "createdAt", "startDate", "endDate"]),
+    normalizeHttpDate((organization as any)?.updatedAt)?.getTime() || 0,
+    normalizeHttpDate((organization as any)?.createdAt)?.getTime() || 0
+  );
+  const lastUpdated = new Date(latestUpdatedAt || Date.now());
+  const payloadData = {
     metrics: {
       netRevenue: {
         total: netRevenue,
@@ -334,8 +374,40 @@ export const getDashboardSummary: express.RequestHandler = async (req, res) => {
       name: String(organization?.name || "").trim(),
       baseCurrency: String(organization?.baseCurrency || "").trim(),
     },
-    generatedAt: new Date().toISOString(),
   };
 
-  return res.json({ success: true, data: responseData });
+  const versionId = hashToUuid(JSON.stringify(payloadData));
+  const etag = `"${versionId}"`;
+  const lastModified = lastUpdated.toUTCString();
+  const ifNoneMatch = String(req.header("If-None-Match") || "").trim();
+  const ifModifiedSince = normalizeHttpDate(req.header("If-Modified-Since"));
+  const matchesEtag =
+    Boolean(ifNoneMatch) &&
+    ifNoneMatch
+      .split(",")
+      .map((value) => value.trim())
+      .includes(etag);
+  const notModifiedByDate = Boolean(ifModifiedSince) && lastUpdated.getTime() <= (ifModifiedSince?.getTime() || 0);
+
+  res.set({
+    ETag: etag,
+    "Last-Modified": lastModified,
+    "Cache-Control": "private, no-cache, must-revalidate",
+    Vary: "Authorization, If-None-Match, If-Modified-Since",
+    "X-Version-Id": versionId,
+    "X-Last-Updated": lastUpdated.toISOString(),
+  });
+
+  if (matchesEtag || notModifiedByDate) {
+    return res.status(304).end();
+  }
+
+  return res.json({
+    success: true,
+    data: {
+      ...payloadData,
+      version_id: versionId,
+      last_updated: lastUpdated.toISOString(),
+    },
+  });
 };

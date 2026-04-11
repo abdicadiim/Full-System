@@ -340,7 +340,7 @@ export const useCustomersSidebarQuery = (options?: { enabled?: boolean; limit?: 
 
 export const useCustomerDetailQuery = (
   customerId: string | undefined,
-  options?: { enabled?: boolean; initialCustomer?: any }
+  options?: { enabled?: boolean; initialCustomer?: any; preferFresh?: boolean }
 ) => {
   const queryClient = useQueryClient();
   const normalizedCustomerId = normalizeCustomerId(customerId);
@@ -350,10 +350,12 @@ export const useCustomerDetailQuery = (
     queryFn: () => fetchCustomerDetail(normalizedCustomerId),
     enabled: (options?.enabled ?? true) && Boolean(normalizedCustomerId),
     staleTime: CUSTOMER_DETAIL_STALE_TIME_MS,
-    placeholderData: () =>
-      normalizeCustomerForQueryCache(options?.initialCustomer, normalizedCustomerId) ||
-      readCustomerFromAnyCachedList(queryClient, normalizedCustomerId) ||
-      undefined,
+    placeholderData: options?.preferFresh
+      ? undefined
+      : () =>
+          normalizeCustomerForQueryCache(options?.initialCustomer, normalizedCustomerId) ||
+          readCustomerFromAnyCachedList(queryClient, normalizedCustomerId) ||
+          undefined,
   });
 
   useEffect(() => {

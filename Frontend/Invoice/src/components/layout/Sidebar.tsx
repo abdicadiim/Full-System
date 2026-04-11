@@ -27,6 +27,7 @@ import { useUser } from "../../lib/auth/UserContext";
 import { useSettings } from "../../lib/settings/SettingsContext";
 import { getNavConfigForRole } from "../../config/roleBasedNav";
 import { prefetchRouteChunk } from "../../routes/routeWarmers";
+import { normalizeImageSrc } from "../../utils/imageSources";
 
 const SYSTEM_VERSION = "0.0.0.1";
 
@@ -444,7 +445,7 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
   const [companyPrimaryRaw, ...companySecondaryParts] = companyName.split(/\s+/).filter(Boolean);
   const companyPrimary = companyPrimaryRaw || "Billing";
   const companySecondary = companySecondaryParts.join(" ");
-  const sidebarLogoSrc = String(settings?.branding?.logoUrl || settings?.branding?.logoFile || "").trim();
+  const sidebarLogoSrc = normalizeImageSrc(settings?.branding?.logoUrl || settings?.branding?.logoFile, "");
   const companyInitials = (companyName.match(/[A-Za-z0-9]/g) || []).slice(0, 2).join("").toUpperCase() || "CO";
 
   // === ROLE-BASED NAVIGATION ===

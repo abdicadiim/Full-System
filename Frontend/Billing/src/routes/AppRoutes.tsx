@@ -1,6 +1,5 @@
 import React, { Suspense, lazy } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { Loader2 } from 'lucide-react'
 import ItemsPage from '../pages/Product-Calalog/items/ItemsPage'
 
 const DashboardRoutes = lazy(() => import('../pages/home/DashboardRoutes'))
@@ -48,10 +47,7 @@ const SenderVerificationPage = lazy(() => import('../pages/public/SenderVerifica
 
 function RouteFallback() {
   return (
-    <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3 p-6 text-sm text-gray-500">
-      <Loader2 className="h-6 w-6 animate-spin text-[rgb(21,99,114)]" />
-      <span>Loading page...</span>
-    </div>
+    <div className="h-full min-h-[240px] w-full bg-slate-50" aria-hidden="true" />
   )
 }
 
@@ -106,11 +102,10 @@ function LegacyCustomersRedirect() {
 
 export default function AppRoutes() {
   const location = useLocation()
-  const routeKey = `${location.pathname}${location.search}`
 
   return (
     <Suspense fallback={<RouteFallback />}>
-      <Routes location={location} key={routeKey}>
+      <Routes location={location}>
         <Route path="/sender-verification/*" element={<SenderVerificationPage />} />
         <Route index element={<Navigate to="/dashboard" replace />} />
 

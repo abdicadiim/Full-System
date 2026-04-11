@@ -9,11 +9,7 @@ const InvoiceDetail = lazy(() => import("./InvoiceDetail/InvoiceDetail"));
 const SendInvoiceEmail = lazy(() => import("./SendInvoiceEmail/SendInvoiceEmail"));
 
 function RouteFallback() {
-  return (
-    <div className="flex min-h-[30vh] items-center justify-center p-6 text-sm text-gray-500">
-      Loading...
-    </div>
-  );
+  return null;
 }
 
 export default function InvoicesRoutes() {

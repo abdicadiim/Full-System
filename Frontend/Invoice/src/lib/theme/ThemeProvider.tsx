@@ -2,6 +2,16 @@ import React, { createContext, useContext, useState, useEffect, useMemo } from '
 
 const ThemeContext = createContext(null);
 
+function safeSetStorageItem(key: string, value: string) {
+  if (typeof localStorage === "undefined") return false;
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function ThemeProvider({ children }) {
   const [mode, setMode] = useState(() => {
     // Get theme from localStorage or default to 'light'
@@ -15,7 +25,7 @@ export function ThemeProvider({ children }) {
     } else {
       document.documentElement.classList.remove('dark');
     }
-    localStorage.setItem('theme', mode);
+    safeSetStorageItem("theme", mode);
   }, [mode]);
 
   const toggleTheme = () => {

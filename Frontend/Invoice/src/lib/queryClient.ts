@@ -1,14 +1,16 @@
 import { QueryClient } from "@tanstack/react-query";
 
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: Infinity,
-      gcTime: 30 * 60_000,
+      staleTime: 0,
+      gcTime: ONE_DAY_MS,
       refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-      refetchOnMount: false,
-      retry: 0,
+      refetchOnReconnect: true,
+      refetchOnMount: true,
+      retry: 1,
     },
     mutations: {
       retry: 0,
@@ -16,4 +18,4 @@ export const queryClient = new QueryClient({
   },
 });
 
-export const QUERY_CACHE_TTL_MS = Infinity;
+export const QUERY_CACHE_TTL_MS = ONE_DAY_MS;

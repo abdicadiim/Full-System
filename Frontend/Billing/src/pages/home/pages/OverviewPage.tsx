@@ -1,18 +1,16 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useState } from "react";
 import { FileText } from "lucide-react";
 import Card from "../../../components/ui/Card";
 import { RangeSelect } from "../../../components/dashboard/parts/SectionBits";
 import AccessDenied from "../../../components/AccessDenied";
-import { dashboardAPI, settingsAPI } from "../../../services/api";
 import { useUser } from "../../../lib/auth/UserContext";
 import { useSettings } from "../../../lib/settings/SettingsContext";
 import { usePermissions } from "../../../hooks/usePermissions";
-import { useCurrency } from "../../../hooks/useCurrency";
-import { useQuery } from "@tanstack/react-query";
+import { useDashboardSummarySync } from "../../../hooks/useDashboardSummarySync";
+import { normalizeImageSrc } from "../../../utils/imageSources";
 import {
-  DashboardSummary,
-  EMPTY_SUMMARY,
-  MetricLegendItem,
+  type DashboardSummary,
+  type MetricLegendItem,
   formatCurrencyValue,
 } from "../../dashboard/summary";
 const formatPercent = (value: number) =>
@@ -38,7 +36,11 @@ function SectionCard({
       <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
         <h3 className="text-[13px] font-medium text-slate-700">{title}</h3>
         {range ? (
-          <RangeSelect value={range} className="[&_button]:border-none [&_button]:bg-transparent [&_button]:px-0 [&_button]:py-0 [&_button]:text-[12px] [&_button]:text-slate-500 hover:[&_button]:bg-transparent" />
+          <RangeSelect
+            value={range}
+            onChange={() => {}}
+            className="[&_button]:border-none [&_button]:bg-transparent [&_button]:px-0 [&_button]:py-0 [&_button]:text-[12px] [&_button]:text-slate-500 hover:[&_button]:bg-transparent"
+          />
         ) : null}
       </div>
       <div className="p-4">{children}</div>
@@ -417,7 +419,7 @@ function DashboardHero({ baseCurrencyCode }: { baseCurrencyCode?: string } = {})
 
   const displayName = user?.name || "User";
   const displayEmail = user?.email || "";
-  const avatarSrc = String(user?.photoUrl || "").trim();
+  const avatarSrc = normalizeImageSrc(user?.photoUrl, "");
   const organizationName =
     settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "Organization";
   const resolvedCurrencyCode = String(baseCurrencyCode || "").trim().toUpperCase();
@@ -501,51 +503,11 @@ function DashboardHero({ baseCurrencyCode }: { baseCurrencyCode?: string } = {})
 
 export default function OverviewPage() {
   const { loading: permissionsLoading, canView } = usePermissions();
-  const { settings } = useSettings();
   const canViewDashboard = canView("dashboard", "View Dashboard");
   const canViewProjects = canView("dashboard", "Projects");
   const canViewSalesAndExpenses = canView("dashboard", "Sales and Expenses");
   const canViewTopExpense = canView("dashboard", "Your Top Expense");
-  const [organizationBaseCurrency, setOrganizationBaseCurrency] = useState<string>("");
-
-  const summaryQuery = useQuery({
-    queryKey: ["dashboard", "summary"],
-    queryFn: async () => {
-      const response = await dashboardAPI.getSummary();
-      if (response?.success && response.data) {
-        return response.data as DashboardSummary;
-      }
-      throw new Error(response?.message || "Failed to load dashboard data.");
-    },
-    enabled: canViewDashboard && !permissionsLoading,
-    staleTime: 30 * 1000,
-    initialData: EMPTY_SUMMARY,
-    placeholderData: EMPTY_SUMMARY,
-  });
-
-  useEffect(() => {
-    if (permissionsLoading || !canViewDashboard) return;
-
-    let cancelled = false;
-    const loadOrganizationProfile = async () => {
-      try {
-        const response = await settingsAPI.getOrganizationProfile();
-        if (cancelled) return;
-        if (response?.success && response.data) {
-          const rawCurrency = String((response.data as any)?.baseCurrency || "").trim().toUpperCase();
-          setOrganizationBaseCurrency(rawCurrency);
-        }
-      } catch {
-        if (!cancelled) setOrganizationBaseCurrency("");
-      }
-    };
-
-    void loadOrganizationProfile();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [permissionsLoading, canViewDashboard]);
+  const dashboardSync = useDashboardSummarySync();
 
   if (permissionsLoading) {
     return (
@@ -567,17 +529,29 @@ export default function OverviewPage() {
     );
   }
 
-  const summaryLoading = summaryQuery.isFetching;
-  const summaryError = summaryQuery.isError ? (summaryQuery.error as Error).message : null;
-  const { formatMoney: formatMoneyWithHook } = useCurrency();
-  const dashboardData = summaryQuery.data ?? EMPTY_SUMMARY;
-  const formatAmount = (value: number, currencyCode?: string) =>
-    currencyCode ? formatCurrencyValue(value, currencyCode) : formatMoneyWithHook(value);
-  const resolvedDashboardCurrencyCode = useMemo(() => {
-    const summaryCurrency = String(dashboardData.organization?.baseCurrency || "").trim().toUpperCase();
-    if (summaryCurrency) return summaryCurrency;
-    return String(organizationBaseCurrency || "").trim().toUpperCase();
-  }, [dashboardData.organization?.baseCurrency, organizationBaseCurrency]);
+  const dashboardData = dashboardSync.data;
+  if (dashboardSync.loading && !dashboardData) {
+    return (
+      <div className="mr-auto w-full max-w-[1500px] px-4 py-4 pr-7 md:px-5 md:pr-10 xl:pr-16 2xl:pr-20">
+        <Card className="border-slate-200 p-8 text-sm text-slate-500 shadow-sm">Loading dashboard data...</Card>
+      </div>
+    );
+  }
+
+  if (!dashboardData) {
+    return (
+      <div className="mr-auto w-full max-w-[1500px] px-4 py-4 pr-7 md:px-5 md:pr-10 xl:pr-16 2xl:pr-20">
+        <Card className="border border-amber-200 bg-amber-50 p-8 text-sm text-amber-800 shadow-sm">
+          {dashboardSync.error || "Failed to load dashboard data."}
+        </Card>
+      </div>
+    );
+  }
+
+  const summaryError = dashboardSync.error;
+  const isRefreshing = dashboardSync.refreshing;
+  const formatAmount = (value: number, currencyCode = "") => formatCurrencyValue(value, currencyCode);
+  const resolvedDashboardCurrencyCode = String(dashboardData.organization?.baseCurrency || "").trim().toUpperCase();
   const receivableBars = dashboardData.metrics.receivables.labels.map((label, index) => ({
     label,
     value: String(dashboardData.metrics.receivables.values[index] || 0),
@@ -594,203 +568,227 @@ export default function OverviewPage() {
         </div>
       ) : null}
 
-      {summaryLoading && (
+      {dashboardSync.pendingSync ? (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          Pending sync: local changes will be pushed when the connection is restored.
+        </div>
+      ) : null}
+
+      {isRefreshing ? (
         <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500 shadow-sm">
           Updating dashboard numbers...
         </div>
-      )}
+      ) : null}
 
-      <>
-        <div className="grid gap-4 xl:grid-cols-2">
-            <SectionCard title="Net Revenue">
-              <MetricHeader value={formatAmount(dashboardData.metrics.netRevenue.total, resolvedDashboardCurrencyCode)} />
-              <LineAreaChart
-                points={dashboardData.metrics.netRevenue.values}
-                stroke="#16c47f"
-                fill="#16c47f"
-                labels={dashboardData.metrics.netRevenue.labels}
-                leftLabels={["10", "8", "6", "4", "2", "0"]}
-              />
-            </SectionCard>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <SectionCard title="Net Revenue">
+          <MetricHeader value={formatAmount(dashboardData.metrics.netRevenue.total, resolvedDashboardCurrencyCode)} />
+          <LineAreaChart
+            points={dashboardData.metrics.netRevenue.values}
+            stroke="#16c47f"
+            fill="#16c47f"
+            labels={dashboardData.metrics.netRevenue.labels}
+            leftLabels={["10", "8", "6", "4", "2", "0"]}
+          />
+        </SectionCard>
 
-            <SectionCard title="Receivable Summary">
-              <div className="mb-4 flex flex-col gap-4 md:flex-row md:justify-between">
-                <div>
-                  <div className="text-[12px] text-slate-500">Total Receivables</div>
-                  <div className="mt-1 text-[17px] font-semibold text-slate-900">
-                    {formatAmount(dashboardData.metrics.receivables.total, resolvedDashboardCurrencyCode)}
-                  </div>
-                </div>
-                <SummaryLegend
-                  items={[
-                    { label: "Current", value: formatAmount(dashboardData.metrics.receivables.current, resolvedDashboardCurrencyCode), color: "#2563eb" },
-                    { label: "Overdue", value: formatAmount(dashboardData.metrics.receivables.overdue, resolvedDashboardCurrencyCode), color: "#f97316" },
-                  ]}
-                />
+        <SectionCard title="Receivable Summary">
+          <div className="mb-4 flex flex-col gap-4 md:flex-row md:justify-between">
+            <div>
+              <div className="text-[12px] text-slate-500">Total Receivables</div>
+              <div className="mt-1 text-[17px] font-semibold text-slate-900">
+                {formatAmount(dashboardData.metrics.receivables.total, resolvedDashboardCurrencyCode)}
               </div>
-              <ReceivableChart bars={receivableBars} />
-            </SectionCard>
+            </div>
+            <SummaryLegend
+              items={[
+                {
+                  label: "Current",
+                  value: formatAmount(dashboardData.metrics.receivables.current, resolvedDashboardCurrencyCode),
+                  color: "#2563eb",
+                },
+                {
+                  label: "Overdue",
+                  value: formatAmount(dashboardData.metrics.receivables.overdue, resolvedDashboardCurrencyCode),
+                  color: "#f97316",
+                },
+              ]}
+            />
           </div>
+          <ReceivableChart bars={receivableBars} />
+        </SectionCard>
+      </div>
 
-          <div className="grid gap-4 xl:grid-cols-[2fr_1fr_1fr]">
-            <SectionCard title="MRR">
-              <MetricHeader value={formatAmount(dashboardData.metrics.mrr.total, resolvedDashboardCurrencyCode)} />
-              <LineAreaChart
-                points={dashboardData.metrics.mrr.values}
-                stroke="#16c47f"
-                fill="#16c47f"
-                labels={dashboardData.metrics.mrr.labels}
-                leftLabels={["20", "15", "10", "5", "0"]}
-              />
-            </SectionCard>
+      <div className="grid gap-4 xl:grid-cols-[2fr_1fr_1fr]">
+        <SectionCard title="MRR">
+          <MetricHeader value={formatAmount(dashboardData.metrics.mrr.total, resolvedDashboardCurrencyCode)} />
+          <LineAreaChart
+            points={dashboardData.metrics.mrr.values}
+            stroke="#16c47f"
+            fill="#16c47f"
+            labels={dashboardData.metrics.mrr.labels}
+            leftLabels={["20", "15", "10", "5", "0"]}
+          />
+        </SectionCard>
 
-            <div className="grid gap-4">
-              <SectionCard title="Active Subscriptions">
-                <MetricHeader value={String(dashboardData.metrics.activeSubscriptions.total)} />
-                <LineAreaChart
-                  points={dashboardData.metrics.activeSubscriptions.values}
-                  stroke="#2b7fff"
-                  fill="#2b7fff"
-                  labels={dashboardData.metrics.activeSubscriptions.labels}
-                  height={92}
-                />
-              </SectionCard>
-
-              <SectionCard title="Churn Rate">
-                <MetricHeader
-                  value={formatPercent(dashboardData.metrics.churnRate.total)}
-                  sublabel="Month On Month"
-                  right={<div className="pt-1 text-[11px] text-slate-500">On {dashboardData.metrics.churnRate.asOf || "today"}</div>}
-                />
-                {isMeaningfulSeries(dashboardData.metrics.churnRate.values) ? (
-                  <LineAreaChart
-                    points={dashboardData.metrics.churnRate.values}
-                    stroke="#f97316"
-                    fill="#f97316"
-                    labels={dashboardData.metrics.churnRate.labels}
-                    height={92}
-                  />
-                ) : (
-                  <NoDataPanel />
-                )}
-              </SectionCard>
-            </div>
-
-            <div className="grid gap-4">
-              <SectionCard title="ARPU">
-                <MetricHeader value={formatAmount(dashboardData.metrics.arpu.total, resolvedDashboardCurrencyCode)} />
-                <LineAreaChart
-                  points={dashboardData.metrics.arpu.values}
-                  stroke="#16c47f"
-                  fill="#16c47f"
-                  labels={dashboardData.metrics.arpu.labels}
-                  height={92}
-                />
-              </SectionCard>
-
-              <SectionCard title="LTV">
-                <MetricHeader
-                  value={formatAmount(dashboardData.metrics.ltv.total, resolvedDashboardCurrencyCode)}
-                  sublabel="Month On Month"
-                  right={<div className="pt-1 text-[11px] text-slate-500">On {dashboardData.metrics.ltv.asOf || "today"}</div>}
-                />
-                {isMeaningfulSeries(dashboardData.metrics.ltv.values) ? (
-                  <LineAreaChart
-                    points={dashboardData.metrics.ltv.values}
-                    stroke="#16c47f"
-                    fill="#16c47f"
-                    labels={dashboardData.metrics.ltv.labels}
-                    height={92}
-                  />
-                ) : (
-                  <NoDataPanel />
-                )}
-              </SectionCard>
-            </div>
-          </div>
-
-          <SectionCard title="Subscription Summary" className="xl:col-span-1">
-            <div className="mb-4 grid gap-4 text-[12px] text-slate-600 sm:grid-cols-4">
-              {[
-                { label: "Signups", value: String(dashboardData.subscriptionSummary.signups), color: "#22c55e" },
-                { label: "Activations", value: String(dashboardData.subscriptionSummary.activations), color: "#2563eb" },
-                { label: "Cancellations", value: String(dashboardData.subscriptionSummary.cancellations), color: "#f97316" },
-                { label: "Reactivations", value: String(dashboardData.subscriptionSummary.reactivations), color: "#7c3aed" },
-              ].map((item) => (
-                <div key={item.label} className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: item.color }} />
-                  <span>{item.label}</span>
-                  <span className="ml-auto text-[16px] font-semibold text-slate-800">{item.value}</span>
-                </div>
-              ))}
-            </div>
-            <SubscriptionSummaryChart
-              labels={dashboardData.subscriptionSummary.series.labels}
-              signups={dashboardData.subscriptionSummary.series.signups}
-              activations={dashboardData.subscriptionSummary.series.activations}
-              cancellations={dashboardData.subscriptionSummary.series.cancellations}
-              reactivations={dashboardData.subscriptionSummary.series.reactivations}
+        <div className="grid gap-4">
+          <SectionCard title="Active Subscriptions">
+            <MetricHeader value={String(dashboardData.metrics.activeSubscriptions.total)} />
+            <LineAreaChart
+              points={dashboardData.metrics.activeSubscriptions.values}
+              stroke="#2b7fff"
+              fill="#2b7fff"
+              labels={dashboardData.metrics.activeSubscriptions.labels}
+              height={92}
             />
           </SectionCard>
 
-          {canViewSalesAndExpenses || canViewTopExpense ? (
-            <div className="grid gap-4 xl:grid-cols-2">
-              {canViewSalesAndExpenses ? (
-                <SectionCard title="Income and Expense" range="Last 12 Months">
-                  <div className="mb-4 flex flex-wrap items-center gap-5 text-[12px]">
-                    {[
-                      { label: "Total Income", value: formatAmount(dashboardData.incomeExpense.totalIncome, resolvedDashboardCurrencyCode), color: "#22c55e" },
-                      { label: "Total Receipts", value: formatAmount(dashboardData.incomeExpense.totalReceipts, resolvedDashboardCurrencyCode), color: "#2563eb" },
-                      { label: "Total Expenses", value: formatAmount(dashboardData.incomeExpense.totalExpenses, resolvedDashboardCurrencyCode), color: "#f2c96b" },
-                    ].map((item) => (
-                      <div key={item.label} className="flex items-center gap-2">
-                        <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: item.color }} />
-                        <span className="text-slate-500">{item.label}</span>
-                        <span className="font-medium text-slate-800">{item.value}</span>
-                      </div>
-                    ))}
+          <SectionCard title="Churn Rate">
+            <MetricHeader
+              value={formatPercent(dashboardData.metrics.churnRate.total)}
+              sublabel="Month On Month"
+              right={<div className="pt-1 text-[11px] text-slate-500">On {dashboardData.metrics.churnRate.asOf || "today"}</div>}
+            />
+            {isMeaningfulSeries(dashboardData.metrics.churnRate.values) ? (
+              <LineAreaChart
+                points={dashboardData.metrics.churnRate.values}
+                stroke="#f97316"
+                fill="#f97316"
+                labels={dashboardData.metrics.churnRate.labels}
+                height={92}
+              />
+            ) : (
+              <NoDataPanel />
+            )}
+          </SectionCard>
+        </div>
+
+        <div className="grid gap-4">
+          <SectionCard title="ARPU">
+            <MetricHeader value={formatAmount(dashboardData.metrics.arpu.total, resolvedDashboardCurrencyCode)} />
+            <LineAreaChart
+              points={dashboardData.metrics.arpu.values}
+              stroke="#16c47f"
+              fill="#16c47f"
+              labels={dashboardData.metrics.arpu.labels}
+              height={92}
+            />
+          </SectionCard>
+
+          <SectionCard title="LTV">
+            <MetricHeader
+              value={formatAmount(dashboardData.metrics.ltv.total, resolvedDashboardCurrencyCode)}
+              sublabel="Month On Month"
+              right={<div className="pt-1 text-[11px] text-slate-500">On {dashboardData.metrics.ltv.asOf || "today"}</div>}
+            />
+            {isMeaningfulSeries(dashboardData.metrics.ltv.values) ? (
+              <LineAreaChart
+                points={dashboardData.metrics.ltv.values}
+                stroke="#16c47f"
+                fill="#16c47f"
+                labels={dashboardData.metrics.ltv.labels}
+                height={92}
+              />
+            ) : (
+              <NoDataPanel />
+            )}
+          </SectionCard>
+        </div>
+      </div>
+
+      <SectionCard title="Subscription Summary" className="xl:col-span-1">
+        <div className="mb-4 grid gap-4 text-[12px] text-slate-600 sm:grid-cols-4">
+          {[
+            { label: "Signups", value: String(dashboardData.subscriptionSummary.signups), color: "#22c55e" },
+            { label: "Activations", value: String(dashboardData.subscriptionSummary.activations), color: "#2563eb" },
+            { label: "Cancellations", value: String(dashboardData.subscriptionSummary.cancellations), color: "#f97316" },
+            { label: "Reactivations", value: String(dashboardData.subscriptionSummary.reactivations), color: "#7c3aed" },
+          ].map((item) => (
+            <div key={item.label} className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: item.color }} />
+              <span>{item.label}</span>
+              <span className="ml-auto text-[16px] font-semibold text-slate-800">{item.value}</span>
+            </div>
+          ))}
+        </div>
+        <SubscriptionSummaryChart
+          labels={dashboardData.subscriptionSummary.series.labels}
+          signups={dashboardData.subscriptionSummary.series.signups}
+          activations={dashboardData.subscriptionSummary.series.activations}
+          cancellations={dashboardData.subscriptionSummary.series.cancellations}
+          reactivations={dashboardData.subscriptionSummary.series.reactivations}
+        />
+      </SectionCard>
+
+      {canViewSalesAndExpenses || canViewTopExpense ? (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {canViewSalesAndExpenses ? (
+            <SectionCard title="Income and Expense" range="Last 12 Months">
+              <div className="mb-4 flex flex-wrap items-center gap-5 text-[12px]">
+                {[
+                  {
+                    label: "Total Income",
+                    value: formatAmount(dashboardData.incomeExpense.totalIncome, resolvedDashboardCurrencyCode),
+                    color: "#22c55e",
+                  },
+                  {
+                    label: "Total Receipts",
+                    value: formatAmount(dashboardData.incomeExpense.totalReceipts, resolvedDashboardCurrencyCode),
+                    color: "#2563eb",
+                  },
+                  {
+                    label: "Total Expenses",
+                    value: formatAmount(dashboardData.incomeExpense.totalExpenses, resolvedDashboardCurrencyCode),
+                    color: "#f2c96b",
+                  },
+                ].map((item) => (
+                  <div key={item.label} className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: item.color }} />
+                    <span className="text-slate-500">{item.label}</span>
+                    <span className="font-medium text-slate-800">{item.value}</span>
                   </div>
-                  <IncomeExpenseChart
-                    labels={dashboardData.incomeExpense.labels}
-                    income={dashboardData.incomeExpense.income}
-                    receipts={dashboardData.incomeExpense.receipts}
-                    expenses={dashboardData.incomeExpense.expenses}
-                  />
-                </SectionCard>
-              ) : (
-                <div />
-              )}
+                ))}
+              </div>
+              <IncomeExpenseChart
+                labels={dashboardData.incomeExpense.labels}
+                income={dashboardData.incomeExpense.income}
+                receipts={dashboardData.incomeExpense.receipts}
+                expenses={dashboardData.incomeExpense.expenses}
+              />
+            </SectionCard>
+          ) : (
+            <div />
+          )}
 
-              {canViewTopExpense ? (
-                <SectionCard title="Top Expenses" range="Last 12 Months">
-                  <ExpenseDonut
-                    items={dashboardData.topExpenses.items}
-                    total={dashboardData.topExpenses.total}
-                    currencyCode={resolvedDashboardCurrencyCode}
-                    formatAmount={formatAmount}
-                  />
-                </SectionCard>
-              ) : (
-                <div />
-              )}
-            </div>
-          ) : null}
+          {canViewTopExpense ? (
+            <SectionCard title="Top Expenses" range="Last 12 Months">
+              <ExpenseDonut
+                items={dashboardData.topExpenses.items}
+                total={dashboardData.topExpenses.total}
+                currencyCode={resolvedDashboardCurrencyCode}
+                formatAmount={formatAmount}
+              />
+            </SectionCard>
+          ) : (
+            <div />
+          )}
+        </div>
+      ) : null}
 
-          {canViewProjects ? (
-            <div className="grid gap-4 xl:grid-cols-2">
-                <SectionCard title="Projects" range="">
-                  <ProjectsCard
-                    project={dashboardData.projects.topProject}
-                    totalUnbilledHours={dashboardData.projects.totalUnbilledHours}
-                    totalUnbilledExpenses={dashboardData.projects.totalUnbilledExpenses}
-                    currencyCode={resolvedDashboardCurrencyCode}
-                    formatAmount={formatAmount}
-                  />
-                </SectionCard>
-              <div />
-            </div>
-          ) : null}
-      </>
+      {canViewProjects ? (
+        <div className="grid gap-4 xl:grid-cols-2">
+          <SectionCard title="Projects" range="">
+            <ProjectsCard
+              project={dashboardData.projects.topProject}
+              totalUnbilledHours={dashboardData.projects.totalUnbilledHours}
+              totalUnbilledExpenses={dashboardData.projects.totalUnbilledExpenses}
+              currencyCode={resolvedDashboardCurrencyCode}
+              formatAmount={formatAmount}
+            />
+          </SectionCard>
+          <div />
+        </div>
+      ) : null}
     </div>
   );
 }

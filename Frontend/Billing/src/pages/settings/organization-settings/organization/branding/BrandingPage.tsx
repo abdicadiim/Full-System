@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Upload, X, Moon, Sun, Check } from "lucide-react";
 import { toast } from "react-toastify";
+import { normalizeImageSrc } from "../../../../../utils/imageSources";
 
 const API_BASE_URL = '/api';
 
@@ -97,7 +98,7 @@ export default function BrandingPage({ onColorChange }) {
 
             // Load logo from profile - check both branding.logo and fetch from profile if needed
             if (branding.logo) {
-              setLogoPreview(branding.logo);
+              setLogoPreview(normalizeImageSrc(branding.logo, ""));
             } else {
               // Also try to load logo directly from profile
               try {
@@ -110,7 +111,7 @@ export default function BrandingPage({ onColorChange }) {
                 if (profileResponse.ok) {
                   const profileData = await profileResponse.json();
                   if (profileData.success && profileData.data && profileData.data.logo) {
-                    setLogoPreview(profileData.data.logo);
+                    setLogoPreview(normalizeImageSrc(profileData.data.logo, ""));
                   }
                 }
               } catch (profileError) {
@@ -142,7 +143,7 @@ export default function BrandingPage({ onColorChange }) {
     const handleBrandingUpdate = (event: any) => {
       const newLogo = event?.detail?.logo;
       if (typeof newLogo === "string") {
-        setLogoPreview(newLogo);
+        setLogoPreview(normalizeImageSrc(newLogo, ""));
       }
     };
 
@@ -328,7 +329,7 @@ export default function BrandingPage({ onColorChange }) {
       const reader = new FileReader();
       reader.onloadend = async () => {
         const result = reader.result;
-        setLogoPreview(result);
+        setLogoPreview(normalizeImageSrc(result, ""));
         // Auto-save logo immediately after upload
         if (!isInitialLoad) {
           await autoSaveBranding({

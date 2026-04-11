@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import { useUser } from '../auth/UserContext';
+import { normalizeImageSrc } from '../../utils/imageSources';
 
 const SettingsContext = createContext(null);
 
@@ -29,7 +30,13 @@ function readStoredBranding() {
     const savedBranding = localStorage.getItem("organization_branding");
     if (!savedBranding) return {};
     const parsed = JSON.parse(savedBranding);
-    return parsed && typeof parsed === "object" ? parsed : {};
+    if (!parsed || typeof parsed !== "object") return {};
+    return {
+      ...parsed,
+      logo: normalizeImageSrc((parsed as any).logo, ""),
+      logoUrl: normalizeImageSrc((parsed as any).logoUrl, ""),
+      logoFile: normalizeImageSrc((parsed as any).logoFile, ""),
+    };
   } catch {
     return {};
   }
@@ -96,6 +103,74 @@ function applyThemeColors(theme) {
 
 const DEFAULT_FAVICON = "/logo-DxLi_Ek_.png";
 const DEFAULT_APP_TITLE = "Taban Invoice";
+const STORAGE_IMAGE_KEYS = new Set(["logo", "logoUrl", "logoFile", "photoUrl", "avatar"]);
+const STORAGE_IMAGE_LENGTH_LIMIT = 10000;
+
+function canUseLocalStorage() {
+  return typeof localStorage !== "undefined";
+}
+
+function isLikelyEmbeddedAsset(value: unknown) {
+  return typeof value === "string" && (value.startsWith("data:") || value.length > STORAGE_IMAGE_LENGTH_LIMIT);
+}
+
+function sanitizeStorageValue(value: any, key = ""): any {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => sanitizeStorageValue(item))
+      .filter((item) => item !== undefined);
+  }
+
+  if (value && typeof value === "object") {
+    const next: Record<string, any> = {};
+    Object.entries(value).forEach(([childKey, childValue]) => {
+      if (STORAGE_IMAGE_KEYS.has(childKey) && isLikelyEmbeddedAsset(childValue)) {
+        return;
+      }
+
+      const sanitized = sanitizeStorageValue(childValue, childKey);
+      if (sanitized !== undefined) {
+        next[childKey] = sanitized;
+      }
+    });
+    return next;
+  }
+
+  if (STORAGE_IMAGE_KEYS.has(key) && isLikelyEmbeddedAsset(value)) {
+    return undefined;
+  }
+
+  return value;
+}
+
+function safeSetJsonStorage(key: string, value: any) {
+  if (!canUseLocalStorage()) return false;
+
+  const serialized = JSON.stringify(sanitizeStorageValue(value));
+
+  try {
+    localStorage.setItem(key, serialized);
+    return true;
+  } catch {
+    try {
+      localStorage.removeItem(key);
+      localStorage.setItem(key, serialized);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+function safeSetStorageItem(key: string, value: string) {
+  if (!canUseLocalStorage()) return false;
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function setDocumentFavicon(href: string) {
   if (!href) return;
@@ -162,7 +237,7 @@ export function SettingsProvider({ children }) {
         const appearance = normalizeAppearance(parsedBranding?.appearance, parsed.branding?.appearance || "dark");
         const sidebarDarkFrom = String(parsedBranding?.sidebarDarkFrom || "").trim();
         const sidebarLightFrom = String(parsedBranding?.sidebarLightFrom || "").trim();
-        const logo = String(parsedBranding?.logo || parsed.branding?.logoUrl || "").trim();
+        const logo = normalizeImageSrc(parsedBranding?.logo || parsed.branding?.logoUrl, "");
         return {
           general: {
             schoolDisplayName: parsed.general?.schoolDisplayName || 'Taban Enterprise',
@@ -174,7 +249,7 @@ export function SettingsProvider({ children }) {
           branding: {
             primaryColor: parsed.branding?.primaryColor || DEFAULT_THEME.primaryColor,
             logoUrl: logo,
-            logoFile: parsed.branding?.logoFile || '',
+            logoFile: normalizeImageSrc(parsed.branding?.logoFile, ''),
             appearance,
           },
           theme: {
@@ -217,7 +292,7 @@ export function SettingsProvider({ children }) {
 
   const applyOrganizationProfileToSettings = (profile: any) => {
     const name = String(profile?.name || profile?.organizationName || "").trim();
-    const logo = String(profile?.logoUrl || profile?.logo || "").trim();
+    const logo = normalizeImageSrc(profile?.logoUrl || profile?.logo, "");
     const orgEmail = String(profile?.email || profile?.primaryContactEmail || "").trim();
 
     if (!name && !logo && !orgEmail) return;
@@ -246,7 +321,7 @@ export function SettingsProvider({ children }) {
     const accentColor = String(branding?.accentColor || "").trim();
     const sidebarDarkFrom = String(branding?.sidebarDarkFrom || "").trim();
     const sidebarLightFrom = String(branding?.sidebarLightFrom || "").trim();
-    const logo = String(branding?.logo || "").trim();
+    const logo = normalizeImageSrc(branding?.logo, "");
     const hasLogoField = Object.prototype.hasOwnProperty.call(branding, "logo");
 
     setSettings((prev) => {
@@ -305,7 +380,10 @@ export function SettingsProvider({ children }) {
 
     try {
       const cached = localStorage.getItem("organization_profile");
-      if (cached) applyOrganizationProfileToSettings(JSON.parse(cached));
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        applyOrganizationProfileToSettings(parsed);
+      }
     } catch {}
 
     const token = localStorage.getItem("auth_token") || localStorage.getItem("token") || "";
@@ -317,9 +395,7 @@ export function SettingsProvider({ children }) {
       .then((payload) => {
         const profile = payload?.success ? payload?.data : null;
         if (!profile) return;
-        try {
-          localStorage.setItem("organization_profile", JSON.stringify(profile));
-        } catch {}
+        safeSetJsonStorage("organization_profile", profile);
         applyOrganizationProfileToSettings(profile);
       })
       .catch(() => {});
@@ -347,7 +423,10 @@ export function SettingsProvider({ children }) {
 
     try {
       const cached = localStorage.getItem("organization_branding");
-      if (cached) applyBrandingToSettings(JSON.parse(cached));
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        applyBrandingToSettings(parsed);
+      }
     } catch {}
 
     const token = localStorage.getItem("auth_token") || localStorage.getItem("token") || "";
@@ -359,9 +438,7 @@ export function SettingsProvider({ children }) {
       .then((payload) => {
         const branding = payload?.success ? payload?.data : null;
         if (!branding || brandingUpdatedLocallyRef.current) return;
-        try {
-          localStorage.setItem("organization_branding", JSON.stringify(branding));
-        } catch {}
+        safeSetJsonStorage("organization_branding", branding);
         applyBrandingToSettings(branding);
       })
       .catch(() => {});
@@ -379,9 +456,7 @@ export function SettingsProvider({ children }) {
       );
       brandingUpdatedLocallyRef.current = hasVisualBrandingFields;
       const mergedBranding = mergeBrandingPayload(readStoredBranding(), detail);
-      try {
-        localStorage.setItem("organization_branding", JSON.stringify(mergedBranding));
-      } catch {}
+      safeSetJsonStorage("organization_branding", mergedBranding);
       applyBrandingToSettings(mergedBranding);
     };
 
@@ -394,9 +469,7 @@ export function SettingsProvider({ children }) {
     const handleOrganizationProfileUpdate = (event: any) => {
       const detail = event?.detail;
       if (!detail) return;
-      try {
-        localStorage.setItem("organization_profile", JSON.stringify(detail));
-      } catch {}
+      safeSetJsonStorage("organization_profile", detail);
       applyOrganizationProfileToSettings(detail);
     };
 
@@ -434,12 +507,12 @@ export function SettingsProvider({ children }) {
 
   // Save settings to localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem('appSettings', JSON.stringify(settings));
+    safeSetJsonStorage("appSettings", settings);
   }, [settings]);
 
   const setCampus = (campusId, campusData) => {
     setCurrentCampusId(campusId);
-    localStorage.setItem('currentCampusId', campusId);
+    safeSetStorageItem("currentCampusId", campusId);
   };
 
   // Update theme colors

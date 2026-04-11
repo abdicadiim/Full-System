@@ -219,6 +219,7 @@ type RequestOptions = {
   params?: Record<string, any>;
   data?: any;
   headers?: Record<string, string>;
+  skipCache?: boolean;
 };
 
 const request = async ({
@@ -227,6 +228,7 @@ const request = async ({
   params,
   data,
   headers = {},
+  skipCache = false,
 }: RequestOptions) => {
   const url = `${withBase(path)}${toQuery(params)}`;
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
@@ -260,6 +262,16 @@ const request = async ({
         : await response.text().catch(() => "");
       const normalizedPayload = normalizePayload(payload);
 
+      if (response.status === 304) {
+        return {
+          success: true,
+          status: 304,
+          notModified: true,
+          message: "Not Modified",
+          data: null,
+        };
+      }
+
       if (!response.ok) {
         return {
           success: false,
@@ -292,32 +304,40 @@ const request = async ({
 
     if (method === "GET") {
       const queryKey = ["api", normalizedPath, stableSerialize(params || {}), token || ""];
-      const cachedState = queryClient.getQueryState(queryKey);
-      const cachedValue = queryClient.getQueryData(queryKey);
-      if (
-        cachedState &&
-        cachedValue !== undefined &&
-        Date.now() - cachedState.dataUpdatedAt < QUERY_CACHE_TTL_MS
-      ) {
-        return cachedValue;
+      if (!skipCache) {
+        const cachedState = queryClient.getQueryState(queryKey);
+        const cachedValue = queryClient.getQueryData(queryKey);
+        if (
+          cachedState &&
+          cachedValue !== undefined &&
+          Date.now() - cachedState.dataUpdatedAt < QUERY_CACHE_TTL_MS
+        ) {
+          return cachedValue;
+        }
       }
 
       const pendingKey = stableSerialize({ path: normalizedPath, params: params || {}, token: token || "" });
-      const pending = pendingGetRequests.get(pendingKey);
-      if (pending) return pending;
+      if (!skipCache) {
+        const pending = pendingGetRequests.get(pendingKey);
+        if (pending) return pending;
+      }
 
       const promise = performFetch()
         .then((result) => {
-          if (result?.success !== false) {
+          if (!skipCache && result?.success !== false) {
             queryClient.setQueryData(queryKey, result);
           }
           return result;
         })
         .finally(() => {
-          pendingGetRequests.delete(pendingKey);
+          if (!skipCache) {
+            pendingGetRequests.delete(pendingKey);
+          }
         });
 
-      pendingGetRequests.set(pendingKey, promise);
+      if (!skipCache) {
+        pendingGetRequests.set(pendingKey, promise);
+      }
       return promise;
     }
 
@@ -3395,7 +3415,8 @@ export const settingsAPI = {
 };
 
 export const dashboardAPI = {
-  getSummary: (params?: Record<string, any>) => request({ path: "/dashboard/summary", params }),
+  getSummary: (options?: { params?: Record<string, any>; headers?: Record<string, string>; skipCache?: boolean }) =>
+    request({ path: "/dashboard/summary", params: options?.params, headers: options?.headers, skipCache: options?.skipCache }),
 };
 
 export const authAPI = {

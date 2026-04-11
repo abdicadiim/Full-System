@@ -2,12 +2,11 @@ import React from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
-import {
-  billingQueryClient,
-  CUSTOMER_QUERY_CACHE_BUSTER,
-  CUSTOMER_QUERY_PERSIST_KEY,
-  CUSTOMER_QUERY_PERSIST_MAX_AGE_MS,
-} from "./queryClient";
+import { queryClient } from "../queryClient";
+
+const INVOICE_QUERY_PERSIST_KEY = "invoice_query_cache_v1";
+const INVOICE_QUERY_CACHE_BUSTER = "invoice-cache-v1";
+const INVOICE_QUERY_PERSIST_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 const PERSISTED_QUERY_ROOT_KEYS = new Set([
   "dashboard",
@@ -27,20 +26,16 @@ const PERSISTED_QUERY_ROOT_KEYS = new Set([
   "expenses",
   "projects",
   "time-entries",
-  "journal-entries",
-  "payments-made",
-  "payment-modes",
-  "bank-accounts",
-  "users",
-  "roles",
   "locations",
+  "bank-accounts",
+  "payment-modes",
+  "reporting-tags",
   "currencies",
   "taxes",
-  "reporting-tags",
-  "automation",
-  "email-templates",
+  "users",
+  "roles",
   "sender-emails",
-  "reports",
+  "email-templates",
 ]);
 
 const wrapPersisterWithPromises = (persister: ReturnType<typeof createSyncStoragePersister>) => ({
@@ -51,40 +46,35 @@ const wrapPersisterWithPromises = (persister: ReturnType<typeof createSyncStorag
   removeClient: () => Promise.resolve(persister.removeClient()),
 });
 
-const createCustomerPersister = () => {
+const createPersister = () => {
   if (typeof window === "undefined") return null;
 
   const basePersister = createSyncStoragePersister({
     storage: window.localStorage,
-    key: CUSTOMER_QUERY_PERSIST_KEY,
+    key: INVOICE_QUERY_PERSIST_KEY,
     throttleTime: 1000,
   });
 
   return wrapPersisterWithPromises(basePersister);
 };
 
-export function BillingQueryProvider({ children }: { children: React.ReactNode }) {
-  const persister = React.useMemo(() => createCustomerPersister(), []);
+export function InvoiceQueryProvider({ children }: { children: React.ReactNode }) {
+  const persister = React.useMemo(() => createPersister(), []);
 
   if (!persister) {
-    return (
-      <QueryClientProvider client={billingQueryClient}>
-        {children}
-      </QueryClientProvider>
-    );
+    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
   }
 
   return (
     <PersistQueryClientProvider
-      client={billingQueryClient}
+      client={queryClient}
       persistOptions={{
         persister,
-        buster: CUSTOMER_QUERY_CACHE_BUSTER,
-        maxAge: CUSTOMER_QUERY_PERSIST_MAX_AGE_MS,
+        buster: INVOICE_QUERY_CACHE_BUSTER,
+        maxAge: INVOICE_QUERY_PERSIST_MAX_AGE_MS,
         dehydrateOptions: {
           shouldDehydrateQuery: (query) =>
-            Array.isArray(query.queryKey) &&
-            PERSISTED_QUERY_ROOT_KEYS.has(String(query.queryKey[0] || "")),
+            Array.isArray(query.queryKey) && PERSISTED_QUERY_ROOT_KEYS.has(String(query.queryKey[0] || "")),
         },
       }}
     >

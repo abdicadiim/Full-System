@@ -20,11 +20,11 @@ export default function App() {
           {isPublicSenderVerification ? (
             <AppRoutes />
           ) : (
-            <AuthGate>
-              <Layout>
+            <Layout>
+              <AuthGate>
                 <AppRoutes />
-              </Layout>
-            </AuthGate>
+              </AuthGate>
+            </Layout>
           )}
           <ToastContainer
             position="top-right"

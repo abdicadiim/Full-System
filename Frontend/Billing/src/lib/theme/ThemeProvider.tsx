@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import { safeSetStorageItem } from '../../utils/storage';
 
 const ThemeContext = createContext(null);
 
@@ -15,7 +16,7 @@ export function ThemeProvider({ children }) {
     } else {
       document.documentElement.classList.remove('dark');
     }
-    localStorage.setItem('theme', mode);
+    safeSetStorageItem('theme', mode);
   }, [mode]);
 
   const toggleTheme = () => {

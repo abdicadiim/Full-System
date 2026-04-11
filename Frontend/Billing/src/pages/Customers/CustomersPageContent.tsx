@@ -740,7 +740,6 @@ export default function CustomersPageContent({ controller }: { controller: any }
                     key={`${customer.id}-${index}`}
                     onMouseEnter={() => {
                       setHoveredRowId(customer.id);
-                      void preloadCustomerDetailRoute();
                     }}
                     onPointerDown={() => {
                       void preloadCustomerDetailRoute();

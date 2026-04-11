@@ -59,7 +59,6 @@ import type {
 
 import { useCustomerDetailPageViewModel } from "./useCustomerDetailPageViewModel";
 
-const CUSTOMER_DETAIL_SIDEBAR_CACHE_KEY = "billing_customer_detail_sidebar_seed";
 const CUSTOMER_EDIT_PRELOAD_PREFIX = "billing_customer_edit_preload:";
 const DEFAULT_CUSTOMER_PDF_TEMPLATES: CustomerPdfTemplates = {
     customerStatement: "Standard Template",
@@ -116,34 +115,11 @@ export default function CustomerDetail() {
     const { id } = useParams();
     const navigate = useNavigate();
     const location = useLocation();
-    const detailRouteState = (location.state as any) || {};
-    const initialCustomer = detailRouteState.customer || null;
-    const customerJustSaved = Boolean(detailRouteState.customerJustSaved);
-    const normalizedInitialCustomer = initialCustomer ? normalizeSidebarCustomer(initialCustomer) : null;
-    const initialSidebarCustomersFromRoute = Array.isArray(detailRouteState.customerList) && detailRouteState.customerList.length > 0
-        ? detailRouteState.customerList.map(normalizeSidebarCustomer)
-        : [];
-    const cachedSidebarCustomers = (() => {
-        if (typeof window === "undefined") return [];
-        try {
-            const raw = sessionStorage.getItem(CUSTOMER_DETAIL_SIDEBAR_CACHE_KEY);
-            const parsed = raw ? JSON.parse(raw) : [];
-            return Array.isArray(parsed) ? parsed.map(normalizeSidebarCustomer) : [];
-        } catch {
-            return [];
-        }
-    })();
-    const sidebarSeedBase = initialSidebarCustomersFromRoute.length > 0 ? initialSidebarCustomersFromRoute : cachedSidebarCustomers;
-    const initialSidebarCustomers = normalizedInitialCustomer
-        ? [
-            normalizedInitialCustomer,
-            ...sidebarSeedBase.filter((row: any) => String(row?._id || row?.id || "").trim() !== normalizedInitialCustomer.id),
-        ]
-        : sidebarSeedBase;
+    const initialSidebarCustomers: ExtendedCustomer[] = [];
 
-    const [customer, setCustomer] = useState<ExtendedCustomer | null>(normalizedInitialCustomer);
+    const [customer, setCustomer] = useState<ExtendedCustomer | null>(null);
     const [availableCurrencies, setAvailableCurrencies] = useState<any[]>([]);
-    const [loading, setLoading] = useState(!normalizedInitialCustomer);
+    const [loading, setLoading] = useState(true);
     const [isNavigatingToEdit, setIsNavigatingToEdit] = useState(false);
     const [customers, setCustomers] = useState<ExtendedCustomer[]>(initialSidebarCustomers);
     const [activeTab, setActiveTab] = useState("overview");
@@ -651,8 +627,6 @@ export default function CustomerDetail() {
 
     const { refreshData } = useCustomerDetailData({
         id,
-        initialCustomer,
-        customerJustSaved,
         locationKey: location.key,
         navigate,
         activeTab,
@@ -1065,24 +1039,14 @@ export default function CustomerDetail() {
             normalizeSidebarCustomer(toSerializableCustomerState(row))
         );
 
-        setCustomer(previewCustomer);
-        setComments(normalizeComments(safeCustomer?.comments));
         setCustomers(safeCustomerList);
-        setLoading(false);
-
-        if (typeof window !== "undefined") {
-            try {
-                sessionStorage.setItem(CUSTOMER_DETAIL_SIDEBAR_CACHE_KEY, JSON.stringify(safeCustomerList));
-            } catch {
-            }
-        }
 
         navigate(`/sales/customers/${nextCustomerId}`, {
             state: {
-                customer: previewCustomer,
+                customerList: safeCustomerList,
             },
         });
-    }, [navigate, normalizeComments, sidebarSortedCustomers]);
+    }, [navigate, sidebarSortedCustomers]);
 
     const handleSidebarBulkUpdate = () => {
         setIsBulkActionsDropdownOpen(false);
@@ -1234,45 +1198,6 @@ export default function CustomerDetail() {
                 underline: Boolean(item.underline)
             }));
     }
-
-    useEffect(() => {
-        const currentRouteCustomerId = String(initialCustomer?._id || initialCustomer?.id || "").trim();
-        const currentPageCustomerId = String(id || "").trim();
-        if (!initialCustomer || !currentRouteCustomerId || currentRouteCustomerId !== currentPageCustomerId) return;
-
-        const previewCustomer = normalizeSidebarCustomer(initialCustomer);
-        setCustomer((prev) => {
-            const previousCustomerId = String(prev?._id || prev?.id || "").trim();
-            if (previousCustomerId === currentRouteCustomerId) {
-                return {
-                    ...prev,
-                    ...previewCustomer,
-                    id: previewCustomer.id,
-                    _id: previewCustomer._id,
-                    name: previewCustomer.name,
-                    displayName: previewCustomer.displayName || previewCustomer.name,
-                };
-            }
-            return previewCustomer;
-        });
-        setComments(normalizeComments(initialCustomer.comments));
-        setCustomers((prev) => {
-            const existing = Array.isArray(prev) ? prev : [];
-            return [
-                previewCustomer,
-                ...existing.filter((row: any) => String(row?._id || row?.id || "").trim() !== currentRouteCustomerId),
-            ];
-        });
-        setLoading(false);
-    }, [id, initialCustomer]);
-
-    useEffect(() => {
-        if (typeof window === "undefined" || !Array.isArray(customers) || customers.length === 0) return;
-        try {
-            sessionStorage.setItem(CUSTOMER_DETAIL_SIDEBAR_CACHE_KEY, JSON.stringify(customers));
-        } catch {
-        }
-    }, [customers]);
 
     useEffect(() => {
         setAreRemindersStopped(Boolean((customer as any)?.remindersStopped));

@@ -26,17 +26,17 @@ export default function App() {
           {isPublicSenderVerification ? (
             <AppRoutes />
           ) : (
-            <AuthGate>
-              <CustomerQueryWarmup />
-              <ItemQueryWarmup />
-              <ProductQueryWarmup />
-              <QuoteQueryWarmup />
-              <CouponQueryWarmup />
-              <PriceListQueryWarmup />
-              <Layout>
+            <Layout>
+              <AuthGate>
+                <CustomerQueryWarmup />
+                <ItemQueryWarmup />
+                <ProductQueryWarmup />
+                <QuoteQueryWarmup />
+                <CouponQueryWarmup />
+                <PriceListQueryWarmup />
                 <AppRoutes />
-              </Layout>
-            </AuthGate>
+              </AuthGate>
+            </Layout>
           )}
           <ToastContainer
             position="top-right"

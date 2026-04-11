@@ -1,9 +1,8 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
-import { QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
-import { queryClient } from './lib/queryClient'
+import { InvoiceQueryProvider } from './lib/query/InvoiceQueryProvider'
 import './index.css'
 import 'react-toastify/dist/ReactToastify.css'
 
@@ -29,14 +28,15 @@ if (import.meta.env.PROD && !window.location.pathname.startsWith("/sender-verifi
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
+    <InvoiceQueryProvider>
       <BrowserRouter
         future={{
-          v7_relativeSplatPath: true
+          v7_relativeSplatPath: true,
+          v7_startTransition: true,
         }}
       >
         <App />
       </BrowserRouter>
-    </QueryClientProvider>
+    </InvoiceQueryProvider>
   </React.StrictMode>
 )

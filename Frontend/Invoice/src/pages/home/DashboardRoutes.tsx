@@ -100,20 +100,48 @@ const DASHBOARD_SUBSCRIPTIONS_CACHE_KEY = "taban_invoice_dashboard_subscriptions
 const dashboardCacheKey = (baseKey: string, organizationId: string) =>
   `${baseKey}:${String(organizationId || "global").trim() || "global"}`;
 
-function readCachedSummary(organizationId = "") {
+type SummaryCacheEnvelope = {
+  version_id: string;
+  last_updated: string;
+  payload: any;
+};
+
+function readCachedSummaryEnvelope(organizationId = "") {
   try {
     const raw = localStorage.getItem(dashboardCacheKey(DASHBOARD_SUMMARY_CACHE_KEY, organizationId));
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : null;
+    if (parsed && typeof parsed === "object" && "payload" in parsed) {
+      return {
+        version_id: String((parsed as any).version_id || ""),
+        last_updated: String((parsed as any).last_updated || ""),
+        payload: (parsed as any).payload,
+      } as SummaryCacheEnvelope;
+    }
+    return parsed && typeof parsed === "object"
+      ? ({
+          version_id: String((parsed as any).version_id || ""),
+          last_updated: String((parsed as any).last_updated || ""),
+          payload: parsed,
+        } as SummaryCacheEnvelope)
+      : null;
   } catch {
     return null;
   }
 }
 
-function writeCachedSummary(summary: any, organizationId = "") {
+function readCachedSummary(organizationId = "") {
+  return readCachedSummaryEnvelope(organizationId)?.payload || null;
+}
+
+function writeCachedSummary(summary: any, organizationId = "", meta?: { version_id?: string; last_updated?: string }) {
   try {
-    localStorage.setItem(dashboardCacheKey(DASHBOARD_SUMMARY_CACHE_KEY, organizationId), JSON.stringify(summary));
+    const envelope: SummaryCacheEnvelope = {
+      version_id: String(meta?.version_id || summary?.version_id || ""),
+      last_updated: String(meta?.last_updated || summary?.last_updated || new Date().toISOString()),
+      payload: summary,
+    };
+    localStorage.setItem(dashboardCacheKey(DASHBOARD_SUMMARY_CACHE_KEY, organizationId), JSON.stringify(envelope));
   } catch {
     // Ignore non-critical cache failures.
   }
@@ -344,6 +372,8 @@ function buildDashboardSummaryFromRows({
       name: organizationName,
       baseCurrency,
     },
+    version_id: "",
+    last_updated: new Date().toISOString(),
     generatedAt: new Date().toISOString(),
   };
 }
@@ -778,23 +808,43 @@ function DashboardHome() {
   const canViewDashboard = canView("dashboard", "View Dashboard");
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState("ytd");
-  const [dashboardRefreshKey] = useState(() => `${Date.now()}-${Math.random().toString(36).slice(2)}`);
-  const organizationId = String(user?.organizationId || "").trim();
+  const organizationId = String((user as any)?.organizationId || "").trim();
   const dashboardQuery = useQuery({
-    queryKey: ["dashboard", "summary", organizationId || "global", String(baseCurrencyCode || "").trim().toUpperCase(), dashboardRefreshKey],
+    queryKey: ["dashboard", "summary", organizationId || "global", String(baseCurrencyCode || "").trim().toUpperCase()],
     staleTime: 30_000,
     enabled: !permissionsLoading && canViewDashboard,
     queryFn: async () => {
       setError(null);
+      const cachedSummaryEnvelope = readCachedSummaryEnvelope(organizationId);
+      const summaryHeaders: Record<string, string> = {};
+      if (cachedSummaryEnvelope?.last_updated) {
+        summaryHeaders["If-Modified-Since"] = cachedSummaryEnvelope.last_updated;
+      }
+      if (cachedSummaryEnvelope?.version_id) {
+        summaryHeaders["X-Client-Version-Id"] = cachedSummaryEnvelope.version_id;
+      }
       const results = await Promise.allSettled([
-        withTimeout(dashboardAPI.getSummary({ refresh: dashboardRefreshKey, organizationId }), 8000),
-        withTimeout(invoicesAPI.getAll({ limit: 1000, refresh: dashboardRefreshKey, organizationId }), 8000),
-        withTimeout(paymentsReceivedAPI.getAll({ limit: 1000, refresh: dashboardRefreshKey, organizationId }), 8000),
-        withTimeout(expensesAPI.getAll({ limit: 1000, refresh: dashboardRefreshKey, organizationId }), 8000),
-        withTimeout(subscriptionsAPI.getAll({ limit: 1000, refresh: dashboardRefreshKey, organizationId }), 8000),
+        withTimeout(
+          dashboardAPI.getSummary({
+            params: { organizationId },
+            headers: summaryHeaders,
+            skipCache: true,
+          }),
+          8000
+        ),
+        withTimeout(invoicesAPI.getAll({ limit: 1000, organizationId }), 8000),
+        withTimeout(paymentsReceivedAPI.getAll({ limit: 1000, organizationId }), 8000),
+        withTimeout(expensesAPI.getAll({ limit: 1000, organizationId }), 8000),
+        withTimeout(subscriptionsAPI.getAll({ limit: 1000, organizationId }), 8000),
       ]);
       const [summaryRes, invoiceRes, paymentRes, expenseRes, subscriptionRes] = results;
-      const summary = summaryRes.status === "fulfilled" && summaryRes.value?.success !== false ? summaryRes.value.data : null;
+      const summaryResponse = summaryRes.status === "fulfilled" ? summaryRes.value : null;
+      const summary =
+        summaryResponse?.notModified && cachedSummaryEnvelope
+          ? cachedSummaryEnvelope.payload
+          : summaryResponse?.success !== false
+            ? summaryResponse?.data
+            : null;
       const invoices = invoiceRes.status === "fulfilled" ? asRows(invoiceRes.value) : [];
       const payments = paymentRes.status === "fulfilled" ? asRows(paymentRes.value) : [];
       const expenses = expenseRes.status === "fulfilled" ? asRows(expenseRes.value) : [];
@@ -822,7 +872,10 @@ function DashboardHome() {
               organizationName,
               baseCurrency: String(baseCurrencyCode || "").trim().toUpperCase(),
             });
-      writeCachedSummary(nextSummary, organizationId);
+      writeCachedSummary(nextSummary, organizationId, {
+        version_id: String(summary?.version_id || nextSummary?.version_id || ""),
+        last_updated: String(summary?.last_updated || nextSummary?.last_updated || new Date().toISOString()),
+      });
       return { summary: nextSummary, invoices, payments, expenses, subscriptions };
     },
   });
@@ -842,6 +895,8 @@ function DashboardHome() {
     incomeExpense: { totalIncome: 0, totalReceipts: 0, totalExpenses: 0, labels: [], income: [], receipts: [], expenses: [] },
     topExpenses: { total: 0, items: [] },
     organization: { name: "", baseCurrency: "" },
+    version_id: "",
+    last_updated: "",
     generatedAt: "",
   };
 

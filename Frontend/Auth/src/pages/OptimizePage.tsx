@@ -135,7 +135,7 @@ export default function OptimizePage() {
           navigate(`/verifying${window.location.search}`);
           return;
         }
-        navigate(`/settings/taxes${window.location.search}`);
+        navigate(`/moving-system${window.location.search}`);
       })
       .catch(() => {
         setSaving(false);

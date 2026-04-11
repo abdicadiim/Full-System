@@ -13,6 +13,7 @@ import {
 import { useUser } from "../../lib/auth/UserContext";
 import { useSettings } from "../../lib/settings/SettingsContext";
 import SettingsDrawer from "../settings/SettingsDrawer";
+import { normalizeImageSrc } from "../../utils/imageSources";
 
 const DEFAULT_LOGO_URL = "/logo-DxLi_Ek_.png";
 const SYSTEM_NAME = "Taban Invoice";
@@ -39,9 +40,10 @@ function Header({ onToggleSidebar }) {
   const displayName = user?.name || "Guest";
   const defaultLogoUrl = DEFAULT_LOGO_URL;
   const avatarInitial = displayName.trim().charAt(0).toUpperCase() || "A";
-  const avatarSrc = String(
-    settings?.branding?.logoUrl || settings?.branding?.logoFile || user?.photoUrl || defaultLogoUrl,
-  ).trim();
+  const avatarSrc = normalizeImageSrc(
+    settings?.branding?.logoUrl || settings?.branding?.logoFile || user?.photoUrl,
+    defaultLogoUrl,
+  );
   const unreadMessages = user?.unreadMessages ?? 0;
   const unreadNotifications = user?.unreadNotifications ?? 0;
 

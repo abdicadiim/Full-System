@@ -1,13 +1,8 @@
 import React from "react";
-import { Routes, Route, NavLink } from "react-router-dom";
+import { Routes, Route, Navigate, NavLink } from "react-router-dom";
 
 import OverviewPage from "./pages/OverviewPage";
-import MetricsPage from "./pages/MetricsPage";
-import SubscriptionsPage from "./pages/SubscriptionsPage";
-import FinancePage from "./pages/FinancePage";
-import ProjectsPage from "./pages/ProjectsPage";
 import { usePermissions } from "../../hooks/usePermissions";
-import AccessDenied from "../../components/AccessDenied";
 
 const Tab = ({ to, children }) => (
   <NavLink
@@ -26,8 +21,7 @@ const Tab = ({ to, children }) => (
 );
 
 export default function DashboardRoutes() {
-  const { loading, canView } = usePermissions();
-  const canViewProjects = canView("dashboard", "Projects");
+  const { loading } = usePermissions();
 
   if (loading) {
     return <div className="p-6 text-sm text-slate-500">Loading dashboard permissions...</div>;
@@ -36,22 +30,11 @@ export default function DashboardRoutes() {
   return (
     <Routes>
       <Route index element={<OverviewPage />} />
-      <Route path="metrics" element={<MetricsPage />} />
-      <Route path="subscriptions" element={<SubscriptionsPage />} />
-      <Route path="finance" element={<FinancePage />} />
-      <Route
-        path="projects"
-        element={
-          canViewProjects ? (
-            <ProjectsPage />
-          ) : (
-            <AccessDenied
-              title="Projects access required"
-              message="Your role does not include permission to view the dashboard projects page."
-            />
-          )
-        }
-      />
+      <Route path="metrics" element={<Navigate to="/dashboard" replace />} />
+      <Route path="subscriptions" element={<Navigate to="/dashboard" replace />} />
+      <Route path="finance" element={<Navigate to="/dashboard" replace />} />
+      <Route path="projects" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 }

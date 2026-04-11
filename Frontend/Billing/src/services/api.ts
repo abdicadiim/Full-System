@@ -72,6 +72,16 @@ const request = async ({ method = "GET", path, params, data, headers = {} }: Req
       ? await response.json().catch(() => null)
       : await response.text().catch(() => "");
 
+    if (response.status === 304) {
+      return {
+        success: true,
+        status: 304,
+        notModified: true,
+        message: "Not Modified",
+        data: null,
+      };
+    }
+
     if (!response.ok) {
       return {
         success: false,
@@ -2506,6 +2516,54 @@ const readFileAsDataUrl = (file: File) =>
   });
 
 export const documentsAPI = {
+  uploadBinary: async (file: File, extra?: Record<string, any>) => {
+    const token = getStoredToken();
+    const params = new URLSearchParams();
+    params.set("name", file.name);
+    params.set("size", String(file.size));
+    Object.entries(extra || {}).forEach(([key, value]) => {
+      if (value === undefined || value === null || value === "") return;
+      params.set(key, String(value));
+    });
+
+    try {
+      const response = await fetch(`${withBase("/documents/binary")}?${params.toString()}`, {
+        method: "POST",
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          "Content-Type": file.type || "application/octet-stream",
+        },
+        credentials: "include",
+        body: file,
+      });
+
+      const contentType = response.headers.get("content-type") || "";
+      const payload = contentType.includes("application/json")
+        ? await response.json().catch(() => null)
+        : await response.text().catch(() => "");
+
+      if (!response.ok) {
+        return {
+          success: false,
+          status: response.status,
+          message:
+            (payload && typeof payload === "object" && (payload as any).message) ||
+            response.statusText ||
+            "Upload failed",
+          data: payload && typeof payload === "object" ? (payload as any).data ?? null : payload,
+        };
+      }
+
+      if (payload && typeof payload === "object") {
+        if ("success" in (payload as any)) return payload as any;
+        return { success: true, data: payload };
+      }
+
+      return { success: true, data: payload };
+    } catch (error: any) {
+      return { success: false, message: error?.message || "Upload failed", data: null };
+    }
+  },
   upload: async (file: File, extra?: Record<string, any>) => {
     try {
       const contentUrl = await readFileAsDataUrl(file);
@@ -2524,12 +2582,43 @@ export const documentsAPI = {
       return { success: false, message: error?.message || "Upload failed", data: null };
     }
   },
-  delete: async (id: string) => {
+  uploadSmart: async (file: File, extra?: Record<string, any>) => {
+    const fastUpload = await documentsAPI.uploadBinary(file, extra);
+    if (fastUpload?.success) {
+      return fastUpload;
+    }
+
+    if (fastUpload?.status && ![404, 415, 500, 501].includes(Number(fastUpload.status))) {
+      return fastUpload;
+    }
+
+    return await documentsAPI.upload(file, extra);
+  },
+  delete: async (
+    id: string,
+    extra?: {
+      customerId?: string;
+      name?: string;
+      size?: string | number;
+      uploadedAt?: string;
+      url?: string;
+    }
+  ) => {
     const docId = String(id || "").trim();
     if (!docId) {
       return { success: false, message: "Document id is required", data: null };
     }
-    return (await request({ method: "DELETE", path: `/documents/${encodeURIComponent(docId)}` })) as any;
+    const params: Record<string, any> = {};
+    Object.entries(extra || {}).forEach(([key, value]) => {
+      if (value === undefined || value === null || value === "") return;
+      params[key] = value;
+    });
+
+    return (await request({
+      method: "DELETE",
+      path: `/documents/${encodeURIComponent(docId)}`,
+      params: Object.keys(params).length ? params : undefined,
+    })) as any;
   },
   getById: async (id: string) => {
     const docId = String(id || "").trim();
@@ -3113,7 +3202,8 @@ export const priceListsAPI = {
 };
 
 export const dashboardAPI = {
-  getSummary: () => request({ path: "/dashboard/summary" }),
+  getSummary: (options?: { headers?: Record<string, string> }) =>
+    request({ path: "/dashboard/summary", headers: options?.headers }),
 };
 
 export default {

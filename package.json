@@ -6,6 +6,7 @@
   "scripts": {
     "install:all": "npm install && npm --prefix Frontend/Auth install && npm --prefix Frontend/Billing install && npm --prefix Frontend/Invoice install",
     "dev": "npm run dev:all",
+    "ensure:frontend-deps": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/ensure-frontend-deps.ps1",
     "wait:backend": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/wait-for-port.ps1 -Port 5000 -TimeoutSeconds 120",
     "dev:backend-only": "tsx watch server.ts",
     "dev:backend": "powershell -NoProfile -Command \"$pids = Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique; if($pids){ foreach($processId in $pids){ try{ Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue }catch{} }; Start-Sleep -Milliseconds 500 }; tsx watch server.ts\"",
@@ -17,7 +18,7 @@
     "dev:auth:wait": "npm run wait:backend && npm run dev:auth",
     "dev:billing:wait": "npm run wait:backend && npm run dev:billing",
     "dev:invoice:wait": "npm run wait:backend && npm run dev:invoice",
-    "dev:all": "concurrently -k -n backend,auth,billing,invoice -c blue,magenta,green,yellow \"npm run dev:backend\" \"npm run dev:auth:wait\" \"npm run dev:billing:wait\" \"npm run dev:invoice:wait\"",
+    "dev:all": "npm run ensure:frontend-deps && concurrently -k -n backend,auth,billing,invoice -c blue,magenta,green,yellow \"npm run dev:backend\" \"npm run dev:auth:wait\" \"npm run dev:billing:wait\" \"npm run dev:invoice:wait\"",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js"
   },

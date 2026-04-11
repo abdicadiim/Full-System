@@ -40,8 +40,22 @@ type UserContextValue = {
 
 const UserContext = createContext<UserContextValue | null>(null);
 
+function readCachedUser(): User {
+  if (typeof window === "undefined") return null;
+  for (const key of ["user", "current_user", "auth_user"]) {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) continue;
+    try {
+      return JSON.parse(raw) as User;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
 export function UserProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User>(null);
+  const [user, setUser] = useState<User>(() => readCachedUser());
   const [loading, setLoading] = useState(true);
   const [hasChecked, setHasChecked] = useState(false);
   const [pollingEnabled, setPollingEnabled] = useState(false);

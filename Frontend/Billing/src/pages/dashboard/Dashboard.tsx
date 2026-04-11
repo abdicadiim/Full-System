@@ -1,10 +1,8 @@
 import React from "react";
 import Card from "../../components/ui/Card";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { dashboardAPI } from "../../services/api";
-import { useSettings } from "../../lib/settings/SettingsContext";
-import { formatCurrencyValue, EMPTY_SUMMARY, DashboardSummary } from "./summary";
+import { formatCurrencyValue, type DashboardSummary } from "./summary";
+import { useDashboardSummarySync } from "../../hooks/useDashboardSummarySync";
 
 function Stat({ label, value, delta, up = true }) {
   return (
@@ -38,25 +36,29 @@ const getDeltaInfo = (values: number[] = []) => {
 };
 
 export default function Dashboard() {
-  const { settings } = useSettings();
-  const currencyCode = (
-    String(settings?.general?.baseCurrency || "").trim().toUpperCase() || "USD"
-  );
-  const summaryQuery = useQuery<DashboardSummary>({
-    queryKey: ["dashboard", "summary"],
-    queryFn: async () => {
-      const response = await dashboardAPI.getSummary();
-      if (!response?.success) {
-        throw new Error(response?.message || "Failed to load dashboard data.");
-      }
-      return (response.data as DashboardSummary) || EMPTY_SUMMARY;
-    },
-    initialData: EMPTY_SUMMARY,
-    placeholderData: EMPTY_SUMMARY,
-    staleTime: 1000 * 60 * 5,
-  });
+  const summarySync = useDashboardSummarySync();
+  const dashboardData = summarySync.data;
+  const errorMessage = summarySync.error;
 
-  const dashboardData = summaryQuery.data ?? EMPTY_SUMMARY;
+  if (summarySync.loading && !dashboardData) {
+    return (
+      <div className="space-y-6">
+        <Card className="border-slate-200 p-8 text-sm text-slate-500 shadow-sm">Loading dashboard data...</Card>
+      </div>
+    );
+  }
+
+  if (!dashboardData) {
+    return (
+      <div className="space-y-6">
+        <Card className="border border-rose-100 bg-rose-50 p-8 text-sm text-rose-700 shadow-sm">
+          {errorMessage || "Failed to load dashboard data."}
+        </Card>
+      </div>
+    );
+  }
+
+  const currencyCode = String(dashboardData.organization?.baseCurrency || "").trim().toUpperCase();
   const mrrValue = dashboardData.metrics.mrr.total ?? 0;
   const arrValue = mrrValue * 12;
   const overdueValue = dashboardData.metrics.receivables.overdue ?? 0;
@@ -93,11 +95,6 @@ export default function Dashboard() {
     },
   ];
 
-  const errorMessage =
-    summaryQuery.isError && summaryQuery.error
-      ? (summaryQuery.error as Error).message
-      : null;
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -113,7 +110,7 @@ export default function Dashboard() {
         </div>
       ) : null}
 
-      {summaryQuery.isFetching && (
+      {summarySync.refreshing && (
         <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500 shadow-sm">
           Updating dashboard numbers...
         </div>

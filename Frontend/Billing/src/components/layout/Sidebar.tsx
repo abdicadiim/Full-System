@@ -20,17 +20,10 @@ import { useUser } from "../../lib/auth/UserContext";
 import { useSettings } from "../../lib/settings/SettingsContext";
 import { getNavConfigForRole } from "../../config/roleBasedNav";
 import { preloadCustomersIndexRoute } from "../../pages/Customers/customerRouteLoaders";
+import { prefetchRouteChunk } from "../../routes/routeWarmers";
+import { normalizeImageSrc } from "../../utils/imageSources";
 const OFFICIAL_COMPANY_NAME = "Taban Enterprise";
 const SYSTEM_VERSION = "0.0.0.1";
-
-const isSafeImageSrc = (value: unknown) => {
-  const src = String(value || "").trim();
-  if (!src) return false;
-  if (src.startsWith("/") || src.startsWith("blob:")) return true;
-  if (/^https?:\/\//i.test(src)) return true;
-  if (/^data:image\/(png|jpe?g|gif|webp|bmp|svg\+xml);base64,[A-Za-z0-9+/=]+$/i.test(src)) return true;
-  return false;
-};
 
 const SIDEBAR_MODULE_BY_PATH: Record<string, string[]> = {
   "/sales/quotes": ["quotes"],
@@ -449,8 +442,7 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
   const [companyPrimaryRaw, ...companySecondaryParts] = companyName.split(/\s+/).filter(Boolean);
   const companyPrimary = companyPrimaryRaw || "Billing";
   const companySecondary = companySecondaryParts.join(" ");
-  const sidebarLogoCandidate = String(settings?.branding?.logoUrl || settings?.branding?.logoFile || "").trim();
-  const sidebarLogoSrc = isSafeImageSrc(sidebarLogoCandidate) ? sidebarLogoCandidate : "";
+  const sidebarLogoSrc = normalizeImageSrc(settings?.branding?.logoUrl || settings?.branding?.logoFile, "");
   const companyInitials = (companyName.match(/[A-Za-z0-9]/g) || []).slice(0, 2).join("").toUpperCase() || "CO";
 
   // === ROLE-BASED NAVIGATION ===
@@ -699,20 +691,11 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
                             scheduleFlyoutClose();
                           }}
                         >
-                          <NavLink
+                            <NavLink
                             to={item.to}
                             end={item.to === "/dashboard" || item.to === "/"}
-                            onMouseEnter={() => {
-                              if (item.to === "/sales/customers") {
-                                void preloadCustomersIndexRoute();
-                              }
-                            }}
-                            onFocus={() => {
-                              if (item.to === "/sales/customers") {
-                                void preloadCustomersIndexRoute();
-                              }
-                            }}
                             onPointerDown={() => {
+                              prefetchRouteChunk(item.to);
                               if (item.to === "/sales/customers") {
                                 void preloadCustomersIndexRoute();
                               }
@@ -802,6 +785,7 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
                                         <NavLink
                                           to={sub.to}
                                           end={sub.to === item.to}
+                                          onPointerDown={() => prefetchRouteChunk(sub.to)}
                                           onClick={handleLinkClick}
                                           className={({ isActive }) =>
                                             submenuClasses(isActive)
@@ -875,6 +859,7 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
                           key={sub.to}
                           to={sub.to}
                           end
+                          onPointerDown={() => prefetchRouteChunk(sub.to)}
                           onClick={handleLinkClick}
                           className={({ isActive }) =>
                             `group flex items-center justify-between gap-2 rounded-xl px-4 py-2.5 text-[14px] font-medium transition-colors no-underline mb-1 border ${isActive

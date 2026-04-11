@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import { useUser } from '../auth/UserContext';
 import { settingsAPI } from '../../services/api';
+import { normalizeImageSrc } from '../../utils/imageSources';
+import { readJsonStorage, safeSetJsonStorage, safeSetStorageItem } from '../../utils/storage';
 
 const SettingsContext = createContext(null);
 
@@ -133,14 +135,14 @@ function sanitizeProfileForStorage(profile: any) {
 }
 
 function readStoredBranding() {
-  try {
-    const savedBranding = localStorage.getItem("organization_branding");
-    if (!savedBranding) return {};
-    const parsed = JSON.parse(savedBranding);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
+  const parsed = readJsonStorage<any>("organization_branding", {});
+  if (!parsed || typeof parsed !== "object") return {};
+  return {
+    ...parsed,
+    logo: normalizeImageSrc((parsed as any).logo, ""),
+    logoUrl: normalizeImageSrc((parsed as any).logoUrl, ""),
+    logoFile: normalizeImageSrc((parsed as any).logoFile, ""),
+  };
 }
 
 function mergeBrandingPayload(existing: any, incoming: any) {
@@ -270,7 +272,7 @@ export function SettingsProvider({ children }) {
         const appearance = normalizeAppearance(parsedBranding?.appearance, parsed.branding?.appearance || "dark");
         const sidebarDarkFrom = String(parsedBranding?.sidebarDarkFrom || "").trim();
         const sidebarLightFrom = String(parsedBranding?.sidebarLightFrom || "").trim();
-    const logo = sanitizeLogoValue(parsedBranding?.logo || parsed.branding?.logoUrl || "");
+        const logo = normalizeImageSrc(parsedBranding?.logo || parsed.branding?.logoUrl, "");
         return {
         general: {
           schoolDisplayName: parsed.general?.schoolDisplayName || 'Taban Enterprise',
@@ -283,7 +285,7 @@ export function SettingsProvider({ children }) {
           branding: {
             primaryColor: parsed.branding?.primaryColor || DEFAULT_THEME.primaryColor,
             logoUrl: logo,
-            logoFile: sanitizeLogoValue(parsed.branding?.logoFile),
+            logoFile: normalizeImageSrc(parsed.branding?.logoFile, ''),
             appearance,
           },
           theme: {
@@ -332,7 +334,7 @@ export function SettingsProvider({ children }) {
       const cachedProfile = localStorage.getItem("organization_profile");
       if (cachedProfile) {
         const parsed = JSON.parse(cachedProfile);
-        safeStorageSetItem("organization_profile", JSON.stringify(sanitizeProfileForStorage(parsed)));
+        safeSetJsonStorage("organization_profile", sanitizeProfileForStorage(parsed));
       }
     } catch {
       try {
@@ -344,7 +346,7 @@ export function SettingsProvider({ children }) {
       const cachedBranding = localStorage.getItem("organization_branding");
       if (cachedBranding) {
         const parsed = JSON.parse(cachedBranding);
-        safeStorageSetItem("organization_branding", JSON.stringify(sanitizeBrandingForStorage(parsed)));
+        safeSetJsonStorage("organization_branding", sanitizeBrandingForStorage(parsed));
       }
     } catch {
       try {
@@ -371,7 +373,7 @@ export function SettingsProvider({ children }) {
 
   const applyOrganizationProfileToSettings = (profile: any) => {
     const name = String(profile?.name || profile?.organizationName || "").trim();
-    const logo = String(profile?.logoUrl || profile?.logo || "").trim();
+    const logo = normalizeImageSrc(profile?.logoUrl || profile?.logo, "");
     const orgEmail = String(profile?.email || profile?.primaryContactEmail || "").trim();
     const baseCurrency = String(profile?.baseCurrency || "").trim().toUpperCase();
 
@@ -402,7 +404,7 @@ export function SettingsProvider({ children }) {
     const accentColor = String(branding?.accentColor || "").trim();
     const sidebarDarkFrom = String(branding?.sidebarDarkFrom || "").trim();
     const sidebarLightFrom = String(branding?.sidebarLightFrom || "").trim();
-    const logo = sanitizeLogoValue(branding?.logo);
+    const logo = normalizeImageSrc(branding?.logo, "");
     const hasLogoField = Object.prototype.hasOwnProperty.call(branding, "logo");
 
     setSettings((prev) => {
@@ -460,23 +462,22 @@ export function SettingsProvider({ children }) {
     if (!hasChecked || !user) return;
 
     try {
-      const cached = localStorage.getItem("organization_profile");
-      if (cached) applyOrganizationProfileToSettings(JSON.parse(cached));
+      const cached = readJsonStorage<any>("organization_profile", null);
+      if (cached) applyOrganizationProfileToSettings(cached);
     } catch {}
 
-        void (async () => {
-          try {
-            const res = await settingsAPI.getOrganizationProfile();
-            if (!res?.success || !res?.data) return;
-            const safeProfile = sanitizeProfileForStorage(res.data);
-            try {
-            safeStorageSetItem("organization_profile", JSON.stringify(safeProfile));
-            } catch {}
-            applyOrganizationProfileToSettings(res.data);
-          } catch (error) {
-            console.error("Failed to load organization profile", error);
-          }
-        })();
+    void (async () => {
+      try {
+        const res = await settingsAPI.getOrganizationProfile();
+        if (!res?.success || !res?.data) return;
+        try {
+          safeSetJsonStorage("organization_profile", res.data);
+        } catch {}
+        applyOrganizationProfileToSettings(res.data);
+      } catch (error) {
+        console.error("Failed to load organization profile", error);
+      }
+    })();
   }, [hasChecked, user?.id]);
 
   useEffect(() => {
@@ -498,8 +499,8 @@ export function SettingsProvider({ children }) {
     if (!hasChecked || !user) return;
 
     try {
-      const cached = localStorage.getItem("organization_branding");
-      if (cached) applyBrandingToSettings(JSON.parse(cached));
+      const cached = readJsonStorage<any>("organization_branding", null);
+      if (cached) applyBrandingToSettings(cached);
     } catch {}
 
     void (async () => {
@@ -507,9 +508,8 @@ export function SettingsProvider({ children }) {
         const res = await settingsAPI.getOrganizationProfile();
         const branding = res?.success ? res?.data?.branding : null;
         if (!branding || brandingUpdatedLocallyRef.current) return;
-        const safeBranding = sanitizeBrandingForStorage(branding);
         try {
-          safeStorageSetItem("organization_branding", JSON.stringify(safeBranding));
+          safeSetJsonStorage("organization_branding", branding);
         } catch {}
         applyBrandingToSettings(branding);
       } catch (error) {
@@ -531,7 +531,7 @@ export function SettingsProvider({ children }) {
       brandingUpdatedLocallyRef.current = hasVisualBrandingFields;
       const mergedBranding = mergeBrandingPayload(readStoredBranding(), detail);
       try {
-        safeStorageSetItem("organization_branding", JSON.stringify(sanitizeBrandingForStorage(mergedBranding)));
+        safeSetJsonStorage("organization_branding", mergedBranding);
       } catch {}
       applyBrandingToSettings(mergedBranding);
     };
@@ -546,7 +546,7 @@ export function SettingsProvider({ children }) {
       const detail = event?.detail;
       if (!detail) return;
       try {
-        safeStorageSetItem("organization_profile", JSON.stringify(sanitizeProfileForStorage(detail)));
+        safeSetJsonStorage("organization_profile", detail);
       } catch {}
       applyOrganizationProfileToSettings(detail);
     };
@@ -583,9 +583,14 @@ export function SettingsProvider({ children }) {
     setDocumentFavicon(DEFAULT_FAVICON);
   }, []);
 
+  // Save settings to localStorage whenever they change
+  useEffect(() => {
+    safeSetJsonStorage("appSettings", settings);
+  }, [settings]);
+
   const setCampus = (campusId, campusData) => {
     setCurrentCampusId(campusId);
-    safeStorageSetItem('currentCampusId', campusId);
+    safeSetStorageItem("currentCampusId", campusId);
   };
 
   // Update theme colors

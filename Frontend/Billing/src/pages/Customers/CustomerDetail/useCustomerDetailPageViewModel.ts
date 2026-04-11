@@ -66,6 +66,30 @@ const buildUniqueCloneLabel = (baseValue: any, existingValues: any[]) => {
     return candidate;
 };
 
+async function runConcurrentUploads<TInput, TResult>(
+    items: TInput[],
+    concurrency: number,
+    worker: (item: TInput, index: number) => Promise<TResult>
+) {
+    const safeConcurrency = Math.max(1, concurrency);
+    const results: TResult[] = new Array(items.length);
+    let nextIndex = 0;
+
+    const runner = async () => {
+        while (nextIndex < items.length) {
+            const currentIndex = nextIndex;
+            nextIndex += 1;
+            results[currentIndex] = await worker(items[currentIndex], currentIndex);
+        }
+    };
+
+    await Promise.all(
+        Array.from({ length: Math.min(safeConcurrency, items.length) }, () => runner())
+    );
+
+    return results;
+}
+
 export function useCustomerDetailPageViewModel(args: any) {
     const {
         id,
@@ -932,10 +956,24 @@ export function useCustomerDetailPageViewModel(args: any) {
                 return;
             }
 
-            const uploadedDocuments: any[] = [];
+            const uploadStartedAt = Date.now();
+            const tempDocuments = filesArray.map((file, index) => ({
+                id: `temp-${Date.now()}-${index}-${file.name}`,
+                documentId: `temp-${Date.now()}-${index}-${file.name}`,
+                name: file.name,
+                size: file.size,
+                mimeType: file.type || "application/octet-stream",
+                uploadedAt: new Date().toISOString(),
+                isUploading: true,
+            }));
+
+            const optimisticDocuments = [...currentDocuments, ...tempDocuments];
+            setCustomer((prev) => prev ? ({ ...prev, documents: optimisticDocuments }) : prev);
+            setAttachments(mapDocumentsToAttachments(optimisticDocuments));
+
             let persistedDocuments: any[] | null = null;
-            for (const file of filesArray) {
-                const uploadResponse = await documentsAPI.upload(file, {
+            const uploadResults = await runConcurrentUploads(filesArray, 3, async (file) => {
+                const uploadResponse = await documentsAPI.uploadSmart(file, {
                     name: file.name,
                     module: "Customers",
                     type: "other",
@@ -945,7 +983,12 @@ export function useCustomerDetailPageViewModel(args: any) {
 
                 if (uploadResponse?.success && uploadResponse?.data) {
                     const document = uploadResponse.data as any;
-                    uploadedDocuments.push({
+                    if (Array.isArray(document.documents)) {
+                        persistedDocuments = document.documents;
+                    }
+
+                    return {
+                        success: true as const,
                         id: String(document.documentId || document.id || document._id || file.name),
                         documentId: String(document.documentId || document.id || document._id || "").trim() || String(document.id || document._id || ""),
                         name: document.name || file.name,
@@ -955,14 +998,25 @@ export function useCustomerDetailPageViewModel(args: any) {
                         viewUrl: document.viewUrl || document.url || document.contentUrl || document.previewUrl || "",
                         downloadUrl: document.downloadUrl || document.url || document.contentUrl || "",
                         uploadedAt: document.uploadedAt || new Date().toISOString()
-                    });
-                    if (Array.isArray(document.documents)) {
-                        persistedDocuments = document.documents;
-                    }
+                    };
                 }
-            }
+
+                return {
+                    success: false as const,
+                    name: file.name,
+                };
+            });
+
+            const uploadedDocuments = uploadResults
+                .filter((entry) => entry?.success)
+                .map((entry) => {
+                    const { success, ...document } = entry as any;
+                    return document;
+                });
 
             if (uploadedDocuments.length === 0) {
+                setCustomer(prev => prev ? ({ ...prev, documents: currentDocuments }) : prev);
+                setAttachments(mapDocumentsToAttachments(currentDocuments));
                 toast.error("Failed to upload files. Please try again.");
                 return;
             }
@@ -974,8 +1028,21 @@ export function useCustomerDetailPageViewModel(args: any) {
             setCustomer(prev => prev ? ({ ...prev, documents: nextDocuments }) : prev);
             setAttachments(mapDocumentsToAttachments(nextDocuments));
 
-            toast.success(`${uploadedDocuments.length} file(s) uploaded successfully`);
+            const failedCount = filesArray.length - uploadedDocuments.length;
+            const elapsedSeconds = ((Date.now() - uploadStartedAt) / 1000).toFixed(1);
+            if (failedCount > 0) {
+                toast.warning(
+                    `${uploadedDocuments.length} file(s) uploaded, ${failedCount} failed in ${elapsedSeconds}s.`
+                );
+            } else {
+                toast.success(`${uploadedDocuments.length} file(s) uploaded successfully`);
+            }
+
+            void refreshData();
         } catch (error) {
+            const currentDocuments = Array.isArray(customer.documents) ? customer.documents : [];
+            setCustomer(prev => prev ? ({ ...prev, documents: currentDocuments }) : prev);
+            setAttachments(mapDocumentsToAttachments(currentDocuments));
             toast.error('Failed to upload files: ' + (error instanceof Error ? error.message : 'Unknown error'));
         } finally {
             setIsUploadingAttachments(false);
@@ -990,9 +1057,9 @@ export function useCustomerDetailPageViewModel(args: any) {
     const handleRemoveAttachment = async (attachmentId: string | number) => {
         if (!customer || !id) return;
 
+        const currentDocuments = Array.isArray(customer.documents) ? customer.documents : [];
         try {
             const targetId = String(attachmentId || "").trim();
-            const currentDocuments = Array.isArray(customer.documents) ? customer.documents : [];
             const removedDocument = currentDocuments.find((doc: any, index: number) => {
                 const docId = String(doc.documentId || doc.id || doc._id || index + 1).trim();
                 return docId === targetId || String(index + 1) === targetId;
@@ -1003,18 +1070,46 @@ export function useCustomerDetailPageViewModel(args: any) {
                 return docId !== targetId && String(index + 1) !== targetId;
             });
 
-            if (!removedDocumentId) {
+            if (updatedDocuments.length === currentDocuments.length) {
                 throw new Error("Attachment not found.");
             }
 
-            const deleteResponse = await documentsAPI.delete(String(removedDocumentId));
-            const persistedDocuments = deleteResponse?.data?.documents || updatedDocuments;
+            setCustomer(prev => prev ? ({ ...prev, documents: updatedDocuments }) : prev);
+            setAttachments(mapDocumentsToAttachments(updatedDocuments));
 
-            setCustomer(prev => prev ? ({ ...prev, documents: persistedDocuments }) : prev);
-            setAttachments(mapDocumentsToAttachments(persistedDocuments));
+            if (removedDocumentId && !removedDocumentId.startsWith("pending-") && !removedDocumentId.startsWith("temp-")) {
+                const deleteResponse = await documentsAPI.delete(String(removedDocumentId), {
+                    customerId: String(id),
+                    name: String(removedDocument?.name || "").trim(),
+                    size: removedDocument?.size,
+                    uploadedAt: String(removedDocument?.uploadedAt || "").trim(),
+                    url: String(
+                        removedDocument?.downloadUrl ||
+                        removedDocument?.viewUrl ||
+                        removedDocument?.url ||
+                        removedDocument?.contentUrl ||
+                        ""
+                    ).trim(),
+                });
+
+                if (!deleteResponse?.success) {
+                    throw new Error(deleteResponse?.message || "Failed to remove attachment");
+                }
+
+                const persistedDocuments = Array.isArray(deleteResponse?.data?.documents)
+                    ? deleteResponse.data.documents
+                    : updatedDocuments;
+
+                setCustomer(prev => prev ? ({ ...prev, documents: persistedDocuments }) : prev);
+                setAttachments(mapDocumentsToAttachments(persistedDocuments));
+            }
+
+            await refreshData();
 
             toast.success('Attachment removed successfully');
         } catch (error) {
+            setCustomer(prev => prev ? ({ ...prev, documents: currentDocuments }) : prev);
+            setAttachments(mapDocumentsToAttachments(currentDocuments));
             toast.error('Failed to remove attachment: ' + (error instanceof Error ? error.message : 'Unknown error'));
         }
     };

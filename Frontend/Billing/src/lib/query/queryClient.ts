@@ -9,9 +9,11 @@ export const CUSTOMER_QUERY_PERSIST_MAX_AGE_MS = ONE_DAY_MS;
 export const billingQueryClient = new QueryClient({
   defaultOptions: {
     queries: {
+      staleTime: 0,
       gcTime: ONE_DAY_MS,
       retry: 1,
       refetchOnReconnect: true,
+      refetchOnMount: true,
       refetchOnWindowFocus: false,
     },
     mutations: {

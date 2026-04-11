@@ -42,11 +42,41 @@ const sanitizeFileName = (name: string) =>
     .replace(/[\r\n"]/g, "_")
     .trim() || "attachment";
 
+const normalizeComparableText = (value: unknown) =>
+  String(value || "")
+    .trim()
+    .toLowerCase();
+
+const normalizeComparableNumber = (value: unknown) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 const buildDocumentUrls = (id: string) => ({
   url: `/api/documents/${encodeURIComponent(id)}/content`,
   viewUrl: `/api/documents/${encodeURIComponent(id)}/content`,
   downloadUrl: `/api/documents/${encodeURIComponent(id)}/download`,
 });
+
+const persistCustomerDocument = async (orgId: string, customerId: string, document: any) => {
+  const customerRecord = await Customer.findOne({ _id: customerId, organizationId: orgId })
+    .select({ documents: 1 })
+    .lean();
+  if (!customerRecord) return null;
+
+  const currentDocuments = Array.isArray(customerRecord?.documents) ? customerRecord.documents : [];
+  const nextDocumentId = String(document?.documentId || document?.id || document?._id || "").trim();
+  const dedupedCurrent = currentDocuments.filter((entry: any) => {
+    const entryId = String(entry?.documentId || entry?.id || entry?._id || "").trim();
+    return !nextDocumentId || entryId !== nextDocumentId;
+  });
+  const nextDocuments = [...dedupedCurrent, document];
+  await Customer.updateOne(
+    { _id: customerId, organizationId: orgId },
+    { $set: { documents: nextDocuments } }
+  );
+  return nextDocuments;
+};
 
 const normalizeDocument = (doc: any) => {
   if (!doc) return null;
@@ -71,6 +101,68 @@ const normalizeDocument = (doc: any) => {
     contentUrl: urls.url,
     previewUrl: urls.url,
   };
+};
+
+const documentMatchesCandidate = (
+  document: any,
+  options: {
+    targetId?: string;
+    name?: string;
+    size?: number | null;
+    uploadedAt?: string;
+    url?: string;
+  }
+) => {
+  const candidateIds = [
+    document?.documentId,
+    document?.id,
+    document?._id,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+
+  if (options.targetId && candidateIds.includes(options.targetId)) {
+    return true;
+  }
+
+  const candidateName = normalizeComparableText(document?.name);
+  const requestedName = normalizeComparableText(options.name);
+  const candidateSize = normalizeComparableNumber(document?.size);
+  const requestedSize = normalizeComparableNumber(options.size);
+  const candidateUploadedAt = String(document?.uploadedAt || document?.createdAt || "").trim();
+  const requestedUploadedAt = String(options.uploadedAt || "").trim();
+  const candidateUrl = normalizeComparableText(
+    document?.downloadUrl || document?.viewUrl || document?.url || document?.contentUrl || document?.previewUrl
+  );
+  const requestedUrl = normalizeComparableText(options.url);
+
+  if (
+    requestedName &&
+    candidateName &&
+    requestedName === candidateName &&
+    requestedSize !== null &&
+    candidateSize !== null &&
+    requestedSize === candidateSize
+  ) {
+    return true;
+  }
+
+  if (
+    requestedName &&
+    candidateName &&
+    requestedName === candidateName &&
+    requestedUploadedAt &&
+    candidateUploadedAt &&
+    requestedUploadedAt === candidateUploadedAt
+  ) {
+    return true;
+  }
+
+  if (requestedUrl && candidateUrl && requestedUrl === candidateUrl) {
+    return true;
+  }
+
+  return false;
 };
 
 const syncCustomerDocuments = async (customerId: string, orgId: string) => {
@@ -186,8 +278,10 @@ export const uploadDocument: express.RequestHandler = async (req, res, next) => 
     }
 
     if (relatedToType === "customer" && relatedToId) {
-      const customerExists = await Customer.exists({ _id: relatedToId, organizationId: orgId });
-      if (!customerExists) {
+      const customerRecord = await Customer.findOne({ _id: relatedToId, organizationId: orgId })
+        .select({ _id: 1 })
+        .lean();
+      if (!customerRecord) {
         return res.status(404).json({ success: false, message: "Customer not found", data: null });
       }
     }
@@ -207,8 +301,65 @@ export const uploadDocument: express.RequestHandler = async (req, res, next) => 
 
     const normalized = normalizeDocument(created.toObject()) as any;
     if (relatedToType === "customer" && relatedToId) {
-      const documents = await syncCustomerDocuments(relatedToId, orgId);
-      if (documents) normalized.documents = documents;
+      const nextDocuments = await persistCustomerDocument(orgId, relatedToId, normalized);
+      if (nextDocuments) normalized.documents = nextDocuments;
+    }
+
+    return res.status(201).json({ success: true, data: normalized });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const uploadDocumentBinary: express.RequestHandler = async (req, res, next) => {
+  try {
+    const orgId = getOrgId(req);
+    if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
+
+    const body = Buffer.isBuffer(req.body)
+      ? req.body
+      : req.body instanceof Uint8Array
+        ? Buffer.from(req.body)
+        : Buffer.alloc(0);
+
+    if (!body.length) {
+      return res.status(400).json({ success: false, message: "Attachment content is required", data: null });
+    }
+
+    const name = String(req.query.name || "attachment").trim() || "attachment";
+    const relatedToType = String(req.query.relatedToType || "").trim().toLowerCase();
+    const relatedToId = String(req.query.relatedToId || "").trim();
+    const module = String(req.query.module || "").trim();
+    const type = String(req.query.type || "").trim();
+    const size = Number(req.query.size || body.length || 0);
+    const mimeType = String(req.headers["content-type"] || "application/octet-stream").trim() || "application/octet-stream";
+
+    if (relatedToType === "customer" && relatedToId) {
+      const customerRecord = await Customer.findOne({ _id: relatedToId, organizationId: orgId })
+        .select({ _id: 1 })
+        .lean();
+      if (!customerRecord) {
+        return res.status(404).json({ success: false, message: "Customer not found", data: null });
+      }
+    }
+
+    const created = await StoredDocument.create({
+      organizationId: orgId,
+      relatedToType,
+      relatedToId,
+      module,
+      type,
+      name,
+      size: Number.isFinite(size) && size > 0 ? size : body.length,
+      mimeType,
+      contentBase64: body.toString("base64"),
+      uploadedAt: new Date().toISOString(),
+    });
+
+    const normalized = normalizeDocument(created.toObject()) as any;
+    if (relatedToType === "customer" && relatedToId) {
+      const nextDocuments = await persistCustomerDocument(orgId, relatedToId, normalized);
+      if (nextDocuments) normalized.documents = nextDocuments;
     }
 
     return res.status(201).json({ success: true, data: normalized });
@@ -222,23 +373,39 @@ export const deleteDocument: express.RequestHandler = async (req, res, next) => 
     const orgId = getOrgId(req);
     if (!orgId) return res.status(401).json({ success: false, message: "Unauthenticated", data: null });
 
+    const targetId = String(req.params.id || "").trim();
+    const customerId = String(req.query.customerId || "").trim();
+    const documentName = String(req.query.name || "").trim();
+    const documentUploadedAt = String(req.query.uploadedAt || "").trim();
+    const documentUrl = String(req.query.url || "").trim();
+    const documentSize = normalizeComparableNumber(req.query.size);
+    let matchedCustomerDocuments = false;
     const doc = await StoredDocument.findOne({ _id: req.params.id, organizationId: orgId }).lean();
     if (!doc) {
-      const legacyCustomers = await Customer.find({
-        organizationId: orgId,
+      const legacyFilter: Record<string, unknown> = {
+        organizationId: orgId as unknown as string,
         documents: { $exists: true, $ne: [] },
-      }).lean();
-      const targetId = String(req.params.id || "").trim();
+      };
+      if (customerId && mongoose.isValidObjectId(customerId)) {
+        legacyFilter._id = customerId;
+      }
+
+      const legacyCustomers = await Customer.find(legacyFilter).lean();
       let matchedLegacy = false;
       for (const customer of legacyCustomers as any[]) {
         const current = Array.isArray(customer.documents) ? customer.documents : [];
         const filtered = current.filter((item: any) => {
-          const itemId = String(item?.documentId || item?.id || item?._id || "").trim();
-          if (!itemId) return true;
-          return itemId !== targetId;
+          return !documentMatchesCandidate(item, {
+            targetId,
+            name: documentName,
+            size: documentSize,
+            uploadedAt: documentUploadedAt,
+            url: documentUrl,
+          });
         });
         if (filtered.length !== current.length) {
           matchedLegacy = true;
+          matchedCustomerDocuments = true;
           await Customer.updateOne({ _id: customer._id, organizationId: orgId }, { $set: { documents: filtered } });
         }
       }
@@ -252,7 +419,62 @@ export const deleteDocument: express.RequestHandler = async (req, res, next) => 
 
     let documents: unknown[] | null = null;
     if (String(doc.relatedToType || "").toLowerCase() === "customer" && String(doc.relatedToId || "").trim()) {
-      documents = await syncCustomerDocuments(String(doc.relatedToId), orgId);
+      const customer = await findCustomerByAnyId(orgId, String(doc.relatedToId));
+      if (customer) {
+        const persistedCustomerId = String(customer._id || (customer as any)?.id || doc.relatedToId).trim();
+        const current = Array.isArray((customer as any).documents) ? (customer as any).documents : [];
+        const filtered = current.filter((item: any) => {
+          const storedDocumentUrls = buildDocumentUrls(targetId);
+          return !documentMatchesCandidate(item, {
+            targetId,
+            name: String(doc.name || documentName || "").trim(),
+            size: normalizeComparableNumber(doc.size) ?? documentSize,
+            uploadedAt: String(doc.uploadedAt || documentUploadedAt || "").trim(),
+            url: String(documentUrl || storedDocumentUrls.downloadUrl || storedDocumentUrls.viewUrl || "").trim(),
+          });
+        });
+        await Customer.updateOne(
+          { _id: persistedCustomerId, organizationId: orgId },
+          { $set: { documents: filtered } }
+        );
+        documents = filtered;
+        matchedCustomerDocuments = true;
+      } else {
+        documents = [];
+      }
+    }
+
+    if (!matchedCustomerDocuments) {
+      await Customer.updateMany(
+        { organizationId: orgId, documents: { $exists: true, $ne: [] } },
+        [
+          {
+            $set: {
+              documents: {
+                $filter: {
+                  input: "$documents",
+                  as: "doc",
+                  cond: {
+                    $ne: [
+                      {
+                        $trim: {
+                          input: {
+                            $ifNull: [
+                              "$$doc.documentId",
+                              { $ifNull: ["$$doc.id", { $ifNull: ["$$doc._id", ""] }] }
+                            ]
+                          }
+                        }
+                      },
+                      targetId
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        ]
+      ).catch(() => null);
     }
 
     return res.json({ success: true, data: { id: String(doc._id), documents } });

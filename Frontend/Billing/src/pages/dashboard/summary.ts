@@ -5,6 +5,8 @@ export type MetricLegendItem = {
 };
 
 export type DashboardSummary = {
+  version_id: string;
+  last_updated: string;
   metrics: {
     netRevenue: { total: number; labels: string[]; values: number[] };
     receivables: {
@@ -70,6 +72,8 @@ export type DashboardSummary = {
 };
 
 export const EMPTY_SUMMARY: DashboardSummary = {
+  version_id: "",
+  last_updated: "",
   metrics: {
     netRevenue: { total: 0, labels: ["", "", "", ""], values: [0, 0, 0, 0] },
     receivables: {

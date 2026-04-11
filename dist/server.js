@@ -58,6 +58,26 @@ else if (!JWT_SECRET) {
 }
 const app = express();
 let server = null;
+const logServerError = (label, error) => {
+    if (error instanceof Error) {
+        // eslint-disable-next-line no-console
+        console.error(`[${label}] ${error.message}`);
+        if (error.stack) {
+            // eslint-disable-next-line no-console
+            console.error(error.stack);
+        }
+        return;
+    }
+    // eslint-disable-next-line no-console
+    console.error(`[${label}]`, error);
+};
+process.on("unhandledRejection", (reason) => {
+    logServerError("UnhandledRejection", reason);
+});
+process.on("uncaughtException", (error) => {
+    logServerError("UncaughtException", error);
+    process.exit(1);
+});
 const shutdownServer = async (signal) => {
     // eslint-disable-next-line no-console
     console.log(`Received ${signal}. Shutting down API server...`);
@@ -169,8 +189,7 @@ app.use("/api", (_req, res) => {
     res.status(501).json({ success: false, message: "Not implemented", data: null });
 });
 app.use((err, _req, res, _next) => {
-    // eslint-disable-next-line no-console
-    console.error(err);
+    logServerError("ExpressError", err);
     res.status(500).json({ success: false, message: "Server error", data: null });
 });
 const start = async () => {

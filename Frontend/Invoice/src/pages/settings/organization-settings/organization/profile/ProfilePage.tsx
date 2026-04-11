@@ -6,9 +6,43 @@ import { toast } from "react-toastify";
 import Skeleton from "../../../../../components/ui/Skeleton";
 import { TIMEZONES } from "../../../../../constants/timezones";
 import { currenciesAPI } from "../../../../../services/api";
+import { normalizeImageSrc } from "../../../../../utils/imageSources";
 
 const API_BASE_URL = '/api';
 const DEFAULT_SYSTEM_SENDER_EMAIL = "message-service@sender.tabanbooks.com";
+
+function stripProfileLogoForStorage(profile: any) {
+  if (!profile || typeof profile !== "object") return profile;
+  return {
+    ...profile,
+    logo: "",
+    logoUrl: "",
+  };
+}
+
+function safeSetJsonStorage(key: string, value: any) {
+  try {
+    localStorage.setItem(key, JSON.stringify(stripProfileLogoForStorage(value)));
+    return true;
+  } catch {
+    try {
+      localStorage.removeItem(key);
+      localStorage.setItem(key, JSON.stringify(stripProfileLogoForStorage(value)));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+function readStoredOrgProfile() {
+  try {
+    const raw = localStorage.getItem("org_profile");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
 
 const getStoredUser = () => {
   try {
@@ -918,29 +952,26 @@ function DateFormatDropdown({ value, placeholder, onChange }) {
 
 export default function ProfilePage() {
   const navigate = useNavigate();
+  const storedOrgProfile = readStoredOrgProfile();
   const [currencyOptions, setCurrencyOptions] = useState<string[]>(() => readStoredCurrencyOptions());
   const [orgName, setOrgName] = useState(() => {
-    const local = localStorage.getItem('org_profile');
-    return local ? JSON.parse(local).organizationName : "Taban enterprise";
+    return storedOrgProfile?.organizationName || "Taban enterprise";
   });
 
   const [businessType, setBusinessType] = useState(() => {
-    const local = localStorage.getItem('org_profile');
-    return local ? JSON.parse(local).businessType : "";
+    return storedOrgProfile?.businessType || "";
   });
 
   const [industry, setIndustry] = useState(() => {
-    const local = localStorage.getItem('org_profile');
-    return local ? JSON.parse(local).industry : "Agriculture";
+    return storedOrgProfile?.industry || "Agriculture";
   });
   const [location, setLocation] = useState(() => {
-    const local = localStorage.getItem('org_profile');
-    return local ? JSON.parse(local).location : "Somalia";
+    return storedOrgProfile?.location || "Somalia";
   });
 
   const [email, setEmail] = useState(() => {
-    const user = localStorage.getItem('user');
-    return user ? JSON.parse(user).email : "";
+    const user = getStoredUser();
+    return user?.email || "";
   });
   const [primarySenderName, setPrimarySenderName] = useState(() => {
     const storedUser = getStoredUser();
@@ -955,24 +986,19 @@ export default function ProfilePage() {
   const [loadingProfile, setLoadingProfile] = useState(true);
   const fileInputRef = useRef(null);
   const [street1, setStreet1] = useState(() => {
-    const local = localStorage.getItem('org_profile');
-    return local ? JSON.parse(local).street1 : "";
+    return storedOrgProfile?.street1 || "";
   });
   const [street2, setStreet2] = useState(() => {
-    const local = localStorage.getItem('org_profile');
-    return local ? JSON.parse(local).street2 : "";
+    return storedOrgProfile?.street2 || "";
   });
   const [city, setCity] = useState(() => {
-    const local = localStorage.getItem('org_profile');
-    return local ? JSON.parse(local).city : "";
+    return storedOrgProfile?.city || "";
   });
   const [zipCode, setZipCode] = useState(() => {
-    const local = localStorage.getItem('org_profile');
-    return local ? JSON.parse(local).zipCode : "";
+    return storedOrgProfile?.zipCode || "";
   });
   const [state, setState] = useState(() => {
-    const local = localStorage.getItem('org_profile');
-    return local ? JSON.parse(local).state : "";
+    return storedOrgProfile?.state || "";
   });
 
   const [phone, setPhone] = useState("");
@@ -990,10 +1016,8 @@ export default function ProfilePage() {
     }
     const options = readStoredCurrencyOptions();
     try {
-      const local = localStorage.getItem('org_profile');
-      if (local) {
-        const parsed = JSON.parse(local);
-        const cur = parsed.currency || parsed.baseCurrency;
+      if (storedOrgProfile) {
+        const cur = storedOrgProfile.currency || storedOrgProfile.baseCurrency;
         return resolveCurrencySelection(cur, options);
       }
     } catch (error) {
@@ -1005,13 +1029,11 @@ export default function ProfilePage() {
   const [startDate, setStartDate] = useState("1");
   const [reportBasis, setReportBasis] = useState("Accrual");
   const [orgLanguage, setOrgLanguage] = useState(() => {
-    const local = localStorage.getItem('org_profile');
-    return local ? JSON.parse(local).language : "English";
+    return storedOrgProfile?.language || "English";
   });
   const [commLanguage, setCommLanguage] = useState("English");
   const [timeZone, setTimeZone] = useState(() => {
-    const local = localStorage.getItem('org_profile');
-    return local ? JSON.parse(local).timezone : "(GMT 3:00) Eastern African Time (Africa/Mogadishu)";
+    return storedOrgProfile?.timezone || "(GMT 3:00) Eastern African Time (Africa/Mogadishu)";
   });
 
   const [dateFormat, setDateFormat] = useState("dd-MM-yyyy [ 25-12-2025 ]");
@@ -1098,7 +1120,7 @@ export default function ProfilePage() {
       // Create preview
       const reader = new FileReader();
       reader.onloadend = () => {
-        setLogoPreview(reader.result);
+        setLogoPreview(normalizeImageSrc(reader.result, ""));
       };
       reader.readAsDataURL(file);
     }
@@ -1171,30 +1193,25 @@ export default function ProfilePage() {
     const loadProfile = async () => {
       setLoadingProfile(true);
       // Priority 1: Load from local storage (onboarding data)
-      const localData = localStorage.getItem('org_profile');
-      if (localData) {
-        try {
-          const lp = JSON.parse(localData);
-          const storedBaseSelection = readStoredBaseCurrencySelection();
-          if (lp.organizationName) setOrgName(lp.organizationName);
-          if (lp.businessType) setBusinessType(lp.businessType);
-          if (lp.industry) setIndustry(lp.industry);
-          if (lp.location) setLocation(lp.location);
-          if (lp.street1) setStreet1(lp.street1);
-          if (lp.street2) setStreet2(lp.street2);
-          if (lp.city) setCity(lp.city);
-          if (lp.zipCode) setZipCode(lp.zipCode);
-          if (lp.state) setState(lp.state);
-          if (storedBaseSelection) {
-            setBaseCurrency(storedBaseSelection);
-          } else if (lp.currency || lp.baseCurrency) {
-            setBaseCurrency(resolveCurrencySelection(lp.currency || lp.baseCurrency, readStoredCurrencyOptions()));
-          }
-          if (lp.language) setOrgLanguage(lp.language);
-          if (lp.timezone) setTimeZone(lp.timezone);
-        } catch (e) {
-          console.error('Error parsing local org profile:', e);
+      const lp = readStoredOrgProfile();
+      if (lp) {
+        const storedBaseSelection = readStoredBaseCurrencySelection();
+        if (lp.organizationName) setOrgName(lp.organizationName);
+        if (lp.businessType) setBusinessType(lp.businessType);
+        if (lp.industry) setIndustry(lp.industry);
+        if (lp.location) setLocation(lp.location);
+        if (lp.street1) setStreet1(lp.street1);
+        if (lp.street2) setStreet2(lp.street2);
+        if (lp.city) setCity(lp.city);
+        if (lp.zipCode) setZipCode(lp.zipCode);
+        if (lp.state) setState(lp.state);
+        if (storedBaseSelection) {
+          setBaseCurrency(storedBaseSelection);
+        } else if (lp.currency || lp.baseCurrency) {
+          setBaseCurrency(resolveCurrencySelection(lp.currency || lp.baseCurrency, readStoredCurrencyOptions()));
         }
+        if (lp.language) setOrgLanguage(lp.language);
+        if (lp.timezone) setTimeZone(lp.timezone);
       }
 
       // Priority 2: Load from server and merge
@@ -1244,7 +1261,7 @@ export default function ProfilePage() {
             }
 
             if (p.logo) {
-              setLogoPreview(p.logo);
+              setLogoPreview(normalizeImageSrc(p.logo, ""));
             }
           }
         }
@@ -1329,8 +1346,8 @@ export default function ProfilePage() {
     }
 
     try {
-      localStorage.setItem("org_profile", JSON.stringify(liveOrgProfile));
-      localStorage.setItem("organization_profile", JSON.stringify(liveOrgProfile));
+      safeSetJsonStorage("org_profile", liveOrgProfile);
+      safeSetJsonStorage("organization_profile", liveOrgProfile);
     } catch {
       // ignore storage sync failures
     }
@@ -1539,13 +1556,7 @@ export default function ProfilePage() {
 
         toast.success('Profile saved successfully!');
         try {
-          const existingOrgProfile = (() => {
-            try {
-              return JSON.parse(localStorage.getItem("organization_profile") || "{}");
-            } catch {
-              return {};
-            }
-          })();
+          const existingOrgProfile = readStoredOrgProfile() || {};
           const updatedOrgProfile = {
             ...existingOrgProfile,
             organizationName: orgName,
@@ -1574,8 +1585,8 @@ export default function ProfilePage() {
               fax: fax,
             },
           };
-          localStorage.setItem("org_profile", JSON.stringify(updatedOrgProfile));
-          localStorage.setItem("organization_profile", JSON.stringify(updatedOrgProfile));
+          safeSetJsonStorage("org_profile", updatedOrgProfile);
+          safeSetJsonStorage("organization_profile", updatedOrgProfile);
 
           window.dispatchEvent(new CustomEvent("organizationProfileUpdated", {
             detail: updatedOrgProfile,

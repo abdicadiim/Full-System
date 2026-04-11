@@ -6,6 +6,7 @@ import {
   creditNotesAPI,
   currenciesAPI,
   customersAPI,
+  documentsAPI,
   expensesAPI,
   invoicesAPI,
   paymentsMadeAPI,
@@ -106,8 +107,6 @@ const VISIBILITY_REFRESH_MIN_AGE_MS = 45 * 1000;
 export default function useCustomerDetailData(args: any) {
   const {
     id,
-    initialCustomer,
-    customerJustSaved,
     locationKey,
     navigate,
     activeTab,
@@ -153,10 +152,12 @@ export default function useCustomerDetailData(args: any) {
   const lastRefreshAtRef = useRef(0);
   const isRefreshInFlightRef = useRef(false);
   const isMountedRef = useRef(false);
+  const loadInFlightRef = useRef(false);
+  const lastLoadKeyRef = useRef("");
   const queryClient = useQueryClient();
   const customerDetailQuery = useCustomerDetailQuery(id, {
     enabled: Boolean(id),
-    initialCustomer,
+    preferFresh: true,
   });
   const sidebarCustomersQuery = useCustomersSidebarQuery({
     enabled: true,
@@ -219,6 +220,30 @@ export default function useCustomerDetailData(args: any) {
     }
   }, [organizationProfile, setOwnerEmail]);
 
+  const fetchCustomerDocumentsFromDatabase = useCallback(
+    async (customerId: string, fallbackDocuments?: any[]) => {
+      const normalizedCustomerId = String(customerId || "").trim();
+      if (!normalizedCustomerId) {
+        return Array.isArray(fallbackDocuments) ? fallbackDocuments : [];
+      }
+
+      try {
+        const response = await documentsAPI.list({
+          relatedToType: "customer",
+          relatedToId: normalizedCustomerId,
+        });
+
+        if (response?.success && Array.isArray(response.data)) {
+          return response.data;
+        }
+      } catch {
+      }
+
+      return Array.isArray(fallbackDocuments) ? fallbackDocuments : [];
+    },
+    []
+  );
+
   const refreshData = useCallback(async (options: { minAgeMs?: number } = {}) => {
     if (!id || !isMountedRef.current) return;
     const { minAgeMs = 0 } = options;
@@ -250,6 +275,7 @@ export default function useCustomerDetailData(args: any) {
         salesReceiptsResponse,
         journalsResponse,
         vendorsResponse,
+        documentsResponse,
       ] = await Promise.all([
         customersAPI.getById(customerId),
         invoicesAPI.getByCustomer(customerId).catch(() => ({ success: true, data: [] })),
@@ -264,15 +290,17 @@ export default function useCustomerDetailData(args: any) {
         salesReceiptsAPI.getAll({ customerId }).catch(() => ({ success: true, data: [] })),
         Promise.resolve({ success: true, data: [] }),
         vendorsAPI.getAll().catch(() => ({ success: true, data: [] })),
+        fetchCustomerDocumentsFromDatabase(customerId),
       ]);
 
       if (!isMountedRef.current) return;
 
       if (customerResponse && customerResponse.success && customerResponse.data) {
         const { mappedCustomer, normalizedComments } = mapCustomerRecord(customerResponse.data, normalizeComments);
-        setCustomer(mappedCustomer);
+        const databaseDocuments = Array.isArray(documentsResponse) ? documentsResponse : customerResponse.data.documents || [];
+        setCustomer({ ...mappedCustomer, documents: databaseDocuments });
         setComments(normalizedComments);
-        setAttachments(mapDocumentsToAttachments(customerResponse.data.documents || []));
+        setAttachments(mapDocumentsToAttachments(databaseDocuments));
         syncCustomerIntoCustomerQueries(queryClient, customerResponse.data);
       } else {
         navigate("/sales/customers");
@@ -359,6 +387,7 @@ export default function useCustomerDetailData(args: any) {
     navigate,
     normalizeComments,
     queryClient,
+    fetchCustomerDocumentsFromDatabase,
     setLinkedVendor,
     setComments,
     setAttachments,
@@ -406,22 +435,33 @@ export default function useCustomerDetailData(args: any) {
     if (!Array.isArray(sidebarCustomers)) return;
 
     const mappedSidebarCustomers = mapSidebarCustomers(sidebarCustomers);
-    const previewCustomerId = String(initialCustomer?._id || initialCustomer?.id || "").trim();
-    const currentCustomerId = String(id || "").trim();
-    const previewCustomer =
-      previewCustomerId && previewCustomerId === currentCustomerId
-        ? mapSidebarCustomers([initialCustomer])[0]
-        : null;
+    const nextCustomers = mappedSidebarCustomers;
 
-    setCustomers(
-      previewCustomer
-        ? [
-            previewCustomer,
-            ...mappedSidebarCustomers.filter((row: any) => String(row?.id || row?._id || "").trim() !== previewCustomerId),
-          ]
-        : mappedSidebarCustomers
-    );
-  }, [id, initialCustomer, setCustomers, sidebarCustomersQuery.data]);
+    setCustomers((prev) => {
+      const previous = Array.isArray(prev) ? prev : [];
+      if (previous.length !== nextCustomers.length) {
+        return nextCustomers;
+      }
+
+      const isSame = previous.every((row: any, index: number) => {
+        const nextRow = nextCustomers[index] || {};
+        const prevId = String(row?.id || row?._id || "").trim();
+        const nextId = String(nextRow?.id || nextRow?._id || "").trim();
+        const prevName = String(row?.displayName || row?.name || "").trim();
+        const nextName = String(nextRow?.displayName || nextRow?.name || "").trim();
+        const prevReceivables = String(
+          row?.receivables ?? row?.receivablesBaseCurrency ?? row?.receivablesBCY ?? ""
+        ).trim();
+        const nextReceivables = String(
+          nextRow?.receivables ?? nextRow?.receivablesBaseCurrency ?? nextRow?.receivablesBCY ?? ""
+        ).trim();
+
+        return prevId === nextId && prevName === nextName && prevReceivables === nextReceivables;
+      });
+
+      return isSame ? prev : nextCustomers;
+    });
+  }, [setCustomers, sidebarCustomersQuery.data]);
 
   useEffect(() => {
     let isActive = true;
@@ -430,19 +470,16 @@ export default function useCustomerDetailData(args: any) {
       if (!id) return;
 
       const customerId = String(id).trim();
-      const prefill = initialCustomer || null;
-      const prefillId = prefill ? String(prefill._id || prefill.id || "").trim() : "";
+      const nextLoadKey = `${customerId}:${locationKey ?? ""}`;
+      if (loadInFlightRef.current && lastLoadKeyRef.current === nextLoadKey) {
+        return;
+      }
+      loadInFlightRef.current = true;
+      lastLoadKeyRef.current = nextLoadKey;
+
       const currentCustomerId = String(customer?._id || customer?.id || "").trim();
-      const queryCustomer = customerDetailQuery.data;
+      const queryCustomer = customerDetailQuery.isPlaceholderData ? null : customerDetailQuery.data;
       const queryCustomerId = queryCustomer ? String(queryCustomer._id || queryCustomer.id || "").trim() : "";
-      const previewCustomer =
-        queryCustomer && queryCustomerId === customerId
-          ? queryCustomer
-          : prefill && prefillId === customerId
-          ? prefill
-          : currentCustomerId && currentCustomerId === customerId
-            ? customer
-            : null;
 
       const loadSupplementaryData = async (canonicalCustomerId: string, linkedVendorId: string) => {
         try {
@@ -459,6 +496,7 @@ export default function useCustomerDetailData(args: any) {
             salesReceiptsResponse,
             journalsResponse,
             vendorsResponse,
+            documentsResponse,
           ] = await Promise.all([
             invoicesAPI.getByCustomer(customerId).catch(() => ({ success: true, data: [] })),
             paymentsReceivedAPI.getByCustomer(customerId).catch(() => ({ success: true, data: [] })),
@@ -472,9 +510,12 @@ export default function useCustomerDetailData(args: any) {
             salesReceiptsAPI.getAll({ customerId }).catch(() => ({ success: true, data: [] })),
             Promise.resolve({ success: true, data: [] }),
             vendorsAPI.getAll().catch(() => ({ success: true, data: [] })),
+            fetchCustomerDocumentsFromDatabase(canonicalCustomerId),
           ]);
 
           if (!isActive) return;
+
+          setAttachments(mapDocumentsToAttachments(documentsResponse));
 
           setInvoices(
             invoicesResponse?.success && Array.isArray(invoicesResponse.data)
@@ -542,26 +583,12 @@ export default function useCustomerDetailData(args: any) {
         }
       };
 
-      if (previewCustomer) {
-        const { mappedCustomer, normalizedComments } = mapCustomerRecord(previewCustomer, normalizeComments);
-        setCustomer(mappedCustomer);
-        setComments(normalizedComments);
-        setAttachments(mapDocumentsToAttachments(previewCustomer.documents || []));
-        setLoading(false);
-      } else {
+      if (!currentCustomerId || currentCustomerId !== customerId) {
         setCustomer(null);
         setComments([]);
-        setLoading(true);
+        setAttachments([]);
       }
-
-      if (previewCustomer && customerJustSaved) {
-        lastRefreshAtRef.current = Date.now();
-        await loadSupplementaryData(
-          String(previewCustomer._id || previewCustomer.id || customerId).trim(),
-          String(previewCustomer.linkedVendorId || "").trim(),
-        );
-        return;
-      }
+      setLoading(true);
 
       try {
         const customerResponse =
@@ -573,9 +600,13 @@ export default function useCustomerDetailData(args: any) {
 
         if (customerResponse && customerResponse.success && customerResponse.data) {
           const { mappedCustomer, normalizedComments } = mapCustomerRecord(customerResponse.data, normalizeComments);
-          setCustomer(mappedCustomer);
+          const databaseDocuments = await fetchCustomerDocumentsFromDatabase(
+            customerId,
+            customerResponse.data.documents || []
+          );
+          setCustomer({ ...mappedCustomer, documents: databaseDocuments });
           setComments(normalizedComments);
-          setAttachments(mapDocumentsToAttachments(customerResponse.data.documents || []));
+          setAttachments(mapDocumentsToAttachments(databaseDocuments));
           syncCustomerIntoCustomerQueries(queryClient, customerResponse.data);
         } else {
           navigate("/sales/customers");
@@ -593,6 +624,10 @@ export default function useCustomerDetailData(args: any) {
         if (!isActive) return;
         toast.error("Error loading customer: " + (error.message || "Unknown error"));
         navigate("/sales/customers");
+      } finally {
+        if (loadInFlightRef.current && lastLoadKeyRef.current === nextLoadKey) {
+          loadInFlightRef.current = false;
+        }
       }
     };
 
@@ -603,14 +638,14 @@ export default function useCustomerDetailData(args: any) {
     };
   }, [
     customerDetailQuery.data,
-    customerJustSaved,
+    customerDetailQuery.isPlaceholderData,
     id,
-    initialCustomer,
     locationKey,
     mapDocumentsToAttachments,
     navigate,
     normalizeComments,
     queryClient,
+    fetchCustomerDocumentsFromDatabase,
     setCustomer,
     setComments,
     setLoading,
