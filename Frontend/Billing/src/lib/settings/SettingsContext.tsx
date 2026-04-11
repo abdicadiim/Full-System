@@ -25,6 +25,113 @@ function normalizeAppearance(value: any, fallback = 'dark') {
   return raw === 'system' ? 'dark' : raw;
 }
 
+const sanitizeLogoValue = (value: unknown) => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('data:')) return '';
+  return raw;
+};
+
+const safeStorageSetItem = (key: string, value: string) => {
+  if (key === "appSettings") {
+    try {
+      sessionStorage.setItem(key, value);
+      return true;
+    } catch (error) {
+      console.warn(`Unable to persist ${key}`, error);
+      return false;
+    }
+  }
+
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (error) {
+    const bulkyKeys = [
+      "appSettings",
+      "organization_profile",
+      "organization_branding",
+      "organization_logo",
+      "org_profile",
+    ];
+    try {
+      bulkyKeys.forEach((candidate) => {
+        try {
+          localStorage.removeItem(candidate);
+        } catch {}
+      });
+      localStorage.setItem(key, value);
+      return true;
+    } catch {}
+    try {
+      sessionStorage.setItem(key, value);
+      return true;
+    } catch {}
+    console.warn(`Unable to persist ${key}`, error);
+    return false;
+  }
+};
+
+const readCachedValue = (key: string) => {
+  try {
+    const localValue = localStorage.getItem(key);
+    if (localValue !== null) return localValue;
+  } catch {}
+  try {
+    const sessionValue = sessionStorage.getItem(key);
+    if (sessionValue !== null) return sessionValue;
+  } catch {}
+  return null;
+};
+
+const clearOversizedStorageEntries = () => {
+  if (typeof localStorage === "undefined") return;
+
+  const keysToRemove: string[] = [];
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (!key) continue;
+    let value = "";
+    try {
+      value = String(localStorage.getItem(key) || "");
+    } catch {
+      keysToRemove.push(key);
+      continue;
+    }
+    if (value.startsWith("data:image/") && value.length > 50_000) {
+      keysToRemove.push(key);
+    }
+    if (value.length > 500_000) {
+      keysToRemove.push(key);
+    }
+  }
+
+  keysToRemove.forEach((key) => {
+    try {
+      localStorage.removeItem(key);
+    } catch {}
+  });
+};
+
+function sanitizeBrandingForStorage(branding: any) {
+  if (!branding || typeof branding !== 'object') return {};
+  return {
+    ...branding,
+    logoFile: '',
+    logo: sanitizeLogoValue(branding.logo),
+    logoUrl: sanitizeLogoValue(branding.logoUrl || branding.logo),
+  };
+}
+
+function sanitizeProfileForStorage(profile: any) {
+  if (!profile || typeof profile !== 'object') return {};
+  return {
+    ...profile,
+    logoUrl: sanitizeLogoValue(profile.logoUrl || profile.logo),
+    logo: sanitizeLogoValue(profile.logo),
+  };
+}
+
 function readStoredBranding() {
   try {
     const savedBranding = localStorage.getItem("organization_branding");
@@ -154,7 +261,7 @@ export function SettingsProvider({ children }) {
   // Load settings from localStorage or use defaults
   const brandingUpdatedLocallyRef = useRef(false);
   const [settings, setSettings] = useState(() => {
-    const saved = localStorage.getItem('appSettings');
+    const saved = null;
     const parsedBranding = readStoredBranding();
     if (saved) {
       try {
@@ -163,7 +270,7 @@ export function SettingsProvider({ children }) {
         const appearance = normalizeAppearance(parsedBranding?.appearance, parsed.branding?.appearance || "dark");
         const sidebarDarkFrom = String(parsedBranding?.sidebarDarkFrom || "").trim();
         const sidebarLightFrom = String(parsedBranding?.sidebarLightFrom || "").trim();
-        const logo = String(parsedBranding?.logo || parsed.branding?.logoUrl || "").trim();
+    const logo = sanitizeLogoValue(parsedBranding?.logo || parsed.branding?.logoUrl || "");
         return {
         general: {
           schoolDisplayName: parsed.general?.schoolDisplayName || 'Taban Enterprise',
@@ -176,7 +283,7 @@ export function SettingsProvider({ children }) {
           branding: {
             primaryColor: parsed.branding?.primaryColor || DEFAULT_THEME.primaryColor,
             logoUrl: logo,
-            logoFile: parsed.branding?.logoFile || '',
+            logoFile: sanitizeLogoValue(parsed.branding?.logoFile),
             appearance,
           },
           theme: {
@@ -218,6 +325,50 @@ export function SettingsProvider({ children }) {
   const [loadingCampuses, setLoadingCampuses] = useState(false);
   const { user, hasChecked } = useUser();
 
+  useEffect(() => {
+    clearOversizedStorageEntries();
+
+    try {
+      const cachedProfile = localStorage.getItem("organization_profile");
+      if (cachedProfile) {
+        const parsed = JSON.parse(cachedProfile);
+        safeStorageSetItem("organization_profile", JSON.stringify(sanitizeProfileForStorage(parsed)));
+      }
+    } catch {
+      try {
+        localStorage.removeItem("organization_profile");
+      } catch {}
+    }
+
+    try {
+      const cachedBranding = localStorage.getItem("organization_branding");
+      if (cachedBranding) {
+        const parsed = JSON.parse(cachedBranding);
+        safeStorageSetItem("organization_branding", JSON.stringify(sanitizeBrandingForStorage(parsed)));
+      }
+    } catch {
+      try {
+        localStorage.removeItem("organization_branding");
+      } catch {}
+    }
+
+    try {
+      try {
+        localStorage.removeItem("appSettings");
+      } catch {}
+      try {
+        sessionStorage.removeItem("appSettings");
+      } catch {}
+    } catch {
+      try {
+        localStorage.removeItem("appSettings");
+      } catch {}
+      try {
+        sessionStorage.removeItem("appSettings");
+      } catch {}
+    }
+  }, []);
+
   const applyOrganizationProfileToSettings = (profile: any) => {
     const name = String(profile?.name || profile?.organizationName || "").trim();
     const logo = String(profile?.logoUrl || profile?.logo || "").trim();
@@ -251,7 +402,7 @@ export function SettingsProvider({ children }) {
     const accentColor = String(branding?.accentColor || "").trim();
     const sidebarDarkFrom = String(branding?.sidebarDarkFrom || "").trim();
     const sidebarLightFrom = String(branding?.sidebarLightFrom || "").trim();
-    const logo = String(branding?.logo || "").trim();
+    const logo = sanitizeLogoValue(branding?.logo);
     const hasLogoField = Object.prototype.hasOwnProperty.call(branding, "logo");
 
     setSettings((prev) => {
@@ -313,18 +464,19 @@ export function SettingsProvider({ children }) {
       if (cached) applyOrganizationProfileToSettings(JSON.parse(cached));
     } catch {}
 
-    void (async () => {
-      try {
-        const res = await settingsAPI.getOrganizationProfile();
-        if (!res?.success || !res?.data) return;
-        try {
-          localStorage.setItem("organization_profile", JSON.stringify(res.data));
-        } catch {}
-        applyOrganizationProfileToSettings(res.data);
-      } catch (error) {
-        console.error("Failed to load organization profile", error);
-      }
-    })();
+        void (async () => {
+          try {
+            const res = await settingsAPI.getOrganizationProfile();
+            if (!res?.success || !res?.data) return;
+            const safeProfile = sanitizeProfileForStorage(res.data);
+            try {
+            safeStorageSetItem("organization_profile", JSON.stringify(safeProfile));
+            } catch {}
+            applyOrganizationProfileToSettings(res.data);
+          } catch (error) {
+            console.error("Failed to load organization profile", error);
+          }
+        })();
   }, [hasChecked, user?.id]);
 
   useEffect(() => {
@@ -355,8 +507,9 @@ export function SettingsProvider({ children }) {
         const res = await settingsAPI.getOrganizationProfile();
         const branding = res?.success ? res?.data?.branding : null;
         if (!branding || brandingUpdatedLocallyRef.current) return;
+        const safeBranding = sanitizeBrandingForStorage(branding);
         try {
-          localStorage.setItem("organization_branding", JSON.stringify(branding));
+          safeStorageSetItem("organization_branding", JSON.stringify(safeBranding));
         } catch {}
         applyBrandingToSettings(branding);
       } catch (error) {
@@ -378,7 +531,7 @@ export function SettingsProvider({ children }) {
       brandingUpdatedLocallyRef.current = hasVisualBrandingFields;
       const mergedBranding = mergeBrandingPayload(readStoredBranding(), detail);
       try {
-        localStorage.setItem("organization_branding", JSON.stringify(mergedBranding));
+        safeStorageSetItem("organization_branding", JSON.stringify(sanitizeBrandingForStorage(mergedBranding)));
       } catch {}
       applyBrandingToSettings(mergedBranding);
     };
@@ -393,7 +546,7 @@ export function SettingsProvider({ children }) {
       const detail = event?.detail;
       if (!detail) return;
       try {
-        localStorage.setItem("organization_profile", JSON.stringify(detail));
+        safeStorageSetItem("organization_profile", JSON.stringify(sanitizeProfileForStorage(detail)));
       } catch {}
       applyOrganizationProfileToSettings(detail);
     };
@@ -430,14 +583,9 @@ export function SettingsProvider({ children }) {
     setDocumentFavicon(DEFAULT_FAVICON);
   }, []);
 
-  // Save settings to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem('appSettings', JSON.stringify(settings));
-  }, [settings]);
-
   const setCampus = (campusId, campusData) => {
     setCurrentCampusId(campusId);
-    localStorage.setItem('currentCampusId', campusId);
+    safeStorageSetItem('currentCampusId', campusId);
   };
 
   // Update theme colors
@@ -453,7 +601,7 @@ export function SettingsProvider({ children }) {
 
   useEffect(() => {
     // Load saved campus from localStorage
-    const savedCampusId = localStorage.getItem('currentCampusId');
+    const savedCampusId = readCachedValue('currentCampusId');
     if (savedCampusId) {
       setCurrentCampusId(savedCampusId);
     }

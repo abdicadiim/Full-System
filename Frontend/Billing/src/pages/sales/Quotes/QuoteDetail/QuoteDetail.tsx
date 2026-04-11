@@ -261,7 +261,7 @@ const QuoteDetail = () => {
         if (data.success && data.data) {
           setOrganizationProfile(data.data);
           // Store in localStorage as fallback
-          localStorage.setItem('organization_profile', JSON.stringify(data.data));
+          localStorage.setItem('organization_profile', JSON.stringify(sanitizeProfileForCache(data.data)));
         }
       } else {
         console.error('Failed to fetch organization profile:', response.status, response.statusText);
@@ -322,7 +322,7 @@ const QuoteDetail = () => {
         if (data.success && data.data) {
           setOrganizationProfile(data.data);
           // Update localStorage
-          localStorage.setItem('organization_profile', JSON.stringify(data.data));
+          localStorage.setItem('organization_profile', JSON.stringify(sanitizeProfileForCache(data.data)));
         }
       }
     } catch (error) {
@@ -5654,3 +5654,13 @@ export default QuoteDetail;
 
 
 
+const sanitizeProfileForCache = (profile: any) => {
+  if (!profile || typeof profile !== "object") return {};
+  const rawLogo = String(profile.logo || profile.logoUrl || "").trim();
+  const nextLogo = rawLogo.startsWith("data:") ? "" : rawLogo;
+  return {
+    ...profile,
+    logo: nextLogo,
+    logoUrl: nextLogo,
+  };
+};

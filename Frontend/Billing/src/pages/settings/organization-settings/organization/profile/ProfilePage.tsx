@@ -1498,9 +1498,17 @@ export default function ProfilePage() {
       document.title = orgName;
     }
 
+    const persistedLiveProfile = {
+      ...liveOrgProfile,
+      logo: typeof liveOrgProfile.logo === "string" && liveOrgProfile.logo.startsWith("data:") ? "" : liveOrgProfile.logo,
+      logoUrl: typeof liveOrgProfile.logoUrl === "string" && liveOrgProfile.logoUrl.startsWith("data:")
+        ? ""
+        : liveOrgProfile.logoUrl,
+    };
+
     try {
-      localStorage.setItem("org_profile", JSON.stringify(liveOrgProfile));
-      localStorage.setItem("organization_profile", JSON.stringify(liveOrgProfile));
+      localStorage.setItem("org_profile", JSON.stringify(persistedLiveProfile));
+      localStorage.setItem("organization_profile", JSON.stringify(persistedLiveProfile));
     } catch {
       // ignore storage sync failures
     }
@@ -1755,13 +1763,14 @@ export default function ProfilePage() {
               return {};
             }
           })();
+          const persistedLogo = typeof logoBase64 === "string" && logoBase64.startsWith("data:") ? "" : logoBase64;
           const updatedOrgProfile = {
             ...existingOrgProfile,
             organizationName: orgName,
             industry: industry,
             location: location,
-            logo: logoBase64,
-            logoUrl: logoBase64,
+            logo: persistedLogo,
+            logoUrl: persistedLogo,
             email: email,
             website: website,
             baseCurrency: syncedBaseCurrency.split(" - ")[0],
@@ -1781,7 +1790,14 @@ export default function ProfilePage() {
               fax: fax,
             },
           };
-          localStorage.setItem("organization_profile", JSON.stringify(updatedOrgProfile));
+          const persistedUpdatedProfile = {
+            ...updatedOrgProfile,
+            logo: typeof updatedOrgProfile.logo === "string" && updatedOrgProfile.logo.startsWith("data:") ? "" : updatedOrgProfile.logo,
+            logoUrl: typeof updatedOrgProfile.logoUrl === "string" && updatedOrgProfile.logoUrl.startsWith("data:")
+              ? ""
+              : updatedOrgProfile.logoUrl,
+          };
+          localStorage.setItem("organization_profile", JSON.stringify(persistedUpdatedProfile));
 
           window.dispatchEvent(new CustomEvent("organizationProfileUpdated", {
             detail: updatedOrgProfile,

@@ -192,7 +192,7 @@ export default function useCustomerDetailData(args: any) {
         const data = await response.json();
         if (data.success && data.data) {
           setOrganizationProfile(data.data);
-          localStorage.setItem("organization_profile", JSON.stringify(data.data));
+          localStorage.setItem("organization_profile", JSON.stringify(sanitizeProfileForCache(data.data)));
         }
         return;
       }
@@ -861,3 +861,13 @@ export default function useCustomerDetailData(args: any) {
 
   return { refreshData };
 }
+const sanitizeProfileForCache = (profile: any) => {
+  if (!profile || typeof profile !== "object") return {};
+  const rawLogo = String(profile.logo || profile.logoUrl || "").trim();
+  const nextLogo = rawLogo.startsWith("data:") ? "" : rawLogo;
+  return {
+    ...profile,
+    logo: nextLogo,
+    logoUrl: nextLogo,
+  };
+};

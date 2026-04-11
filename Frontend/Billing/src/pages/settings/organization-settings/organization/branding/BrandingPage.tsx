@@ -466,10 +466,14 @@ export default function BrandingPage({ onColorChange }) {
             const darkColor = "#156372"; // Solid New button color
             const lightGreyFrom = "#f9fafb"; // bg-gray-50
             const lightGreyTo = "#f3f4f6"; // bg-gray-100
+            const persistedLogo =
+              typeof savedBranding.logo === "string" && savedBranding.logo.startsWith("data:")
+                ? ""
+                : (savedBranding.logo ?? brandingData.logo ?? "");
             const eventData = {
               appearance: savedBranding.appearance || currentAppearance,
               accentColor: savedBranding.accentColor || currentAccentColor,
-              logo: savedBranding.logo ?? brandingData.logo ?? "",
+              logo: persistedLogo,
               sidebarDarkFrom: darkColor,
               sidebarDarkTo: darkColor,
               sidebarLightFrom: lightGreyFrom,

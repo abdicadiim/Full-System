@@ -48,7 +48,25 @@ export type OrganizationProfilePatch = Partial<{
   logoUrl: string;
 }>;
 
+export type OrganizationListItem = {
+  organization_id: string;
+  name: string;
+  account_created_date?: string;
+  account_created_date_formatted?: string;
+  logoUrl?: string;
+  email?: string;
+  currency_code?: string;
+  time_zone?: string;
+};
+
+type OrganizationListResponse = {
+  code?: number;
+  message?: string;
+  organizations?: OrganizationListItem[];
+};
+
 export const orgApi = {
   getMe: () => request<any>("/organizations/me", "GET"),
   patchMe: (patch: OrganizationProfilePatch) => request<any>("/organizations/me", "PATCH", patch),
+  list: () => request<OrganizationListResponse>("/organizations", "GET"),
 };

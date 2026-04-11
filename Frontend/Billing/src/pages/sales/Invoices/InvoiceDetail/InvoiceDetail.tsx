@@ -494,7 +494,7 @@ export default function InvoiceDetail() { // Start of component
         if (data.success && data.data) {
           setOrganizationProfile(data.data);
           // Store in localStorage as fallback
-          localStorage.setItem('organization_profile', JSON.stringify(data.data));
+          localStorage.setItem('organization_profile', JSON.stringify(sanitizeProfileForCache(data.data)));
         }
       } else {
         console.error('Failed to fetch organization profile:', response.status, response.statusText);
@@ -547,7 +547,7 @@ export default function InvoiceDetail() { // Start of component
         if (data.success && data.data) {
           setOrganizationProfile(data.data);
           // Update localStorage
-          localStorage.setItem('organization_profile', JSON.stringify(data.data));
+          localStorage.setItem('organization_profile', JSON.stringify(sanitizeProfileForCache(data.data)));
         }
       }
     } catch (error) {
@@ -794,8 +794,10 @@ export default function InvoiceDetail() { // Start of component
 
       // Load organization logo from localStorage
       const savedLogo = localStorage.getItem('organization_logo');
-      if (savedLogo) {
+      if (savedLogo && !savedLogo.startsWith("data:")) {
         setLogoPreview(savedLogo);
+      } else if (savedLogo) {
+        localStorage.removeItem('organization_logo');
       }
 
       // Load organization address data from localStorage
@@ -1456,7 +1458,12 @@ export default function InvoiceDetail() { // Start of component
       setLogoPreview(logoDataUrl);
       setLogoFile(file);
       // Save logo to localStorage
-      localStorage.setItem('organization_logo', logoDataUrl);
+      const persistedLogo = typeof logoDataUrl === "string" && logoDataUrl.startsWith("data:") ? "" : String(logoDataUrl || "");
+      if (persistedLogo) {
+        localStorage.setItem('organization_logo', persistedLogo);
+      } else {
+        localStorage.removeItem('organization_logo');
+      }
     };
     reader.readAsDataURL(file);
   };
@@ -6174,3 +6181,13 @@ export default function InvoiceDetail() { // Start of component
 }
 
 
+const sanitizeProfileForCache = (profile: any) => {
+  if (!profile || typeof profile !== "object") return {};
+  const rawLogo = String(profile.logo || profile.logoUrl || "").trim();
+  const nextLogo = rawLogo.startsWith("data:") ? "" : rawLogo;
+  return {
+    ...profile,
+    logo: nextLogo,
+    logoUrl: nextLogo,
+  };
+};

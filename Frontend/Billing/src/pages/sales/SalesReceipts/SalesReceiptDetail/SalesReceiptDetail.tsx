@@ -197,8 +197,10 @@ export default function SalesReceiptDetail() {
     fetchBaseCurrency();
 
     const savedLogo = localStorage.getItem("organization_logo");
-    if (savedLogo) {
+    if (savedLogo && !savedLogo.startsWith("data:")) {
       setLogoPreview(savedLogo);
+    } else if (savedLogo) {
+      localStorage.removeItem("organization_logo");
     }
 
     const savedAddress = localStorage.getItem("organization_address");
@@ -733,7 +735,12 @@ ${sellerInfo.name}`
       setLogoPreview(logoDataUrl);
       setLogoFile(file);
       // Save logo to localStorage
-      localStorage.setItem('organization_logo', logoDataUrl);
+      const persistedLogo = typeof logoDataUrl === "string" && logoDataUrl.startsWith("data:") ? "" : logoDataUrl;
+      if (persistedLogo) {
+        localStorage.setItem('organization_logo', persistedLogo);
+      } else {
+        localStorage.removeItem('organization_logo');
+      }
       toast.success("Logo uploaded successfully!");
     };
     reader.readAsDataURL(file);

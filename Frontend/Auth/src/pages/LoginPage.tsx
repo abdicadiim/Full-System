@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import AuthShell from "../components/AuthShell";
 import { getAppDisplayName, getFallbackUrl } from "../lib/appBranding";
 import { prepareAuthViewTransition } from "../lib/authViewTransition";
-import { goReturnTo } from "../lib/returnTo";
+import { getReturnTo, goReturnTo } from "../lib/returnTo";
 import { clearSessionBridgeToken, setSessionBridgeToken } from "../lib/sessionBridge";
 import { authApi, type ApiFailure, type VerificationRequirement } from "../services/authApi";
 
@@ -237,7 +237,12 @@ export default function LoginPage() {
         }
       } else {
         persistSession(result);
-        goReturnTo(getFallbackUrl());
+        const returnToValue = getReturnTo();
+        if (returnToValue) {
+          goReturnTo(getFallbackUrl());
+        } else {
+          navigate(`/org-select${search}`);
+        }
       }
     } catch (err: any) {
       setError(err?.message || "An error occurred during login");

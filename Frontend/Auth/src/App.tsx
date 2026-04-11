@@ -8,6 +8,7 @@ import SignupPage from "./pages/SignupPage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
 import UserInvitationPage from "./pages/UserInvitationPage";
 import OrgSetupPage from "./pages/OrgSetupPage";
+import OrganizationSelectionPage from "./pages/OrganizationSelectionPage";
 import OptimizePage from "./pages/OptimizePage";
 import MovingSystemPage from "./pages/MovingSystemPage";
 import VerifyingPage from "./pages/VerifyingPage";
@@ -36,6 +37,7 @@ export default function App() {
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/invite" element={<UserInvitationPage />} />
       <Route path="/signup" element={<SignupPage />} />
+      <Route path="/org-select" element={<OrganizationSelectionPage />} />
       <Route path="/org-setup" element={<OrgSetupPage />} />
       <Route path="/optimize" element={<OptimizePage />} />
       <Route path="/moving-system" element={<MovingSystemPage />} />
