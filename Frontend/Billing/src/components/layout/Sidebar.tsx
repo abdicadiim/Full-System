@@ -20,7 +20,8 @@ import { useUser } from "../../lib/auth/UserContext";
 import { useSettings } from "../../lib/settings/SettingsContext";
 import { getNavConfigForRole } from "../../config/roleBasedNav";
 import { preloadCustomersIndexRoute } from "../../pages/Customers/customerRouteLoaders";
-import packageJson from "../../../package.json";
+const OFFICIAL_COMPANY_NAME = "Taban Enterprise";
+const SYSTEM_VERSION = "0.0.0.1";
 
 const SIDEBAR_MODULE_BY_PATH: Record<string, string[]> = {
   "/sales/quotes": ["quotes"],
@@ -435,7 +436,7 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
   };
 
   // Get company name from settings
-  const companyName = (settings?.general?.companyDisplayName || "Billing").trim();
+  const companyName = (settings?.general?.companyDisplayName || OFFICIAL_COMPANY_NAME).trim();
   const [companyPrimaryRaw, ...companySecondaryParts] = companyName.split(/\s+/).filter(Boolean);
   const companyPrimary = companyPrimaryRaw || "Billing";
   const companySecondary = companySecondaryParts.join(" ");
@@ -897,7 +898,7 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
             <div className="px-4 pb-6 pt-3">
               <div className={["border-t pt-3", isLightAppearance ? "border-slate-200" : "border-white/10"].join(" ")}>
                 <div className={["text-xs font-medium", isLightAppearance ? "text-slate-600" : "text-white/80"].join(" ")}>
-                  Version {packageJson.version}
+                  Version {SYSTEM_VERSION}
                 </div>
                 <div
                   className={[
@@ -906,7 +907,7 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
                   ].join(" ")}
                 >
                   <span aria-hidden="true">{"\u00A9"}</span>
-                  <span className="truncate">{companyName}</span>
+                  <span className="truncate">{OFFICIAL_COMPANY_NAME}</span>
                 </div>
               </div>
             </div>

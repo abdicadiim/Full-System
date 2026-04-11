@@ -14,16 +14,8 @@ import { useUser } from "../../lib/auth/UserContext";
 import { useSettings } from "../../lib/settings/SettingsContext";
 import SettingsDrawer from "../settings/SettingsDrawer";
 
-function readStoredOrganizationProfile() {
-  try {
-    const raw = localStorage.getItem("organization_profile");
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : null;
-  } catch {
-    return null;
-  }
-}
+const DEFAULT_LOGO_URL = "/logo-DxLi_Ek_.png";
+const SYSTEM_NAME = "Taban Invoice";
 
 function Header({ onToggleSidebar }) {
   const { user, logout } = useUser();
@@ -45,18 +37,11 @@ function Header({ onToggleSidebar }) {
   const searchInputRef = useRef(null);
 
   const displayName = user?.name || "Guest";
-  const email = user?.email || "";
-  const storedOrganization = readStoredOrganizationProfile();
-  const organizationName =
-    String(
-      storedOrganization?.name ||
-        storedOrganization?.organizationName ||
-        settings?.general?.companyDisplayName ||
-        settings?.general?.schoolDisplayName ||
-        "Organization",
-    ).trim();
+  const defaultLogoUrl = DEFAULT_LOGO_URL;
   const avatarInitial = displayName.trim().charAt(0).toUpperCase() || "A";
-  const avatarSrc = String(settings?.branding?.logoUrl || settings?.branding?.logoFile || user?.photoUrl || "").trim();
+  const avatarSrc = String(
+    settings?.branding?.logoUrl || settings?.branding?.logoFile || user?.photoUrl || defaultLogoUrl,
+  ).trim();
   const unreadMessages = user?.unreadMessages ?? 0;
   const unreadNotifications = user?.unreadNotifications ?? 0;
 
@@ -405,9 +390,10 @@ function Header({ onToggleSidebar }) {
             {openMenu && (
               <div className="absolute right-0 top-11 z-50 w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-xl">
                 <div className="border-b border-slate-100 pb-3">
-                  <p className="truncate text-sm font-semibold text-slate-800">{displayName}</p>
-                  <p className="truncate text-xs text-slate-500">{organizationName}</p>
-                  <p className="truncate text-xs text-slate-500">{email}</p>
+                  <div className="flex items-center gap-3">
+                    <img src={DEFAULT_LOGO_URL} alt="Taban Invoice logo" className="h-10 w-10 rounded border border-slate-200" />
+                    <p className="truncate text-sm font-semibold text-slate-800">{SYSTEM_NAME}</p>
+                  </div>
                 </div>
 
                 <div className="pt-2">

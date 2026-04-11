@@ -5,6 +5,37 @@ import { getAppDisplayName } from "../lib/appBranding";
 import { prepareAuthViewTransition } from "../lib/authViewTransition";
 import { authApi } from "../services/authApi";
 
+const readStoredBrandingLogo = () => {
+  if (typeof window === "undefined") return "";
+  try {
+    const storedBranding = localStorage.getItem("organization_branding");
+    if (storedBranding) {
+      const brandingParsed = JSON.parse(storedBranding);
+      if (typeof brandingParsed === "object") {
+        const brandLogo = String(brandingParsed?.logo || brandingParsed?.logoUrl || "").trim();
+        if (brandLogo) return brandLogo;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  try {
+    const storedProfile = localStorage.getItem("organization_profile");
+    if (storedProfile) {
+      const profileParsed = JSON.parse(storedProfile);
+      if (typeof profileParsed === "object") {
+        const profileLogo = String(profileParsed?.logo || profileParsed?.logoUrl || "").trim();
+        if (profileLogo) return profileLogo;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return "";
+};
+
 const getAuthDraftKey = () => {
   if (typeof window === "undefined") return "full";
   const app = new URLSearchParams(window.location.search).get("app")?.toLowerCase();
@@ -120,6 +151,7 @@ export default function SignupPage() {
   const trimmedEmail = email.trim().toLowerCase();
   const emailExistsMessage = "An account with this email already exists. Please log in.";
   const emailIsTaken = emailExists && !checkingEmail;
+  const [authLogo, setAuthLogo] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -149,6 +181,11 @@ export default function SignupPage() {
     writeDraftValue(SIGNUP_DRAFT_KEY("email"), email);
     writeSessionDraftValue(SIGNUP_DRAFT_KEY("password"), password);
   }, [draftKey, email, name, password]);
+
+  useEffect(() => {
+    const logo = readStoredBrandingLogo();
+    if (logo) setAuthLogo(logo);
+  }, []);
 
   useEffect(() => {
     const input = emailInputRef.current;
@@ -255,6 +292,16 @@ export default function SignupPage() {
         <p className="mt-4 max-w-md text-sm leading-6 text-slate-500">
           Use your email and password to create your workspace.
         </p>
+        {authLogo && (
+          <div className="mt-6 flex items-center justify-center">
+            <img
+              src={authLogo}
+              alt="Organization logo"
+              loading="lazy"
+              className="h-14 w-auto rounded-xl border border-slate-200 object-contain"
+            />
+          </div>
+        )}
       </div>
 
       <form className="space-y-5" onSubmit={onSubmit}>

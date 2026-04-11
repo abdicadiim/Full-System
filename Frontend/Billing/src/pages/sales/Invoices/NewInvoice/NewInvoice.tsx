@@ -42,7 +42,7 @@ import {
 } from "lucide-react";
 import { saveInvoice, getInvoiceById, updateInvoice, updateQuote, getTaxes, saveTax, deleteTax, Customer, Tax, Salesperson, Invoice, ContactPerson } from "../../salesModel";
 import { getAllDocuments } from "../../../../utils/documentStorage";
-import { customersAPI, salespersonsAPI, projectsAPI, invoicesAPI, itemsAPI, plansAPI, bankAccountsAPI, currenciesAPI, transactionNumberSeriesAPI, chartOfAccountsAPI, accountantAPI, reportingTagsAPI, priceListsAPI } from "../../../../services/api";
+import { customersAPI, salespersonsAPI, projectsAPI, invoicesAPI, bankAccountsAPI, currenciesAPI, transactionNumberSeriesAPI, chartOfAccountsAPI, accountantAPI, reportingTagsAPI, priceListsAPI } from "../../../../services/api";
 import { useCurrency } from "../../../../hooks/useCurrency";
 import { usePaymentTermsDropdown, defaultPaymentTerms, PaymentTerm } from "../../../../hooks/usePaymentTermsDropdown";
 import { API_BASE_URL, getToken } from "../../../../services/auth";
@@ -53,8 +53,8 @@ import NewTaxQuickModal from "../../../../components/tax/NewTaxQuickModal";
 import { toast } from "react-toastify";
 import { readTaxesLocal, TAXES_STORAGE_EVENT } from "../../../settings/organization-settings/taxes-compliance/TAX/storage";
 import { buildTaxOptionGroups, taxLabel } from "../../../../hooks/Taxdropdownstyle";
-
-const PLANS_STORAGE_KEY = "inv_plans_v1";
+import { useItemsListQuery } from "../../../Product-Calalog/items/itemQueries";
+import { usePlansListQuery } from "../../../Product-Calalog/plans/planQueries";
 
 interface Item {
   id: string | number;
@@ -209,10 +209,10 @@ const extractTransactionSeriesRows = (response: any) => {
 const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
 const [customers, setCustomers] = useState<any[]>([]);
 const [availableProjects, setAvailableProjects] = useState<any[]>([]);
-const [availableItems, setAvailableItems] = useState<any[]>([]);
-const availableDocuments: any[] = [];
-const [taxOptions, setTaxOptions] = useState<any[]>([]);
-const bankAccounts: any[] = [];
+  const [availableItems, setAvailableItems] = useState<any[]>([]);
+  const availableDocuments: any[] = [];
+  const [taxOptions, setTaxOptions] = useState<any[]>([]);
+  const bankAccounts: any[] = [];
 const [paymentTerms, setPaymentTerms] = useState<PaymentTerm[]>(defaultPaymentTerms);
 const [selectedPaymentTerm, setSelectedPaymentTerm] = useState(defaultPaymentTerms[0]?.value || "due-on-receipt");
 const filteredPaymentTerms = paymentTerms;
@@ -332,13 +332,57 @@ const paymentData: any = { paymentMode: "Cash", depositTo: "Petty Cash", amountR
 const [openItemDropdowns, setOpenItemDropdowns] = useState<Record<string, boolean>>({});
 const [openTaxDropdowns, setOpenTaxDropdowns] = useState<Record<string, boolean>>({});
 const [taxSearches, setTaxSearches] = useState<Record<string, string>>({});
-const [isNewTaxQuickModalOpen, setIsNewTaxQuickModalOpen] = useState(false);
-const [newTaxTargetItemId, setNewTaxTargetItemId] = useState<string | number | null>(null);
-const [itemSearches, setItemSearches] = useState<Record<string, string>>({});
-const isCustomerActive = (customer: any) => {
-  const status = String(customer?.status || customer?.customerStatus || customer?.state || "active").toLowerCase();
-  return status !== "inactive";
-};
+  const [isNewTaxQuickModalOpen, setIsNewTaxQuickModalOpen] = useState(false);
+  const [newTaxTargetItemId, setNewTaxTargetItemId] = useState<string | number | null>(null);
+  const [itemSearches, setItemSearches] = useState<Record<string, string>>({});
+  const itemsQuery = useItemsListQuery();
+  const plansQuery = usePlansListQuery();
+
+  const catalogEntries = useMemo(() => {
+    const normalizedItems = (itemsQuery.data || []).map((entry: any, index: number) => ({
+      ...entry,
+      entityType: entry?.entityType || "item",
+      id: String(entry?.id || entry?._id || entry?.itemId || `item-${index}`),
+      sourceId: String(entry?.sourceId || entry?.id || entry?._id || `item-${index}`),
+      name: String(entry?.name || entry?.displayName || entry?.itemName || entry?.title || entry?.code || "").trim(),
+      sku: String(entry?.sku || entry?.code || entry?.itemCode || "").trim(),
+      code: String(entry?.code || entry?.sku || entry?.itemCode || "").trim(),
+      rate: Number(entry?.rate || entry?.price || entry?.sellingPrice || 0) || 0,
+      unit: String(entry?.unit || entry?.unitName || entry?.usageUnit || "pcs").trim(),
+      description: String(entry?.description || entry?.salesDescription || "").trim(),
+    }));
+
+    const normalizedPlans = (plansQuery.data || []).map((plan: any, index: number) => ({
+      ...plan,
+      entityType: "plan",
+      id: String(plan?.id || plan?._id || `plan-${index}`),
+      sourceId: String(plan?.id || plan?._id || `plan-${index}`),
+      name: String(plan?.planName || plan?.name || plan?.plan || "").trim(),
+      sku: String(plan?.planCode || plan?.code || "").trim(),
+      code: String(plan?.planCode || plan?.code || "").trim(),
+      rate: Number(plan?.price || plan?.amount || plan?.rate || 0) || 0,
+      unit: String(plan?.billingFrequency || plan?.billingFrequencyUnit || "plan").trim(),
+      description: String(plan?.description || plan?.planDescription || "").trim(),
+    }));
+
+    const uniqueByKey = new Map<string, any>();
+    [...normalizedItems, ...normalizedPlans].forEach((entry) => {
+      const key = `${String(entry?.entityType || "item")}:${String(entry?.id || entry?.sourceId || entry?.name || "").trim()}`;
+      if (key && !key.endsWith(":")) {
+        uniqueByKey.set(key, entry);
+      }
+    });
+
+    return Array.from(uniqueByKey.values());
+  }, [itemsQuery.data, plansQuery.data]);
+
+  useEffect(() => {
+    setAvailableItems(catalogEntries);
+  }, [catalogEntries]);
+  const isCustomerActive = (customer: any) => {
+    const status = String(customer?.status || customer?.customerStatus || customer?.state || "active").toLowerCase();
+    return status !== "inactive";
+  };
 const filteredCustomers = customers.filter((customer) => {
   if (!isCustomerActive(customer)) return false;
   const name = String(customer?.name || customer?.displayName || customer?.companyName || "").toLowerCase();
@@ -1689,159 +1733,6 @@ useEffect(() => {
   window.addEventListener("focus", onWindowFocus);
   return () => {
     window.removeEventListener(TAXES_STORAGE_EVENT, onTaxStorageUpdated as EventListener);
-    window.removeEventListener("focus", onWindowFocus);
-  };
-}, []);
-
-useEffect(() => {
-  const loadCatalogItemsAndPlans = async () => {
-    try {
-      let transformedItems: any[] = [];
-      try {
-        const response = await itemsAPI.getAll();
-        const rows = response?.success && Array.isArray(response?.data)
-          ? response.data
-          : Array.isArray((response as any)?.data)
-            ? (response as any).data
-            : Array.isArray(response)
-              ? response
-              : [];
-
-        transformedItems = Array.isArray(rows)
-          ? rows
-              .map((item: any, index: number) => ({
-                ...item,
-                entityType: "item",
-                id: String(item?.id || item?._id || item?.itemId || `item-${index}`),
-                sourceId: String(item?.id || item?._id || item?.itemId || `item-${index}`),
-                name: String(item?.name || item?.itemName || "").trim(),
-                sku: String(item?.sku || item?.itemCode || "").trim(),
-                code: String(item?.sku || item?.itemCode || "").trim(),
-                rate: Number(item?.sellingPrice || item?.costPrice || item?.rate || 0) || 0,
-                stockOnHand: Number(item?.stockOnHand || item?.quantityOnHand || item?.stockQuantity || 0) || 0,
-                unit: String(item?.unit || item?.unitOfMeasure || "pcs"),
-                description: String(item?.salesDescription || item?.description || ""),
-              }))
-              .filter((item: any) => item.name)
-          : [];
-      } catch (error) {
-        console.error("Error loading items for invoice:", error);
-      }
-
-      let transformedPlans: any[] = [];
-      try {
-        const response = await plansAPI.getAll({ limit: 10000 });
-        const rows = response?.success && Array.isArray(response?.data)
-          ? response.data
-          : Array.isArray((response as any)?.data)
-            ? (response as any).data
-            : Array.isArray(response)
-              ? response
-              : [];
-
-        transformedPlans = Array.isArray(rows)
-          ? rows
-              .map((plan: any, index: number) => {
-                const sourceId = String(plan?.id || plan?._id || `plan-${index}`);
-                return {
-                  ...plan,
-                  entityType: "plan",
-                  id: `plan:${sourceId}`,
-                  sourceId,
-                  name: String(plan?.planName || plan?.name || plan?.plan || "").trim(),
-                  sku: String(plan?.planCode || plan?.code || "").trim(),
-                  code: String(plan?.planCode || plan?.code || "").trim(),
-                  rate: Number(plan?.price ?? plan?.rate ?? 0) || 0,
-                  stockOnHand: 0,
-                  unit: String(plan?.billingFrequencyUnit || plan?.billingFrequency || "plan"),
-                  description: String(plan?.planDescription || plan?.description || ""),
-                };
-              })
-              .filter((plan: any) => plan.name)
-              .filter((plan: any) => String(plan?.status || "active").toLowerCase() !== "inactive")
-          : [];
-
-        if (transformedPlans.length === 0) {
-          const rawPlans = localStorage.getItem(PLANS_STORAGE_KEY);
-          const parsedPlans = rawPlans ? JSON.parse(rawPlans) : [];
-          if (Array.isArray(parsedPlans)) {
-            transformedPlans = parsedPlans
-              .map((plan: any, index: number) => {
-                const sourceId = String(plan?.id || plan?._id || `plan-${index}`);
-                return {
-                  ...plan,
-                  entityType: "plan",
-                  id: `plan:${sourceId}`,
-                  sourceId,
-                  name: String(plan?.planName || plan?.name || plan?.plan || "").trim(),
-                  sku: String(plan?.planCode || plan?.code || "").trim(),
-                  code: String(plan?.planCode || plan?.code || "").trim(),
-                  rate: Number(plan?.price ?? plan?.rate ?? 0) || 0,
-                  stockOnHand: 0,
-                  unit: String(plan?.billingFrequencyUnit || plan?.billingFrequency || "plan"),
-                  description: String(plan?.planDescription || plan?.description || ""),
-                };
-              })
-              .filter((plan: any) => plan.name)
-              .filter((plan: any) => String(plan?.status || "active").toLowerCase() !== "inactive");
-          }
-        }
-      } catch (error) {
-        console.error("Error loading plans for invoice:", error);
-        try {
-          const rawPlans = localStorage.getItem(PLANS_STORAGE_KEY);
-          const parsedPlans = rawPlans ? JSON.parse(rawPlans) : [];
-          if (Array.isArray(parsedPlans)) {
-            transformedPlans = parsedPlans
-              .map((plan: any, index: number) => {
-                const sourceId = String(plan?.id || plan?._id || `plan-${index}`);
-                return {
-                  ...plan,
-                  entityType: "plan",
-                  id: `plan:${sourceId}`,
-                  sourceId,
-                  name: String(plan?.planName || plan?.name || plan?.plan || "").trim(),
-                  sku: String(plan?.planCode || plan?.code || "").trim(),
-                  code: String(plan?.planCode || plan?.code || "").trim(),
-                  rate: Number(plan?.price ?? plan?.rate ?? 0) || 0,
-                  stockOnHand: 0,
-                  unit: String(plan?.billingFrequencyUnit || plan?.billingFrequency || "plan"),
-                  description: String(plan?.planDescription || plan?.description || ""),
-                };
-              })
-              .filter((plan: any) => plan.name)
-              .filter((plan: any) => String(plan?.status || "active").toLowerCase() !== "inactive");
-          }
-        } catch (fallbackError) {
-          console.error("Error loading fallback plans for invoice:", fallbackError);
-        }
-      }
-
-      const uniqueByEntityAndId = new Map<string, any>();
-      [...transformedItems, ...transformedPlans].forEach((entry: any) => {
-        const key = `${String(entry?.entityType || "item")}:${String(entry?.id || entry?.name || "")}`;
-        if (!key.endsWith(":")) uniqueByEntityAndId.set(key, entry);
-      });
-      setAvailableItems(Array.from(uniqueByEntityAndId.values()));
-    } catch (error) {
-      console.error("Error loading invoice catalog entries:", error);
-      setAvailableItems([]);
-    }
-  };
-
-  loadCatalogItemsAndPlans();
-
-  const onStorageChange = (event: StorageEvent) => {
-    if (!event.key || event.key === PLANS_STORAGE_KEY) {
-      loadCatalogItemsAndPlans();
-    }
-  };
-  const onWindowFocus = () => loadCatalogItemsAndPlans();
-
-  window.addEventListener("storage", onStorageChange);
-  window.addEventListener("focus", onWindowFocus);
-  return () => {
-    window.removeEventListener("storage", onStorageChange);
     window.removeEventListener("focus", onWindowFocus);
   };
 }, []);

@@ -2333,7 +2333,7 @@ export default function NewSalesReceipt() {
         </button>
       </div>
 
-        <div className="flex-1 overflow-y-auto bg-white pb-40">
+        <div className="flex-1 overflow-y-auto bg-white pb-72">
         <div className="w-full px-5 py-4">
           <div className="w-full overflow-visible border border-[#e5e7eb] bg-white">
             <div className="border-b border-[#eceef2] bg-[#f3f4f6] px-5 py-5">
@@ -2389,7 +2389,7 @@ export default function NewSalesReceipt() {
                       </button>
                       <button
                         type="button"
-                        className="text-[#2563eb] transition-colors hover:text-[#1d4ed8]"
+                        className="text-[#156372] transition-colors hover:text-[#0D4A52]"
                         onClick={() => {
                           setIsCustomerInlineSearchMode(true);
                           setIsCustomerDropdownOpen(false);
@@ -2452,7 +2452,7 @@ export default function NewSalesReceipt() {
                       </div>
                       <button
                         type="button"
-                        className="flex w-full items-center gap-2 border-t border-[#eef2f7] px-4 py-3 text-sm font-medium text-[#2563eb] hover:bg-[#f8fafc]"
+                        className="flex w-full items-center gap-2 border-t border-[#eef2f7] px-4 py-3 text-sm font-medium text-[#156372] hover:bg-slate-50"
                         onClick={() => {
                           setIsCustomerDropdownOpen(false);
                           openCustomerQuickAction();

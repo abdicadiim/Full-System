@@ -138,6 +138,20 @@ export default function BrandingPage({ onColorChange }) {
     loadBranding();
   }, []);
 
+  useEffect(() => {
+    const handleBrandingUpdate = (event: any) => {
+      const newLogo = event?.detail?.logo;
+      if (typeof newLogo === "string") {
+        setLogoPreview(newLogo);
+      }
+    };
+
+    window.addEventListener('brandingUpdated', handleBrandingUpdate);
+    return () => {
+      window.removeEventListener('brandingUpdated', handleBrandingUpdate);
+    };
+  }, []);
+
   const selectedColor = accentColor === "custom"
     ? customColor
     : accentColors.find(c => c.name === accentColor)?.value || "#3b82f6";

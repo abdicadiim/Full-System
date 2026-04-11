@@ -21,6 +21,8 @@ import { Organization } from "../models/Organization.js";
 import { User } from "../models/User.js";
 import { SenderEmail } from "../models/SenderEmail.js";
 import { Role } from "../models/Role.js";
+import { Location } from "../models/Location.js";
+import { TransactionNumberSeries } from "../models/TransactionNumberSeries.js";
 import { buildAuthUserData, clearSessionCookie, getAuthedUser, getDevAuthedUser, issueSessionToken, setSessionCookie } from "../midelwares/auth.js";
 import mongoose from "mongoose";
 import { sendSmtpMail } from "../services/smtpMailer.js";
@@ -312,6 +314,51 @@ export const signup = async (req: express.Request, res: express.Response) => {
   let org: any = null;
   try {
     org = await Organization.create({ name, primaryContactEmail: email });
+    let headLocationId: string | null = null;
+    try {
+      const createdLocation = await Location.create({
+        organizationId: org._id,
+        name: "Head Location",
+        type: "Business",
+        isDefault: true,
+        status: "Active",
+        primaryContact: name,
+        website: "",
+        logo: org.logoUrl || "",
+      });
+      headLocationId = String(createdLocation._id);
+    } catch {
+      // ignore location creation failures for now
+    }
+
+    if (headLocationId) {
+      try {
+        const modules = [
+          { module: "invoice", prefix: "INV-", seriesName: "Default", startingNumber: "1000", nextNumber: 1000, isDefault: true },
+          { module: "salesreciept", prefix: "SR-", seriesName: "Default", startingNumber: "1000", nextNumber: 1000 },
+        ];
+        await TransactionNumberSeries.insertMany(
+          modules.map((mod) => ({
+            organizationId: org._id,
+            seriesName: mod.seriesName,
+            module: mod.module,
+            name: mod.module,
+            moduleKey: mod.module,
+            prefix: mod.prefix,
+            startingNumber: mod.startingNumber,
+            nextNumber: mod.nextNumber || 1,
+            restartNumbering: "none",
+            isDefault: Boolean(mod.isDefault),
+            locationIds: [headLocationId],
+            status: "Active",
+          })),
+          { ordered: false }
+        );
+      } catch {
+        // swallow duplicates or failures silently
+      }
+    }
+
     // Ensure default roles exist for this organization.
     try {
       await Role.updateOne(

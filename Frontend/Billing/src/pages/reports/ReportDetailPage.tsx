@@ -2002,7 +2002,6 @@ export default function ReportDetailPage() {
   const [moreFilterRows, setMoreFilterRows] = useState<MoreFilterRow[]>([{ id: 1, field: "", comparator: "", value: "" }]);
   const [openMoreFilterFieldRowId, setOpenMoreFilterFieldRowId] = useState<number | null>(null);
   const [openMoreFilterComparatorRowId, setOpenMoreFilterComparatorRowId] = useState<number | null>(null);
-  const [reportRefreshTick, setReportRefreshTick] = useState(0);
   const [selectedDateRange, setSelectedDateRange] = useState<DateRangePreset>(
     isAgingReport ? "Today" : "This Month"
   );
@@ -2139,19 +2138,14 @@ export default function ReportDetailPage() {
     return () => {
       cancelled = true;
     };
-<<<<<<< Updated upstream
-  }, [category.name, customReport, reportDisplayName, resolvedReportId, agingBy, selectedEntities, reportRefreshTick]);
-=======
   }, [
     agingBy,
     category.name,
     customReport,
     reportDisplayName,
-    reportRefreshTick,
     resolvedReportId,
     selectedEntities,
   ]);
->>>>>>> Stashed changes
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
@@ -2265,15 +2259,6 @@ export default function ReportDetailPage() {
   const visiblePreviewColumns = effectiveVisibleColumns;
   const visiblePreviewRows = previewRows;
   const visiblePreviewTotals = previewTotals;
-  const runReport = () => {
-    setActiveFilterDropdown(null);
-    setMoreFiltersOpen(false);
-    setOpenMoreFilterFieldRowId(null);
-    setOpenMoreFilterComparatorRowId(null);
-    setLivePreview(null);
-    setLivePreviewLoading(true);
-    setReportRefreshTick((value) => value + 1);
-  };
   const handleExportReport = () => {
     toast.info("Exporting report...");
   };
@@ -2514,30 +2499,10 @@ export default function ReportDetailPage() {
             )}
             {filterButtonLabel}
           </button>
-          <button
-            type="button"
-            onClick={runReport}
-            disabled={livePreviewLoading}
-            className="inline-flex h-8 items-center gap-1 rounded bg-[#156372] px-4 text-sm font-semibold text-white hover:bg-[#0f4f5b] disabled:cursor-wait disabled:bg-[#156372]/80"
-          >
-            {livePreviewLoading ? (
-              "Loading..."
-            ) : (
-              <>
-                <CalendarDays size={14} />
-                Run Report
-                <ChevronDown size={14} />
-              </>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={runReport}
-            disabled={livePreviewLoading}
-            className="inline-flex h-8 items-center gap-1 rounded bg-[#156372] px-4 text-sm font-semibold text-white hover:bg-[#0f4f5b] disabled:cursor-wait disabled:bg-[#156372]/80"
-          >
-            {livePreviewLoading ? "Loading..." : <><CalendarDays size={14} /> Run Report <ChevronDown size={14} /></>}
-          </button>
+          <span className="inline-flex h-8 items-center gap-2 rounded border border-[#cfd6e4] bg-white px-4 text-sm text-[#334155]">
+            <Clock3 size={14} />
+            Live preview updates automatically
+          </span>
 
           {!isTimeToGetPaidReport && isDateRangeOpen ? (
             <div
@@ -2904,14 +2869,10 @@ export default function ReportDetailPage() {
               </div>
 
               <div className="flex items-center gap-3 border-t border-[#edf1f7] px-4 py-3">
-                <button
-                  type="button"
-                  onClick={runReport}
-                  disabled={livePreviewLoading}
-                  className="inline-flex h-8 items-center rounded bg-[#156372] px-4 text-sm font-semibold text-white hover:bg-[#0f4f5b] disabled:cursor-wait disabled:bg-[#156372]/80"
-                >
-                  {livePreviewLoading ? "Loading..." : "Run Report"}
-                </button>
+                <span className="inline-flex h-8 items-center gap-2 rounded border border-[#cfd6e4] bg-white px-4 text-sm text-[#334155]">
+                  <Clock3 size={14} />
+                  Filters apply automatically
+                </span>
                 <button
                   type="button"
                   onClick={() => setMoreFiltersOpen(false)}

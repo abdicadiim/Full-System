@@ -87,11 +87,13 @@ export default function NewTransactionNumberSeriesPage({ onBack, editSeriesItems
         const locs = response.data || [];
         setLocations(locs);
         
-        // If editing, set selected locations based on locationIds
         if (isEditMode && editSeriesItems?.[0]?.locationIds) {
           const ids = editSeriesItems[0].locationIds;
           const selected = locs.filter((l: any) => ids.includes(l._id || l.id));
           setSelectedLocations(selected);
+        } else if (!isEditMode && locs.length && selectedLocations.length === 0) {
+          // Automatically select first location (Head Location) when creating new series
+          setSelectedLocations([locs[0]]);
         }
       }
     } catch (error) {

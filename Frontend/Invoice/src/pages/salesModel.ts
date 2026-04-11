@@ -1876,7 +1876,6 @@ export const saveQuote = async (quoteData: Partial<Quote>, retryCount = 0): Prom
           : ""),
       billingAddress: normalizeAddressSnapshot((quoteData as any).billingAddress),
       shippingAddress: normalizeAddressSnapshot((quoteData as any).shippingAddress),
-    location: String((quoteData as any).location || (quoteData as any).selectedLocation || ""),
     priceListId: String((quoteData as any).priceListId || ""),
       priceListName: String((quoteData as any).priceListName || ""),
       date: toISO(quoteData.quoteDate || quoteData.date) || new Date().toISOString(),

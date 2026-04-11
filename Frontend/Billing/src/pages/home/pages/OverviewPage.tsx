@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { FileText } from "lucide-react";
 import Card from "../../../components/ui/Card";
 import { RangeSelect } from "../../../components/dashboard/parts/SectionBits";
@@ -7,132 +7,14 @@ import { dashboardAPI, settingsAPI } from "../../../services/api";
 import { useUser } from "../../../lib/auth/UserContext";
 import { useSettings } from "../../../lib/settings/SettingsContext";
 import { usePermissions } from "../../../hooks/usePermissions";
-
-type MetricLegendItem = {
-  label: string;
-  value: string;
-  color: string;
-};
-
-type DashboardSummary = {
-  metrics: {
-    netRevenue: { total: number; labels: string[]; values: number[] };
-    receivables: { total: number; current: number; overdue: number; currentCount: number; overdueCount: number; labels: string[]; values: number[] };
-    mrr: { total: number; labels: string[]; values: number[] };
-    activeSubscriptions: { total: number; labels: string[]; values: number[] };
-    churnRate: { total: number; asOf: string; labels: string[]; values: number[] };
-    arpu: { total: number; labels: string[]; values: number[] };
-    ltv: { total: number; asOf: string; labels: string[]; values: number[] };
-  };
-  subscriptionSummary: {
-    signups: number;
-    activations: number;
-    cancellations: number;
-    reactivations: number;
-    series: {
-      labels: string[];
-      signups: number[];
-      activations: number[];
-      cancellations: number[];
-      reactivations: number[];
-    };
-  };
-  incomeExpense: {
-    totalIncome: number;
-    totalReceipts: number;
-    totalExpenses: number;
-    labels: string[];
-    income: number[];
-    receipts: number[];
-    expenses: number[];
-  };
-  topExpenses: {
-    total: number;
-    items: MetricLegendItem[];
-  };
-  projects: {
-    totalCount: number;
-    totalUnbilledMinutes: number;
-    totalUnbilledHours: string;
-    totalUnbilledExpenses: number;
-    topProject: null | {
-      id: string;
-      name: string;
-      customerName: string;
-      unbilledHours: string;
-      unbilledExpenses: number;
-      progress: number;
-      budgetLabel: string;
-    };
-  };
-  organization: {
-    name: string;
-    baseCurrency: string;
-  };
-};
-
-const EMPTY_SUMMARY: DashboardSummary = {
-  metrics: {
-    netRevenue: { total: 0, labels: ["", "", "", ""], values: [0, 0, 0, 0] },
-    receivables: {
-      total: 0,
-      current: 0,
-      overdue: 0,
-      currentCount: 0,
-      overdueCount: 0,
-      labels: ["Current", "1-15", "15-30", "31-45", ">45"],
-      values: [0, 0, 0, 0, 0],
-    },
-    mrr: { total: 0, labels: ["", "", "", ""], values: [0, 0, 0, 0] },
-    activeSubscriptions: { total: 0, labels: ["", "", "", ""], values: [0, 0, 0, 0] },
-    churnRate: { total: 0, asOf: "", labels: ["", "", "", ""], values: [0, 0, 0, 0] },
-    arpu: { total: 0, labels: ["", "", "", ""], values: [0, 0, 0, 0] },
-    ltv: { total: 0, asOf: "", labels: ["", "", "", ""], values: [0, 0, 0, 0] },
-  },
-  subscriptionSummary: {
-    signups: 0,
-    activations: 0,
-    cancellations: 0,
-    reactivations: 0,
-    series: {
-      labels: ["", "", "", ""],
-      signups: [0, 0, 0, 0],
-      activations: [0, 0, 0, 0],
-      cancellations: [0, 0, 0, 0],
-      reactivations: [0, 0, 0, 0],
-    },
-  },
-  incomeExpense: {
-    totalIncome: 0,
-    totalReceipts: 0,
-    totalExpenses: 0,
-    labels: ["", "", "", ""],
-    income: [0, 0, 0, 0],
-    receipts: [0, 0, 0, 0],
-    expenses: [0, 0, 0, 0],
-  },
-  topExpenses: {
-    total: 0,
-    items: [],
-  },
-  projects: {
-    totalCount: 0,
-    totalUnbilledMinutes: 0,
-    totalUnbilledHours: "00:00",
-    totalUnbilledExpenses: 0,
-    topProject: null,
-  },
-  organization: {
-    name: "",
-    baseCurrency: "",
-  },
-};
-
-const formatMoney = (value: number, currencyCode = "") =>
-  `${currencyCode}${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
-    Number.isFinite(value) ? value : 0
-  )}`;
-
+import { useCurrency } from "../../../hooks/useCurrency";
+import { useQuery } from "@tanstack/react-query";
+import {
+  DashboardSummary,
+  EMPTY_SUMMARY,
+  MetricLegendItem,
+  formatCurrencyValue,
+} from "../../dashboard/summary";
 const formatPercent = (value: number) =>
   `${new Intl.NumberFormat("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(
     Number.isFinite(value) ? value : 0
@@ -215,16 +97,16 @@ function ChartShell({
       <div>
         <div className="relative overflow-hidden rounded-md" style={{ height }}>
           <div className="absolute inset-0 flex flex-col justify-between py-2">
-            {Array.from({ length: 5 }).map((_, index) => (
-              <div key={index} className="border-b border-dashed border-slate-200 last:border-b-0" />
+        {Array.from({ length: 5 }).map((_, index) => (
+          <div key={`grid-line-${index}`} className="border-b border-dashed border-slate-200 last:border-b-0" />
             ))}
           </div>
           <div className="absolute inset-0">{children}</div>
         </div>
 
         <div className="mt-2 grid text-[10px] text-slate-400" style={{ gridTemplateColumns: `repeat(${labels.length}, minmax(0, 1fr))` }}>
-          {labels.map((label, labelIndex) => (
-            <div key={`${label || "label"}-${labelIndex}`} className="text-center leading-tight">
+        {labels.map((label, labelIndex) => (
+          <div key={`${label || "label"}-${labelIndex}`} className="text-center leading-tight">
               {label.split("\n").map((part, partIndex) => (
                 <div key={`${part || "part"}-${labelIndex}-${partIndex}`}>{part}</div>
               ))}
@@ -358,12 +240,12 @@ function SubscriptionSummaryChart({
       height={150}
     >
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full">
-        {[
-          { points: signups, stroke: "#22c55e" },
-          { points: activations, stroke: "#2b7fff" },
-          { points: cancellations, stroke: "#f97316" },
-          { points: reactivations, stroke: "#7c3aed" },
-        ].map((series) => {
+          {[
+            { points: signups, stroke: "#22c55e" },
+            { points: activations, stroke: "#2b7fff" },
+            { points: cancellations, stroke: "#f97316" },
+            { points: reactivations, stroke: "#7c3aed" },
+          ].map((series, index) => {
           const max = Math.max(...series.points, 1);
           const width = 100;
           const baseY = 90;
@@ -377,7 +259,7 @@ function SubscriptionSummaryChart({
 
           return (
             <polyline
-              key={series.stroke}
+              key={`${series.stroke}-${index}`}
               points={coords.join(" ")}
               fill="none"
               stroke={series.stroke}
@@ -436,10 +318,12 @@ function ExpenseDonut({
   items,
   total,
   currencyCode,
+  formatAmount,
 }: {
   items: MetricLegendItem[];
   total: number;
   currencyCode: string;
+  formatAmount: (value: number, currencyCode?: string) => string;
 }) {
   const active = items[0];
   const totalValue = Math.max(total, 0);
@@ -456,17 +340,17 @@ function ExpenseDonut({
         <div className="absolute inset-[9px] rounded-full bg-white" />
         <div className="relative text-center">
           <div className="text-[10px] text-slate-400">All Expenses</div>
-          <div className="text-[14px] font-semibold text-slate-800">{formatMoney(activeValue, currencyCode)}</div>
+          <div className="text-[14px] font-semibold text-slate-800">{formatAmount(activeValue, currencyCode)}</div>
         </div>
       </div>
 
       <div className="space-y-2 text-[12px] text-slate-600">
         {items.length > 0 ? (
-          items.map((item) => (
-            <div key={item.label} className="flex min-w-[150px] items-center gap-3">
+          items.map((item, index) => (
+            <div key={`${item.label || "expense"}-${index}`} className="flex min-w-[150px] items-center gap-3">
               <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: item.color }} />
               <span className="flex-1">{item.label}</span>
-              <span className="font-medium text-slate-700">{formatMoney(Number(item.value) || 0, currencyCode)}</span>
+              <span className="font-medium text-slate-700">{formatAmount(Number(item.value) || 0, currencyCode)}</span>
             </div>
           ))
         ) : (
@@ -482,11 +366,13 @@ function ProjectsCard({
   totalUnbilledHours,
   totalUnbilledExpenses,
   currencyCode,
+  formatAmount,
 }: {
   project: DashboardSummary["projects"]["topProject"];
   totalUnbilledHours: string;
   totalUnbilledExpenses: number;
   currencyCode: string;
+  formatAmount: (value: number, currencyCode?: string) => string;
 }) {
   const label = project?.budgetLabel || "No budget hours";
   const progress = project?.progress ?? 0;
@@ -501,7 +387,7 @@ function ProjectsCard({
         </div>
         <div className="px-4 py-3 text-center">
           <div className="text-[11px] text-slate-500">Unbilled Expenses</div>
-          <div className="mt-1 text-[22px] font-semibold text-slate-800">{formatMoney(totalUnbilledExpenses, currencyCode)}</div>
+          <div className="mt-1 text-[22px] font-semibold text-slate-800">{formatAmount(totalUnbilledExpenses, currencyCode)}</div>
         </div>
       </div>
 
@@ -620,46 +506,22 @@ export default function OverviewPage() {
   const canViewProjects = canView("dashboard", "Projects");
   const canViewSalesAndExpenses = canView("dashboard", "Sales and Expenses");
   const canViewTopExpense = canView("dashboard", "Your Top Expense");
-  const [summary, setSummary] = useState<DashboardSummary | null>(null);
-  const [summaryLoading, setSummaryLoading] = useState(true);
-  const [summaryError, setSummaryError] = useState<string | null>(null);
   const [organizationBaseCurrency, setOrganizationBaseCurrency] = useState<string>("");
 
-  useEffect(() => {
-    if (permissionsLoading) return;
-    if (!canViewDashboard) {
-      setSummaryLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    const loadSummary = async () => {
-      setSummaryLoading(true);
-      setSummaryError(null);
-      try {
-        const response = await dashboardAPI.getSummary();
-        if (cancelled) return;
-        if (response?.success && response.data) {
-          setSummary(response.data as DashboardSummary);
-        } else {
-          setSummary(EMPTY_SUMMARY);
-          setSummaryError(response?.message || "Failed to load dashboard data.");
-        }
-      } catch (error: any) {
-        if (cancelled) return;
-        setSummary(EMPTY_SUMMARY);
-        setSummaryError(error?.message || "Failed to load dashboard data.");
-      } finally {
-        if (!cancelled) setSummaryLoading(false);
+  const summaryQuery = useQuery({
+    queryKey: ["dashboard", "summary"],
+    queryFn: async () => {
+      const response = await dashboardAPI.getSummary();
+      if (response?.success && response.data) {
+        return response.data as DashboardSummary;
       }
-    };
-
-    void loadSummary();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [permissionsLoading, canViewDashboard]);
+      throw new Error(response?.message || "Failed to load dashboard data.");
+    },
+    enabled: canViewDashboard && !permissionsLoading,
+    staleTime: 30 * 1000,
+    initialData: EMPTY_SUMMARY,
+    placeholderData: EMPTY_SUMMARY,
+  });
 
   useEffect(() => {
     if (permissionsLoading || !canViewDashboard) return;
@@ -705,8 +567,17 @@ export default function OverviewPage() {
     );
   }
 
-  const dashboardData = summary || EMPTY_SUMMARY;
-  const dashboardCurrencyCode = String(organizationBaseCurrency || dashboardData.organization?.baseCurrency || "").trim().toUpperCase();
+  const summaryLoading = summaryQuery.isFetching;
+  const summaryError = summaryQuery.isError ? (summaryQuery.error as Error).message : null;
+  const { formatMoney: formatMoneyWithHook } = useCurrency();
+  const dashboardData = summaryQuery.data ?? EMPTY_SUMMARY;
+  const formatAmount = (value: number, currencyCode?: string) =>
+    currencyCode ? formatCurrencyValue(value, currencyCode) : formatMoneyWithHook(value);
+  const resolvedDashboardCurrencyCode = useMemo(() => {
+    const summaryCurrency = String(dashboardData.organization?.baseCurrency || "").trim().toUpperCase();
+    if (summaryCurrency) return summaryCurrency;
+    return String(organizationBaseCurrency || "").trim().toUpperCase();
+  }, [dashboardData.organization?.baseCurrency, organizationBaseCurrency]);
   const receivableBars = dashboardData.metrics.receivables.labels.map((label, index) => ({
     label,
     value: String(dashboardData.metrics.receivables.values[index] || 0),
@@ -715,7 +586,7 @@ export default function OverviewPage() {
 
   return (
     <div className="mr-auto w-full max-w-[1500px] space-y-4 px-4 py-4 pr-7 md:px-5 md:pr-10 xl:pr-16 2xl:pr-20">
-      <DashboardHero baseCurrencyCode={dashboardCurrencyCode} />
+      <DashboardHero baseCurrencyCode={resolvedDashboardCurrencyCode} />
 
       {summaryError ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -723,13 +594,16 @@ export default function OverviewPage() {
         </div>
       ) : null}
 
-      {summaryLoading ? (
-        <Card className="border-slate-200 p-8 text-sm text-slate-500">Loading dashboard data from the database...</Card>
-      ) : (
-        <>
-          <div className="grid gap-4 xl:grid-cols-2">
+      {summaryLoading && (
+        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500 shadow-sm">
+          Updating dashboard numbers...
+        </div>
+      )}
+
+      <>
+        <div className="grid gap-4 xl:grid-cols-2">
             <SectionCard title="Net Revenue">
-              <MetricHeader value={formatMoney(dashboardData.metrics.netRevenue.total, dashboardCurrencyCode)} />
+              <MetricHeader value={formatAmount(dashboardData.metrics.netRevenue.total, resolvedDashboardCurrencyCode)} />
               <LineAreaChart
                 points={dashboardData.metrics.netRevenue.values}
                 stroke="#16c47f"
@@ -744,13 +618,13 @@ export default function OverviewPage() {
                 <div>
                   <div className="text-[12px] text-slate-500">Total Receivables</div>
                   <div className="mt-1 text-[17px] font-semibold text-slate-900">
-                    {formatMoney(dashboardData.metrics.receivables.total, dashboardCurrencyCode)}
+                    {formatAmount(dashboardData.metrics.receivables.total, resolvedDashboardCurrencyCode)}
                   </div>
                 </div>
                 <SummaryLegend
                   items={[
-                    { label: "Current", value: formatMoney(dashboardData.metrics.receivables.current, dashboardCurrencyCode), color: "#2563eb" },
-                    { label: "Overdue", value: formatMoney(dashboardData.metrics.receivables.overdue, dashboardCurrencyCode), color: "#f97316" },
+                    { label: "Current", value: formatAmount(dashboardData.metrics.receivables.current, resolvedDashboardCurrencyCode), color: "#2563eb" },
+                    { label: "Overdue", value: formatAmount(dashboardData.metrics.receivables.overdue, resolvedDashboardCurrencyCode), color: "#f97316" },
                   ]}
                 />
               </div>
@@ -760,7 +634,7 @@ export default function OverviewPage() {
 
           <div className="grid gap-4 xl:grid-cols-[2fr_1fr_1fr]">
             <SectionCard title="MRR">
-              <MetricHeader value={formatMoney(dashboardData.metrics.mrr.total, dashboardCurrencyCode)} />
+              <MetricHeader value={formatAmount(dashboardData.metrics.mrr.total, resolvedDashboardCurrencyCode)} />
               <LineAreaChart
                 points={dashboardData.metrics.mrr.values}
                 stroke="#16c47f"
@@ -804,7 +678,7 @@ export default function OverviewPage() {
 
             <div className="grid gap-4">
               <SectionCard title="ARPU">
-                <MetricHeader value={formatMoney(dashboardData.metrics.arpu.total, dashboardCurrencyCode)} />
+                <MetricHeader value={formatAmount(dashboardData.metrics.arpu.total, resolvedDashboardCurrencyCode)} />
                 <LineAreaChart
                   points={dashboardData.metrics.arpu.values}
                   stroke="#16c47f"
@@ -816,7 +690,7 @@ export default function OverviewPage() {
 
               <SectionCard title="LTV">
                 <MetricHeader
-                  value={formatMoney(dashboardData.metrics.ltv.total, dashboardCurrencyCode)}
+                  value={formatAmount(dashboardData.metrics.ltv.total, resolvedDashboardCurrencyCode)}
                   sublabel="Month On Month"
                   right={<div className="pt-1 text-[11px] text-slate-500">On {dashboardData.metrics.ltv.asOf || "today"}</div>}
                 />
@@ -865,9 +739,9 @@ export default function OverviewPage() {
                 <SectionCard title="Income and Expense" range="Last 12 Months">
                   <div className="mb-4 flex flex-wrap items-center gap-5 text-[12px]">
                     {[
-                      { label: "Total Income", value: formatMoney(dashboardData.incomeExpense.totalIncome, dashboardCurrencyCode), color: "#22c55e" },
-                      { label: "Total Receipts", value: formatMoney(dashboardData.incomeExpense.totalReceipts, dashboardCurrencyCode), color: "#2563eb" },
-                      { label: "Total Expenses", value: formatMoney(dashboardData.incomeExpense.totalExpenses, dashboardCurrencyCode), color: "#f2c96b" },
+                      { label: "Total Income", value: formatAmount(dashboardData.incomeExpense.totalIncome, resolvedDashboardCurrencyCode), color: "#22c55e" },
+                      { label: "Total Receipts", value: formatAmount(dashboardData.incomeExpense.totalReceipts, resolvedDashboardCurrencyCode), color: "#2563eb" },
+                      { label: "Total Expenses", value: formatAmount(dashboardData.incomeExpense.totalExpenses, resolvedDashboardCurrencyCode), color: "#f2c96b" },
                     ].map((item) => (
                       <div key={item.label} className="flex items-center gap-2">
                         <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: item.color }} />
@@ -892,7 +766,8 @@ export default function OverviewPage() {
                   <ExpenseDonut
                     items={dashboardData.topExpenses.items}
                     total={dashboardData.topExpenses.total}
-                    currencyCode={dashboardCurrencyCode}
+                    currencyCode={resolvedDashboardCurrencyCode}
+                    formatAmount={formatAmount}
                   />
                 </SectionCard>
               ) : (
@@ -903,19 +778,19 @@ export default function OverviewPage() {
 
           {canViewProjects ? (
             <div className="grid gap-4 xl:grid-cols-2">
-              <SectionCard title="Projects" range="">
-                <ProjectsCard
-                  project={dashboardData.projects.topProject}
-                  totalUnbilledHours={dashboardData.projects.totalUnbilledHours}
-                  totalUnbilledExpenses={dashboardData.projects.totalUnbilledExpenses}
-                  currencyCode={dashboardCurrencyCode}
-                />
-              </SectionCard>
+                <SectionCard title="Projects" range="">
+                  <ProjectsCard
+                    project={dashboardData.projects.topProject}
+                    totalUnbilledHours={dashboardData.projects.totalUnbilledHours}
+                    totalUnbilledExpenses={dashboardData.projects.totalUnbilledExpenses}
+                    currencyCode={resolvedDashboardCurrencyCode}
+                    formatAmount={formatAmount}
+                  />
+                </SectionCard>
               <div />
             </div>
           ) : null}
-        </>
-      )}
+      </>
     </div>
   );
 }

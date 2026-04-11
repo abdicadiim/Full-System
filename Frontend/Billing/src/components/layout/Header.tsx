@@ -35,10 +35,12 @@ function Header({ onToggleSidebar }) {
   const searchInputRef = useRef(null);
 
   const displayName = user?.name || "Guest";
-  const email = user?.email || "";
-  const organizationName = settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "Organization";
+  const defaultLogoUrl = "/logo-DxLi_Ek_.png";
+  const systemName = "Taban Billing";
   const avatarInitial = displayName.trim().charAt(0).toUpperCase() || "A";
-  const avatarSrc = String(settings?.branding?.logoUrl || settings?.branding?.logoFile || user?.photoUrl || "").trim();
+  const avatarSrc = String(
+    settings?.branding?.logoUrl || settings?.branding?.logoFile || user?.photoUrl || defaultLogoUrl,
+  ).trim();
   const unreadMessages = user?.unreadMessages ?? 0;
   const unreadNotifications = user?.unreadNotifications ?? 0;
 
@@ -438,10 +440,28 @@ function Header({ onToggleSidebar }) {
 
             {openMenu && (
               <div className="absolute right-0 top-11 z-50 w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-xl">
-                <div className="border-b border-slate-100 pb-3">
-                  <p className="truncate text-sm font-semibold text-slate-800">{displayName}</p>
-                  <p className="truncate text-xs text-slate-500">{organizationName}</p>
-                  <p className="truncate text-xs text-slate-500">{email}</p>
+                <div className="border-b border-slate-100 pb-3 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <img src={defaultLogoUrl} alt="Taban Billing logo" className="h-9 w-9 rounded" />
+                    <p className="truncate text-sm font-semibold text-slate-800">{systemName}</p>
+                  </div>
+                  <div className="flex items-center gap-3 pt-2">
+                    <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-slate-100">
+                      {avatarSrc ? (
+                        <img
+                          src={avatarSrc}
+                          alt={`${displayName} avatar`}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-sm font-semibold text-slate-700">{avatarInitial}</span>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">{displayName}</p>
+                      <p className="truncate text-xs text-slate-500">{user?.email || "No email provided"}</p>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="pt-2">

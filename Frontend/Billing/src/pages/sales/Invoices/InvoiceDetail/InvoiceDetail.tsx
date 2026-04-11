@@ -19,6 +19,9 @@ import {
 } from "lucide-react";
 import { getStatesByCountry } from "../../../../constants/locationData";
 
+const DEFAULT_INVOICE_BRAND_NAME = "Taban Enterprise";
+const DEFAULT_INVOICE_BRAND_NAME_UPPER = DEFAULT_INVOICE_BRAND_NAME.toUpperCase();
+
 const normalizeInvoiceItems = (sourceInvoice: any) => {
   const coerceItems = (value: any) => {
     if (!value) return [];
@@ -514,8 +517,8 @@ export default function InvoiceDetail() { // Start of component
   // Fetch owner email data
   const fetchOwnerEmail = async () => {
     try {
-      const primarySenderRes = await senderEmailsAPI.getPrimary();
-      const fallbackName = String(organizationProfile?.name || "Team").trim() || "Team";
+    const primarySenderRes = await senderEmailsAPI.getPrimary();
+    const fallbackName = DEFAULT_INVOICE_BRAND_NAME;
       const fallbackEmail = String(organizationProfile?.email || "").trim();
       const sender = resolveVerifiedPrimarySender(primarySenderRes, fallbackName, fallbackEmail);
       setOwnerEmail(sender);
@@ -1461,7 +1464,7 @@ export default function InvoiceDetail() { // Start of component
   const handleScheduleEmail = () => {
     setIsSendDropdownOpen(false);
     if (invoice) {
-      const orgName = organizationProfile?.name || "Your Company";
+      const orgName = DEFAULT_INVOICE_BRAND_NAME;
       // Pre-fill schedule data with invoice info
       setScheduleData({
         to: invoice.customerEmail || invoice.customer || "",
@@ -1758,7 +1761,7 @@ export default function InvoiceDetail() { // Start of component
         <div class="invoice-container">
           <div class="header">
             <div class="company-info">
-              <h1>${organizationProfile?.name || 'TABAN ENTERPRISES'}</h1>
+              <h1>${DEFAULT_INVOICE_BRAND_NAME_UPPER}</h1>
               <p>${organizationProfile?.address?.street1 || 'taleex'}</p>
               <p>${organizationProfile?.address?.street2 || 'taleex'}</p>
               <p>${organizationProfile?.address?.city ?
@@ -4259,7 +4262,7 @@ export default function InvoiceDetail() { // Start of component
                   {/* Company Name & Address */}
                   <div>
                     <div className="text-sm font-bold text-gray-900 uppercase tracking-wide mb-1">
-                      {organizationProfile?.name || 'TABAN ENTERPRISES'}
+                      {DEFAULT_INVOICE_BRAND_NAME_UPPER}
                     </div>
                     <div className="text-xs text-gray-600 leading-relaxed max-w-[250px]">
                       <p>{organizationProfile?.address?.street1 || 'taleex'}</p>

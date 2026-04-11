@@ -3,7 +3,7 @@ import {
   ChevronLeft,
   LayoutGrid,
   FileText,
-  CreditCard,
+  Inbox,
   Plus,
   Trash2,
   Search,
@@ -76,7 +76,7 @@ function CloudPickerModal({ isOpen, onClose, onAttach }) {
         {/* Header */}
         <div className="px-6 py-4 flex items-center justify-between border-b border-slate-100 shrink-0">
           <h3 className="text-[17px] font-medium text-slate-500">Cloud Picker</h3>
-          <button onClick={onClose} className="text-slate-400 transition-colors" onMouseEnter={(e) => e.target.style.color = "#156372"} onMouseLeave={(e) => e.target.style.color = ""}>
+          <button onClick={onClose} className="text-slate-400 transition-colors" onMouseEnter={(e) => e.currentTarget.style.color = "#156372"} onMouseLeave={(e) => e.currentTarget.style.color = ""}>
             <X size={24} strokeWidth={1} />
           </button>
         </div>
@@ -137,10 +137,10 @@ function CloudPickerModal({ isOpen, onClose, onAttach }) {
                   <button className="flex items-center gap-2 px-4 py-1.5 rounded text-[14px] font-bold transition-all active:scale-95 text-white"
                     style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
                     onMouseEnter={(e) => {
-                      e.target.style.opacity = '0.9';
+                      e.currentTarget.style.opacity = '0.9';
                     }}
                     onMouseLeave={(e) => {
-                      e.target.style.opacity = '1';
+                      e.currentTarget.style.opacity = '1';
                     }}>
                     <Plus size={18} strokeWidth={3} /> New
                   </button>
@@ -1231,10 +1231,10 @@ function ExportDocumentsModal({ isOpen, onClose, currentVisibleFiles }) {
             className="px-6 py-2 text-[14px] font-bold text-white rounded-md transition-all shadow-sm"
             style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
             onMouseEnter={(e) => {
-              e.target.style.opacity = '0.9';
+              e.currentTarget.style.opacity = '0.9';
             }}
             onMouseLeave={(e) => {
-              e.target.style.opacity = '1';
+              e.currentTarget.style.opacity = '1';
             }}
           >
             Export
@@ -1320,8 +1320,8 @@ function NewExportTemplateModal({ isOpen, onClose, onSave, templateName, setTemp
             onClick={onClose}
             className="transition-colors"
             style={{ color: "#156372" }}
-            onMouseEnter={(e) => e.target.style.color = "#0e4a5e"}
-            onMouseLeave={(e) => e.target.style.color = "#156372"}
+            onMouseEnter={(e) => e.currentTarget.style.color = "#0e4a5e"}
+            onMouseLeave={(e) => e.currentTarget.style.color = "#156372"}
           >
             <X size={20} strokeWidth={2} />
           </button>
@@ -1409,10 +1409,10 @@ function NewExportTemplateModal({ isOpen, onClose, onSave, templateName, setTemp
             className="px-6 py-2 text-[14px] font-bold text-white rounded-md transition-all shadow-sm"
             style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
             onMouseEnter={(e) => {
-              e.target.style.opacity = '0.9';
+              e.currentTarget.style.opacity = '0.9';
             }}
             onMouseLeave={(e) => {
-              e.target.style.opacity = '1';
+              e.currentTarget.style.opacity = '1';
             }}
           >
             Save and Select
@@ -1613,8 +1613,8 @@ function NewFolderModal({ isOpen, onClose, onCreate, initialData }) {
           <button
             onClick={onClose}
             className="text-slate-400 transition-colors"
-            onMouseEnter={(e) => e.target.style.color = "#156372"}
-            onMouseLeave={(e) => e.target.style.color = ""}
+            onMouseEnter={(e) => e.currentTarget.style.color = "#156372"}
+            onMouseLeave={(e) => e.currentTarget.style.color = ""}
           >
             <X size={20} />
           </button>
@@ -1683,10 +1683,10 @@ function NewFolderModal({ isOpen, onClose, onCreate, initialData }) {
           <button className="bg-[#4a90e2] hover:bg-[#357abd] text-white px-5 py-2 rounded-md text-[13px] font-bold transition-all shadow-sm active:scale-95" 
             style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
             onMouseEnter={(e) => {
-              e.target.style.opacity = '0.9';
+              e.currentTarget.style.opacity = '0.9';
             }}
             onMouseLeave={(e) => {
-              e.target.style.opacity = '1';
+              e.currentTarget.style.opacity = '1';
             }} onClick={handleSave}>
             Save
           </button>
@@ -1921,10 +1921,10 @@ function DocumentActionOverlay({ isOpen, onClose, document, actionType }) {
                   <button className="w-9 h-9 rounded-md flex items-center justify-center text-white transition-colors shrink-0 shadow-sm"
                     style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
                     onMouseEnter={(e) => {
-                      e.target.style.opacity = '0.9';
+                      e.currentTarget.style.opacity = '0.9';
                     }}
                     onMouseLeave={(e) => {
-                      e.target.style.opacity = '1';
+                      e.currentTarget.style.opacity = '1';
                     }}>
                     <Search size={16} />
                   </button>
@@ -1955,10 +1955,10 @@ function DocumentActionOverlay({ isOpen, onClose, document, actionType }) {
                   <button className="w-9 h-9 rounded-md flex items-center justify-center text-white transition-colors shrink-0 shadow-sm"
                     style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
                     onMouseEnter={(e) => {
-                      e.target.style.opacity = '0.9';
+                      e.currentTarget.style.opacity = '0.9';
                     }}
                     onMouseLeave={(e) => {
-                      e.target.style.opacity = '1';
+                      e.currentTarget.style.opacity = '1';
                     }}>
                     <Search size={16} />
                   </button>
@@ -1982,10 +1982,10 @@ function DocumentActionOverlay({ isOpen, onClose, document, actionType }) {
               <button className="px-8 py-2 rounded-[4px] text-[13px] font-bold shadow-sm transition-all active:scale-95 text-white" 
                 style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
                 onMouseEnter={(e) => {
-                  e.target.style.opacity = '0.9';
+                  e.currentTarget.style.opacity = '0.9';
                 }}
                 onMouseLeave={(e) => {
-                  e.target.style.opacity = '1';
+                  e.currentTarget.style.opacity = '1';
                 }}>Save</button>
               <button className="bg-[#f3f4f6] hover:bg-[#e5e7eb] text-slate-600 px-6 py-2 rounded-[4px] text-[13px] font-bold border border-slate-200 transition-all hover:border-slate-300">Save and Next</button>
             </div>
@@ -2131,8 +2131,7 @@ export default function DocumentsPage() {
   const detailSettingsRef = useRef(null);
 
   const inboxItems = [
-    { id: "Files", label: "Files", icon: FileText, count: 1 },
-    { id: "Bank Statements", label: "Bank Statements", icon: CreditCard },
+    { id: "Inbox", label: "Inbox", icon: Inbox },
   ];
 
   const statusOptions = [
@@ -2605,10 +2604,10 @@ export default function DocumentsPage() {
                           className="w-full text-left px-3 py-2 rounded-md text-[13px] font-bold text-white shadow-md transition-all"
                           style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
                           onMouseEnter={(e) => {
-                            e.target.style.opacity = '0.9';
+                            e.currentTarget.style.opacity = '0.9';
                           }}
                           onMouseLeave={(e) => {
-                            e.target.style.opacity = '1';
+                            e.currentTarget.style.opacity = '1';
                           }}
                         >
                           Edit
@@ -2687,10 +2686,10 @@ export default function DocumentsPage() {
                         className="w-full text-left px-3 py-2 rounded-lg text-[13px] font-bold text-white shadow-md mb-1 transition-all"
                         style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
                         onMouseEnter={(e) => {
-                          e.target.style.opacity = '0.9';
+                          e.currentTarget.style.opacity = '0.9';
                         }}
                         onMouseLeave={(e) => {
-                          e.target.style.opacity = '1';
+                          e.currentTarget.style.opacity = '1';
                         }}
                       >
                         Attach From Desktop
@@ -2714,12 +2713,12 @@ export default function DocumentsPage() {
                     style={isSortDropdownOpen ? { borderColor: "#156372", backgroundColor: "rgba(21, 99, 114, 0.1)" } : {}}
                     onMouseEnter={(e) => {
                       if (!isSortDropdownOpen) {
-                        e.target.style.backgroundColor = "rgba(21, 99, 114, 0.05)";
+                        e.currentTarget.style.backgroundColor = "rgba(21, 99, 114, 0.05)";
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (!isSortDropdownOpen) {
-                        e.target.style.backgroundColor = "";
+                        e.currentTarget.style.backgroundColor = "";
                       }
                     }}
                   >
@@ -2742,12 +2741,12 @@ export default function DocumentsPage() {
                         style={sortBy === "fileName" ? { background: "#156372", boxShadow: "0 4px 6px -1px rgba(21, 99, 114, 0.2)" } : {}}
                         onMouseEnter={(e) => {
                           if (sortBy !== "fileName") {
-                            e.target.style.backgroundColor = "rgba(21, 99, 114, 0.1)";
+                            e.currentTarget.style.backgroundColor = "rgba(21, 99, 114, 0.1)";
                           }
                         }}
                         onMouseLeave={(e) => {
                           if (sortBy !== "fileName") {
-                            e.target.style.backgroundColor = "";
+                            e.currentTarget.style.backgroundColor = "";
                           }
                         }}
                       >
@@ -2766,16 +2765,16 @@ export default function DocumentsPage() {
                         style={sortBy === "uploadedOn" ? { background: "#156372", boxShadow: "0 4px 6px -1px rgba(21, 99, 114, 0.2)" } : {}}
                         onMouseEnter={(e) => {
                           if (sortBy === "uploadedOn") {
-                            e.target.style.backgroundColor = "#0e4a5e";
+                            e.currentTarget.style.backgroundColor = "#0e4a5e";
                           } else {
-                            e.target.style.backgroundColor = "rgba(21, 99, 114, 0.1)";
+                            e.currentTarget.style.backgroundColor = "rgba(21, 99, 114, 0.1)";
                           }
                         }}
                         onMouseLeave={(e) => {
                           if (sortBy === "uploadedOn") {
-                            e.target.style.backgroundColor = "#156372";
+                            e.currentTarget.style.backgroundColor = "#156372";
                           } else {
-                            e.target.style.backgroundColor = "";
+                            e.currentTarget.style.backgroundColor = "";
                           }
                         }}
                       >
@@ -2794,16 +2793,16 @@ export default function DocumentsPage() {
                         style={sortBy === "uploadedBy" ? { background: "#156372", boxShadow: "0 4px 6px -1px rgba(21, 99, 114, 0.2)" } : {}}
                         onMouseEnter={(e) => {
                           if (sortBy === "uploadedBy") {
-                            e.target.style.backgroundColor = "#0e4a5e";
+                            e.currentTarget.style.backgroundColor = "#0e4a5e";
                           } else {
-                            e.target.style.backgroundColor = "rgba(21, 99, 114, 0.1)";
+                            e.currentTarget.style.backgroundColor = "rgba(21, 99, 114, 0.1)";
                           }
                         }}
                         onMouseLeave={(e) => {
                           if (sortBy === "uploadedBy") {
-                            e.target.style.backgroundColor = "#156372";
+                            e.currentTarget.style.backgroundColor = "#156372";
                           } else {
-                            e.target.style.backgroundColor = "";
+                            e.currentTarget.style.backgroundColor = "";
                           }
                         }}
                       >
@@ -2862,10 +2861,10 @@ export default function DocumentsPage() {
                     className={`px-5 py-2 text-[12px] font-extrabold shadow-lg rounded-md transition-all flex items-center gap-2 active:scale-95 text-white ${isFolderActive || activeTab === "All Documents" ? '' : ''}`}
                     style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
                     onMouseEnter={(e) => {
-                      e.target.style.opacity = '0.9';
+                      e.currentTarget.style.opacity = '0.9';
                     }}
                     onMouseLeave={(e) => {
-                      e.target.style.opacity = '1';
+                      e.currentTarget.style.opacity = '1';
                     }}
                   >
                     Upload File <ChevronDown size={16} className={`transition-transform duration-200 stroke-[3] ${isUploadDropdownOpen ? 'rotate-180' : ''}`} />
@@ -2881,10 +2880,10 @@ export default function DocumentsPage() {
                         className="w-full text-left px-3 py-2 rounded-lg text-[13px] font-bold text-white shadow-md mb-1 transition-all"
                         style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
                         onMouseEnter={(e) => {
-                          e.target.style.opacity = '0.9';
+                          e.currentTarget.style.opacity = '0.9';
                         }}
                         onMouseLeave={(e) => {
-                          e.target.style.opacity = '1';
+                          e.currentTarget.style.opacity = '1';
                         }}
                       >
                         Attach From Desktop
@@ -2918,10 +2917,10 @@ export default function DocumentsPage() {
                       onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
                       className="w-10 h-10 flex items-center justify-center rounded-md border border-slate-200 transition-all ml-1 bg-white shadow-sm"
                       onMouseEnter={(e) => {
-                        e.target.style.backgroundColor = "rgba(21, 99, 114, 0.05)";
+                        e.currentTarget.style.backgroundColor = "rgba(21, 99, 114, 0.05)";
                       }}
                       onMouseLeave={(e) => {
-                        e.target.style.backgroundColor = "";
+                        e.currentTarget.style.backgroundColor = "";
                       }}
                     >
                       <MoreVertical size={18} className="stroke-[2.5]" style={{ color: "#475569" }} />
@@ -2940,16 +2939,16 @@ export default function DocumentsPage() {
                           style={sortBy === "fileName" ? { background: "#156372", boxShadow: "0 4px 6px -1px rgba(21, 99, 114, 0.2)" } : {}}
                           onMouseEnter={(e) => {
                             if (sortBy === "fileName") {
-                              e.target.style.backgroundColor = "#0e4a5e";
+                              e.currentTarget.style.backgroundColor = "#0e4a5e";
                             } else {
-                              e.target.style.backgroundColor = "rgba(21, 99, 114, 0.1)";
+                              e.currentTarget.style.backgroundColor = "rgba(21, 99, 114, 0.1)";
                             }
                           }}
                           onMouseLeave={(e) => {
                             if (sortBy === "fileName") {
-                              e.target.style.backgroundColor = "#156372";
+                              e.currentTarget.style.backgroundColor = "#156372";
                             } else {
-                              e.target.style.backgroundColor = "";
+                              e.currentTarget.style.backgroundColor = "";
                             }
                           }}
                         >
@@ -2965,16 +2964,16 @@ export default function DocumentsPage() {
                           style={sortBy === "uploadedBy" ? { background: "#156372", boxShadow: "0 4px 6px -1px rgba(21, 99, 114, 0.2)" } : {}}
                           onMouseEnter={(e) => {
                             if (sortBy === "uploadedBy") {
-                              e.target.style.backgroundColor = "#0e4a5e";
+                              e.currentTarget.style.backgroundColor = "#0e4a5e";
                             } else {
-                              e.target.style.backgroundColor = "rgba(21, 99, 114, 0.1)";
+                              e.currentTarget.style.backgroundColor = "rgba(21, 99, 114, 0.1)";
                             }
                           }}
                           onMouseLeave={(e) => {
                             if (sortBy === "uploadedBy") {
-                              e.target.style.backgroundColor = "#156372";
+                              e.currentTarget.style.backgroundColor = "#156372";
                             } else {
-                              e.target.style.backgroundColor = "";
+                              e.currentTarget.style.backgroundColor = "";
                             }
                           }}
                         >
@@ -2990,16 +2989,16 @@ export default function DocumentsPage() {
                           style={sortBy === "uploadedOn" ? { background: "#156372", boxShadow: "0 4px 6px -1px rgba(21, 99, 114, 0.2)" } : {}}
                           onMouseEnter={(e) => {
                             if (sortBy === "uploadedOn") {
-                              e.target.style.backgroundColor = "#0e4a5e";
+                              e.currentTarget.style.backgroundColor = "#0e4a5e";
                             } else {
-                              e.target.style.backgroundColor = "rgba(21, 99, 114, 0.1)";
+                              e.currentTarget.style.backgroundColor = "rgba(21, 99, 114, 0.1)";
                             }
                           }}
                           onMouseLeave={(e) => {
                             if (sortBy === "uploadedOn") {
-                              e.target.style.backgroundColor = "#156372";
+                              e.currentTarget.style.backgroundColor = "#156372";
                             } else {
-                              e.target.style.backgroundColor = "";
+                              e.currentTarget.style.backgroundColor = "";
                             }
                           }}
                         >
@@ -3015,16 +3014,16 @@ export default function DocumentsPage() {
                           style={sortBy === "folder" ? { background: "#156372", boxShadow: "0 4px 6px -1px rgba(21, 99, 114, 0.2)" } : {}}
                           onMouseEnter={(e) => {
                             if (sortBy === "folder") {
-                              e.target.style.backgroundColor = "#0e4a5e";
+                              e.currentTarget.style.backgroundColor = "#0e4a5e";
                             } else {
-                              e.target.style.backgroundColor = "rgba(21, 99, 114, 0.1)";
+                              e.currentTarget.style.backgroundColor = "rgba(21, 99, 114, 0.1)";
                             }
                           }}
                           onMouseLeave={(e) => {
                             if (sortBy === "folder") {
-                              e.target.style.backgroundColor = "#156372";
+                              e.currentTarget.style.backgroundColor = "#156372";
                             } else {
-                              e.target.style.backgroundColor = "";
+                              e.currentTarget.style.backgroundColor = "";
                             }
                           }}
                         >
@@ -3039,10 +3038,10 @@ export default function DocumentsPage() {
                           }}
                           className="w-full text-left px-3 py-2 rounded-md text-[13px] font-bold transition-all flex items-center gap-2 text-slate-600"
                           onMouseEnter={(e) => {
-                            e.target.style.backgroundColor = "rgba(21, 99, 114, 0.1)";
+                            e.currentTarget.style.backgroundColor = "rgba(21, 99, 114, 0.1)";
                           }}
                           onMouseLeave={(e) => {
-                            e.target.style.backgroundColor = "";
+                            e.currentTarget.style.backgroundColor = "";
                           }}
                         >
                           <ArrowUpRight size={14} className="stroke-[2.5]" />
@@ -3133,8 +3132,8 @@ export default function DocumentsPage() {
                   {canDeleteDocuments && <button
                     onClick={() => setIsDeleteModalOpen(true)}
                     className="p-2 rounded-md border border-slate-200 bg-white text-slate-500 transition-all shadow-sm"
-                    onMouseEnter={(e) => e.target.style.color = "#156372"}
-                    onMouseLeave={(e) => e.target.style.color = ""}
+                    onMouseEnter={(e) => e.currentTarget.style.color = "#156372"}
+                    onMouseLeave={(e) => e.currentTarget.style.color = ""}
                   >
                     <Trash2 size={16} className="stroke-[2.5]" />
                   </button>}
@@ -3715,10 +3714,10 @@ export default function DocumentsPage() {
                               className="w-full text-left px-3 py-2 rounded-md text-[13px] font-bold text-white shadow-md transition-all"
                           style={{ background: 'linear-gradient(90deg, #156372 0%, #0D4A52 100%)' }}
                           onMouseEnter={(e) => {
-                            e.target.style.opacity = '0.9';
+                            e.currentTarget.style.opacity = '0.9';
                           }}
                           onMouseLeave={(e) => {
-                            e.target.style.opacity = '1';
+                            e.currentTarget.style.opacity = '1';
                           }}
                             >
                               Rename
@@ -3948,8 +3947,8 @@ export default function DocumentsPage() {
                 }}
                 className="px-6 py-2 text-white text-[13px] font-bold rounded-md transition-all shadow-sm"
                 style={{ background: "#156372" }}
-                onMouseOver={(e) => e.target.style.backgroundColor = "#0e4a5e"}
-                onMouseOut={(e) => e.target.style.backgroundColor = "#156372"}
+                onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#0e4a5e"}
+                onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#156372"}
               >
                 OK
               </button>

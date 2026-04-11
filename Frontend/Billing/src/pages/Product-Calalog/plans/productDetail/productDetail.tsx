@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CirclePlus, Download, MoreVertical, Pencil, Trash2, Upload, X } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -154,7 +154,7 @@ export default function ProductDetailPage() {
     void load();
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const state: any = (location as any)?.state;
     if (state?.initialProduct) {
       setInitialSelectedProduct(state.initialProduct);

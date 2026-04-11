@@ -104,16 +104,40 @@ export const itemQueryKeys = {
   detail: (itemId: string) => ["items", "detail", normalizeItemId(itemId)] as const,
 };
 
-export const fetchItemsList = async () => {
-  const response = await itemsAPI.getAll();
+const extractRowsFromResponse = (response: any) => {
+  if (!response) return [];
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response?.data)) return response.data;
+  if (Array.isArray(response?.items)) return response.items;
+  if (Array.isArray(response?.rows)) return response.rows;
+  return [];
+};
 
-  if (response?.success === false) {
-    throw new Error(response?.message || "Failed to load items");
+export const fetchItemsList = async () => {
+  const perPage = 200;
+  const accumulatedRows: any[] = [];
+  let page = 1;
+
+  while (true) {
+    const response = await itemsAPI.getAll({ page, per_page: perPage });
+    if (response?.success === false) {
+      throw new Error(response?.message || "Failed to load items");
+    }
+
+    const rows = extractRowsFromResponse(response);
+    if (rows.length > 0) {
+      accumulatedRows.push(...rows);
+    }
+
+    const hasMorePage = Boolean(response?.has_more_page);
+    if (!hasMorePage || rows.length === 0 || rows.length < perPage) {
+      break;
+    }
+
+    page += 1;
   }
 
-  const rows = Array.isArray(response) ? response : Array.isArray(response?.data) ? response.data : [];
-
-  return rows
+  return accumulatedRows
     .map((row: any) => normalizeItemForQueryCache(row))
     .filter(Boolean) as any[];
 };
@@ -177,13 +201,14 @@ export const removeItemFromItemQueries = (queryClient: QueryClient, itemId: stri
   });
 };
 
-export const useItemsListQuery = (options?: { enabled?: boolean }) =>
+export const useItemsListQuery = (options?: { enabled?: boolean; initialData?: any[] }) =>
   useQuery({
     queryKey: itemQueryKeys.list(),
     queryFn: fetchItemsList,
     enabled: options?.enabled ?? true,
     staleTime: ITEM_LIST_STALE_TIME_MS,
-    placeholderData: (previousData) => previousData,
+    initialData: options?.initialData,
+    placeholderData: options?.initialData ?? ((previousData) => previousData),
   });
 
 export const useItemDetailQuery = (

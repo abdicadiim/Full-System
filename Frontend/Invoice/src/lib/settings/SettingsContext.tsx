@@ -94,6 +94,9 @@ function applyThemeColors(theme) {
   root.style.setProperty('--accent', accentRgb);
 }
 
+const DEFAULT_FAVICON = "/logo-DxLi_Ek_.png";
+const DEFAULT_APP_TITLE = "Taban Invoice";
+
 function setDocumentFavicon(href: string) {
   if (!href) return;
   const head = document.head || document.getElementsByTagName("head")[0];
@@ -422,14 +425,12 @@ export function SettingsProvider({ children }) {
   }, [settings.theme]);
 
   useEffect(() => {
-    const title = String(settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "").trim();
-    if (title) document.title = title;
-  }, [settings?.general?.companyDisplayName, settings?.general?.schoolDisplayName]);
+    document.title = DEFAULT_APP_TITLE;
+  }, []);
 
   useEffect(() => {
-    const icon = String(settings?.branding?.logoUrl || settings?.branding?.logoFile || "").trim();
-    if (icon) setDocumentFavicon(icon);
-  }, [settings?.branding?.logoUrl, settings?.branding?.logoFile]);
+    setDocumentFavicon(DEFAULT_FAVICON);
+  }, []);
 
   // Save settings to localStorage whenever they change
   useEffect(() => {

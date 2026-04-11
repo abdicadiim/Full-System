@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import Skeleton from "../../../../../components/ui/Skeleton";
 import { TIMEZONES } from "../../../../../constants/timezones";
 import { currenciesAPI } from "../../../../../services/api";
+import { getToken } from "../../../../../services/auth";
 
 const API_BASE_URL = '/api';
 const DEFAULT_SYSTEM_SENDER_EMAIL = "message-service@sender.tabanbooks.com";
@@ -349,6 +350,16 @@ const DEFAULT_CURRENCY_OPTIONS = [
 const CURRENCY_STORAGE_KEYS = ["taban_currencies", "taban_books_currencies"];
 const LANGUAGES = ["English", "Spanish", "French", "German", "Arabic", "Chinese", "Hindi"];
 const TIME_ZONES = TIMEZONES;
+const DEFAULT_TIME_ZONE = "(GMT+03:00) Eastern African Time (Africa/Mogadishu)";
+
+const resolveTimezoneSelection = (value: string | null | undefined, fallback: string = DEFAULT_TIME_ZONE) => {
+  const raw = String(value || "").trim();
+  if (!raw) return fallback;
+  if (TIME_ZONES.includes(raw)) return raw;
+  const normalized = raw.toLowerCase();
+  const matched = TIME_ZONES.find((zone) => zone.toLowerCase().includes(normalized));
+  return matched || raw;
+};
 const DATE_FORMATS = {
   "short": [
     "MM-dd-yy [ 12-25-25 ]",
@@ -442,7 +453,21 @@ const normalizeOrganizationPayload = (responsePayload: any) => {
   const payload = extractOrganizationResponse(responsePayload);
   if (!payload || typeof payload !== "object") return null;
 
-  const address = payload?.address && typeof payload.address === "object" ? payload.address : {};
+  const addressSource = payload?.address && typeof payload.address === "object" ? payload.address : {};
+  const addressFallback = {
+    street1: payload?.street_address1 || payload?.addressLine1 || "",
+    street2: payload?.street_address2 || payload?.addressLine2 || "",
+    city: payload?.city || "",
+    zipCode: payload?.zip || payload?.postalCode || "",
+    state: payload?.state || "",
+    country: payload?.country || payload?.countryIso || "",
+    phone: payload?.phone || "",
+    fax: payload?.fax || "",
+  };
+  const mergedAddress = {
+    ...addressFallback,
+    ...addressSource,
+  };
   const customFields = Array.isArray(payload?.custom_fields)
     ? payload.custom_fields
     : Array.isArray(payload?.additionalFields)
@@ -452,7 +477,7 @@ const normalizeOrganizationPayload = (responsePayload: any) => {
   return {
     name: String(payload?.name || payload?.organizationName || "").trim(),
     industry: String(payload?.industry || payload?.industry_type || "").trim(),
-    country: String(address?.country || payload?.country || "").trim(),
+    country: String(mergedAddress?.country || "").trim(),
     website: String(payload?.website || "").trim(),
     email: String(payload?.email || "").trim(),
     baseCurrency: String(payload?.baseCurrency || payload?.currency_code || "").trim(),
@@ -463,16 +488,14 @@ const normalizeOrganizationPayload = (responsePayload: any) => {
     timeZone: String(payload?.timeZone || payload?.time_zone || "").trim(),
     dateFormat: String(payload?.dateFormat || payload?.date_format || "").trim(),
     dateSeparator: String(payload?.dateSeparator || payload?.field_separator || "").trim(),
-    street1: String(address?.street1 || address?.street_address1 || "").trim(),
-    street2: String(address?.street2 || address?.street_address2 || "").trim(),
-    city: String(address?.city || "").trim(),
-    zipCode: String(address?.zipCode || address?.zip || "").trim(),
-    state: String(address?.state || "").trim(),
-    phone: String(address?.phone || payload?.phone || "").trim(),
-    fax: String(address?.fax || payload?.fax || "").trim(),
+    street1: String(mergedAddress?.street1 || "").trim(),
+    street2: String(mergedAddress?.street2 || "").trim(),
+    city: String(mergedAddress?.city || "").trim(),
+    zipCode: String(mergedAddress?.zipCode || "").trim(),
+    state: String(mergedAddress?.state || "").trim(),
+    phone: String(mergedAddress?.phone || "").trim(),
+    fax: String(mergedAddress?.fax || "").trim(),
     logo: String(payload?.logo || payload?.logoUrl || "").trim(),
-    companyIdType: String(payload?.companyIdType || payload?.company_id_label || payload?.companyid_label || "").trim(),
-    companyIdValue: String(payload?.companyIdValue || payload?.company_id_value || payload?.companyid_value || "").trim(),
     additionalFields: customFields.map((field: any, index: number) => ({
       label: String(field?.label || "").trim(),
       value: String(field?.value || "").trim(),
@@ -502,27 +525,29 @@ const validateProfileForm = (input: {
   baseCurrency: string;
   timeZone: string;
   paymentStubAddress: string;
-  companyIdType: string;
-  companyIdValue: string;
   additionalFields: Array<{ label?: string; value?: string }>;
 }) => {
-  if (!input.orgName.trim()) return "Organization name is required.";
-  if (!input.industry.trim()) return "Industry is required.";
-  if (!input.location.trim()) return "Organization location is required.";
-  if (!extractCurrencyCode(input.baseCurrency)) return "Base currency is required.";
-  if (!input.timeZone.trim()) return "Time zone is required.";
+  const safeOrgName = String(input.orgName ?? "");
+  const safeIndustry = String(input.industry ?? "");
+  const safeLocation = String(input.location ?? "");
+  const safeTimeZone = String(input.timeZone ?? "");
+  const safeBaseCurrency = String(input.baseCurrency ?? "");
+  const normalizedEmail = String(input.email ?? "").trim().toLowerCase();
+  const normalizedWebsite = String(input.website ?? "").trim();
+  const safePaymentStubAddress = String(input.paymentStubAddress ?? "");
 
-  const normalizedEmail = input.email.trim().toLowerCase();
+  if (!safeOrgName.trim()) return "Organization name is required.";
+  if (!safeIndustry.trim()) return "Industry is required.";
+  if (!safeLocation.trim()) return "Organization location is required.";
+  if (!extractCurrencyCode(safeBaseCurrency)) return "Base currency is required.";
+  if (!safeTimeZone.trim()) return "Time zone is required.";
+
   if (normalizedEmail && !EMAIL_REGEX.test(normalizedEmail)) {
     return "Enter a valid organization email address.";
   }
 
-  if (input.website.trim() && !isValidWebsite(input.website.trim())) {
+  if (normalizedWebsite && !isValidWebsite(normalizedWebsite)) {
     return "Enter a valid website URL.";
-  }
-
-  if ((input.companyIdType.trim() && !input.companyIdValue.trim()) || (!input.companyIdType.trim() && input.companyIdValue.trim())) {
-    return "Company ID type and value must be entered together.";
   }
 
   const incompleteAdditionalField = input.additionalFields.find((field) => {
@@ -535,7 +560,7 @@ const validateProfileForm = (input: {
     return "Each additional field needs both a label and a value.";
   }
 
-  if (input.paymentStubAddress.trim().length > 255) {
+  if (safePaymentStubAddress.trim().length > 255) {
     return "Payment stub address cannot exceed 255 characters.";
   }
 
@@ -584,14 +609,69 @@ const resolveCurrencySelection = (value: string | null | undefined, options: str
     || raw;
 };
 
+const extractCurrencyCode = (value: string | null | undefined) =>
+  String(value || "").split(" - ")[0].trim().toUpperCase();
+
+const extractCurrencyRows = (payload: any) => {
+  if (!payload) return [];
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.currencies)) return payload.currencies;
+  if (Array.isArray(payload?.rows)) return payload.rows;
+  return [];
+};
+
+const isBaseCurrencyRecord = (row: any) => {
+  if (!row || typeof row !== "object") return false;
+  return Boolean(
+    row?.isBase ||
+    row?.isBaseCurrency ||
+    row?.is_base_currency ||
+    row?.baseCurrency ||
+    row?.base_currency
+  );
+};
+
+const normalizeCurrencyOption = (row: any) => {
+  if (!row || typeof row !== "object") return null;
+  const codeCandidate = String(
+    row?.code ||
+    row?.currencyCode ||
+    row?.currency ||
+    row?.currency_id ||
+    row?.id ||
+    ""
+  ).trim();
+  const code = extractCurrencyCode(codeCandidate);
+  if (!code) return null;
+  const name = String(row?.name || row?.currencyName || row?.label || row?.displayName || "").trim();
+  const symbol = String(row?.symbol || row?.currencySymbol || "").trim();
+  const detail = name || symbol ? ` - ${name || symbol}` : "";
+  const label = `${code}${detail}`;
+  return {
+    code,
+    label,
+    isBase: isBaseCurrencyRecord(row),
+  };
+};
+
+const buildCurrencyOptions = (rows: any[]) => {
+  const seen = new Set<string>();
+  const options: string[] = [];
+  rows.forEach((row) => {
+    const normalized = normalizeCurrencyOption(row);
+    if (!normalized || seen.has(normalized.label.toUpperCase())) return;
+    options.push(normalized.label);
+    seen.add(normalized.label.toUpperCase());
+  });
+  return options;
+};
+
 const readStoredCurrencyOptions = () => {
   const rows = readStoredCurrencyRows();
   const options = buildCurrencyOptions(rows);
   return options.length > 0 ? options : DEFAULT_CURRENCY_OPTIONS;
 };
-
-const extractCurrencyCode = (value: string | null | undefined) =>
-  String(value || "").split(" - ")[0].trim().toUpperCase();
 
 const getBaseCurrencySelectionFromRows = (rows: any[], options?: string[]) => {
   const base = normalizeCurrencyOption(rows.find(isBaseCurrencyRecord));
@@ -1107,7 +1187,8 @@ export default function ProfilePage() {
   const [commLanguage, setCommLanguage] = useState("English");
   const [timeZone, setTimeZone] = useState(() => {
     const local = localStorage.getItem('org_profile');
-    return local ? JSON.parse(local).timezone : "(GMT 3:00) Eastern African Time (Africa/Mogadishu)";
+    const stored = local ? JSON.parse(local).timezone : null;
+    return resolveTimezoneSelection(stored);
   });
 
   const [dateFormat, setDateFormat] = useState("dd-MM-yyyy [ 25-12-2025 ]");
@@ -1120,8 +1201,6 @@ export default function ProfilePage() {
     const updatedFormat = dateFormat.replace(/[-./]/g, newSeparator);
     setDateFormat(updatedFormat);
   };
-  const [companyIdType, setCompanyIdType] = useState("Company ID :");
-  const [companyIdValue, setCompanyIdValue] = useState("");
   const [additionalFields, setAdditionalFields] = useState<any[]>([{ label: "", value: "" }]);
   const [isSaving, setIsSaving] = useState(false);
   // Save feedback uses react-toastify (see `handleSave`).
@@ -1286,7 +1365,7 @@ export default function ProfilePage() {
             setBaseCurrency(resolveCurrencySelection(lp.currency || lp.baseCurrency, readStoredCurrencyOptions()));
           }
           if (lp.language) setOrgLanguage(lp.language);
-          if (lp.timezone) setTimeZone(lp.timezone);
+          if (lp.timezone) setTimeZone(resolveTimezoneSelection(lp.timezone));
         } catch (e) {
           console.error('Error parsing local org profile:', e);
         }
@@ -1324,7 +1403,7 @@ export default function ProfilePage() {
             if (p.reportBasis) setReportBasis(p.reportBasis);
             if (p.orgLanguage) setOrgLanguage(p.orgLanguage);
             if (p.commLanguage) setCommLanguage(p.commLanguage);
-            if (p.timeZone) setTimeZone(p.timeZone);
+            if (p.timeZone) setTimeZone(resolveTimezoneSelection(p.timeZone));
             if (p.dateFormat) setDateFormat(p.dateFormat);
             if (p.dateSeparator) setDateSeparator(p.dateSeparator);
             if (p.street1) setStreet1(p.street1);
@@ -1335,8 +1414,6 @@ export default function ProfilePage() {
             if (p.phone) setPhone(p.phone);
             if (p.fax) setFax(p.fax);
             if (p.logo) setLogoPreview(p.logo);
-            if (p.companyIdType) setCompanyIdType(p.companyIdType);
-            if (p.companyIdValue) setCompanyIdValue(p.companyIdValue);
             if (Array.isArray(p.additionalFields) && p.additionalFields.length > 0) setAdditionalFields(p.additionalFields);
             if (p.paymentStubAddress) setPaymentStubAddress(p.paymentStubAddress);
             if (typeof p.showPaymentStubAddress === "boolean") setShowPaymentStubAddress(p.showPaymentStubAddress);
@@ -1510,7 +1587,7 @@ export default function ProfilePage() {
     setIsSaving(true);
 
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = getToken();
       if (!token) {
         toast.error('Not authenticated. Please login again.');
         setIsSaving(false);
@@ -1526,8 +1603,6 @@ export default function ProfilePage() {
         baseCurrency,
         timeZone,
         paymentStubAddress,
-        companyIdType,
-        companyIdValue,
         additionalFields,
       });
 
@@ -1598,8 +1673,6 @@ export default function ProfilePage() {
         time_zone: timeZone,
         date_format: dateFormat,
         field_separator: dateSeparator,
-        companyid_label: companyIdType,
-        companyid_value: companyIdValue,
         custom_fields: additionalFields
           .map((field, index) => ({
             index: index + 1,
@@ -1772,10 +1845,30 @@ export default function ProfilePage() {
     <div className="relative p-6 max-w-4xl pb-28">
       <div className="mb-6">
         <div className="flex items-center gap-3 mb-2">
-          <h1 className="text-2xl font-semibold text-gray-900">Organization Profile</h1>
-          <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm font-medium rounded-full">
+            <h1 className="text-2xl font-semibold text-gray-900">Organization Profile</h1>
+            {/* Show MongoDB-based Organization ID */}
+            {logoPreview && (
+              <img
+              src={logoPreview}
+              alt="Organization Logo"
+              className="w-8 h-8 rounded-full object-cover border border-gray-300 mr-2"
+              style={{ display: "inline-block", verticalAlign: "middle" }}
+              />
+            )}
+            {logoPreview && (
+              <img
+              src={logoPreview}
+              alt="Organization Logo"
+              className="w-8 h-8 rounded-full object-cover border border-gray-300 mr-2"
+              style={{ display: "inline-block", verticalAlign: "middle" }}
+              />
+            )}
+            <span className="ml-4 px-3 py-1 bg-gray-100 text-gray-700 text-sm font-medium rounded-full">
+            Org ID: {getStoredUser()?.organizationId || "N/A"}
+            </span>
+          {/* <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm font-medium rounded-full">
             ID: 907496461
-          </span>
+          </span> */}
         </div>
       </div>
 
@@ -1785,52 +1878,52 @@ export default function ProfilePage() {
       <div className="rounded-lg border-0 p-6 mb-6">
         <div className="flex gap-6">
           <div className="flex-shrink-0">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/jpg,image/png,image/gif,image/bmp"
-              onChange={handleLogoUpload}
-              className="hidden"
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/jpg,image/png,image/gif,image/bmp"
+          onChange={handleLogoUpload}
+          className="hidden"
+        />
+        <div
+          className="w-32 h-32 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-blue-500 transition relative"
+          onClick={handleLogoClick}
+        >
+            {logoPreview ? (
+            <>
+            <img
+            src={logoPreview}
+            alt="Organization Logo"
+            className="w-full h-full object-contain rounded-lg"
             />
-            <div
-              className="w-32 h-32 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-blue-500 transition relative"
-              onClick={handleLogoClick}
+            <button
+            onClick={handleRemoveLogo}
+            className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition"
+            title="Remove logo"
             >
-              {logoPreview ? (
-                <>
-                  <img
-                    src={logoPreview}
-                    alt="Organization Logo"
-                    className="w-full h-full object-contain rounded-lg"
-                  />
-                  <button
-                    onClick={handleRemoveLogo}
-                    className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition"
-                    title="Remove logo"
-                  >
-                    <X size={16} />
-                  </button>
-                  <div className="absolute bottom-2 left-2 right-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded text-center">
-                    Click to change
-                  </div>
-                </>
-              ) : (
-                <>
-                  <Upload size={32} className="text-gray-400 mb-2" />
-                  <span className="text-sm font-medium text-gray-600 text-center px-2">Upload Your Organization Logo</span>
-                </>
-              )}
+            <X size={16} />
+            </button>
+            <div className="absolute bottom-2 left-2 right-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded text-center">
+            Click to change
             </div>
+            </>
+            ) : (
+            <>
+            <Upload size={32} className="text-gray-400 mb-2" />
+            <span className="text-sm font-medium text-gray-600 text-center px-2">Upload Your Organization Logo</span>
+            </>
+            )}
+        </div>
           </div>
           <div className="flex-1">
-            <p className="text-sm text-gray-600 mb-4">
-              This logo will be displayed in transaction PDFs and email notifications.
-            </p>
-            <div className="space-y-1 text-xs text-gray-500">
-              <p>Preferred Image Dimensions: 240 x 240 pixels @ 72 DPI</p>
-              <p>Supported Files: jpg, jpeg, png, gif, bmp</p>
-              <p>Maximum File Size: 1MB</p>
-            </div>
+        <p className="text-sm text-gray-600 mb-4">
+          This logo will be displayed in transaction PDFs and email notifications.
+        </p>
+        <div className="space-y-1 text-xs text-gray-500">
+          <p>Preferred Image Dimensions: 240 x 240 pixels @ 72 DPI</p>
+          <p>Supported Files: jpg, jpeg, png, gif, bmp</p>
+          <p>Maximum File Size: 1MB</p>
+        </div>
           </div>
         </div>
       </div>
@@ -2161,30 +2254,6 @@ export default function ProfilePage() {
 
       <div className="border-t border-gray-200 my-6" />
 
-      {/* Company ID */}
-      <div className="rounded-lg border-0 p-6 mb-6">
-        <div className="flex items-start gap-6">
-          <label className="w-56 text-sm font-medium text-gray-700 pt-2">Company ID</label>
-          <div className="flex-1">
-            <div className="grid grid-cols-2 gap-4">
-              <SearchableDropdown
-                value={companyIdType}
-                placeholder="Select Type"
-                options={["ACN", "BN", "CN", "CPR", "CVR", "DIW", "KT", "ORG", "SEC", "CRN", "Company ID :"]}
-                onChange={setCompanyIdType}
-              />
-              <input
-                type="text"
-                value={companyIdValue}
-                onChange={(e) => setCompanyIdValue(e.target.value)}
-                placeholder="Enter Company ID"
-                className="h-10 px-3 rounded-lg border border-gray-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div className="border-t border-gray-200 my-6" />
 
       {/* Additional Fields */}
@@ -2235,7 +2304,7 @@ export default function ProfilePage() {
         <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
           <HelpCircle size={16} className="text-blue-600 flex-shrink-0 mt-0.5" />
           <div className="text-sm text-gray-700">
-            You can include the Company ID and additional fields in your organization address which will be displayed in your transaction PDFs. Configure this by selecting the required placeholders in your{" "}
+            You can include additional fields in your organization address which will be displayed in your transaction PDFs. Configure this by selecting the required placeholders in your{" "}
             <button
               type="button"
               onClick={handleOpenOrganizationAddressFormat}

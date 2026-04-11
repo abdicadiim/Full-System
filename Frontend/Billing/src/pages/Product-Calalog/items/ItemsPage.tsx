@@ -24,8 +24,22 @@ function ItemsPageContent() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [items, setItems] = useState<Item[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const ITEMS_STORAGE_KEY = "inv_items_v1";
+  const loadCachedItems = () => {
+    if (typeof window === "undefined" || !window.localStorage) return [];
+    const stored = window.localStorage.getItem(ITEMS_STORAGE_KEY);
+    if (!stored) return [];
+    try {
+      const parsed = JSON.parse(stored);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const cachedItems = useMemo(() => loadCachedItems(), []);
+  const [items, setItems] = useState<Item[]>(cachedItems);
+  const [loading, setLoading] = useState<boolean>(cachedItems.length === 0);
   const [view, setView] = useState<string>("list"); // list | new | detail | edit
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<DeleteConfirmModal>({
@@ -46,7 +60,6 @@ function ItemsPageContent() {
   const canEditItems = canEdit();
   const canDeleteItems = canDelete();
 
-  const ITEMS_STORAGE_KEY = "inv_items_v1";
   const normalizedSelectedId = String(selectedId || "").trim();
 
   const setRouteHash = useCallback(
@@ -104,6 +117,7 @@ function ItemsPageContent() {
 
   const itemsListQuery = useItemsListQuery({
     enabled: !permissionsLoading && canViewItems,
+    initialData: cachedItems,
   });
 
   useEffect(() => {

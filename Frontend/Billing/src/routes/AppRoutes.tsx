@@ -106,7 +106,7 @@ function LegacyCustomersRedirect() {
 
 export default function AppRoutes() {
   const location = useLocation()
-  const routeKey = `${location.pathname}${location.search}${location.hash}`
+  const routeKey = `${location.pathname}${location.search}`
 
   return (
     <Suspense fallback={<RouteFallback />}>
