@@ -1345,7 +1345,17 @@ export default function RecordExpense() {
   // Handle location state to pre-fill form with project/customer data or edit existing expense
   useEffect(() => {
     if (location.state) {
-      const { projectName, customerName, editExpense, isEdit: isEditFromState, clonedData, receiptFiles } = location.state;
+      const {
+        projectName,
+        customerName,
+        customerId,
+        editExpense,
+        isEdit: isEditFromState,
+        clonedData,
+        receiptFiles,
+      } = location.state;
+      const directCustomerId = String(customerId || editExpense?.customer_id || clonedData?.customer_id || "").trim();
+      const directCustomerName = String(customerName || editExpense?.customerName || clonedData?.customerName || "").trim();
 
       if (receiptFiles && Array.isArray(receiptFiles)) {
         setUploadedFiles(receiptFiles);
@@ -1464,15 +1474,18 @@ export default function RecordExpense() {
             showAdditionalInformation: line.showAdditionalInformation ?? line.show_additional_information ?? true,
           })));
         }
-      } else if (projectName || customerName) {
+      } else if (projectName || directCustomerName || directCustomerId) {
         setTaxAmountOverride("");
         setTaxAmountEditOpen(false);
         setFormData(prev => ({
           ...prev,
-          customerName: customerName || prev.customerName,
-          customer_id: prev.customer_id,
+          customerName: directCustomerName || prev.customerName,
+          customer_id: directCustomerId || prev.customer_id,
           projectName: projectName || prev.projectName,
         }));
+        if (directCustomerId) {
+          void loadProjectsForSelectedCustomer(directCustomerId);
+        }
       }
     }
   }, [location.state]);

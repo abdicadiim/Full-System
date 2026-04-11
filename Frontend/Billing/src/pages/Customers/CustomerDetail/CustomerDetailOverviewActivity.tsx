@@ -52,6 +52,36 @@ export default function CustomerDetailOverviewActivity({
     return null;
   };
 
+  const resolvePersonName = (value: any) => {
+    if (!value) return "";
+    if (typeof value === "string" || typeof value === "number") return String(value).trim();
+
+    return String(
+      value.displayName ||
+        value.name ||
+        value.fullName ||
+        value.username ||
+        value.email ||
+        value.createdByName ||
+        value.updatedByName ||
+        value.created_by_name ||
+        value.updated_by_name ||
+        value.createdBy ||
+        value.updatedBy ||
+        value.created_by ||
+        value.updated_by ||
+        ""
+    ).trim();
+  };
+
+  const resolveActorName = (...candidates: any[]) => {
+    for (const candidate of candidates) {
+      const resolved = resolvePersonName(candidate);
+      if (resolved) return resolved;
+    }
+    return "Unknown";
+  };
+
   const matchesCustomer = (row: any) => {
     if (!row || !canonicalCustomerId) return false;
     const rowCustomerId = String(
@@ -61,7 +91,31 @@ export default function CustomerDetailOverviewActivity({
   };
 
   const getActor = (row: any) =>
-    String(row?.updatedBy || row?.modifiedBy || row?.createdBy || row?.created_by || customer?.createdBy || "System").trim() || "System";
+    resolveActorName(
+      row?.updatedBy,
+      row?.modifiedBy,
+      row?.updated_by,
+      row?.modified_by,
+      row?.updatedByUser,
+      row?.modifiedByUser,
+      row?.updatedByName,
+      row?.updated_by_name,
+      row?.createdBy,
+      row?.created_by,
+      row?.createdByUser,
+      row?.created_by_user,
+      row?.createdByName,
+      row?.created_by_name,
+      customer?.updatedBy,
+      customer?.modifiedBy,
+      customer?.updated_by,
+      customer?.createdBy,
+      customer?.created_by,
+      customer?.updatedByUser,
+      customer?.createdByUser,
+      customer?.updatedByName,
+      customer?.createdByName
+    );
 
   if (customer?.createdDate || customer?.createdAt) {
     events.push({
@@ -69,7 +123,14 @@ export default function CustomerDetailOverviewActivity({
       date: new Date(String(customer.createdDate || customer.createdAt)),
       title: "Contact added",
       description: "Customer created",
-      author: customer.createdBy || "System",
+      author: resolveActorName(
+        customer?.createdBy,
+        customer?.created_by,
+        customer?.createdByUser,
+        customer?.created_by_user,
+        customer?.createdByName,
+        customer?.created_by_name
+      ),
       color: "border-blue-400",
     });
   }

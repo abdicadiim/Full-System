@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import AuthShell from "../components/AuthShell";
-import { getAppDisplayName, getFallbackUrl } from "../lib/appBranding";
+import { getAppDisplayName } from "../lib/appBranding";
 import { prepareAuthViewTransition } from "../lib/authViewTransition";
-import { goReturnTo } from "../lib/returnTo";
 import { setSessionBridgeToken } from "../lib/sessionBridge";
 import { authApi } from "../services/authApi";
+import { clearOrganizationSelectionCache, orgApi, writeOrganizationSelectionCache } from "../services/orgApi";
 
 const persistSession = (result: any) => {
   if (typeof window === "undefined") return;
@@ -26,6 +26,19 @@ const persistSession = (result: any) => {
   }
 };
 
+const prefetchOrganizationSelection = async () => {
+  try {
+    const result = await orgApi.list();
+    if (result?.success && Array.isArray(result.organizations)) {
+      writeOrganizationSelectionCache(result.organizations);
+    } else {
+      clearOrganizationSelectionCache();
+    }
+  } catch {
+    // Ignore prefetch errors; the selection page will retry.
+  }
+};
+
 const getAutoSendKey = (app: string, email: string) => `auth:otp:auto-sent:${app.trim().toLowerCase()}:${email.trim().toLowerCase()}`;
 
 const hasAutoSentOtp = (app: string, email: string) => {
@@ -39,6 +52,7 @@ const markAutoSentOtp = (app: string, email: string) => {
 };
 
 export default function EmailOtpLoginPage() {
+  const navigate = useNavigate();
   const emailInputRef = useRef<HTMLInputElement | null>(null);
   const codeInputRef = useRef<HTMLInputElement | null>(null);
   const [email, setEmail] = useState("");
@@ -200,7 +214,8 @@ export default function EmailOtpLoginPage() {
         return;
       }
       persistSession(result);
-      goReturnTo(getFallbackUrl());
+      void prefetchOrganizationSelection();
+      navigate(`/org-select${window.location.search}`, { replace: true });
     } catch (err: any) {
       setError(err?.message || "OTP verification failed");
     } finally {

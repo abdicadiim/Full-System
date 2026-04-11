@@ -1,4 +1,6 @@
 import React, { Suspense, lazy, useMemo } from "react";
+import { useLocation } from "react-router-dom";
+import CustomerDetail from "./CustomerDetail/CustomerDetail";
 import useCustomersPageController from "./useCustomersPageController";
 import CustomersPageContent from "./CustomersPageContent";
 
@@ -7,6 +9,18 @@ const CustomersSearchModal = lazy(() => import("./CustomersSearchModal"));
 const CustomersSecondaryModals = lazy(() => import("./CustomersSecondaryModals"));
 
 export default function Customers() {
+  const location = useLocation();
+  const pathname = location.pathname || "";
+  const pathSegments = pathname.split("/").filter(Boolean);
+  const lastSegment = pathSegments[pathSegments.length - 1] || "";
+  const isCustomerDetailPath =
+    pathname.startsWith("/sales/customers/") &&
+    !["new", "import", "new-custom-view", "request-review", "send-email-statement", "edit"].includes(lastSegment);
+
+  if (isCustomerDetailPath) {
+    return <CustomerDetail />;
+  }
+
   const controller = useCustomersPageController();
   const shouldRenderBulkUpdateModal = Boolean(controller.isBulkUpdateModalOpen);
   const shouldRenderSearchModal = Boolean(controller.isSearchModalOpen);

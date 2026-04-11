@@ -49,6 +49,12 @@ const resolveCustomerName = (customerData: any) => {
 const mapCustomerRecord = (customerData: any, normalizeComments: (value: any) => any[]) => {
   const customerName = resolveCustomerName(customerData);
   const normalizedComments = normalizeComments(customerData.comments);
+  const status = String(customerData?.status || "").trim().toLowerCase();
+  const isInactive = typeof customerData?.isInactive === "boolean" ? customerData.isInactive : status === "inactive";
+  const isActive =
+    typeof customerData?.isActive === "boolean"
+      ? customerData.isActive
+      : status ? status !== "inactive" : !isInactive;
 
   return {
     normalizedComments,
@@ -57,6 +63,9 @@ const mapCustomerRecord = (customerData: any, normalizeComments: (value: any) =>
       id: String(customerData._id || customerData.id),
       name: customerName,
       displayName: customerData.displayName || customerName,
+      status: customerData?.status || (isInactive ? "inactive" : "active"),
+      isActive,
+      isInactive,
       billingAttention: customerData.billingAddress?.attention || customerData.billingAttention || "",
       billingCountry: customerData.billingAddress?.country || customerData.billingCountry || "",
       billingStreet1: customerData.billingAddress?.street1 || customerData.billingStreet1 || "",
@@ -111,6 +120,7 @@ export default function useCustomerDetailData(args: any) {
     navigate,
     activeTab,
     customer,
+    customerStatusOverride,
     linkedVendor,
     organizationProfile,
     normalizeComments,
@@ -383,6 +393,7 @@ export default function useCustomerDetailData(args: any) {
     }
   }, [
     id,
+    customerStatusOverride,
     mapDocumentsToAttachments,
     navigate,
     normalizeComments,
@@ -587,8 +598,10 @@ export default function useCustomerDetailData(args: any) {
         setCustomer(null);
         setComments([]);
         setAttachments([]);
+        setLoading(true);
+      } else {
+        setLoading(false);
       }
-      setLoading(true);
 
       try {
         const customerResponse =
@@ -598,16 +611,42 @@ export default function useCustomerDetailData(args: any) {
 
         if (!isActive) return;
 
-        if (customerResponse && customerResponse.success && customerResponse.data) {
-          const { mappedCustomer, normalizedComments } = mapCustomerRecord(customerResponse.data, normalizeComments);
+      if (customerResponse && customerResponse.success && customerResponse.data) {
+          const fallbackStatusPatch = {
+            status: String(customer?.status || "").trim(),
+            isActive: typeof customer?.isActive === "boolean" ? customer.isActive : undefined,
+            isInactive: typeof customer?.isInactive === "boolean" ? customer.isInactive : undefined,
+          };
+          const normalizedOverride = String(customerStatusOverride || "").trim().toLowerCase();
+          const overrideStatusPatch =
+            normalizedOverride === "active" || normalizedOverride === "inactive"
+              ? {
+                  status: normalizedOverride,
+                  isActive: normalizedOverride === "active",
+                  isInactive: normalizedOverride === "inactive",
+                }
+              : {};
+          const hasExplicitStatusFields =
+            Object.prototype.hasOwnProperty.call(customerResponse.data, "status") ||
+            Object.prototype.hasOwnProperty.call(customerResponse.data, "isActive") ||
+            Object.prototype.hasOwnProperty.call(customerResponse.data, "isInactive");
+          const responseCustomerData = hasExplicitStatusFields
+            ? customerResponse.data
+            : { ...customerResponse.data, ...fallbackStatusPatch };
+          const effectiveCustomerData = {
+            ...responseCustomerData,
+            ...overrideStatusPatch,
+          };
+
+          const { mappedCustomer, normalizedComments } = mapCustomerRecord(effectiveCustomerData, normalizeComments);
           const databaseDocuments = await fetchCustomerDocumentsFromDatabase(
             customerId,
-            customerResponse.data.documents || []
+            effectiveCustomerData.documents || []
           );
           setCustomer({ ...mappedCustomer, documents: databaseDocuments });
           setComments(normalizedComments);
           setAttachments(mapDocumentsToAttachments(databaseDocuments));
-          syncCustomerIntoCustomerQueries(queryClient, customerResponse.data);
+          syncCustomerIntoCustomerQueries(queryClient, effectiveCustomerData);
         } else {
           navigate("/sales/customers");
           return;

@@ -54,6 +54,34 @@ const buildAddressFormData = (customer: any, type: "billing" | "shipping") => {
   };
 };
 
+const formatRecordDate = (value: any) => {
+  const date = value ? new Date(value) : null;
+  return date && !Number.isNaN(date.getTime())
+    ? date.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" })
+    : "--";
+};
+
+const resolveCreatedByName = (value: any) => {
+  if (!value) return "--";
+  if (typeof value === "string" || typeof value === "number") {
+    const text = String(value).trim();
+    return text || "--";
+  }
+
+  const candidate = String(
+    value.displayName ||
+      value.name ||
+      value.fullName ||
+      value.username ||
+      value.email ||
+      value.createdBy ||
+      value.created_by ||
+      ""
+  ).trim();
+
+  return candidate || "--";
+};
+
 export default function CustomerDetailOverviewSidebar({
   customer,
   id,
@@ -594,17 +622,19 @@ export default function CustomerDetailOverviewSidebar({
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Customer ID:</span>
-                <span className="text-sm font-medium text-gray-900">{customer.id || id}</span>
+                <span className="text-sm font-medium text-gray-900">{customer._id || customer.id || id || "--"}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Created On:</span>
                 <span className="text-sm font-medium text-gray-900">
-                  {customer.createdDate ? new Date(customer.createdDate).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }) : "03/12/2025"}
+                  {formatRecordDate(customer.createdDate || customer.createdAt || customer.created_on)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Created By:</span>
-                <span className="text-sm font-medium text-gray-900">{customer.createdBy || "JIRDE HUSSEIN KHALIF"}</span>
+                <span className="text-sm font-medium text-gray-900">
+                  {resolveCreatedByName(customer.createdBy || customer.created_by || customer.createdByUser || customer.createdByUserId)}
+                </span>
               </div>
             </div>
           </div>

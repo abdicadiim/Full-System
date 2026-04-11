@@ -60,6 +60,7 @@ import type {
 import { useCustomerDetailPageViewModel } from "./useCustomerDetailPageViewModel";
 
 const CUSTOMER_EDIT_PRELOAD_PREFIX = "billing_customer_edit_preload:";
+const CUSTOMER_DETAIL_SIDEBAR_CACHE_KEY = "billing_customer_detail_sidebar_seed";
 const DEFAULT_CUSTOMER_PDF_TEMPLATES: CustomerPdfTemplates = {
     customerStatement: "Standard Template",
     quotes: "Standard Template",
@@ -116,10 +117,37 @@ export default function CustomerDetail() {
     const navigate = useNavigate();
     const location = useLocation();
     const initialSidebarCustomers: ExtendedCustomer[] = [];
+    const initialRouteCustomer = (() => {
+        if (location.state?.customer) {
+            return normalizeSidebarCustomer(location.state.customer);
+        }
+        if (typeof window === "undefined") return null;
+        try {
+            const raw = sessionStorage.getItem(CUSTOMER_DETAIL_SIDEBAR_CACHE_KEY);
+            const parsed = raw ? JSON.parse(raw) : null;
+            const list = Array.isArray(parsed) ? parsed : [];
+            const targetId = String(id || "").trim();
+            if (!targetId) return null;
+            const matched = list.find((row: any) => {
+                const rowId = String(row?._id || row?.id || "").trim();
+                return rowId === targetId;
+            });
+            return matched ? normalizeSidebarCustomer(matched) : null;
+        } catch {
+            return null;
+        }
+    })();
 
-    const [customer, setCustomer] = useState<ExtendedCustomer | null>(null);
+    const [customer, setCustomer] = useState<ExtendedCustomer | null>(() => initialRouteCustomer);
+    const [customerStatusOverride, setCustomerStatusOverride] = useState<"active" | "inactive" | null>(() => {
+        const status = String((initialRouteCustomer as any)?.status || "").toLowerCase().trim();
+        if (status === "active" || status === "inactive") return status as "active" | "inactive";
+        if ((initialRouteCustomer as any)?.isInactive === true) return "inactive";
+        if ((initialRouteCustomer as any)?.isActive === true) return "active";
+        return null;
+    });
     const [availableCurrencies, setAvailableCurrencies] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(() => !initialRouteCustomer);
     const [isNavigatingToEdit, setIsNavigatingToEdit] = useState(false);
     const [customers, setCustomers] = useState<ExtendedCustomer[]>(initialSidebarCustomers);
     const [activeTab, setActiveTab] = useState("overview");
@@ -149,6 +177,55 @@ export default function CustomerDetail() {
         journals: false,
         bills: false
     });
+
+    useEffect(() => {
+        const seededCustomer = location.state?.customer ? normalizeSidebarCustomer(location.state.customer) : null;
+        if (seededCustomer) {
+            setCustomer(seededCustomer);
+            setLoading(false);
+            const seededStatus = String((seededCustomer as any)?.status || "").toLowerCase().trim();
+            if (seededStatus === "active" || seededStatus === "inactive") {
+                setCustomerStatusOverride(seededStatus as "active" | "inactive");
+            } else if ((seededCustomer as any)?.isInactive === true) {
+                setCustomerStatusOverride("inactive");
+            } else if ((seededCustomer as any)?.isActive === true) {
+                setCustomerStatusOverride("active");
+            }
+            return;
+        }
+        if (typeof window === "undefined") {
+            return;
+        }
+        try {
+            const raw = sessionStorage.getItem(CUSTOMER_DETAIL_SIDEBAR_CACHE_KEY);
+            const parsed = raw ? JSON.parse(raw) : null;
+            const list = Array.isArray(parsed) ? parsed : [];
+            const targetId = String(id || "").trim();
+            if (!targetId) return;
+            const matched = list.find((row: any) => {
+                const rowId = String(row?._id || row?.id || "").trim();
+                return rowId === targetId;
+            });
+            if (matched) {
+                const normalized = normalizeSidebarCustomer(matched);
+                setCustomer(normalized);
+                setLoading(false);
+                const matchedStatus = String((normalized as any)?.status || "").toLowerCase().trim();
+                if (matchedStatus === "active" || matchedStatus === "inactive") {
+                    setCustomerStatusOverride(matchedStatus as "active" | "inactive");
+                } else if ((normalized as any)?.isInactive === true) {
+                    setCustomerStatusOverride("inactive");
+                } else if ((normalized as any)?.isActive === true) {
+                    setCustomerStatusOverride("active");
+                }
+            }
+        } catch {
+        }
+    }, [id, location.key, location.state, setCustomer]);
+
+    useEffect(() => {
+        setCustomerStatusOverride(null);
+    }, [id]);
 
     useEffect(() => {
         if (!isNavigatingToEdit || typeof window === "undefined") {
@@ -631,6 +708,7 @@ export default function CustomerDetail() {
         navigate,
         activeTab,
         customer,
+        customerStatusOverride,
         linkedVendor,
         organizationProfile,
         normalizeComments,
@@ -649,6 +727,7 @@ export default function CustomerDetail() {
         setCreditNotes,
         setAvailableCurrencies,
         setCustomers,
+        setCustomerStatusOverride,
         setQuotes,
         setRecurringInvoices,
         setExpenses,
@@ -1043,6 +1122,7 @@ export default function CustomerDetail() {
 
         navigate(`/sales/customers/${nextCustomerId}`, {
             state: {
+                customer: safeCustomer,
                 customerList: safeCustomerList,
             },
         });
@@ -1314,6 +1394,8 @@ export default function CustomerDetail() {
         id,
         customer,
         customers,
+        customerStatusOverride,
+        setCustomerStatusOverride,
         navigate,
         activeTab,
         invoices,

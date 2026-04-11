@@ -62,6 +62,8 @@ export default function CustomerDetailOverviewContent({
   salesReceipts,
   recurringInvoices,
 }: CustomerDetailOverviewContentProps) {
+  const customerId = String(customer?.id || customer?._id || "").trim();
+  const customerName = String(customer?.name || customer?.displayName || customer?.companyName || "").trim();
   const receivablesValue = Number((customer as any)?.receivables ?? 0);
   const creditLimitRaw = (customer as any)?.creditLimit ?? (customer as any)?.credit_limit ?? (customer as any)?.creditlimit ?? (customer as any)?.creditLimitAmount ?? "";
   const creditLimitValue = Number(String(creditLimitRaw ?? "").trim());
@@ -278,7 +280,7 @@ export default function CustomerDetailOverviewContent({
               <button
                 className="flex h-[38px] min-w-[100px] cursor-pointer items-center justify-center gap-2 rounded-l-lg border-b-[4px] border-[#0D4A52] px-4 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[1px] active:border-b-[2px]"
                 style={{ background: "linear-gradient(180deg, #156372 0%, #0D4A52 100%)" }}
-                onClick={() => navigate("/subscriptions/new", { state: { customerId: customer?.id, customerName: customer?.name } })}
+                onClick={() => navigate("/sales/subscriptions/new", { state: { customerId, customerName } })}
               >
                 <Plus size={16} /> New
               </button>
@@ -297,7 +299,7 @@ export default function CustomerDetailOverviewContent({
                   style={{ backgroundColor: "#156372" }}
                   onClick={() => {
                     setIsSubscriptionDropdownOpen(false);
-                    navigate("/subscriptions/new", { state: { customerId: customer?.id, customerName: customer?.name } });
+                    navigate("/sales/subscriptions/new", { state: { customerId, customerName } });
                   }}
                 >
                   New Subscription
@@ -306,7 +308,7 @@ export default function CustomerDetailOverviewContent({
                   className="cursor-pointer px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-100"
                   onClick={() => {
                     setIsSubscriptionDropdownOpen(false);
-                    navigate("/sales/quotes/subscription/new", { state: { customerId: customer?.id, customerName: customer?.name, forSubscription: true } });
+                    navigate("/sales/quotes/subscription/new", { state: { customerId, customerName, forSubscription: true } });
                   }}
                 >
                   Create Quote for Subscription
@@ -324,7 +326,7 @@ export default function CustomerDetailOverviewContent({
                 <button
                   className="flex h-[38px] min-w-[100px] cursor-pointer items-center justify-center gap-2 rounded-l-lg border-b-[4px] border-[#0D4A52] px-4 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[1px] active:border-b-[2px]"
                   style={{ background: "linear-gradient(180deg, #156372 0%, #0D4A52 100%)" }}
-                  onClick={() => navigate("/subscriptions/new", { state: { customerId: customer?.id, customerName: customer?.name } })}
+                  onClick={() => navigate("/sales/subscriptions/new", { state: { customerId, customerName } })}
                 >
                   <Plus size={16} /> New
                 </button>
@@ -343,7 +345,7 @@ export default function CustomerDetailOverviewContent({
                     style={{ backgroundColor: "#156372" }}
                     onClick={() => {
                       setIsSubscriptionDropdownOpen(false);
-                      navigate("/subscriptions/new", { state: { customerId: customer?.id, customerName: customer?.name } });
+                      navigate("/sales/subscriptions/new", { state: { customerId, customerName } });
                     }}
                   >
                     New Subscription
@@ -352,7 +354,7 @@ export default function CustomerDetailOverviewContent({
                     className="cursor-pointer px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-100"
                     onClick={() => {
                       setIsSubscriptionDropdownOpen(false);
-                      navigate("/sales/quotes/subscription/new", { state: { customerId: customer?.id, customerName: customer?.name, forSubscription: true } });
+                      navigate("/sales/quotes/subscription/new", { state: { customerId, customerName, forSubscription: true } });
                     }}
                   >
                     Create Quote for Subscription

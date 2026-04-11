@@ -40,8 +40,10 @@ const DIGITS_ONLY_FIELDS = new Set([
   "mobile",
   "billingPhone",
   "billingFax",
+  "billingZipCode",
   "shippingPhone",
   "shippingFax",
+  "shippingZipCode",
 ]);
 const DECIMAL_FIELDS = new Set(["openingBalance", "exchangeRate"]);
 
@@ -742,21 +744,45 @@ export default function NewCustomer() {
   useEffect(() => {
     const fetchCurrencies = async () => {
       try {
-        const response = await currenciesAPI.getAll({ isActive: true });
-        if (response && response.success) {
-          setAvailableCurrencies(response.data);
-          const base = response.data.find((c: any) => c.isBaseCurrency);
-          if (base) setBaseCurrency(base);
+        const getData = (res: any) => (Array.isArray(res?.data) ? res.data : []);
+        let response = await currenciesAPI.getAll({ isActive: true });
+        let data = getData(response);
 
-          // Set default currency if not in edit mode
-          if (!isEditMode && response.data.length > 0) {
-            if (base) {
-              setFormData(prev => ({ ...prev, currency: base.code, exchangeRate: "1.00" }));
-            } else if (response.data.some(c => c.code === "USD")) {
-              setFormData(prev => ({ ...prev, currency: "USD", exchangeRate: "1.00" }));
-            } else {
-              setFormData(prev => ({ ...prev, currency: response.data[0].code, exchangeRate: "1.00" }));
-            }
+        if (!response?.success || data.length === 0) {
+          const fallbackResponse = await currenciesAPI.getAll({ limit: 1000 });
+          const fallbackData = getData(fallbackResponse);
+          if (fallbackResponse?.success && fallbackData.length > 0) {
+            response = fallbackResponse;
+            data = fallbackData;
+          }
+        }
+
+        if (!response?.success || data.length === 0) {
+          const fallbackResponse = await currenciesAPI.getAll();
+          const fallbackData = getData(fallbackResponse);
+          if (fallbackResponse?.success && fallbackData.length > 0) {
+            response = fallbackResponse;
+            data = fallbackData;
+          }
+        }
+
+        if (!data.length) {
+          setAvailableCurrencies([]);
+          return;
+        }
+
+        setAvailableCurrencies(data);
+        const base = data.find((c: any) => Boolean(c?.isBaseCurrency || c?.is_base_currency || c?.isBase));
+        if (base) setBaseCurrency(base);
+
+        // Set default currency if not in edit mode
+        if (!isEditMode && data.length > 0) {
+          if (base) {
+            setFormData(prev => ({ ...prev, currency: base.code, exchangeRate: "1.00" }));
+          } else if (data.some((c: any) => c.code === "USD")) {
+            setFormData(prev => ({ ...prev, currency: "USD", exchangeRate: "1.00" }));
+          } else {
+            setFormData(prev => ({ ...prev, currency: data[0].code, exchangeRate: "1.00" }));
           }
         }
       } catch (error) { }
@@ -1862,7 +1888,7 @@ export default function NewCustomer() {
                           value="business"
                           checked={formData.customerType === "business"}
                           onChange={handleChange}
-                          className="w-4 h-4 text-[#156372] border-gray-300 focus:ring-[#156372] cursor-pointer"
+                          className="w-4 h-4 accent-[#0f4752] text-[#0f4752] border-gray-300 focus:ring-[#0f4752] cursor-pointer"
                         />
                         <span className="text-[13px] text-gray-700 group-hover:text-gray-900 transition-colors">Business</span>
                       </label>
@@ -1873,7 +1899,7 @@ export default function NewCustomer() {
                           value="individual"
                           checked={formData.customerType === "individual"}
                           onChange={handleChange}
-                          className="w-4 h-4 text-[#156372] border-gray-300 focus:ring-[#156372] cursor-pointer"
+                          className="w-4 h-4 accent-[#0f4752] text-[#0f4752] border-gray-300 focus:ring-[#0f4752] cursor-pointer"
                         />
                         <span className="text-[13px] text-gray-700 group-hover:text-gray-900 transition-colors">Individual</span>
                       </label>
@@ -2263,7 +2289,6 @@ export default function NewCustomer() {
                       const normalizedTagOptions = Array.isArray(tag.options) ? tag.options : [];
                       const selectedOptionMissing = selectedVal && !normalizedTagOptions.includes(selectedVal);
                       const options = [
-                        { value: "", label: "None" },
                         ...normalizedTagOptions.map((opt: string) => ({ value: opt, label: opt })),
                         ...(selectedOptionMissing ? [{ value: selectedVal, label: selectedVal }] : []),
                       ];
@@ -2301,8 +2326,25 @@ export default function NewCustomer() {
                                   });
                                 }
                               }}
-                              placeholder="None"
+                              placeholder="Select report tag"
                               accentColor="#156372"
+                              showClear={Boolean(selectedVal)}
+                              onClear={() => {
+                                setFormData(prev => {
+                                  const existing = Array.isArray(prev.reportingTags) ? prev.reportingTags : [];
+                                  const updated = existing.filter((rt: any) => rt.tagId !== tagId && rt.id !== tagId);
+                                  return { ...prev, reportingTags: updated };
+                                });
+                                const tagErrorKey = getReportingTagErrorKey(tagId);
+                                if (errors[tagErrorKey]) {
+                                  setErrors((prev) => {
+                                    if (!prev[tagErrorKey]) return prev;
+                                    const next = { ...prev };
+                                    delete next[tagErrorKey];
+                                    return next;
+                                  });
+                                }
+                              }}
                               inputClassName={errors[getReportingTagErrorKey(tagId)] ? "border-red-500 bg-red-50 hover:border-red-500 focus:border-red-500" : ""}
                             />
                             {errors[getReportingTagErrorKey(tagId)] && (
@@ -3147,6 +3189,8 @@ export default function NewCustomer() {
                               value={formData.billingZipCode}
                               onChange={handleChange}
                               placeholder="Enter ZIP code"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
                               className="w-full px-3 py-1.5 border border-gray-300 rounded text-[13px] text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#156372] focus:border-[#156372]"
                             />
                           </div>
@@ -3352,6 +3396,8 @@ export default function NewCustomer() {
                               value={formData.shippingZipCode}
                               onChange={handleChange}
                               placeholder="Enter ZIP code"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
                               className="w-full px-3 py-1.5 border border-gray-300 rounded text-[13px] text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#156372] focus:border-[#156372]"
                             />
                           </div>

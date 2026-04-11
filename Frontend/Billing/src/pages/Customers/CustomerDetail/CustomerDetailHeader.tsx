@@ -41,6 +41,9 @@ export default function CustomerDetailHeader(args: any) {
     CustomerAttachmentsPopover,
   } = args;
 
+  const customerId = String(customer?.id || customer?._id || "").trim();
+  const customerName = String(customer?.name || customer?.displayName || customer?.companyName || "").trim();
+
   return (
     <div className="sticky top-0 z-30 bg-white">
       {!isCustomerActive(customer) ? (
@@ -136,21 +139,19 @@ export default function CustomerDetailHeader(args: any) {
               {isNewTransactionDropdownOpen && (
                 <div className="absolute right-0 top-full z-50 mt-2 max-h-[360px] w-56 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
                   <div className="border-b border-gray-200 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-gray-500">SALES</div>
-                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/subscriptions/new", { state: { customerId: customer?.id, customerName: customer?.name } }); }}>Subscription</div>
-                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/sales/invoices/new", { state: { customerId: customer?.id, customerName: customer?.name } }); }}>Invoice</div>
-                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/payments/payments-received/new", { state: { customerId: customer?.id, customerName: customer?.name } }); }}>Customer Payment</div>
-                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/payments/payment-links/new", { state: { customerId: customer?.id, customerName: customer?.name } }); }}>Payment Link</div>
-                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/sales/quotes/new", { state: { customerId: customer?.id, customerName: customer?.name } }); }}>Quote</div>
-                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/sales/quotes/subscription/new", { state: { customerId: customer?.id, customerName: customer?.name, forSubscription: true } }); }}>Quote for Subscription</div>
-                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/sales/retainer-invoices/new", { state: { customerId: customer?.id, customerName: customer?.name } }); }}>Retainer Invoice</div>
-                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/sales/recurring-invoices/new", { state: { customerId: customer?.id, customerName: customer?.name } }); }}>Recurring Invoice</div>
-                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/purchases/expenses/new", { state: { customerId: customer?.id, customerName: customer?.name } }); }}>Expense</div>
-                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/expenses/recurring-expenses/new", { state: { customerId: customer?.id, customerName: customer?.name } }); }}>Recurring Expense</div>
-                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/accountant/manual-journals/new", { state: { customerId: customer?.id, customerName: customer?.name } }); }}>Journal</div>
-                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/sales/credit-notes/new", { state: { customerId: customer?.id, customerName: customer?.name } }); }}>Credit Note</div>
-                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/sales/sales-receipts/new", { state: { customerId: customer?.id, customerName: customer?.name } }); }}>Sales Receipt</div>
+                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/sales/subscriptions/new", { state: { customerId, customerName } }); }}>Subscription</div>
+                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/sales/invoices/new", { state: { customerId, customerName } }); }}>Invoice</div>
+                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/payments/payments-received/new", { state: { customerId, customerName } }); }}>Customer Payment</div>
+                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/payments/payment-links/new", { state: { customerId, customerName } }); }}>Payment Link</div>
+                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/sales/quotes/new", { state: { customerId, customerName } }); }}>Quote</div>
+                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/sales/quotes/subscription/new", { state: { customerId, customerName, forSubscription: true } }); }}>Quote for Subscription</div>
+                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/sales/retainer-invoices/new", { state: { customerId, customerName } }); }}>Retainer Invoice</div>
+                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/purchases/expenses/new", { state: { customerId, customerName } }); }}>Expense</div>
+                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/expenses/recurring-expenses/new", { state: { customerId, customerName } }); }}>Recurring Expense</div>
+                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/sales/credit-notes/new", { state: { customerId, customerName } }); }}>Credit Note</div>
+                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/sales/sales-receipts/new", { state: { customerId, customerName } }); }}>Sales Receipt</div>
                   <div className="my-1 h-px bg-gray-200" />
-                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/projects/new", { state: { customerId: customer?.id, customerName: customer?.name } }); }}>Project</div>
+                  <div className="cursor-pointer px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => { setIsNewTransactionDropdownOpen(false); navigate("/time-tracking/projects/new", { state: { customerId, customerName } }); }}>Project</div>
                 </div>
               )}
             </div>

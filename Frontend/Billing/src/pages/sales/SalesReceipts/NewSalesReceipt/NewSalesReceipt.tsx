@@ -1449,6 +1449,55 @@ export default function NewSalesReceipt() {
     loadReceiptData();
   }, [isEditMode, id, isDataLoaded, customers, salespersons, taxes, items, depositAccounts]);
 
+  useEffect(() => {
+    if (hasLoadedEditDataRef.current) return;
+    if (isEditMode) return;
+
+    const state = location.state as any;
+    if (!state || state.source) return;
+
+    const customerId = String(state.customerId || state.customer?._id || state.customer?.id || "").trim();
+    const customerName = String(
+      state.customerName ||
+        state.customer?.displayName ||
+        state.customer?.companyName ||
+        state.customer?.name ||
+        ""
+    ).trim();
+
+    if (!customerId && !customerName) return;
+
+    const matchedCustomer =
+      (customerId
+        ? customers.find((customer) => String(customer.id || customer._id || "") === customerId)
+        : null) ||
+      customers.find(
+        (customer) =>
+          String(customer.name || customer.displayName || customer.companyName || "").trim().toLowerCase() ===
+          customerName.toLowerCase()
+      );
+
+    if (matchedCustomer) {
+      setSelectedCustomer(matchedCustomer);
+      setFormData((prev) => ({
+        ...prev,
+        customerName: matchedCustomer.name || matchedCustomer.displayName || customerName || prev.customerName,
+      }));
+    } else {
+      setSelectedCustomer({
+        id: customerId || undefined,
+        _id: customerId || undefined,
+        name: customerName,
+        displayName: customerName,
+        companyName: customerName,
+      } as any);
+      setFormData((prev) => ({
+        ...prev,
+        customerName: customerName || prev.customerName,
+      }));
+    }
+  }, [location.state, customers, isEditMode]);
+
   // Helper to recalculate totals
   const calculateTotalsHelper = (items, discount, discountType, shipping, adjustment) => {
     const subTotal = items.reduce(

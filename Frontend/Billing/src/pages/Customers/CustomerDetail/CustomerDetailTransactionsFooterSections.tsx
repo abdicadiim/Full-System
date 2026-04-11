@@ -22,6 +22,9 @@ export default function CustomerDetailTransactionsFooterSections(args: any) {
     getFilteredSalesReceipts,
   } = args;
 
+  const customerId = String(customer?.id || customer?._id || "").trim();
+  const customerName = String(customer?.name || customer?.displayName || customer?.companyName || "").trim();
+
   return (
     <>
       <div
@@ -41,7 +44,7 @@ export default function CustomerDetailTransactionsFooterSections(args: any) {
           className="hidden flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium cursor-pointer hover:bg-blue-700 transition-colors"
           onClick={(event) => {
             event.stopPropagation();
-            navigate("/sales/credit-notes/new", { state: { customerId: customer?.id, customerName: customer?.name } });
+            navigate("/sales/credit-notes/new", { state: { customerId, customerName } });
           }}
         >
           <Plus size={14} />
@@ -162,7 +165,7 @@ export default function CustomerDetailTransactionsFooterSections(args: any) {
           className="hidden flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium cursor-pointer hover:bg-blue-700 transition-colors"
           onClick={(event) => {
             event.stopPropagation();
-            navigate("/sales/sales-receipts/new", { state: { customerId: customer?.id, customerName: customer?.name } });
+            navigate("/sales/sales-receipts/new", { state: { customerId, customerName } });
           }}
         >
           <Plus size={14} />

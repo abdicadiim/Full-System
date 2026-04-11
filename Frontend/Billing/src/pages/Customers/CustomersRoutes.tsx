@@ -1,7 +1,7 @@
 import React, { Suspense } from "react";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
+import CustomerDetail from "./CustomerDetail/CustomerDetail";
 import {
-  CustomerDetailRoute,
   CustomersIndexRoute,
   ImportCustomersRoute,
   NewCustomerRoute,
@@ -21,19 +21,16 @@ const withSuspense = (node: React.ReactNode) => (
 );
 
 export default function CustomersRoutes() {
-  const location = useLocation();
-  const routeKey = `${location.pathname}${location.search}${location.hash}`;
-
   return (
-    <Routes location={location} key={routeKey}>
+    <Routes>
       <Route index element={withSuspense(<CustomersIndexRoute />)} />
-      <Route path="new" element={withSuspense(<NewCustomerRoute key={`customer-new-${routeKey}`} />)} />
+      <Route path="new" element={withSuspense(<NewCustomerRoute />)} />
       <Route path="import" element={withSuspense(<ImportCustomersRoute />)} />
       <Route path="new-custom-view" element={withSuspense(<NewCustomViewRoute />)} />
-      <Route path=":id/edit" element={withSuspense(<NewCustomerRoute key={`customer-edit-${routeKey}`} />)} />
+      <Route path=":id/edit" element={withSuspense(<NewCustomerRoute />)} />
       <Route path=":id/request-review" element={withSuspense(<RequestReviewRoute />)} />
       <Route path=":id/send-email-statement" element={withSuspense(<SendEmailStatementRoute />)} />
-      <Route path=":id" element={withSuspense(<CustomerDetailRoute key={`customer-detail-${routeKey}`} />)} />
+      <Route path=":id" element={<CustomerDetail />} />
       <Route path="*" element={<Navigate to="." replace />} />
     </Routes>
   );

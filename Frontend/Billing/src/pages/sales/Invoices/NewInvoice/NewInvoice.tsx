@@ -554,7 +554,6 @@ const [formData, setFormData] = useState<InvoiceFormState>({
   customerName: "",
   mobile: "",
   selectedLocation: "Head Office" as any,
-  reportingTags: [] as any,
   invoiceNumber: `${invoicePrefix}${invoiceNextNumber}`,
   orderNumber: "",
   invoiceDate: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
@@ -1522,6 +1521,55 @@ useEffect(() => {
 }, [location.state, customers, isEditMode, baseCurrencyCode]);
 
 useEffect(() => {
+  if (isEditMode) return;
+  if (prefillAppliedRef.current) return;
+
+  const state = location.state as any;
+  if (!state || state.source) return;
+
+  const customerId = String(state.customerId || state.customer?._id || state.customer?.id || "").trim();
+  const customerName = String(
+    state.customerName ||
+      state.customer?.displayName ||
+      state.customer?.companyName ||
+      state.customer?.name ||
+      ""
+  ).trim();
+
+  if (!customerId && !customerName) return;
+
+  const matchedCustomer =
+    (customerId
+      ? customers.find((customer: any) => String(customer?.id || customer?._id || "") === customerId)
+      : null) ||
+    customers.find(
+      (customer: any) =>
+        String(customer?.name || customer?.displayName || customer?.companyName || "")
+          .trim()
+          .toLowerCase() === customerName.toLowerCase()
+    );
+
+  if (matchedCustomer) {
+    setSelectedCustomer(matchedCustomer);
+  } else {
+    setSelectedCustomer({
+      id: customerId || undefined,
+      _id: customerId || undefined,
+      name: customerName,
+      displayName: customerName,
+      companyName: customerName,
+    });
+  }
+
+  if (customerName) {
+    setFormData((prev) => ({
+      ...prev,
+      customerName: prev.customerName || customerName,
+    }));
+  }
+}, [location.state, customers, isEditMode]);
+
+useEffect(() => {
   if (prefillAppliedRef.current) return;
   if (isEditMode) return;
 
@@ -2173,7 +2221,6 @@ const buildInvoicePayload = (statusValue: string) => {
     termsAndConditions: formData.termsAndConditions,
     attachedFiles: formData.attachedFiles || [],
     displayAttachmentsInPortalEmails: Boolean((formData as any).displayAttachmentsInPortalEmails),
-    reportingTags: (formData as any).reportingTags || [],
 
     paymentReceived: isPaymentReceived,
     paymentData: isPaymentReceived ? {
@@ -2999,58 +3046,6 @@ return (
               </div>
             </div>
 
-
-            {normalizedReportingTags.map((tag) => {
-              const currentValue =
-                ((formData as any).reportingTags || []).find(
-                  (entry: any) => String(entry?.tagId || "") === String(tag.id || tag._id || tag.key)
-                    || String(entry?.name || "") === tag.label
-                )?.value || "";
-
-              return (
-                <div key={tag.key} className="flex items-center gap-6">
-                  <label className="text-[13px] font-medium text-gray-600 w-[140px] flex-shrink-0">
-                    {tag.label}
-                  </label>
-                  <div className="relative w-[280px]">
-                    <select
-                      value={currentValue}
-                      onChange={(e) =>
-                        setFormData((prev: any) => {
-                          const nextReportingTags = Array.isArray(prev.reportingTags)
-                            ? prev.reportingTags.filter(
-                                (entry: any) =>
-                                  String(entry?.tagId || "") !== String(tag.id || tag._id || tag.key)
-                                  && String(entry?.name || "") !== tag.label
-                              )
-                            : [];
-
-                          if (e.target.value) {
-                            nextReportingTags.push({
-                              tagId: tag.id || tag._id || tag.key,
-                              value: e.target.value,
-                              name: tag.label,
-                            });
-                          }
-
-                          return {
-                            ...prev,
-                            reportingTags: nextReportingTags,
-                          };
-                        })
-                      }
-                      className="w-full h-9 px-3 pr-8 border border-gray-300 rounded focus:outline-none focus:border-blue-400 text-sm appearance-none bg-white"
-                    >
-                      <option value="">None</option>
-                      {tag.options.map((option: string, index: number) => (
-                        <option key={`${tag.key}-option-${index}-${option}`} value={option}>{option}</option>
-                      ))}
-                    </select>
-                    <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                  </div>
-                </div>
-              );
-            })}
 
             <div className="flex items-start gap-6">
               <div className="flex items-center gap-2 w-[140px] pt-2">

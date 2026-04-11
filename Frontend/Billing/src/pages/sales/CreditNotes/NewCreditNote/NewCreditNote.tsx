@@ -876,6 +876,51 @@ export default function NewCreditNote() {
   }, [location.state, customers, isEditMode]);
 
   useEffect(() => {
+    if (prefillFromProjectRef.current) return;
+    if (isEditMode) return;
+
+    const state = location.state as any;
+    if (!state || state.source) return;
+
+    const customerId = String(state.customerId || state.customer?._id || state.customer?.id || "").trim();
+    const customerName = String(
+      state.customerName ||
+        state.customer?.displayName ||
+        state.customer?.companyName ||
+        state.customer?.name ||
+        ""
+    ).trim();
+
+    if (!customerId && !customerName) return;
+
+    const matchedCustomer =
+      (customerId
+        ? customers.find((c: any) => String(c?.id || c?._id || "") === customerId)
+        : null) ||
+      customers.find(
+        (c: any) =>
+          String(c?.name || c?.displayName || c?.companyName || "")
+            .trim()
+            .toLowerCase() === customerName.toLowerCase()
+      );
+
+    if (matchedCustomer) {
+      setSelectedCustomer(matchedCustomer);
+    } else {
+      setSelectedCustomer({
+        id: customerId || "unknown",
+        name: customerName,
+        displayName: customerName,
+      } as any);
+    }
+
+    setFormData((prev: any) => ({
+      ...prev,
+      customerName: customerName || prev.customerName,
+    }));
+  }, [location.state, customers, isEditMode]);
+
+  useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
       if (customerDropdownRef.current && !customerDropdownRef.current.contains(target)) setIsCustomerDropdownOpen(false);

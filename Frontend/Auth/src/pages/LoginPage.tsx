@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AuthShell from "../components/AuthShell";
-import { getAppDisplayName, getFallbackUrl } from "../lib/appBranding";
+import { getAppDisplayName } from "../lib/appBranding";
 import { prepareAuthViewTransition } from "../lib/authViewTransition";
-import { getReturnTo, goReturnTo } from "../lib/returnTo";
 import { clearSessionBridgeToken, setSessionBridgeToken } from "../lib/sessionBridge";
 import { authApi, type ApiFailure, type VerificationRequirement } from "../services/authApi";
+import { clearOrganizationSelectionCache, orgApi, writeOrganizationSelectionCache } from "../services/orgApi";
 
 const persistSession = (result: any) => {
   if (typeof window === "undefined") return;
@@ -23,6 +23,19 @@ const persistSession = (result: any) => {
     localStorage.setItem("user", serialized);
     localStorage.setItem("current_user", serialized);
     localStorage.setItem("auth_user", serialized);
+  }
+};
+
+const prefetchOrganizationSelection = async () => {
+  try {
+    const result = await orgApi.list();
+    if (result?.success && Array.isArray(result.organizations)) {
+      writeOrganizationSelectionCache(result.organizations);
+    } else {
+      clearOrganizationSelectionCache();
+    }
+  } catch {
+    // Ignore prefetch errors; the org select page will retry.
   }
 };
 
@@ -119,6 +132,7 @@ export default function LoginPage() {
     localStorage.removeItem("timerState");
     localStorage.removeItem("auth_bootstrap_ready");
     clearSessionBridgeToken();
+    clearOrganizationSelectionCache();
   };
 
   useEffect(() => {
@@ -237,12 +251,8 @@ export default function LoginPage() {
         }
       } else {
         persistSession(result);
-        const returnToValue = getReturnTo();
-        if (returnToValue) {
-          goReturnTo(getFallbackUrl());
-        } else {
-          navigate(`/org-select${search}`);
-        }
+        void prefetchOrganizationSelection();
+        navigate(`/org-select${search}`, { replace: true });
       }
     } catch (err: any) {
       setError(err?.message || "An error occurred during login");

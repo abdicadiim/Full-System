@@ -16,11 +16,12 @@ import { customersAPI, projectsAPI, salespersonsAPI, quotesAPI, itemsAPI, curren
 import { useAccountSelect } from "../../../../hooks/useAccountSelect";
 import { useCurrency } from "../../../../hooks/useCurrency";
 import { API_BASE_URL, getToken } from "../../../../services/auth";
-import toast from "react-hot-toast";
+import { toast } from "react-toastify";
 import { Country, State } from "country-state-city";
 import NewTaxModal from "../../../../../components/modals/NewTaxModal";
 import { buildTaxOptionGroups, taxLabel, normalizeCreatedTaxPayload, isTaxActive } from "../../../../hooks/Taxdropdownstyle";
 import { readTaxesLocal, createTaxLocal } from "../../../settings/organization-settings/taxes-compliance/TAX/storage";
+import NewItemForm from "../../../Product-Calalog/items/components/NewItemForm";
 
 // taxOptions REMOVED: Now fetching from backend API
 
@@ -307,6 +308,9 @@ const NewQuote = () => {
   const [isPhoneCodeDropdownOpen, setIsPhoneCodeDropdownOpen] = useState(false);
   const [phoneCodeSearch, setPhoneCodeSearch] = useState("");
   const phoneCodeDropdownRef = useRef<HTMLDivElement | null>(null);
+  const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState(false);
+  const [countrySearch, setCountrySearch] = useState("");
+  const countryDropdownRef = useRef<HTMLDivElement | null>(null);
   const [addressFormData, setAddressFormData] = useState({
     attention: "",
     country: "",
@@ -401,6 +405,7 @@ const NewQuote = () => {
   const [showAdditionalInformation, setShowAdditionalInformation] = useState(false);
   const [additionalInfoItemIds, setAdditionalInfoItemIds] = useState<string[]>([]);
   const [isNewItemModalOpen, setIsNewItemModalOpen] = useState(false);
+  const [newItemTargetRowId, setNewItemTargetRowId] = useState<string | number | null>(null);
   const [isReportingTagsModalOpen, setIsReportingTagsModalOpen] = useState(false);
   const [availableReportingTags, setAvailableReportingTags] = useState<any[]>([]);
   const [reportingTagSelections, setReportingTagSelections] = useState<Record<string, string>>({});
@@ -488,7 +493,11 @@ const NewQuote = () => {
   const loadCustomersForDropdown = async () => {
     try {
       setIsCustomersLoading(true);
-      const rows = await getCustomers();
+      let rows = await getCustomers();
+      if (!Array.isArray(rows) || rows.length === 0) {
+        const response: any = await customersAPI.getAll({ limit: 2000 });
+        rows = Array.isArray(response?.data) ? response.data : [];
+      }
       const normalizedCustomers = (rows || []).map((c: any) => ({
         ...c,
         id: c._id || c.id,
@@ -1776,6 +1785,55 @@ const NewQuote = () => {
     prefillFromProjectRef.current = true;
   }, [location.state, customers, projects, isEditMode]);
 
+  useEffect(() => {
+    if (prefillFromProjectRef.current) return;
+    if (isEditMode) return;
+
+    const state = location.state as any;
+    if (!state || state.source) return;
+
+    const customerId = String(state.customerId || state.customer?._id || state.customer?.id || "").trim();
+    const customerName = String(
+      state.customerName ||
+        state.customer?.displayName ||
+        state.customer?.companyName ||
+        state.customer?.name ||
+        ""
+    ).trim();
+
+    if (!customerId && !customerName) return;
+
+    const matchedCustomer =
+      (customerId
+        ? customers.find((c: any) => String(c?.id || c?._id || "") === customerId)
+        : null) ||
+      customers.find(
+        (c: any) =>
+          String(c?.name || c?.displayName || c?.companyName || "")
+            .trim()
+            .toLowerCase() === customerName.toLowerCase()
+      );
+
+    if (matchedCustomer) {
+      setSelectedCustomer(matchedCustomer);
+    } else {
+      setSelectedCustomer({
+        id: customerId || undefined,
+        _id: customerId || undefined,
+        name: customerName,
+        displayName: customerName,
+        companyName: customerName,
+      } as any);
+    }
+
+    if (customerName) {
+      setFormData((prev: any) => ({
+        ...prev,
+        customerName: prev.customerName || customerName,
+      }));
+    }
+  }, [location.state, customers, isEditMode]);
+
   const formatDate = (date) => {
     if (!date) return "";
     const d = new Date(date);
@@ -2228,6 +2286,8 @@ const NewQuote = () => {
     });
     setIsPhoneCodeDropdownOpen(false);
     setPhoneCodeSearch("");
+    setIsCountryDropdownOpen(false);
+    setCountrySearch("");
     setIsAddressModalOpen(true);
   };
 
@@ -2299,6 +2359,14 @@ const NewQuote = () => {
   };
 
   const countryOptions = useMemo(() => Country.getAllCountries(), []);
+  const filteredCountryOptions = useMemo(() => {
+    const query = String(countrySearch || "").trim().toLowerCase();
+    if (!query) return countryOptions;
+    return countryOptions.filter((country: any) =>
+      String(country.name || "").toLowerCase().includes(query) ||
+      String(country.isoCode || "").toLowerCase().includes(query)
+    );
+  }, [countryOptions, countrySearch]);
   const phoneCountryOptions = useMemo(
     () =>
       countryOptions
@@ -2350,6 +2418,17 @@ const NewQuote = () => {
     document.addEventListener("mousedown", handleOutsideClick);
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, [isPhoneCodeDropdownOpen]);
+
+  useEffect(() => {
+    if (!isCountryDropdownOpen) return;
+    const handleOutsideClick = (event: any) => {
+      if (countryDropdownRef.current && !countryDropdownRef.current.contains(event.target)) {
+        setIsCountryDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [isCountryDropdownOpen]);
 
   useEffect(() => {
     if (addressFormData.phoneCountryCode) return;
@@ -3565,6 +3644,65 @@ const NewQuote = () => {
     }
   };
 
+  const normalizeItemForQuote = (item: any) => ({
+    ...item,
+    entityType: "item",
+    id: String(item?._id || item?.id || ""),
+    sourceId: String(item?._id || item?.id || ""),
+    name: String(item?.name || "").trim(),
+    sku: String(item?.sku || item?.itemCode || "").trim(),
+    code: String(item?.sku || item?.itemCode || "").trim(),
+    rate: Number(item?.sellingPrice || item?.costPrice || item?.rate || 0) || 0,
+    stockOnHand: Number(item?.stockOnHand || item?.quantityOnHand || item?.stockQuantity || 0) || 0,
+    unit: item?.unit || item?.unitOfMeasure || "pcs",
+    description: item?.salesDescription || item?.description || ""
+  });
+
+  const handleCreateItemFromModal = async (data: any, tagIds: string[] = []) => {
+    try {
+      const response: any = await itemsAPI.create(data);
+      if (response?.success === false) {
+        throw new Error(response?.message || "Failed to save item");
+      }
+      const savedItem = response?.data || response;
+      if (!savedItem) {
+        throw new Error("Item saved without data");
+      }
+
+      const normalizedItem = normalizeItemForQuote(savedItem);
+      setAvailableItems(prev => [...prev, normalizedItem]);
+
+      // Keep local cache in sync for immediate dropdown availability
+      try {
+        const savedItems = JSON.parse(localStorage.getItem("inv_items_v1") || "[]");
+        savedItems.push({
+          id: savedItem._id || savedItem.id,
+          name: savedItem.name,
+          sku: savedItem.sku || savedItem.itemCode,
+          sellingPrice: savedItem.sellingPrice ?? savedItem.rate ?? normalizedItem.rate,
+          costPrice: savedItem.costPrice ?? 0,
+          stockOnHand: savedItem.stockOnHand ?? 0,
+          unit: savedItem.unit || savedItem.unitOfMeasure || "pcs",
+          type: savedItem.type || "Goods"
+        });
+        localStorage.setItem("inv_items_v1", JSON.stringify(savedItems));
+      } catch {
+        // ignore local cache write errors
+      }
+
+      if (newItemTargetRowId !== null && newItemTargetRowId !== undefined) {
+        handleItemSelect(newItemTargetRowId, normalizedItem);
+      }
+
+      setNewItemTargetRowId(null);
+      setIsNewItemModalOpen(false);
+      toast.success("Item created successfully");
+    } catch (error: any) {
+      console.error("Failed to create item from modal:", error);
+      throw error;
+    }
+  };
+
   const handleSaveNewItem = () => {
     if (!newItemData.name.trim()) {
       alert("Please enter item name");
@@ -4179,6 +4317,52 @@ const NewQuote = () => {
     return "";
   };
 
+  const hasCustomerAddress = () => {
+    const sources = [
+      billingAddress,
+      shippingAddress,
+      (selectedCustomer as any)?.billingAddress,
+      (selectedCustomer as any)?.shippingAddress,
+      (selectedCustomer as any)?.billing_address,
+      (selectedCustomer as any)?.shipping_address
+    ];
+    return sources.some((addr: any) => {
+      if (!addr) return false;
+      const values = Object.values(addr).map((v) => String(v ?? "").trim());
+      return values.some((v) => v.length > 0);
+    });
+  };
+
+  const ensureCustomerHasAddress = async () => {
+    if (hasCustomerAddress()) return true;
+    const customerId = String((selectedCustomer as any)?.id || (selectedCustomer as any)?._id || "");
+    if (!customerId) return false;
+
+    const trimmed = (value: any) => String(value ?? "").trim();
+    const addressPayload = {
+      attention: trimmed(addressFormData.attention),
+      country: trimmed(addressFormData.country) || "N/A",
+      street1: trimmed(addressFormData.street1) || "N/A",
+      street2: trimmed(addressFormData.street2),
+      city: trimmed(addressFormData.city),
+      state: trimmed(addressFormData.state),
+      zipCode: trimmed(addressFormData.zipCode),
+      phone: `${trimmed(addressFormData.phoneCountryCode)} ${trimmed(addressFormData.phone)}`.trim(),
+      fax: trimmed(addressFormData.fax),
+      phoneCountryCode: trimmed(addressFormData.phoneCountryCode),
+    };
+
+    try {
+      await customersAPI.update(customerId, { billingAddress: addressPayload });
+      setBillingAddress(addressPayload);
+      setSelectedCustomer((prev: any) => prev ? { ...prev, billingAddress: addressPayload } : prev);
+      return true;
+    } catch (error) {
+      console.error("Failed to auto-create customer address:", error);
+      return false;
+    }
+  };
+
   const handleSaveDraft = async () => {
     if (saveLoading) return;
 
@@ -4191,6 +4375,7 @@ const NewQuote = () => {
     setSaveLoading("draft");
 
     try {
+      await ensureCustomerHasAddress();
       // Upload files first
 
       const finalAttachedFiles = await uploadQuoteFiles(formData.attachedFiles);
@@ -4273,10 +4458,8 @@ const NewQuote = () => {
       let savedQuote;
       if (isEditMode && quoteId) {
         savedQuote = await updateQuote(quoteId, quoteData);
-        console.log("Quote updated as draft:", savedQuote);
       } else {
         savedQuote = await saveQuote(quoteData);
-        console.log("Quote saved as draft:", savedQuote);
       }
 
       // Handle URL change to detect if we should show a specific modal
@@ -4291,7 +4474,10 @@ const NewQuote = () => {
       navigate("/sales/quotes", { replace: true });
     } catch (error) {
       console.error("Error saving quote as draft:", error);
-      alert("Failed to save quote. Please try again.");
+      const message = String((error as any)?.message || "");
+      if (!message.toLowerCase().includes("must have at least one address")) {
+        toast.error("Failed to save quote. Please try again.");
+      }
     } finally {
       setSaveLoading(null);
     }
@@ -4302,12 +4488,13 @@ const NewQuote = () => {
 
     if (!validateForm()) {
       const firstError = Object.values(formErrors)[0] || "Please fill in all required fields marked with *";
-      alert(firstError);
+      toast.error(String(firstError));
       return;
     }
 
     setSaveLoading("send");
     try {
+      await ensureCustomerHasAddress();
 
 
       // Upload files first
@@ -4389,7 +4576,6 @@ const NewQuote = () => {
       // Step 2: Navigate to email page
       if (savedQuote) {
         const id = savedQuote._id || savedQuote.id || quoteId;
-        console.log("Quote saved as draft, navigating to email:", id);
         navigate(`/sales/quotes/${id}/email`, {
           state: {
             preloadedQuote: savedQuote,
@@ -4401,7 +4587,10 @@ const NewQuote = () => {
       }
     } catch (error: any) {
       console.error("Error in handleSaveAndSend:", error);
-      alert(error?.message || "Failed to save quote. Please try again.");
+      const message = String(error?.message || "");
+      if (!message.toLowerCase().includes("must have at least one address")) {
+        toast.error(message || "Failed to save quote. Please try again.");
+      }
     } finally {
       setSaveLoading(null);
     }
@@ -4413,7 +4602,6 @@ const NewQuote = () => {
 
   const handleOtherAction = () => {
     // Handle "Other" action - can be customized based on requirements
-    console.log("Other action clicked");
     // You can add custom logic here for what "Other" should do
     // For example: open a modal with more options, or perform a specific action
   };
@@ -5212,6 +5400,7 @@ const NewQuote = () => {
                                       <div
                                         className="px-4 py-2 text-sm text-[#156372] hover:bg-gray-50 cursor-pointer font-medium border-t border-gray-100"
                                         onClick={() => {
+                                          setNewItemTargetRowId(item.id);
                                           setIsNewItemModalOpen(true);
                                           setOpenItemDropdowns(prev => ({ ...prev, [item.id]: false }));
                                         }}
@@ -5769,7 +5958,7 @@ const NewQuote = () => {
 
       {/* Address Modal */}
       {isAddressModalOpen && (
-        <div className="fixed inset-0 z-[12000] bg-black/45 flex items-center justify-center p-4" onClick={() => !isAddressSaving && setIsAddressModalOpen(false)}>
+        <div className="fixed inset-0 z-[12000] bg-black/45 flex items-start justify-center pt-6 pb-6 px-4" onClick={() => !isAddressSaving && setIsAddressModalOpen(false)}>
           <div className="w-full max-w-[620px] rounded-lg bg-white shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
               <h3 className="text-[32px] leading-none font-medium text-gray-800">
@@ -5793,12 +5982,58 @@ const NewQuote = () => {
 
               <div>
                 <label className="block text-sm text-gray-700 mb-1">Country/Region</label>
-                <input className="w-full h-10 rounded border border-gray-300 px-3 text-sm text-gray-700 outline-none focus:border-[#156372]" name="country" value={addressFormData.country} onChange={handleAddressFieldChange} placeholder="Select or type to add" list="country-list" />
-                <datalist id="country-list">
-                  {countryOptions.map((country: any) => (
-                    <option key={country.isoCode} value={country.name} />
-                  ))}
-                </datalist>
+                <div className="relative" ref={countryDropdownRef}>
+                  <button
+                    type="button"
+                    className="w-full h-10 rounded border border-gray-300 px-3 text-sm text-gray-700 outline-none focus:border-[#156372] bg-white flex items-center justify-between"
+                    onClick={() => {
+                      setIsCountryDropdownOpen((prev) => !prev);
+                      setCountrySearch("");
+                    }}
+                  >
+                    <span className={addressFormData.country ? "text-gray-700" : "text-gray-400"}>
+                      {addressFormData.country || "Select or type to add"}
+                    </span>
+                    {isCountryDropdownOpen ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
+                  </button>
+                  {isCountryDropdownOpen && (
+                    <div className="absolute left-0 top-full z-[13000] mt-1 w-full rounded-md border border-gray-200 bg-white shadow-xl overflow-hidden">
+                      <div className="p-2 border-b border-gray-100">
+                        <div className="relative">
+                          <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+                          <input
+                            type="text"
+                            value={countrySearch}
+                            onChange={(e) => setCountrySearch(e.target.value)}
+                            placeholder="Search"
+                            className="h-9 w-full rounded border border-gray-300 pl-7 pr-2 text-sm text-gray-700 outline-none focus:border-[#156372]"
+                            autoFocus
+                          />
+                        </div>
+                      </div>
+                      <div className="max-h-64 overflow-y-auto">
+                        {filteredCountryOptions.length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-gray-500">No matching country</div>
+                        ) : (
+                          filteredCountryOptions.map((country: any) => (
+                            <button
+                              key={country.isoCode}
+                              type="button"
+                              className={`w-full px-3 py-2 text-left text-sm hover:bg-[#f4f8f7] ${String(addressFormData.country || "").toLowerCase() === String(country.name || "").toLowerCase() ? "bg-[#e6f4f7] text-[#156372]" : "text-gray-700"}`}
+                              onClick={() => {
+                                setAddressFormData((prev: any) => ({ ...prev, country: String(country.name || "") }));
+                                setIsCountryDropdownOpen(false);
+                                setCountrySearch("");
+                              }}
+                            >
+                              {country.name}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -5900,7 +6135,7 @@ const NewQuote = () => {
             <div className="px-5 py-4 border-t border-gray-200 flex items-center gap-3">
               <button
                 type="button"
-                className="px-5 h-9 rounded-md bg-[#22b573] text-white text-sm font-semibold hover:bg-[#1ea465] disabled:opacity-70"
+                className="px-5 h-9 rounded-md bg-[#0f4752] text-white text-sm font-semibold hover:bg-[#0b3a42] disabled:opacity-70"
                 onClick={handleSaveAddress}
                 disabled={isAddressSaving}
               >
@@ -5950,392 +6185,33 @@ const NewQuote = () => {
       </div>
 
       {/* New Item Modal */}
-      {
-        isNewItemModalOpen && (
-          <div className="new-invoice-modal-overlay" onClick={handleCancelNewItem}>
-            <div className="new-item-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="new-item-modal-header">
-                <h2 className="new-item-modal-title">New Item</h2>
-                <button
-                  className="new-item-modal-close"
-                  onClick={handleCancelNewItem}
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              <div className="new-item-modal-body">
-                {/* Top Section - Type, Name, SKU, Unit, and Image */}
-                <div className="new-item-top-section">
-                  <div className="new-item-form-left">
-                    {/* Type */}
-                    <div className="new-item-field-group">
-                      <label className="new-item-label">
-                        Type
-                        <Info size={14} className="new-item-info-icon" />
-                      </label>
-                      <div className="new-item-radio-group">
-                        <label className="new-item-radio-label">
-                          <input
-                            type="radio"
-                            name="type"
-                            value="Goods"
-                            checked={newItemData.type === "Goods"}
-                            onChange={handleNewItemChange}
-                            className="new-item-radio"
-                          />
-                          <span className="new-item-radio-dot"></span>
-                          Goods
-                        </label>
-                        <label className="new-item-radio-label">
-                          <input
-                            type="radio"
-                            name="type"
-                            value="Service"
-                            checked={newItemData.type === "Service"}
-                            onChange={handleNewItemChange}
-                            className="new-item-radio"
-                          />
-                          <span className="new-item-radio-dot"></span>
-                          Service
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Name */}
-                    <div className="new-item-field-group">
-                      <label className="new-item-label">
-                        Name<span className="new-item-required">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        name="name"
-                        className="new-item-input"
-                        value={newItemData.name}
-                        onChange={handleNewItemChange}
-                      />
-                    </div>
-
-                    {/* SKU */}
-                    <div className="new-item-field-group">
-                      <label className="new-item-label">
-                        SKU
-                        <Info size={14} className="new-item-info-icon" />
-                      </label>
-                      <input
-                        type="text"
-                        name="sku"
-                        className="new-item-input"
-                        value={newItemData.sku}
-                        onChange={handleNewItemChange}
-                      />
-                    </div>
-
-                    {/* Unit */}
-                    <div className="new-item-field-group">
-                      <label className="new-item-label">
-                        Unit
-                        <Info size={14} className="new-item-info-icon" />
-                      </label>
-                      <div className="new-item-select-wrapper">
-                        <select
-                          name="unit"
-                          className="new-item-select"
-                          value={newItemData.unit}
-                          onChange={handleNewItemChange}
-                        >
-                          <option value="">Select or type to add</option>
-                          <option value="pcs">pcs</option>
-                          <option value="box">box</option>
-                          <option value="kg">kg</option>
-                          <option value="ltr">ltr</option>
-                          <option value="m">m</option>
-                        </select>
-                        <ChevronDown size={16} className="new-item-select-icon" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Image Upload */}
-                  <div className="new-item-image-section">
-                    <div
-                      className="new-item-image-upload"
-                      onClick={() => newItemImageRef.current?.click()}
-                    >
-                      {newItemImage ? (
-                        <img src={newItemImage} alt="Item" className="new-item-image-preview" />
-                      ) : (
-                        <>
-                          <ImageIcon size={48} className="new-item-image-icon" />
-                          <p className="new-item-image-text">Drag image(s) here or</p>
-                          <button type="button" className="new-item-browse-button">
-                            Browse images
-                          </button>
-                        </>
-                      )}
-                    </div>
-                    <input
-                      ref={newItemImageRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleNewItemImageUpload}
-                      style={{ display: "none" }}
-                    />
-                  </div>
-                </div>
-
-                {/* Sales and Purchase Information */}
-                <div className="new-item-info-section">
-                  {/* Sales Information */}
-                  <div className="new-item-info-column">
-                    <div className="new-item-info-header">
-                      <h3 className="new-item-info-title">Sales Information</h3>
-                      <label className="new-item-checkbox-label">
-                        <input
-                          type="checkbox"
-                          name="sellable"
-                          checked={newItemData.sellable}
-                          onChange={handleNewItemChange}
-                          className="new-item-checkbox"
-                        />
-                        Sellable
-                      </label>
-                    </div>
-
-                    {/* Selling Price */}
-                    <div className="new-item-field-group">
-                      <label className="new-item-label new-item-label-red">
-                        Selling Price<span className="new-item-required">*</span>
-                      </label>
-                      <div className="new-item-price-input">
-                        <span className="new-item-currency-prefix">{formData.currency}</span>
-                        <input
-                          type="number"
-                          name="sellingPrice"
-                          className="new-item-input new-item-input-with-prefix"
-                          value={newItemData.sellingPrice}
-                          onChange={handleNewItemChange}
-                          step="0.01"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Sales Account */}
-                    <div className="new-item-field-group">
-                      <label className="new-item-label new-item-label-red">
-                        Account<span className="new-item-required">*</span>
-                      </label>
-                      <div className="new-item-select-wrapper">
-                        <select
-                          name="salesAccount"
-                          className="new-item-select"
-                          value={newItemData.salesAccount}
-                          onChange={handleNewItemChange}
-                        >
-                          <option value="Sales">Sales</option>
-                          <option value="Service Income">Service Income</option>
-                          <option value="Other Income">Other Income</option>
-                        </select>
-                        <ChevronDown size={16} className="new-item-select-icon" />
-                      </div>
-                    </div>
-
-                    {/* Sales Description */}
-                    <div
-                      className="new-item-field-group new-item-field-group-description"
-                      style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: "6px" }}
-                    >
-                      <label className="new-item-label">Description</label>
-                      <textarea
-                        name="salesDescription"
-                        className="new-item-textarea"
-                        style={{ width: "100%", minWidth: 0 }}
-                        value={newItemData.salesDescription}
-                        onChange={handleNewItemChange}
-                        rows={3}
-                      />
-                    </div>
-
-                    {/* Sales Tax */}
-                    <div className="new-item-field-group">
-                      <label className="new-item-label">
-                        Tax
-                        <Info size={14} className="new-item-info-icon" />
-                      </label>
-                      <div className="new-item-select-wrapper">
-                        <select
-                          name="salesTax"
-                          className="new-item-select"
-                          value={newItemData.salesTax}
-                          onChange={handleNewItemChange}
-                        >
-                          <option value="">Select a Tax</option>
-                          {taxes.map(tax => (
-                            <option key={tax.id} value={tax.id}>{tax.name}</option>
-                          ))}
-                        </select>
-                        <ChevronDown size={16} className="new-item-select-icon" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Purchase Information */}
-                  <div className="new-item-info-column">
-                    <div className="new-item-info-header">
-                      <h3 className="new-item-info-title">Purchase Information</h3>
-                      <label className="new-item-checkbox-label">
-                        <input
-                          type="checkbox"
-                          name="purchasable"
-                          checked={newItemData.purchasable}
-                          onChange={handleNewItemChange}
-                          className="new-item-checkbox"
-                        />
-                        Purchasable
-                      </label>
-                    </div>
-
-                    {/* Cost Price */}
-                    <div className="new-item-field-group">
-                      <label className="new-item-label new-item-label-red">
-                        Cost Price<span className="new-item-required">*</span>
-                      </label>
-                      <div className="new-item-price-input">
-                        <span className="new-item-currency-prefix">{formData.currency}</span>
-                        <input
-                          type="number"
-                          name="costPrice"
-                          className="new-item-input new-item-input-with-prefix"
-                          value={newItemData.costPrice}
-                          onChange={handleNewItemChange}
-                          step="0.01"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Purchase Account */}
-                    <div className="new-item-field-group">
-                      <label className="new-item-label new-item-label-red">
-                        Account<span className="new-item-required">*</span>
-                      </label>
-                      <div className="new-item-select-wrapper">
-                        <select
-                          name="purchaseAccount"
-                          className="new-item-select"
-                          value={newItemData.purchaseAccount}
-                          onChange={handleNewItemChange}
-                        >
-                          <option value="Cost of Goods Sold">Cost of Goods Sold</option>
-                          <option value="Purchases">Purchases</option>
-                          <option value="Expenses">Expenses</option>
-                        </select>
-                        <ChevronDown size={16} className="new-item-select-icon" />
-                      </div>
-                    </div>
-
-                    {/* Purchase Description */}
-                    <div
-                      className="new-item-field-group new-item-field-group-description"
-                      style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: "6px" }}
-                    >
-                      <label className="new-item-label">Description</label>
-                      <textarea
-                        name="purchaseDescription"
-                        className="new-item-textarea"
-                        style={{ width: "100%", minWidth: 0 }}
-                        value={newItemData.purchaseDescription}
-                        onChange={handleNewItemChange}
-                        rows={3}
-                      />
-                    </div>
-
-                    {/* Purchase Tax */}
-                    <div className="new-item-field-group">
-                      <label className="new-item-label">
-                        Tax
-                        <Info size={14} className="new-item-info-icon" />
-                      </label>
-                      <div className="new-item-select-wrapper">
-                        <select
-                          name="purchaseTax"
-                          className="new-item-select"
-                          value={newItemData.purchaseTax}
-                          onChange={handleNewItemChange}
-                        >
-                          <option value="">Select a Tax</option>
-                          {taxes.map(tax => (
-                            <option key={tax.id} value={tax.id}>{tax.name}</option>
-                          ))}
-                        </select>
-                        <ChevronDown size={16} className="new-item-select-icon" />
-                      </div>
-                    </div>
-
-                    {/* Preferred Vendor */}
-                    <div className="new-item-field-group">
-                      <label className="new-item-label">Preferred Vendor</label>
-                      <div className="new-item-select-wrapper">
-                        <select
-                          name="preferredVendor"
-                          className="new-item-select"
-                          value={newItemData.preferredVendor}
-                          onChange={handleNewItemChange}
-                        >
-                          <option value=""></option>
-                        </select>
-                        <ChevronDown size={16} className="new-item-select-icon" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Track Inventory Section */}
-                <div className="new-item-inventory-section">
-                  <label className="new-item-inventory-checkbox">
-                    <input
-                      type="checkbox"
-                      name="trackInventory"
-                      checked={newItemData.trackInventory}
-                      onChange={handleNewItemChange}
-                      className="new-item-checkbox"
-                    />
-                    <span className="new-item-inventory-label">
-                      Track Inventory for this item
-                      <Info size={14} className="new-item-info-icon" />
-                    </span>
-                  </label>
-                  <p className="new-item-inventory-note">
-                    You cannot enable/disable inventory tracking once you've created transactions for this item
-                  </p>
-
-                  {newItemData.trackInventory && (
-                    <div className="new-item-inventory-info">
-                      <Info size={16} className="new-item-inventory-info-icon" />
-                      <span>Note: You can configure the opening stock and stock tracking for this item under the Items module</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="new-item-modal-footer">
-                <button
-                  className="new-item-button new-item-button-primary"
-                  style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                  onClick={handleSaveNewItem}
-                >
-                  Save
-                </button>
-                <button
-                  className="new-item-button new-item-button-cancel"
-                  onClick={handleCancelNewItem}
-                >
-                  Cancel
-                </button>
-              </div>
+      {isNewItemModalOpen && createPortal(
+        <div
+          className="fixed inset-0 z-[12000] flex items-center justify-center bg-black/50 p-4"
+          onClick={() => {
+            setIsNewItemModalOpen(false);
+            setNewItemTargetRowId(null);
+          }}
+        >
+          <div
+            className="w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="max-h-[90vh] overflow-y-auto bg-gray-50">
+              <NewItemForm
+                onCancel={() => {
+                  setIsNewItemModalOpen(false);
+                  setNewItemTargetRowId(null);
+                }}
+                onCreate={handleCreateItemFromModal}
+                baseCurrency={baseCurrencyCode ? { code: baseCurrencyCode } : undefined}
+                formTitle="New Item"
+              />
             </div>
           </div>
-        )
-      }
+        </div>,
+        document.body
+      )}
 
       {/* New Project Modal */}
       {

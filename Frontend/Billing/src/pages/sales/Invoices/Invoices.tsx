@@ -654,7 +654,7 @@ export default function Invoices() {
   };
 
   const handleCreateNewRecurringInvoice = () => {
-    navigate("/sales/recurring-invoices/new");
+    navigate("/sales/subscriptions/new");
   };
 
   const handleCreateNewCreditNote = () => {

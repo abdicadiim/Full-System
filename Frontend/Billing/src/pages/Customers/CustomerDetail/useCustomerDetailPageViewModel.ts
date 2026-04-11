@@ -95,6 +95,8 @@ export function useCustomerDetailPageViewModel(args: any) {
         id,
         customer,
         customers,
+        customerStatusOverride,
+        setCustomerStatusOverride,
         navigate,
         activeTab,
         invoices,
@@ -1385,12 +1387,16 @@ export function useCustomerDetailPageViewModel(args: any) {
     };
 
     const isCustomerActive = (c: any) => {
+        const override = String(customerStatusOverride || "").toLowerCase().trim();
+        if (override === "inactive") return false;
+        if (override === "active") return true;
         const status = String(c?.status ?? "").toLowerCase().trim();
         if (status === "inactive" || c?.isInactive === true) return false;
         return status === "active" || c?.isActive === true || (!status && c?.isInactive !== true);
     };
 
     const setActiveStatus = async (makeActive: boolean) => {
+        const previousStatusOverride = customerStatusOverride;
         const customerIdCandidates = getCustomerIdCandidates(customer, id);
         const targetId = customerIdCandidates.find(isMongoObjectId) || customerIdCandidates[0] || "";
         if (!targetId || targetId.toLowerCase() === "undefined" || targetId.toLowerCase() === "null") {
@@ -1405,6 +1411,7 @@ export function useCustomerDetailPageViewModel(args: any) {
         customerIdCandidates.forEach((candidateId) => {
             syncCurrentCustomerPatch(optimisticStatusPatch, candidateId);
         });
+        setCustomerStatusOverride(status);
 
         try {
             const response = await customersAPI.update(targetId, {
@@ -1416,18 +1423,41 @@ export function useCustomerDetailPageViewModel(args: any) {
                 throw new Error(response?.message || "Failed to update customer");
             }
 
-            const persistedStatusPatch = buildCustomerStatusPatch(makeActive, response?.data);
+            const persistedStatusPatch = {
+                ...optimisticStatusPatch,
+                ...(response?.data && typeof response.data === "object" ? {
+                    ...response.data,
+                    status: status,
+                    isActive: optimisticStatusPatch.isActive,
+                    isInactive: optimisticStatusPatch.isInactive,
+                } : {}),
+            };
             const persistedIdCandidates = getCustomerIdCandidates(response?.data, targetId);
             const patchTargets = Array.from(new Set([...customerIdCandidates, ...persistedIdCandidates]));
 
             patchTargets.forEach((candidateId) => {
                 syncCurrentCustomerPatch(persistedStatusPatch, candidateId);
             });
+            setCustomerStatusOverride(status);
+
+            if (typeof window !== "undefined") {
+                window.dispatchEvent(new CustomEvent("customersUpdated", {
+                    detail: {
+                        customer: {
+                            id: targetId,
+                            _id: targetId,
+                            status,
+                            isActive: optimisticStatusPatch.isActive,
+                            isInactive: optimisticStatusPatch.isInactive,
+                        },
+                        action: "status",
+                    },
+                }));
+            }
 
             toast.success(`Customer marked as ${statusLabel} successfully`);
-            void reloadSidebarCustomerList();
-            void refreshData();
         } catch (error: any) {
+            setCustomerStatusOverride(previousStatusOverride);
             toast.error("Failed to update customer: " + (error.message || "Unknown error"));
             void refreshData();
         }

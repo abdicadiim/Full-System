@@ -757,6 +757,46 @@ export default function NewRetailInvoice() {
     prefillFromProjectRef.current = true;
   }, [location.state, customers, projects, isEditMode]);
 
+  useEffect(() => {
+    if (prefillFromProjectRef.current) return;
+    if (isEditMode) return;
+
+    const state = location.state as any;
+    if (!state || state.source) return;
+
+    const customerIdFromState = String(state.customerId || state.customer?._id || state.customer?.id || "").trim();
+    const customerNameFromState = String(
+      state.customerName ||
+        state.customer?.displayName ||
+        state.customer?.companyName ||
+        state.customer?.name ||
+        ""
+    ).trim();
+
+    if (!customerIdFromState && !customerNameFromState) return;
+
+    const match =
+      (customerIdFromState
+        ? customers.find((c: any) => String(c?._id || c?.id || "") === customerIdFromState)
+        : null) ||
+      customers.find(
+        (c: any) =>
+          String(c?.displayName || c?.name || c?.companyName || "")
+            .trim()
+            .toLowerCase() === customerNameFromState.toLowerCase()
+      );
+
+    if (match) {
+      const matchedId = String(match._id || match.id || "");
+      setCustomerId(matchedId);
+      if (matchedId) {
+        void loadProjectsForCustomer(matchedId);
+      }
+    } else {
+      setCustomerId(customerIdFromState);
+    }
+  }, [location.state, customers, isEditMode]);
+
   const handleCustomerSelect = async (customer: any) => {
     const selectedId = String(customer._id || customer.id || "");
     if (!selectedId) return;

@@ -57,12 +57,58 @@ export type OrganizationListItem = {
   email?: string;
   currency_code?: string;
   time_zone?: string;
+  country?: string;
+  countryIso?: string;
+  state?: string;
+  role?: string;
+  roleName?: string;
 };
 
 type OrganizationListResponse = {
   code?: number;
   message?: string;
   organizations?: OrganizationListItem[];
+};
+
+type OrganizationSelectionCache = {
+  organizations: OrganizationListItem[];
+  savedAt: string;
+};
+
+export const ORG_SELECTION_CACHE_KEY = "auth:org-selection-cache";
+
+export const readOrganizationSelectionCache = () => {
+  if (typeof window === "undefined") return [];
+
+  const raw = window.sessionStorage.getItem(ORG_SELECTION_CACHE_KEY);
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<OrganizationSelectionCache> | null;
+    if (!parsed || !Array.isArray(parsed.organizations)) return [];
+    return parsed.organizations.filter((item): item is OrganizationListItem => Boolean(item?.organization_id));
+  } catch {
+    return [];
+  }
+};
+
+export const writeOrganizationSelectionCache = (organizations: OrganizationListItem[]) => {
+  if (typeof window === "undefined") return;
+
+  try {
+    const payload: OrganizationSelectionCache = {
+      organizations: Array.isArray(organizations) ? organizations : [],
+      savedAt: new Date().toISOString(),
+    };
+    window.sessionStorage.setItem(ORG_SELECTION_CACHE_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore storage failures; the live fetch still works.
+  }
+};
+
+export const clearOrganizationSelectionCache = () => {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(ORG_SELECTION_CACHE_KEY);
 };
 
 export const orgApi = {

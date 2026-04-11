@@ -2516,6 +2516,52 @@ const readFileAsDataUrl = (file: File) =>
   });
 
 export const documentsAPI = {
+  uploadMultipart: async (file: File, extra?: Record<string, any>) => {
+    const token = getStoredToken();
+    const formData = new FormData();
+    formData.append("file", file, file.name);
+    Object.entries(extra || {}).forEach(([key, value]) => {
+      if (value === undefined || value === null || value === "") return;
+      formData.append(key, String(value));
+    });
+
+    try {
+      const response = await fetch(withBase("/documents"), {
+        method: "POST",
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "include",
+        body: formData,
+      });
+
+      const contentType = response.headers.get("content-type") || "";
+      const payload = contentType.includes("application/json")
+        ? await response.json().catch(() => null)
+        : await response.text().catch(() => "");
+
+      if (!response.ok) {
+        return {
+          success: false,
+          status: response.status,
+          message:
+            (payload && typeof payload === "object" && (payload as any).message) ||
+            response.statusText ||
+            "Upload failed",
+          data: payload && typeof payload === "object" ? (payload as any).data ?? null : payload,
+        };
+      }
+
+      if (payload && typeof payload === "object") {
+        if ("success" in (payload as any)) return payload as any;
+        return { success: true, data: payload };
+      }
+
+      return { success: true, data: payload };
+    } catch (error: any) {
+      return { success: false, message: error?.message || "Upload failed", data: null };
+    }
+  },
   uploadBinary: async (file: File, extra?: Record<string, any>) => {
     const token = getStoredToken();
     const params = new URLSearchParams();
@@ -2588,8 +2634,17 @@ export const documentsAPI = {
       return fastUpload;
     }
 
-    if (fastUpload?.status && ![404, 415, 500, 501].includes(Number(fastUpload.status))) {
+    if (fastUpload?.status && ![400, 404, 413, 415, 422, 500, 501].includes(Number(fastUpload.status))) {
       return fastUpload;
+    }
+
+    const multipartUpload = await documentsAPI.uploadMultipart(file, extra);
+    if (multipartUpload?.success) {
+      return multipartUpload;
+    }
+
+    if (multipartUpload?.status && ![400, 404, 413, 415, 422, 500, 501].includes(Number(multipartUpload.status))) {
+      return multipartUpload;
     }
 
     return await documentsAPI.upload(file, extra);

@@ -74,6 +74,9 @@ export default function CustomerDetailTransactionsTab(args: any) {
     getFilteredSalesReceipts,
   } = args;
 
+  const customerId = String(customer?.id || customer?._id || "").trim();
+  const customerName = String(customer?.name || customer?.displayName || customer?.companyName || "").trim();
+
   return (
                         <div className="flex-1 min-h-0 p-6" style={{ paddingRight: 0 }}>
                             <div className="relative inline-block mb-4" ref={goToTransactionsDropdownRef}>
@@ -164,7 +167,7 @@ export default function CustomerDetailTransactionsTab(args: any) {
                                             className="hidden flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium cursor-pointer hover:bg-blue-700 transition-colors"
                                             onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
                                                 e.stopPropagation();
-                                                navigate("/sales/invoices/new", { state: { customerId: customer?.id, customerName: customer?.name } });
+                                            navigate("/sales/invoices/new", { state: { customerId, customerName } });
                                             }}
                                         >
                                             <Plus size={14} />
@@ -318,7 +321,7 @@ export default function CustomerDetailTransactionsTab(args: any) {
                                         className="hidden flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium cursor-pointer hover:bg-blue-700 transition-colors"
                                         onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
                                             e.stopPropagation();
-                                            navigate("/payments/payments-received/new", { state: { customerId: customer?.id, customerName: customer?.name } });
+                                            navigate("/payments/payments-received/new", { state: { customerId, customerName } });
                                         }}
                                     >
                                         <Plus size={14} />
@@ -423,7 +426,7 @@ export default function CustomerDetailTransactionsTab(args: any) {
                                         className="hidden flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium cursor-pointer hover:bg-blue-700 transition-colors"
                                         onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
                                             e.stopPropagation();
-                                            navigate("/sales/quotes/new", { state: { customerId: customer?.id, customerName: customer?.name } });
+                                            navigate("/sales/quotes/new", { state: { customerId, customerName } });
                                         }}
                                     >
                                         <Plus size={14} />
@@ -534,7 +537,7 @@ export default function CustomerDetailTransactionsTab(args: any) {
                                         className="hidden flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium cursor-pointer hover:bg-blue-700 transition-colors"
                                         onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
                                             e.stopPropagation();
-                                            navigate("/sales/retainer-invoices/new", { state: { customerId: customer?.id, customerName: customer?.name } });
+                                            navigate("/sales/retainer-invoices/new", { state: { customerId, customerName } });
                                         }}
                                     >
                                         <Plus size={14} />
@@ -638,7 +641,7 @@ export default function CustomerDetailTransactionsTab(args: any) {
                                         className="hidden flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium cursor-pointer hover:bg-blue-700 transition-colors"
                                         onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
                                             e.stopPropagation();
-                                            navigate("/purchases/expenses/new", { state: { customerId: customer?.id, customerName: customer?.name } });
+                                            navigate("/purchases/expenses/new", { state: { customerId, customerName } });
                                         }}
                                     >
                                         <Plus size={14} />
@@ -745,7 +748,7 @@ export default function CustomerDetailTransactionsTab(args: any) {
                                         className="hidden flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium cursor-pointer hover:bg-blue-700 transition-colors"
                                         onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
                                             e.stopPropagation();
-                                            navigate("/purchases/expenses/recurring/new", { state: { customerId: customer?.id, customerName: customer?.name } });
+                                            navigate("/purchases/expenses/recurring/new", { state: { customerId, customerName } });
                                         }}
                                     >
                                         <Plus size={14} />
@@ -849,7 +852,7 @@ export default function CustomerDetailTransactionsTab(args: any) {
                                         className="hidden flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium cursor-pointer hover:bg-blue-700 transition-colors"
                                         onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
                                             e.stopPropagation();
-                                            navigate("/time-tracking/projects/new", { state: { customerId: customer?.id, customerName: customer?.name } });
+                                            navigate("/time-tracking/projects/new", { state: { customerId, customerName } });
                                         }}
                                     >
                                         <Plus size={14} />

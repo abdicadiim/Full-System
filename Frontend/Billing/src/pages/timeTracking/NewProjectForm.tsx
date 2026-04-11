@@ -298,18 +298,30 @@ export default function NewProjectForm() {
     });
   }, [formData.billingMethod]);
 
-  // Pre-populate form data from location state (when coming from quote)
+  // Pre-populate form data from location state
   useEffect(() => {
     if (location.state) {
-      const { customerName } = location.state;
-      if (customerName) {
+      const { customerName, customerId } = location.state;
+      if (customerName || customerId) {
+        const matchedCustomer = customers.find((customer) => {
+          const candidateId = String(customer.id || customer._id || "");
+          const candidateName = String(customer.name || customer.displayName || customer.companyName || "").trim().toLowerCase();
+          return (customerId && candidateId === String(customerId).trim()) || (customerName && candidateName === String(customerName).trim().toLowerCase());
+        });
+        const resolvedCustomerName =
+          matchedCustomer?.name ||
+          matchedCustomer?.displayName ||
+          matchedCustomer?.companyName ||
+          customerName ||
+          "";
         setFormData(prev => ({
           ...prev,
-          customerName: customerName
+          customerName: resolvedCustomerName,
+          customerId: String(customerId || matchedCustomer?.id || matchedCustomer?._id || prev.customerId || "")
         }));
       }
     }
-  }, [location.state]);
+  }, [location.state, customers]);
 
   // When opening advanced search, show all customers by default.
   useEffect(() => {

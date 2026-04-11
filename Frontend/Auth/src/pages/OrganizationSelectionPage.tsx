@@ -2,8 +2,13 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import SetupHeader from "../components/SetupHeader";
 import SetupProgressBar from "../components/SetupProgressBar";
-import { getAppDisplayName } from "../lib/appBranding";
-import { orgApi, type OrganizationListItem } from "../services/orgApi";
+import { getAppDisplayName, getFallbackUrl } from "../lib/appBranding";
+import {
+  orgApi,
+  readOrganizationSelectionCache,
+  type OrganizationListItem,
+  writeOrganizationSelectionCache,
+} from "../services/orgApi";
 
 const estimateCreatedOn = (value?: string) => {
   if (!value) return "Date unknown";
@@ -17,25 +22,55 @@ const toTimestamp = (value?: string) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const getStoredUserRole = () => {
+  if (typeof window === "undefined") return "";
+  const keys = ["user", "current_user", "auth_user"];
+  for (const key of keys) {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) continue;
+    try {
+      const parsed = JSON.parse(raw);
+      const role = String(parsed?.roleName || parsed?.role || "").trim();
+      if (role) return role;
+    } catch {
+      continue;
+    }
+  }
+  return "";
+};
+
+const formatLocation = (org: OrganizationListItem) => {
+  const parts = [org.state, org.country || org.countryIso].map((part) => String(part || "").trim()).filter(Boolean);
+  if (parts.length === 0) return "Location not set";
+  return parts.join(", ");
+};
+
 export default function OrganizationSelectionPage() {
   const navigate = useNavigate();
   const appName = getAppDisplayName();
-  const [loading, setLoading] = useState(true);
+  const currentUserRole = getStoredUserRole();
+  const [organizations, setOrganizations] = useState<OrganizationListItem[]>(() => readOrganizationSelectionCache());
+  const [loading, setLoading] = useState(() => readOrganizationSelectionCache().length === 0);
   const [error, setError] = useState<string | null>(null);
-  const [organizations, setOrganizations] = useState<OrganizationListItem[]>([]);
   const [activeMenuOrg, setActiveMenuOrg] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
+    const hadCachedOrganizations = readOrganizationSelectionCache().length > 0;
     orgApi
       .list()
       .then((result) => {
         if (!isMounted) return;
-        setOrganizations(result.organizations ?? []);
+        const nextOrganizations = result.organizations ?? [];
+        setOrganizations(nextOrganizations);
+        writeOrganizationSelectionCache(nextOrganizations);
+        setError(null);
       })
       .catch(() => {
         if (!isMounted) return;
-        setError("Unable to load your organizations right now.");
+        if (!hadCachedOrganizations) {
+          setError("Unable to load your organizations right now.");
+        }
       })
       .finally(() => {
         if (!isMounted) return;
@@ -60,15 +95,22 @@ export default function OrganizationSelectionPage() {
     try {
       if (typeof window !== "undefined" && org.organization_id) {
         localStorage.setItem("selected_organization_id", org.organization_id);
+        document.cookie = `selected_organization_id=${encodeURIComponent(org.organization_id)}; Path=/; SameSite=Lax`;
       }
     } catch {
       // ignore
     }
-    navigate("/optimize");
+
+    const billingBaseUrl = getFallbackUrl();
+    const targetUrl = new URL("/dashboard", billingBaseUrl);
+    targetUrl.searchParams.set("organization_id", org.organization_id);
+    window.location.replace(targetUrl.toString());
   };
 
   const handleCreateOrg = () => {
-    navigate("/org-setup");
+    const params = new URLSearchParams(window.location.search);
+    params.set("minimal", "1");
+    navigate(`/org-setup${params.toString() ? `?${params.toString()}` : ""}`);
   };
 
   useEffect(() => {
@@ -178,6 +220,10 @@ export default function OrganizationSelectionPage() {
                             Organization created on {estimateCreatedOn(org.account_created_date_formatted ?? org.account_created_date)}
                           </p>
                           <p className="text-[11px] text-slate-500">Organization ID: {org.organization_id}</p>
+                          <p className="text-[11px] text-slate-500">Location: {formatLocation(org)}</p>
+                          <p className="text-[11px] text-slate-500">
+                            Role: {String(org.roleName || org.role || currentUserRole || "Admin")}
+                          </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-3 text-xs text-slate-500">
@@ -210,21 +256,14 @@ export default function OrganizationSelectionPage() {
                           >
                             <button
                               type="button"
-                              className="w-full rounded-t-2xl px-4 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-primary/10 hover:text-primary"
+                              className="w-full rounded-t-2xl px-4 py-2 text-left text-sm font-medium text-slate-600 transition hover:bg-slate-50"
                               onClick={() => handleMenuAction("default", org)}
                             >
                               Mark as Default
                             </button>
                             <button
                               type="button"
-                              className="w-full px-4 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-50"
-                              onClick={() => handleMenuAction("leave", org)}
-                            >
-                              Leave Organization
-                            </button>
-                            <button
-                              type="button"
-                              className="w-full rounded-b-2xl px-4 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-50"
+                              className="w-full px-4 py-2 text-left text-sm font-medium text-slate-600 transition hover:bg-slate-50"
                               onClick={() => handleMenuAction("delete", org)}
                             >
                               Delete

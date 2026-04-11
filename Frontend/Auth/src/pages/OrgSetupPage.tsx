@@ -75,6 +75,52 @@ const clearSessionDraftPrefix = (prefix: string) => {
   } catch {}
 };
 
+const resolveUserDisplayName = (user: any) => {
+  if (!user || typeof user !== "object") return "";
+  const firstName = String(user.firstName || user.first_name || "").trim();
+  const lastName = String(user.lastName || user.last_name || "").trim();
+  const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
+  const directName = String(user.name || user.fullName || user.full_name || user.displayName || "").trim();
+  return fullName || directName;
+};
+
+const resolveUserEmail = (user: any) => {
+  if (!user || typeof user !== "object") return "";
+  return String(user.email || user.primaryEmail || user.mail || "").trim();
+};
+
+const getStoredUserName = () => {
+  if (typeof window === "undefined") return "";
+  for (const key of ["user", "current_user", "auth_user"]) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      const name = resolveUserDisplayName(parsed);
+      if (name) return name;
+    } catch {
+      continue;
+    }
+  }
+  return "";
+};
+
+const getStoredUserEmail = () => {
+  if (typeof window === "undefined") return "";
+  for (const key of ["user", "current_user", "auth_user"]) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      const email = resolveUserEmail(parsed);
+      if (email) return email;
+    } catch {
+      continue;
+    }
+  }
+  return "";
+};
+
 const COUNTRIES: SelectOption[] = Country.getAllCountries()
   .map((c: ICountry) => ({ value: c.isoCode, label: c.name }))
   .sort((a: SelectOption, b: SelectOption) => a.label.localeCompare(b.label));
@@ -286,6 +332,9 @@ export default function OrgSetupPage() {
   const authApp = getAuthApp();
   const location = useLocation();
   const navigate = useNavigate();
+  const isMinimalSetup = new URLSearchParams(location.search).get("minimal") === "1";
+  const initialMinimalOrgName = isMinimalSetup ? getStoredUserEmail() : "";
+  const [welcomeName, setWelcomeName] = useState(() => getStoredUserName());
   const locationState = (location.state as { orgName?: unknown; intent?: unknown } | null) || null;
   const signupStateOrgName =
     typeof locationState?.orgName === "string" && locationState.orgName.trim() && locationState.intent === "signup"
@@ -305,6 +354,7 @@ export default function OrgSetupPage() {
       const fromStorage = sessionStorage.getItem("orgName");
       if (fromStorage && fromStorage.trim()) return fromStorage;
     } catch {}
+    if (initialMinimalOrgName) return initialMinimalOrgName;
     return "";
   });
   const [countryIso, setCountryIso] = useState(() => readDraftValue(ORG_SETUP_DRAFT_KEY("countryIso")) || getDefaultCountryIso());
@@ -383,11 +433,124 @@ export default function OrgSetupPage() {
     if (!stateOptions.includes(state)) setState("");
   }, [countryIso, state, stateOptions]);
 
+  useEffect(() => {
+    if (!isMinimalSetup) return;
 
-  const onContinue = (e: React.FormEvent) => {
+    let alive = true;
+    const loadUserName = async () => {
+      try {
+        const token =
+          localStorage.getItem("auth_token") ||
+          localStorage.getItem("token") ||
+          localStorage.getItem("accessToken") ||
+          "";
+        const response = await fetch("/api/auth/me", {
+          credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        const payload = await response.json().catch(() => null);
+        const candidate = payload?.data || payload?.user || payload;
+        const name = resolveUserDisplayName(candidate) || getStoredUserName();
+        const email = resolveUserEmail(candidate) || getStoredUserEmail();
+        if (alive && name) {
+          setWelcomeName(name);
+        }
+        if (alive && isMinimalSetup && email && !orgName.trim()) {
+          setOrgName(email);
+        }
+      } catch {
+        if (alive && !welcomeName) {
+          setWelcomeName(getStoredUserName());
+        }
+      }
+    };
+
+    void loadUserName();
+    return () => {
+      alive = false;
+    };
+  }, [isMinimalSetup]);
+
+  if (isMinimalSetup) {
+    return (
+      <div className="min-h-screen w-full bg-[#eef4fb] px-4 py-10 font-display text-slate-900 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-[980px] rounded-[2px] border-t-2 border-t-blue-500 bg-white px-5 py-10 shadow-[0_2px_12px_rgba(15,23,42,0.06)] sm:px-14 sm:py-14">
+          <div className="mx-auto max-w-[800px]">
+            <h1 className="text-2xl font-normal tracking-tight text-slate-900 sm:text-[28px]">
+              {`Welcome ${welcomeName || "there"},`}
+            </h1>
+            <p className="mt-3 text-[15px] leading-6 text-slate-500">
+              Let us know where your business is &amp; we&apos;ll optimize {appName} accordingly!
+            </p>
+
+            <form onSubmit={onContinue} className="mt-12 space-y-8">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-900">
+                  Organization Name<span className="text-red-500">*</span>
+                </label>
+                <input
+                  className={[
+                    "h-11 w-full rounded-md border bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100",
+                    submitted && !orgName.trim() ? "border-red-300" : "border-slate-200",
+                  ].join(" ")}
+                  value={orgName}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setOrgName(next);
+                    try {
+                      sessionStorage.setItem("orgName", next);
+                    } catch {}
+                  }}
+                  placeholder=""
+                />
+                {submitted && !orgName.trim() ? (
+                  <p className="text-[11px] text-red-600">Organization name is required.</p>
+                ) : null}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-900">
+                  Organization Location<span className="text-red-500">*</span>
+                </label>
+                <SearchableSelect
+                  label={undefined}
+                  required
+                  value={countryIso}
+                  options={COUNTRIES}
+                  placeholder="Select"
+                  invalid={submitted && !countryIso}
+                  onChange={setCountryIso}
+                />
+                {submitted && !countryIso ? (
+                  <p className="text-[11px] text-red-600">Organization location is required.</p>
+                ) : null}
+              </div>
+
+              <div className="border-t border-slate-200 pt-8">
+                {saveError ? <p className="mb-3 text-[11px] text-red-600">{saveError}</p> : null}
+                <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
+                  <button
+                    className="inline-flex min-w-[170px] items-center justify-center rounded-md bg-[#4a96f3] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#3f89e8]"
+                    type="submit"
+                    disabled={saving}
+                  >
+                    {saving ? "Saving..." : "Let's get started!"}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+
+  function onContinue(e: React.FormEvent) {
     e.preventDefault();
     setSubmitted(true);
     if (!orgName.trim()) return;
+    if (!countryIso.trim()) return;
 
     setSaving(true);
     setSaveError(null);
@@ -422,7 +585,7 @@ export default function OrgSetupPage() {
         setSaving(false);
         setSaveError("Failed to save organization profile");
       });
-  };
+  }
 
   return (
     <div className="min-h-screen w-full bg-background-light font-display text-slate-900">

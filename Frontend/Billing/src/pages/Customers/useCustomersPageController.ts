@@ -37,6 +37,7 @@ export default function useCustomersPageController() {
   const AUTH_URL = (import.meta as any).env?.VITE_AUTH_URL || "http://localhost:5172";
   const LOCAL_COLUMNS_LAYOUT_KEY = "taban_customers_columns";
   const [customers, setCustomers] = useState<any[]>([]);
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, "active" | "inactive">>({});
   const [selectedCustomers, setSelectedCustomers] = useState(new Set<string>());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -1011,9 +1012,10 @@ export default function useCustomersPageController() {
     return String(rawId).trim();
   };
 
-  const mapCustomerForList = (customer: any) => {
+  const mapCustomerForList = useCallback((customer: any) => {
     const customerId = customer?.id ? String(customer.id) : (customer?._id ? String(customer._id) : "");
     if (!customerId) return null;
+    const statusOverride = statusOverrides[customerId];
 
     let customerName = customer.displayName || customer.name;
     if (!customerName || customerName.trim() === "") {
@@ -1030,6 +1032,16 @@ export default function useCustomersPageController() {
     }
 
     customerName = customerName.trim() || "Customer";
+    const normalizedStatusOverride = statusOverride ? statusOverride.toLowerCase() : "";
+    const statusFromFlags =
+      customer?.isInactive === true
+        ? "inactive"
+        : customer?.isActive === true
+          ? "active"
+          : "";
+    const resolvedStatus = normalizedStatusOverride || String(customer.status || statusFromFlags || "active").toLowerCase();
+    const resolvedIsActive = resolvedStatus === "active";
+    const resolvedIsInactive = resolvedStatus === "inactive";
 
     return {
       ...customer,
@@ -1051,13 +1063,15 @@ export default function useCustomersPageController() {
         customer.customer_no
       ),
       paymentTerms: pickFirstValue(customer.paymentTerms, customer.payment_terms),
-      status: pickFirstValue(customer.status, "Active"),
+      status: resolvedStatus,
+      isActive: resolvedIsActive,
+      isInactive: resolvedIsInactive,
       website: pickFirstValue(customer.website, customer.webSite),
       receivables: Number(customer.receivables ?? customer.accountsReceivable ?? 0),
       unusedCredits: Number(customer.unusedCredits ?? customer.unused_credits ?? 0),
       currency: pickFirstValue(customer.currency, customer.currencyCode, "KES")
     };
-  };
+  }, [statusOverrides]);
 
   const applyCustomerListResult = useCallback((result?: CustomersListQueryResult | null) => {
     if (!result) return;
@@ -1066,7 +1080,24 @@ export default function useCustomersPageController() {
     setTotalItems(result.total || result.pagination?.total || customersArray.length || 0);
     setTotalPages(result.totalPages || result.pagination?.pages || 0);
     setCustomers(customersArray.map(mapCustomerForList).filter(Boolean));
-  }, []);
+    setStatusOverrides((prev) => {
+      const next = { ...prev };
+      customersArray.forEach((row: any) => {
+        const rowId = String(row?._id || row?.id || "").trim();
+        if (!rowId || !next[rowId]) return;
+        const rowStatus =
+          row?.isInactive === true
+            ? "inactive"
+            : row?.isActive === true
+              ? "active"
+              : String(row?.status || "").toLowerCase();
+        if (rowStatus && rowStatus === next[rowId]) {
+          delete next[rowId];
+        }
+      });
+      return next;
+    });
+  }, [mapCustomerForList]);
 
   const customersListQuery = useCustomersListQuery({
     page: currentPage,
@@ -1512,12 +1543,55 @@ export default function useCustomersPageController() {
       return;
     }
 
+    const ids = Array.from(selectedCustomers).map((value) => String(value));
+    const statusPatch = { status: "active", isActive: true, isInactive: false };
+    const idsSet = new Set(ids);
+    const applyStatusPatchToCache = () => {
+      setCustomers((prev) =>
+        (Array.isArray(prev) ? prev : []).map((row: any) => {
+          const rowId = String(row?.id || row?._id || "").trim();
+          if (!rowId || !idsSet.has(rowId)) return row;
+          return { ...row, ...statusPatch };
+        })
+      );
+      setStatusOverrides((prev) => {
+        const next = { ...prev };
+        idsSet.forEach((rowId) => {
+          next[rowId] = "active";
+        });
+        return next;
+      });
+      const cachedListQueries = queryClient.getQueryCache().findAll({
+        queryKey: customerQueryKeys.lists(),
+      });
+      cachedListQueries.forEach((query) => {
+        queryClient.setQueryData(query.queryKey, (existing: CustomersListQueryResult | undefined) => {
+          if (!existing || !Array.isArray(existing.data)) return existing;
+          const nextData = existing.data.map((row: any) => {
+            const rowId = String(row?._id || row?.id || "").trim();
+            if (!rowId || !idsSet.has(rowId)) return row;
+            return { ...row, ...statusPatch };
+          });
+          return { ...existing, data: nextData };
+        });
+      });
+    };
+
     try {
-      await customersAPI.bulkUpdate(Array.from(selectedCustomers), { status: "active" });
+      applyStatusPatchToCache();
+      await customersAPI.bulkUpdate(ids, statusPatch);
       await loadCustomers();
       toast.success(`Marked ${selectedCustomers.size} customer(s) as active`);
       setSelectedCustomers(new Set());
     } catch (error) {
+      setStatusOverrides((prev) => {
+        const next = { ...prev };
+        idsSet.forEach((rowId) => {
+          delete next[rowId];
+        });
+        return next;
+      });
+      await loadCustomers();
       toast.error("Failed to mark customers as active. Please try again.");
     }
   };
@@ -1528,12 +1602,55 @@ export default function useCustomersPageController() {
       return;
     }
 
+    const ids = Array.from(selectedCustomers).map((value) => String(value));
+    const statusPatch = { status: "inactive", isActive: false, isInactive: true };
+    const idsSet = new Set(ids);
+    const applyStatusPatchToCache = () => {
+      setCustomers((prev) =>
+        (Array.isArray(prev) ? prev : []).map((row: any) => {
+          const rowId = String(row?.id || row?._id || "").trim();
+          if (!rowId || !idsSet.has(rowId)) return row;
+          return { ...row, ...statusPatch };
+        })
+      );
+      setStatusOverrides((prev) => {
+        const next = { ...prev };
+        idsSet.forEach((rowId) => {
+          next[rowId] = "inactive";
+        });
+        return next;
+      });
+      const cachedListQueries = queryClient.getQueryCache().findAll({
+        queryKey: customerQueryKeys.lists(),
+      });
+      cachedListQueries.forEach((query) => {
+        queryClient.setQueryData(query.queryKey, (existing: CustomersListQueryResult | undefined) => {
+          if (!existing || !Array.isArray(existing.data)) return existing;
+          const nextData = existing.data.map((row: any) => {
+            const rowId = String(row?._id || row?.id || "").trim();
+            if (!rowId || !idsSet.has(rowId)) return row;
+            return { ...row, ...statusPatch };
+          });
+          return { ...existing, data: nextData };
+        });
+      });
+    };
+
     try {
-      await customersAPI.bulkUpdate(Array.from(selectedCustomers), { status: "inactive" });
+      applyStatusPatchToCache();
+      await customersAPI.bulkUpdate(ids, statusPatch);
       await loadCustomers();
       toast.success(`Marked ${selectedCustomers.size} customer(s) as inactive`);
       setSelectedCustomers(new Set());
     } catch (error) {
+      setStatusOverrides((prev) => {
+        const next = { ...prev };
+        idsSet.forEach((rowId) => {
+          delete next[rowId];
+        });
+        return next;
+      });
+      await loadCustomers();
       toast.error("Failed to mark customers as inactive. Please try again.");
     }
   };
