@@ -30,15 +30,24 @@ function Install-FrontendDeps {
 
   $lockFile = Join-Path $ProjectPath "package-lock.json"
   $shrinkwrapFile = Join-Path $ProjectPath "npm-shrinkwrap.json"
+  $npmCmd = Get-Command "npm.cmd" -ErrorAction SilentlyContinue
 
   Push-Location $ProjectPath
   try {
     if ((Test-Path $lockFile) -or (Test-Path $shrinkwrapFile)) {
       Write-Host "[setup] Installing $ProjectName frontend dependencies from lockfile..."
-      npm ci --no-audit --no-fund
+      if ($npmCmd) {
+        npm.cmd ci --no-audit --no-fund
+      } else {
+        npm ci --no-audit --no-fund
+      }
     } else {
       Write-Host "[setup] Installing $ProjectName frontend dependencies and creating a lockfile..."
-      npm install --no-audit --no-fund
+      if ($npmCmd) {
+        npm.cmd install --no-audit --no-fund
+      } else {
+        npm install --no-audit --no-fund
+      }
     }
   } finally {
     Pop-Location

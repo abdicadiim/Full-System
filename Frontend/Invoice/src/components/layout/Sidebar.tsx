@@ -500,7 +500,8 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
   const sidebarClasses = [
     "z-50 -translate-x-full transform transition duration-200 ease-out",
     "fixed inset-y-0 left-0",
-    "lg:fixed lg:inset-y-4 lg:left-2 lg:translate-x-0",
+    "lg:static lg:translate-x-0 lg:h-full",
+    "shrink-0",
     isCollapsed ? "w-[220px] lg:w-[96px]" : "w-[220px] lg:w-[220px]",
     mobileOpen ? "translate-x-0" : "",
   ]

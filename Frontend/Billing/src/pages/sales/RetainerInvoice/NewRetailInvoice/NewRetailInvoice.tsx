@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { Search, X, Plus, ChevronDown, ChevronUp, Settings, Info, BriefcaseBusiness, Check, PlusCircle } from "lucide-react";
+import { Search, X, Plus, ChevronDown, ChevronUp, Settings, Info, PlusCircle, FileText } from "lucide-react";
 import { toast } from "react-toastify";
 import { getCustomers, getInvoiceById, saveInvoice, updateInvoice } from "../../salesModel";
 import { customersAPI, invoicesAPI, projectsAPI, reportingTagsAPI, taxesAPI, transactionNumberSeriesAPI } from "../../../../services/api";
@@ -158,9 +158,6 @@ export default function NewRetailInvoice() {
   const [rows, setRows] = useState<LineRow[]>([
     { id: Date.now(), description: "", taxId: "", amount: 0 },
   ]);
-  const [taxPreference, setTaxPreference] = useState<"Tax Exclusive" | "Tax Inclusive">("Tax Exclusive");
-  const [isTaxPreferenceOpen, setIsTaxPreferenceOpen] = useState(false);
-  const [taxPreferenceSearch, setTaxPreferenceSearch] = useState("");
 
   const extractRetainerDigits = (value: any) => {
     const raw = String(value || "").trim();
@@ -344,7 +341,6 @@ export default function NewRetailInvoice() {
           setProjectId(resolvedProjectId);
           setCustomerNotes(String(existing?.notes || existing?.customerNotes || ""));
           setTerms(String(existing?.terms || existing?.termsAndConditions || ""));
-          setTaxPreference(existing?.taxExclusive === "Tax Inclusive" ? "Tax Inclusive" : "Tax Exclusive");
 
           const itemRows = Array.isArray(existing?.items) ? existing.items : [];
           const resolveTaxId = (item: any) => {
@@ -561,9 +557,6 @@ export default function NewRetailInvoice() {
       if (element && !element.closest("[data-rt-dropdown='true']")) {
         setOpenReportingTagId(null);
       }
-      if (element && !element.closest("[data-tax-pref-dropdown='true']")) {
-        setIsTaxPreferenceOpen(false);
-      }
     };
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
@@ -586,18 +579,12 @@ export default function NewRetailInvoice() {
         const rate = Number(taxById.get(r.taxId)?.rate || 0);
         const amount = Number(r.amount) || 0;
         if (!rate || amount <= 0) return sum;
-        if (taxPreference === "Tax Inclusive") {
-          return sum + amount * (rate / (100 + rate));
-        }
         return sum + amount * (rate / 100);
       }, 0),
-    [rows, taxById, taxPreference]
+    [rows, taxById]
   );
 
-  const total = useMemo(
-    () => (taxPreference === "Tax Inclusive" ? subtotal : subtotal + totalTax),
-    [subtotal, totalTax, taxPreference]
-  );
+  const total = useMemo(() => subtotal + totalTax, [subtotal, totalTax]);
 
   const taxBreakdown = useMemo(() => {
     const map = new Map<string, { id: string; label: string; amount: number }>();
@@ -610,10 +597,7 @@ export default function NewRetailInvoice() {
       if (amount <= 0) return;
       const rate = Number(tax.rate || 0);
       if (!rate) return;
-      const taxAmount =
-        taxPreference === "Tax Inclusive"
-          ? amount * (rate / (100 + rate))
-          : amount * (rate / 100);
+      const taxAmount = amount * (rate / 100);
       if (!taxAmount) return;
       const existing = map.get(taxId);
       const label = taxLabel(tax);
@@ -624,7 +608,7 @@ export default function NewRetailInvoice() {
       });
     });
     return Array.from(map.values());
-  }, [rows, taxById, taxPreference]);
+  }, [rows, taxById]);
   const reportingTagsForForm = useMemo(() => {
     const tags = Array.isArray(availableReportingTags) ? [...availableReportingTags] : [];
     return tags.sort((a, b) => {
@@ -936,10 +920,7 @@ export default function NewRetailInvoice() {
       .map((r) => {
         const rate = Number(taxById.get(r.taxId)?.rate || 0);
         const amount = Number(r.amount) || 0;
-        const taxAmount =
-          taxPreference === "Tax Inclusive"
-            ? amount * (rate / (100 + rate))
-            : amount * (rate / 100);
+        const taxAmount = amount * (rate / 100);
         return {
           name: r.description || "Item",
           description: r.description,
@@ -947,7 +928,7 @@ export default function NewRetailInvoice() {
           unitPrice: amount,
           taxRate: rate,
           taxAmount,
-          total: taxPreference === "Tax Inclusive" ? amount : amount + taxAmount,
+          total: amount + taxAmount,
         };
       });
 
@@ -988,7 +969,7 @@ export default function NewRetailInvoice() {
         orderNumber: reference,
         paymentTerms: "Due on Receipt",
         currency: "USD",
-        taxExclusive: taxPreference,
+        taxExclusive: "Tax Exclusive",
         location: selectedLocation,
         selectedLocation,
       reportingTags: Object.entries(reportingTagSelections)
@@ -1064,9 +1045,9 @@ export default function NewRetailInvoice() {
   };
 
   const inputBaseClass =
-    "h-[34px] w-full rounded border border-gray-300 px-3 text-[13px] outline-none focus:border-blue-400 transition-all";
+    "h-[34px] w-full rounded-md border border-slate-200 bg-white px-3 text-[13px] text-slate-700 shadow-sm outline-none transition-all placeholder:text-slate-400 hover:border-slate-300 focus:border-[#3b82f6] focus:ring-2 focus:ring-[#3b82f6]/20";
   const selectBaseClass =
-    "h-[34px] w-full appearance-none rounded border border-gray-300 bg-white px-3 pr-8 text-[13px] outline-none focus:border-blue-400 transition-all";
+    "h-[34px] w-full appearance-none rounded-md border border-slate-200 bg-white px-3 pr-8 text-[13px] text-slate-700 shadow-sm outline-none transition-all hover:border-slate-300 focus:border-[#3b82f6] focus:ring-2 focus:ring-[#3b82f6]/20 disabled:bg-slate-50 disabled:text-slate-400";
   const labelClass = "text-[13px] text-gray-700";
   const requiredLabelClass = "text-[13px] text-[#ef4444]";
 
@@ -1141,30 +1122,31 @@ export default function NewRetailInvoice() {
       setLoadingReportingTagId((prev) => (prev === tag.id ? null : prev));
     }
   };
-  const taxPreferenceOptions = ["Tax Exclusive", "Tax Inclusive"];
-  const filteredTaxPreferenceOptions = taxPreferenceOptions.filter((option) =>
-    option.toLowerCase().includes(taxPreferenceSearch.trim().toLowerCase())
-  );
 
   return (
-    <div className="flex min-h-[calc(100vh-98px)] flex-col bg-white">
-      <div className="flex items-center justify-between border-b px-6 py-3">
-        <h1 className="text-lg font-normal text-gray-800">{isEditMode ? "Edit Retainer Invoice" : "New Retainer Invoice"}</h1>
+    <div className="flex min-h-[calc(100vh-98px)] flex-col bg-slate-50">
+      <div className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white/90 px-6 py-4 backdrop-blur">
+        <div className="flex items-center gap-2">
+          <FileText size={18} className="text-slate-600" />
+          <h1 className="text-[18px] font-semibold text-slate-900">
+            {isEditMode ? "Edit Retainer Invoice" : "New Retainer Invoice"}
+          </h1>
+        </div>
         <button
           onClick={() => {
             ensureRetainerListAllView();
             navigate("/sales/retainer-invoices");
           }}
-          className="text-gray-400 hover:text-gray-600 transition-colors"
+          className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+          aria-label="Close"
         >
           <X size={22} />
         </button>
       </div>
 
-      <div className="bg-white">
-        <div className="max-w-[1120px] px-6 py-6">
-          <div className="space-y-6">
-            <div className="bg-white p-6">
+      <div className="mx-auto w-full max-w-[1240px] px-6 py-6">
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
+          <div className="p-6">
               <div className="grid grid-cols-[220px_1fr] items-center gap-y-4 gap-x-4 max-w-[860px]">
                 <label className={requiredLabelClass}>Customer Name*</label>
                 <div className="relative flex items-center" ref={customerDropdownRef}>
@@ -1195,7 +1177,7 @@ export default function NewRetailInvoice() {
                   </button>
 
                   {isCustomerDropdownOpen && (
-                    <div className="absolute left-0 top-full mt-1 w-[calc(100%-40px)] rounded-md border border-gray-200 bg-white shadow-xl z-[200]">
+                    <div className="absolute left-0 top-full mt-1 w-[calc(100%-40px)] rounded-md border border-slate-200 bg-white shadow-xl z-[200] animate-in fade-in zoom-in-95 duration-100">
                       <div className="p-2 border-b border-gray-100">
                         <div className="flex items-center gap-2 px-2 py-1.5 border border-gray-200 rounded bg-gray-50">
                           <Search size={13} className="text-gray-400" />
@@ -1260,7 +1242,7 @@ export default function NewRetailInvoice() {
               </div>
             </div>
 
-            <div className="bg-white p-6">
+          <div className="border-t border-slate-100 p-6">
               <div className="grid grid-cols-[220px_1fr] items-start gap-y-4 gap-x-4 max-w-[860px]">
                 <label className={requiredLabelClass}>Retainer Invoice Number*</label>
                 <div className="relative max-w-[260px]">
@@ -1314,9 +1296,9 @@ export default function NewRetailInvoice() {
                   {customerId && customerProjects.length === 0 && <p className="text-xs text-gray-500 mt-1">No active projects found for this customer.</p>}
                 </div>
               </div>
-            </div>
+          </div>
 
-            <div className="bg-white p-6 border-y border-gray-200">
+          <div className="border-t border-slate-100 p-6">
               {reportingTagsForForm.length > 0 ? (
                 <div className="grid grid-cols-[220px_1fr] items-center gap-y-4 gap-x-4 max-w-[860px]">
                   {reportingTagsForForm.map((tag) => {
@@ -1338,7 +1320,7 @@ export default function NewRetailInvoice() {
                               setReportingTagSearch("");
                               void ensureReportingTagOptions(tag);
                             }}
-                            className="h-[34px] w-full rounded border border-gray-300 bg-white px-3 text-left text-[13px] text-gray-700"
+                            className={`${inputBaseClass} text-left relative`}
                           >
                             {selectedValue}
                             {isOpen ? (
@@ -1348,7 +1330,7 @@ export default function NewRetailInvoice() {
                             )}
                           </button>
                           {isOpen && (
-                            <div className="absolute left-0 top-full mt-1 w-full rounded-md border border-gray-200 bg-white shadow-lg z-[220]">
+                            <div className="absolute left-0 top-full mt-1 w-full rounded-md border border-slate-200 bg-white shadow-xl z-[220] animate-in fade-in zoom-in-95 duration-100">
                               <div className="p-2 border-b border-gray-100">
                                 <div className="flex items-center gap-2 px-2 py-1.5 border border-[#3b82f6] rounded bg-white">
                                   <Search size={13} className="text-gray-400" />
@@ -1401,93 +1383,31 @@ export default function NewRetailInvoice() {
               ) : (
                 <div className="text-[13px] text-gray-500">No reporting tags found in Settings.</div>
               )}
-            </div>
+          </div>
 
-            <div className="bg-white p-6">
-              <div className="mb-4 relative inline-block" data-tax-pref-dropdown="true">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsTaxPreferenceOpen((prev) => !prev);
-                    setTaxPreferenceSearch("");
-                  }}
-                  className="inline-flex items-center gap-2 text-[13px] text-gray-800"
-                >
-                  <BriefcaseBusiness size={15} className="text-[#8b8fab]" />
-                  <span>{taxPreference}</span>
-                  {isTaxPreferenceOpen ? (
-                    <ChevronUp size={14} className="text-[#3b82f6]" />
-                  ) : (
-                    <ChevronDown size={14} className="text-gray-500" />
-                  )}
-                </button>
-
-                {isTaxPreferenceOpen && (
-                  <div className="absolute left-0 top-full mt-2 w-[235px] rounded-md border border-gray-200 bg-white shadow-xl z-[240]">
-                    <div className="p-2 border-b border-gray-100">
-                      <div className="flex items-center gap-2 px-2 py-1.5 border border-[#3b82f6] rounded bg-white">
-                        <Search size={13} className="text-gray-400" />
-                        <input
-                          value={taxPreferenceSearch}
-                          onChange={(e) => setTaxPreferenceSearch(e.target.value)}
-                          placeholder="Search"
-                          className="w-full bg-transparent border-none outline-none text-[13px] text-gray-700"
-                          autoFocus
-                        />
-                      </div>
-                    </div>
-                    <div className="px-3 py-2 text-[13px] font-semibold text-gray-500">Item Tax Preference</div>
-                    <div className="pb-2">
-                      {filteredTaxPreferenceOptions.map((option) => {
-                        const isSelected = option === taxPreference;
-                        return (
-                          <button
-                            key={option}
-                            type="button"
-                            onClick={() => {
-                              setTaxPreference(option as "Tax Exclusive" | "Tax Inclusive");
-                              setIsTaxPreferenceOpen(false);
-                              setTaxPreferenceSearch("");
-                            }}
-                            className={`flex w-full items-center justify-between px-3 py-2 text-left text-[13px] ${
-                              isSelected ? "bg-[#3b82f6] text-white" : "text-gray-700 hover:bg-gray-50"
-                            }`}
-                          >
-                            <span>{option}</span>
-                            {isSelected && <Check size={14} />}
-                          </button>
-                        );
-                      })}
-                      {filteredTaxPreferenceOptions.length === 0 && (
-                        <div className="px-3 py-2 text-[13px] text-gray-500">No options found</div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="border border-gray-200 rounded-md overflow-visible">
+          <div className="border-t border-slate-100 p-6">
+              <div className="border border-slate-200 rounded-lg overflow-visible shadow-sm">
                 <table className="w-full text-sm">
-                  <thead className="bg-white border-b border-gray-200">
+                  <thead className="bg-slate-50/40 border-b border-slate-200">
                     <tr className="text-[12px] text-slate-700">
-                      <th className="text-left px-3 py-2 font-medium border-r border-gray-200">Description</th>
-                      <th className="text-left px-3 py-2 font-medium border-r border-gray-200 w-[180px]">Tax</th>
+                      <th className="text-left px-3 py-2 font-medium border-r border-slate-200">Description</th>
+                      <th className="text-left px-3 py-2 font-medium border-r border-slate-200 w-[180px]">Tax</th>
                       <th className="text-right px-3 py-2 font-medium w-[180px]">Amount</th>
                       <th className="w-[48px]" />
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map((row) => (
-                      <tr key={row.id} className="border-t border-gray-200">
-                        <td className="px-3 py-2 border-r border-gray-200">
+                      <tr key={row.id} className="border-t border-slate-200">
+                        <td className="px-3 py-2 border-r border-slate-200">
                           <input
                             value={row.description}
                             onChange={(e) => setRow(row.id, { description: e.target.value })}
                             placeholder="Description"
-                            className="w-full h-[34px] border-none outline-none text-[13px]"
+                            className="w-full h-[34px] rounded-md border border-transparent px-2 text-[13px] text-slate-700 outline-none transition-all hover:border-slate-200 focus:border-[#3b82f6] focus:ring-2 focus:ring-[#3b82f6]/20"
                           />
                         </td>
-                        <td className="px-3 py-2 border-r border-gray-200">
+                        <td className="px-3 py-2 border-r border-slate-200">
                           <div className="relative" data-retainer-tax-dropdown="true">
                             {(() => {
                               const selectedTax = taxes.find((t) => String(t.id) === String(row.taxId));
@@ -1510,7 +1430,7 @@ export default function NewRetailInvoice() {
                                 <>
                                   <button
                                     type="button"
-                                    className="flex h-[34px] w-full items-center justify-between rounded border border-gray-200 px-2 text-left text-[13px] outline-none"
+                                    className="flex h-[34px] w-full items-center justify-between rounded-md border border-slate-200 bg-white px-2 text-left text-[13px] text-slate-700 shadow-sm outline-none transition-all hover:border-slate-300 focus:border-[#3b82f6] focus:ring-2 focus:ring-[#3b82f6]/20"
                                     onClick={() =>
                                       setOpenTaxDropdownId(openTaxDropdownId === row.id ? null : row.id)
                                     }
@@ -1540,7 +1460,7 @@ export default function NewRetailInvoice() {
                                   </button>
 
                                   {openTaxDropdownId === row.id && (
-                                    <div className="absolute left-0 top-full z-[9999] mt-1 w-72 rounded-xl border border-[#d6dbe8] bg-white p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+                                    <div className="absolute left-0 top-full z-[9999] mt-1 w-72 rounded-xl border border-slate-200 bg-white p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
                                       <div className="p-2">
                                         <div
                                           className="flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-all focus-within:bg-white"
@@ -1621,7 +1541,7 @@ export default function NewRetailInvoice() {
                             step="0.01"
                             value={row.amount}
                             onChange={(e) => setRow(row.id, { amount: Number(e.target.value) || 0 })}
-                            className="w-full h-[34px] text-right rounded border border-gray-200 px-2 text-[13px] outline-none focus:border-blue-400"
+                            className="w-full h-[34px] text-right rounded-md border border-slate-200 bg-white px-2 text-[13px] text-slate-700 shadow-sm outline-none transition-all hover:border-slate-300 focus:border-[#3b82f6] focus:ring-2 focus:ring-[#3b82f6]/20"
                           />
                         </td>
                         <td className="px-2 py-2 text-center">
@@ -1636,16 +1556,15 @@ export default function NewRetailInvoice() {
               <div className="mt-3">
                 <button
                   onClick={addRow}
-                  className="inline-flex items-center gap-1.5 text-[13px] hover:underline"
-                  style={{ color: accentColor }}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-[13px] font-medium text-slate-700 shadow-sm transition-all hover:bg-slate-100 active:scale-95"
                 >
-                  <Plus size={14} /> Add New Row
+                  <Plus size={14} style={{ color: accentColor }} /> Add New Row
                 </button>
               </div>
 
               <div className="mt-4 grid grid-cols-[1fr_430px] gap-6">
                 <div />
-                <div className="bg-[#f8fafc] rounded-md border border-gray-200 p-4 text-sm">
+                <div className="bg-slate-50 rounded-lg border border-slate-200 p-4 text-sm">
                   <div className="flex items-center justify-between py-2">
                     <span className="font-medium">Sub Total</span>
                     <span className="font-medium">{subtotal.toFixed(2)}</span>
@@ -1653,12 +1572,12 @@ export default function NewRetailInvoice() {
                   {taxBreakdown.map((line) => (
                     <div key={line.id} className="flex items-center justify-between py-2 text-[13px] text-slate-700">
                       <span>
-                        {line.label} {taxPreference === "Tax Inclusive" ? "(Included)" : ""}
+                        {line.label}
                       </span>
                       <span>{line.amount.toFixed(2)}</span>
                     </div>
                   ))}
-                  <div className="border-t border-gray-200 my-2" />
+                  <div className="border-t border-slate-200 my-2" />
                   <div className="flex items-center justify-between py-2 text-xl font-semibold">
                     <span>Total</span>
                     <span>{total.toFixed(2)}</span>
@@ -1667,14 +1586,14 @@ export default function NewRetailInvoice() {
               </div>
             </div>
 
-            <div className="bg-white p-6 space-y-6">
+          <div className="border-t border-slate-100 p-6 space-y-6">
               <div className="grid grid-cols-[220px_1fr] items-start gap-4">
                 <label className={labelClass}>Customer Notes</label>
                 <textarea
                   value={customerNotes}
                   onChange={(e) => setCustomerNotes(e.target.value)}
                   placeholder="Enter any notes to be displayed in your transaction"
-                  className="w-full max-w-[560px] h-20 rounded border border-gray-300 p-3 text-[13px] outline-none focus:border-blue-400 resize-none"
+                  className="w-full max-w-[560px] h-20 rounded-md border border-slate-200 bg-white p-3 text-[13px] text-slate-700 shadow-sm outline-none transition-all placeholder:text-slate-400 hover:border-slate-300 focus:border-[#3b82f6] focus:ring-2 focus:ring-[#3b82f6]/20 resize-none"
                 />
               </div>
 
@@ -1684,28 +1603,27 @@ export default function NewRetailInvoice() {
                   value={terms}
                   onChange={(e) => setTerms(e.target.value)}
                   placeholder="Enter the terms and conditions of your business to be displayed in your transaction"
-                  className="w-full max-w-[900px] h-20 rounded border border-gray-300 p-3 text-[13px] outline-none focus:border-blue-400 resize-none"
+                  className="w-full max-w-[900px] h-20 rounded-md border border-slate-200 bg-white p-3 text-[13px] text-slate-700 shadow-sm outline-none transition-all placeholder:text-slate-400 hover:border-slate-300 focus:border-[#3b82f6] focus:ring-2 focus:ring-[#3b82f6]/20 resize-none"
                 />
               </div>
-            </div>
           </div>
         </div>
       </div>
 
-      <div className="sticky bottom-0 z-20 border-t bg-[#f9fafb] px-6 py-4">
+      <div className="sticky bottom-0 z-20 border-t border-slate-200 bg-white/90 px-6 py-4 backdrop-blur">
         <div className="flex gap-2">
           <button
             onClick={() => handleSave("draft")}
             disabled={loading}
-            className="text-white px-6 py-1.5 rounded text-[13px] font-medium hover:opacity-90 shadow-sm active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-            style={{ backgroundColor: accentColor }}
+            className="bg-white border border-slate-300 text-slate-700 px-6 py-1.5 rounded-md text-[13px] font-medium shadow-sm transition-all hover:bg-slate-50 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {savingMode === "draft" ? "Saving..." : isEditMode ? "Update as Draft" : "Save as Draft"}
           </button>
           <button
             onClick={() => handleSave("sent")}
             disabled={loading}
-            className="bg-white border border-gray-300 text-gray-700 px-6 py-1.5 rounded text-[13px] font-medium hover:bg-gray-50 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+            className="text-white px-6 py-1.5 rounded-md text-[13px] font-medium shadow-sm transition-all hover:opacity-90 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+            style={{ backgroundColor: accentColor }}
           >
             {savingMode === "sent" ? "Saving..." : isEditMode ? "Update and Send" : "Save and Send"}
           </button>
@@ -1714,7 +1632,7 @@ export default function NewRetailInvoice() {
               ensureRetainerListAllView();
               navigate("/sales/retainer-invoices");
             }}
-            className="bg-white border border-gray-300 text-gray-700 px-6 py-1.5 rounded text-[13px] font-medium hover:bg-gray-50 active:scale-95 transition-all"
+            className="bg-white border border-slate-300 text-slate-700 px-6 py-1.5 rounded-md text-[13px] font-medium shadow-sm transition-all hover:bg-slate-50 active:scale-95"
           >
             Cancel
           </button>

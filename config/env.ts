@@ -1,3 +1,72 @@
+import { randomBytes } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+const stripOptionalQuotes = (value: string) => {
+  const trimmed = value.trim();
+  if (trimmed.length >= 2) {
+    if (
+      (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'"))
+    ) {
+      return trimmed.slice(1, -1);
+    }
+  }
+  return trimmed;
+};
+
+const readMongoUriFromDotEnvFile = (): string => {
+  try {
+    const dotenvPath = resolve(process.cwd(), ".env");
+    if (!existsSync(dotenvPath)) return "";
+
+    const contents = readFileSync(dotenvPath, "utf8");
+    for (const rawLine of contents.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith("#")) continue;
+
+      if (line.startsWith("MONGO_URI=")) {
+        return stripOptionalQuotes(line.slice("MONGO_URI=".length));
+      }
+      if (line.startsWith("MONGODB_URI=")) {
+        return stripOptionalQuotes(line.slice("MONGODB_URI=".length));
+      }
+
+      if (/^mongodb(\+srv)?:\/\//i.test(line)) {
+        // Support the common mistake of putting the URI in .env without a key.
+        return line;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return "";
+};
+
+// Back-compat: if the user put ONLY a raw Mongo URI line in `.env`, pick it up.
+if (!process.env.MONGO_URI && !process.env.MONGODB_URI) {
+  const inferredMongoUri = readMongoUriFromDotEnvFile();
+  if (inferredMongoUri) {
+    process.env.MONGO_URI = inferredMongoUri;
+    // eslint-disable-next-line no-console
+    console.warn(
+      "Loaded MongoDB connection string from `.env` without a key. Prefer `MONGO_URI=...` in `.env` for clarity."
+    );
+  }
+}
+
+// Dev ergonomics: generate an ephemeral JWT secret if missing (tokens won't survive restarts).
+if (
+  !process.env.JWT_SECRET &&
+  process.env.AUTH_BYPASS !== "1" &&
+  (process.env.NODE_ENV || "development") !== "production"
+) {
+  process.env.JWT_SECRET = randomBytes(32).toString("hex");
+  // eslint-disable-next-line no-console
+  console.warn("JWT_SECRET not set; generated an ephemeral dev secret. Set JWT_SECRET in .env to persist sessions.");
+}
+
 export const PORT = Number(process.env.PORT || 5000);
 
 // Support both names:

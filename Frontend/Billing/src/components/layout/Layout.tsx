@@ -101,7 +101,7 @@ export default function Layout({ children }) {
             collapsed={sidebarCollapsed}
             onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
           />
-          <div className={`flex-1 min-w-0 h-full flex flex-col bg-white overflow-hidden ${sidebarCollapsed ? "lg:ml-[112px]" : "lg:ml-[236px]"}`}>
+          <div className="flex-1 min-w-0 h-full flex flex-col bg-white overflow-hidden">
             <Header onToggleSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)} />
 
             {/* Mobile Action Bar - "Under the header" */}
