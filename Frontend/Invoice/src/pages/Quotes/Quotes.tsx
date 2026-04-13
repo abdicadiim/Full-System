@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useLocation } from "react-router-dom";
+import { toast } from "react-toastify";
 import { getQuotes, deleteQuotes, updateQuote, getCustomers, getProjects, getSalespersons, getCustomViews, deleteCustomView } from "../salesModel";
 import { generateQuoteHTMLForQuote as generateQuoteDetailHtml } from "./QuoteDetail/QuoteDetail.utils";
 import { useQuotesListQuery } from "./quoteQueries";
@@ -127,6 +129,7 @@ export default function Quotes() {
   const [bulkFieldSearch, setBulkFieldSearch] = useState("");
   const [selectedBulkCustomer, setSelectedBulkCustomer] = useState<Customer | null>(null);
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
   const [isMarkAsSentModalOpen, setIsMarkAsSentModalOpen] = useState(false);
   const [isDeleteConfirmModalOpen, setIsDeleteConfirmModalOpen] = useState(false);
   const [isDeletingQuotes, setIsDeletingQuotes] = useState(false);
@@ -147,6 +150,28 @@ export default function Quotes() {
   const [headerMenuPosition, setHeaderMenuPosition] = useState({ top: 0, left: 0 });
   // const headerMenuRef = useRef<HTMLDivElement>(null);
   const headerMenuMenuRef = useRef<HTMLDivElement>(null);
+
+  const formatAddressLines = (address: any, fallback: string[]) => {
+    if (typeof address === "string") {
+      const trimmed = address.trim();
+      if (trimmed) return [trimmed];
+    }
+
+    const lines = [
+      address?.attention || address?.name,
+      address?.street1 || address?.addressLine1 || address?.address,
+      address?.street2 || address?.addressLine2,
+      [address?.city, address?.state, address?.zipCode || address?.postalCode].filter(Boolean).join(", "),
+      address?.country,
+      address?.phone ? `Phone: ${address.phone}` : "",
+      address?.fax ? `Fax Number: ${address.fax}` : "",
+    ]
+      .map((line) => String(line || "").trim())
+      .filter(Boolean);
+
+    if (lines.length > 0) return lines;
+    return fallback.filter(Boolean);
+  };
 
   const allColumnOptions = [
     { key: 'date', label: 'Date', locked: true },
@@ -1532,10 +1557,21 @@ export default function Quotes() {
 
   const handleBulkUpdateSubmit = async () => {
     if (!bulkUpdateField) {
-      alert("Please select a field to update");
+      toast.warn("Please select a field to update");
       return;
     }
 
+    if (selectedQuotes.length === 0) {
+      toast.warn("Please select at least one quote to update");
+      return;
+    }
+
+    if (!String(bulkUpdateValue ?? "").trim() && bulkUpdateField !== "billingAddress" && bulkUpdateField !== "shippingAddress" && bulkUpdateField !== "billingAndShippingAddress") {
+      toast.warn("Please enter a value to update");
+      return;
+    }
+
+    setIsBulkUpdating(true);
     try {
       // Update all selected quotes with the new value
       await Promise.all(
@@ -1556,9 +1592,12 @@ export default function Quotes() {
       setBulkFieldSearch("");
       setIsBulkUpdateModalOpen(false);
       setSelectedQuotes([]);
+      toast.success(`Updated ${selectedQuotes.length} quote${selectedQuotes.length === 1 ? "" : "s"} successfully`);
     } catch (error) {
       console.error("Error updating quotes:", error);
-      alert("Failed to update quotes. Please try again.");
+      toast.error("Failed to update quotes. Please try again.");
+    } finally {
+      setIsBulkUpdating(false);
     }
   };
 
@@ -2334,7 +2373,7 @@ export default function Quotes() {
                       <div className="absolute top-0 right-full mr-2 w-52 bg-white border border-gray-200 rounded-lg shadow-xl py-1 z-[120]">
                         <button
                           onClick={handleExportQuotesFromMenu}
-                          className="w-full text-left px-3 py-2 text-sm text-white bg-[#156372] hover:bg-[#0f4f5b] transition-colors"
+                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                         >
                           Export Quotes
                         </button>
@@ -3505,8 +3544,8 @@ export default function Quotes() {
       {/* Bulk Update Modal */}
       {
         isBulkUpdateModalOpen && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50 flex items-start justify-center pt-[10vh] overflow-y-auto px-4 py-6" onClick={handleCancelBulkUpdate}>
-            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50 flex items-start justify-center pt-4 overflow-y-auto px-4 py-6" onClick={handleCancelBulkUpdate}>
+            <div className="bg-white rounded-lg shadow-xl max-w-[760px] w-full mx-4 overflow-visible" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between p-6 border-b border-gray-200">
                 <h2 className="text-lg font-semibold text-gray-900">Bulk Update Quotes</h2>
                 <button
@@ -3522,7 +3561,7 @@ export default function Quotes() {
                   Choose a field from the dropdown and update with new information.
                 </p>
 
-                <div className="flex flex-col gap-4 mb-6">
+                <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] gap-4 mb-6 items-start">
                   {/* Custom Field Dropdown */}
                   <div className="relative w-full" ref={bulkFieldDropdownRef}>
                     <div
@@ -3540,7 +3579,7 @@ export default function Quotes() {
                     </div>
 
                     {isBulkFieldDropdownOpen && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-[9999] overflow-visible">
                         <div className="flex items-center gap-2 p-3 border-b border-gray-200">
                           <Search size={16} />
                           <input
@@ -3553,7 +3592,7 @@ export default function Quotes() {
                             onClick={(e) => e.stopPropagation()}
                           />
                         </div>
-                        <div className="max-h-48 overflow-y-auto">
+                        <div>
                           {getFilteredBulkFieldOptions().map(option => (
                             <div
                               key={option.value}
@@ -3573,7 +3612,9 @@ export default function Quotes() {
                     )}
                   </div>
 
-                  {renderBulkUpdateValueInput()}
+                  <div className="w-full min-w-0">
+                    {renderBulkUpdateValueInput()}
+                  </div>
                 </div>
 
                 <p className="text-sm text-gray-600 mb-6">
@@ -3583,10 +3624,11 @@ export default function Quotes() {
 
               <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50">
                 <button
-                  className="px-4 py-2 rounded-md text-sm font-medium bg-[#156372] text-white hover:bg-blue-700 cursor-pointer"
+                  className="px-4 py-2 rounded-md text-sm font-medium bg-[#156372] text-white hover:bg-blue-700 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
                   onClick={handleBulkUpdateSubmit}
+                  disabled={isBulkUpdating}
                 >
-                  Update
+                  {isBulkUpdating ? "Updating..." : "Update"}
                 </button>
                 <button
                   className="px-4 py-2 rounded-md text-sm font-medium bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 cursor-pointer"
@@ -3601,71 +3643,122 @@ export default function Quotes() {
       }
 
       {/* Address Selection Modal */}
-      {
-        isAddressModalOpen && selectedBulkCustomer && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-[60] flex items-start justify-center pt-[10vh] overflow-y-auto px-4 py-6" onClick={() => setIsAddressModalOpen(false)}>
-            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">Choose Address</h2>
-                <button
-                  className="p-1 text-gray-500 hover:text-gray-700 cursor-pointer"
-                  onClick={() => setIsAddressModalOpen(false)}
-                >
-                  <X size={20} />
-                </button>
-              </div>
-              <div className="p-6">
-                <div className="mb-4">
-                  <span className="text-sm font-semibold text-gray-900">Customer Name: </span>
-                  <span className="text-sm text-gray-700">{selectedBulkCustomer.name}</span>
+      {isAddressModalOpen && selectedBulkCustomer && typeof document !== "undefined" && document.body && createPortal(
+        <div
+          className="fixed inset-0 bg-black/45 z-[12000] flex items-start justify-center pt-6 pb-6 px-4"
+          onClick={() => setIsAddressModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-[640px] rounded-lg bg-white shadow-xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">
+                Choose {bulkUpdateField === "billingAddress" ? "Billing Address" : bulkUpdateField === "shippingAddress" ? "Shipping Address" : "Billing or Shipping Address"}
+              </h2>
+              <button
+                type="button"
+                className="p-1 text-gray-500 hover:text-gray-700 cursor-pointer"
+                onClick={() => setIsAddressModalOpen(false)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="px-5 py-4">
+              <div className="rounded-lg border border-gray-100 bg-gray-50/70 p-4">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-2">
+                  Customer
                 </div>
-                <div className="space-y-3">
-                  {bulkUpdateField === "billingAddress" || bulkUpdateField === "billingAndShippingAddress" ? (
-                    <div className="border border-gray-200 rounded-md p-4 cursor-pointer hover:bg-gray-50"
-                      onClick={() => {
-                        const address = selectedBulkCustomer.billingAddress ||
-                          `${selectedBulkCustomer.billingStreet1 || ""} ${selectedBulkCustomer.billingStreet2 || ""} ${selectedBulkCustomer.billingCity || ""} ${selectedBulkCustomer.billingState || ""} ${selectedBulkCustomer.billingZipCode || ""}`.trim();
-                        setBulkUpdateValue(address);
-                        setIsAddressModalOpen(false);
-                      }}
-                    >
-                      <div className="text-sm font-semibold text-gray-900 mb-1">Billing Address</div>
-                      <div className="text-sm text-gray-600">
-                        {selectedBulkCustomer.billingAddress ||
-                          `${selectedBulkCustomer.billingStreet1 || ""} ${selectedBulkCustomer.billingStreet2 || ""} ${selectedBulkCustomer.billingCity || ""} ${selectedBulkCustomer.billingState || ""} ${selectedBulkCustomer.billingZipCode || ""}`.trim() || "No billing address"}
-                      </div>
-                    </div>
-                  ) : null}
-                  {bulkUpdateField === "shippingAddress" || bulkUpdateField === "billingAndShippingAddress" ? (
-                    <div className="border border-gray-200 rounded-md p-4 cursor-pointer hover:bg-gray-50"
-                      onClick={() => {
-                        const address = selectedBulkCustomer.shippingAddress ||
-                          `${selectedBulkCustomer.shippingStreet1 || ""} ${selectedBulkCustomer.shippingStreet2 || ""} ${selectedBulkCustomer.shippingCity || ""} ${selectedBulkCustomer.shippingState || ""} ${selectedBulkCustomer.shippingZipCode || ""}`.trim();
-                        setBulkUpdateValue(address);
-                        setIsAddressModalOpen(false);
-                      }}
-                    >
-                      <div className="text-sm font-semibold text-gray-900 mb-1">Shipping Address</div>
-                      <div className="text-sm text-gray-600">
-                        {selectedBulkCustomer.shippingAddress ||
-                          `${selectedBulkCustomer.shippingStreet1 || ""} ${selectedBulkCustomer.shippingStreet2 || ""} ${selectedBulkCustomer.shippingCity || ""} ${selectedBulkCustomer.shippingState || ""} ${selectedBulkCustomer.shippingZipCode || ""}`.trim() || "No shipping address"}
-                      </div>
-                    </div>
-                  ) : null}
+                <div className="text-sm font-medium text-gray-900">
+                  {selectedBulkCustomer.displayName || selectedBulkCustomer.name || "Selected customer"}
                 </div>
               </div>
-              <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50">
-                <button
-                  className="px-4 py-2 rounded-md text-sm font-medium bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 cursor-pointer"
-                  onClick={() => setIsAddressModalOpen(false)}
-                >
-                  Cancel
-                </button>
+
+              <div className="mt-4 space-y-3">
+                {bulkUpdateField === "billingAddress" || bulkUpdateField === "billingAndShippingAddress" ? (
+                  <button
+                    type="button"
+                    className="w-full text-left rounded-lg border border-gray-200 p-4 hover:bg-gray-50 transition-colors"
+                    onClick={() => {
+                      const addressValue = formatAddressLines(selectedBulkCustomer.billingAddress, [
+                        selectedBulkCustomer.billingStreet1,
+                        selectedBulkCustomer.billingStreet2,
+                        [selectedBulkCustomer.billingCity, selectedBulkCustomer.billingState, selectedBulkCustomer.billingZipCode].filter(Boolean).join(" "),
+                        selectedBulkCustomer.billingCountry,
+                      ]).join(", ");
+                      setBulkUpdateValue(addressValue);
+                      setIsAddressModalOpen(false);
+                    }}
+                  >
+                    <div className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
+                      Billing Address
+                    </div>
+                    <div className="space-y-0.5 text-sm text-gray-700 leading-6">
+                      {formatAddressLines(selectedBulkCustomer.billingAddress, [
+                        selectedBulkCustomer.billingStreet1,
+                        selectedBulkCustomer.billingStreet2,
+                        [selectedBulkCustomer.billingCity, selectedBulkCustomer.billingState, selectedBulkCustomer.billingZipCode].filter(Boolean).join(" "),
+                        selectedBulkCustomer.billingCountry,
+                      ]).map((line, idx) => (
+                        <div key={`billing-line-${idx}`}>{line}</div>
+                      ))}
+                      {formatAddressLines(selectedBulkCustomer.billingAddress, []).length === 0 && (
+                        <div className="text-gray-500 italic">No billing address</div>
+                      )}
+                    </div>
+                  </button>
+                ) : null}
+
+                {bulkUpdateField === "shippingAddress" || bulkUpdateField === "billingAndShippingAddress" ? (
+                  <button
+                    type="button"
+                    className="w-full text-left rounded-lg border border-gray-200 p-4 hover:bg-gray-50 transition-colors"
+                    onClick={() => {
+                      const addressValue = formatAddressLines(selectedBulkCustomer.shippingAddress, [
+                        selectedBulkCustomer.shippingStreet1,
+                        selectedBulkCustomer.shippingStreet2,
+                        [selectedBulkCustomer.shippingCity, selectedBulkCustomer.shippingState, selectedBulkCustomer.shippingZipCode].filter(Boolean).join(" "),
+                        selectedBulkCustomer.shippingCountry,
+                      ]).join(", ");
+                      setBulkUpdateValue(addressValue);
+                      setIsAddressModalOpen(false);
+                    }}
+                  >
+                    <div className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
+                      Shipping Address
+                    </div>
+                    <div className="space-y-0.5 text-sm text-gray-700 leading-6">
+                      {formatAddressLines(selectedBulkCustomer.shippingAddress, [
+                        selectedBulkCustomer.shippingStreet1,
+                        selectedBulkCustomer.shippingStreet2,
+                        [selectedBulkCustomer.shippingCity, selectedBulkCustomer.shippingState, selectedBulkCustomer.shippingZipCode].filter(Boolean).join(" "),
+                        selectedBulkCustomer.shippingCountry,
+                      ]).map((line, idx) => (
+                        <div key={`shipping-line-${idx}`}>{line}</div>
+                      ))}
+                      {formatAddressLines(selectedBulkCustomer.shippingAddress, []).length === 0 && (
+                        <div className="text-gray-500 italic">No shipping address</div>
+                      )}
+                    </div>
+                  </button>
+                ) : null}
               </div>
             </div>
+
+            <div className="px-5 py-4 border-t border-gray-200 flex items-center justify-end">
+              <button
+                type="button"
+                className="px-4 py-2 rounded-md border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50"
+                onClick={() => setIsAddressModalOpen(false)}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
-        )
-      }
+        </div>,
+        document.body
+      )}
 
       {/* Print Preview Modal */}
       {

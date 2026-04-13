@@ -4,6 +4,7 @@ import { useLocation } from "react-router-dom";
 import { Info, Settings, ExternalLink, Search, ChevronUp, ChevronDown, Settings2, X, Loader2 } from "lucide-react";
 import { getToken, API_BASE_URL } from "../../../../../services/auth";
 import toast from "react-hot-toast";
+import { settingsAPI } from "../../../../../services/api";
 
 const BILLING_MODULE_OPTIONS = [
   { key: "quotes", label: "Quotes" },
@@ -139,6 +140,11 @@ export default function GeneralSettingsPage() {
           if (data.success && data.data?.settings) {
             const s = data.data.settings;
             setOrganizationSettings(s);
+            try {
+              await settingsAPI.updateGeneralSettings(s);
+            } catch (cacheError) {
+              console.warn("Failed to seed general settings cache", cacheError);
+            }
             if (s.modules) {
               const nextModules = BILLING_MODULE_KEYS.reduce<Record<string, boolean>>((acc, key) => {
                 if (typeof s.modules[key] === "boolean") {
@@ -258,6 +264,11 @@ export default function GeneralSettingsPage() {
       if (response.ok) {
         toast.success("Settings saved successfully");
         setOrganizationSettings(payload.settings);
+        try {
+          await settingsAPI.updateGeneralSettings(payload.settings);
+        } catch (cacheError) {
+          console.warn("Failed to refresh general settings cache", cacheError);
+        }
         // Dispatch event for sidebar to update
         window.dispatchEvent(new CustomEvent('generalSettingsUpdated', { detail: payload.settings }));
       } else {

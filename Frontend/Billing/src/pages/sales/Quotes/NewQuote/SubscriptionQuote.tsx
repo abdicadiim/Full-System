@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Calculator, CalendarDays, ChevronDown, ChevronRight, ChevronUp, Image as ImageIcon, Info, MoreVertical, PlusCircle, Search, Settings, ShoppingBag, Tag, Upload, X } from "lucide-react";
+import { AlertTriangle, Calculator, CalendarDays, ChevronDown, ChevronRight, ChevronUp, Edit2, Image as ImageIcon, Info, MoreVertical, PlusCircle, Search, Settings, ShoppingBag, Tag, Upload, X } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Customer, Salesperson, getCustomers, getPlansFromAPI, getQuotes, getSalespersonsFromAPI, getTaxesFromAPI, saveQuote, saveSalesperson, saveTax } from "../../salesModel";
-import { customersAPI, quotesAPI, reportingTagsAPI, priceListsAPI, productsAPI, transactionNumberSeriesAPI } from "../../../../services/api";
+import { createPortal } from "react-dom";
+import { toast } from "react-toastify";
+import { Customer, Salesperson, deleteSalesperson, getCustomers, getPlansFromAPI, getQuotes, getSalespersonsFromAPI, getTaxesFromAPI, saveQuote, saveSalesperson, saveTax, updateSalesperson } from "../../salesModel";
+import { customersAPI, quotesAPI, reportingTagsAPI, priceListsAPI, productsAPI, salespersonsAPI, settingsAPI, transactionNumberSeriesAPI } from "../../../../services/api";
 import { createTaxLocal, readTaxesLocal } from "../../../settings/organization-settings/taxes-compliance/TAX/storage";
 import { Country, State } from "country-state-city";
 
@@ -30,7 +32,6 @@ type SubscriptionQuoteForm = {
   coupon: string;
   couponCode: string;
   couponValue: string;
-  wsq: string;
   meteredBilling: boolean;
 };
 
@@ -90,6 +91,36 @@ export default function SubscriptionQuote() {
   const planAddonDropdownRef = useRef<HTMLDivElement | null>(null);
   const quoteDateNativeRef = useRef<HTMLInputElement | null>(null);
   const expiryDateNativeRef = useRef<HTMLInputElement | null>(null);
+  const cachedGeneralSettings = settingsAPI.getCachedGeneralSettings?.() || {};
+  const cachedTaxModeSetting = String(
+    cachedGeneralSettings?.taxSettings?.taxInclusive ??
+    cachedGeneralSettings?.taxSettings?.taxBasis ??
+    cachedGeneralSettings?.taxSettings?.taxMode ??
+    "both"
+  ).trim().toLowerCase();
+  const initialTaxPreferenceValue = (() => {
+    if (
+      cachedTaxModeSetting.includes("both") ||
+      (cachedTaxModeSetting.includes("inclusive") && cachedTaxModeSetting.includes("exclusive"))
+    ) {
+      return "Tax Exclusive";
+    }
+    if (
+      cachedTaxModeSetting === "inclusive" ||
+      cachedTaxModeSetting === "tax inclusive" ||
+      cachedTaxModeSetting.includes("tax inclusive")
+    ) {
+      return "Tax Inclusive";
+    }
+    if (
+      cachedTaxModeSetting === "exclusive" ||
+      cachedTaxModeSetting === "tax exclusive" ||
+      cachedTaxModeSetting.includes("tax exclusive")
+    ) {
+      return "Tax Exclusive";
+    }
+    return "Tax Exclusive";
+  })();
   const todayLabel = useMemo(
     () =>
       new Intl.DateTimeFormat("en-GB", {
@@ -119,12 +150,11 @@ export default function SubscriptionQuote() {
     termsAndConditions: "",
     collectPaymentOffline: true,
     location: "Head Office",
-    taxPreference: "Tax Exclusive",
+    taxPreference: initialTaxPreferenceValue,
     priceList: "Select Price List",
     coupon: "",
     couponCode: "",
     couponValue: "0.00",
-    wsq: "None",
     meteredBilling: false,
   });
   const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
@@ -142,17 +172,20 @@ export default function SubscriptionQuote() {
   const [planAddonSearch, setPlanAddonSearch] = useState("");
   const [isManageSalespersonsOpen, setIsManageSalespersonsOpen] = useState(false);
   const [manageSalespersonSearch, setManageSalespersonSearch] = useState("");
+  const [selectedSalespersonIds, setSelectedSalespersonIds] = useState<string[]>([]);
+  const [manageSalespersonMenuOpen, setManageSalespersonMenuOpen] = useState<string | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [isNewSalespersonFormOpen, setIsNewSalespersonFormOpen] = useState(false);
+  const [editingSalespersonId, setEditingSalespersonId] = useState<string | null>(null);
   const [newSalespersonData, setNewSalespersonData] = useState({ name: "", email: "" });
   const [locationOptions, setLocationOptions] = useState<string[]>(["Head Office"]);
   const [isLocationDropdownOpen, setIsLocationDropdownOpen] = useState(false);
   const locationDropdownRef = useRef<HTMLDivElement | null>(null);
   const [isTaxPreferenceDropdownOpen, setIsTaxPreferenceDropdownOpen] = useState(false);
   const taxPreferenceDropdownRef = useRef<HTMLDivElement | null>(null);
-  const [isPriceListDropdownOpen, setIsPriceListDropdownOpen] = useState(false);
-  const priceListDropdownRef = useRef<HTMLDivElement | null>(null);
   const [catalogPriceLists, setCatalogPriceLists] = useState<any[]>([]);
   const [priceListSwitchDialog, setPriceListSwitchDialog] = useState<PriceListSwitchDialogState | null>(null);
+  const [enabledSettings, setEnabledSettings] = useState<any>(cachedGeneralSettings);
   const [isCouponDropdownOpen, setIsCouponDropdownOpen] = useState(false);
   const couponDropdownRef = useRef<HTMLTableCellElement | null>(null);
   const [couponSearch, setCouponSearch] = useState("");
@@ -208,6 +241,44 @@ export default function SubscriptionQuote() {
   };
   const isProductSelected = formData.product.trim().length > 0;
   const normalizeText = (value: any) => String(value || "").trim().toLowerCase();
+  const rawTaxPreferenceMode = String(
+    enabledSettings?.taxSettings?.taxInclusive ??
+    enabledSettings?.taxSettings?.taxBasis ??
+    enabledSettings?.taxSettings?.taxMode ??
+    "both"
+  ).trim().toLowerCase();
+  const taxPreferenceMode = (() => {
+    if (!rawTaxPreferenceMode) return "both";
+    if (
+      rawTaxPreferenceMode.includes("both") ||
+      (rawTaxPreferenceMode.includes("inclusive") && rawTaxPreferenceMode.includes("exclusive"))
+    ) {
+      return "both";
+    }
+    if (
+      rawTaxPreferenceMode === "inclusive" ||
+      rawTaxPreferenceMode === "tax inclusive" ||
+      rawTaxPreferenceMode.includes("tax inclusive")
+    ) {
+      return "inclusive";
+    }
+    if (
+      rawTaxPreferenceMode === "exclusive" ||
+      rawTaxPreferenceMode === "tax exclusive" ||
+      rawTaxPreferenceMode.includes("tax exclusive")
+    ) {
+      return "exclusive";
+    }
+    if (rawTaxPreferenceMode.includes("inclusive")) return "inclusive";
+    if (rawTaxPreferenceMode.includes("exclusive")) return "exclusive";
+    return "both";
+  })();
+  const isTaxPreferenceLocked = taxPreferenceMode === "inclusive" || taxPreferenceMode === "exclusive";
+  const resolvedTaxPreference = taxPreferenceMode === "inclusive"
+    ? "Tax Inclusive"
+    : taxPreferenceMode === "exclusive"
+      ? "Tax Exclusive"
+      : formData.taxPreference || "Tax Exclusive";
 
   const selectedPriceList = useMemo(() => {
     const selected = String(formData.priceList || "").trim();
@@ -874,9 +945,6 @@ export default function SubscriptionQuote() {
       if (taxPreferenceDropdownRef.current && !taxPreferenceDropdownRef.current.contains(event.target as Node)) {
         setIsTaxPreferenceDropdownOpen(false);
       }
-      if (priceListDropdownRef.current && !priceListDropdownRef.current.contains(event.target as Node)) {
-        setIsPriceListDropdownOpen(false);
-      }
       if (couponDropdownRef.current && !couponDropdownRef.current.contains(event.target as Node)) {
         setIsCouponDropdownOpen(false);
       }
@@ -893,6 +961,46 @@ export default function SubscriptionQuote() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadGeneralSettings = async () => {
+      try {
+        const response: any = await settingsAPI.getGeneralSettings();
+        if (cancelled) return;
+        if (!response?.success) return;
+        const generalSettings = response?.data?.settings || response?.data || {};
+        setEnabledSettings(generalSettings);
+      } catch (error) {
+        console.error("Error loading general settings:", error);
+      }
+    };
+
+    void loadGeneralSettings();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleGeneralSettingsUpdate = (event: any) => {
+      const detail = event?.detail;
+      if (!detail) return;
+      setEnabledSettings(detail?.settings || detail || {});
+    };
+
+    window.addEventListener("generalSettingsUpdated", handleGeneralSettingsUpdate as EventListener);
+    return () => window.removeEventListener("generalSettingsUpdated", handleGeneralSettingsUpdate as EventListener);
+  }, []);
+
+  useEffect(() => {
+    if (!isTaxPreferenceLocked) return;
+    setFormData((prev) => {
+      if (prev.taxPreference === resolvedTaxPreference) return prev;
+      return { ...prev, taxPreference: resolvedTaxPreference };
+    });
+  }, [isTaxPreferenceLocked, resolvedTaxPreference]);
 
   useEffect(() => {
     const loadPriceLists = async () => {
@@ -1091,21 +1199,34 @@ export default function SubscriptionQuote() {
     const email = String(salesperson?.email || "").toLowerCase();
     return name.includes(term) || email.includes(term);
   });
+  const selectedSalespersonRecord = useMemo(() => {
+    const salespersonId = String(formData.salespersonId || "").trim();
+    if (salespersonId) {
+      const byId = salespersons.find((sp: any) => String(sp.id || sp._id || "") === salespersonId);
+      if (byId) return byId;
+    }
+    const selectedName = String(formData.salesperson || "").trim().toLowerCase();
+    if (!selectedName) return null;
+    return salespersons.find((sp: any) => String(sp.name || sp.displayName || "").trim().toLowerCase() === selectedName) || null;
+  }, [formData.salesperson, formData.salespersonId, salespersons]);
+  const selectedSalespersonIsActive = Boolean(selectedSalespersonRecord && isSalespersonActive(selectedSalespersonRecord));
 
-  const activeProducts = products.filter((product: any) => {
-    const status = String(product?.status || "").toLowerCase();
-    if (status) return status === "active";
-    if (typeof product?.active === "boolean") return product.active;
-    return true;
-  });
+  const manageSalespersonsPageSize = 3;
+  const [manageSalespersonsPage, setManageSalespersonsPage] = useState(1);
+  const manageSalespersonsTotalPages = Math.max(1, Math.ceil(filteredManageSalespersons.length / manageSalespersonsPageSize));
+  const manageSalespersonsCurrentPage = Math.min(manageSalespersonsPage, manageSalespersonsTotalPages);
+  const paginatedManageSalespersons = useMemo(() => {
+    const startIndex = (manageSalespersonsCurrentPage - 1) * manageSalespersonsPageSize;
+    return filteredManageSalespersons.slice(startIndex, startIndex + manageSalespersonsPageSize);
+  }, [filteredManageSalespersons, manageSalespersonsCurrentPage]);
 
-  const filteredProducts = activeProducts.filter((product: ProductOption) => {
+  const filteredProducts = products.filter((product: ProductOption) => {
     const term = productSearch.toLowerCase().trim();
     if (!term) return true;
     return product.name.toLowerCase().includes(term);
   });
 
-  const selectedProduct = activeProducts.find((product: ProductOption) => product.name === formData.product);
+  const selectedProduct = products.find((product: ProductOption) => product.name === formData.product);
   const selectedProductNameKey = normalizeText(formData.product);
   const selectedProductAliases = new Set(
     [selectedProduct?.id, selectedProduct?.name, selectedProduct?.code]
@@ -1413,6 +1534,30 @@ export default function SubscriptionQuote() {
     setIsManageSalespersonsOpen(false);
   };
 
+  const handleStartNewSalesperson = () => {
+    setEditingSalespersonId(null);
+    setNewSalespersonData({ name: "", email: "" });
+    setIsNewSalespersonFormOpen(true);
+  };
+
+  const handleStartEditSalesperson = (salesperson: any) => {
+    const salespersonId = String(salesperson?.id || salesperson?._id || "").trim();
+    setEditingSalespersonId(salespersonId || null);
+    setNewSalespersonData({
+      name: String(salesperson?.name || salesperson?.displayName || ""),
+      email: String(salesperson?.email || "")
+    });
+    setIsNewSalespersonFormOpen(true);
+  };
+
+  const handleNewSalespersonChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setNewSalespersonData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
   const handleProductSelect = (product: ProductOption) => {
     updateField("product", product.name);
     updateField("plan", "");
@@ -1599,12 +1744,6 @@ export default function SubscriptionQuote() {
       customerNotes: formData.customerNotes,
       termsAndConditions: formData.termsAndConditions,
       reportingTags: Object.entries(reportingTagSelections).map(([tagId, value]) => ({ tagId, value })),
-      customFields: [
-        {
-          label: "wsq",
-          value: formData.wsq || "None",
-        },
-      ],
       quoteType: "subscription",
       isSubscriptionQuote: true,
       meteredBilling: Boolean(formData.meteredBilling),
@@ -1660,28 +1799,311 @@ export default function SubscriptionQuote() {
   };
 
   const handleSaveNewSalesperson = async () => {
-    const name = newSalespersonData.name.trim();
-    if (!name) return;
+    const trimmedName = String(newSalespersonData.name || "").trim();
+    const trimmedEmail = String(newSalespersonData.email || "").trim();
+    const normalizedName = trimmedName.toLowerCase();
+    const normalizedEmail = trimmedEmail.toLowerCase();
+    const editingId = String(editingSalespersonId || "").trim();
+
+    if (!trimmedName) {
+      toast.error("Please enter a name for the salesperson");
+      return;
+    }
+
+    const duplicateSalesperson = salespersons.find((sp: any) => {
+      const spId = String(sp.id || sp._id || "").trim();
+      if (editingId && spId === editingId) return false;
+      const existingName = String(sp.name || sp.displayName || "").trim().toLowerCase();
+      const existingEmail = String(sp.email || "").trim().toLowerCase();
+      return (
+        (existingName && existingName === normalizedName) ||
+        (normalizedEmail && existingEmail && existingEmail === normalizedEmail)
+      );
+    });
+
+    if (duplicateSalesperson) {
+      const existingName = String(duplicateSalesperson.name || duplicateSalesperson.displayName || "").trim();
+      const existingEmail = String(duplicateSalesperson.email || "").trim();
+      if (existingName.toLowerCase() === normalizedName && normalizedName) {
+        toast.error(`A salesperson named "${trimmedName}" already exists.`);
+      } else if (normalizedEmail && existingEmail.toLowerCase() === normalizedEmail) {
+        toast.error(`A salesperson with email "${trimmedEmail}" already exists.`);
+      } else {
+        toast.error("This salesperson already exists.");
+      }
+      return;
+    }
 
     try {
-      const saved = await saveSalesperson({
-        name,
-        email: newSalespersonData.email.trim(),
+      const payload = {
+        name: trimmedName,
+        email: trimmedEmail,
         status: "active",
-      });
+      };
+
+      const isEditing = Boolean(editingId);
+      const saved = isEditing
+        ? await updateSalesperson(editingId, payload)
+        : await saveSalesperson(payload);
 
       try {
         const refreshed = await getSalespersonsFromAPI();
         setSalespersons(Array.isArray(refreshed) ? refreshed : []);
       } catch {
-        setSalespersons((prev) => [saved as any, ...prev]);
+        setSalespersons((prev) => {
+          if (!saved) return prev;
+          if (!isEditing) return [saved as any, ...prev];
+          return prev.map((sp: any) => {
+            const spId = String(sp.id || sp._id || "").trim();
+            return spId === editingId ? (saved as any) : sp;
+          });
+        });
       }
 
-      handleSalespersonSelect(saved);
+      if (saved) {
+        handleSalespersonSelect(saved);
+      }
       setNewSalespersonData({ name: "", email: "" });
+      setEditingSalespersonId(null);
       setIsNewSalespersonFormOpen(false);
+      setIsManageSalespersonsOpen(false);
+      toast.success(isEditing ? "Salesperson updated successfully" : "Salesperson added successfully");
     } catch (error) {
       console.error("Failed to save salesperson:", error);
+      toast.error("Error saving salesperson: " + ((error as any)?.message || "Unknown error"));
+    }
+  };
+
+  const handleCancelNewSalesperson = () => {
+    setNewSalespersonData({ name: "", email: "" });
+    setEditingSalespersonId(null);
+    setIsNewSalespersonFormOpen(false);
+  };
+
+  const handleDeleteSalesperson = async (salespersonId: string) => {
+    const normalizedId = String(salespersonId || "").trim();
+    if (!normalizedId) return;
+
+    if (!window.confirm("Are you sure you want to delete this salesperson?")) {
+      return;
+    }
+
+    try {
+      await deleteSalesperson(normalizedId);
+      const refreshed = await getSalespersonsFromAPI();
+      setSalespersons(Array.isArray(refreshed) ? refreshed : []);
+
+      if (String(formData.salespersonId || "") === normalizedId) {
+        updateField("salesperson", "");
+        updateField("salespersonId", "");
+      }
+
+      if (editingSalespersonId === normalizedId) {
+        handleCancelNewSalesperson();
+      }
+
+      toast.success("Salesperson deleted successfully");
+    } catch (error) {
+      console.error("Failed to delete salesperson:", error);
+      toast.error("Error deleting salesperson: " + ((error as any)?.message || "Unknown error"));
+    }
+  };
+
+  const handleSetSalespersonStatus = async (salespersonId: string, nextStatus: "active" | "inactive") => {
+    const normalizedId = String(salespersonId || "").trim();
+    if (!normalizedId) return;
+
+    const salesperson = salespersons.find((sp: any) => String(sp.id || sp._id || "") === normalizedId);
+    if (!salesperson) {
+      toast.error("Salesperson not found");
+      return;
+    }
+
+    const previousSalespersons = salespersons;
+    const previousSalespersonName = formData.salesperson;
+    const previousSalespersonId = formData.salespersonId;
+    const nextIsActive = nextStatus === "active";
+
+    setSalespersons((prev) =>
+      prev.map((sp: any) => {
+        const spId = String(sp.id || sp._id || "");
+        if (spId !== normalizedId) return sp;
+        return {
+          ...sp,
+          status: nextStatus,
+          active: nextIsActive,
+          isActive: nextIsActive,
+        };
+      })
+    );
+
+    setManageSalespersonMenuOpen(null);
+    toast.success(nextStatus === "inactive" ? "Salesperson marked inactive" : "Salesperson marked active");
+
+    try {
+      const response = await updateSalesperson(normalizedId, {
+        name: String(salesperson.name || salesperson.displayName || "").trim(),
+        email: String(salesperson.email || "").trim(),
+        status: nextStatus,
+        active: nextIsActive,
+        isActive: nextIsActive,
+      });
+
+      if (response) {
+        const updatedSalesperson = {
+          ...salesperson,
+          ...response,
+          status: nextStatus,
+        };
+
+        if (String(formData.salespersonId || "") === normalizedId) {
+          if (nextStatus === "inactive") {
+            updateField("salesperson", "");
+            updateField("salespersonId", "");
+          } else {
+            updateField("salesperson", String(updatedSalesperson.name || previousSalespersonName || ""));
+            updateField("salespersonId", String(updatedSalesperson.id || updatedSalesperson._id || previousSalespersonId || ""));
+          }
+        }
+
+        try {
+          const refreshed = await salespersonsAPI.getAll();
+          setSalespersons(Array.isArray(refreshed?.data) ? refreshed.data : []);
+        } catch {
+          const refreshed = await getSalespersonsFromAPI();
+          setSalespersons(Array.isArray(refreshed) ? refreshed : []);
+        }
+        return;
+      }
+
+      setSalespersons(previousSalespersons);
+      updateField("salesperson", previousSalespersonName);
+      updateField("salespersonId", previousSalespersonId);
+      toast.error("Failed to update salesperson status");
+    } catch (error: any) {
+      console.error("Error updating salesperson status:", error);
+      setSalespersons(previousSalespersons);
+      updateField("salesperson", previousSalespersonName);
+      updateField("salespersonId", previousSalespersonId);
+      toast.error("Error updating salesperson: " + ((error as any)?.message || "Unknown error"));
+    }
+  };
+
+  const applySalespersonStatusLocally = (ids: string[], nextStatus: "active" | "inactive") => {
+    const normalizedIds = new Set(ids.map((id) => String(id || "").trim()).filter(Boolean));
+    const isActive = nextStatus === "active";
+    setSalespersons((prev) =>
+      prev.map((sp: any) => {
+        const spId = String(sp.id || sp._id || "").trim();
+        if (!normalizedIds.has(spId)) return sp;
+        return {
+          ...sp,
+          status: nextStatus,
+          active: isActive,
+          isActive,
+        };
+      })
+    );
+  };
+
+  const handleBulkSalespersonStatusChange = async (nextStatus: "active" | "inactive") => {
+    const ids = Array.from(
+      new Set(
+        selectedSalespersonIds
+          .map((id: any) => String(id || "").trim())
+          .filter(Boolean)
+      )
+    );
+
+    if (ids.length === 0) {
+      toast.error("Please select at least one salesperson");
+      return;
+    }
+
+    const previousSalespersons = salespersons;
+    applySalespersonStatusLocally(ids, nextStatus);
+    setSelectedSalespersonIds([]);
+    setManageSalespersonMenuOpen(null);
+    toast.success(
+      nextStatus === "inactive"
+        ? `${ids.length} salesperson${ids.length === 1 ? "" : "s"} marked inactive`
+        : `${ids.length} salesperson${ids.length === 1 ? "" : "s"} marked active`
+    );
+
+    try {
+      await Promise.all(
+        ids.map(async (salespersonId) => {
+          const salesperson = salespersons.find((sp: any) => String(sp.id || sp._id || "") === salespersonId);
+          if (!salesperson) return;
+          await updateSalesperson(salespersonId, {
+            name: String(salesperson.name || salesperson.displayName || "").trim(),
+            email: String(salesperson.email || "").trim(),
+            status: nextStatus,
+            active: nextStatus === "active",
+            isActive: nextStatus === "active",
+          });
+        })
+      );
+
+      try {
+        const refreshed = await salespersonsAPI.getAll();
+        setSalespersons(Array.isArray(refreshed?.data) ? refreshed.data : []);
+      } catch {
+        const refreshed = await getSalespersonsFromAPI();
+        setSalespersons(Array.isArray(refreshed) ? refreshed : []);
+      }
+    } catch (error: any) {
+      console.error("Error updating salesperson statuses:", error);
+      setSalespersons(previousSalespersons);
+      try {
+        const refreshed = await getSalespersonsFromAPI();
+        setSalespersons(Array.isArray(refreshed) ? refreshed : []);
+      } catch {
+        setSalespersons(previousSalespersons);
+      }
+      toast.error("Error updating salespersons: " + ((error as any)?.message || "Unknown error"));
+    }
+  };
+
+  const handleBulkDeleteSalespersons = async () => {
+    const ids = Array.from(
+      new Set(
+        selectedSalespersonIds
+          .map((id: any) => String(id || "").trim())
+          .filter(Boolean)
+      )
+    );
+
+    if (ids.length === 0) {
+      toast.error("Please select at least one salesperson");
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to delete ${ids.length} salesperson${ids.length === 1 ? "" : "s"}?`)) {
+      return;
+    }
+
+    try {
+      await Promise.all(ids.map((salespersonId) => deleteSalesperson(salespersonId)));
+      try {
+        const refreshed = await salespersonsAPI.getAll();
+        setSalespersons(Array.isArray(refreshed?.data) ? refreshed.data : []);
+      } catch {
+        const refreshed = await getSalespersonsFromAPI();
+        setSalespersons(Array.isArray(refreshed) ? refreshed : []);
+      }
+      setSelectedSalespersonIds([]);
+      setManageSalespersonMenuOpen(null);
+
+      if (ids.includes(String(formData.salespersonId || ""))) {
+        updateField("salesperson", "");
+        updateField("salespersonId", "");
+      }
+
+      toast.success(`${ids.length} salesperson${ids.length === 1 ? "" : "s"} deleted`);
+    } catch (error: any) {
+      console.error("Error deleting salespersons:", error);
+      toast.error("Error deleting salespersons: " + ((error as any)?.message || "Unknown error"));
     }
   };
 
@@ -2001,8 +2423,8 @@ export default function SubscriptionQuote() {
                   className={`${inputClass} flex items-center justify-between cursor-pointer`}
                   onClick={() => setIsSalespersonDropdownOpen(!isSalespersonDropdownOpen)}
                 >
-                  <span className={formData.salesperson ? "text-slate-900" : "text-slate-400"}>
-                    {formData.salesperson || "Select or Add Salesperson"}
+                  <span className={selectedSalespersonIsActive ? "text-slate-900" : "text-slate-400"}>
+                    {selectedSalespersonIsActive ? (formData.salesperson || "Select or Add Salesperson") : "Select or Add Salesperson"}
                   </span>
                   <ChevronDown size={18} className="text-slate-500" />
                 </div>
@@ -2025,7 +2447,7 @@ export default function SubscriptionQuote() {
                         filteredSalespersons.map((salesperson: any, index) => (
                           <div
                             key={salesperson?.id || salesperson?._id || index}
-                            className="cursor-pointer truncate px-4 py-2 text-sm text-slate-700 hover:bg-[#156372] hover:text-white"
+                            className="cursor-pointer truncate px-4 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-900"
                             onClick={() => handleSalespersonSelect(salesperson)}
                           >
                             {salesperson?.name || salesperson?.displayName || "Unnamed Salesperson"}
@@ -2050,19 +2472,6 @@ export default function SubscriptionQuote() {
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[260px_minmax(0,420px)]">
-              <label className="text-[16px] text-slate-800">wsq</label>
-              <div className="relative">
-                <select
-                  className={`${inputClass} appearance-none pr-10`}
-                  value={formData.wsq}
-                  onChange={(e) => updateField("wsq", e.target.value)}
-                >
-                  <option value="None">None</option>
-                </select>
-                <ChevronDown size={18} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" />
-              </div>
-            </div>
           </section>
 
           <section className="px-6 py-8">
@@ -2109,7 +2518,7 @@ export default function SubscriptionQuote() {
                     </div>
                     <div className="max-h-44 overflow-y-auto">
                       {filteredProducts.length === 0 ? (
-                        <div className="px-3 py-2 text-[13px] text-slate-500">No active products found</div>
+                        <div className="px-3 py-2 text-[13px] text-slate-500">No products found</div>
                       ) : (
                         filteredProducts.map((product, index) => (
                           <button
@@ -2137,87 +2546,51 @@ export default function SubscriptionQuote() {
             </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-4 pb-2">
-              <div className="relative" ref={taxPreferenceDropdownRef}>
-                <button
-                  type="button"
-                  onClick={() => setIsTaxPreferenceDropdownOpen((prev) => !prev)}
-                  className="inline-flex h-9 min-w-[170px] items-center justify-between gap-2 px-2 text-left text-[14px] text-slate-700"
-                >
-                  <span className="inline-flex items-center gap-2">
-                    <ShoppingBag size={14} className="text-slate-500" />
-                    {formData.taxPreference || "Tax Exclusive"}
-                  </span>
-                  <ChevronDown size={14} className="text-slate-500" />
-                </button>
-                {isTaxPreferenceDropdownOpen && (
-                  <div className="absolute left-0 top-full z-40 mt-1 w-[190px] overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg">
-                    {["Tax Exclusive", "Tax Inclusive"].map((option) => (
-                      <button
-                        key={option}
-                        type="button"
-                        className="block w-full border-b border-slate-100 px-3 py-2 text-left text-[13px] text-slate-700 hover:bg-[#eef5ff]"
-                        onClick={() => {
-                          updateField("taxPreference", option);
-                          setIsTaxPreferenceDropdownOpen(false);
-                        }}
-                      >
-                        {option}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="h-6 w-px bg-slate-200" />
-
-              <div className="relative flex items-center" ref={priceListDropdownRef}>
-                <button
-                  type="button"
-                  onClick={() => setIsPriceListDropdownOpen((prev) => !prev)}
-                  className="inline-flex h-9 min-w-[180px] items-center justify-between gap-2 px-2 text-left text-[14px] text-slate-700"
-                >
-                  <CalendarDays size={14} className="text-slate-500" />
-                  <span className="max-w-[130px] truncate">
-                    {formData.priceList || "Select Price List"}
-                  </span>
-                  <ChevronDown size={14} className="text-slate-500" />
-                </button>
-                {isPriceListDropdownOpen && (
-                  <div className="absolute left-0 top-full z-40 mt-1 w-[230px] overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg">
-                    <button
-                      type="button"
-                      className="block w-full border-b border-slate-100 px-3 py-2 text-left text-[13px] text-slate-700 hover:bg-[#eef5ff]"
-                      onClick={() => {
-                        updateField("priceList", "Select Price List");
-                        setIsPriceListDropdownOpen(false);
-                      }}
-                    >
-                      Select Price List
-                    </button>
-                    {catalogPriceLists.map((priceList: any, idx: number) => (
-                      <button
-                        key={priceList?.id || priceList?._id || idx}
-                        type="button"
-                        className="block w-full border-b border-slate-100 px-3 py-2 text-left text-[13px] text-slate-700 hover:bg-[#eef5ff]"
-                        onClick={() => {
-                          updateField("priceList", String(priceList?.name || priceList?.priceListName || "Select Price List"));
-                          setIsPriceListDropdownOpen(false);
-                        }}
-                      >
-                        {String(priceList?.name || priceList?.priceListName || "Unnamed Price List")}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              {isTaxPreferenceLocked ? (
+                <div className="inline-flex h-9 min-w-[170px] items-center gap-2 px-2 text-left text-[14px] text-slate-700">
+                  <ShoppingBag size={14} className="text-slate-500" />
+                  <span>{resolvedTaxPreference}</span>
+                </div>
+              ) : (
+                <div className="relative" ref={taxPreferenceDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setIsTaxPreferenceDropdownOpen((prev) => !prev)}
+                    className="inline-flex h-9 min-w-[170px] items-center justify-between gap-2 px-2 text-left text-[14px] text-slate-700"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <ShoppingBag size={14} className="text-slate-500" />
+                      {formData.taxPreference || "Tax Exclusive"}
+                    </span>
+                    <ChevronDown size={14} className="text-slate-500" />
+                  </button>
+                  {isTaxPreferenceDropdownOpen && (
+                    <div className="absolute left-0 top-full z-40 mt-1 w-[190px] overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg">
+                      {["Tax Exclusive", "Tax Inclusive"].map((option) => (
+                        <button
+                          key={option}
+                          type="button"
+                          className="block w-full border-b border-slate-100 px-3 py-2 text-left text-[13px] text-slate-700 hover:bg-[#eef5ff]"
+                          onClick={() => {
+                            updateField("taxPreference", option);
+                            setIsTaxPreferenceDropdownOpen(false);
+                          }}
+                        >
+                          {option}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
-            <div className={`mt-4 w-full max-w-[1060px] border border-slate-200 relative ${(isPlanAddonDropdownOpen || isTaxDropdownOpen || isReportingTagsDropdownOpen) ? "overflow-visible z-[100]" : "overflow-x-auto z-0"}`}>
+            <div className={`mt-4 w-full max-w-[1060px] border border-slate-200 bg-white relative ${(isPlanAddonDropdownOpen || isTaxDropdownOpen || isReportingTagsDropdownOpen) ? "overflow-visible z-[100]" : "overflow-x-auto z-0"}`}>
               <div className="min-w-[860px]">
-                <div className="grid grid-cols-[2.2fr_1fr_1fr_1fr_0.7fr_48px] border-b border-slate-200 bg-white text-[12px] font-medium uppercase tracking-wide text-slate-700">
-                  <div className="px-3 py-2.5">Plan and Addon</div>
-                  <div className="border-l border-slate-200 px-3 py-2.5 text-right">Quantity</div>
-                  <div className="border-l border-slate-200 px-3 py-2.5 text-right">
+                <div className="grid grid-cols-[2.5fr_0.72fr_0.82fr_0.9fr_0.82fr_44px] border-b border-slate-200 bg-white text-[11px] font-semibold uppercase tracking-wide text-slate-800">
+                  <div className="px-4 py-2.5">Plan and Addon</div>
+                  <div className="border-l border-slate-200 px-4 py-2.5 text-right">Quantity</div>
+                  <div className="border-l border-slate-200 px-4 py-2.5 text-right">
                     <span className="inline-flex items-center gap-1">
                       Rate
                       <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-[2px] border border-slate-400 text-slate-500">
@@ -2225,27 +2598,26 @@ export default function SubscriptionQuote() {
                       </span>
                     </span>
                   </div>
-                  <div className="border-l border-slate-200 px-3 py-2.5">Tax</div>
-                  <div className="border-l border-slate-200 px-3 py-2.5 text-right">Amount</div>
+                  <div className="border-l border-slate-200 px-4 py-2.5">Tax</div>
+                  <div className="border-l border-slate-200 px-4 py-2.5 text-right">Amount</div>
                   <div className="border-l border-slate-200 px-2 py-2.5" />
                 </div>
 
-                <div className={`grid grid-cols-[2.2fr_1fr_1fr_1fr_0.7fr_48px] items-center gap-0 border-b border-slate-200 divide-x divide-slate-200 px-2.5 py-2 ${!isProductSelected ? "opacity-60" : ""} relative ${(isPlanAddonDropdownOpen || isTaxDropdownOpen || isReportingTagsDropdownOpen) ? "z-50" : "z-0"}`}>
-                  <div className="pr-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-7 w-7 items-center justify-center rounded border border-slate-300 bg-slate-50 text-slate-400">
-                        <ImageIcon size={14} />
-                      </div>
-                      <div className="relative flex-1" ref={planAddonDropdownRef}>
-                        <button
-                          type="button"
-                          disabled={!isProductSelected}
-                          onClick={() => setIsPlanAddonDropdownOpen((prev) => !prev)}
-                          className={`h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-[13px] text-left ${formData.plan ? "text-slate-800" : "text-slate-400"} flex items-center justify-between ${!isProductSelected ? "cursor-not-allowed" : ""}`}
-                        >
-                          <span>{formData.plan || "Type or click to select a plan."}</span>
-                          <ChevronDown size={16} className="text-slate-500" />
-                        </button>
+                <div className={`grid grid-cols-[2.5fr_0.72fr_0.82fr_0.9fr_0.82fr_44px] items-stretch gap-0 border-b border-slate-200 bg-white ${!isProductSelected ? "opacity-60" : ""} relative ${(isPlanAddonDropdownOpen || isTaxDropdownOpen || isReportingTagsDropdownOpen) ? "z-50" : "z-0"}`}>
+                  <div className="flex items-center gap-3 px-4 py-3 border-r border-slate-200">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-sm bg-slate-100 text-slate-400">
+                      <ImageIcon size={14} />
+                    </div>
+                    <div className="relative flex-1" ref={planAddonDropdownRef}>
+                      <button
+                        type="button"
+                        disabled={!isProductSelected}
+                        onClick={() => setIsPlanAddonDropdownOpen((prev) => !prev)}
+                        className={`w-full bg-white px-0 text-left text-[13px] text-slate-500 outline-none flex items-center justify-between ${!isProductSelected ? "cursor-not-allowed" : ""}`}
+                      >
+                        <span className="truncate">{formData.plan || "Type or click to select a plan."}</span>
+                        <ChevronDown size={16} className="ml-2 text-slate-500" />
+                      </button>
                       {isPlanAddonDropdownOpen && isProductSelected && (
                         <div className="absolute left-0 right-0 top-full z-[100] mt-1 overflow-hidden rounded-md border border-slate-200 bg-white shadow-none">
                           <div className="border-b border-slate-200 p-2">
@@ -2294,32 +2666,31 @@ export default function SubscriptionQuote() {
                         </div>
                       )}
                     </div>
-                    </div>
                   </div>
                   <input
                     type="text"
-                    className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-[13px] text-right text-slate-800 outline-none transition focus:border-[#3b82f6]"
+                    className="h-full w-full border-r border-slate-200 bg-white px-4 text-[13px] text-right text-slate-700 outline-none"
                     value={formData.quantity}
                     onChange={(e) => updateField("quantity", e.target.value)}
                     disabled={!isProductSelected}
                   />
                   <input
                     type="text"
-                    className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-[13px] text-right text-slate-800 outline-none transition focus:border-[#3b82f6]"
+                    className="h-full w-full border-r border-slate-200 bg-white px-4 text-[13px] text-right text-slate-700 outline-none"
                     value={formData.rate}
                     onChange={(e) => updateField("rate", e.target.value)}
                     disabled={!isProductSelected}
                   />
-                  <div className="relative" ref={taxDropdownRef}>
+                  <div className="relative border-r border-slate-200" ref={taxDropdownRef}>
                     <button
                       type="button"
                       disabled={!isProductSelected}
                       onClick={() => setIsTaxDropdownOpen((prev) => !prev)}
-                        className={`h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-[13px] text-left ${formData.tax ? "text-slate-800" : "text-slate-400"} outline-none transition focus:border-[#3b82f6] flex items-center justify-between ${!isProductSelected ? "cursor-not-allowed" : ""}`}
-                      >
-                        <span>{formData.tax || "Select a Tax"}</span>
-                        <ChevronDown size={16} className="text-slate-500 transition-transform duration-200" style={{ transform: isTaxDropdownOpen ? "rotate(180deg)" : "rotate(0deg)" }} />
-                      </button>
+                      className={`h-full w-full bg-white px-4 text-[13px] text-left ${formData.tax ? "text-slate-700" : "text-slate-400"} outline-none flex items-center justify-between ${!isProductSelected ? "cursor-not-allowed" : ""}`}
+                    >
+                      <span>{formData.tax || "Select a Tax"}</span>
+                      <ChevronDown size={16} className="text-slate-500 transition-transform duration-200" style={{ transform: isTaxDropdownOpen ? "rotate(180deg)" : "rotate(0deg)" }} />
+                    </button>
                     {isTaxDropdownOpen && isProductSelected && (
                       <div className="absolute left-0 right-0 top-full z-[150] mt-1 overflow-hidden rounded-md border border-slate-200 bg-white shadow-xl min-w-[280px]">
                         <div className="border-b border-slate-200 p-2">
@@ -2392,8 +2763,8 @@ export default function SubscriptionQuote() {
                       </div>
                     )}
                   </div>
-                  <div className="pr-2 text-right text-[14px] font-semibold leading-none text-slate-900">{quoteLineAmount.toFixed(2)}</div>
-                  <div className="relative" ref={moreMenuRef}>
+                  <div className="border-r border-slate-200 px-4 py-3 text-right text-[14px] font-semibold leading-none text-slate-900">{quoteLineAmount.toFixed(2)}</div>
+                  <div className="relative flex items-center justify-center" ref={moreMenuRef}>
                     <button
                       type="button"
                       disabled={!isProductSelected}
@@ -2406,7 +2777,7 @@ export default function SubscriptionQuote() {
                       }}
                       className="inline-flex items-center justify-center rounded-md p-2 text-[#2563eb] hover:bg-slate-100 disabled:cursor-not-allowed"
                     >
-                        <MoreVertical size={16} />
+                      <MoreVertical size={16} />
                     </button>
                   </div>
                 </div>
@@ -2477,15 +2848,15 @@ export default function SubscriptionQuote() {
             </div>
 
             {activeCoupons.length > 0 && (
-            <div className={`mt-6 w-full max-w-[1060px] relative ${isCouponDropdownOpen ? "z-[500]" : "z-0"}`}>
-                <h3 className="mb-3 text-[14px] font-medium text-slate-600">Coupon</h3>
-                <div className={`${isCouponDropdownOpen ? "overflow-visible" : "overflow-x-auto"} border border-slate-200 relative`}>
+            <div className={`mt-8 w-full max-w-[1060px] relative ${isCouponDropdownOpen ? "z-[500]" : "z-0"}`}>
+                <h3 className="mb-3 text-[14px] font-medium text-slate-700">Coupon</h3>
+                <div className={`${isCouponDropdownOpen ? "overflow-visible" : "overflow-x-auto"} border border-slate-200 bg-white relative`}>
                   <table className="w-full min-w-[860px] border-collapse text-left text-[13px]">
                     <thead>
                       <tr className="border-b border-slate-200 bg-white text-[12px] font-semibold uppercase tracking-wide text-slate-800">
                         <th className="border-r border-slate-200 px-4 py-3">Coupon</th>
                         <th className="border-r border-slate-200 px-4 py-3">Coupon Code</th>
-                        <th className="px-4 py-3 text-right">Value</th>
+                        <th className="border-r border-slate-200 px-4 py-3 text-right">Value</th>
                         <th className="w-10 px-2 py-3"></th>
                       </tr>
                     </thead>
@@ -2518,14 +2889,14 @@ export default function SubscriptionQuote() {
                                 </div>
                                 <div className="max-h-56 overflow-y-auto">
                                   {filteredCoupons.length === 0 ? (
-                                    <div className="px-3 py-2 text-[13px] text-slate-500">No active coupons found</div>
+                                    <div className="px-3 py-2 text-[13px] text-slate-500">No coupons found</div>
                                   ) : (
                                     filteredCoupons.map((coupon: CouponOption) => (
                                       <button
                                         key={coupon.id}
                                         type="button"
                                         onClick={() => handleCouponSelect(coupon)}
-                                        className="block w-full border-b border-slate-100 px-3 py-2 text-left hover:bg-[#3b82f6] hover:text-white"
+                                        className="block w-full border-b border-slate-100 px-3 py-2 text-left text-slate-700 hover:bg-slate-50 hover:text-slate-900"
                                       >
                                         <div className="text-[13px] font-medium">{coupon.couponName}</div>
                                         <div className="text-[12px] opacity-80">[{formatCouponValue(coupon)}]</div>
@@ -3071,84 +3442,346 @@ export default function SubscriptionQuote() {
         </div>
       )}
 
-      {isManageSalespersonsOpen && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-              <h3 className="text-[18px] font-semibold text-slate-900">Manage Salespersons</h3>
-              <button type="button" onClick={() => setIsManageSalespersonsOpen(false)} className="rounded p-1 text-slate-500 hover:bg-slate-100">
-                <X size={18} />
+      {isManageSalespersonsOpen && createPortal(
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center pt-4 z-[10000]">
+          <div
+            className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h3 className="text-[18px] leading-none font-semibold text-gray-900">Manage Salespersons</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  handleCancelNewSalesperson();
+                  setSelectedSalespersonIds([]);
+                  setManageSalespersonMenuOpen(null);
+                  setIsManageSalespersonsOpen(false);
+                }}
+                className="flex h-8 w-8 items-center justify-center rounded-md text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-colors"
+                aria-label="Close manage salespersons"
+              >
+                <X size={20} />
               </button>
             </div>
 
-            <div className="space-y-3 p-4">
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <Search size={14} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+            {selectedSalespersonIds.length > 0 ? (
+              <div className="p-6 border-b border-gray-200 flex items-center justify-between bg-gray-50">
+                <div className="flex items-center gap-2">
+                  <button className="px-3 py-1.5 bg-white border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50 shadow-sm">
+                    Merge
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setMenuPosition({ top: rect.bottom, left: rect.left });
+                      setManageSalespersonMenuOpen("BULK_ACTIONS");
+                    }}
+                    className="px-3 py-1.5 bg-white border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50 shadow-sm flex items-center gap-2"
+                  >
+                    More Actions
+                    <ChevronDown size={14} />
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSalespersonIds([])}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            ) : (
+              <div className="p-6 border-b border-gray-200 flex items-center gap-3">
+                <div className="flex-1 relative">
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input
                     type="text"
-                    className="h-9 w-full rounded border border-slate-300 bg-white pl-7 pr-2 text-[13px] text-slate-700 outline-none focus:border-[#3b82f6]"
-                    value={manageSalespersonSearch}
-                    onChange={(e) => setManageSalespersonSearch(e.target.value)}
                     placeholder="Search Salesperson"
+                    value={manageSalespersonSearch}
+                    onChange={(e) => {
+                      setManageSalespersonSearch(e.target.value);
+                      setManageSalespersonsPage(1);
+                    }}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#156372]"
                   />
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsNewSalespersonFormOpen((prev) => !prev)}
-                  className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-[13px] text-slate-700 hover:bg-slate-50"
+                  onClick={() => {
+                    handleStartNewSalesperson();
+                    setManageSalespersonSearch("");
+                    setManageSalespersonsPage(1);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#156372] text-white rounded-md"
                 >
-                  <PlusCircle size={14} />
+                  <PlusCircle size={16} />
                   New Salesperson
                 </button>
               </div>
+            )}
 
-              {isNewSalespersonFormOpen && (
-                <div className="grid grid-cols-1 gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-[1fr_1fr_auto]">
-                  <input
-                    type="text"
-                    className="h-9 rounded border border-slate-300 px-3 text-[13px] outline-none focus:border-[#3b82f6]"
-                    placeholder="Name"
-                    value={newSalespersonData.name}
-                    onChange={(e) => setNewSalespersonData((prev) => ({ ...prev, name: e.target.value }))}
-                  />
-                  <input
-                    type="email"
-                    className="h-9 rounded border border-slate-300 px-3 text-[13px] outline-none focus:border-[#3b82f6]"
-                    placeholder="Email"
-                    value={newSalespersonData.email}
-                    onChange={(e) => setNewSalespersonData((prev) => ({ ...prev, email: e.target.value }))}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleSaveNewSalesperson}
-                    className="h-9 rounded bg-[#22c55e] px-4 text-[13px] font-medium text-white hover:bg-[#16a34a]"
-                  >
-                    Save
-                  </button>
+            <div className="flex-1 overflow-y-auto p-6">
+              {isNewSalespersonFormOpen ? (
+                <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-4">
+                    {editingSalespersonId ? "Edit Salesperson" : "Add New Salesperson"}
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                      <input
+                        type="text"
+                        name="name"
+                        value={newSalespersonData.name}
+                        onChange={handleNewSalespersonChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#156372]"
+                        placeholder="Enter name"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                      <input
+                        type="email"
+                        name="email"
+                        value={newSalespersonData.email}
+                        onChange={handleNewSalespersonChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#156372]"
+                        placeholder="Enter email"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleSaveNewSalesperson}
+                        className="flex-1 px-4 py-2 bg-[#156372] text-white rounded-md"
+                      >
+                        {editingSalespersonId ? "Save Changes" : "Add"}
+                      </button>
+                      <button
+                        onClick={handleCancelNewSalesperson}
+                        className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-md"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              <table className="w-full">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">
+                      <input
+                        type="checkbox"
+                        className="rounded border-gray-300 text-[#156372] focus:ring-[#156372]"
+                        checked={
+                          paginatedManageSalespersons.length > 0 &&
+                          paginatedManageSalespersons.every((sp: any) =>
+                            selectedSalespersonIds.includes(String(sp.id || sp._id || ""))
+                          )
+                        }
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedSalespersonIds(paginatedManageSalespersons.map((s: any) => String(s.id || s._id || "")));
+                          } else {
+                            setSelectedSalespersonIds(
+                              selectedSalespersonIds.filter(
+                                (id) => !paginatedManageSalespersons.some((sp: any) => String(sp.id || sp._id || "") === String(id))
+                              )
+                            );
+                          }
+                        }}
+                      />
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">SALESPERSON NAME</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">EMAIL</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {paginatedManageSalespersons.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+                        {manageSalespersonSearch ? "No salespersons found" : "No salespersons available"}
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedManageSalespersons.map((salesperson: any) => {
+                      const salespersonId = String(salesperson.id || salesperson._id || "");
+                      const isInactive = String(salesperson.status || "").toLowerCase() === "inactive";
+                      return (
+                        <tr key={salespersonId} className="group hover:bg-gray-50">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center">
+                              <input
+                                type="checkbox"
+                                className="rounded border-gray-300 text-[#156372] focus:ring-[#156372]"
+                                checked={selectedSalespersonIds.includes(salespersonId)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedSalespersonIds([...selectedSalespersonIds, salespersonId]);
+                                  } else {
+                                    setSelectedSalespersonIds(selectedSalespersonIds.filter((id) => id !== salespersonId));
+                                  }
+                                }}
+                              />
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-900">
+                            {salesperson.name || salesperson.displayName || "Unnamed Salesperson"}
+                            {isInactive && (
+                              <span className="ml-2 inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800">
+                                Inactive
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{salesperson.email || ""}</td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="hidden group-hover:flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleStartEditSalesperson(salesperson);
+                                }}
+                                className="p-1 text-gray-500 hover:text-[#156372] hover:bg-gray-100 rounded"
+                                title="Edit"
+                              >
+                                <Edit2 size={16} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  setMenuPosition({ top: rect.bottom, left: rect.right });
+                                  setManageSalespersonMenuOpen(manageSalespersonMenuOpen === salespersonId ? null : salespersonId);
+                                }}
+                                className={`p-1 text-gray-500 hover:text-[#156372] hover:bg-gray-100 rounded ${manageSalespersonMenuOpen === salespersonId ? "bg-gray-100 text-[#156372]" : ""}`}
+                              >
+                                <MoreVertical size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+
+              {manageSalespersonsTotalPages > 1 && (
+                <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
+                  <div>
+                    Page {manageSalespersonsCurrentPage} of {manageSalespersonsTotalPages}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="rounded border border-gray-300 bg-white px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={manageSalespersonsCurrentPage <= 1}
+                      onClick={() => setManageSalespersonsPage((prev) => Math.max(1, prev - 1))}
+                    >
+                      Prev
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded border border-gray-300 bg-white px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={manageSalespersonsCurrentPage >= manageSalespersonsTotalPages}
+                      onClick={() => setManageSalespersonsPage((prev) => Math.min(manageSalespersonsTotalPages, prev + 1))}
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
               )}
-
-              <div className="max-h-72 overflow-y-auto rounded-md border border-slate-200">
-                {filteredManageSalespersons.length === 0 ? (
-                  <div className="px-4 py-3 text-[13px] text-slate-500">No salespersons found</div>
-                ) : (
-                  filteredManageSalespersons.map((salesperson: any, index) => (
-                    <button
-                      key={salesperson?.id || salesperson?._id || index}
-                      type="button"
-                      onClick={() => handleSalespersonSelect(salesperson)}
-                      className="flex w-full items-center justify-between border-b border-slate-100 px-4 py-2.5 text-left hover:bg-[#eef5ff]"
-                    >
-                      <span className="text-[14px] text-slate-800">{salesperson?.name || salesperson?.displayName || "Unnamed Salesperson"}</span>
-                      <span className="text-[12px] text-slate-500">{salesperson?.email || ""}</span>
-                    </button>
-                  ))
-                )}
-              </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
+      )}
+
+      {manageSalespersonMenuOpen && menuPosition && createPortal(
+        <>
+          <div
+            className="fixed inset-0 z-[10001]"
+            onClick={() => setManageSalespersonMenuOpen(null)}
+          />
+          <div
+            className="fixed z-[10002] w-48 rounded-md border border-slate-200 bg-white py-1 shadow-lg"
+            style={{
+              top: menuPosition.top,
+              left: manageSalespersonMenuOpen === "BULK_ACTIONS" ? menuPosition.left : menuPosition.left - 192,
+            }}
+          >
+            {manageSalespersonMenuOpen === "BULK_ACTIONS" ? (
+              <>
+                <button
+                  type="button"
+                  className="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                  onClick={() => handleBulkSalespersonStatusChange("active")}
+                >
+                  Mark as Active
+                </button>
+                <button
+                  type="button"
+                  className="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                  onClick={() => handleBulkSalespersonStatusChange("inactive")}
+                >
+                  Mark as Inactive
+                </button>
+                <button
+                  type="button"
+                  className="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                  onClick={() => handleBulkDeleteSalespersons()}
+                >
+                  Delete
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+                  onClick={() => {
+                    const salesperson = salespersons.find((sp: any) => String(sp.id || sp._id || "") === manageSalespersonMenuOpen);
+                    if (salesperson) handleStartEditSalesperson(salesperson);
+                    setManageSalespersonMenuOpen(null);
+                  }}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                  onClick={() => {
+                    const salesperson = salespersons.find((sp: any) => String(sp.id || sp._id || "") === manageSalespersonMenuOpen);
+                    if (salesperson) {
+                      const nextStatus = String(salesperson?.status || "").toLowerCase() === "inactive" ? "active" : "inactive";
+                      void handleSetSalespersonStatus(manageSalespersonMenuOpen, nextStatus);
+                    }
+                  }}
+                >
+                  {salespersons.find((sp: any) => String(sp.id || sp._id || "") === manageSalespersonMenuOpen && String(sp?.status || "").toLowerCase() === "inactive") ? "Mark as Active" : "Mark as Inactive"}
+                </button>
+                <button
+                  type="button"
+                  className="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+                  onClick={() => {
+                    void handleDeleteSalesperson(manageSalespersonMenuOpen);
+                    setManageSalespersonMenuOpen(null);
+                  }}
+                >
+                  Delete
+                </button>
+              </>
+            )}
+          </div>
+        </>,
+        document.body
       )}
 
       {isSummaryModalOpen && !isSendApprovalModalOpen && (

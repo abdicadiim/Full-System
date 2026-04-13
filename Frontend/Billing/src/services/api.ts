@@ -3063,11 +3063,32 @@ export const settingsAPI = {
   getGeneralSettings: async () => {
     const defaults = {
       discountSettings: { discountType: "transaction", discountBeforeTax: true },
-      taxSettings: { taxBasis: "exclusive" },
+      taxSettings: { taxInclusive: "inclusive" },
       roundingSettings: { roundingType: "none", precision: 2 }
     };
+    try {
+      const res = await request({ path: "/settings/general" });
+      if (res?.success) {
+        const data = res.data && typeof res.data === "object"
+          ? { ...defaults, ...(res.data.settings || res.data) }
+          : defaults;
+        writeSettingsObject(LOCAL_GENERAL_SETTINGS_KEY, data);
+        return { success: true, data };
+      }
+    } catch {
+      // fall back to local cache
+    }
     const data = readSettingsObject(LOCAL_GENERAL_SETTINGS_KEY, defaults);
+    writeSettingsObject(LOCAL_GENERAL_SETTINGS_KEY, data);
     return { success: true, data };
+  },
+  getCachedGeneralSettings: () => {
+    const defaults = {
+      discountSettings: { discountType: "transaction", discountBeforeTax: true },
+      taxSettings: { taxInclusive: "inclusive" },
+      roundingSettings: { roundingType: "none", precision: 2 }
+    };
+    return readSettingsObject(LOCAL_GENERAL_SETTINGS_KEY, defaults);
   },
   updateGeneralSettings: async (data: any) => {
     const current = readSettingsObject(LOCAL_GENERAL_SETTINGS_KEY, {});

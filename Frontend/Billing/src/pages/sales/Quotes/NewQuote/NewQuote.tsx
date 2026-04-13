@@ -67,10 +67,32 @@ const NewQuote = () => {
   const isEditMode = !!quoteId;
   const isSubscriptionMode = location.pathname.includes("/sales/quotes/subscription/new");
   const clonedDataFromState = location.state?.clonedData || null;
+  const cachedGeneralSettings = settingsAPI.getCachedGeneralSettings?.() || {};
+  const cachedTaxModeSetting = String(
+    cachedGeneralSettings?.taxSettings?.taxInclusive ??
+    cachedGeneralSettings?.taxSettings?.taxBasis ??
+    cachedGeneralSettings?.taxSettings?.taxMode ??
+    "both"
+  ).trim().toLowerCase();
+  const initialTaxExclusiveValue = (() => {
+    if (
+      cachedTaxModeSetting.includes("both") ||
+      (cachedTaxModeSetting.includes("inclusive") && cachedTaxModeSetting.includes("exclusive"))
+    ) {
+      return "Tax Exclusive";
+    }
+    if (cachedTaxModeSetting === "inclusive" || cachedTaxModeSetting === "tax inclusive" || cachedTaxModeSetting.includes("tax inclusive")) {
+      return "Tax Inclusive";
+    }
+    if (cachedTaxModeSetting === "exclusive" || cachedTaxModeSetting === "tax exclusive" || cachedTaxModeSetting.includes("tax exclusive")) {
+      return "Tax Exclusive";
+    }
+    return "Tax Exclusive";
+  })();
   const [isLoading, setIsLoading] = useState(true);
   const [saveLoading, setSaveLoading] = useState<null | "draft" | "send">(null);
   const [taxes, setTaxes] = useState<Tax[]>([]);
-  const [enabledSettings, setEnabledSettings] = useState<any>(null);
+  const [enabledSettings, setEnabledSettings] = useState<any>(cachedGeneralSettings);
   const [formData, setFormData] = useState<any>({
     customerName: "",
     selectedLocation: "Head Office",
@@ -86,7 +108,7 @@ const NewQuote = () => {
     salespersonId: "",
     projectName: "",
     subject: "",
-    taxExclusive: "Tax Exclusive",
+    taxExclusive: initialTaxExclusiveValue,
     items: [
       { id: 1, itemType: "item", itemDetails: "", quantity: 1, rate: 0, tax: "", taxRate: 0, amount: 0, description: "", stockOnHand: 0, reportingTags: [] }
     ],
@@ -114,7 +136,36 @@ const NewQuote = () => {
   const showTransactionDiscount = discountMode === "transaction";
   const showShippingCharges = enabledSettings?.chargeSettings?.shippingCharges !== false;
   const showAdjustment = enabledSettings?.chargeSettings?.adjustments !== false;
-  const taxMode = enabledSettings?.taxSettings?.taxInclusive ?? "inclusive";
+  const rawTaxModeSetting = String(
+    enabledSettings?.taxSettings?.taxInclusive ??
+    enabledSettings?.taxSettings?.taxBasis ??
+    enabledSettings?.taxSettings?.taxMode ??
+    "both"
+  ).trim().toLowerCase();
+  const taxMode = (() => {
+    if (!rawTaxModeSetting) return "both";
+    if (
+      rawTaxModeSetting.includes("both") ||
+      (rawTaxModeSetting.includes("inclusive") && rawTaxModeSetting.includes("exclusive"))
+    ) {
+      return "both";
+    }
+    if (rawTaxModeSetting === "inclusive" || rawTaxModeSetting === "tax inclusive" || rawTaxModeSetting.includes("tax inclusive")) {
+      return "inclusive";
+    }
+    if (rawTaxModeSetting === "exclusive" || rawTaxModeSetting === "tax exclusive" || rawTaxModeSetting.includes("tax exclusive")) {
+      return "exclusive";
+    }
+    if (rawTaxModeSetting.includes("inclusive")) return "inclusive";
+    if (rawTaxModeSetting.includes("exclusive")) return "exclusive";
+    return "both";
+  })();
+  const isTaxPreferenceLocked = taxMode === "inclusive" || taxMode === "exclusive";
+  const resolvedTaxPreference = taxMode === "inclusive"
+    ? "Tax Inclusive"
+    : taxMode === "exclusive"
+      ? "Tax Exclusive"
+      : formData.taxExclusive || "Tax Exclusive";
 
   const toNumberSafe = (value: any) => {
     const parsed = Number(value);
@@ -1299,7 +1350,7 @@ const NewQuote = () => {
         if (generalSettingsResult.status === "fulfilled") {
           const response: any = generalSettingsResult.value;
           if (response?.success && response?.data) {
-            setEnabledSettings(response.data);
+            setEnabledSettings(response.data?.settings || response.data || {});
           }
         }
 
@@ -1327,6 +1378,17 @@ const NewQuote = () => {
 
     loadData();
   }, [isEditMode]);
+
+  useEffect(() => {
+    const handleGeneralSettingsUpdate = (event: any) => {
+      const detail = event?.detail;
+      if (!detail) return;
+      setEnabledSettings(detail?.settings || detail || {});
+    };
+
+    window.addEventListener("generalSettingsUpdated", handleGeneralSettingsUpdate as EventListener);
+    return () => window.removeEventListener("generalSettingsUpdated", handleGeneralSettingsUpdate as EventListener);
+  }, []);
 
   useEffect(() => {
     if (isEditMode || quoteNumberMode !== "auto" || !quoteSeriesRows.length) return;
@@ -1408,6 +1470,16 @@ const NewQuote = () => {
       return next;
     });
   }, [showTransactionDiscount, showShippingCharges, showAdjustment, taxMode, isEditMode]);
+
+  useEffect(() => {
+    if (!isTaxPreferenceLocked) return;
+    setIsTaxPreferenceDropdownOpen(false);
+    setTaxPreferenceSearch("");
+    setFormData(prev => {
+      if (prev.taxExclusive === resolvedTaxPreference) return prev;
+      return { ...prev, taxExclusive: resolvedTaxPreference };
+    });
+  }, [isTaxPreferenceLocked, resolvedTaxPreference]);
 
   // Load quote data when in edit mode (after salespersons are loaded)
   useEffect(() => {
@@ -2750,9 +2822,37 @@ const NewQuote = () => {
       email.toLowerCase().includes(customerSearch.toLowerCase());
   });
 
-  const filteredSalespersons = salespersons.filter(salesperson =>
-    salesperson.name.toLowerCase().includes(salespersonSearch.toLowerCase())
+  const isSalespersonActive = (salesperson: any) => {
+    const status = String(salesperson?.status || "").toLowerCase();
+    if (status) return status !== "inactive";
+    if (typeof salesperson?.active === "boolean") return salesperson.active;
+    if (typeof salesperson?.isActive === "boolean") return salesperson.isActive;
+    return true;
+  };
+
+  const filteredSalespersons = salespersons.filter((salesperson: any) =>
+    isSalespersonActive(salesperson) &&
+    String(salesperson.name || salesperson.displayName || "").toLowerCase().includes(salespersonSearch.toLowerCase())
   );
+
+  useEffect(() => {
+    const currentName = String(formData.salesperson || "").trim().toLowerCase();
+    if (!currentName) return;
+
+    const matched = salespersons.find((salesperson: any) => {
+      const salespersonName = String(salesperson.name || salesperson.displayName || "").trim().toLowerCase();
+      return salespersonName === currentName;
+    });
+
+    if (!matched || !isSalespersonActive(matched)) {
+      setSelectedSalesperson(null);
+      setFormData((prev: any) => ({
+        ...prev,
+        salesperson: "",
+        salespersonId: "",
+      }));
+    }
+  }, [salespersons, formData.salesperson]);
 
   const filteredManageSalespersons = salespersons.filter(salesperson =>
     salesperson.name.toLowerCase().includes(manageSalespersonSearch.toLowerCase()) ||
@@ -5164,116 +5264,67 @@ const NewQuote = () => {
 
               <div className="border-t border-gray-200 pt-4 mb-3 max-w-[980px]">
                 <div className="flex flex-wrap items-center gap-4 text-sm">
-                  <div className="relative" ref={taxPreferenceDropdownRef}>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-2 text-sm text-gray-700 hover:text-[#156372] transition-colors"
-                      onClick={() => {
-                        setIsTaxPreferenceDropdownOpen(prev => !prev);
-                        setIsPriceListDropdownOpen(false);
-                      }}
-                    >
+                  {isTaxPreferenceLocked ? (
+                    <div className="inline-flex items-center gap-2 text-sm text-gray-700">
                       <Briefcase size={14} className="text-gray-400" />
-                      <span>{formData.taxExclusive}</span>
-                      {isTaxPreferenceDropdownOpen ? <ChevronUp size={14} className="text-[#156372]" /> : <ChevronDown size={14} className="text-gray-400" />}
-                    </button>
+                      <span>{resolvedTaxPreference}</span>
+                    </div>
+                  ) : (
+                    <div className="relative" ref={taxPreferenceDropdownRef}>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-2 text-sm text-gray-700 hover:text-[#156372] transition-colors"
+                        onClick={() => {
+                          setIsTaxPreferenceDropdownOpen(prev => !prev);
+                          setIsPriceListDropdownOpen(false);
+                        }}
+                      >
+                        <Briefcase size={14} className="text-gray-400" />
+                        <span>{formData.taxExclusive}</span>
+                        {isTaxPreferenceDropdownOpen ? <ChevronUp size={14} className="text-[#156372]" /> : <ChevronDown size={14} className="text-gray-400" />}
+                      </button>
 
-                    {isTaxPreferenceDropdownOpen && (
-                      <div className="absolute left-0 top-full mt-2 w-[220px] rounded-md border border-gray-200 bg-white shadow-lg z-[90] overflow-hidden">
-                        <div className="p-2 border-b border-gray-100">
-                          <div className="relative">
-                            <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
-                            <input
-                              type="text"
-                              value={taxPreferenceSearch}
-                              onChange={(e) => setTaxPreferenceSearch(e.target.value)}
-                              placeholder="Search"
-                              className="w-full h-8 pl-7 pr-2 text-sm border border-[#3b82f6] rounded-md outline-none"
-                            />
+                      {isTaxPreferenceDropdownOpen && (
+                        <div className="absolute left-0 top-full mt-2 w-[220px] rounded-md border border-gray-200 bg-white shadow-lg z-[90] overflow-hidden">
+                          <div className="p-2 border-b border-gray-100">
+                            <div className="relative">
+                              <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+                              <input
+                                type="text"
+                                value={taxPreferenceSearch}
+                                onChange={(e) => setTaxPreferenceSearch(e.target.value)}
+                                placeholder="Search"
+                                className="w-full h-8 pl-7 pr-2 text-sm border border-[#3b82f6] rounded-md outline-none"
+                              />
+                            </div>
+                          </div>
+                          <div className="px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-100">Item Tax Preference</div>
+                          <div className="py-1">
+                            {filteredTaxPreferenceOptions.length > 0 ? filteredTaxPreferenceOptions.map((option) => {
+                              const selected = formData.taxExclusive === option;
+                              return (
+                                <button
+                                  key={option}
+                                  type="button"
+                                  className={`w-full px-3 py-2 text-sm text-left flex items-center justify-between ${selected ? "bg-gray-100 text-gray-900" : "text-gray-700 hover:bg-white"}`}
+                                  onClick={() => {
+                                    setFormData(prev => ({ ...prev, taxExclusive: option }));
+                                    setIsTaxPreferenceDropdownOpen(false);
+                                    setTaxPreferenceSearch("");
+                                  }}
+                                >
+                                  <span>{option}</span>
+                                  {selected ? <Check size={14} className="text-gray-700" /> : null}
+                                </button>
+                              );
+                            }) : (
+                              <div className="px-3 py-2 text-sm text-gray-500">No options found</div>
+                            )}
                           </div>
                         </div>
-                        <div className="px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-100">Item Tax Preference</div>
-                        <div className="py-1">
-                          {filteredTaxPreferenceOptions.length > 0 ? filteredTaxPreferenceOptions.map((option) => {
-                            const selected = formData.taxExclusive === option;
-                            return (
-                              <button
-                                key={option}
-                                type="button"
-                                className={`w-full px-3 py-2 text-sm text-left flex items-center justify-between ${selected ? "bg-[#156372] text-white" : "text-gray-700 hover:bg-gray-50"}`}
-                                onClick={() => {
-                                  setFormData(prev => ({ ...prev, taxExclusive: option }));
-                                  setIsTaxPreferenceDropdownOpen(false);
-                                  setTaxPreferenceSearch("");
-                                }}
-                              >
-                                <span>{option}</span>
-                                {selected ? <Check size={14} /> : null}
-                              </button>
-                            );
-                          }) : (
-                            <div className="px-3 py-2 text-sm text-gray-500">No options found</div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <div className="h-7 w-px bg-gray-200" />
-                  <div className="relative" ref={priceListDropdownRef}>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-[#156372] transition-colors"
-                      onClick={() => {
-                        loadCatalogPriceLists();
-                        setIsPriceListDropdownOpen(prev => !prev);
-                        setIsTaxPreferenceDropdownOpen(false);
-                      }}
-                    >
-                      <FileText size={14} className="text-gray-400" />
-                      <span>{selectedPriceListDisplay}</span>
-                      {isPriceListDropdownOpen ? <ChevronUp size={14} className="text-[#156372]" /> : <ChevronDown size={14} className="text-gray-400" />}
-                    </button>
-
-                    {isPriceListDropdownOpen && (
-                      <div className="absolute left-0 top-full mt-2 w-[240px] rounded-md border border-gray-200 bg-white shadow-lg z-[90] overflow-hidden">
-                        <div className="p-2 border-b border-gray-100">
-                          <div className="relative">
-                            <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
-                            <input
-                              type="text"
-                              value={priceListSearch}
-                              onChange={(e) => setPriceListSearch(e.target.value)}
-                              placeholder="Search"
-                              className="w-full h-8 pl-7 pr-2 text-sm border border-[#3b82f6] rounded-md outline-none"
-                            />
-                          </div>
-                        </div>
-                        <div className="px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-100">Price Lists</div>
-                        <div className="py-1">
-                          {filteredPriceListOptions.length > 0 ? filteredPriceListOptions.map((option) => {
-                            const selected = formData.selectedPriceList === option.name;
-                            return (
-                              <button
-                                key={option.id || option.name}
-                                type="button"
-                                className={`w-full px-3 py-2 text-sm text-left flex items-center justify-between ${selected ? "bg-[#156372] text-white" : "text-gray-700 hover:bg-gray-50"}`}
-                                onClick={() => {
-                                  setFormData(prev => ({ ...prev, selectedPriceList: option.name }));
-                                  setIsPriceListDropdownOpen(false);
-                                  setPriceListSearch("");
-                                }}
-                              >
-                                <span>{option.displayLabel}</span>
-                                {selected ? <Check size={14} /> : null}
-                              </button>
-                            );
-                          }) : (
-                            <div className="px-3 py-2 text-sm text-gray-500">No price lists found in Product Catalog</div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -8348,13 +8399,13 @@ const NewQuote = () => {
                     <>
                       <button
                         onClick={() => setManageSalespersonMenuOpen(null)}
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
                       >
                         Mark as Active
                       </button>
                       <button
                         onClick={() => setManageSalespersonMenuOpen(null)}
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
                       >
                         Mark as Inactive
                       </button>
@@ -8363,7 +8414,7 @@ const NewQuote = () => {
                           // Handle bulk delete if needed
                           setManageSalespersonMenuOpen(null);
                         }}
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
                       >
                         Delete
                       </button>
@@ -8374,7 +8425,7 @@ const NewQuote = () => {
                         onClick={() => {
                           setManageSalespersonMenuOpen(null);
                         }}
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
                       >
                         Mark as Inactive
                       </button>
@@ -8383,7 +8434,7 @@ const NewQuote = () => {
                           handleDeleteSalesperson(manageSalespersonMenuOpen);
                           setManageSalespersonMenuOpen(null);
                         }}
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
                       >
                         Delete
                       </button>
