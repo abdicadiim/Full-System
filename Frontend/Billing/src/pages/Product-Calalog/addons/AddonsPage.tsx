@@ -25,7 +25,6 @@ const DEFAULT_ADDON_COLUMNS: ColumnConfig[] = [
   { key: "name", label: "Name", visible: true, locked: true, width: 220 },
   { key: "product", label: "Product", visible: true, width: 170 },
   { key: "addonCode", label: "Addon Code", visible: true, locked: true, width: 170 },
-  { key: "description", label: "Description", visible: true, width: 230 },
   { key: "status", label: "Status", visible: true, width: 130 },
   { key: "addonType", label: "Addon Type", visible: true, width: 170 },
   { key: "pricingModel", label: "Pricing Model", visible: true, width: 170 },
@@ -100,7 +99,6 @@ export default function AddonsPage() {
 
   const [bulkUpdateOpen, setBulkUpdateOpen] = useState(false);
   const [bulkUpdateField, setBulkUpdateField] = useState("");
-  const [bulkTextValue, setBulkTextValue] = useState("");
   const [bulkBooleanValue, setBulkBooleanValue] = useState<"check" | "uncheck">("check");
   const [bulkAccountValue, setBulkAccountValue] = useState("");
   const [bulkAccountSearch, setBulkAccountSearch] = useState("");
@@ -243,7 +241,6 @@ export default function AddonsPage() {
   }, []);
 
   useEffect(() => {
-    setBulkTextValue("");
     setBulkBooleanValue("check");
     setBulkAccountValue("");
     setBulkAccountSearch("");
@@ -278,7 +275,7 @@ export default function AddonsPage() {
   const handleExport = () => {
     if (addons.length === 0) return;
     const headers = [
-      "Product", "Addon Name", "Addon Code", "Description", "Status",
+      "Product", "Addon Name", "Addon Code", "Status",
       "Pricing Model", "Addon Type", "Price", "Account", "Tax Name"
     ];
     const csvContent = addons.map((row) => {
@@ -286,7 +283,6 @@ export default function AddonsPage() {
         row.product || "",
         row.addonName || "",
         row.addonCode || "",
-        row.description || "",
         row.status || "",
         row.pricingModel || "",
         row.addonType || "",
@@ -352,7 +348,6 @@ export default function AddonsPage() {
 
     const boolValue = bulkBooleanValue === "check";
     const patch: any = {};
-    if (bulkUpdateField === "description") patch.description = bulkTextValue;
     if (bulkUpdateField === "account") patch.account = bulkAccountValue;
     if (bulkUpdateField === "showInWidget") patch.includeInWidget = boolValue;
     if (bulkUpdateField === "showInPortal") patch.showInPortal = boolValue;
@@ -365,7 +360,6 @@ export default function AddonsPage() {
         toast.success(`Updated ${selectedIds.length} addons successfully.`);
         setBulkUpdateOpen(false);
         setBulkUpdateField("");
-        setBulkTextValue("");
         setBulkBooleanValue("check");
         setBulkAccountValue("");
         setBulkAccountSearch("");
@@ -515,21 +509,21 @@ export default function AddonsPage() {
                   <div className="relative">
                     <button
                       onClick={() => setSortSubMenuOpen((prev) => !prev)}
-                      className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${sortSubMenuOpen ? 'text-white rounded-md mx-2 w-[calc(100%-16px)] shadow-sm' : 'text-slate-600 hover:bg-[#1b5e6a] hover:text-white'}`}
-                      style={sortSubMenuOpen ? { backgroundColor: '#1b5e6a' } : {}}
+                    className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${sortSubMenuOpen ? 'bg-gray-100 text-slate-900 rounded-md mx-2 w-[calc(100%-16px)] shadow-sm' : 'text-slate-600 hover:bg-gray-100 hover:text-slate-900'}`}
+                      style={sortSubMenuOpen ? { backgroundColor: '#f3f4f6' } : {}}
                     >
                       <span className="flex items-center gap-3">
-                        <ArrowDownUp size={16} className={sortSubMenuOpen ? "text-white" : ""} style={!sortSubMenuOpen ? { color: "#1b5e6a" } : {}} />
+                        <ArrowDownUp size={16} className={sortSubMenuOpen ? "text-slate-700" : "text-slate-500"} style={!sortSubMenuOpen ? { color: "#1b5e6a" } : {}} />
                         Sort by
                       </span>
-                      <ChevronRight size={14} className={sortSubMenuOpen ? "text-white" : "text-slate-400"} />
+                      <ChevronRight size={14} className={sortSubMenuOpen ? "text-slate-700" : "text-slate-400"} />
                     </button>
                     {sortSubMenuOpen && (
                       <div className="md:absolute md:top-0 md:right-full md:mr-2 md:w-52 relative w-full bg-white md:border border-gray-100 rounded-lg md:shadow-xl py-2 z-[115] md:animate-in md:fade-in md:slide-in-from-right-1 duration-200">
                         {["Addon Name", "Product Name", "Creation Date"].map((option) => (
                           <button
                             key={option}
-                            className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-teal-50/50 transition-colors"
+                            className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-gray-100 hover:text-slate-900 transition-colors"
                             onClick={() => setSortSubMenuOpen(false)}
                           >
                             {option}
@@ -542,27 +536,27 @@ export default function AddonsPage() {
                   {canCreateAddon ? (
                     <button
                       onClick={() => navigate("/products/addons/import")}
-                      className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
-                    >
-                      <Upload size={16} className="text-teal-600 group-hover:text-white" />
-                      Import Addons
-                    </button>
-                  ) : null}
-                  <button
-                    onClick={handleExport}
-                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
+                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-gray-100 hover:text-slate-900 transition-colors group"
                   >
-                    <Download size={16} className="text-teal-600 group-hover:text-white" />
-                    Export Addons
+                    <Upload size={16} className="text-teal-600 group-hover:text-slate-700" />
+                    Import Addons
                   </button>
-                  <div className="h-px bg-gray-50 my-1 mx-2" />
-                  <button
-                    onClick={resetColumnWidths}
-                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
-                  >
-                    <RotateCcw size={16} className="text-teal-600 group-hover:text-white" />
-                    Reset Column Width
-                  </button>
+                ) : null}
+                <button
+                  onClick={handleExport}
+                  className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-gray-100 hover:text-slate-900 transition-colors group"
+                >
+                  <Download size={16} className="text-teal-600 group-hover:text-slate-700" />
+                  Export Addons
+                </button>
+                <div className="h-px bg-gray-50 my-1 mx-2" />
+                <button
+                  onClick={resetColumnWidths}
+                  className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-gray-100 hover:text-slate-900 transition-colors group"
+                >
+                  <RotateCcw size={16} className="text-teal-600 group-hover:text-slate-700" />
+                  Reset Column Width
+                </button>
                 </div>
               )}
             </div>
@@ -790,7 +784,6 @@ export default function AddonsPage() {
                       className="w-full appearance-none rounded-md border border-gray-300 bg-white px-4 py-2 pr-8 text-sm text-gray-700 outline-none focus:border-[#1b5e6a] transition-colors"
                     >
                       <option value="" disabled>Select a field</option>
-                      <option value="description">Addon Description</option>
                       <option value="account">Sales Account</option>
                       <option value="showInWidget">Show in Widget</option>
                       <option value="showInPortal">Show in Portal</option>
@@ -800,14 +793,6 @@ export default function AddonsPage() {
                 </div>
 
                 <div className="flex-1">
-                  {bulkUpdateField === "description" && (
-                    <textarea
-                      value={bulkTextValue}
-                      onChange={(e) => setBulkTextValue(e.target.value)}
-                      className="h-[84px] w-full resize-none rounded-md border border-gray-300 px-4 py-2 text-sm outline-none focus:border-[#1b5e6a] transition-colors"
-                    />
-                  )}
-
                   {bulkUpdateField === "account" && (
                     <div className="relative" ref={bulkAccountRef}>
                       <button

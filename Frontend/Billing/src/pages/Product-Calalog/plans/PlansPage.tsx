@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
     AlignLeft,
@@ -249,13 +250,14 @@ export default function PlansPage() {
     const [bulkUpdateOpen, setBulkUpdateOpen] = useState(false);
     const [newProductModalOpen, setNewProductModalOpen] = useState(false);
     const [deleteModal, setDeleteModal] = useState<{ entityType: TabType; ids: string[] } | null>(null);
+    const [moreDropdownStyle, setMoreDropdownStyle] = useState<{ top: number; left: number; minWidth: number } | null>(null);
 
     const [products, setProducts] = useState<ProductRow[]>([]);
     const [addons, setAddons] = useState<any[]>([]);
     const [coupons, setCoupons] = useState<any[]>([]);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-    const [sortKey, setSortKey] = useState("plan");
+    const [sortKey, setSortKey] = useState("planCode");
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
     const plansListQuery = usePlansListQuery();
@@ -282,6 +284,7 @@ export default function PlansPage() {
     const allProductsRef = useRef<HTMLDivElement>(null);
     const newRef = useRef<HTMLDivElement>(null);
     const moreRef = useRef<HTMLDivElement>(null);
+    const moreMenuRef = useRef<HTMLDivElement>(null);
     const tableToolsRef = useRef<HTMLDivElement>(null);
     const resizingRef = useRef<{ key: string; startX: number; startWidth: number } | null>(null);
 
@@ -363,7 +366,12 @@ export default function PlansPage() {
             if (allPlansRef.current && !allPlansRef.current.contains(target)) setAllPlansDropdownOpen(false);
             if (allProductsRef.current && !allProductsRef.current.contains(target)) setAllProductsDropdownOpen(false);
             if (newRef.current && !newRef.current.contains(target)) setNewDropdownOpen(false);
-            if (moreRef.current && !moreRef.current.contains(target)) {
+            if (
+                moreRef.current &&
+                !moreRef.current.contains(target) &&
+                moreMenuRef.current &&
+                !moreMenuRef.current.contains(target)
+            ) {
                 setMoreDropdownOpen(false);
                 setSortSubMenuOpen(false);
             }
@@ -385,6 +393,28 @@ export default function PlansPage() {
             prev.map((col) => (col.key === columnKey ? { ...col, width: safeWidth } : col))
         );
     };
+
+    const updateMoreDropdownPosition = useCallback(() => {
+        if (typeof window === "undefined") return;
+        const anchor = moreRef.current?.getBoundingClientRect?.();
+        if (!anchor) return;
+        const menuWidth = 240;
+        const left = Math.max(12, Math.min(anchor.right - menuWidth, window.innerWidth - menuWidth - 12));
+        const top = Math.min(anchor.bottom + 8, window.innerHeight - 12);
+        setMoreDropdownStyle({ top, left, minWidth: menuWidth });
+    }, []);
+
+    useEffect(() => {
+        if (!moreDropdownOpen) return;
+        updateMoreDropdownPosition();
+        const handleReposition = () => updateMoreDropdownPosition();
+        window.addEventListener("resize", handleReposition);
+        window.addEventListener("scroll", handleReposition, true);
+        return () => {
+            window.removeEventListener("resize", handleReposition);
+            window.removeEventListener("scroll", handleReposition, true);
+        };
+    }, [moreDropdownOpen, updateMoreDropdownPosition]);
 
     const resetColumnWidths = () => {
         const defaults = tab === "plans" ? DEFAULT_PLAN_COLUMNS : DEFAULT_PRODUCT_COLUMNS;
@@ -766,9 +796,7 @@ export default function PlansPage() {
     const sortFields =
         tab === "plans"
             ? [
-                { key: "plan", label: "Plan" },
                 { key: "planCode", label: "Plan Code" },
-                { key: "price", label: "Price" },
             ]
             : [
                 { key: "name", label: "Name" },
@@ -879,8 +907,8 @@ export default function PlansPage() {
                                                     setPlanStatusFilter(option);
                                                     setAllPlansDropdownOpen(false);
                                                 }}
-                                                className={`w-full px-4 py-2 text-left text-sm ${planStatusFilter === option ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-gray-50"
-                                                    }`}
+                                                className={`w-full px-4 py-2 text-left text-sm ${planStatusFilter === option ? "bg-[#1b5e6a] text-white" : "text-slate-700 hover:bg-[#1b5e6a] hover:text-white"
+                                                }`}
                                             >
                                                 {option}
                                             </button>
@@ -906,8 +934,8 @@ export default function PlansPage() {
                                                     setProductStatusFilter(option);
                                                     setAllProductsDropdownOpen(false);
                                                 }}
-                                                className={`w-full px-4 py-2 text-left text-sm ${productStatusFilter === option ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-gray-50"
-                                                    }`}
+                                                className={`w-full px-4 py-2 text-left text-sm ${productStatusFilter === option ? "bg-[#1b5e6a] text-white" : "text-slate-700 hover:bg-[#1b5e6a] hover:text-white"
+                                                }`}
                                             >
                                                 {option}
                                             </button>
@@ -931,105 +959,20 @@ export default function PlansPage() {
                                 </button>
                             ) : null}
                         </div>
-                        <div className="relative" ref={moreRef}>
+                        <div className="relative z-[200]" ref={moreRef}>
                             <button
-                                onClick={() => setMoreDropdownOpen((prev) => !prev)}
+                                onClick={() => {
+                                    setSortSubMenuOpen(false);
+                                    setMoreDropdownOpen((prev) => {
+                                        const next = !prev;
+                                        if (next) updateMoreDropdownPosition();
+                                        return next;
+                                    });
+                                }}
                                 className="h-[38px] flex items-center justify-center p-2 bg-white border border-gray-300 border-b-[4px] rounded-lg hover:bg-gray-50 transition-all hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:translate-y-[1px] shadow-sm"
                             >
                                 <MoreHorizontal size={18} className="text-gray-500" />
                             </button>
-                            {moreDropdownOpen && (
-                                tab === "products" ? (
-                                    <div className="absolute top-full right-0 mt-2 w-60 bg-white border border-gray-100 rounded-lg shadow-xl z-[110] py-2 animate-in fade-in slide-in-from-top-1 duration-200">
-                                        {canCreateCurrent ? (
-                                            <button
-                                                onClick={() => {
-                                                    setMoreDropdownOpen(false);
-                                                    navigate("/products/products/import?tab=products");
-                                                }}
-                                                className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
-                                            >
-                                                <Upload size={16} className="text-teal-600 group-hover:text-white" />
-                                                Import Products
-                                            </button>
-                                        ) : null}
-                                        <button
-                                            onClick={handleExport}
-                                            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
-                                        >
-                                            <Download size={16} className="text-teal-600 group-hover:text-white" />
-                                            Export Products
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <div className="absolute top-full right-0 mt-2 w-60 bg-white border border-gray-100 rounded-lg shadow-xl z-[110] py-2 animate-in fade-in slide-in-from-top-1 duration-200">
-                                        <div className="relative">
-                                            <button
-                                                onClick={() => setSortSubMenuOpen((prev) => !prev)}
-                                                className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${sortSubMenuOpen ? 'text-white rounded-md mx-2 w-[calc(100%-16px)] shadow-sm' : 'text-slate-600 hover:bg-[#1b5e6a] hover:text-white'}`}
-                                                style={sortSubMenuOpen ? { backgroundColor: '#1b5e6a' } : {}}
-                                            >
-                                                <span className="inline-flex items-center gap-3">
-                                                    <ArrowDownUp size={16} className={sortSubMenuOpen ? 'text-white' : ''} style={!sortSubMenuOpen ? { color: '#1b5e6a' } : {}} />
-                                                    Sort by
-                                                </span>
-                                                <ChevronRight size={14} className={sortSubMenuOpen ? 'text-white' : 'text-slate-400'} />
-                                            </button>
-                                            {sortSubMenuOpen && (
-                                                <div className="md:absolute md:top-0 md:right-full md:mr-2 md:w-52 relative w-full bg-white md:border border-gray-100 rounded-lg md:shadow-xl py-2 z-[115] md:animate-in md:fade-in md:slide-in-from-right-1 duration-200">
-                                                    {sortFields.map((field) => (
-                                                        <button
-                                                            key={field.key}
-                                                            onClick={() => {
-                                                                if (sortKey === field.key) {
-                                                                    setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-                                                                } else {
-                                                                    setSortKey(field.key);
-                                                                    setSortOrder("asc");
-                                                                }
-                                                            }}
-                                                            className={`w-full flex items-center justify-between px-4 py-2 text-sm transition-colors ${sortKey === field.key ? 'bg-[#1b5e6a] text-white font-bold' : 'text-slate-600 hover:bg-teal-50/50'}`}
-                                                        >
-                                                            <span style={sortKey === field.key ? { color: 'white', fontWeight: 'bold' } : {}}>
-                                                                {field.label} {sortKey === field.key ? (sortOrder === "asc" ? "(Asc)" : "(Desc)") : ""}
-                                                            </span>
-                                                            {sortKey === field.key && <Plus size={14} className="rotate-45" style={{ color: 'white' }} />}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="h-px bg-gray-50 my-1 mx-2" />
-                                        {canCreateCurrent ? (
-                                            <button
-                                                onClick={() => {
-                                                    setMoreDropdownOpen(false);
-                                                    setSortSubMenuOpen(false);
-                                                    navigate("/products/plans/import");
-                                                }}
-                                                className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
-                                            >
-                                                <Upload size={16} className="text-teal-600 group-hover:text-white" />
-                                                Import Plans
-                                            </button>
-                                        ) : null}
-                                        <button
-                                            onClick={handleExport}
-                                            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
-                                        >
-                                            <Download size={16} className="text-teal-600 group-hover:text-white" />
-                                            Export Plans
-                                        </button>
-                                        <button
-                                            onClick={resetColumnWidths}
-                                            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
-                                        >
-                                            <RotateCcw size={16} className="text-teal-600 group-hover:text-white" />
-                                            Reset Column Width
-                                        </button>
-                                    </div>
-                                )
-                            )}
                         </div>
                     </div>
                 </div>
@@ -1094,15 +1037,15 @@ export default function PlansPage() {
 	                    </thead>
                     <tbody className="bg-white">
                         {currentRows.map((row: any) => (
-                            <tr
-                                key={row.id}
-                                onClick={() => {
-                                    if (tab === "plans") {
-                                        navigate(`/products/plans/${row.id}`);
-                                    } else {
+                              <tr
+                                  key={row.id}
+                                  onClick={() => {
+                                      if (tab === "plans") {
+                                        navigate(`/products/plans/${row.id}`, { state: { initialPlan: row } });
+                                      } else {
                                         navigate(`/products/products/${row.id}`, { state: { initialProduct: row } });
-                                    }
-                                }}
+                                      }
+                                  }}
                                 className={`text-[13px] group transition-all hover:bg-[#f8fafc] cursor-pointer h-[50px] border-b border-[#eef1f6] ${tab === "plans" ? "text-black" : ""}`}
                             >
                                 <td className="px-4 py-3">
@@ -1204,6 +1147,118 @@ export default function PlansPage() {
                     void refreshProductsFromQuery();
                 }}
             />
+
+            {moreDropdownOpen && moreDropdownStyle
+                ? createPortal(
+                    <div
+                        ref={moreMenuRef}
+                        className="fixed z-[99999] rounded-lg border border-gray-100 bg-white py-2 shadow-2xl animate-in fade-in slide-in-from-top-1 duration-200"
+                        style={{
+                            top: moreDropdownStyle.top,
+                            left: moreDropdownStyle.left,
+                            minWidth: moreDropdownStyle.minWidth,
+                        }}
+                    >
+                        {tab === "products" ? (
+                            <>
+                                {canCreateCurrent ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setMoreDropdownOpen(false);
+                                            navigate("/products/products/import?tab=products");
+                                        }}
+                                        className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-slate-600 hover:bg-gray-100 hover:text-slate-900 transition-colors group"
+                                    >
+                                        <Upload size={16} className="text-slate-500 group-hover:text-slate-700" />
+                                        Import Products
+                                    </button>
+                                ) : null}
+                                <button
+                                    type="button"
+                                    onClick={handleExport}
+                                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-slate-600 hover:bg-gray-100 hover:text-slate-900 transition-colors group"
+                                >
+                                    <Download size={16} className="text-slate-500 group-hover:text-slate-700" />
+                                    Export Products
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <div className="relative">
+                                    <button
+                                        type="button"
+                                        onClick={() => setSortSubMenuOpen((prev) => !prev)}
+                                        className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${sortSubMenuOpen ? 'bg-gray-100 text-slate-900 rounded-md mx-2 w-[calc(100%-16px)] shadow-sm' : 'text-slate-600 hover:bg-gray-100 hover:text-slate-900'}`}
+                                    >
+                                        <span className="inline-flex items-center gap-3">
+                                            <ArrowDownUp size={16} className={sortSubMenuOpen ? "text-slate-700" : "text-slate-500"} />
+                                            Sort by
+                                        </span>
+                                        <ChevronRight size={14} className={sortSubMenuOpen ? "text-slate-700" : "text-slate-400"} />
+                                    </button>
+                                    {sortSubMenuOpen && (
+                                        <div className="absolute right-full top-0 mr-2 w-52 rounded-lg border border-gray-100 bg-white py-2 shadow-xl z-[100000] animate-in fade-in slide-in-from-right-1 duration-200">
+                                            {sortFields.map((field) => (
+                                                <button
+                                                    key={field.key}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (sortKey === field.key) {
+                                                            setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+                                                        } else {
+                                                            setSortKey(field.key);
+                                                            setSortOrder("asc");
+                                                        }
+                                                    }}
+                                                className={`w-full flex items-center justify-between px-4 py-2 text-sm transition-colors ${sortKey === field.key ? 'bg-gray-100 text-slate-900 font-semibold' : 'text-slate-600 hover:bg-gray-100 hover:text-slate-900'}`}
+                                            >
+                                                    <span style={sortKey === field.key ? { color: '#0f172a', fontWeight: 600 } : {}}>
+                                                        {field.label} {sortKey === field.key ? (sortOrder === "asc" ? "(Asc)" : "(Desc)") : ""}
+                                                    </span>
+                                                    {sortKey === field.key && <Plus size={14} className="rotate-45 text-slate-700" />}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="h-px bg-gray-50 my-1 mx-2" />
+                                {canCreateCurrent ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setMoreDropdownOpen(false);
+                                            setSortSubMenuOpen(false);
+                                            navigate("/products/plans/import");
+                                        }}
+                                        className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-slate-600 hover:bg-gray-100 hover:text-slate-900 transition-colors group"
+                                    >
+                                        <Upload size={16} className="text-slate-500 group-hover:text-slate-700" />
+                                        Import Plans
+                                    </button>
+                                ) : null}
+                                <button
+                                    type="button"
+                                    onClick={handleExport}
+                                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-slate-600 hover:bg-gray-100 hover:text-slate-900 transition-colors group"
+                                >
+                                    <Download size={16} className="text-slate-500 group-hover:text-slate-700" />
+                                    Export Plans
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={resetColumnWidths}
+                                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm text-slate-600 hover:bg-gray-100 hover:text-slate-900 transition-colors group"
+                                >
+                                    <RotateCcw size={16} className="text-slate-500 group-hover:text-slate-700" />
+                                    Reset Column Width
+                                </button>
+                            </>
+                        )}
+                    </div>,
+                    document.body
+                )
+                : null}
 
             {deleteModal ? (
                 <div className="fixed inset-0 z-[2100] flex items-start justify-center bg-black/40 pt-16">

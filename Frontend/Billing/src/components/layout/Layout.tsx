@@ -5,6 +5,7 @@ import Sidebar from './Sidebar'
 import { OrgsProvider } from '../../state/orgsContext'
 import { ensureTimerTicker } from '../../lib/timeTracking/timerService'
 import { transactionNumberSeriesAPI } from '../../services/api'
+import ItemQueryWarmup from '../../pages/Product-Calalog/items/ItemQueryWarmup'
 
 export default function Layout({ children }) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -93,6 +94,7 @@ export default function Layout({ children }) {
 
   return (
     <OrgsProvider>
+      <ItemQueryWarmup />
       <div className="h-screen w-full bg-slate-50 text-[rgb(21,99,114)] overflow-hidden pt-4 pr-4">
         <div className="flex h-full">
           <Sidebar

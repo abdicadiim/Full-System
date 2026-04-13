@@ -258,8 +258,11 @@ export const useProductDetailQuery = (
   const queryClient = useQueryClient();
   const normalizedProductId = normalizeProductId(productId);
   const cachedProduct = readProductFromAnyCachedList(queryClient, normalizedProductId);
+  const normalizedInitialProduct = normalizeProductForQueryCache(options?.initialProduct);
   const initialData =
-    normalizeProductForQueryCache(options?.initialProduct, normalizedProductId) ||
+    (normalizedInitialProduct && productMatchesId(normalizedInitialProduct, normalizedProductId)
+      ? normalizedInitialProduct
+      : null) ||
     cachedProduct ||
     undefined;
 

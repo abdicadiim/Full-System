@@ -1,27 +1,11 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronDown, Plus, MoreVertical, Search, Filter, ArrowUpDown, Bell, X, Check, Settings, LogOut, User } from "lucide-react";
-
-const ITEMS_KEY = "inv_items_v1";
-
-interface Item {
-  id: string;
-  name: string;
-  purchaseDescription?: string;
-  salesDescription?: string;
-  costPrice?: number;
-  sellingPrice?: number;
-  currency?: string;
-  unit?: string;
-}
-
-
-const hasLS = () => typeof window !== "undefined" && !!window.localStorage;
-const getLS = (k: string) => (hasLS() ? window.localStorage.getItem(k) : null);
+import { useItemsListQuery } from "./itemQueries";
 
 export default function AllItemsPage() {
   const navigate = useNavigate();
-  const [items, setItems] = useState<Item[]>([]);
+  const itemsListQuery = useItemsListQuery();
   const [searchTerm, setSearchTerm] = useState("");
 
   // Dropdown states
@@ -36,16 +20,7 @@ export default function AllItemsPage() {
   const moreDropdownRef = useRef(null);
   const notificationDropdownRef = useRef(null);
 
-  useEffect(() => {
-    const raw = getLS(ITEMS_KEY);
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw);
-      setItems(Array.isArray(parsed) ? parsed : []);
-    } catch {
-      // ignore
-    }
-  }, []);
+  const items = itemsListQuery.data || [];
 
   // Handle click outside for dropdowns
   useEffect(() => {
@@ -265,6 +240,11 @@ export default function AllItemsPage() {
 
       {/* Table Content */}
       <div className="px-6 flex-1 overflow-auto w-full custom-scrollbar">
+        {itemsListQuery.isPending && filteredItems.length === 0 ? (
+          <div className="flex min-h-[280px] items-center justify-center text-sm text-gray-500">
+            Loading items...
+          </div>
+        ) : null}
         <table className="w-full border-collapse min-w-[800px]">
           <thead className="sticky top-0 z-20 bg-gray-50">
             <tr className="border-b border-gray-200">
@@ -301,9 +281,9 @@ export default function AllItemsPage() {
             ) : (
               filteredItems.map((item) => (
                 <tr
-                  key={item.id}
+                  key={item.id || item._id}
                   className="border-b border-gray-200 cursor-pointer hover:bg-gray-50"
-                  onClick={() => navigate(`/items/${item.id}`)}
+                  onClick={() => navigate(`/products/items/${item.id || item._id}`)}
                 >
                   <td className="p-3 px-6">
                     <input type="checkbox" className="cursor-pointer" />

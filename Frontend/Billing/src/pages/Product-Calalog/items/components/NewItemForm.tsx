@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { useOrganizationBranding } from "../../../../hooks/useOrganizationBranding";
 import { reportingTagsAPI, taxesAPI, unitsAPI } from "../../../../services/api";
 import CreateAccountModal from "../../../settings/organization-settings/setup-configurations/opening-balances/CreateAccountModal";
+import { debugItems } from "../itemQueries";
 
 interface NewItemFormProps {
   onCancel: () => void;
@@ -631,6 +632,17 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
     try {
       const selectedTaxLabel = String(form.salesTax || "").trim();
       const selectedTaxName = String(selectedTaxLabel.split("[")[0] || "").trim().toLowerCase();
+      debugItems("form submit", {
+        mode: initialData?._id || initialData?.id ? "edit" : "create",
+        name: form.name.trim(),
+        sku: form.sku.trim(),
+        unit: form.unit.trim(),
+        type: form.type,
+        sellingPrice: Number(form.sellingPrice),
+        tagCount: tagsPayload.length,
+        imageCount: images.length,
+        hasTax: Boolean(selectedTaxLabel),
+      });
       const selectedTaxRecord = selectedTaxLabel
         ? taxRows.find((tax: any) => {
           if (!tax) return false;
@@ -728,7 +740,16 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
         },
         tagsPayload.map((t: any) => String(t.groupId)).filter(Boolean)
       );
+      debugItems("form submit complete", {
+        mode: initialData?._id || initialData?.id ? "edit" : "create",
+        name: form.name.trim(),
+        sku: form.sku.trim(),
+      });
     } catch (error) {
+      debugItems("form submit failed", {
+        name: form.name.trim(),
+        message: error instanceof Error ? error.message : String(error),
+      });
       console.error("Failed to save item:", error);
       toast.error("Failed to save item.");
     } finally {

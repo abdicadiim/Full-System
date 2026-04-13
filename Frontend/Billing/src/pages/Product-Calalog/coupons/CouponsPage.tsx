@@ -807,14 +807,14 @@ const CouponsPage: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => setSortSubMenuOpen((prev) => !prev)}
-                              className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${sortSubMenuOpen ? 'text-white rounded-md mx-2 w-[calc(100%-16px)] shadow-sm' : 'text-slate-600 hover:bg-[#1b5e6a] hover:text-white'}`}
-                              style={sortSubMenuOpen ? { backgroundColor: '#1b5e6a' } : {}}
+                              className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${sortSubMenuOpen ? 'bg-gray-100 text-slate-900 rounded-md mx-2 w-[calc(100%-16px)] shadow-sm' : 'text-slate-600 hover:bg-gray-100 hover:text-slate-900'}`}
+                              style={sortSubMenuOpen ? { backgroundColor: '#f3f4f6' } : {}}
                             >
                               <span className="flex items-center gap-3">
-                                <ArrowUpDown size={16} className={sortSubMenuOpen ? 'text-white' : ''} style={!sortSubMenuOpen ? { color: '#1b5e6a' } : {}} />
+                                <ArrowUpDown size={16} className={sortSubMenuOpen ? 'text-slate-700' : 'text-slate-500'} style={!sortSubMenuOpen ? { color: '#1b5e6a' } : {}} />
                                 <span className="font-medium">Sort by</span>
                               </span>
-                              <ChevronRight size={14} className={sortSubMenuOpen ? 'text-white' : 'text-slate-400'} />
+                              <ChevronRight size={14} className={sortSubMenuOpen ? 'text-slate-700' : 'text-slate-400'} />
                             </button>
                             {sortSubMenuOpen && (
                               <div className="md:absolute md:top-0 md:right-full md:mr-2 md:w-56 relative w-full bg-white md:border border-gray-100 rounded-lg md:shadow-xl py-2 z-[115] md:animate-in md:fade-in md:slide-in-from-right-1 duration-200">
@@ -838,12 +838,12 @@ const CouponsPage: React.FC = () => {
                                           setSortOrder('asc');
                                         }
                                       }}
-                                      className={`w-full flex items-center justify-between px-4 py-2 text-sm transition-colors ${isActive ? 'bg-[#1b5e6a] text-white font-bold' : 'text-slate-600 hover:bg-teal-50/50'}`}
+                                      className={`w-full flex items-center justify-between px-4 py-2 text-sm transition-colors ${isActive ? 'bg-gray-100 text-slate-900 font-bold' : 'text-slate-600 hover:bg-gray-100 hover:text-slate-900'}`}
                                     >
-                                      <span style={isActive ? { color: 'white', fontWeight: 'bold' } : {}}>
+                                      <span style={isActive ? { color: '#0f172a', fontWeight: 'bold' } : {}}>
                                         {option.label} {isActive ? (sortOrder === 'asc' ? '(Asc)' : '(Desc)') : ''}
                                       </span>
-                                      {isActive && <Plus size={14} className="rotate-45" style={{ color: 'white' }} />}
+                                      {isActive && <Plus size={14} className="rotate-45" style={{ color: '#0f172a' }} />}
                                     </button>
                                   );
                                 })}
@@ -858,17 +858,17 @@ const CouponsPage: React.FC = () => {
                                 setMoreOpen(false);
                                 setSortSubMenuOpen(false);
                               }}
-                              className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
+                              className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-gray-100 hover:text-slate-900 transition-colors group"
                             >
-                              <Upload size={16} className="text-teal-600 group-hover:text-white" />
+                              <Upload size={16} className="text-teal-600 group-hover:text-slate-700" />
                               Import Coupons
                             </button>
                           ) : null}
                           <button
                             onClick={handleExportCoupons}
-                            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
+                            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-gray-100 hover:text-slate-900 transition-colors group"
                           >
-                            <Download size={16} className="text-teal-600 group-hover:text-white" />
+                            <Download size={16} className="text-teal-600 group-hover:text-slate-700" />
                             Export Coupons
                           </button>
                           <div className="h-px bg-gray-50 my-1 mx-2" />
@@ -878,9 +878,9 @@ const CouponsPage: React.FC = () => {
                               setMoreOpen(false);
                               setSortSubMenuOpen(false);
                             }}
-                            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
+                            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-gray-100 hover:text-slate-900 transition-colors group"
                           >
-                            <RotateCcw size={16} className="text-teal-600 group-hover:text-white" />
+                            <RotateCcw size={16} className="text-teal-600 group-hover:text-slate-700" />
                             Reset Column Width
                           </button>
                         </div>

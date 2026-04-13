@@ -16,7 +16,8 @@ export default function BrandingPage({ onColorChange }) {
         const parsed = JSON.parse(cached);
         const value = String(parsed?.accentColor || parsed?.theme?.accentColor || "").trim().toLowerCase();
         if (value === "#ffffff" || value === "#fff" || value === "white") return "white";
-        if (value === "#3b82f6" || value === "blue") return "blue";
+        if (value === "#156372" || value === "teal") return "teal";
+        if (value === "#3b82f6" || value === "blue") return "teal";
         if (value === "#10b981" || value === "green") return "green";
         if (value === "#ef4444" || value === "red") return "red";
         if (value === "#f97316" || value === "orange") return "orange";
@@ -24,11 +25,11 @@ export default function BrandingPage({ onColorChange }) {
         if (value.startsWith("#")) return "custom";
       }
     } catch {}
-    return "white";
+    return "teal";
   });
   const [keepZohoBranding, setKeepZohoBranding] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
-  const [customColor, setCustomColor] = useState("#9374F5");
+  const [customColor, setCustomColor] = useState("#156372");
   const [hue, setHue] = useState(260);
   const [saturation, setSaturation] = useState(75);
   const [lightness, setLightness] = useState(75);
@@ -41,7 +42,7 @@ export default function BrandingPage({ onColorChange }) {
 
   const accentColors = [
     { name: "white", value: "#ffffff", label: "White" },
-    { name: "blue", value: "#3b82f6", label: "Blue" },
+    { name: "teal", value: "#156372", label: "Teal" },
     { name: "green", value: "#10b981", label: "Green" },
     { name: "red", value: "#ef4444", label: "Red" },
     { name: "orange", value: "#f97316", label: "Orange" },
@@ -61,7 +62,7 @@ export default function BrandingPage({ onColorChange }) {
       return { accentKey: "custom", customValue: raw };
     }
 
-    return { accentKey: raw ? "custom" : "white", customValue: raw || "#9374F5" };
+    return { accentKey: raw ? "custom" : "teal", customValue: raw || "#156372" };
   };
 
   // Load branding data on mount
@@ -155,7 +156,7 @@ export default function BrandingPage({ onColorChange }) {
 
   const selectedColor = accentColor === "custom"
     ? customColor
-    : accentColors.find(c => c.name === accentColor)?.value || "#3b82f6";
+    : accentColors.find(c => c.name === accentColor)?.value || "#156372";
 
   // Convert HSL to Hex
   const hslToHex = (h, s, l) => {
@@ -232,7 +233,7 @@ export default function BrandingPage({ onColorChange }) {
 
   const handleColorChange = (colorName) => {
     setAccentColor(colorName);
-    const colorValue = accentColors.find(c => c.name === colorName)?.value || "#3b82f6";
+    const colorValue = accentColors.find(c => c.name === colorName)?.value || "#156372";
 
     // Immediate optimistic update (Instant Feedback)
     const darkColor = "#156372";
@@ -397,7 +398,7 @@ export default function BrandingPage({ onColorChange }) {
         const currentAccentColor =
           typeof accentOverride === "string"
             ? accentOverride
-            : (accentColor === "custom" ? customColor : (accentColors.find(c => c.name === accentColor)?.value || "#3b82f6"));
+            : (accentColor === "custom" ? customColor : (accentColors.find(c => c.name === accentColor)?.value || "#156372"));
         const currentKeepZohoBranding = typeof keepZohoOverride === "boolean" ? keepZohoOverride : keepZohoBranding;
 
         // Convert logo to base64 if image file is selected (only if not skipping)

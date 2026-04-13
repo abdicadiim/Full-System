@@ -7,14 +7,16 @@ type StartupHydrationProps = {
 };
 
 export default function StartupHydration({ children }: StartupHydrationProps) {
-  const { hydrating, error } = useStartupHydration();
+  const { hydrating, hasCachedData, error } = useStartupHydration();
+  const isItemsRoute = typeof window !== "undefined" && window.location.pathname.startsWith("/products/items");
+  const showSplash = Boolean(error) || (hydrating && !hasCachedData && !isItemsRoute);
 
   return (
     <>
       {children}
-      {(hydrating || error) && (
+      {showSplash && (
         <StartupSplash
-          blocking
+          blocking={false}
           title={error ? "Loading took longer than expected" : "Getting your workspace ready"}
           message={error || "Please wait while we make everything perfect for you..."}
         />

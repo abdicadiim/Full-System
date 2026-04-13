@@ -375,26 +375,34 @@ const NewCouponPage: React.FC<NewCouponPageProps> = ({ onCancel, onClose, onSave
     const associatedPlansRaw = String(initialCoupon.associatedPlans || 'All Plans').trim();
     const knownPlanMode =
       associatedPlansRaw === 'All Plans' ||
-      associatedPlansRaw === 'None' ||
       associatedPlansRaw === 'Selected Plans';
     const selectedPlans =
       associatedPlansRaw && !knownPlanMode
         ? associatedPlansRaw.split(',').map((s) => s.trim()).filter(Boolean)
         : [];
-    const associatePlans = selectedPlans.length > 0 ? 'Selected Plans' : associatedPlansRaw || 'All Plans';
+    const associatePlans =
+      selectedPlans.length > 0
+        ? 'Selected Plans'
+        : associatedPlansRaw === 'None'
+          ? 'All Plans'
+          : associatedPlansRaw || 'All Plans';
 
     const associatedAddonsRaw = String(initialCoupon.associatedAddons || 'All Addons').trim();
     const knownAddonMode =
       associatedAddonsRaw === 'All Addons' ||
       associatedAddonsRaw === 'All Recurring Addons' ||
       associatedAddonsRaw === 'All One-time Addons' ||
-      associatedAddonsRaw === 'None' ||
       associatedAddonsRaw === 'Selected Addons';
     const selectedAddons =
       associatedAddonsRaw && !knownAddonMode
         ? associatedAddonsRaw.split(',').map((s) => s.trim()).filter(Boolean)
         : [];
-    const associateAddons = selectedAddons.length > 0 ? 'Selected Addons' : associatedAddonsRaw || 'All Addons';
+    const associateAddons =
+      selectedAddons.length > 0
+        ? 'Selected Addons'
+        : associatedAddonsRaw === 'None'
+          ? 'All Addons'
+          : associatedAddonsRaw || 'All Addons';
 
     setForm((prev) => ({
       ...prev,
@@ -653,7 +661,7 @@ const NewCouponPage: React.FC<NewCouponPageProps> = ({ onCancel, onClose, onSave
               <FormRow label="Associate Plans*" required>
                 <SearchableDropdown
                   value={form.associatePlans}
-                  options={[{ value: 'All Plans', label: 'All Plans' }, { value: 'None', label: 'None' }, { value: 'Selected Plans', label: 'Selected Plans' }]}
+                  options={[{ value: 'All Plans', label: 'All Plans' }, { value: 'Selected Plans', label: 'Selected Plans' }]}
                   onChange={(v) => setForm(prev => ({ ...prev, associatePlans: v, selectedPlans: v === 'Selected Plans' ? prev.selectedPlans : [] }))}
                   placeholder="All Plans"
                   accentColor={accentColor}
@@ -678,7 +686,6 @@ const NewCouponPage: React.FC<NewCouponPageProps> = ({ onCancel, onClose, onSave
                     { value: 'All Addons', label: 'All Addons' },
                     { value: 'All Recurring Addons', label: 'All Recurring Addons' },
                     { value: 'All One-time Addons', label: 'All One-time Addons' },
-                    { value: 'None', label: 'None' },
                     { value: 'Selected Addons', label: 'Selected Addons' },
                   ]}
                   onChange={(v) =>

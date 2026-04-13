@@ -477,6 +477,18 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
     );
   });
 
+  const getOpenParentForPath = React.useCallback(
+    (pathname: string) =>
+      Object.keys(filteredSubMenus).find(
+        (parent) =>
+          pathname === parent ||
+          filteredSubMenus[parent].some(
+            (sub) => pathname === sub.to || pathname.startsWith(sub.to + "/")
+          )
+      ) || null,
+    [filteredSubMenus]
+  );
+
   React.useEffect(() => {
     if (openParent && !filteredSubMenus[openParent]?.length) {
       setOpenParent(null);
@@ -486,8 +498,18 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
     }
   }, [filteredSubMenus, hoveredParent, openParent]);
 
+  React.useEffect(() => {
+    const activeParent = getOpenParentForPath(location.pathname);
+    if (activeParent) {
+      setOpenParent(activeParent);
+    }
+  }, [getOpenParentForPath, location.pathname]);
+
   const handleLinkClick = () => {
     if (onCloseMobile) onCloseMobile();
+  };
+  const handleSubmenuLinkClick = () => {
+    handleLinkClick();
   };
   const handleParentToggle = (itemTo, hasSubMenu) => {
     if (!hasSubMenu) return;
@@ -786,7 +808,7 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
                                           to={sub.to}
                                           end={sub.to === item.to}
                                           onPointerDown={() => prefetchRouteChunk(sub.to)}
-                                          onClick={handleLinkClick}
+                                          onClick={handleSubmenuLinkClick}
                                           className={({ isActive }) =>
                                             submenuClasses(isActive)
                                           }
@@ -860,7 +882,7 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
                           to={sub.to}
                           end
                           onPointerDown={() => prefetchRouteChunk(sub.to)}
-                          onClick={handleLinkClick}
+                          onClick={handleSubmenuLinkClick}
                           className={({ isActive }) =>
                             `group flex items-center justify-between gap-2 rounded-xl px-4 py-2.5 text-[14px] font-medium transition-colors no-underline mb-1 border ${isActive
                               ? (isLightAppearance ? "bg-slate-200 text-slate-900 border-slate-300" : "bg-white/10 text-white border-blue-500")

@@ -20,7 +20,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import CommentsDrawer from "../components/CommentsDrawer";
 import PlansBulkUpdateModal from "../components/PlansBulkUpdateModal";
@@ -163,14 +163,16 @@ const toCsv = (headers: string[], rows: string[][]) => {
 
 export default function PlanDetailPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { planId } = useParams();
   const actionsRef = useRef<HTMLDivElement>(null);
   const planFilterRef = useRef<HTMLDivElement>(null);
   const bulkActionsRef = useRef<HTMLDivElement>(null);
 
   const sidebarMenuRef = useRef<HTMLDivElement>(null);
+  const initialPlanFromState = (location as any)?.state?.initialPlan ?? null;
 
-  const [plans, setPlans] = useState<any[]>([]);
+  const [plans, setPlans] = useState<any[]>(() => (initialPlanFromState ? [initialPlanFromState] : []));
   const [addons, setAddons] = useState<any[]>([]);
   const [priceLists, setPriceLists] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<"details" | "addons" | "price-lists" | "activity">("details");
@@ -186,6 +188,7 @@ export default function PlanDetailPage() {
   const [showPriceListCount, setShowPriceListCount] = useState(false);
   const [isSidebarMenuOpen, setIsSidebarMenuOpen] = useState(false);
   const [productIdByName, setProductIdByName] = useState<Record<string, string>>({});
+  const [initialSelectedPlan, setInitialSelectedPlan] = useState<any | null>(initialPlanFromState);
   const [plansLoading, setPlansLoading] = useState(false);
   const [activityLogs, setActivityLogs] = useState<PlanActivityLog[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -195,14 +198,15 @@ export default function PlanDetailPage() {
     try {
       const res: any = await plansAPI.getAll({ limit: 1000 });
       const rows = Array.isArray(res?.data) ? res.data : [];
-      setPlans(rows);
+      setPlans(rows.length > 0 ? rows : initialPlanFromState ? [initialPlanFromState] : []);
     } catch {
       try {
         const raw = localStorage.getItem(PLANS_STORAGE_KEY);
         const parsed = raw ? JSON.parse(raw) : [];
-        setPlans(Array.isArray(parsed) ? parsed : []);
+        const nextPlans = Array.isArray(parsed) ? parsed : [];
+        setPlans(nextPlans.length > 0 ? nextPlans : initialPlanFromState ? [initialPlanFromState] : []);
       } catch {
-        setPlans([]);
+        setPlans(initialPlanFromState ? [initialPlanFromState] : []);
       }
     } finally {
       setPlansLoading(false);
@@ -270,6 +274,20 @@ export default function PlanDetailPage() {
   }, []);
 
   useEffect(() => {
+    const state: any = (location as any)?.state;
+    if (state?.initialPlan) {
+      setInitialSelectedPlan(state.initialPlan);
+      setPlans((prev) => {
+        const nextId = getPlanId(state.initialPlan);
+        if (nextId && prev.some((plan) => getPlanId(plan) === nextId)) {
+          return prev;
+        }
+        return [state.initialPlan, ...prev];
+      });
+    }
+  }, [location.state]);
+
+  useEffect(() => {
     const onOutsideClick = (event: MouseEvent) => {
       const target = event.target as Node;
       if (actionsRef.current && !actionsRef.current.contains(target)) {
@@ -316,7 +334,10 @@ export default function PlanDetailPage() {
   const allVisibleSelected =
     visiblePlanIds.length > 0 && visiblePlanIds.every((id) => selectedIds.includes(id));
 
-  const selectedPlan = useMemo(() => plans.find((p) => getPlanId(p) === planId) || plans[0] || null, [plans, planId]);
+  const selectedPlan = useMemo(
+    () => plans.find((p) => getPlanId(p) === planId) || initialSelectedPlan || plans[0] || null,
+    [plans, planId, initialSelectedPlan]
+  );
   const selectedPlanName = useMemo(() => planNameOf(selectedPlan).toLowerCase(), [selectedPlan]);
   const selectedPlanProduct = useMemo(
     () => String(selectedPlan?.product || "").trim().toLowerCase(),
@@ -621,7 +642,6 @@ export default function PlanDetailPage() {
     setIsSidebarMenuOpen(false);
     toast.success("Plans exported");
   };
-
 
   if (!selectedPlan) {
     return <div className="rounded-lg border border-[#d8deea] bg-white p-8 text-sm text-slate-600">No plans found.</div>;

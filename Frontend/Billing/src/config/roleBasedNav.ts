@@ -38,8 +38,6 @@ const subMenus: NavConfig["subMenus"] = {
     { label: "Plans", to: "/products/plans" },
     { label: "Addons", to: "/products/addons" },
     { label: "Coupons", to: "/products/coupons" },
-    { label: "Pricing Widgets", to: "/products/pricing-widgets" },
-    { label: "Price Lists", to: "/products/price-lists" },
   ],
   "/sales": [
     { label: "Quotes", to: "/sales/quotes" },
