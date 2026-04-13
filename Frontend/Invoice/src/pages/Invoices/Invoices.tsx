@@ -41,7 +41,7 @@ import {
   GripVertical,
   RotateCcw
 } from "lucide-react";
-import { getInvoicesPaginated, getInvoiceById, updateInvoice, deleteInvoice, Invoice } from "../salesModel";
+import { getInvoicesPaginated, getInvoiceById, updateInvoice, deleteInvoice, Invoice } from "../invoiceSalesModel";
 import { getInvoiceStatusDisplay } from "../../utils/invoiceUtils";
 import { useCurrency } from "../../hooks/useCurrency";
 import { useSettings } from "../../lib/settings/SettingsContext";

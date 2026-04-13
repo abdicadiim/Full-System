@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "install:all": "npm install && npm --prefix Frontend/Auth install && npm --prefix Frontend/Billing install && npm --prefix Frontend/Invoice install",
-    "dev": "npm run dev:all",
+    "dev": "node -e \"console.error('Do not run the full system from the root terminal. Open a separate terminal for each app and run npm run dev inside Frontend/Auth, Frontend/Billing, or Frontend/Invoice.'); process.exit(1)\"",
     "ensure:frontend-deps": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/ensure-frontend-deps.ps1",
     "wait:backend": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/wait-for-port.ps1 -Port 5000 -TimeoutSeconds 120",
     "dev:backend-only": "tsx watch server.ts",
@@ -13,12 +13,7 @@
     "dev:auth": "npm --prefix Frontend/Auth run dev -- --open",
     "dev:billing": "npm --prefix Frontend/Billing run dev -- --open",
     "dev:invoice": "npm --prefix Frontend/Invoice run dev -- --open",
-    "dev:frontends": "concurrently -k -n auth,billing,invoice -c magenta,green,yellow \"npm run dev:auth\" \"npm run dev:billing\" \"npm run dev:invoice\"",
-    "dev:frontends:wait": "npm run wait:backend && npm run dev:frontends",
-    "dev:auth:wait": "npm run wait:backend && npm run dev:auth",
-    "dev:billing:wait": "npm run wait:backend && npm run dev:billing",
-    "dev:invoice:wait": "npm run wait:backend && npm run dev:invoice",
-    "dev:all": "npm run ensure:frontend-deps && concurrently -k -n backend,auth,billing,invoice -c blue,magenta,green,yellow \"npm run dev:backend\" \"npm run dev:auth:wait\" \"npm run dev:billing:wait\" \"npm run dev:invoice:wait\"",
+    "dev:all": "node -e \"console.error('Combined startup is disabled. Open separate terminals and run each app individually.'); process.exit(1)\"",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js"
   },

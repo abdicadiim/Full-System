@@ -3,9 +3,10 @@ import { AlertTriangle, Calculator, CalendarDays, ChevronDown, ChevronRight, Che
 import { useLocation, useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { toast } from "react-toastify";
-import { Customer, Salesperson, deleteSalesperson, getCustomers, getPlansFromAPI, getQuotes, getSalespersonsFromAPI, getTaxesFromAPI, saveQuote, saveSalesperson, saveTax, updateSalesperson } from "../../salesModel";
-import { customersAPI, quotesAPI, reportingTagsAPI, priceListsAPI, productsAPI, salespersonsAPI, settingsAPI, transactionNumberSeriesAPI } from "../../../../services/api";
-import { createTaxLocal, readTaxesLocal } from "../../../settings/organization-settings/taxes-compliance/TAX/storage";
+import { Customer, Salesperson, getCustomers, getPlansFromAPI, getQuotes, getSalespersonsFromAPI, getTaxesFromAPI, saveQuote, saveSalesperson, saveTax, updateCustomer, updateSalesperson } from "../../salesModel.ts";
+import { quotesAPI, reportingTagsAPI, priceListsAPI, productsAPI, salespersonsAPI, settingsAPI, transactionNumberSeriesAPI } from "../../../../services/api.ts";
+import { readTaxesLocal, writeTaxesLocal } from "../../../settings/organization-settings/taxes-compliance/TAX/storage.ts";
+import { buildTaxOptionGroups, taxLabel, normalizeCreatedTaxPayload } from "../../../../hooks/Taxdropdownstyle";
 import { Country, State } from "country-state-city";
 
 type SubscriptionQuoteForm = {
@@ -430,6 +431,27 @@ export default function SubscriptionQuote() {
     return "";
   };
 
+  const taxOptionGroups = useMemo(() => buildTaxOptionGroups(taxes as any[]), [taxes]);
+  const filteredTaxGroups = useMemo(() => {
+    const keyword = taxSearch.trim().toLowerCase();
+    if (!keyword) return taxOptionGroups;
+    return taxOptionGroups
+      .map((group) => ({
+        ...group,
+        options: group.options.filter((tax) => taxLabel(tax.raw ?? tax).toLowerCase().includes(keyword)),
+      }))
+      .filter((group) => group.options.length > 0);
+  }, [taxSearch, taxOptionGroups]);
+  const selectedTaxLabel = useMemo(() => {
+    const matchedTax = taxes.find((tax: any) => {
+      const id = String(tax?.id || tax?._id || "").trim();
+      const label = taxLabel(tax);
+      return (id && String(formData.tax || "").trim() === id) || String(formData.tax || "").trim() === label;
+    });
+    if (!matchedTax) return String(formData.tax || "").trim();
+    return taxLabel(matchedTax);
+  }, [taxes, formData.tax]);
+
   const applyResolvedPriceListChoice = (nextPriceListName: string) => {
     setFormData((prev) => ({
       ...prev,
@@ -466,14 +488,26 @@ export default function SubscriptionQuote() {
 
   const normalizeTaxRows = (rows: any[]) => {
     return rows
-      .map((tax: any, idx: number) => ({
-        id: String(tax?.id || tax?._id || tax?.tax_id || `tax-${idx}`),
-        name: String(tax?.name || tax?.taxName || "").trim(),
-        rate: Number(tax?.rate ?? tax?.taxRate ?? 0) || 0,
-        type: String(tax?.type || (tax?.isGroup ? "group" : "tax")).toLowerCase(),
-        isActive: tax?.isActive !== false && String(tax?.status || "").toLowerCase() !== "inactive",
-        isGroup: Boolean(tax?.isGroup) || String(tax?.type || "").toLowerCase() === "group",
-      }))
+      .map((tax: any, idx: number) => {
+        const id = String(tax?.id || tax?._id || tax?.tax_id || `tax-${idx}`).trim();
+        const name = String(tax?.name || tax?.taxName || "").trim();
+        const type = String(tax?.type || (tax?.isGroup ? "group" : "tax")).toLowerCase();
+        return {
+          ...tax,
+          id,
+          _id: String(tax?._id || tax?.id || tax?.tax_id || id).trim(),
+          name,
+          rate: Number(tax?.rate ?? tax?.taxRate ?? 0) || 0,
+          type,
+          kind: tax?.kind,
+          taxType: tax?.taxType,
+          description: tax?.description,
+          groupTaxes: Array.isArray(tax?.groupTaxes) ? tax.groupTaxes : Array.isArray(tax?.groupTaxIds) ? tax.groupTaxIds : [],
+          isActive: tax?.isActive !== false && String(tax?.status || "").toLowerCase() !== "inactive",
+          isGroup: Boolean(tax?.isGroup) || type === "group" || String(tax?.description || "") === "__taban_tax_group__",
+          isCompound: Boolean(tax?.isCompound || tax?.is_compound),
+        };
+      })
       .filter((tax: any) => tax.name && tax.isActive);
   };
 
@@ -1124,14 +1158,18 @@ export default function SubscriptionQuote() {
           return byId || byNameRate;
         });
 
+        const nextRow = {
+          _id: String(savedTax?._id || savedTax?.id || selectedName).trim() || selectedName,
+          id: String(savedTax?._id || savedTax?.id || selectedName).trim() || selectedName,
+          name: selectedName,
+          rate: selectedRate,
+          type: "both",
+          isActive: true,
+          isCompound: !!newTaxForm.isCompound,
+        };
+
         if (!alreadyExists) {
-          createTaxLocal({
-            name: selectedName,
-            rate: selectedRate,
-            type: "both",
-            isActive: true,
-            isCompound: !!newTaxForm.isCompound,
-          });
+          writeTaxesLocal([nextRow as any, ...existing]);
         }
       } catch {
         // ignore settings sync failure; primary save already completed
@@ -1441,7 +1479,7 @@ export default function SubscriptionQuote() {
       const payload =
         addressModalType === "billing" ? { billingAddress: addressPayload } : { shippingAddress: addressPayload };
 
-      const response: any = await customersAPI.update(String(customerId), payload);
+      const response: any = await updateCustomer(String(customerId), payload);
       const updatedFromApi = response?.data || response;
 
       setCustomers((prev) =>
@@ -1889,7 +1927,7 @@ export default function SubscriptionQuote() {
     }
 
     try {
-      await deleteSalesperson(normalizedId);
+      await salespersonsAPI.delete(normalizedId);
       const refreshed = await getSalespersonsFromAPI();
       setSalespersons(Array.isArray(refreshed) ? refreshed : []);
 
@@ -2084,7 +2122,7 @@ export default function SubscriptionQuote() {
     }
 
     try {
-      await Promise.all(ids.map((salespersonId) => deleteSalesperson(salespersonId)));
+      await Promise.all(ids.map((salespersonId) => salespersonsAPI.delete(salespersonId)));
       try {
         const refreshed = await salespersonsAPI.getAll();
         setSalespersons(Array.isArray(refreshed?.data) ? refreshed.data : []);
@@ -2686,76 +2724,78 @@ export default function SubscriptionQuote() {
                       type="button"
                       disabled={!isProductSelected}
                       onClick={() => setIsTaxDropdownOpen((prev) => !prev)}
-                      className={`h-full w-full bg-white px-4 text-[13px] text-left ${formData.tax ? "text-slate-700" : "text-slate-400"} outline-none flex items-center justify-between ${!isProductSelected ? "cursor-not-allowed" : ""}`}
+                      className="w-full px-2 py-1.5 border border-gray-300 bg-white rounded outline-none text-sm text-left flex items-center justify-between hover:border-gray-400 transition-colors"
                     >
-                      <span>{formData.tax || "Select a Tax"}</span>
-                      <ChevronDown size={16} className="text-slate-500 transition-transform duration-200" style={{ transform: isTaxDropdownOpen ? "rotate(180deg)" : "rotate(0deg)" }} />
+                      <span className={selectedTaxLabel ? "text-gray-900" : "text-gray-500"}>
+                        {selectedTaxLabel || "Select a Tax"}
+                      </span>
+                      <ChevronDown
+                        size={14}
+                        className={`transition-transform ${isTaxDropdownOpen ? "rotate-180" : ""}`}
+                        style={{ color: "#156372" }}
+                      />
                     </button>
                     {isTaxDropdownOpen && isProductSelected && (
-                      <div className="absolute left-0 right-0 top-full z-[150] mt-1 overflow-hidden rounded-md border border-slate-200 bg-white shadow-xl min-w-[280px]">
-                        <div className="border-b border-slate-200 p-2">
-                          <div className="relative">
-                            <Search size={14} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <div className="absolute left-0 top-full z-[9999] mt-1 w-72 rounded-xl border border-[#d6dbe8] bg-white p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+                        <div className="p-2">
+                          <div
+                            className="flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-all focus-within:bg-white"
+                            style={{ borderColor: "#156372" }}
+                          >
+                            <Search size={14} className="text-slate-400" />
                             <input
                               type="text"
-                              className="h-8 w-full rounded border border-slate-300 bg-white pl-7 pr-2 text-[13px] text-slate-700 outline-none focus:border-[#3b82f6]"
+                              className="w-full border-none bg-transparent text-[13px] text-slate-700 outline-none placeholder:text-slate-400"
                               value={taxSearch}
                               onChange={(e) => setTaxSearch(e.target.value)}
-                              placeholder="Search"
+                              placeholder="Search..."
                               autoFocus
                             />
                           </div>
                         </div>
-                        <div className="max-h-60 overflow-y-auto">
-
-                          {/* Group Taxes */}
-                          {taxes.filter(t => t.type === "group" && (taxSearch === "" || t.name.toLowerCase().includes(taxSearch.toLowerCase()))).length > 0 && (
-                            <div className="p-2">
-                              <div className="mb-1 px-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">Tax Group</div>
-                              {taxes.filter(t => t.type === "group" && (taxSearch === "" || t.name.toLowerCase().includes(taxSearch.toLowerCase()))).map((tax: any) => (
-                                <button
-                                  key={tax.id || tax._id}
-                                  type="button"
-                                  className="block w-full rounded px-2 py-1.5 text-left text-[13px] text-slate-700 hover:bg-[#3b82f6] hover:text-white"
-                                  onClick={() => {
-                                    updateField("tax", `${tax.name} [${tax.rate}%]`);
-                                    setIsTaxDropdownOpen(false);
-                                  }}
-                                >
-                                  {tax.name} [{tax.rate}%]
-                                </button>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* Simple/Standard Taxes */}
-                          {taxes.filter(t => t.type !== "group" && (taxSearch === "" || t.name.toLowerCase().includes(taxSearch.toLowerCase()))).length > 0 && (
-                            <div className="p-2 border-t border-slate-100">
-                              <div className="mb-1 px-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">Taxes</div>
-                              {taxes.filter(t => t.type !== "group" && (taxSearch === "" || t.name.toLowerCase().includes(taxSearch.toLowerCase()))).map((tax: any) => (
-                                <button
-                                  key={tax.id || tax._id}
-                                  type="button"
-                                  className="block w-full rounded px-2 py-1.5 text-left text-[13px] text-slate-700 hover:bg-[#3b82f6] hover:text-white"
-                                  onClick={() => {
-                                    updateField("tax", `${tax.name} [${tax.rate}%]`);
-                                    setIsTaxDropdownOpen(false);
-                                  }}
-                                >
-                                  {tax.name} [{tax.rate}%]
-                                </button>
-                              ))}
-                            </div>
-                          )}
-
-                          {taxes.length === 0 && (
+                        <div className="max-h-64 overflow-y-auto py-1 custom-scrollbar">
+                          {filteredTaxGroups.length > 0 ? (
+                            filteredTaxGroups.map((group) => (
+                              <div key={group.label}>
+                                <div className="px-4 py-1.5 text-[10px] font-extrabold uppercase tracking-widest text-slate-700">
+                                  {group.label}
+                                </div>
+                                {group.options.map((tax) => {
+                                  const label = taxLabel(tax.raw ?? tax);
+                                  const taxId = String(tax.id || "").trim();
+                                  const selected = String(formData.tax || "").trim() === taxId || String(formData.tax || "").trim() === label;
+                                  return (
+                                    <button
+                                      key={taxId}
+                                      type="button"
+                                      className={`w-full px-4 py-2 text-left text-[13px] ${selected
+                                        ? "text-[#156372] font-medium hover:bg-gray-50 hover:text-gray-900"
+                                        : "text-slate-700 hover:bg-gray-50 hover:text-gray-900"
+                                        }`}
+                                      onClick={() => {
+                                        updateField("tax", taxId || label);
+                                        setIsTaxDropdownOpen(false);
+                                        setTaxSearch("");
+                                      }}
+                                    >
+                                      {label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ))
+                          ) : (
                             <div className="px-4 py-3 text-center text-[13px] text-slate-500">No taxes found</div>
                           )}
                         </div>
                         <button
                           type="button"
-                          onClick={handleOpenNewTaxModal}
-                          className="flex w-full items-center justify-center gap-2 border-t border-slate-200 px-3 py-2.5 text-[13px] text-[#0f6c82] hover:bg-slate-50 transition-colors"
+                          className="w-full border-t border-gray-200 px-4 py-2 text-left text-[#156372] text-[13px] font-medium flex items-center gap-2 hover:bg-gray-50"
+                          onClick={() => {
+                            setIsTaxDropdownOpen(false);
+                            setTaxSearch("");
+                            handleOpenNewTaxModal();
+                          }}
                         >
                           <PlusCircle size={14} />
                           New Tax
@@ -2806,26 +2846,29 @@ export default function SubscriptionQuote() {
                               <div className="text-slate-500">No reporting tags available.</div>
                             ) : (
                               availableReportingTags.map((tag: any) => (
-                                <div key={tag.id || tag._id}>
+                              <div key={tag.id || tag._id}>
                                   <label className="mb-1 block text-[12px] font-medium text-slate-600">{tag.name}</label>
-                                  <select
-                                    className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-[13px] text-slate-700 outline-none focus:border-[#3b82f6]"
-                                    value={reportingTagSelections[tag.id || tag._id] || ""}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setReportingTagSelections(prev => {
-                                        const next = { ...prev };
-                                        if (val) next[tag.id || tag._id] = val;
-                                        else delete next[tag.id || tag._id];
-                                        return next;
-                                      });
-                                    }}
-                                  >
-                                    <option value="">Select an option</option>
-                                    {(Array.isArray(tag.options) ? tag.options : []).map((opt: any) => (
-                                      <option key={opt} value={opt}>{opt}</option>
-                                    ))}
-                                  </select>
+                                  <div className="relative">
+                                    <select
+                                      className="h-10 w-full appearance-none rounded border border-slate-300 bg-white px-3 pr-10 text-[13px] text-slate-700 outline-none focus:border-[#156372]"
+                                      value={reportingTagSelections[tag.id || tag._id] || ""}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setReportingTagSelections(prev => {
+                                          const next = { ...prev };
+                                          if (val) next[tag.id || tag._id] = val;
+                                          else delete next[tag.id || tag._id];
+                                          return next;
+                                        });
+                                      }}
+                                    >
+                                      <option value="">Select an option</option>
+                                      {(Array.isArray(tag.options) ? tag.options : []).map((opt: any) => (
+                                        <option key={opt} value={opt}>{opt}</option>
+                                      ))}
+                                    </select>
+                                    <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                  </div>
                                 </div>
                               ))
                             )}

@@ -41,7 +41,7 @@ export default function QuotesPage() {
   const [approvalRules, setApprovalRules] = useState<any[]>([]);
   const [activeApproverLevel, setActiveApproverLevel] = useState<number | null>(null);
   const [approverSearch, setApproverSearch] = useState("");
-  const approverDropdownRef = useRef<HTMLDivElement>(null);
+  const approverDropdownRef = useRef<HTMLTableCellElement | null>(null);
 
   const mockUsers = [
     { name: "asc wcs", email: "ascwcs685@gmail.com" },
@@ -59,7 +59,7 @@ export default function QuotesPage() {
   const [customButtons, setCustomButtons] = useState<any[]>([]);
   const [locationFilter, setLocationFilter] = useState("All");
   const [showNewButtonDropdown, setShowNewButtonDropdown] = useState(false);
-  const newButtonDropdownRef = useRef(null);
+  const newButtonDropdownRef = useRef<HTMLDivElement | null>(null);
 
   // Related Lists tab states
   const [relatedLists, setRelatedLists] = useState<any[]>([]);
@@ -82,7 +82,7 @@ export default function QuotesPage() {
 
   const addApprovalLevel = () => {
     const nextId = approvalLevels.length > 0 ? Math.max(...approvalLevels.map(al => al.id)) + 1 : 1;
-    setApprovalLevels([...approvalLevels, { id: nextId, level: approvalLevels.length + 1, approver: "" }]);
+    setApprovalLevels([...approvalLevels, { id: nextId, level: approvalLevels.length + 1, approver: "", email: "" }]);
   };
 
   const removeApprovalLevel = (id: number) => {
@@ -132,8 +132,9 @@ export default function QuotesPage() {
               const ownerResponse = await settingsAPI.getOwnerEmail();
               if (cancelled) return;
               if (ownerResponse.success && ownerResponse.data) {
+                const owner = ownerResponse.data as any;
                 setApprovalLevels([
-                  { id: 1, level: 1, approver: ownerResponse.data.name, email: ownerResponse.data.email },
+                  { id: 1, level: 1, approver: owner.name || owner.approver || "", email: owner.email || "" },
                   { id: 2, level: 2, approver: "", email: "" }
                 ]);
               }
@@ -203,7 +204,6 @@ export default function QuotesPage() {
     customFields,
     customButtons,
     relatedLists,
-    subscriptionConversionOption,
   });
 
   const handleSaveGeneral = async () => {

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { isTaxGroupRecord } from "../pages/settings/organization-settings/taxes-compliance/TAX/storage";
+import { isTaxGroupRecord } from "../pages/settings/organization-settings/taxes-compliance/TAX/storage.ts";
 
 export type TaxQuickCreateTarget = { type: "expense" } | { type: "itemized"; index: number };
 
@@ -105,7 +105,7 @@ export const buildTaxOptionGroups = (taxes: any[] = []): TaxDropdownGroup[] => {
 
   return [
     { label: "Tax", options: taxRows },
-    { label: "Tax Component", options: compoundRows },
+    { label: "Compound Tax", options: compoundRows },
     { label: "Tax Group", options: groupRows },
   ].filter((group) => group.options.length > 0);
 };

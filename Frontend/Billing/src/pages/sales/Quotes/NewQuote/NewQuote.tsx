@@ -9,10 +9,10 @@ import {
   FileText, CreditCard, Square, Upload, Loader2, LayoutGrid, PlusCircle, Mail, Building2, AlertTriangle,
   Package, Layout
 } from "lucide-react";
-import { getCustomers, saveQuote, getQuotes, getQuoteById, updateQuote, getProjects, getSalespersonsFromAPI, updateSalesperson, getItemsFromAPI, getTaxes, Customer, Tax, Salesperson, Quote, ContactPerson, Project } from "../../salesModel";
+import { getCustomers, saveQuote, saveSalesperson, getQuotes, getQuoteById, updateQuote, getProjects, getSalespersonsFromAPI, updateSalesperson, getItemsFromAPI, getTaxes, Customer, Tax, Salesperson, Quote, ContactPerson, Project } from "../../salesModel.ts";
 
 import { getAllDocuments } from "../../../../utils/documentStorage";
-import { customersAPI, projectsAPI, salespersonsAPI, quotesAPI, itemsAPI, currenciesAPI, contactPersonsAPI, vendorsAPI, settingsAPI, chartOfAccountsAPI, documentsAPI, reportingTagsAPI, priceListsAPI, plansAPI, transactionNumberSeriesAPI } from "../../../../services/api";
+import { customersAPI, projectsAPI, salespersonsAPI, quotesAPI, itemsAPI, currenciesAPI, contactPersonsAPI, vendorsAPI, settingsAPI, chartOfAccountsAPI, documentsAPI, reportingTagsAPI, priceListsAPI, plansAPI, transactionNumberSeriesAPI } from "../../../../services/api.ts";
 import { useAccountSelect } from "../../../../hooks/useAccountSelect";
 import { useCurrency } from "../../../../hooks/useCurrency";
 import { API_BASE_URL, getToken } from "../../../../services/auth";
@@ -20,7 +20,7 @@ import { toast } from "react-toastify";
 import { Country, State } from "country-state-city";
 import NewTaxModal from "../../../../../components/modals/NewTaxModal";
 import { buildTaxOptionGroups, taxLabel, normalizeCreatedTaxPayload, isTaxActive } from "../../../../hooks/Taxdropdownstyle";
-import { readTaxesLocal, createTaxLocal } from "../../../settings/organization-settings/taxes-compliance/TAX/storage";
+import { readTaxesLocal, writeTaxesLocal } from "../../../settings/organization-settings/taxes-compliance/TAX/storage.ts";
 import NewItemForm from "../../../Product-Calalog/items/components/NewItemForm";
 
 // taxOptions REMOVED: Now fetching from backend API
@@ -403,6 +403,7 @@ const NewQuote = () => {
   const [selectedSalespersonIds, setSelectedSalespersonIds] = useState<string[]>([]);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [isNewSalespersonFormOpen, setIsNewSalespersonFormOpen] = useState(false);
+  const [editingSalespersonId, setEditingSalespersonId] = useState<string | null>(null);
   const [isAddContactPersonModalOpen, setIsAddContactPersonModalOpen] = useState(false);
   const [contactPersonData, setContactPersonData] = useState({
     salutation: "",
@@ -2854,12 +2855,40 @@ const NewQuote = () => {
     }
   }, [salespersons, formData.salesperson]);
 
-  const filteredManageSalespersons = salespersons.filter(salesperson =>
-    salesperson.name.toLowerCase().includes(manageSalespersonSearch.toLowerCase()) ||
-    (salesperson.email && salesperson.email.toLowerCase().includes(manageSalespersonSearch.toLowerCase()))
-  );
+  const filteredManageSalespersons = salespersons.filter((salesperson: any) => {
+    const term = manageSalespersonSearch.toLowerCase().trim();
+    if (!term) return true;
+    const name = String(salesperson?.name || salesperson?.displayName || "").toLowerCase();
+    const email = String(salesperson?.email || "").toLowerCase();
+    return name.includes(term) || email.includes(term);
+  });
+  const manageSalespersonsPageSize = 3;
+  const [manageSalespersonsPage, setManageSalespersonsPage] = useState(1);
+  const manageSalespersonsTotalPages = Math.max(1, Math.ceil(filteredManageSalespersons.length / manageSalespersonsPageSize));
+  const manageSalespersonsCurrentPage = Math.min(manageSalespersonsPage, manageSalespersonsTotalPages);
+  const paginatedManageSalespersons = useMemo(() => {
+    const startIndex = (manageSalespersonsCurrentPage - 1) * manageSalespersonsPageSize;
+    return filteredManageSalespersons.slice(startIndex, startIndex + manageSalespersonsPageSize);
+  }, [filteredManageSalespersons, manageSalespersonsCurrentPage]);
 
-  const handleNewSalespersonChange = (e) => {
+  const handleStartNewSalesperson = () => {
+    setEditingSalespersonId(null);
+    setNewSalespersonData({ name: "", email: "" });
+    setManageSalespersonMenuOpen(null);
+    setIsNewSalespersonFormOpen(true);
+  };
+
+  const handleStartEditSalesperson = (salesperson: any) => {
+    const salespersonId = String(salesperson?.id || salesperson?._id || "").trim();
+    setEditingSalespersonId(salespersonId || null);
+    setNewSalespersonData({
+      name: String(salesperson?.name || salesperson?.displayName || ""),
+      email: String(salesperson?.email || "")
+    });
+    setIsNewSalespersonFormOpen(true);
+  };
+
+  const handleNewSalespersonChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setNewSalespersonData(prev => ({
       ...prev,
@@ -2867,102 +2896,360 @@ const NewQuote = () => {
     }));
   };
 
-  const handleSaveAndSelectSalesperson = async () => {
-    if (!newSalespersonData.name.trim()) {
-      alert("Please enter a name for the salesperson");
+  const handleSaveNewSalesperson = async () => {
+    const trimmedName = String(newSalespersonData.name || "").trim();
+    const trimmedEmail = String(newSalespersonData.email || "").trim();
+    const normalizedName = trimmedName.toLowerCase();
+    const normalizedEmail = trimmedEmail.toLowerCase();
+    const editingId = String(editingSalespersonId || "").trim();
+
+    if (!trimmedName) {
+      toast.error("Please enter a name for the salesperson");
       return;
     }
 
     try {
-      // Save the new salesperson to backend
-      const response = await salespersonsAPI.create({
-        name: newSalespersonData.name.trim(),
-        email: newSalespersonData.email.trim() || "",
-        phone: ""
+      const duplicateSalesperson: any = (salespersons as any[]).find((sp: any) => {
+        const spId = String(sp.id || sp._id || "").trim();
+        if (editingId && spId === editingId) return false;
+        const existingName = String(sp.name || sp.displayName || "").trim().toLowerCase();
+        const existingEmail = String(sp.email || "").trim().toLowerCase();
+        return (
+          (existingName && existingName === normalizedName) ||
+          (normalizedEmail && existingEmail && existingEmail === normalizedEmail)
+        );
       });
 
-      if (response && response.success && response.data) {
-        const savedSalesperson = response.data;
-
-        // Reload salespersons from backend to get updated list
-        try {
-          const salespersonsResponse = await salespersonsAPI.getAll();
-          if (salespersonsResponse && salespersonsResponse.success && salespersonsResponse.data) {
-            setSalespersons(salespersonsResponse.data);
-          } else {
-            // Fallback: add to existing list
-            setSalespersons(prev => [...prev, savedSalesperson]);
-          }
-        } catch (error) {
-          console.error('Error reloading salespersons:', error);
-          // Fallback: add to existing list
-          setSalespersons(prev => [...prev, savedSalesperson]);
+      if (duplicateSalesperson) {
+        const existingName = String(duplicateSalesperson.name || duplicateSalesperson.displayName || "").trim();
+        const existingEmail = String(duplicateSalesperson.email || "").trim();
+        if (existingName.toLowerCase() === normalizedName && normalizedName) {
+          toast.error(`A salesperson named "${trimmedName}" already exists.`);
+        } else if (normalizedEmail && existingEmail.toLowerCase() === normalizedEmail) {
+          toast.error(`A salesperson with email "${trimmedEmail}" already exists.`);
+        } else {
+          toast.error("This salesperson already exists.");
         }
-
-        // Select the new salesperson
-        setSelectedSalesperson(savedSalesperson);
-        setFormData(prev => ({
-          ...prev,
-          salesperson: savedSalesperson.name
-        }));
-
-        // Reset form and close
-        setNewSalespersonData({ name: "", email: "" });
-        setIsNewSalespersonFormOpen(false);
-        setIsManageSalespersonsOpen(false);
-        setIsSalespersonDropdownOpen(false);
-      } else {
-        alert("Failed to save salesperson: " + ((response as any)?.message || "Unknown error"));
+        return;
       }
+
+      const payload: any = {
+        name: trimmedName,
+        email: trimmedEmail,
+        status: "active",
+      };
+
+      const isEditing = Boolean(editingId);
+      const saved = isEditing
+        ? await updateSalesperson(editingId, payload)
+        : await saveSalesperson({
+            ...payload,
+            phone: "",
+          });
+
+      try {
+        const salespersonsResponse = await salespersonsAPI.getAll();
+        const refreshed = Array.isArray((salespersonsResponse as any)?.data)
+          ? (salespersonsResponse as any).data
+          : Array.isArray(salespersonsResponse)
+            ? salespersonsResponse
+            : [];
+        setSalespersons(refreshed);
+      } catch {
+        setSalespersons((prev) => {
+          if (!saved) return prev;
+          if (!isEditing) return [saved as any, ...prev];
+          return prev.map((sp: any) => {
+            const spId = String(sp.id || sp._id || "").trim();
+            return spId === editingId ? (saved as any) : sp;
+          });
+        });
+      }
+
+      if (saved) {
+        handleSalespersonSelect(saved);
+      }
+      setNewSalespersonData({ name: "", email: "" });
+      setEditingSalespersonId(null);
+      setIsNewSalespersonFormOpen(false);
+      setIsManageSalespersonsOpen(false);
+      toast.success(isEditing ? "Salesperson updated successfully" : "Salesperson added successfully");
     } catch (error) {
       console.error("Error saving salesperson:", error);
-      alert("Error saving salesperson: " + (error.message || "Unknown error"));
-    }
-  };
-
-  const handleDeleteSalesperson = async (salespersonId) => {
-    if (!window.confirm("Are you sure you want to delete this salesperson?")) {
-      return;
-    }
-
-    try {
-      const response = await salespersonsAPI.delete(salespersonId);
-      if (response && response.success) {
-        // Reload salespersons from backend to get updated list
-        try {
-          const salespersonsResponse = await salespersonsAPI.getAll();
-          if (salespersonsResponse && salespersonsResponse.success && salespersonsResponse.data) {
-            setSalespersons(salespersonsResponse.data);
-          } else {
-            // Fallback: remove from list
-            setSalespersons(prev => prev.filter(sp => (sp.id || sp._id) !== salespersonId));
-          }
-        } catch (error) {
-          console.error('Error reloading salespersons:', error);
-          // Fallback: remove from list
-          setSalespersons(prev => prev.filter(sp => (sp.id || sp._id) !== salespersonId));
-        }
-
-        // If deleted salesperson was selected, clear selection
-        if (selectedSalesperson && (selectedSalesperson.id || selectedSalesperson._id) === salespersonId) {
-          setSelectedSalesperson(null);
-          setFormData(prev => ({
-            ...prev,
-            salesperson: ""
-          }));
-        }
-      } else {
-        alert("Failed to delete salesperson: " + ((response as any)?.message || "Unknown error"));
-      }
-    } catch (error) {
-      console.error("Error deleting salesperson:", error);
-      alert("Error deleting salesperson: " + (error.message || "Unknown error"));
+      toast.error("Error saving salesperson: " + ((error as any)?.message || "Unknown error"));
     }
   };
 
   const handleCancelNewSalesperson = () => {
     setNewSalespersonData({ name: "", email: "" });
+    setEditingSalespersonId(null);
+    setManageSalespersonMenuOpen(null);
     setIsNewSalespersonFormOpen(false);
+  };
+
+  const handleDeleteSalesperson = async (salespersonId: string) => {
+    const normalizedId = String(salespersonId || "").trim();
+    if (!normalizedId) return;
+
+    if (!window.confirm("Are you sure you want to delete this salesperson?")) {
+      return;
+    }
+
+    try {
+      await salespersonsAPI.delete(normalizedId);
+      try {
+        const salespersonsResponse = await salespersonsAPI.getAll();
+        const refreshed = Array.isArray((salespersonsResponse as any)?.data)
+          ? (salespersonsResponse as any).data
+          : Array.isArray(salespersonsResponse)
+            ? salespersonsResponse
+            : [];
+        setSalespersons(refreshed);
+      } catch {
+        setSalespersons(prev => prev.filter(sp => String(sp.id || sp._id || "") !== normalizedId));
+      }
+
+      if (selectedSalesperson && String(selectedSalesperson.id || selectedSalesperson._id || "") === normalizedId) {
+        setSelectedSalesperson(null);
+        setFormData(prev => ({
+          ...prev,
+          salesperson: "",
+          salespersonId: ""
+        }));
+      }
+
+      if (editingSalespersonId === normalizedId) {
+        handleCancelNewSalesperson();
+      }
+
+      toast.success("Salesperson deleted successfully");
+    } catch (error) {
+      console.error("Error deleting salesperson:", error);
+      toast.error("Error deleting salesperson: " + ((error as any)?.message || "Unknown error"));
+    }
+  };
+
+  const handleSetSalespersonStatus = async (salespersonId: string, nextStatus: "active" | "inactive") => {
+    const normalizedId = String(salespersonId || "").trim();
+    if (!normalizedId) return;
+
+    const salesperson: any = (salespersons as any[]).find((sp: any) => String(sp.id || sp._id || "") === normalizedId);
+    if (!salesperson) {
+      toast.error("Salesperson not found");
+      return;
+    }
+
+    const previousSalespersons = salespersons;
+    const previousSalespersonName = formData.salesperson;
+    const previousSalespersonId = formData.salespersonId;
+    const nextIsActive = nextStatus === "active";
+
+    setSalespersons((prev) =>
+      prev.map((sp: any) => {
+        const spId = String(sp.id || sp._id || "");
+        if (spId !== normalizedId) return sp;
+        return {
+          ...sp,
+          status: nextStatus,
+          active: nextIsActive,
+          isActive: nextIsActive,
+        };
+      })
+    );
+
+    setManageSalespersonMenuOpen(null);
+    toast.success(nextStatus === "inactive" ? "Salesperson marked inactive" : "Salesperson marked active");
+
+    try {
+      const response = await updateSalesperson(normalizedId, {
+        name: String(salesperson.name || salesperson.displayName || "").trim(),
+        email: String(salesperson.email || "").trim(),
+        status: nextStatus,
+        active: nextIsActive,
+        isActive: nextIsActive,
+      } as any);
+
+      if (response) {
+        const updatedSalesperson = {
+          ...salesperson,
+          ...response,
+          status: nextStatus,
+        };
+
+        if (String(formData.salespersonId || "") === normalizedId) {
+          if (nextStatus === "inactive") {
+            setSelectedSalesperson(null);
+            setFormData((prev) => ({ ...prev, salesperson: "", salespersonId: "" }));
+          } else {
+            setSelectedSalesperson(updatedSalesperson);
+            setFormData((prev) => ({
+              ...prev,
+              salesperson: String(updatedSalesperson.name || previousSalespersonName || ""),
+              salespersonId: String(updatedSalesperson.id || updatedSalesperson._id || previousSalespersonId || ""),
+            }));
+          }
+        }
+
+        try {
+          const refreshed = await salespersonsAPI.getAll();
+          const rows = Array.isArray((refreshed as any)?.data)
+            ? (refreshed as any).data
+            : Array.isArray(refreshed)
+              ? refreshed
+              : [];
+          setSalespersons(rows);
+        } catch {
+          const refreshed = await getSalespersonsFromAPI();
+          setSalespersons(Array.isArray(refreshed) ? refreshed : []);
+        }
+        return;
+      }
+
+      setSalespersons(previousSalespersons);
+      setFormData((prev) => ({
+        ...prev,
+        salesperson: previousSalespersonName,
+        salespersonId: previousSalespersonId,
+      }));
+      toast.error("Failed to update salesperson status");
+    } catch (error: any) {
+      console.error("Error updating salesperson status:", error);
+      setSalespersons(previousSalespersons);
+      setFormData((prev) => ({
+        ...prev,
+        salesperson: previousSalespersonName,
+        salespersonId: previousSalespersonId,
+      }));
+      toast.error("Error updating salesperson: " + ((error as any)?.message || "Unknown error"));
+    }
+  };
+
+  const applySalespersonStatusLocally = (ids: string[], nextStatus: "active" | "inactive") => {
+    const normalizedIds = new Set(ids.map((id) => String(id || "").trim()).filter(Boolean));
+    const isActive = nextStatus === "active";
+    setSalespersons((prev) =>
+      prev.map((sp: any) => {
+        const spId = String(sp.id || sp._id || "").trim();
+        if (!normalizedIds.has(spId)) return sp;
+        return {
+          ...sp,
+          status: nextStatus,
+          active: isActive,
+          isActive,
+        };
+      })
+    );
+  };
+
+  const handleBulkSalespersonStatusChange = async (nextStatus: "active" | "inactive") => {
+    const ids = Array.from(
+      new Set(
+        selectedSalespersonIds
+          .map((id: any) => String(id || "").trim())
+          .filter(Boolean)
+      )
+    );
+
+    if (ids.length === 0) {
+      toast.error("Please select at least one salesperson");
+      return;
+    }
+
+    const previousSalespersons = salespersons;
+    applySalespersonStatusLocally(ids, nextStatus);
+    setSelectedSalespersonIds([]);
+    setManageSalespersonMenuOpen(null);
+    toast.success(
+      nextStatus === "inactive"
+        ? `${ids.length} salesperson${ids.length === 1 ? "" : "s"} marked inactive`
+        : `${ids.length} salesperson${ids.length === 1 ? "" : "s"} marked active`
+    );
+
+    try {
+      await Promise.all(
+        ids.map(async (salespersonId) => {
+          const salesperson: any = (salespersons as any[]).find((sp: any) => String(sp.id || sp._id || "") === salespersonId);
+          if (!salesperson) return;
+          await updateSalesperson(salespersonId, {
+            name: String(salesperson.name || salesperson.displayName || "").trim(),
+            email: String(salesperson.email || "").trim(),
+            status: nextStatus,
+            active: nextStatus === "active",
+            isActive: nextStatus === "active",
+          } as any);
+        })
+      );
+
+      try {
+        const refreshed = await salespersonsAPI.getAll();
+        const rows = Array.isArray((refreshed as any)?.data)
+          ? (refreshed as any).data
+          : Array.isArray(refreshed)
+            ? refreshed
+            : [];
+        setSalespersons(rows);
+      } catch {
+        const refreshed = await getSalespersonsFromAPI();
+        setSalespersons(Array.isArray(refreshed) ? refreshed : []);
+      }
+    } catch (error: any) {
+      console.error("Error updating salesperson statuses:", error);
+      setSalespersons(previousSalespersons);
+      try {
+        const refreshed = await getSalespersonsFromAPI();
+        setSalespersons(Array.isArray(refreshed) ? refreshed : []);
+      } catch {
+        setSalespersons(previousSalespersons);
+      }
+      toast.error("Error updating salespersons: " + ((error as any)?.message || "Unknown error"));
+    }
+  };
+
+  const handleBulkDeleteSalespersons = async () => {
+    const ids = Array.from(
+      new Set(
+        selectedSalespersonIds
+          .map((id: any) => String(id || "").trim())
+          .filter(Boolean)
+      )
+    );
+
+    if (ids.length === 0) {
+      toast.error("Please select at least one salesperson");
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to delete ${ids.length} salesperson${ids.length === 1 ? "" : "s"}?`)) {
+      return;
+    }
+
+    try {
+      await Promise.all(ids.map(async (salespersonId) => salespersonsAPI.delete(salespersonId)));
+      try {
+        const refreshed = await salespersonsAPI.getAll();
+        const rows = Array.isArray((refreshed as any)?.data)
+          ? (refreshed as any).data
+          : Array.isArray(refreshed)
+            ? refreshed
+            : [];
+        setSalespersons(rows);
+      } catch {
+        const refreshed = await getSalespersonsFromAPI();
+        setSalespersons(Array.isArray(refreshed) ? refreshed : []);
+      }
+      setSelectedSalespersonIds([]);
+      setManageSalespersonMenuOpen(null);
+
+      if (ids.includes(String(formData.salespersonId || ""))) {
+        setSelectedSalesperson(null);
+        setFormData((prev) => ({ ...prev, salesperson: "", salespersonId: "" }));
+      }
+
+      toast.success(`${ids.length} salesperson${ids.length === 1 ? "" : "s"} deleted`);
+    } catch (error: any) {
+      console.error("Error deleting salespersons:", error);
+      toast.error("Error deleting salespersons: " + ((error as any)?.message || "Unknown error"));
+    }
   };
 
   const handleOpenReportingTagsModal = (itemId: string | number) => {
@@ -3427,13 +3714,29 @@ const NewQuote = () => {
     }
 
     try {
-      createdTax = createTaxLocal({
+      const nextTaxId = String(createdTax?._id || createdTax?.id || inputName).trim() || inputName;
+      const nextRow = {
+        _id: nextTaxId,
+        id: nextTaxId,
         name: inputName,
         rate: Number.isFinite(inputRate) ? inputRate : 0,
-        isActive: true,
         type: "both",
+        isActive: true,
         isCompound: inputIsCompound,
-      }) || createdTax;
+      };
+      const existing = readTaxesLocal();
+      const alreadyExists = existing.some((row: any) => {
+        const rowId = String(row?._id || row?.id || "").trim();
+        return rowId === nextTaxId;
+      });
+      const nextRows = alreadyExists
+        ? existing.map((row: any) => {
+            const rowId = String(row?._id || row?.id || "").trim();
+            return rowId === nextTaxId ? { ...row, ...nextRow } : row;
+          })
+        : [nextRow, ...existing];
+      writeTaxesLocal(nextRows as any);
+      createdTax = { ...nextRow, ...createdTax };
     } catch (error) {
       console.error("Error creating tax in local settings storage:", error);
     }
@@ -6009,10 +6312,10 @@ const NewQuote = () => {
 
       {/* Address Modal */}
       {isAddressModalOpen && (
-        <div className="fixed inset-0 z-[12000] bg-black/45 flex items-start justify-center pt-6 pb-6 px-4" onClick={() => !isAddressSaving && setIsAddressModalOpen(false)}>
+        <div className="fixed inset-0 z-[12000] bg-black/45 flex items-start justify-center pt-3 pb-4 px-4" onClick={() => !isAddressSaving && setIsAddressModalOpen(false)}>
           <div className="w-full max-w-[620px] rounded-lg bg-white shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-              <h3 className="text-[32px] leading-none font-medium text-gray-800">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-200">
+              <h3 className="text-[28px] leading-none font-medium text-gray-800">
                 {addressModalType === "billing" ? "Billing Address" : "Shipping Address"}
               </h3>
               <button
@@ -6025,18 +6328,18 @@ const NewQuote = () => {
               </button>
             </div>
 
-            <div className="px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
+            <div className="px-5 py-3.5 space-y-3.5 max-h-[70vh] overflow-y-auto">
               <div>
-                <label className="block text-sm text-gray-700 mb-1">Attention</label>
-                <input className="w-full h-10 rounded border border-gray-300 px-3 text-sm text-gray-700 outline-none focus:border-[#156372]" name="attention" value={addressFormData.attention} onChange={handleAddressFieldChange} autoFocus />
+                <label className="block text-[12px] text-gray-700 mb-1">Attention</label>
+                <input className="w-full h-9 rounded border border-gray-300 px-3 text-[12px] text-gray-700 outline-none focus:border-[#156372]" name="attention" value={addressFormData.attention} onChange={handleAddressFieldChange} autoFocus />
               </div>
 
               <div>
-                <label className="block text-sm text-gray-700 mb-1">Country/Region</label>
+                <label className="block text-[12px] text-gray-700 mb-1">Country/Region</label>
                 <div className="relative" ref={countryDropdownRef}>
                   <button
                     type="button"
-                    className="w-full h-10 rounded border border-gray-300 px-3 text-sm text-gray-700 outline-none focus:border-[#156372] bg-white flex items-center justify-between"
+                    className="w-full h-9 rounded border border-gray-300 px-3 text-[12px] text-gray-700 outline-none focus:border-[#156372] bg-white flex items-center justify-between"
                     onClick={() => {
                       setIsCountryDropdownOpen((prev) => !prev);
                       setCountrySearch("");
@@ -6057,20 +6360,20 @@ const NewQuote = () => {
                             value={countrySearch}
                             onChange={(e) => setCountrySearch(e.target.value)}
                             placeholder="Search"
-                            className="h-9 w-full rounded border border-gray-300 pl-7 pr-2 text-sm text-gray-700 outline-none focus:border-[#156372]"
+                            className="h-9 w-full rounded border border-gray-300 pl-7 pr-2 text-[12px] text-gray-700 outline-none focus:border-[#156372]"
                             autoFocus
                           />
                         </div>
                       </div>
                       <div className="max-h-64 overflow-y-auto">
                         {filteredCountryOptions.length === 0 ? (
-                          <div className="px-3 py-2 text-sm text-gray-500">No matching country</div>
+                          <div className="px-3 py-2 text-[12px] text-gray-500">No matching country</div>
                         ) : (
                           filteredCountryOptions.map((country: any) => (
                             <button
                               key={country.isoCode}
                               type="button"
-                              className={`w-full px-3 py-2 text-left text-sm hover:bg-[#f4f8f7] ${String(addressFormData.country || "").toLowerCase() === String(country.name || "").toLowerCase() ? "bg-[#e6f4f7] text-[#156372]" : "text-gray-700"}`}
+                              className={`w-full px-3 py-2 text-left text-[12px] hover:bg-[#f4f8f7] ${String(addressFormData.country || "").toLowerCase() === String(country.name || "").toLowerCase() ? "bg-[#e6f4f7] text-[#156372]" : "text-gray-700"}`}
                               onClick={() => {
                                 setAddressFormData((prev: any) => ({ ...prev, country: String(country.name || "") }));
                                 setIsCountryDropdownOpen(false);
@@ -6088,20 +6391,20 @@ const NewQuote = () => {
               </div>
 
               <div>
-                <label className="block text-sm text-gray-700 mb-1">Address</label>
-                <textarea className="w-full min-h-[54px] rounded border border-gray-300 px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#156372]" name="street1" value={addressFormData.street1} onChange={handleAddressFieldChange} placeholder="Street 1" />
-                <textarea className="mt-2 w-full min-h-[54px] rounded border border-gray-300 px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#156372]" name="street2" value={addressFormData.street2} onChange={handleAddressFieldChange} placeholder="Street 2" />
+                <label className="block text-[12px] text-gray-700 mb-1">Address</label>
+                <textarea className="w-full min-h-[50px] rounded border border-gray-300 px-3 py-2 text-[12px] text-gray-700 outline-none focus:border-[#156372]" name="street1" value={addressFormData.street1} onChange={handleAddressFieldChange} placeholder="Street 1" />
+                <textarea className="mt-2 w-full min-h-[50px] rounded border border-gray-300 px-3 py-2 text-[12px] text-gray-700 outline-none focus:border-[#156372]" name="street2" value={addressFormData.street2} onChange={handleAddressFieldChange} placeholder="Street 2" />
               </div>
 
               <div>
-                <label className="block text-sm text-gray-700 mb-1">City</label>
-                <input className="w-full h-10 rounded border border-gray-300 px-3 text-sm text-gray-700 outline-none focus:border-[#156372]" name="city" value={addressFormData.city} onChange={handleAddressFieldChange} />
+                <label className="block text-[12px] text-gray-700 mb-1">City</label>
+                <input className="w-full h-9 rounded border border-gray-300 px-3 text-[12px] text-gray-700 outline-none focus:border-[#156372]" name="city" value={addressFormData.city} onChange={handleAddressFieldChange} />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-gray-700 mb-1">State</label>
-                  <input className="w-full h-10 rounded border border-gray-300 px-3 text-sm text-gray-700 outline-none focus:border-[#156372]" name="state" value={addressFormData.state} onChange={handleAddressFieldChange} placeholder="Select or type to add" list="state-list" />
+                  <label className="block text-[12px] text-gray-700 mb-1">State</label>
+                  <input className="w-full h-9 rounded border border-gray-300 px-3 text-[12px] text-gray-700 outline-none focus:border-[#156372]" name="state" value={addressFormData.state} onChange={handleAddressFieldChange} placeholder="Select or type to add" list="state-list" />
                   <datalist id="state-list">
                     {stateOptions.map((state: any) => (
                       <option key={state.isoCode} value={state.name} />
@@ -6109,19 +6412,19 @@ const NewQuote = () => {
                   </datalist>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-700 mb-1">ZIP Code</label>
-                  <input className="w-full h-10 rounded border border-gray-300 px-3 text-sm text-gray-700 outline-none focus:border-[#156372]" name="zipCode" value={addressFormData.zipCode} onChange={handleAddressFieldChange} />
+                  <label className="block text-[12px] text-gray-700 mb-1">ZIP Code</label>
+                  <input className="w-full h-9 rounded border border-gray-300 px-3 text-[12px] text-gray-700 outline-none focus:border-[#156372]" name="zipCode" value={addressFormData.zipCode} onChange={handleAddressFieldChange} />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-gray-700 mb-1">Phone</label>
+                  <label className="block text-[12px] text-gray-700 mb-1">Phone</label>
                   <div className="grid grid-cols-[88px_1fr] gap-0">
                     <div className="relative" ref={phoneCodeDropdownRef}>
                       <button
                         type="button"
-                        className="h-10 w-full rounded-l border border-gray-300 px-2 text-sm text-gray-700 bg-white flex items-center justify-between outline-none focus:border-[#156372]"
+                        className="h-9 w-full rounded-l border border-gray-300 px-2 text-[12px] text-gray-700 bg-white flex items-center justify-between outline-none focus:border-[#156372]"
                         onClick={() => {
                           setIsPhoneCodeDropdownOpen((prev) => !prev);
                           setPhoneCodeSearch("");
@@ -6141,20 +6444,20 @@ const NewQuote = () => {
                                 value={phoneCodeSearch}
                                 onChange={(e) => setPhoneCodeSearch(e.target.value)}
                                 placeholder="Search"
-                                className="h-9 w-full rounded border border-gray-300 pl-7 pr-2 text-sm text-gray-700 outline-none focus:border-[#156372]"
+                                className="h-9 w-full rounded border border-gray-300 pl-7 pr-2 text-[12px] text-gray-700 outline-none focus:border-[#156372]"
                                 autoFocus
                               />
                             </div>
                           </div>
                           <div className="max-h-64 overflow-y-auto">
                             {filteredPhoneCountryOptions.length === 0 ? (
-                              <div className="px-3 py-2 text-sm text-gray-500">No matching country code</div>
+                              <div className="px-3 py-2 text-[12px] text-gray-500">No matching country code</div>
                             ) : (
                               filteredPhoneCountryOptions.map((country: any) => (
                                 <button
                                   key={`${country.isoCode}-${country.phoneCode}`}
                                   type="button"
-                                  className={`w-full px-3 py-2 text-left text-sm hover:bg-[#3b82f6] hover:text-white ${addressFormData.phoneCountryCode === country.phoneCode ? "bg-[#3b82f6] text-white" : "text-gray-700"}`}
+                                  className={`w-full px-3 py-2 text-left text-[12px] hover:bg-[#3b82f6] hover:text-white ${addressFormData.phoneCountryCode === country.phoneCode ? "bg-[#3b82f6] text-white" : "text-gray-700"}`}
                                   onClick={() => {
                                     setAddressFormData((prev: any) => ({ ...prev, phoneCountryCode: country.phoneCode }));
                                     setIsPhoneCodeDropdownOpen(false);
@@ -6169,24 +6472,24 @@ const NewQuote = () => {
                         </div>
                       )}
                     </div>
-                    <input className="h-10 rounded-r border border-l-0 border-gray-300 px-3 text-sm text-gray-700 outline-none focus:border-[#156372]" name="phone" value={addressFormData.phone} onChange={handleAddressFieldChange} />
+                    <input className="h-9 rounded-r border border-l-0 border-gray-300 px-3 text-[12px] text-gray-700 outline-none focus:border-[#156372]" name="phone" value={addressFormData.phone} onChange={handleAddressFieldChange} />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-700 mb-1">Fax Number</label>
-                  <input className="w-full h-10 rounded border border-gray-300 px-3 text-sm text-gray-700 outline-none focus:border-[#156372]" name="fax" value={addressFormData.fax} onChange={handleAddressFieldChange} />
+                  <label className="block text-[12px] text-gray-700 mb-1">Fax Number</label>
+                  <input className="w-full h-9 rounded border border-gray-300 px-3 text-[12px] text-gray-700 outline-none focus:border-[#156372]" name="fax" value={addressFormData.fax} onChange={handleAddressFieldChange} />
                 </div>
               </div>
 
-              <p className="text-sm text-gray-500">
+              <p className="text-[12px] text-gray-500">
                 <span className="font-semibold">Note:</span> Changes made here will be updated for this customer.
               </p>
             </div>
 
-            <div className="px-5 py-4 border-t border-gray-200 flex items-center gap-3">
+            <div className="px-5 py-3.5 border-t border-gray-200 flex items-center gap-3">
               <button
                 type="button"
-                className="px-5 h-9 rounded-md bg-[#0f4752] text-white text-sm font-semibold hover:bg-[#0b3a42] disabled:opacity-70"
+                className="px-5 h-9 rounded-md bg-[#15803d] text-white text-sm font-semibold hover:bg-[#166534] disabled:opacity-70"
                 onClick={handleSaveAddress}
                 disabled={isAddressSaving}
               >
@@ -7822,21 +8125,24 @@ const NewQuote = () => {
                           {tagName}
                           {Boolean(tag?.isMandatory) ? <span className="text-red-500 ml-1">*</span> : null}
                         </label>
-                        <select
-                          className="w-full h-10 px-3 border border-gray-300 rounded text-sm text-gray-700 bg-white focus:outline-none focus:border-[#156372]"
-                          value={reportingTagSelections[tagId] || ""}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            setReportingTagSelections(prev => ({ ...prev, [tagId]: value }));
-                          }}
-                        >
-                          <option value="">None</option>
-                          {tagOptions.map((option: string) => (
-                            <option key={`${tagId}-${option}`} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="relative">
+                          <select
+                            className="w-full h-10 rounded border border-gray-300 bg-white px-3 pr-10 text-sm text-gray-700 outline-none focus:border-[#156372] appearance-none shadow-sm"
+                            value={reportingTagSelections[tagId] || ""}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setReportingTagSelections((prev) => ({ ...prev, [tagId]: value }));
+                            }}
+                          >
+                            <option value="">Select an option</option>
+                            {tagOptions.map((option: string) => (
+                              <option key={`${tagId}-${option}`} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        </div>
                       </div>
                     );
                   })}
@@ -8157,7 +8463,7 @@ const NewQuote = () => {
                   </div>
                   <div className="flex gap-2 pt-4">
                     <button
-                      onClick={handleSaveAndSelectSalesperson}
+                      onClick={handleSaveNewSalesperson}
                       className="flex-1 px-4 py-2 bg-[#156372] text-white rounded-md "
                     >
                       Add
@@ -8186,7 +8492,12 @@ const NewQuote = () => {
               <div className="flex items-center justify-between p-6 border-b border-gray-200">
                 <h2 className="text-xl font-bold text-gray-900">Manage Salespersons</h2>
                 <button
-                  onClick={() => setIsManageSalespersonsOpen(false)}
+                  onClick={() => {
+                    handleCancelNewSalesperson();
+                    setSelectedSalespersonIds([]);
+                    setManageSalespersonMenuOpen(null);
+                    setIsManageSalespersonsOpen(false);
+                  }}
                   className="p-2  rounded-lg text-gray-400 "
                 >
                   <X size={20} />
@@ -8229,14 +8540,18 @@ const NewQuote = () => {
                       type="text"
                       placeholder="Search Salesperson"
                       value={manageSalespersonSearch}
-                      onChange={(e) => setManageSalespersonSearch(e.target.value)}
+                      onChange={(e) => {
+                        setManageSalespersonSearch(e.target.value);
+                        setManageSalespersonsPage(1);
+                      }}
                       className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#156372]"
                     />
                   </div>
                   <button
                     onClick={() => {
-                      setIsNewSalespersonFormOpen(true);
+                      handleStartNewSalesperson();
                       setManageSalespersonSearch("");
+                      setManageSalespersonsPage(1);
                     }}
                     className="flex items-center gap-2 px-4 py-2 bg-[#156372] text-white rounded-md "
                   >
@@ -8250,7 +8565,9 @@ const NewQuote = () => {
               <div className="flex-1 overflow-y-auto p-6">
                 {isNewSalespersonFormOpen ? (
                   <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-4">Add New Salesperson</h3>
+                    <h3 className="text-sm font-semibold text-gray-900 mb-4">
+                      {editingSalespersonId ? "Edit Salesperson" : "Add New Salesperson"}
+                    </h3>
                     <div className="space-y-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
@@ -8276,10 +8593,10 @@ const NewQuote = () => {
                       </div>
                       <div className="flex gap-2">
                         <button
-                          onClick={handleSaveAndSelectSalesperson}
+                          onClick={handleSaveNewSalesperson}
                           className="flex-1 px-4 py-2 bg-[#156372] text-white rounded-md "
                         >
-                          Add
+                          {editingSalespersonId ? "Save Changes" : "Add"}
                         </button>
                         <button
                           onClick={handleCancelNewSalesperson}
@@ -8299,12 +8616,16 @@ const NewQuote = () => {
                         <input
                           type="checkbox"
                           className="rounded border-gray-300 text-[#156372] focus:ring-[#156372]"
-                          checked={filteredManageSalespersons.length > 0 && selectedSalespersonIds.length === filteredManageSalespersons.length}
+                          checked={paginatedManageSalespersons.length > 0 && paginatedManageSalespersons.every((sp: any) => selectedSalespersonIds.includes(String(sp.id || sp._id || "")))}
                           onChange={(e) => {
                             if (e.target.checked) {
-                              setSelectedSalespersonIds(filteredManageSalespersons.map(s => s.id || s._id));
+                              setSelectedSalespersonIds(paginatedManageSalespersons.map((s: any) => String(s.id || s._id || "")));
                             } else {
-                              setSelectedSalespersonIds([]);
+                              setSelectedSalespersonIds(
+                                selectedSalespersonIds.filter(
+                                  (id) => !paginatedManageSalespersons.some((sp: any) => String(sp.id || sp._id || "") === String(id))
+                                )
+                              );
                             }
                           }}
                         />
@@ -8315,15 +8636,16 @@ const NewQuote = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredManageSalespersons.length === 0 ? (
+                    {paginatedManageSalespersons.length === 0 ? (
                       <tr>
                         <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
                           {manageSalespersonSearch ? "No salespersons found" : "No salespersons available"}
                         </td>
                       </tr>
                     ) : (
-                      filteredManageSalespersons.map(salesperson => {
-                        const salespersonId = salesperson.id || salesperson._id;
+                      paginatedManageSalespersons.map((salesperson: any) => {
+                        const salespersonId = String(salesperson.id || salesperson._id || "");
+                        const isInactive = String(salesperson.status || "").toLowerCase() === "inactive";
                         return (
                           <tr key={salespersonId} className="group hover:bg-gray-50">
                             <td className="px-4 py-3">
@@ -8343,8 +8665,8 @@ const NewQuote = () => {
                               </div>
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-900">
-                              {salesperson.name}
-                              {salesperson.status === 'inactive' && (
+                              {salesperson.name || salesperson.displayName || "Unnamed Salesperson"}
+                              {isInactive && (
                                 <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
                                   Inactive
                                 </span>
@@ -8354,12 +8676,18 @@ const NewQuote = () => {
                             <td className="px-4 py-3 text-right">
                               <div className="hidden group-hover:flex items-center justify-end gap-2">
                                 <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleStartEditSalesperson(salesperson);
+                                  }}
                                   className="p-1 text-gray-500 hover:text-[#156372] hover:bg-gray-100 rounded"
                                   title="Edit"
                                 >
                                   <Edit2 size={16} />
                                 </button>
                                 <button
+                                  type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     const rect = e.currentTarget.getBoundingClientRect();
@@ -8378,15 +8706,41 @@ const NewQuote = () => {
                     )}
                   </tbody>
                 </table>
+
+                {manageSalespersonsTotalPages > 1 && (
+                  <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
+                    <div>
+                      Page {manageSalespersonsCurrentPage} of {manageSalespersonsTotalPages}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="rounded border border-gray-300 bg-white px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={manageSalespersonsCurrentPage <= 1}
+                        onClick={() => setManageSalespersonsPage((prev) => Math.max(1, prev - 1))}
+                      >
+                        Prev
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded border border-gray-300 bg-white px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={manageSalespersonsCurrentPage >= manageSalespersonsTotalPages}
+                        onClick={() => setManageSalespersonsPage((prev) => Math.min(manageSalespersonsTotalPages, prev + 1))}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Dropdown Portal */}
-            {manageSalespersonMenuOpen && menuPosition && createPortal(
-              <>
-                <div
-                  className="fixed inset-0 z-[10000]"
-                  onClick={() => setManageSalespersonMenuOpen(null)}
+              {manageSalespersonMenuOpen && menuPosition && createPortal(
+                <>
+                  <div
+                    className="fixed inset-0 z-[10000]"
+                    onClick={() => setManageSalespersonMenuOpen(null)}
                 />
                 <div
                   className="fixed bg-white rounded-md shadow-lg z-[10001] border border-gray-100 py-1 w-48"
@@ -8398,21 +8752,23 @@ const NewQuote = () => {
                   {manageSalespersonMenuOpen === "BULK_ACTIONS" ? (
                     <>
                       <button
-                        onClick={() => setManageSalespersonMenuOpen(null)}
+                        type="button"
+                        onClick={() => handleBulkSalespersonStatusChange("active")}
                         className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
                       >
                         Mark as Active
                       </button>
                       <button
-                        onClick={() => setManageSalespersonMenuOpen(null)}
+                        type="button"
+                        onClick={() => handleBulkSalespersonStatusChange("inactive")}
                         className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
                       >
                         Mark as Inactive
                       </button>
                       <button
+                        type="button"
                         onClick={() => {
-                          // Handle bulk delete if needed
-                          setManageSalespersonMenuOpen(null);
+                          handleBulkDeleteSalespersons();
                         }}
                         className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
                       >
@@ -8422,14 +8778,31 @@ const NewQuote = () => {
                   ) : (
                     <>
                       <button
+                        type="button"
                         onClick={() => {
+                          const salesperson = salespersons.find((sp: any) => String(sp.id || sp._id || "") === manageSalespersonMenuOpen);
+                          if (salesperson) handleStartEditSalesperson(salesperson);
                           setManageSalespersonMenuOpen(null);
                         }}
                         className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
                       >
-                        Mark as Inactive
+                        Edit
                       </button>
                       <button
+                        type="button"
+                        onClick={() => {
+                          const salesperson = salespersons.find((sp: any) => String(sp.id || sp._id || "") === manageSalespersonMenuOpen);
+                          if (salesperson) {
+                            const nextStatus = String(salesperson?.status || "").toLowerCase() === "inactive" ? "active" : "inactive";
+                            void handleSetSalespersonStatus(manageSalespersonMenuOpen, nextStatus);
+                          }
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                      >
+                        {salespersons.find((sp: any) => String(sp.id || sp._id || "") === manageSalespersonMenuOpen && String(sp?.status || "").toLowerCase() === "inactive") ? "Mark as Active" : "Mark as Inactive"}
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => {
                           handleDeleteSalesperson(manageSalespersonMenuOpen);
                           setManageSalespersonMenuOpen(null);
