@@ -1,5 +1,5 @@
 ﻿import React from "react";
-import { ArrowUpDown, Check, ChevronDown, ChevronRight, ChevronUp, Download, Eye, Info, Loader2, MoreVertical, Plus, Search, SlidersHorizontal, Star, Trash2, X } from "lucide-react";
+import { ArrowUpDown, Check, ChevronDown, ChevronRight, ChevronUp, Download, Eye, Info, Loader2, MoreVertical, Plus, RefreshCw, Search, Settings, SlidersHorizontal, Star, Trash2, Upload, X } from "lucide-react";
 
 import { preloadCustomerDetailRoute } from "./customerRouteLoaders";
 
@@ -37,6 +37,7 @@ export default function CustomersPageContent({ controller }: { controller: any }
     handleManageCustomFields,
     handleOpenBulkUpdate,
     handlePrintStatements,
+    handleResetColumnWidths,
     handleSaveLayout,
     handleCancelLayout,
     handleSelectAll,
@@ -49,6 +50,7 @@ export default function CustomersPageContent({ controller }: { controller: any }
     isDownloading,
     isDropdownOpen,
     isMoreMenuOpen,
+    isRefreshing,
     navigate,
     moreMenuRef,
     openReceivablesDropdownId,
@@ -60,6 +62,7 @@ export default function CustomersPageContent({ controller }: { controller: any }
     setIsCustomizeModalOpen,
     setIsDropdownOpen,
     setIsExportCustomersModalOpen,
+    setIsImportContinueLoading,
     setIsImportModalOpen,
     setIsMoreMenuOpen,
     setOpenReceivablesDropdownId,
@@ -71,6 +74,9 @@ export default function CustomersPageContent({ controller }: { controller: any }
     viewSearchQuery,
     setViewSearchQuery,
     visibleColumns,
+    loadCustomers,
+    currentPage,
+    itemsPerPage,
   } = controller;
 
   const navigateToCustomerDetail = (selectedCustomer: any) => {

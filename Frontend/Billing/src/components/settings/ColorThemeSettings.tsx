@@ -202,10 +202,10 @@ export default function ColorThemeSettings() {
               backgroundColor: localTheme.buttonColor,
             }}
             onMouseEnter={(e) => {
-              e.target.style.backgroundColor = localTheme.buttonHoverColor;
+              (e.currentTarget as HTMLButtonElement).style.backgroundColor = localTheme.buttonHoverColor;
             }}
             onMouseLeave={(e) => {
-              e.target.style.backgroundColor = localTheme.buttonColor;
+              (e.currentTarget as HTMLButtonElement).style.backgroundColor = localTheme.buttonColor;
             }}
           >
             Save Changes
@@ -238,10 +238,10 @@ export default function ColorThemeSettings() {
                 backgroundColor: localTheme.buttonColor,
               }}
               onMouseEnter={(e) => {
-                e.target.style.backgroundColor = localTheme.buttonHoverColor;
+                (e.currentTarget as HTMLButtonElement).style.backgroundColor = localTheme.buttonHoverColor;
               }}
               onMouseLeave={(e) => {
-                e.target.style.backgroundColor = localTheme.buttonColor;
+                (e.currentTarget as HTMLButtonElement).style.backgroundColor = localTheme.buttonColor;
               }}
             >
               Button Preview

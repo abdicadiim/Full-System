@@ -73,14 +73,15 @@ const ItemsList = ({
 
   const fmtMoney = (amount: number, currency?: string) => {
     const val = typeof amount === "number" ? amount : Number(amount || 0);
-    const code = String(currency || baseCurrency?.code || "USD").trim() || "USD";
-    return `${code}${val.toLocaleString(undefined, {
+    const code = String(currency || baseCurrency?.code || "").trim();
+    const formatted = val.toLocaleString(undefined, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    })}`;
+    });
+    return code ? `${code}${formatted}` : formatted;
   };
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterType, setFilterType] = useState("Active Items");
+  const [filterType, setFilterType] = useState("All");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showSearch, setShowSearch] = useState(false);
   const [newTransactionOpen, setNewTransactionOpen] = useState(false);

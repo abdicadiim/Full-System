@@ -563,7 +563,7 @@ export default function ImportInvoices({ mode }: { mode?: "invoice" | "retainer"
           phone: phone || "",
           mobile: phone || "",
           status: "active",
-        });
+        } as any);
 
         if (createdCustomer) {
           customerRows.push(createdCustomer);

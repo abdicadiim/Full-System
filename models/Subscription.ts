@@ -12,5 +12,6 @@ const SubscriptionSchema = new mongoose.Schema(
 );
 
 SubscriptionSchema.index({ organizationId: 1, customerId: 1, createdAt: -1 });
+SubscriptionSchema.index({ organizationId: 1, updatedAt: -1 });
 
 export const Subscription = mongoose.model("Subscription", SubscriptionSchema);

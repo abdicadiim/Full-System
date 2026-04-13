@@ -166,14 +166,14 @@ const FieldMappingRow = ({ field, required, fileHeaders, selectedValue, onSelect
                   }}
                   onMouseEnter={(e) => {
                     if (selectedValue !== header) {
-                      e.target.style.backgroundColor = "#156372";
-                      e.target.style.color = "white";
+                      e.currentTarget.style.backgroundColor = "#156372";
+                      e.currentTarget.style.color = "white";
                     }
                   }}
                   onMouseLeave={(e) => {
                     if (selectedValue !== header) {
-                      e.target.style.backgroundColor = "transparent";
-                      e.target.style.color = "#111827";
+                      e.currentTarget.style.backgroundColor = "transparent";
+                      e.currentTarget.style.color = "#111827";
                     }
                   }}
                 >
@@ -254,14 +254,14 @@ const FieldMappingRow = ({ field, required, fileHeaders, selectedValue, onSelect
                   }}
                   onMouseEnter={(e) => {
                     if (dateFormat !== format) {
-                      e.target.style.backgroundColor = "#156372";
-                      e.target.style.color = "white";
+                      e.currentTarget.style.backgroundColor = "#156372";
+                      e.currentTarget.style.color = "white";
                     }
                   }}
                   onMouseLeave={(e) => {
                     if (dateFormat !== format) {
-                      e.target.style.backgroundColor = "transparent";
-                      e.target.style.color = "#111827";
+                      e.currentTarget.style.backgroundColor = "transparent";
+                      e.currentTarget.style.color = "#111827";
                     }
                   }}
                 >
@@ -742,8 +742,8 @@ export default function ImportTimesheets() {
                 gap: "8px",
                 marginBottom: "12px"
               }}
-              onMouseEnter={(e) => e.target.style.backgroundColor = "#0D4A52"}
-              onMouseLeave={(e) => e.target.style.backgroundColor = "#156372"}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#0D4A52"}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#156372"}
             >
               Choose File
               <ChevronDown size={16} />
@@ -897,14 +897,14 @@ export default function ImportTimesheets() {
                       }}
                       onMouseEnter={(e) => {
                         if (characterEncoding !== encoding) {
-                          e.target.style.backgroundColor = "#156372";
-                          e.target.style.color = "white";
+                          e.currentTarget.style.backgroundColor = "#156372";
+                          e.currentTarget.style.color = "white";
                         }
                       }}
                       onMouseLeave={(e) => {
                         if (characterEncoding !== encoding) {
-                          e.target.style.backgroundColor = "transparent";
-                          e.target.style.color = "#111827";
+                          e.currentTarget.style.backgroundColor = "transparent";
+                          e.currentTarget.style.color = "#111827";
                         }
                       }}
                     >
@@ -1023,8 +1023,8 @@ export default function ImportTimesheets() {
                       alignItems: "center",
                       gap: "6px"
                     }}
-                    onMouseEnter={(e) => e.target.style.backgroundColor = "#0D4A52"}
-                    onMouseLeave={(e) => e.target.style.backgroundColor = "#156372"}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#0D4A52"}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#156372"}
                   >
                     <Edit size={14} />
                     Edit
@@ -1195,8 +1195,8 @@ export default function ImportTimesheets() {
                     borderRadius: "4px",
                     color: "#ef4444"
                   }}
-                  onMouseEnter={(e) => e.target.style.backgroundColor = "#f3f4f6"}
-                  onMouseLeave={(e) => e.target.style.backgroundColor = "transparent"}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#f3f4f6"}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
                 >
                   <X size={20} />
                 </button>
@@ -1309,14 +1309,14 @@ export default function ImportTimesheets() {
                             }}
                             onMouseEnter={(e) => {
                               if (dateFormat !== format) {
-                                e.target.style.backgroundColor = "#156372";
-                                e.target.style.color = "white";
+                                e.currentTarget.style.backgroundColor = "#156372";
+                                e.currentTarget.style.color = "white";
                               }
                             }}
                             onMouseLeave={(e) => {
                               if (dateFormat !== format) {
-                                e.target.style.backgroundColor = "transparent";
-                                e.target.style.color = "#111827";
+                                e.currentTarget.style.backgroundColor = "transparent";
+                                e.currentTarget.style.color = "#111827";
                               }
                             }}
                           >
@@ -1385,10 +1385,10 @@ export default function ImportTimesheets() {
                     color: "#374151"
                   }}
                   onMouseEnter={(e) => {
-                    e.target.style.backgroundColor = "#e5e7eb";
+                    e.currentTarget.style.backgroundColor = "#e5e7eb";
                   }}
                   onMouseLeave={(e) => {
-                    e.target.style.backgroundColor = "#f3f4f6";
+                    e.currentTarget.style.backgroundColor = "#f3f4f6";
                   }}
                 >
                   Cancel
@@ -1405,8 +1405,8 @@ export default function ImportTimesheets() {
                     cursor: "pointer",
                     color: "white"
                   }}
-                  onMouseEnter={(e) => e.target.style.backgroundColor = "#0D4A52"}
-                  onMouseLeave={(e) => e.target.style.backgroundColor = "#156372"}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#0D4A52"}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#156372"}
                 >
                   Save
                 </button>
@@ -1440,12 +1440,12 @@ export default function ImportTimesheets() {
                   gap: "4px"
                 }}
                 onMouseEnter={(e) => {
-                  e.target.style.backgroundColor = "#156372";
-                  e.target.style.color = "white";
+                  e.currentTarget.style.backgroundColor = "#156372";
+                  e.currentTarget.style.color = "white";
                 }}
                 onMouseLeave={(e) => {
-                  e.target.style.backgroundColor = "rgba(21, 99, 114, 0.1)";
-                  e.target.style.color = "#156372";
+                  e.currentTarget.style.backgroundColor = "rgba(21, 99, 114, 0.1)";
+                  e.currentTarget.style.color = "#156372";
                 }}
               >
                 <ChevronRight size={16} style={{ transform: "rotate(180deg)" }} /> Previous
@@ -1470,12 +1470,12 @@ export default function ImportTimesheets() {
                 }}
                 onMouseEnter={(e) => {
                   if (((currentStep === 1 && selectedFile) || currentStep === 2) && !isUploadingToDb) {
-                    e.target.style.backgroundColor = "#0D4A52";
+                    e.currentTarget.style.backgroundColor = "#0D4A52";
                   }
                 }}
                 onMouseLeave={(e) => {
                   if (((currentStep === 1 && selectedFile) || currentStep === 2) && !isUploadingToDb) {
-                    e.target.style.backgroundColor = "#156372";
+                    e.currentTarget.style.backgroundColor = "#156372";
                   }
                 }}
               >
@@ -1497,10 +1497,10 @@ export default function ImportTimesheets() {
               textDecoration: "underline"
             }}
             onMouseEnter={(e) => {
-              e.target.style.color = "#0D4A52";
+              e.currentTarget.style.color = "#0D4A52";
             }}
             onMouseLeave={(e) => {
-              e.target.style.color = "#156372";
+              e.currentTarget.style.color = "#156372";
             }}
           >
             Cancel

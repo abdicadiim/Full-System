@@ -1,6 +1,7 @@
 import type express from "express";
 import mongoose from "mongoose";
 import { PriceList } from "../models/PriceList.js";
+import { recordDeletion } from "../services/syncTombstoneService.js";
 
 const asString = (v: unknown) => (typeof v === "string" ? v : "");
 const asNumber = (v: unknown) => (typeof v === "number" ? v : null);
@@ -140,5 +141,10 @@ export const deletePriceList: express.RequestHandler = async (req, res) => {
 
   const deleted = await PriceList.findOneAndDelete({ _id: id, organizationId: orgId }).lean();
   if (!deleted) return res.status(404).json({ success: false, message: "Price List not found", data: null });
+  await recordDeletion({
+    organizationId: orgId,
+    resourceId: "price-lists.list",
+    documentId: id,
+  });
   return res.json({ success: true, data: { id } });
 };

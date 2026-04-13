@@ -7,6 +7,7 @@ import {
   normalizeProductStatus,
   parseProductPayload,
 } from "../services/productPayloads.js";
+import { recordDeletion } from "../services/syncTombstoneService.js";
 
 const asString = (value: unknown) => String(typeof value === "string" ? value : "").trim();
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -242,6 +243,11 @@ export const deleteProduct: express.RequestHandler = async (req, res, next) => {
     if (!existing) return buildErrorResponse(res, 404, 4004, "Product not found");
 
     await Product.deleteOne({ _id: productId, organizationId: orgId });
+    await recordDeletion({
+      organizationId: orgId,
+      resourceId: "products.list",
+      documentId: productId,
+    });
     return res.json({
       success: true,
       code: 0,

@@ -20,6 +20,12 @@ export const SectionTitle = ({ icon: Icon, children, right }) => (
 );
 
 /* NEW: keep old name `RangeSelect` but render the real picker */
-export const RangeSelect = ({ value = "Last 12 months", onChange, className }) => (
+type RangeSelectProps = {
+  value?: string;
+  onChange?: (value: string) => void;
+  className?: string;
+};
+
+export const RangeSelect = ({ value = "Last 12 months", onChange, className }: RangeSelectProps) => (
   <DateRangePicker value={value} onChange={onChange} className={className} />
 );

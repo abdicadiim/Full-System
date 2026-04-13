@@ -24,6 +24,7 @@ import {
   X,
   ChevronLeft,
 } from "lucide-react";
+import { toast } from "react-toastify";
 import { customersAPI, debitNotesAPI, invoicesAPI, projectsAPI, reportingTagsAPI, salespersonsAPI, transactionNumberSeriesAPI } from "../../../../services/api";
 import { getTaxes, saveInvoice } from "../../salesModel";
 import { usePaymentTermsDropdown, defaultPaymentTerms, PaymentTerm } from "../../../../hooks/usePaymentTermsDropdown";
@@ -1013,8 +1014,8 @@ export default function NewDebitNote() {
   const unpaidInvoiceCount = invoiceOptions.filter((invoice) => isUnpaidInvoice(invoice)).length;
   const customerPanelInitial = getCustomerInitial(customerDetails || selectedCustomer || {});
   const customerPanelName = getCustomerPrimaryName(customerDetails || selectedCustomer || {}) || "Customer";
-  const customerPanelEmail = getCustomerEmail(customerDetails || selectedCustomer || "");
-  const customerPanelCompany = getCustomerCompany(customerDetails || selectedCustomer || "");
+  const customerPanelEmail = getCustomerEmail(customerDetails || selectedCustomer || {});
+  const customerPanelCompany = getCustomerCompany(customerDetails || selectedCustomer || {});
   const customerPanelReportingTags = Array.isArray(customerDetails?.reportingTags)
     ? customerDetails.reportingTags
         .map((tag: any) => getReportingTagLabel(tag))
@@ -1042,7 +1043,7 @@ export default function NewDebitNote() {
   const resolvedCurrency = getCustomerCurrency(customerDetails || selectedCustomer || {}) || formData.currency || "AMD";
 
   useEffect(() => {
-    const nextCurrency = getCustomerCurrency(customerDetails || selectedCustomer || "");
+    const nextCurrency = getCustomerCurrency(customerDetails || selectedCustomer || {});
     if (nextCurrency && nextCurrency !== formData.currency) {
       setField("currency", nextCurrency);
     }
@@ -1134,8 +1135,8 @@ export default function NewDebitNote() {
     const loadTaxes = async () => {
       try {
         const rows = await getTaxes();
-        const apiRows = Array.isArray(rows?.data)
-          ? rows.data
+        const apiRows = Array.isArray((rows as any)?.data)
+          ? (rows as any).data
           : Array.isArray(rows)
             ? rows
             : [];

@@ -16,4 +16,6 @@ const ExpenseSchema = new mongoose.Schema(
   { timestamps: true, strict: false, minimize: false }
 );
 
+ExpenseSchema.index({ organizationId: 1, updatedAt: -1 });
+
 export const Expense = mongoose.model("Expense", ExpenseSchema);

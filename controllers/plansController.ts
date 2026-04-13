@@ -2,6 +2,7 @@ import type express from "express";
 import mongoose from "mongoose";
 import { Plan } from "../models/Plan.js";
 import { Product } from "../models/Product.js";
+import { recordDeletion } from "../services/syncTombstoneService.js";
 
 const asString = (v: unknown) => (typeof v === "string" ? v : "");
 
@@ -244,6 +245,11 @@ export const deletePlan: express.RequestHandler = async (req, res) => {
 
   const deleted = await Plan.findOneAndDelete({ _id: id, organizationId: orgId }).lean();
   if (!deleted) return res.status(404).json({ success: false, message: "Plan not found", data: null });
+  await recordDeletion({
+    organizationId: orgId,
+    resourceId: "plans.list",
+    documentId: id,
+  });
   return res.json({ success: true, data: { id } });
 };
 

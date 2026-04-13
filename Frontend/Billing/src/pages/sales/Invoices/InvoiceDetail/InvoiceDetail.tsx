@@ -1323,8 +1323,8 @@ export default function InvoiceDetail() { // Start of component
 
       await debitNotesAPI.sendEmail(id, {
         to: customerEmail,
-        subject: `Debit Note ${invoice?.debitNoteNumber || invoice?.invoiceNumber || ""}`.trim(),
-        body: `Please find attached Debit Note ${invoice?.debitNoteNumber || invoice?.invoiceNumber || ""}.`,
+        subject: `Debit Note ${(invoice as any)?.debitNoteNumber || invoice?.invoiceNumber || ""}`.trim(),
+        body: `Please find attached Debit Note ${(invoice as any)?.debitNoteNumber || invoice?.invoiceNumber || ""}.`,
       });
 
       const dueDateValue = (invoice as any)?.dueDate;
@@ -3066,8 +3066,8 @@ export default function InvoiceDetail() { // Start of component
   };
 
   // Attachments Handlers
-  const handleFileUpload = (files) => {
-    const validFiles = Array.from(files).filter(file => {
+  const handleFileUpload = (files: FileList | File[]) => {
+    const validFiles = Array.from(files as ArrayLike<File>).filter(file => {
       if (file.size > 10 * 1024 * 1024) {
         toast(`File ${file.name} is too large. Maximum size is 10MB.`);
         return false;
@@ -3171,10 +3171,10 @@ export default function InvoiceDetail() { // Start of component
     });
   };
 
-  const handleDrop = (e) => {
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
-    const files = Array.from(e.dataTransfer.files || []);
+    const files = Array.from(e.dataTransfer.files || []) as File[];
     if (files.length > 0) {
       handleFileUpload(files);
     }
@@ -4370,7 +4370,7 @@ export default function InvoiceDetail() { // Start of component
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="5" className="py-8 text-center text-gray-500">No items</td>
+                        <td colSpan={5} className="py-8 text-center text-gray-500">No items</td>
                       </tr>
                     )}
                   </tbody>
@@ -5606,7 +5606,7 @@ export default function InvoiceDetail() { // Start of component
                               {attachment.name}
                             </div>
                             <div className="text-xs text-gray-500">
-                              {(attachment.size / 1024).toFixed(2)} KB
+                              {(Number(attachment.size || 0) / 1024).toFixed(2)} KB
                             </div>
                           </div>
                           <button
@@ -5650,7 +5650,7 @@ export default function InvoiceDetail() { // Start of component
                   multiple
                   className="hidden"
                   onChange={(e) => {
-                    const files = Array.from(e.target.files || []);
+                    const files = Array.from(e.target.files || []) as File[];
                     if (files.length > 0) {
                       handleFileUpload(files);
                     }
@@ -5811,10 +5811,7 @@ export default function InvoiceDetail() { // Start of component
 
         {/* Field Customization Modal */}
         {isFieldCustomizationOpen && (
-          <FieldCustomization
-            featureType="invoices"
-            onClose={() => setIsFieldCustomizationOpen(false)}
-          />
+          <FieldCustomization onClose={() => setIsFieldCustomizationOpen(false)} />
         )}
 
         {/* Organization Address Modal */}

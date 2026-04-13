@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useLayoutEffect } from "re
 import { createPortal } from "react-dom";
 import { useNavigate, useLocation } from "react-router-dom";
 import { toast } from "react-toastify";
+import { useCurrency } from "../../hooks/useCurrency";
 import { getQuotes, deleteQuotes, updateQuote, getCustomers, getProjects, getSalespersons, getCustomViews, deleteCustomView } from "../salesModel";
 import { generateQuoteHTMLForQuote as generateQuoteDetailHtml } from "./QuoteDetail/QuoteDetail.utils";
 import { useQuotesListQuery } from "./quoteQueries";
@@ -111,6 +112,7 @@ const defaultQuoteViews = [
 export default function Quotes() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { baseCurrencyCode } = useCurrency();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedView, setSelectedView] = useState("All Quotes");
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
@@ -863,7 +865,7 @@ export default function Quotes() {
           "Location Name": quote.selectedLocation || quote.location || "Head Office",
           "Expiry Date": formatDateISO(quote.expiryDate),
           "PurchaseOrder": quote.referenceNumber || "",
-          "Currency Code": quote.currency || "AMD",
+          "Currency Code": quote.currency || baseCurrencyCode || "",
           "Exchange Rate": Number(quote.exchangeRate ?? 1).toFixed(2),
           "Discount Type": quote.discountType ? "entity_level" : "",
           "Is Discount Before Tax": "true",
@@ -1882,7 +1884,7 @@ export default function Quotes() {
       }
       const quoteNumber = quote.quoteNumber || quote.id || "-";
       const customerName = quote.customerName || "-";
-      const amount = formatAmount(quote.total || quote.amount || 0, quote.currency || "AED");
+      const amount = formatAmount(quote.total || quote.amount || 0, quote.currency || baseCurrencyCode || "");
       const status = getStatusDisplay(quote.status || "draft");
       pdf.text(`${index + 1}. ${quoteNumber} | ${customerName} | ${amount} | ${status}`, 14, y);
       y += 7;

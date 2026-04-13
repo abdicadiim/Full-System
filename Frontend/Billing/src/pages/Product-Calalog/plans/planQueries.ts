@@ -12,7 +12,7 @@ const PLAN_DETAIL_STALE_TIME_MS = 30 * 1000;
 
 const normalizePlanId = (value: any) => String(value ?? "").trim();
 
-const normalizePlan = (row: any, fallbackId?: string) => {
+export const normalizePlan = (row: any, fallbackId?: string) => {
   if (!row || typeof row !== "object") return null;
 
   const id = normalizePlanId(row?.id || row?._id || row?.planId || row?.plan_id || fallbackId);

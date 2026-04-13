@@ -19,6 +19,7 @@ const ItemSchema = new mongoose.Schema(
 
 ItemSchema.index({ organizationId: 1, name: 1 });
 ItemSchema.index({ organizationId: 1, sku: 1 });
+ItemSchema.index({ organizationId: 1, updatedAt: -1 });
 
 export const Item = mongoose.model("Item", ItemSchema);
 

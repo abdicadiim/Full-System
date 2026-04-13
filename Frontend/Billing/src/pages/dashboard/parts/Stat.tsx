@@ -1,5 +1,5 @@
 import React from "react";
-import Card from "../../ui/Card";
+import Card from "../../../components/ui/Card";
 import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { YoY } from "./SectionBits";
 

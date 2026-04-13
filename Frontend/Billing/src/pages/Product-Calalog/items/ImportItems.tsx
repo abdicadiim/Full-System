@@ -106,7 +106,12 @@ export default function ImportItems() {
     const fetchAccounts = async () => {
       try {
         const response = await accountantAPI.getAccounts({ limit: 1000 });
-        setDbAccounts(Array.isArray(response?.data || response) ? (response.data || response) : []);
+        const rows = Array.isArray(response?.data)
+          ? response.data
+          : Array.isArray(response)
+            ? response
+            : [];
+        setDbAccounts(rows);
       } catch (e) {
         console.error("Failed to fetch accounts", e);
       }
@@ -667,7 +672,7 @@ export default function ImportItems() {
       }
 
       if (skippedCount > 0 && importedCount > 0) {
-        toast(`${skippedCount} record(s) skipped`, { icon: 'ℹ️' });
+        toast(`${skippedCount} record(s) skipped`, { icon: "info" as any });
       }
 
       // 3. Clear localStorage cache to force refresh if needed (though ItemsPage uses API)

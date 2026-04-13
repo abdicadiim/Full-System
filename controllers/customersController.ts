@@ -4,6 +4,7 @@ import { Customer } from "../models/Customer.js";
 import { CustomersVendorsSettings } from "../models/CustomersVendorsSettings.js";
 import { StoredDocument } from "../models/StoredDocument.js";
 import { buildCustomerIdsFilter, buildCustomerLookupFilter, isMongoObjectIdString } from "./customerIdentity.js";
+import { recordDeletion, recordDeletions } from "../services/syncTombstoneService.js";
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -880,6 +881,11 @@ export const deleteCustomer: express.RequestHandler = async (req, res, next) => 
 
     const deleted = await Customer.findOneAndDelete(filter).lean();
     if (!deleted) return res.status(404).json({ success: false, message: "Customer not found", data: null });
+    await recordDeletion({
+      organizationId: orgId,
+      resourceId: "customers.list",
+      documentId: String(deleted._id || ""),
+    });
     await StoredDocument.deleteMany({
       organizationId: orgId,
       relatedToType: "customer",
@@ -925,6 +931,11 @@ export const bulkDeleteCustomers: express.RequestHandler = async (req, res, next
     }
 
     await Customer.deleteMany({ organizationId: orgId, _id: { $in: deletedIds } });
+    await recordDeletions({
+      organizationId: orgId,
+      resourceId: "customers.list",
+      documentIds: deletedIds,
+    });
     await StoredDocument.deleteMany({
       organizationId: orgId,
       relatedToType: "customer",

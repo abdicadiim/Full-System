@@ -28,5 +28,6 @@ const CouponSchema = new mongoose.Schema(
 );
 
 CouponSchema.index({ organizationId: 1, couponCode: 1 }, { unique: true });
+CouponSchema.index({ organizationId: 1, updatedAt: -1 });
 
 export const Coupon = mongoose.model("Coupon", CouponSchema);

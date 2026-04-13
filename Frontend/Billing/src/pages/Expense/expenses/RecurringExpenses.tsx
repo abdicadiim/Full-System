@@ -30,7 +30,7 @@ import {
   ArrowRight,
   FileText,
 } from "lucide-react";
-import BulkUpdateModal from "../shared/BulkUpdateModal";
+import BulkUpdateModal, { BulkFieldOption } from "../shared/BulkUpdateModal";
 import DeleteConfirmationModal from "../shared/DeleteConfirmationModal";
 import ExportRecurringExpenses from "./ExportRecurringExpenses";
 import { computeRecurringExpenseDisplayAmount } from "../shared/recurringExpenseModel";
@@ -483,7 +483,7 @@ export default function RecurringExpenses() {
     }
   };
 
-  const recurringExpenseFieldOptions = useMemo(() => {
+  const recurringExpenseFieldOptions = useMemo<BulkFieldOption[]>(() => {
     const uniqueExpenseAccounts = Array.from(
       new Set(recurringExpenses.map((expense: any) => expense?.expenseAccount).filter(Boolean))
     );
@@ -865,14 +865,14 @@ export default function RecurringExpenses() {
     return sorted;
   }, [getFilteredExpenses, selectedSort, sortDirection]);
 
-  const styles = {
+  const styles: Record<string, React.CSSProperties> = {
     container: {
       width: "100%",
       minHeight: "calc(100vh - 72px)",
       padding: "0",
       backgroundColor: "#ffffff",
       display: "flex",
-      flexDirection: "column" as const as const,
+      flexDirection: "column",
     },
     listCard: {
       width: "100%",
@@ -882,7 +882,7 @@ export default function RecurringExpenses() {
       backgroundColor: "#ffffff",
       boxShadow: "none",
       display: "flex",
-      flexDirection: "column" as const as const,
+      flexDirection: "column",
       overflow: "hidden",
     },
     header: {
@@ -942,7 +942,7 @@ export default function RecurringExpenses() {
       cursor: "pointer",
       border: "none",
       background: "none",
-      textAlign: "left" as const,
+      textAlign: "left",
     },
     headerRight: {
       display: "flex",
@@ -999,7 +999,7 @@ export default function RecurringExpenses() {
       cursor: "pointer",
       border: "none",
       background: "none",
-      textAlign: "left" as const,
+      textAlign: "left",
       transition: "background-color 0.2s",
     },
     moreDropdownItemLeft: {
@@ -1039,7 +1039,7 @@ export default function RecurringExpenses() {
       cursor: "pointer",
       border: "none",
       background: "none",
-      textAlign: "left" as const,
+      textAlign: "left",
       transition: "background-color 0.2s",
     },
     table: {
@@ -1057,13 +1057,13 @@ export default function RecurringExpenses() {
     tableHeader: {
       backgroundColor: "#f6f7fb",
       borderBottom: "1px solid #e6e9f2",
-      position: "sticky" as const,
+      position: "sticky",
       top: 0,
       zIndex: 10,
     },
     tableHeaderCell: {
       padding: "12px 16px",
-      textAlign: "left" as const,
+      textAlign: "left",
       fontSize: "10px",
       fontWeight: "600",
       color: "#7b8494",
@@ -1209,10 +1209,10 @@ export default function RecurringExpenses() {
                 gap: "6px"
               }}
               onMouseEnter={(e) => {
-                e.target.style.backgroundColor = "#f9fafb";
+                e.currentTarget.style.backgroundColor = "#f9fafb";
               }}
               onMouseLeave={(e) => {
-                e.target.style.backgroundColor = "#ffffff";
+                e.currentTarget.style.backgroundColor = "#ffffff";
               }}
             >
               Bulk Update
@@ -1238,10 +1238,10 @@ export default function RecurringExpenses() {
                 gap: "6px"
               }}
               onMouseEnter={(e) => {
-                e.target.style.backgroundColor = "#f9fafb";
+                e.currentTarget.style.backgroundColor = "#f9fafb";
               }}
               onMouseLeave={(e) => {
-                e.target.style.backgroundColor = "#ffffff";
+                e.currentTarget.style.backgroundColor = "#ffffff";
               }}
             >
               Resume
@@ -1262,10 +1262,10 @@ export default function RecurringExpenses() {
                 gap: "6px"
               }}
               onMouseEnter={(e) => {
-                e.target.style.backgroundColor = "#f9fafb";
+                e.currentTarget.style.backgroundColor = "#f9fafb";
               }}
               onMouseLeave={(e) => {
-                e.target.style.backgroundColor = "#ffffff";
+                e.currentTarget.style.backgroundColor = "#ffffff";
               }}
             >
               Stop
@@ -1292,10 +1292,10 @@ export default function RecurringExpenses() {
                 gap: "6px"
               }}
               onMouseEnter={(e) => {
-                e.target.style.backgroundColor = "#f9fafb";
+                e.currentTarget.style.backgroundColor = "#f9fafb";
               }}
               onMouseLeave={(e) => {
-                e.target.style.backgroundColor = "#ffffff";
+                e.currentTarget.style.backgroundColor = "#ffffff";
               }}
             >
               Delete
@@ -1329,11 +1329,11 @@ export default function RecurringExpenses() {
               cursor: "pointer"
             }}
             onMouseEnter={(e) => {
-              e.target.style.backgroundColor = "#e5e7eb";
-              e.target.style.borderRadius = "4px";
+              e.currentTarget.style.backgroundColor = "#e5e7eb";
+              e.currentTarget.style.borderRadius = "4px";
             }}
             onMouseLeave={(e) => {
-              e.target.style.backgroundColor = "transparent";
+              e.currentTarget.style.backgroundColor = "transparent";
             }}
           >
             <span>Esc</span>
@@ -1375,12 +1375,12 @@ export default function RecurringExpenses() {
                           }}
                           onMouseEnter={(e) => {
                             if (!isSelected) {
-                              e.target.style.backgroundColor = "#f9fafb";
+                              e.currentTarget.style.backgroundColor = "#f9fafb";
                             }
                           }}
                           onMouseLeave={(e) => {
                             if (!isSelected) {
-                              e.target.style.backgroundColor = "transparent";
+                              e.currentTarget.style.backgroundColor = "transparent";
                             }
                           }}
                         >
@@ -1412,8 +1412,8 @@ export default function RecurringExpenses() {
                         setShowCustomViewModal(true);
                         setDropdownOpen(false);
                       }}
-                      onMouseEnter={(e) => (e.target.style.backgroundColor = "#f9fafb")}
-                      onMouseLeave={(e) => (e.target.style.backgroundColor = "transparent")}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f9fafb")}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
                     >
                       <Plus size={16} style={{ color: "#156372" }} />
                       New Custom View
@@ -1427,8 +1427,8 @@ export default function RecurringExpenses() {
               <button
                 style={styles.newButton}
                 onClick={() => navigate("/expenses/recurring-expenses/new")}
-              onMouseEnter={(e) => (e.target.style.backgroundColor = "#0D4A52")}
-              onMouseLeave={(e) => (e.target.style.backgroundColor = "#22c55e")}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#0D4A52")}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#22c55e")}
             >
               <Plus size={16} />
               New
@@ -1441,10 +1441,10 @@ export default function RecurringExpenses() {
                     setMoreMenuOpen(!moreMenuOpen);
                   }}
                   onMouseEnter={(e) => {
-                    e.target.style.backgroundColor = "#f9fafb";
+                    e.currentTarget.style.backgroundColor = "#f9fafb";
                   }}
                   onMouseLeave={(e) => {
-                    e.target.style.backgroundColor = "#ffffff";
+                    e.currentTarget.style.backgroundColor = "#ffffff";
                   }}
                 >
                   <MoreVertical size={18} />
@@ -1474,12 +1474,12 @@ export default function RecurringExpenses() {
                         }}
                         onMouseEnter={(e) => {
                           if (!sortSubmenuOpen) {
-                            e.target.style.backgroundColor = "#f9fafb";
+                            e.currentTarget.style.backgroundColor = "#f9fafb";
                           }
                         }}
                         onMouseLeave={(e) => {
                           if (!sortSubmenuOpen) {
-                            e.target.style.backgroundColor = "transparent";
+                            e.currentTarget.style.backgroundColor = "transparent";
                           }
                         }}
                       >
@@ -1510,12 +1510,12 @@ export default function RecurringExpenses() {
                               }}
                               onMouseEnter={(e) => {
                                 if (selectedSort !== option) {
-                                  e.target.style.backgroundColor = "#f3f4f6";
+                                  e.currentTarget.style.backgroundColor = "#f3f4f6";
                                 }
                               }}
                               onMouseLeave={(e) => {
                                 if (selectedSort !== option) {
-                                  e.target.style.backgroundColor = "transparent";
+                                  e.currentTarget.style.backgroundColor = "transparent";
                                 }
                               }}
                             >
@@ -1544,10 +1544,10 @@ export default function RecurringExpenses() {
                         navigate("/expenses/recurring-expenses/import");
                       }}
                       onMouseEnter={(e) => {
-                        e.target.style.backgroundColor = "#f9fafb";
+                        e.currentTarget.style.backgroundColor = "#f9fafb";
                       }}
                       onMouseLeave={(e) => {
-                        e.target.style.backgroundColor = "transparent";
+                        e.currentTarget.style.backgroundColor = "transparent";
                       }}
                     >
                       <Download size={16} style={{ color: "#6b7280" }} />
@@ -1674,10 +1674,10 @@ export default function RecurringExpenses() {
                       }}
                       disabled={isRefreshing}
                       onMouseEnter={(e) => {
-                        e.target.style.backgroundColor = "#f9fafb";
+                        e.currentTarget.style.backgroundColor = "#f9fafb";
                       }}
                       onMouseLeave={(e) => {
-                        e.target.style.backgroundColor = "transparent";
+                        e.currentTarget.style.backgroundColor = "transparent";
                       }}
                     >
                       <RefreshCw
@@ -1792,7 +1792,13 @@ export default function RecurringExpenses() {
                     style={{ ...styles.tableRow, cursor: "pointer" }}
                     onClick={(e) => {
                       // Don't navigate if clicking on checkbox or its container
-                      if (e.target.type === "checkbox" || e.target.closest('input[type="checkbox"]') || e.target.closest('td')?.querySelector('input[type="checkbox"]')) {
+                      const target = e.target as HTMLElement | null;
+                      const inputTarget = target as HTMLInputElement | null;
+                      if (
+                        inputTarget?.type === "checkbox" ||
+                        target?.closest('input[type="checkbox"]') ||
+                        target?.closest('td')?.querySelector('input[type="checkbox"]')
+                      ) {
                         return;
                       }
                       navigate(`/expenses/recurring-expenses/${expense.id}`);
@@ -1862,7 +1868,7 @@ export default function RecurringExpenses() {
         <div style={{
           padding: "60px 40px",
           display: "flex",
-          flexDirection: "column" as const as const,
+          flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
           minHeight: "60vh",
@@ -1893,7 +1899,7 @@ export default function RecurringExpenses() {
             </p>
             <div style={{
               display: "flex",
-              flexDirection: "column" as const as const,
+              flexDirection: "column",
               alignItems: "center",
               gap: "16px"
             }}>
@@ -1913,10 +1919,10 @@ export default function RecurringExpenses() {
                   gap: "8px"
                 }}
                 onMouseEnter={(e) => {
-                  e.target.style.backgroundColor = "#0D4A52";
+                  e.currentTarget.style.backgroundColor = "#0D4A52";
                 }}
                 onMouseLeave={(e) => {
-                  e.target.style.backgroundColor = "#156372";
+                  e.currentTarget.style.backgroundColor = "#156372";
                 }}
               >
                 <Plus size={20} />
@@ -1935,10 +1941,10 @@ export default function RecurringExpenses() {
                   padding: "8px"
                 }}
                 onMouseEnter={(e) => {
-                  e.target.style.color = "#0D4A52";
+                  e.currentTarget.style.color = "#0D4A52";
                 }}
                 onMouseLeave={(e) => {
-                  e.target.style.color = "#156372";
+                  e.currentTarget.style.color = "#156372";
                 }}
               >
                 Import Recurring Expenses
@@ -1985,7 +1991,7 @@ export default function RecurringExpenses() {
               {/* BILLABLE / NON-BILLABLE Split */}
               <div style={{
                 display: "flex",
-                flexDirection: "column" as const as const,
+                flexDirection: "column",
                 gap: "16px"
               }}>
                 {/* BILLABLE Path */}
@@ -2103,7 +2109,7 @@ export default function RecurringExpenses() {
               padding: 0,
               margin: 0,
               display: "flex",
-              flexDirection: "column" as const as const,
+              flexDirection: "column",
               gap: "16px"
             }}>
               <li style={{
@@ -2334,7 +2340,7 @@ export default function RecurringExpenses() {
                 maxWidth: "700px",
                 boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
                 display: "flex",
-                flexDirection: "column" as const as const,
+                flexDirection: "column",
               }}
               onClick={(e) => e.stopPropagation()}
             >
@@ -2412,7 +2418,7 @@ export default function RecurringExpenses() {
                 <div style={{ padding: "24px" }}>
                   <div style={{ display: "flex", gap: "24px" }}>
                     {/* Left Column */}
-                    <div style={{ flex: 1, display: "flex", flexDirection: "column" as const as const, gap: "16px" }}>
+                    <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "16px" }}>
                       {/* Expense Account */}
                       <div>
                         <label style={{ display: "block", fontSize: "13px", fontWeight: "500", color: "#374151", marginBottom: "6px" }}>
@@ -2593,7 +2599,7 @@ export default function RecurringExpenses() {
                     </div>
 
                     {/* Right Column */}
-                    <div style={{ flex: 1, display: "flex", flexDirection: "column" as const as const, gap: "16px" }}>
+                    <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "16px" }}>
                       {/* Next Expense Date Range */}
                       <div>
                         <label style={{ display: "block", fontSize: "13px", fontWeight: "500", color: "#374151", marginBottom: "6px" }}>
@@ -2759,10 +2765,10 @@ export default function RecurringExpenses() {
                       cursor: "pointer",
                     }}
                     onMouseEnter={(e) => {
-                      e.target.style.backgroundColor = "#f9fafb";
+                      e.currentTarget.style.backgroundColor = "#f9fafb";
                     }}
                     onMouseLeave={(e) => {
-                      e.target.style.backgroundColor = "#ffffff";
+                      e.currentTarget.style.backgroundColor = "#ffffff";
                     }}
                   >
                     Cancel
@@ -2783,10 +2789,10 @@ export default function RecurringExpenses() {
                       cursor: "pointer",
                     }}
                     onMouseEnter={(e) => {
-                      e.target.style.backgroundColor = "#0D4A52";
+                      e.currentTarget.style.backgroundColor = "#0D4A52";
                     }}
                     onMouseLeave={(e) => {
-                      e.target.style.backgroundColor = "#156372";
+                      e.currentTarget.style.backgroundColor = "#156372";
                     }}
                   >
                     Search
@@ -2960,23 +2966,29 @@ function UserRoleSelector() {
                   onClick={() => handleSelect(item)}
                   style={{
                     padding: "8px 12px", cursor: "pointer", margin: "4px", borderRadius: "4px",
-                    display: "flex", flexDirection: "column" as const
+                    display: "flex", flexDirection: "column"
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = Z.primaryColor;
-                    e.currentTarget.style.color = "#ffffff";
-                    const emailDiv = e.currentTarget.querySelector('.email-sub');
+                    const target = e.currentTarget as HTMLElement;
+                    target.style.backgroundColor = Z.primaryColor;
+                    target.style.color = "#ffffff";
+                    const emailDiv = target.querySelector(".email-sub") as HTMLElement | null;
                     if (emailDiv) emailDiv.style.opacity = "0.9";
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = "transparent";
-                    e.currentTarget.style.color = "#374151";
-                    const emailDiv = e.currentTarget.querySelector('.email-sub');
+                    const target = e.currentTarget as HTMLElement;
+                    target.style.backgroundColor = "transparent";
+                    target.style.color = "#374151";
+                    const emailDiv = target.querySelector(".email-sub") as HTMLElement | null;
                     if (emailDiv) emailDiv.style.opacity = "1";
                   }}
                 >
                   <div style={{ fontSize: "13px", fontWeight: "600", textTransform: "uppercase" }}>{item.name}</div>
-                  {item.email && <div className="email-sub" style={{ fontSize: "12px", color: "inherit", opacity: 1 }}>{item.email}</div>}
+                  {(item as { email?: string }).email && (
+                    <div className="email-sub" style={{ fontSize: "12px", color: "inherit", opacity: 1 }}>
+                      {(item as { email?: string }).email}
+                    </div>
+                  )}
                 </div>
               ))}
               {filteredItems.length === 0 && <div style={{ padding: "12px", textAlign: "center", color: "#6b7280", fontSize: "13px" }}>No results found</div>}
@@ -3130,7 +3142,7 @@ function NewCustomViewModal({ onClose, onSave }) {
     col.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const modalStyles = {
+  const modalStyles: Record<string, React.CSSProperties> = {
     overlay: {
       position: "fixed",
       top: 0,
@@ -3188,7 +3200,7 @@ function NewCustomViewModal({ onClose, onSave }) {
     },
     formGroup: {
       display: "flex",
-      flexDirection: "column" as const as const,
+      flexDirection: "column",
       gap: "8px",
       flex: 1,
     },
@@ -3221,7 +3233,7 @@ function NewCustomViewModal({ onClose, onSave }) {
     },
     criteriaContainer: {
       display: "flex",
-      flexDirection: "column" as const as const,
+      flexDirection: "column",
       gap: "12px",
     },
     criterionRow: {
@@ -3280,7 +3292,7 @@ function NewCustomViewModal({ onClose, onSave }) {
     },
     columnList: {
       display: "flex",
-      flexDirection: "column" as const as const,
+      flexDirection: "column",
       gap: "4px",
       maxHeight: "200px",
       overflowY: "auto",
@@ -3293,7 +3305,7 @@ function NewCustomViewModal({ onClose, onSave }) {
       borderRadius: "4px",
       border: "none",
       background: "none",
-      textAlign: "left" as const,
+      textAlign: "left",
     },
     footer: {
       padding: "20px 24px",

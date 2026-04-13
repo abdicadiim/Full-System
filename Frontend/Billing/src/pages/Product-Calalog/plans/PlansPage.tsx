@@ -523,6 +523,23 @@ export default function PlansPage() {
         navigate("/products/plans/new");
     };
 
+    const handleCloseNewProductModal = useCallback(() => {
+        setNewProductModalOpen(false);
+
+        const params = new URLSearchParams(location.search);
+        if (params.get("new") === "1") {
+            params.delete("new");
+            const nextSearch = params.toString();
+            navigate(
+                {
+                    pathname: location.pathname,
+                    search: nextSearch ? `?${nextSearch}` : "",
+                },
+                { replace: true }
+            );
+        }
+    }, [location.pathname, location.search, navigate]);
+
     const handleExport = () => {
         const headers = visibleColumns.map((col) => col.label);
         const rows = currentRows.map((row: any) =>
@@ -1182,7 +1199,7 @@ export default function PlansPage() {
 
             <NewProductModal
                 isOpen={newProductModalOpen}
-                onClose={() => setNewProductModalOpen(false)}
+                onClose={handleCloseNewProductModal}
                 onSaveSuccess={() => {
                     void refreshProductsFromQuery();
                 }}

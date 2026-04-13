@@ -101,18 +101,25 @@ export default function PlansCustomizeColumnsModal({
 
         <div className="max-h-[365px] space-y-1.5 overflow-y-auto bg-[#f5f6fa] px-5 py-3">
           {filtered.map((col) => (
-            <div key={col.key} className="group flex h-[38px] items-center gap-2 rounded-sm border border-[#edf1f6] bg-[#f7f8fc] px-2.5">
-              <GripVertical size={13} className="text-slate-400" />
+            <div
+              key={col.key}
+              className={`group flex h-[38px] items-center gap-2 rounded-sm border px-2.5 transition-colors ${
+                col.visible
+                  ? "border-[#edf1f6] bg-[#f7f8fc]"
+                  : "border-[#eef2f7] bg-white"
+              }`}
+            >
+              <GripVertical size={13} className={col.visible ? "text-slate-400" : "text-slate-300"} />
               <input
                 type="checkbox"
                 checked={col.visible}
                 disabled={col.locked}
                 onChange={() => toggle(col.key)}
-                className="h-3.5 w-3.5 rounded border-slate-300 focus:ring-opacity-50"
+                className={`h-3.5 w-3.5 rounded border-slate-300 focus:ring-opacity-50 ${col.visible ? "" : "opacity-80"}`}
                 style={{ color: accentColor, accentColor: accentColor }}
               />
-              {col.locked ? <Lock size={11} className="text-slate-400" /> : null}
-              <span className={`flex-1 text-[13px] ${col.visible ? "text-slate-700" : "text-slate-500"}`}>{col.label}</span>
+              {col.locked ? <Lock size={11} className={col.visible ? "text-slate-400" : "text-slate-300"} /> : null}
+              <span className={`flex-1 text-[13px] ${col.visible ? "text-slate-700" : "text-slate-400"}`}>{col.label}</span>
               {col.visible ? (
                 <button
                   type="button"

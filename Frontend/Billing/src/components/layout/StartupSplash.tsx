@@ -2,9 +2,23 @@ import React from "react";
 
 const billingLogoSrc = new URL("../../assets/BillingLogo.png", import.meta.url).href;
 
-export default function StartupSplash() {
+type StartupSplashProps = {
+  title?: string;
+  message?: string;
+  blocking?: boolean;
+};
+
+export default function StartupSplash({
+  title = "Getting your workspace ready",
+  message = "Please wait while we make everything perfect for you...",
+  blocking = true,
+}: StartupSplashProps) {
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-white px-6">
+    <div
+      className={`fixed inset-0 z-[100] flex items-center justify-center px-6 ${
+        blocking ? "bg-white" : "pointer-events-none bg-white/72 backdrop-blur-[2px]"
+      }`}
+    >
       <div className="flex flex-col items-center text-center">
         <div className="relative flex h-44 w-44 items-center justify-center">
           <div
@@ -23,9 +37,8 @@ export default function StartupSplash() {
             draggable={false}
           />
         </div>
-        <p className="mt-3 max-w-md text-[12px] font-medium text-[#156372]">
-          Please wait while we make everything perfect for you...
-        </p>
+        <h1 className="mt-4 text-lg font-semibold text-[#0f4450]">{title}</h1>
+        <p className="mt-2 max-w-md text-[12px] font-medium text-[#156372]">{message}</p>
       </div>
     </div>
   );

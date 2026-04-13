@@ -12,36 +12,27 @@ import ItemsList from "./ItemsList";
 import ItemSidebar from "./components/ItemSidebar";
 import ItemDetails from "./components/ItemDetails";
 import NewItemForm from "./components/NewItemForm";
-import EditItemForm from "./components/EditItemForm";
 import BulkUpdateModal from "./components/modals/BulkUpdateModal";
 import { useCurrency } from "../../../hooks/useCurrency";
 import { usePermissions } from "../../../hooks/usePermissions";
 import { buildCloneName } from "../utils/cloneName";
 import { fetchItemsList, itemQueryKeys, useItemDetailQuery, useItemsListQuery } from "./itemQueries";
+import LoadingSpinner from "../../../components/LoadingSpinner";
 
 function ItemsPageContent() {
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const ITEMS_STORAGE_KEY = "inv_items_v1";
-  const loadCachedItems = () => {
-    if (typeof window === "undefined" || !window.localStorage) return [];
-    const stored = window.localStorage.getItem(ITEMS_STORAGE_KEY);
-    if (!stored) return [];
-    try {
-      const parsed = JSON.parse(stored);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  };
-
-  const cachedItems = useMemo(() => loadCachedItems(), []);
-  const [items, setItems] = useState<Item[]>(cachedItems);
-  const [loading, setLoading] = useState<boolean>(cachedItems.length === 0);
-  const [view, setView] = useState<string>("list"); // list | new | detail | edit
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [items, setItems] = useState<Item[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    const initialSelectedId = String(params.get("itemId") || "").trim();
+    return initialSelectedId || null;
+  });
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<DeleteConfirmModal>({
     open: false, itemId: null, itemName: null, count: 1, itemIds: null
   });
@@ -59,13 +50,42 @@ function ItemsPageContent() {
   const canCreateItems = canCreate();
   const canEditItems = canEdit();
   const canDeleteItems = canDelete();
-
+  const shouldLoadItemsQuery = permissionsLoading || canViewItems;
+  const showCachedListWhilePermissionsLoad = permissionsLoading && items.length > 0;
+  const resolvedCanViewItems = showCachedListWhilePermissionsLoad ? true : canViewItems;
+  const resolvedCanCreateItems = permissionsLoading ? false : canCreateItems;
+  const resolvedCanEditItems = permissionsLoading ? false : canEditItems;
+  const resolvedCanDeleteItems = permissionsLoading ? false : canDeleteItems;
+  const routeSelectedId = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return String(params.get("itemId") || "").trim();
+  }, [location.search]);
   const normalizedSelectedId = String(selectedId || "").trim();
+  const routeHash = String(location.hash || "").replace(/^#/, "").trim().toLowerCase();
+  const currentView = useMemo(() => {
+    if (routeHash === "new") return "new";
+    if (routeHash === "edit" && normalizedSelectedId) return "edit";
+    if (routeHash === "detail" && normalizedSelectedId) return "detail";
+    return "list";
+  }, [normalizedSelectedId, routeHash]);
 
-  const setRouteHash = useCallback(
-    (hash: string) => {
+  const setRouteState = useCallback(
+    ({ hash, itemId }: { hash?: string; itemId?: string | null }) => {
+      const params = new URLSearchParams(location.search);
+      const normalizedItemId = String(itemId || "").trim();
+
+      if (normalizedItemId) {
+        params.set("itemId", normalizedItemId);
+      } else {
+        params.delete("itemId");
+      }
+
       navigate(
-        { pathname: location.pathname, search: location.search, hash: hash || "" },
+        {
+          pathname: location.pathname,
+          search: params.toString() ? `?${params.toString()}` : "",
+          hash: hash || "",
+        },
         { replace: true }
       );
     },
@@ -116,31 +136,32 @@ function ItemsPageContent() {
   }, []);
 
   const itemsListQuery = useItemsListQuery({
-    enabled: !permissionsLoading && canViewItems,
-    initialData: cachedItems,
+    enabled: shouldLoadItemsQuery,
   });
 
   useEffect(() => {
-    if (permissionsLoading) return;
-    if (!canViewItems) {
+    if (!permissionsLoading && !canViewItems) {
       setLoading(false);
+      setLoadError(null);
       return;
     }
 
     if (itemsListQuery.data) {
+      setLoadError(null);
       applyItemsResult(itemsListQuery.data);
     }
   }, [applyItemsResult, canViewItems, itemsListQuery.data, permissionsLoading]);
 
   useEffect(() => {
-    if (permissionsLoading) return;
-    if (!canViewItems) {
+    if (!permissionsLoading && !canViewItems) {
       setLoading(false);
+      setLoadError(null);
       return;
     }
 
     if (itemsListQuery.isPending && items.length === 0) {
       setLoading(true);
+      setLoadError(null);
       return;
     }
 
@@ -156,30 +177,25 @@ function ItemsPageContent() {
     permissionsLoading,
   ]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(ITEMS_STORAGE_KEY, JSON.stringify(items));
-    } catch {
-      // Ignore local storage sync errors for item cache mirror.
-    }
-  }, [items]);
-
   const fetchItems = useCallback(async () => {
     if (!canViewItems) return [];
 
     if (items.length === 0) {
       setLoading(true);
     }
+    setLoadError(null);
 
     try {
       const rows = await queryClient.fetchQuery({
         queryKey: itemQueryKeys.list(),
         queryFn: fetchItemsList,
+        staleTime: 0,
       });
       applyItemsResult(rows);
       return rows;
     } catch (error) {
       console.error("Failed to fetch items:", error);
+      setLoadError(error instanceof Error ? error.message : "Failed to load items");
       return [];
     } finally {
       setLoading(false);
@@ -195,7 +211,7 @@ function ItemsPageContent() {
   );
 
   const selectedItemQuery = useItemDetailQuery(normalizedSelectedId, {
-    enabled: view === "detail" && Boolean(normalizedSelectedId),
+    enabled: (currentView === "detail" || currentView === "edit") && Boolean(normalizedSelectedId),
     initialItem: selectedItem,
   });
 
@@ -207,24 +223,18 @@ function ItemsPageContent() {
     }
   }, [resolvedSelectedItem, upsertItemInState]);
 
+  useEffect(() => {
+    setSelectedId(routeSelectedId || null);
+  }, [routeSelectedId]);
+
   const handleSelectItem = useCallback((id: string) => {
     const nextId = String(id || "").trim();
     if (!nextId) return;
 
     setSelectedId(nextId);
+    setRouteState({ hash: "detail", itemId: nextId });
     window.scrollTo(0, 0);
-  }, []);
-
-  useEffect(() => {
-    if (!normalizedSelectedId) return;
-    if (view === "detail") {
-      setRouteHash("detail");
-      return;
-    }
-
-    setView("detail");
-    setRouteHash("detail");
-  }, [normalizedSelectedId, setRouteHash, view]);
+  }, [setRouteState]);
 
   const handleCreateItem = async (
     data: any,
@@ -260,10 +270,12 @@ function ItemsPageContent() {
       }
 
       if (!options?.stayOnCurrent) {
-        if (view === "detail") {
-          setSelectedId(String(newItem._id || newItem.id));
+        if (currentView === "detail") {
+          const createdId = String(newItem._id || newItem.id || "").trim();
+          setSelectedId(createdId || null);
+          setRouteState({ hash: "detail", itemId: createdId });
         } else {
-          setView("list");
+          handleBackToList();
         }
       }
       setClonedItem(null);
@@ -326,7 +338,7 @@ function ItemsPageContent() {
       ensureItemApiSuccess(response, "Failed to update item");
       await fetchItems();
       setSelectedId(targetId);
-      setView("detail");
+      setRouteState({ hash: "detail", itemId: targetId });
       toast.success("Item updated successfully");
     } catch (error: any) {
       console.error("Failed to update item:", error);
@@ -354,8 +366,7 @@ function ItemsPageContent() {
       ensureItemApiSuccess(await itemsAPI.delete(deleteConfirmModal.itemId), "Failed to delete item");
       await fetchItems();
       if (selectedId === deleteConfirmModal.itemId) {
-        setSelectedId(null);
-        setView("list");
+        handleBackToList();
       }
       toast.success("Item deleted successfully");
       setDeleteConfirmModal({ open: false, itemId: null, itemName: null, count: 1, itemIds: null });
@@ -381,8 +392,7 @@ function ItemsPageContent() {
       );
       await fetchItems();
       if (deleteConfirmModal.itemIds.includes(selectedId || "")) {
-        setSelectedId(null);
-        setView("list");
+        handleBackToList();
       }
       toast.success(`${deleteConfirmModal.itemIds.length} item(s) deleted successfully`);
       setDeleteConfirmModal({ open: false, itemId: null, itemName: null, count: 1, itemIds: null });
@@ -443,17 +453,19 @@ function ItemsPageContent() {
   };
 
   const openNewView = () => {
-    setView("new");
     setSelectedId(null);
-    setRouteHash("new");
+    setRouteState({ hash: "new", itemId: null });
   };
 
-  const handleBackToList = () => {
-    setView("list");
+  const handleUpdateFromItemForm = async (data: any, _selectedTagIds: string[] = []) => {
+    await handleUpdateItem(data);
+  };
+
+  const handleBackToList = useCallback(() => {
     setSelectedId(null);
     setClonedItem(null);
-    setRouteHash("");
-  };
+    setRouteState({ hash: "", itemId: null });
+  }, [setRouteState]);
 
   const handleCloneItem = async (data: any) => {
     if (!canCreateItems) {
@@ -483,13 +495,13 @@ function ItemsPageContent() {
     await handleCreateItem(clonedPayload, [], { stayOnCurrent: true });
   };
 
-  if (permissionsLoading) {
+  if (permissionsLoading && items.length === 0) {
     return (
       <div className="w-full p-8 text-center text-gray-500">Loading permissions...</div>
     );
   }
 
-  if (!canViewItems) {
+  if (!permissionsLoading && !resolvedCanViewItems) {
     return (
       <div className="w-full p-8">
         <div className="max-w-xl rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
@@ -499,24 +511,50 @@ function ItemsPageContent() {
     );
   }
 
+  if (loading && items.length === 0) {
+    return (
+      <div className="flex min-h-[420px] items-center justify-center bg-white">
+        <LoadingSpinner label="Loading items..." />
+      </div>
+    );
+  }
+
+  if (loadError && items.length === 0) {
+    return (
+      <div className="flex min-h-[420px] items-center justify-center bg-white px-6">
+        <div className="max-w-md rounded-lg border border-rose-200 bg-rose-50 p-5 text-center">
+          <p className="text-sm font-semibold text-rose-700">Unable to load items</p>
+          <p className="mt-2 text-sm text-rose-600">{loadError}</p>
+          <button
+            type="button"
+            onClick={fetchItems}
+            className="mt-4 rounded-md bg-[#156372] px-4 py-2 text-sm font-medium text-white hover:brightness-110"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="w-full h-full">
-      {view === "detail" && normalizedSelectedId ? (
+    <div className="w-full h-full overflow-x-hidden">
+      {currentView === "detail" && normalizedSelectedId ? (
         <div className="flex flex-col md:flex-row gap-0 h-full">
           <div className="hidden md:flex w-full md:w-1/5 border-r border-gray-200 bg-white flex-col z-20">
               <ItemSidebar
               items={items}
               selectedId={selectedId}
               onSelect={handleSelectItem}
-              onNew={() => { if (canCreateItems) openNewView(); }}
+              onNew={() => { if (resolvedCanCreateItems) openNewView(); }}
               baseCurrency={baseCurrency}
               onBulkMarkActive={handleBulkMarkActive}
               onBulkMarkInactive={handleBulkMarkInactive}
               onBulkDelete={async (ids: string[]) => setDeleteConfirmModal({ open: true, itemId: null, itemName: null, count: ids.length, itemIds: ids })}
               onBulkUpdate={(ids: string[]) => setBulkUpdateModal({ open: true, itemIds: ids })}
-              canCreate={canCreateItems}
-              canEdit={canEditItems}
-              canDelete={canDeleteItems}
+              canCreate={resolvedCanCreateItems}
+              canEdit={resolvedCanEditItems}
+              canDelete={resolvedCanDeleteItems}
             />
           </div>
           <div className="flex-1 bg-white overflow-auto w-full">
@@ -524,18 +562,21 @@ function ItemsPageContent() {
               <ItemDetails
                 item={resolvedSelectedItem as Item}
                 onBack={handleBackToList}
-                onEdit={() => { if (canEditItems) { setView("edit"); setRouteHash("edit"); } }}
+                onEdit={() => {
+                  if (resolvedCanEditItems) {
+                    setRouteState({ hash: "edit", itemId: normalizedSelectedId });
+                  }
+                }}
                 onUpdate={handleUpdateItem}
                 items={items}
                 setItems={setItems}
                 onDelete={handleDeleteItem}
                 setSelectedId={setSelectedId}
-                setView={setView}
                 onClone={handleCloneItem}
                 baseCurrency={baseCurrency}
-                canCreate={canCreateItems}
-                canEdit={canEditItems}
-                canDelete={canDeleteItems}
+                canCreate={resolvedCanCreateItems}
+                canEdit={resolvedCanEditItems}
+                canDelete={resolvedCanDeleteItems}
               />
             ) : (
               <div className="flex min-h-[320px] items-center justify-center px-6">
@@ -561,12 +602,15 @@ function ItemsPageContent() {
           </div>
         </div>
       ) : (
-        <div className={`w-full h-full ${view === "list" ? "overflow-hidden" : "overflow-visible"}`}>
-          {view === "list" && (
+        <div
+          className="w-full h-full overflow-y-auto overflow-x-hidden bg-white"
+          style={{ scrollbarGutter: "stable" }}
+        >
+          {currentView === "list" && (
             <ItemsList
               items={items}
               onSelect={handleSelectItem}
-              onNew={() => { if (canCreateItems) openNewView(); }}
+              onNew={() => { if (resolvedCanCreateItems) openNewView(); }}
               onDelete={handleDeleteItem}
               onBulkDelete={async (ids: string[]) => setDeleteConfirmModal({ open: true, itemId: null, itemName: null, count: ids.length, itemIds: ids })}
               onBulkUpdate={(ids: string[]) => setBulkUpdateModal({ open: true, itemIds: ids })}
@@ -575,29 +619,57 @@ function ItemsPageContent() {
               onRefresh={fetchItems}
               baseCurrency={baseCurrency}
               isLoading={loading}
-              canCreate={canCreateItems}
-              canEdit={canEditItems}
-              canDelete={canDeleteItems}
+              canCreate={resolvedCanCreateItems}
+              canEdit={resolvedCanEditItems}
+              canDelete={resolvedCanDeleteItems}
             />
           )}
 
-          {view === "new" && canCreateItems && (
-            <NewItemForm
-              onCancel={handleBackToList}
-              onCreate={handleCreateItem}
-              baseCurrency={baseCurrency}
-              initialData={clonedItem}
-            />
+          {currentView === "new" && resolvedCanCreateItems && (
+            <div className="min-h-full bg-gray-50">
+              <NewItemForm
+                onCancel={handleBackToList}
+                onCreate={handleCreateItem}
+                baseCurrency={baseCurrency}
+                initialData={clonedItem}
+              />
+            </div>
           )}
 
-          {view === "edit" && resolvedSelectedItem && canEditItems && (
-            <EditItemForm
-              onCancel={() => { setView("detail"); setRouteHash("detail"); }}
-              onUpdate={handleUpdateItem}
-              baseCurrency={baseCurrency}
-              item={resolvedSelectedItem as Item}
-              formTitle="Edit Item"
-            />
+          {currentView === "edit" && resolvedSelectedItem && resolvedCanEditItems && (
+            <div className="min-h-full bg-gray-50">
+              <NewItemForm
+                onCancel={() => {
+                  setRouteState({ hash: "detail", itemId: normalizedSelectedId });
+                }}
+                onCreate={handleUpdateFromItemForm}
+                baseCurrency={baseCurrency}
+                initialData={resolvedSelectedItem as Item}
+                formTitle="Edit Item"
+              />
+            </div>
+          )}
+
+          {currentView === "edit" && !resolvedSelectedItem && normalizedSelectedId && (
+            <div className="flex min-h-[320px] items-center justify-center px-6">
+              {selectedItemQuery.isPending ? (
+                <div className="flex items-center gap-3 text-sm text-gray-500">
+                  <Loader2 size={18} className="animate-spin" />
+                  Loading item details...
+                </div>
+              ) : (
+                <div className="text-center">
+                  <p className="text-sm text-gray-600">We couldn't open this item for editing.</p>
+                  <button
+                    type="button"
+                    onClick={handleBackToList}
+                    className="mt-3 rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Back to Items
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}

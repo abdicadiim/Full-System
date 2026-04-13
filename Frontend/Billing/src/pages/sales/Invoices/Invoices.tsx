@@ -618,7 +618,7 @@ export default function Invoices() {
           if (view === "Overdue") nextFilters.status = "overdue";
           if (view === "Partially Paid") nextFilters.status = "partially paid";
           if (view === "Pending Approval") nextFilters.status = "pending_approval";
-          if (view === "Payment Initiated") nextFilters.status = "payment_initiated";
+          if (String(view) === "Payment Initiated") nextFilters.status = "payment_initiated";
           break;
         case "Unpaid":
         case "Unpaid Invoices":

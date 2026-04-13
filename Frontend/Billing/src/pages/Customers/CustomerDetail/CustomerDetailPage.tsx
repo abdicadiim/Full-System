@@ -58,6 +58,7 @@ import type {
 
 
 import { useCustomerDetailPageViewModel } from "./useCustomerDetailPageViewModel";
+import LoadingSpinner from "../../../components/LoadingSpinner";
 
 const CUSTOMER_EDIT_PRELOAD_PREFIX = "billing_customer_edit_preload:";
 const CUSTOMER_DETAIL_SIDEBAR_CACHE_KEY = "billing_customer_detail_sidebar_seed";
@@ -1546,7 +1547,7 @@ export default function CustomerDetail() {
     if (!customer && loading) {
         return (
             <div className="w-full h-screen flex items-center justify-center bg-gray-50">
-                <div className="text-lg text-gray-600">Loading...</div>
+                <LoadingSpinner label="Loading customer..." />
             </div>
         );
     }

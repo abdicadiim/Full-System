@@ -19,5 +19,6 @@ const PaymentReceivedSchema = new mongoose.Schema(
 );
 
 PaymentReceivedSchema.index({ organizationId: 1, paymentNumber: 1 }, { unique: true });
+PaymentReceivedSchema.index({ organizationId: 1, updatedAt: -1 });
 
 export const PaymentReceived = mongoose.model("PaymentReceived", PaymentReceivedSchema);

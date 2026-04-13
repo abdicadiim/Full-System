@@ -64,5 +64,6 @@ const PlanSchema = new mongoose.Schema(
 );
 
 PlanSchema.index({ organizationId: 1, planCode: 1 }, { unique: true });
+PlanSchema.index({ organizationId: 1, updatedAt: -1 });
 
 export const Plan = mongoose.model("Plan", PlanSchema);

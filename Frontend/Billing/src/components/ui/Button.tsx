@@ -1,6 +1,8 @@
 import React from 'react';
 import { useThemeColors } from '../../hooks/useThemeColors';
 
+type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement>;
+
 /**
  * Primary Button component that uses theme colors
  */
@@ -11,7 +13,7 @@ export function PrimaryButton({
   className = '',
   type = 'button',
   ...props 
-}) {
+}: ButtonProps) {
   const { buttonColor, buttonHoverColor } = useThemeColors();
   const [isHovered, setIsHovered] = React.useState(false);
 
@@ -59,7 +61,7 @@ export function SecondaryButton({
   className = '',
   type = 'button',
   ...props 
-}) {
+}: ButtonProps) {
   const baseClasses = `
     flex items-center gap-2
     px-4 py-2

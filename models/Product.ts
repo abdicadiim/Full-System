@@ -19,6 +19,7 @@ const ProductSchema = new mongoose.Schema(
 );
 
 ProductSchema.index({ organizationId: 1, name: 1 }, { unique: true });
+ProductSchema.index({ organizationId: 1, updatedAt: -1 });
 
 export const Product = mongoose.model("Product", ProductSchema);
 

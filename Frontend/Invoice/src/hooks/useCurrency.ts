@@ -8,11 +8,11 @@ type BaseCurrency = {
   name: string;
 };
 
-const DEFAULT_CURRENCY: BaseCurrency = {
-  id: "cur-usd",
-  code: "USD",
-  symbol: "USD",
-  name: "US Dollar",
+const EMPTY_CURRENCY: BaseCurrency = {
+  id: "",
+  code: "",
+  symbol: "",
+  name: "",
 };
 
 const CURRENCY_STORAGE_KEYS = ["taban_currencies", "taban_books_currencies"];
@@ -46,13 +46,13 @@ const extractCurrencyRows = (response: any) => {
 
 const normalizeCurrency = (raw: any): BaseCurrency => {
   if (!raw || typeof raw !== "object") {
-    return DEFAULT_CURRENCY;
+    return EMPTY_CURRENCY;
   }
 
-  const id = String(raw.id || raw._id || raw.currencyId || DEFAULT_CURRENCY.id);
-  const code = String(raw.code || raw.currencyCode || DEFAULT_CURRENCY.code).toUpperCase();
-  const symbol = String(raw.symbol || raw.currencySymbol || code || DEFAULT_CURRENCY.symbol);
-  const name = String(raw.name || raw.currencyName || DEFAULT_CURRENCY.name);
+  const id = String(raw.id || raw._id || raw.currencyId || "");
+  const code = String(raw.code || raw.currencyCode || "").toUpperCase();
+  const symbol = String(raw.symbol || raw.currencySymbol || code || "");
+  const name = String(raw.name || raw.currencyName || "");
 
   return { id, code, symbol, name };
 };
@@ -85,7 +85,7 @@ const readStoredBaseCurrency = (): BaseCurrency | null => {
 };
 
 export const useCurrency = () => {
-  const [baseCurrency, setBaseCurrency] = useState<BaseCurrency>(() => readStoredBaseCurrency() || DEFAULT_CURRENCY);
+  const [baseCurrency, setBaseCurrency] = useState<BaseCurrency>(() => EMPTY_CURRENCY);
 
   useEffect(() => {
     let isMounted = true;
@@ -114,19 +114,7 @@ export const useCurrency = () => {
         // ignore
       }
 
-      try {
-        const storedBase = readStoredBaseCurrency();
-        if (storedBase && isMounted) {
-          setBaseCurrency(storedBase);
-          return;
-        }
-      } catch {
-        // ignore and fall back to default
-      }
-
-      if (isMounted) {
-        setBaseCurrency(DEFAULT_CURRENCY);
-      }
+      // If nothing is found, keep the current value to avoid flashing a static fallback.
     };
 
     loadBaseCurrency();
@@ -139,11 +127,12 @@ export const useCurrency = () => {
     (amount: number | string, fallbackSymbol?: string) => {
       const numeric = Number(amount);
       const safeNumber = Number.isFinite(numeric) ? numeric : 0;
-      const symbol = fallbackSymbol || baseCurrency.symbol || baseCurrency.code || "USD";
-      return `${symbol}${safeNumber.toLocaleString(undefined, {
+      const symbol = fallbackSymbol || baseCurrency.symbol || baseCurrency.code || "";
+      const formatted = safeNumber.toLocaleString(undefined, {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
-      })}`;
+      });
+      return symbol ? `${symbol}${formatted}` : formatted;
     },
     [baseCurrency.code, baseCurrency.symbol]
   );

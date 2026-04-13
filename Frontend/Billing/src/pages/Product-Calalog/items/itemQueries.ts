@@ -4,13 +4,32 @@ import { itemsAPI } from "../../../services/api";
 
 const ITEM_LIST_STALE_TIME_MS = 30 * 1000;
 const ITEM_DETAIL_STALE_TIME_MS = 30 * 1000;
+const ITEMS_STORAGE_KEY = "inv_items_v1";
+const ITEM_DEBUG_STORAGE_KEY = "billing_debug_items_v1";
+const ITEM_LIST_PAGE_SIZE = 200;
 
 const normalizeItemId = (value: any) => String(value ?? "").trim();
+const isMongoObjectIdLike = (value: any) => /^[a-f0-9]{24}$/i.test(normalizeItemId(value));
 
 const normalizeItemStatus = (item: any, isActive: boolean) => {
   const status = String(item?.status || "").trim();
   if (status) return status;
   return isActive ? "Active" : "Inactive";
+};
+
+const isItemDebugEnabled = () => {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(ITEM_DEBUG_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
+
+const debugItems = (...args: any[]) => {
+  if (!isItemDebugEnabled()) return;
+  // Keep debug output lightweight and easy to search in DevTools.
+  console.debug("[items-debug]", ...args);
 };
 
 export const normalizeItemForQueryCache = (item: any, fallbackId?: string) => {
@@ -105,41 +124,206 @@ export const itemQueryKeys = {
 };
 
 const extractRowsFromResponse = (response: any) => {
-  if (!response) return [];
-  if (Array.isArray(response)) return response;
-  if (Array.isArray(response?.data)) return response.data;
-  if (Array.isArray(response?.items)) return response.items;
-  if (Array.isArray(response?.rows)) return response.rows;
+  const candidates = [
+    response,
+    response?.data,
+    response?.data?.data,
+    response?.data?.data?.items,
+    response?.data?.data?.rows,
+    response?.data?.data?.results,
+    response?.data?.items,
+    response?.data?.rows,
+    response?.data?.results,
+    response?.items,
+    response?.rows,
+    response?.results,
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return candidate;
+    }
+  }
+
   return [];
 };
 
-export const fetchItemsList = async () => {
-  const perPage = 200;
-  const accumulatedRows: any[] = [];
-  let page = 1;
+const getPaginationPagesFromResponse = (response: any) =>
+  Number(
+    response?.pagination?.pages ??
+    response?.data?.pagination?.pages ??
+    response?.data?.data?.pagination?.pages ??
+    response?.totalPages ??
+    response?.data?.totalPages ??
+    response?.data?.data?.totalPages ??
+    response?.meta?.pages ??
+    response?.data?.meta?.pages ??
+    response?.data?.data?.meta?.pages ??
+    0
+  );
 
-  while (true) {
-    const response = await itemsAPI.getAll({ page, per_page: perPage });
-    if (response?.success === false) {
-      throw new Error(response?.message || "Failed to load items");
-    }
+const getPaginationTotalFromResponse = (response: any) =>
+  Number(
+    response?.pagination?.total ??
+    response?.data?.pagination?.total ??
+    response?.data?.data?.pagination?.total ??
+    response?.total ??
+    response?.count ??
+    response?.data?.total ??
+    response?.data?.count ??
+    response?.data?.data?.total ??
+    response?.data?.data?.count ??
+    response?.meta?.total ??
+    response?.data?.meta?.total ??
+    response?.data?.data?.meta?.total ??
+    0
+  );
 
-    const rows = extractRowsFromResponse(response);
-    if (rows.length > 0) {
-      accumulatedRows.push(...rows);
-    }
+const getHasMorePageFromResponse = (response: any) =>
+  Boolean(
+    response?.has_more_page ??
+    response?.data?.has_more_page ??
+    response?.data?.data?.has_more_page ??
+    response?.pagination?.has_more_page ??
+    response?.data?.pagination?.has_more_page ??
+    response?.data?.data?.pagination?.has_more_page ??
+    response?.meta?.hasMore ??
+    response?.data?.meta?.hasMore ??
+    response?.data?.data?.meta?.hasMore ??
+    false
+  );
 
-    const hasMorePage = Boolean(response?.has_more_page);
-    if (!hasMorePage || rows.length === 0 || rows.length < perPage) {
-      break;
-    }
+const buildItemsListRequestParams = (page: number, pageSize: number) => ({
+  page,
+  per_page: pageSize,
+  limit: pageSize,
+  pageSize,
+  size: pageSize,
+});
 
-    page += 1;
+const readCachedItems = () => {
+  if (typeof window === "undefined" || !window.localStorage) return [];
+
+  try {
+    const raw = window.localStorage.getItem(ITEMS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
   }
+};
 
-  return accumulatedRows
+const mergeRemoteAndCachedItems = (remoteRows: any[], cachedRows?: any[]) => {
+  const normalizedRemoteRows = (Array.isArray(remoteRows) ? remoteRows : [])
     .map((row: any) => normalizeItemForQueryCache(row))
     .filter(Boolean) as any[];
+  const normalizedCachedRows = (Array.isArray(cachedRows) ? cachedRows : readCachedItems())
+    .map((row: any) => normalizeItemForQueryCache(row))
+    .filter(Boolean) as any[];
+
+  const remoteIds = new Set(normalizedRemoteRows.map((row: any) => normalizeItemId(row?.id || row?._id)).filter(Boolean));
+  const localOnlyRows = normalizedCachedRows.filter((row: any) => {
+    const id = normalizeItemId(row?.id || row?._id);
+    return id && !isMongoObjectIdLike(id) && !remoteIds.has(id);
+  });
+
+  return [...normalizedRemoteRows, ...localOnlyRows];
+};
+
+export const fetchItemsList = async () => {
+  const pageSize = ITEM_LIST_PAGE_SIZE;
+  const cachedRows = readCachedItems();
+  debugItems("starting fetch", {
+    cachedRows: cachedRows.length,
+    pageSize,
+  });
+
+  const firstResponse = await itemsAPI.getAll(buildItemsListRequestParams(1, pageSize));
+  if (firstResponse?.success === false) {
+    debugItems("first page failed", firstResponse?.message || "unknown error");
+    const fallbackRows = mergeRemoteAndCachedItems([], cachedRows);
+    if (fallbackRows.length > 0) {
+      return fallbackRows;
+    }
+    throw new Error(firstResponse?.message || "Failed to load items");
+  }
+
+  const firstRows = extractRowsFromResponse(firstResponse);
+  const accumulatedRows: any[] = [...firstRows];
+  const paginationPages = getPaginationPagesFromResponse(firstResponse);
+  const paginationTotal = getPaginationTotalFromResponse(firstResponse);
+  const hasMorePage = getHasMorePageFromResponse(firstResponse);
+  debugItems("page", 1, {
+    rows: firstRows.length,
+    paginationPages,
+    paginationTotal,
+    hasMorePage,
+  });
+  const dedupeById = (rows: any[]) => {
+    const seen = new Set<string>();
+    return rows.filter((row: any) => {
+      const id = normalizeItemId(row?._id || row?.id || row?.itemId || row?.item_id);
+      if (!id) return true;
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  };
+
+  if (
+    hasMorePage ||
+    paginationPages > 1 ||
+    firstRows.length >= pageSize ||
+    (paginationTotal > 0 && firstRows.length < paginationTotal)
+  ) {
+    let page = 2;
+    const maxPagesGuard = 1000;
+
+    while (page <= maxPagesGuard) {
+      const response = await itemsAPI.getAll(buildItemsListRequestParams(page, pageSize));
+      if (response?.success === false) {
+        debugItems("page failed", page, response?.message || "unknown error");
+        throw new Error(response?.message || "Failed to load items");
+      }
+
+      const rows = extractRowsFromResponse(response);
+      const nextPaginationPages = getPaginationPagesFromResponse(response);
+      const nextPaginationTotal = getPaginationTotalFromResponse(response) || paginationTotal;
+      const nextHasMorePage = getHasMorePageFromResponse(response);
+      debugItems("page", page, {
+        rows: rows.length,
+        paginationPages: nextPaginationPages,
+        paginationTotal: nextPaginationTotal,
+        hasMorePage: nextHasMorePage,
+      });
+      if (rows.length === 0) {
+        break;
+      }
+
+      accumulatedRows.push(...rows);
+      const uniqueRows = dedupeById(accumulatedRows);
+      accumulatedRows.length = 0;
+      accumulatedRows.push(...uniqueRows);
+
+      if (nextPaginationTotal > 0 && accumulatedRows.length >= nextPaginationTotal) {
+        break;
+      }
+
+      if (!nextHasMorePage && rows.length < pageSize) {
+        break;
+      }
+
+      page += 1;
+    }
+  }
+
+  const finalRows = mergeRemoteAndCachedItems(dedupeById(accumulatedRows), cachedRows);
+  debugItems("finished fetch", {
+    remoteRows: accumulatedRows.length,
+    finalRows: finalRows.length,
+    cachedRows: cachedRows.length,
+  });
+  return finalRows;
 };
 
 export const fetchItemDetail = async (itemId: string) => {
@@ -171,10 +355,7 @@ export const syncItemIntoItemQueries = (queryClient: QueryClient, item: any) => 
     queryKey: itemQueryKeys.lists(),
   });
 
-  if (cachedLists.length === 0) {
-    queryClient.setQueryData(itemQueryKeys.list(), [normalizedItem]);
-    return normalizedItem;
-  }
+  if (cachedLists.length === 0) return normalizedItem;
 
   cachedLists.forEach(([queryKey, rows]) => {
     queryClient.setQueryData(queryKey, upsertItemInListResult(rows, normalizedItem));
@@ -201,14 +382,15 @@ export const removeItemFromItemQueries = (queryClient: QueryClient, itemId: stri
   });
 };
 
-export const useItemsListQuery = (options?: { enabled?: boolean; initialData?: any[] }) =>
+export const useItemsListQuery = (options?: { enabled?: boolean }) =>
   useQuery({
     queryKey: itemQueryKeys.list(),
     queryFn: fetchItemsList,
     enabled: options?.enabled ?? true,
-    staleTime: ITEM_LIST_STALE_TIME_MS,
-    initialData: options?.initialData,
-    placeholderData: options?.initialData ?? ((previousData) => previousData),
+    staleTime: 0,
+    placeholderData: (previousData) => previousData,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
   });
 
 export const useItemDetailQuery = (

@@ -466,7 +466,7 @@ const PaymentLinkList = () => {
           <tbody>
             {filteredLinks.length === 0 ? (
               <tr>
-                <td colSpan="9" className="py-8 text-center text-gray-500">
+                <td colSpan={9} className="py-8 text-center text-gray-500">
                   No payment links found
                 </td>
               </tr>
@@ -656,7 +656,7 @@ const CreatePaymentLinkModal = ({ onClose, onCreate }) => {
               name="description"
               value={formData.description}
               onChange={handleChange}
-              rows="3"
+              rows={3}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>

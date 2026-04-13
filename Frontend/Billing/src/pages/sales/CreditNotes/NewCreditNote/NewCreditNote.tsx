@@ -524,7 +524,7 @@ export default function NewCreditNote() {
 
         // Load taxes from backend
         try {
-          const taxesResponse = await taxesAPI.getForTransactions("sales");
+          const taxesResponse = await taxesAPI.getForTransactions();
           if (taxesResponse && taxesResponse.success && taxesResponse.data) {
             const normalizedTaxes = taxesResponse.data.map((t: any) => ({
               ...t,

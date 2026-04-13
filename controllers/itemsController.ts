@@ -14,6 +14,7 @@ import {
   normalizeProductType,
   parseItemPayload,
 } from "../services/itemPayloads.js";
+import { recordDeletion } from "../services/syncTombstoneService.js";
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const asString = (value: unknown) => String(typeof value === "string" ? value : "").trim();
@@ -411,6 +412,11 @@ export const deleteItem: express.RequestHandler = async (req, res, next) => {
     }
 
     await Item.deleteOne({ _id: itemId, organizationId: orgId });
+    await recordDeletion({
+      organizationId: orgId,
+      resourceId: "items.list",
+      documentId: itemId,
+    });
     return res.json({
       success: true,
       code: 0,

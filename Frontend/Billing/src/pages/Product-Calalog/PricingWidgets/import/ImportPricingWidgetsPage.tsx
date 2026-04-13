@@ -2,7 +2,7 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import ThreePhaseImportWizard, { ImportFieldDef, ImportMappedRecord } from "../../shared/ThreePhaseImportWizard";
-import { readPricingWidgets, writePricingWidgets } from "../storage";
+import { normalizePricingWidget, readPricingWidgets, writePricingWidgets } from "../storage";
 
 const IMPORT_FIELDS: ImportFieldDef[] = [
   { key: "name", label: "Widget Name", required: true, aliases: ["widget name", "name"] },
@@ -27,19 +27,7 @@ export default function ImportPricingWidgetsPage() {
   const handleImport = (rows: ImportMappedRecord[]) => {
     try {
       const existing = readPricingWidgets();
-      const prepared = rows.map((row) => ({
-        id: `widget-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-        name: row.name || "",
-        product: row.product || "",
-        template: row.template || "Classic",
-        status: String(row.status || "").toLowerCase() === "inactive" ? "Inactive" : "Active",
-        selectedPlans: row.selectedPlans || "",
-        caption: row.caption || "",
-        buttonLabel: row.buttonLabel || "Subscribe",
-        buttonColor: row.buttonColor || "#1b5e6a",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }));
+      const prepared = rows.map((row) => normalizePricingWidget(row));
       writePricingWidgets([...prepared, ...existing]);
       toast.success(`${prepared.length} pricing widget(s) imported successfully.`);
       navigate("/products/pricing-widgets");

@@ -445,7 +445,7 @@ export default function SendPaymentReceiptEmail() {
       await paymentsReceivedAPI.sendEmail(paymentId, payload);
 
       try {
-        await updatePayment(paymentId, { emailed: true });
+        await updatePayment(paymentId, { emailed: true } as any);
       } catch (statusError) {
         console.warn("Failed to update payment status after sending email.", statusError);
       }

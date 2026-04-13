@@ -90,6 +90,7 @@ interface InvoiceItem {
   id: string | number;
   itemId?: string;
   itemDetails: string;
+  description?: string;
   quantity: number;
   rate: number;
   tax: string;
@@ -242,12 +243,12 @@ const [bulkAccountSearch, setBulkAccountSearch] = useState("");
 const [shippingTaxSearch, setShippingTaxSearch] = useState("");
 const invoicePrefix = "INV-";
 const invoiceNextNumber = "000001";
-const invoiceNumberMode = "auto";
+const invoiceNumberMode: "auto" | "manual" = "auto";
 const modalSelectedCustomerId = "";
 const [selectedBulkAccount, setSelectedBulkAccount] = useState("");
-const selectedCloudProvider = "zoho";
+const selectedCloudProvider: string = "zoho";
 const selectedDocuments: any[] = [];
-const selectedInbox = "files";
+const selectedInbox: string = "files";
 const selectedContactPersons: any[] = [];
 const [salespersons, setSalespersons] = useState<any[]>([]);
 const [availableReportingTags, setAvailableReportingTags] = useState<any[]>([]);
@@ -375,6 +376,17 @@ const [taxSearches, setTaxSearches] = useState<Record<string, string>>({});
 
     return Array.from(uniqueByKey.values());
   }, [itemsQuery.data, plansQuery.data]);
+
+  const getBulkFilteredItems = () => {
+    const search = bulkAddSearch.trim().toLowerCase();
+    if (!search) return catalogEntries;
+    return catalogEntries.filter((entry) => {
+      const name = String(entry?.name || "").toLowerCase();
+      const code = String(entry?.code || "").toLowerCase();
+      const sku = String(entry?.sku || "").toLowerCase();
+      return name.includes(search) || code.includes(search) || sku.includes(search);
+    });
+  };
 
   useEffect(() => {
     setAvailableItems(catalogEntries);

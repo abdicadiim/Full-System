@@ -467,7 +467,7 @@ export default function ExpenseDetail() {
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragging(false);
-    const files = Array.from(e.dataTransfer.files);
+    const files = Array.from(e.dataTransfer.files) as File[];
     if (files.length > 0) {
       // Validate file size (10MB max)
       const validFiles = files.filter(file => file.size <= 10 * 1024 * 1024);
@@ -492,7 +492,7 @@ export default function ExpenseDetail() {
   };
 
   const handleFileSelect = (e) => {
-    const files = Array.from(e.target.files);
+    const files = Array.from(e.target.files || []) as File[];
     if (files.length > 0) {
       // Validate file size (10MB max)
       const validFiles = files.filter(file => file.size <= 10 * 1024 * 1024);

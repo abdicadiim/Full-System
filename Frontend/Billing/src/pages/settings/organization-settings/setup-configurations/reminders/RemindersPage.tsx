@@ -14,7 +14,7 @@ export default function RemindersPage() {
   const [showAutomatedModal, setShowAutomatedModal] = useState(false);
   const [automatedReminder, setAutomatedReminder] = useState(null);
   const [openMenuId, setOpenMenuId] = useState(null);
-  const menuRefs = useRef({});
+  const menuRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [dbReminders, setDbReminders] = useState<Record<string, any>>({});
   const [reminderStatuses, setReminderStatuses] = useState({
     "payment-expected-invoices": false,
@@ -302,9 +302,11 @@ export default function RemindersPage() {
 
   // Close menu when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      Object.values(menuRefs.current).forEach((ref) => {
-        if (ref && !ref.contains(event.target)) {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      const refs = Object.values(menuRefs.current) as Array<HTMLDivElement | null>;
+      refs.forEach((ref) => {
+        if (ref && (!target || !ref.contains(target))) {
           setOpenMenuId(null);
         }
       });

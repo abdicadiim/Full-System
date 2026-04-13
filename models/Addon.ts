@@ -39,5 +39,6 @@ const AddonSchema = new mongoose.Schema(
 );
 
 AddonSchema.index({ organizationId: 1, addonCode: 1 }, { unique: true });
+AddonSchema.index({ organizationId: 1, updatedAt: -1 });
 
 export const Addon = mongoose.model("Addon", AddonSchema);

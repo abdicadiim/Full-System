@@ -36,7 +36,6 @@ interface ItemDetailsProps {
     setItems: React.Dispatch<React.SetStateAction<Item[]>>;
     onUpdate: (data: any) => Promise<void>;
     setSelectedId: (id: string | null) => void;
-    setView: (view: string) => void;
     onDelete: (id: string) => Promise<void>;
     onClone: (data: any) => void;
     baseCurrency?: any;
@@ -84,7 +83,6 @@ export default function ItemDetails({
     setItems,
     onUpdate,
     setSelectedId,
-    setView,
     onDelete,
     onClone,
     baseCurrency,
@@ -642,7 +640,7 @@ export default function ItemDetails({
 
                 <div className="flex items-center gap-2 shrink-0">
                     {canEdit && (
-                        <button onClick={onEdit} className="p-1.5 border border-gray-200 rounded-md hover:bg-gray-50 text-gray-500 transition-colors" title="Edit">
+                        <button type="button" onClick={onEdit} className="p-1.5 border border-gray-200 rounded-md hover:bg-gray-50 text-gray-500 transition-colors" title="Edit">
                             <Pencil size={18} />
                         </button>
                     )}
@@ -695,7 +693,13 @@ export default function ItemDetails({
                         </div>
                     )}
 
-                    <button onClick={onBack} className="p-1 text-gray-400 hover:text-gray-600 ml-1 transition-colors">
+                    <button
+                        type="button"
+                        onClick={onBack}
+                        aria-label="Close item details"
+                        title="Close"
+                        className="p-1 text-gray-400 hover:text-gray-600 ml-1 transition-colors"
+                    >
                         <X size={24} strokeWidth={1} />
                     </button>
                 </div>

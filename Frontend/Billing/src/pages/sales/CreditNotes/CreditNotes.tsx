@@ -651,7 +651,7 @@ export default function CreditNotes() {
     setIsMoreMenuOpen(false);
 
     // Toggle direction if clicking the same field
-    let newDirection = "desc";
+    let newDirection: "desc" | "asc" = "desc";
     if (activeSortField === sortOption) {
       newDirection = sortDirection === "desc" ? "asc" : "desc";
     }
@@ -685,12 +685,12 @@ export default function CreditNotes() {
           bValue = (b.customerName || b.customer || "").toLowerCase();
           break;
         case "Amount":
-          aValue = parseFloat(a.total || a.amount || 0);
-          bValue = parseFloat(b.total || b.amount || 0);
+          aValue = parseFloat(String(a.total || a.amount || 0));
+          bValue = parseFloat(String(b.total || b.amount || 0));
           break;
         case "Balance":
-          aValue = parseFloat(a.balance || a.total || a.amount || 0);
-          bValue = parseFloat(b.balance || b.total || b.amount || 0);
+          aValue = parseFloat(String(a.balance || a.total || a.amount || 0));
+          bValue = parseFloat(String(b.balance || b.total || b.amount || 0));
           break;
         default:
           return 0;
@@ -931,7 +931,7 @@ export default function CreditNotes() {
     try {
       const fullNotes = (
         await Promise.all(selectedNotes.map((note) => getCreditNoteById(note.id)))
-      ).filter(Boolean) as CreditNote[];
+      ).filter(Boolean) as any[];
 
       await downloadCreditNotesPdf({
         notes: fullNotes,
@@ -1975,10 +1975,7 @@ export default function CreditNotes() {
 
       {/* Field Customization Modal */}
       {isFieldCustomizationOpen && (
-        <FieldCustomization
-          featureType="credit-notes"
-          onClose={() => setIsFieldCustomizationOpen(false)}
-        />
+        <FieldCustomization onClose={() => setIsFieldCustomizationOpen(false)} />
       )}
 
       {/* Preferences Modal */}

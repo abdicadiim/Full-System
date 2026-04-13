@@ -124,6 +124,7 @@ export default function Layout({ children }) {
               className={`w-full min-w-0 flex-1 min-h-0 ${disablePageScroll ? "overflow-hidden" : "overflow-y-auto"} ${
                 isFullWidthPage ? "p-0" : "p-4 md:p-6"
               }`}
+              style={{ scrollbarGutter: "stable" }}
             >
               {children}
             </main>

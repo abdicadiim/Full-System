@@ -1,0 +1,457 @@
+import { createHash } from "node:crypto";
+import mongoose from "mongoose";
+import { Customer } from "../models/Customer.js";
+import { Expense } from "../models/Expense.js";
+import { Invoice } from "../models/Invoice.js";
+import { Organization } from "../models/Organization.js";
+import { PaymentReceived } from "../models/PaymentReceived.js";
+import { Subscription } from "../models/Subscription.js";
+
+const normalizeText = (value: unknown) => String(value ?? "").trim().toLowerCase();
+
+const asNumber = (value: unknown, fallback = 0) => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const raw = String(value ?? "").trim();
+  if (!raw) return fallback;
+  const parsed = Number(raw.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const asDate = (value: unknown) => {
+  if (!value) return null;
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
+const addMonths = (date: Date, amount: number) => new Date(date.getFullYear(), date.getMonth() + amount, 1);
+const monthKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+const monthLabel = (date: Date) =>
+  new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).format(date);
+const monthLabelLine = (date: Date) => {
+  const [month, year] = monthLabel(date).split(" ");
+  return `${month}\n${year}`;
+};
+
+const toValidDate = (value: unknown) => {
+  if (!value) return null;
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const getLatestDateFromRows = (rows: any[], fields: string[]) => {
+  let latest = 0;
+  for (const row of rows || []) {
+    for (const field of fields) {
+      const date = toValidDate(row?.[field]);
+      if (!date) continue;
+      latest = Math.max(latest, date.getTime());
+    }
+  }
+  return latest;
+};
+
+const hashToUuid = (value: string) => {
+  const hash = createHash("sha256").update(value).digest("hex");
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
+};
+
+const normalizeHttpDate = (value: unknown) => {
+  if (!value) return null;
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const isOpenInvoice = (row: any) => !["draft", "void", "cancelled", "canceled"].includes(normalizeText(row?.status));
+const isActiveSubscription = (row: any) => !["cancelled", "canceled", "inactive", "expired", "draft"].includes(normalizeText(row?.status));
+const isCancelledSubscription = (row: any) => ["cancelled", "canceled", "inactive", "expired"].includes(normalizeText(row?.status));
+
+const subscriptionValue = (row: any) =>
+  asNumber(
+    row?.monthlyAmount ??
+      row?.mrr ??
+      row?.amount ??
+      row?.total ??
+      row?.price ??
+      row?.billingAmount ??
+      row?.recurringAmount ??
+      row?.chargeAmount ??
+      row?.rate,
+    0
+  );
+
+const buildMonthBuckets = (months = 12) => {
+  const currentMonth = startOfMonth(new Date());
+  const start = addMonths(currentMonth, -(months - 1));
+  return Array.from({ length: months }, (_, index) => {
+    const monthStart = addMonths(start, index);
+    return {
+      key: monthKey(monthStart),
+      label: monthLabelLine(monthStart),
+      start: monthStart,
+      end: addMonths(monthStart, 1),
+    };
+  });
+};
+
+const toMonthlySeries = (
+  rows: any[],
+  buckets: Array<{ start: Date; end: Date }>,
+  getDate: (row: any) => Date | null,
+  getValue: (row: any) => number
+) => {
+  const values = new Array(buckets.length).fill(0);
+  const bucketStart = buckets[0]?.start;
+  const bucketEnd = buckets[buckets.length - 1]?.end;
+  if (!bucketStart || !bucketEnd) return values;
+
+  for (const row of rows || []) {
+    const date = getDate(row);
+    if (!date || date < bucketStart || date >= bucketEnd) continue;
+    const index = (date.getFullYear() - bucketStart.getFullYear()) * 12 + (date.getMonth() - bucketStart.getMonth());
+    if (index < 0 || index >= values.length) continue;
+    values[index] += getValue(row);
+  }
+
+  return values;
+};
+
+const toMonthlyCounts = (rows: any[], buckets: Array<{ start: Date; end: Date }>, getDate: (row: any) => Date | null) =>
+  toMonthlySeries(rows, buckets, getDate, () => 1);
+
+const getCollectionMeta = async (Model: any, orgId: mongoose.Types.ObjectId) => {
+  const [summary] = await Model.aggregate([
+    { $match: { organizationId: orgId } },
+    {
+      $group: {
+        _id: null,
+        count: { $sum: 1 },
+        lastUpdated: { $max: { $ifNull: ["$updatedAt", "$createdAt"] } },
+      },
+    },
+  ]);
+
+  return {
+    count: Number(summary?.count || 0),
+    lastUpdated: summary?.lastUpdated ? new Date(summary.lastUpdated).toISOString() : "",
+  };
+};
+
+export const getDashboardSummarySourceMeta = async (orgId: string) => {
+  const orgObjectId = new mongoose.Types.ObjectId(orgId);
+  const [customers, invoices, payments, expenses, subscriptions, organization] = await Promise.all([
+    getCollectionMeta(Customer, orgObjectId),
+    getCollectionMeta(Invoice, orgObjectId),
+    getCollectionMeta(PaymentReceived, orgObjectId),
+    getCollectionMeta(Expense, orgObjectId),
+    getCollectionMeta(Subscription, orgObjectId),
+    Organization.findById(orgId).select({ updatedAt: 1, createdAt: 1 }).lean(),
+  ]);
+
+  const meta = {
+    customers,
+    invoices,
+    payments,
+    expenses,
+    subscriptions,
+    organization: {
+      lastUpdated:
+        normalizeHttpDate((organization as any)?.updatedAt)?.toISOString() ||
+        normalizeHttpDate((organization as any)?.createdAt)?.toISOString() ||
+        "",
+    },
+  };
+
+  const timestamps = [
+    customers.lastUpdated,
+    invoices.lastUpdated,
+    payments.lastUpdated,
+    expenses.lastUpdated,
+    subscriptions.lastUpdated,
+    meta.organization.lastUpdated,
+  ]
+    .map((value) => normalizeHttpDate(value)?.getTime() || 0)
+    .filter(Boolean);
+
+  const lastUpdated = new Date(Math.max(...timestamps, Date.now())).toISOString();
+  const versionId = hashToUuid(JSON.stringify(meta));
+
+  return {
+    versionId,
+    lastUpdated,
+    counts: {
+      customers: customers.count,
+      invoices: invoices.count,
+      payments: payments.count,
+      expenses: expenses.count,
+      subscriptions: subscriptions.count,
+    },
+  };
+};
+
+export const getDashboardSummaryPayload = async (orgId: string) => {
+  const months = buildMonthBuckets(12);
+  const [customers, invoices, payments, expenses, subscriptions, organization] = await Promise.all([
+    Customer.find({ organizationId: orgId }).select({ createdAt: 1, updatedAt: 1 }).lean(),
+    Invoice.find({ organizationId: orgId })
+      .select({ total: 1, status: 1, dueDate: 1, date: 1, createdAt: 1, updatedAt: 1, invoiceNumber: 1 })
+      .lean(),
+    PaymentReceived.find({ organizationId: orgId })
+      .select({ amount: 1, invoiceId: 1, invoiceNumber: 1, date: 1, createdAt: 1, updatedAt: 1 })
+      .lean(),
+    Expense.find({ organizationId: orgId })
+      .select({ amount: 1, accountName: 1, vendorName: 1, customerName: 1, date: 1, createdAt: 1, updatedAt: 1 })
+      .lean(),
+    Subscription.find({ organizationId: orgId })
+      .select({
+        status: 1,
+        monthlyAmount: 1,
+        mrr: 1,
+        amount: 1,
+        total: 1,
+        price: 1,
+        billingAmount: 1,
+        recurringAmount: 1,
+        chargeAmount: 1,
+        rate: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        startDate: 1,
+        endDate: 1,
+      })
+      .lean(),
+    Organization.findById(orgId).select({ name: 1, baseCurrency: 1, createdAt: 1, updatedAt: 1 }).lean(),
+  ]);
+
+  const invoicePayments = new Map<string, number>();
+  for (const payment of payments || []) {
+    const amount = asNumber((payment as any)?.amount, 0);
+    const key = String((payment as any)?.invoiceId || (payment as any)?.invoiceNumber || "").trim();
+    if (!key) continue;
+    invoicePayments.set(key, (invoicePayments.get(key) || 0) + amount);
+  }
+
+  const openInvoices = (invoices || []).filter(isOpenInvoice);
+  const totalIncome = (invoices || []).reduce((sum, row) => sum + asNumber((row as any)?.total, 0), 0);
+  const totalReceipts = (payments || []).reduce((sum, row) => sum + asNumber((row as any)?.amount, 0), 0);
+  const totalExpenses = (expenses || []).reduce((sum, row) => sum + asNumber((row as any)?.amount, 0), 0);
+  const netRevenue = totalIncome - totalExpenses;
+
+  let receivableTotal = 0;
+  let receivableCurrent = 0;
+  let receivableOverdue = 0;
+  let receivableCurrentCount = 0;
+  let receivableOverdueCount = 0;
+
+  for (const invoice of openInvoices) {
+    const invoiceId = String((invoice as any)?._id || "").trim();
+    const invoiceNumber = String((invoice as any)?.invoiceNumber || "").trim();
+    const total = asNumber((invoice as any)?.total, 0);
+    const paid = (invoicePayments.get(invoiceId) || 0) + (invoicePayments.get(invoiceNumber) || 0);
+    const outstanding = Math.max(0, total - paid);
+    if (!outstanding) continue;
+
+    receivableTotal += outstanding;
+    const dueDate = asDate((invoice as any)?.dueDate);
+    if (dueDate && dueDate.getTime() < Date.now()) {
+      receivableOverdue += outstanding;
+      receivableOverdueCount += 1;
+    } else {
+      receivableCurrent += outstanding;
+      receivableCurrentCount += 1;
+    }
+  }
+
+  const activeSubscriptions = (subscriptions || []).filter(isActiveSubscription);
+  const cancelledSubscriptions = (subscriptions || []).filter(isCancelledSubscription);
+  const activeCustomersCount = customers.length;
+
+  const netRevenueSeries = toMonthlySeries(
+    invoices || [],
+    months,
+    (row) => asDate((row as any)?.date || (row as any)?.createdAt),
+    (row) => asNumber((row as any)?.total, 0)
+  );
+  const receiptSeries = toMonthlySeries(
+    payments || [],
+    months,
+    (row) => asDate((row as any)?.date || (row as any)?.createdAt),
+    (row) => asNumber((row as any)?.amount, 0)
+  );
+  const expenseSeries = toMonthlySeries(
+    expenses || [],
+    months,
+    (row) => asDate((row as any)?.date || (row as any)?.createdAt),
+    (row) => asNumber((row as any)?.amount, 0)
+  );
+  const subscriptionSignupSeries = toMonthlyCounts(
+    subscriptions || [],
+    months,
+    (row) => asDate((row as any)?.createdAt || (row as any)?.startDate)
+  );
+  const subscriptionActivationSeries = toMonthlyCounts(
+    activeSubscriptions,
+    months,
+    (row) => asDate((row as any)?.createdAt || (row as any)?.startDate)
+  );
+  const subscriptionCancellationSeries = toMonthlyCounts(
+    cancelledSubscriptions,
+    months,
+    (row) => asDate((row as any)?.updatedAt || (row as any)?.createdAt || (row as any)?.endDate)
+  );
+
+  const activeSubscriptionSeries = months.map((bucket) =>
+    (subscriptions || []).filter((row) => {
+      const createdAt = asDate((row as any)?.createdAt || (row as any)?.startDate);
+      if (!createdAt || createdAt >= bucket.end) return false;
+      return isActiveSubscription(row);
+    }).length
+  );
+
+  const mrrSeries = months.map((bucket) =>
+    (subscriptions || []).reduce((sum, row) => {
+      const createdAt = asDate((row as any)?.createdAt || (row as any)?.startDate);
+      if (!createdAt || createdAt >= bucket.end) return sum;
+      if (!isActiveSubscription(row)) return sum;
+      return sum + subscriptionValue(row);
+    }, 0)
+  );
+
+  const arpuSeries = months.map((_, index) => {
+    const subs = activeSubscriptionSeries[index] || 0;
+    return subs > 0 ? receiptSeries.slice(0, index + 1).reduce((sum, value) => sum + value, 0) / subs : 0;
+  });
+
+  const ltvSeries = months.map((_, index) => {
+    const customerDenominator = Math.max(activeCustomersCount, 1);
+    return netRevenueSeries.slice(0, index + 1).reduce((sum, value) => sum + value, 0) / customerDenominator;
+  });
+
+  const churnSeries = months.map((_, index) => {
+    const active = Math.max(activeSubscriptionSeries[index] || 0, 1);
+    return ((subscriptionCancellationSeries[index] || 0) / active) * 100;
+  });
+
+  const totalSubscriptions = subscriptions.length;
+  const activeCount = activeSubscriptions.length;
+  const cancelledCount = cancelledSubscriptions.length;
+  const churnRate = totalSubscriptions > 0 ? (cancelledCount / totalSubscriptions) * 100 : 0;
+  const arpu = activeCount > 0 ? totalIncome / activeCount : 0;
+  const ltv = activeCustomersCount > 0 ? totalIncome / activeCustomersCount : 0;
+  const mrr = activeSubscriptions.reduce((sum, row) => sum + subscriptionValue(row), 0);
+
+  const expenseGroups = new Map<string, number>();
+  for (const row of expenses || []) {
+    const label =
+      String((row as any)?.accountName || (row as any)?.vendorName || (row as any)?.customerName || "Uncategorized").trim() ||
+      "Uncategorized";
+    expenseGroups.set(label, (expenseGroups.get(label) || 0) + asNumber((row as any)?.amount, 0));
+  }
+  const topExpenseItems = [...expenseGroups.entries()]
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5);
+
+  const latestUpdatedAt = Math.max(
+    getLatestDateFromRows(customers || [], ["updatedAt", "createdAt"]),
+    getLatestDateFromRows(invoices || [], ["updatedAt", "createdAt", "date", "dueDate"]),
+    getLatestDateFromRows(payments || [], ["updatedAt", "createdAt", "date"]),
+    getLatestDateFromRows(expenses || [], ["updatedAt", "createdAt", "date"]),
+    getLatestDateFromRows(subscriptions || [], ["updatedAt", "createdAt", "startDate", "endDate"]),
+    normalizeHttpDate((organization as any)?.updatedAt)?.getTime() || 0,
+    normalizeHttpDate((organization as any)?.createdAt)?.getTime() || 0
+  );
+
+  const lastUpdated = new Date(latestUpdatedAt || Date.now());
+  const payloadData = {
+    metrics: {
+      netRevenue: {
+        total: netRevenue,
+        labels: months.map((bucket) => bucket.label),
+        values: netRevenueSeries,
+      },
+      receivables: {
+        total: receivableTotal,
+        current: receivableCurrent,
+        overdue: receivableOverdue,
+        currentCount: receivableCurrentCount,
+        overdueCount: receivableOverdueCount,
+        labels: ["Current", "1-15", "15-30", "31-45", ">45"],
+        values: [receivableCurrent, receivableOverdue, 0, 0, 0],
+      },
+      mrr: {
+        total: mrr,
+        labels: months.map((bucket) => bucket.label),
+        values: mrrSeries,
+      },
+      activeSubscriptions: {
+        total: activeCount,
+        labels: months.map((bucket) => bucket.label),
+        values: activeSubscriptionSeries,
+      },
+      churnRate: {
+        total: churnRate,
+        asOf: monthLabel(new Date()),
+        labels: months.map((bucket) => bucket.label),
+        values: churnSeries,
+      },
+      arpu: {
+        total: arpu,
+        labels: months.map((bucket) => bucket.label),
+        values: arpuSeries,
+      },
+      ltv: {
+        total: ltv,
+        asOf: monthLabel(new Date()),
+        labels: months.map((bucket) => bucket.label),
+        values: ltvSeries,
+      },
+    },
+    subscriptionSummary: {
+      signups: subscriptions.length,
+      activations: activeCount,
+      cancellations: cancelledCount,
+      reactivations: 0,
+      series: {
+        labels: months.map((bucket) => bucket.label),
+        signups: subscriptionSignupSeries,
+        activations: subscriptionActivationSeries,
+        cancellations: subscriptionCancellationSeries,
+        reactivations: months.map(() => 0),
+      },
+    },
+    incomeExpense: {
+      totalIncome,
+      totalReceipts,
+      totalExpenses,
+      labels: months.map((bucket) => bucket.label),
+      income: netRevenueSeries,
+      receipts: receiptSeries,
+      expenses: expenseSeries,
+    },
+    topExpenses: {
+      total: totalExpenses,
+      items: topExpenseItems,
+    },
+    projects: {
+      totalCount: 0,
+      totalUnbilledMinutes: 0,
+      totalUnbilledHours: "00:00",
+      totalUnbilledExpenses: 0,
+      topProject: null,
+      rows: [],
+    },
+    organization: {
+      id: String(orgId),
+      name: String((organization as any)?.name || "").trim(),
+      baseCurrency: String((organization as any)?.baseCurrency || "").trim(),
+    },
+  };
+
+  const versionId = hashToUuid(JSON.stringify(payloadData));
+  return {
+    payloadData,
+    versionId,
+    lastUpdated: lastUpdated.toISOString(),
+  };
+};

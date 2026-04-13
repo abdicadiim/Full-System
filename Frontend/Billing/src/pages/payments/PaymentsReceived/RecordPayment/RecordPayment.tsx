@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import { getCustomers, savePayment, getPaymentById, updatePayment, getInvoices, getInvoiceById, getNextPaymentNumber, updateInvoice, Invoice } from "../../../sales/salesModel";
 import { getAllDocuments } from "../../../../utils/documentStorage";
-import { customersAPI, bankAccountsAPI, paymentsReceivedAPI, chartOfAccountsAPI, reportingTagsAPI, senderEmailsAPI, subscriptionsAPI } from "../../../../services/api";
+import { customersAPI, bankAccountsAPI, paymentsReceivedAPI, chartOfAccountsAPI, reportingTagsAPI, senderEmailsAPI, subscriptionsAPI, paymentModesAPI } from "../../../../services/api";
 import ZohoSelect from "../../../../components/ZohoSelect";
 import PaymentModeDropdown from "../../../../components/PaymentModeDropdown";
 import { toast } from "react-toastify";
@@ -41,6 +41,7 @@ import { formatSenderDisplay, resolveVerifiedPrimarySender } from "../../../../u
 
 const paymentModeOptions = ["Cash", "Check", "Credit Card", "Debit Card", "Bank Transfer", "PayPal", "Other"];
 const LS_LOCATIONS_CACHE_KEY = "taban_locations_cache";
+type AttachmentFile = File | { id: number; name: string; size: number; isCloud: boolean; provider: string };
 
 export default function RecordPayment() {
   const navigate = useNavigate();
@@ -99,7 +100,7 @@ export default function RecordPayment() {
   const [customerQuickActionFrameKey, setCustomerQuickActionFrameKey] = useState(0);
   const [isReloadingCustomerFrame, setIsReloadingCustomerFrame] = useState(false);
   const [invoiceSearch, setInvoiceSearch] = useState("");
-  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [attachedFiles, setAttachedFiles] = useState<AttachmentFile[]>([]);
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
   const [showEarlyPaymentBanner, setShowEarlyPaymentBanner] = useState(true);
   const [receivedFullAmount, setReceivedFullAmount] = useState(false);
@@ -539,7 +540,12 @@ export default function RecordPayment() {
               ...prev,
               customerName: custName,
               customerId: custId,
-              location: resolveLocation(location.state?.location, inv.location, inv.selectedLocation, inv.branch),
+              location: resolveLocation(
+                location.state?.location,
+                (inv as any)?.location,
+                (inv as any)?.selectedLocation,
+                (inv as any)?.branch
+              ),
               amountReceived: amt,
               currency: baseCurrencyCode,
               reportingTags: normalizeCustomerReportingTags(
@@ -656,6 +662,11 @@ export default function RecordPayment() {
               paymentNumber: payment.paymentNumber || "",
               paymentMode: normalizedPaymentMode,
               depositTo: depositToValue,
+              depositToAccountId:
+                payment.depositToAccountId ||
+                payment.depositToAccount?._id ||
+                payment.bankAccount?._id ||
+                "",
               referenceNumber: referenceNumberValue,
               taxDeducted: payment.taxDeducted || "no",
               reportingTags: normalizeCustomerReportingTags(payment.reportingTags || []),
@@ -815,8 +826,9 @@ export default function RecordPayment() {
     );
   };
 
-  const loadUnpaidInvoices = async (custId: string, customerName: string, targetInvoiceId: string | null = null, targetAmount: number = 0) => {
+  const loadUnpaidInvoices = async (custId: string | null, customerName: string, targetInvoiceId: string | null = null, targetAmount: number = 0) => {
     try {
+      const safeCustId = custId || "";
       // If we're asked to limit to a specific invoice, fetch that invoice only
       if (targetInvoiceId) {
         const stateInvoice = !isEditMode ? (location.state as any)?.invoice : null;
@@ -826,7 +838,7 @@ export default function RecordPayment() {
           setSelectedInvoice(fallbackInvoice);
           setUnpaidInvoices([fallbackInvoice]);
           const initialPayments: { [key: string]: number } = {};
-          initialPayments[stateInvoiceId] = targetAmount || parseFloat(invoicePayments[stateInvoiceId] || 0) || 0;
+          initialPayments[stateInvoiceId] = targetAmount || parseFloat(String(invoicePayments[stateInvoiceId] || 0)) || 0;
           setInvoicePayments(initialPayments);
           return;
         }
@@ -837,7 +849,7 @@ export default function RecordPayment() {
             setUnpaidInvoices([inv]);
             const invId = inv.id || inv._id;
             const initialPayments: { [key: string]: number } = {};
-            initialPayments[invId] = targetAmount || parseFloat(invoicePayments[invId] || 0) || 0;
+            initialPayments[invId] = targetAmount || parseFloat(String(invoicePayments[invId] || 0)) || 0;
             setInvoicePayments(initialPayments);
             return;
           }
@@ -849,7 +861,7 @@ export default function RecordPayment() {
 
       const allInvoices = await getInvoices();
       // Normalize custId comparison (handle string vs object)
-      const targetCustId = typeof custId === 'object' ? (custId?._id || custId?.id) : custId;
+      const targetCustId = safeCustId;
 
       let invoices = (allInvoices || []).filter((inv: any) => {
         const invCustId = typeof inv.customer === 'object' ? (inv.customer?._id || inv.customer?.id) : inv.customerId;
@@ -950,14 +962,14 @@ export default function RecordPayment() {
   // Calculate total amount due for unpaid invoices
   const getTotalAmountDue = () => {
     return unpaidInvoices.reduce((sum, inv) => {
-      const amountDue = parseFloat(computeInvoiceDue(inv) || 0);
+      const amountDue = parseFloat(String(computeInvoiceDue(inv) || 0));
       return sum + amountDue;
     }, 0);
   };
 
   // Calculate total applied amount
   const getTotalAppliedAmount = () => {
-    return Object.values(invoicePayments).reduce((sum, amount) => sum + parseFloat(amount || 0), 0);
+    return Object.values(invoicePayments).reduce((sum, amount) => sum + parseFloat(String(amount || 0)), 0);
   };
 
   // Handle invoice payment amount change
@@ -976,7 +988,7 @@ export default function RecordPayment() {
   const handlePayInFull = (invoiceId: string) => {
     const invoice = unpaidInvoices.find(inv => (inv.id || inv._id) === invoiceId);
     if (invoice) {
-      const fullAmount = parseFloat(computeInvoiceDue(invoice) || 0);
+      const fullAmount = parseFloat(String(computeInvoiceDue(invoice) || 0));
       handleInvoicePaymentChange(invoiceId, fullAmount);
     }
   };
@@ -990,7 +1002,7 @@ export default function RecordPayment() {
       // Apply full amount to all invoices
       const fullPayments: { [key: string]: number } = {};
       unpaidInvoices.forEach(inv => {
-        const amountDue = parseFloat(computeInvoiceDue(inv) || 0);
+        const amountDue = parseFloat(String(computeInvoiceDue(inv) || 0));
         fullPayments[inv.id || inv._id] = amountDue;
       });
       setInvoicePayments(fullPayments);
@@ -1161,7 +1173,8 @@ export default function RecordPayment() {
 
   // Contact Person Handlers
   const handleContactPersonChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value, type, checked } = e.target;
+    const target = e.target as HTMLInputElement;
+    const { name, value, type, checked } = target;
     setNewContactPersonData(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value
@@ -2111,7 +2124,6 @@ export default function RecordPayment() {
                   }}
                   placeholder="Select Deposit Account"
                   className={!isCustomerSelected ? 'opacity-50 pointer-events-none' : ''}
-                  direction="up"
                   groupBy="account_type"
                 />
               </div>
@@ -2287,8 +2299,8 @@ export default function RecordPayment() {
                   onClick={handleClearAppliedAmount}
                   className="text-[13px] font-medium"
                   style={{ color: "#156372" }}
-                  onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.target.style.color = "#0D4A52"}
-                  onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.target.style.color = "#156372"}
+                  onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.color = "#0D4A52"}
+                  onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.color = "#156372"}
                 >
                   Clear Applied Amount
                 </button>
@@ -2314,7 +2326,7 @@ export default function RecordPayment() {
                       unpaidInvoices.map((invoice) => (
                         <tr key={invoice.id} className="border-b border-gray-100 hover:bg-gray-50">
                           <td className="px-4 py-3 text-gray-900">{formatDate(invoice.invoiceDate || invoice.date)}</td>
-                          <td className="px-4 py-3" style={{ color: "#156372" }} onMouseEnter={(e: React.MouseEvent<HTMLTableCellElement>) => (e.target as HTMLTableCellElement).style.color = "#0D4A52"} onMouseLeave={(e: React.MouseEvent<HTMLTableCellElement>) => (e.target as HTMLTableCellElement).style.color = "#156372"}>{invoice.invoiceNumber || invoice.id}</td>
+                          <td className="px-4 py-3" style={{ color: "#156372" }} onMouseEnter={(e: React.MouseEvent<HTMLTableCellElement>) => e.currentTarget.style.color = "#0D4A52"} onMouseLeave={(e: React.MouseEvent<HTMLTableCellElement>) => e.currentTarget.style.color = "#156372"}>{invoice.invoiceNumber || invoice.id}</td>
                           <td className="px-4 py-3 text-gray-900">{invoice.orderNumber || "-"}</td>
                           <td className="px-4 py-3 text-gray-900">{formatCurrency(invoice.total || invoice.amount, invoice.currency || formData.currency)}</td>
                           <td className="px-4 py-3 text-gray-900">{formatCurrency(invoice.balanceDue || invoice.total || invoice.amount, invoice.currency || formData.currency)}</td>
@@ -2331,7 +2343,7 @@ export default function RecordPayment() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="6" className="px-4 py-12 text-center text-gray-500 italic bg-white">
+                        <td colSpan={6} className="px-4 py-12 text-center text-gray-500 italic bg-white">
                           There are no unpaid invoices associated with this customer.
                         </td>
                       </tr>
@@ -2412,8 +2424,8 @@ export default function RecordPayment() {
                       onClick={handleAttachFromDesktop}
                       className="px-4 py-2 text-sm text-white cursor-pointer transition-colors flex items-center gap-3"
                       style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                      onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => (e.target as HTMLDivElement).style.opacity = "0.9"}
-                      onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => (e.target as HTMLDivElement).style.opacity = "1"}
+                      onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => e.currentTarget.style.opacity = "0.9"}
+                      onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => e.currentTarget.style.opacity = "1"}
                     >
                       <Upload size={14} />
                       Attach From Desktop
@@ -2592,8 +2604,8 @@ export default function RecordPayment() {
                       <div
                         className="px-4 py-3 text-sm font-semibold cursor-pointer"
                         style={{ color: "#156372" }}
-                        onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => { (e.target as HTMLDivElement).style.backgroundColor = "rgba(21, 99, 114, 0.1)"; }}
-                        onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => { (e.target as HTMLDivElement).style.backgroundColor = "transparent"; }}
+                        onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => { e.currentTarget.style.backgroundColor = "rgba(21, 99, 114, 0.1)"; }}
+                        onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => { e.currentTarget.style.backgroundColor = "transparent"; }}
                         onClick={() => {
                           setShareVisibility("Public");
                           setIsVisibilityDropdownOpen(false);
@@ -2662,8 +2674,8 @@ export default function RecordPayment() {
                   <button
                     className="px-8 py-2.5 text-white rounded-xl text-sm font-bold shadow-lg transition-all"
                     style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                    onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.target.style.opacity = "0.9"}
-                    onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.target.style.opacity = "1"}
+                    onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.opacity = "0.9"}
+                    onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.opacity = "1"}
                     onClick={handleGenerateLink}
                   >
                     Generate Link
@@ -2680,8 +2692,8 @@ export default function RecordPayment() {
                   <button
                     className="px-8 py-2.5 text-white rounded-xl text-sm font-bold shadow-lg transition-all"
                     style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                    onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.target.style.opacity = "0.9"}
-                    onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.target.style.opacity = "1"}
+                    onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.opacity = "0.9"}
+                    onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.opacity = "1"}
                     onClick={handleCopyLink}
                   >
                     Copy Link
@@ -2821,8 +2833,8 @@ export default function RecordPayment() {
                         : "border-gray-300"
                         }`}
                         style={selectedDocuments.includes(doc.id) ? { background: "#156372", borderColor: "#156372" } : { borderColor: "#d1d5db" }}
-                        onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => { if (!selectedDocuments.includes(doc.id)) e.target.style.borderColor = "#156372"; }}
-                        onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => { if (!selectedDocuments.includes(doc.id)) e.target.style.borderColor = "#d1d5db"; }}
+                        onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => { if (!selectedDocuments.includes(doc.id)) e.currentTarget.style.borderColor = "#156372"; }}
+                        onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => { if (!selectedDocuments.includes(doc.id)) e.currentTarget.style.borderColor = "#d1d5db"; }}
                       >
                         {selectedDocuments.includes(doc.id) && <Check size={14} />}
                       </div>
@@ -2856,8 +2868,8 @@ export default function RecordPayment() {
                 disabled={selectedDocuments.length === 0}
                 className="px-8 py-2.5 text-white rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed shadow-lg transition-all font-sans"
                 style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => { if (!e.target.disabled) e.target.style.opacity = "0.9"; }}
-                onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => { if (!e.target.disabled) e.target.style.opacity = "1"; }}
+                onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => { if (!e.currentTarget.disabled) e.currentTarget.style.opacity = "0.9"; }}
+                onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => { if (!e.currentTarget.disabled) e.currentTarget.style.opacity = "1"; }}
               >
                 Attach {selectedDocuments.length > 0 ? `(${selectedDocuments.length}) ` : ""}Files
               </button>
@@ -2994,8 +3006,8 @@ export default function RecordPayment() {
                     <button
                       className="px-8 py-3 text-white rounded-md text-sm font-semibold transition-colors shadow-sm"
                       style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                      onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.target.style.opacity = "0.9"}
-                      onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.target.style.opacity = "1"}
+                      onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.opacity = "0.9"}
+                      onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.opacity = "1"}
                       onClick={() => {
                         window.open(
                           "https://accounts.google.com/v3/signin/accountchooser",
@@ -3056,8 +3068,8 @@ export default function RecordPayment() {
                     <button
                       className="px-8 py-3 text-white rounded-md text-sm font-semibold transition-colors shadow-sm"
                       style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                      onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.target.style.opacity = "0.9"}
-                      onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.target.style.opacity = "1"}
+                      onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.opacity = "0.9"}
+                      onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.opacity = "1"}
                       onClick={() => {
                         window.open(
                           "https://www.dropbox.com/oauth2/authorize",
@@ -3110,8 +3122,8 @@ export default function RecordPayment() {
                     <button
                       className="px-8 py-3 text-white rounded-md text-sm font-semibold transition-colors shadow-sm"
                       style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                      onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.target.style.opacity = "0.9"}
-                      onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.target.style.opacity = "1"}
+                      onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.opacity = "0.9"}
+                      onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.opacity = "1"}
                       onClick={() => {
                         window.open(
                           "https://account.box.com/api/oauth2/authorize",
@@ -3161,8 +3173,8 @@ export default function RecordPayment() {
                     <button
                       className="px-8 py-3 text-white rounded-md text-sm font-semibold transition-colors shadow-sm"
                       style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                      onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.target.style.opacity = "0.9"}
-                      onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.target.style.opacity = "1"}
+                      onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.opacity = "0.9"}
+                      onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.opacity = "1"}
                       onClick={() => {
                         window.open(
                           "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
@@ -3382,15 +3394,15 @@ export default function RecordPayment() {
                       isCloud: true,
                       provider: selectedCloudProvider
                     }));
-                    setAttachedFiles(prev => [...prev, ...newFiles as File[]]);
+                    setAttachedFiles(prev => [...prev, ...newFiles]);
                   }
                   setIsCloudPickerOpen(false);
                   setSelectedCloudFiles([]);
                 }}
                 className={`px-6 py-2 text-white rounded-md text-sm font-medium transition-colors ${selectedCloudFiles.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
                 style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => { if (!e.target.disabled && selectedCloudFiles.length > 0) e.target.style.opacity = "0.9"; }}
-                onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => { if (!e.target.disabled && selectedCloudFiles.length > 0) e.target.style.opacity = "1"; }}
+                onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => { if (!e.currentTarget.disabled && selectedCloudFiles.length > 0) e.currentTarget.style.opacity = "0.9"; }}
+                onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => { if (!e.currentTarget.disabled && selectedCloudFiles.length > 0) e.currentTarget.style.opacity = "1"; }}
                 disabled={selectedCloudFiles.length === 0}
               >
                 Attach ({selectedCloudFiles.length})
@@ -3417,8 +3429,8 @@ export default function RecordPayment() {
                 onClick={() => setCustomerSearchModalOpen(false)}
                 className="w-8 h-8 text-white rounded flex items-center justify-center"
                 style={{ background: "linear-gradient(90deg, #156372 0%, #0D4A52 100%)" }}
-                onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.target.style.opacity = "0.9"}
-                onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.target.style.opacity = "1"}
+                onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.opacity = "0.9"}
+                onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => e.currentTarget.style.opacity = "1"}
               >
                 <X size={16} />
               </button>
@@ -3447,8 +3459,8 @@ export default function RecordPayment() {
                             setCustomerSearchCriteriaOpen(false);
                           }}
                           className="w-full px-4 py-2 text-sm text-left text-gray-700"
-                          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => { e.target.style.backgroundColor = "#156372"; e.target.style.color = "white"; }}
-                          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => { e.target.style.backgroundColor = "transparent"; e.target.style.color = "#374151"; }}
+                          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.backgroundColor = "#156372"; e.currentTarget.style.color = "white"; }}
+                          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#374151"; }}
                         >
                           {criteria}
                         </button>
@@ -3506,8 +3518,8 @@ export default function RecordPayment() {
                       >
                         <td className="px-4 py-3 text-sm hover:underline"
                           style={{ color: "#156372" }}
-                          onMouseEnter={(e) => e.target.style.color = "#0D4A52"}
-                          onMouseLeave={(e) => e.target.style.color = "#156372"}
+                          onMouseEnter={(e) => e.currentTarget.style.color = "#0D4A52"}
+                          onMouseLeave={(e) => e.currentTarget.style.color = "#156372"}
                         >
                           {customer.displayName || customer.name || ""}
                         </td>

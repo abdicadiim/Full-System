@@ -1,6 +1,11 @@
 import React from "react";
 
-export default function Checkbox({ checked, onChange, onClick, readOnly, ...props }) {
+type CheckboxProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "type" | "onChange" | "checked"> & {
+  checked?: boolean;
+  onChange?: (event: React.ChangeEvent<HTMLInputElement>) => void;
+};
+
+export default function Checkbox({ checked, onChange, onClick, readOnly, ...props }: CheckboxProps) {
   // If checked is provided without onChange, use defaultChecked for read-only checkboxes
   const isReadOnly = checked !== undefined && !onChange;
   

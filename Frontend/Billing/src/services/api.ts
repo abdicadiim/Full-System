@@ -7,11 +7,12 @@ export const API_BASE_URL =
 
 const getStoredToken = () => {
   if (typeof localStorage === "undefined") return "";
+  const bridgeToken = readCookie("fs_session_bridge");
+  if (bridgeToken) return bridgeToken;
   return (
     localStorage.getItem("token") ||
     localStorage.getItem("auth_token") ||
     localStorage.getItem("accessToken") ||
-    readCookie("fs_session_bridge") ||
     ""
   );
 };
@@ -50,19 +51,21 @@ type RequestOptions = {
 const request = async ({ method = "GET", path, params, data, headers = {} }: RequestOptions) => {
   const url = `${withBase(path)}${toQuery(params)}`;
   const token = getStoredToken();
-  const mergedHeaders: Record<string, string> = { ...headers };
+  const buildHeaders = (includeAuth: boolean) => {
+    const nextHeaders: Record<string, string> = { ...headers };
+    if (!nextHeaders["Content-Type"] && method !== "GET") {
+      nextHeaders["Content-Type"] = "application/json";
+    }
+    if (includeAuth && token && !nextHeaders.Authorization) {
+      nextHeaders.Authorization = `Bearer ${token}`;
+    }
+    return nextHeaders;
+  };
 
-  if (!mergedHeaders["Content-Type"] && method !== "GET") {
-    mergedHeaders["Content-Type"] = "application/json";
-  }
-  if (token && !mergedHeaders.Authorization) {
-    mergedHeaders.Authorization = `Bearer ${token}`;
-  }
-
-  try {
+  const runFetch = async (includeAuth: boolean) => {
     const response = await fetch(url, {
       method,
-      headers: mergedHeaders,
+      headers: buildHeaders(includeAuth),
       credentials: "include",
       body: method === "GET" ? undefined : data !== undefined ? JSON.stringify(data) : undefined,
     });
@@ -71,6 +74,17 @@ const request = async ({ method = "GET", path, params, data, headers = {} }: Req
     const payload = contentType.includes("application/json")
       ? await response.json().catch(() => null)
       : await response.text().catch(() => "");
+
+    return { response, payload };
+  };
+
+  try {
+    let { response, payload } = await runFetch(true);
+
+    // If a stale bearer token is stored locally, let the current session cookie recover the request.
+    if (response.status === 401 && token && !headers.Authorization) {
+      ({ response, payload } = await runFetch(false));
+    }
 
     if (response.status === 304) {
       return {
@@ -407,13 +421,18 @@ const readLocalCollection = (key: string) => {
 
 const writeLocalCollection = (key: string, rows: any[]) => {
   if (typeof localStorage === "undefined") return;
-  localStorage.setItem(key, JSON.stringify(rows));
+  try {
+    localStorage.setItem(key, JSON.stringify(rows));
+  } catch {
+    // Ignore quota issues for optional cache writes.
+  }
 };
 
 const normalizeId = (value: any, prefix = "id") =>
   String(value || `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
 
 const ITEMS_STORAGE_KEY = "inv_items_v1";
+const PERSIST_LEGACY_ITEMS_CACHE = false;
 const UNITS_STORAGE_KEY = "taban_units_v1";
 const TAG_ASSIGNMENTS_STORAGE_KEY = "taban_item_tag_assignments_v1";
 const LOCAL_QUOTES_KEY = "taban_books_quotes";
@@ -483,6 +502,101 @@ const ensureSeedRows = (key: string, seed: any[]) => {
 };
 
 const getEntityId = (row: any) => String(row?._id || row?.id || "").trim();
+
+const normalizeItemCacheRow = (row: any) => {
+  if (!row || typeof row !== "object") return null;
+  const id = getEntityId(row);
+  if (!id) return null;
+
+  return {
+    ...row,
+    id,
+    _id: row?._id || row?.id || id,
+  };
+};
+
+const isMongoObjectIdLike = (value: any) => /^[a-f0-9]{24}$/i.test(String(value || "").trim());
+
+const mergeRemoteItemsWithLocalOnlyCache = (rows: any[]) => {
+  const normalizedRemoteRows = (Array.isArray(rows) ? rows : [])
+    .map((row) => normalizeItemCacheRow(row))
+    .filter(Boolean) as any[];
+  const existing = readLocalCollection(ITEMS_STORAGE_KEY);
+  const remoteIds = new Set(normalizedRemoteRows.map((row: any) => getEntityId(row)).filter(Boolean));
+  const localOnlyRows = (Array.isArray(existing) ? existing : [])
+    .map((row) => normalizeItemCacheRow(row))
+    .filter((row: any) => {
+      const id = getEntityId(row);
+      return id && !isMongoObjectIdLike(id) && !remoteIds.has(id);
+    });
+
+  return [...normalizedRemoteRows, ...localOnlyRows];
+};
+
+const clearLegacyItemCache = () => {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.removeItem(ITEMS_STORAGE_KEY);
+  } catch {
+    // Ignore cleanup failures.
+  }
+};
+
+const mergeItemsIntoCache = (rows: any[]) => {
+  if (!PERSIST_LEGACY_ITEMS_CACHE) {
+    clearLegacyItemCache();
+    return;
+  }
+  const existing = readLocalCollection(ITEMS_STORAGE_KEY);
+  const next = Array.isArray(existing) ? [...existing] : [];
+
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const normalized = normalizeItemCacheRow(row);
+    if (!normalized) return;
+
+    const index = next.findIndex((item: any) => getEntityId(item) === normalized.id);
+    if (index >= 0) next[index] = { ...next[index], ...normalized };
+    else next.push(normalized);
+  });
+
+  writeLocalCollection(ITEMS_STORAGE_KEY, next);
+};
+
+const replaceItemsCache = (rows: any[]) => {
+  if (!PERSIST_LEGACY_ITEMS_CACHE) {
+    clearLegacyItemCache();
+    return;
+  }
+  const normalizedRows = (Array.isArray(rows) ? rows : [])
+    .map((row) => normalizeItemCacheRow(row))
+    .filter(Boolean);
+  writeLocalCollection(ITEMS_STORAGE_KEY, normalizedRows);
+};
+
+const upsertItemCache = (row: any) => {
+  if (!PERSIST_LEGACY_ITEMS_CACHE) {
+    clearLegacyItemCache();
+    return;
+  }
+  const normalized = normalizeItemCacheRow(row);
+  if (!normalized) return;
+  mergeItemsIntoCache([normalized]);
+};
+
+const removeItemFromCache = (id: string) => {
+  if (!PERSIST_LEGACY_ITEMS_CACHE) {
+    clearLegacyItemCache();
+    return;
+  }
+  const normalizedId = String(id || "").trim();
+  if (!normalizedId) return;
+
+  const existing = readLocalCollection(ITEMS_STORAGE_KEY);
+  const next = (Array.isArray(existing) ? existing : []).filter(
+    (row: any) => getEntityId(row) !== normalizedId
+  );
+  writeLocalCollection(ITEMS_STORAGE_KEY, next);
+};
 
 const filterRowsByParams = (rows: any[], params?: Record<string, any>) => {
   let next = [...rows];
@@ -970,22 +1084,168 @@ export const customersAPI = {
 };
 
 const itemsBase = resource("/items");
+const extractItemRowsFromResponse = (response: any) => {
+  const candidates = [
+    response?.data,
+    response?.data?.data,
+    response?.data?.data?.items,
+    response?.data?.data?.rows,
+    response?.data?.data?.results,
+    response?.data?.items,
+    response?.data?.rows,
+    response?.data?.results,
+    response?.items,
+    response?.rows,
+    response?.results,
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return candidate;
+    }
+  }
+
+  return [];
+};
+
+const getItemPaginationPages = (response: any) =>
+  Number(
+    response?.pagination?.pages ??
+    response?.data?.pagination?.pages ??
+    response?.data?.data?.pagination?.pages ??
+    response?.totalPages ??
+    response?.data?.totalPages ??
+    response?.data?.data?.totalPages ??
+    response?.meta?.pages ??
+    response?.data?.meta?.pages ??
+    response?.data?.data?.meta?.pages ??
+    0
+  );
+
+const getItemPaginationTotal = (response: any) =>
+  Number(
+    response?.pagination?.total ??
+    response?.data?.pagination?.total ??
+    response?.data?.data?.pagination?.total ??
+    response?.total ??
+    response?.count ??
+    response?.data?.total ??
+    response?.data?.count ??
+    response?.data?.data?.total ??
+    response?.data?.data?.count ??
+    response?.meta?.total ??
+    response?.data?.meta?.total ??
+    response?.data?.data?.meta?.total ??
+    0
+  );
+
+const getItemHasMorePage = (response: any) =>
+  Boolean(
+    response?.has_more_page ??
+    response?.data?.has_more_page ??
+    response?.data?.data?.has_more_page ??
+    response?.pagination?.has_more_page ??
+    response?.data?.pagination?.has_more_page ??
+    response?.data?.data?.pagination?.has_more_page ??
+    response?.meta?.hasMore ??
+    response?.data?.meta?.hasMore ??
+    response?.data?.data?.meta?.hasMore ??
+    false
+  );
+
 export const itemsAPI = {
-  getAll: async (params?: Record<string, any>) => itemsBase.getAll(params),
+  getAll: async (params?: Record<string, any>) => {
+    if (!PERSIST_LEGACY_ITEMS_CACHE) {
+      clearLegacyItemCache();
+    }
+    const response = await itemsBase.getAll(params);
+    if (response?.success) {
+      const rows = extractItemRowsFromResponse(response);
+
+      const page = Math.max(1, Number(params?.page || 1));
+      const requestedLimit = Number(params?.per_page || params?.limit || 0);
+      const paginationPages = getItemPaginationPages(response);
+      const paginationTotal = getItemPaginationTotal(response);
+      const hasMorePage = getItemHasMorePage(response);
+      const responseLooksComplete =
+        rows.length > 0 &&
+        (
+          (paginationTotal > 0 && rows.length >= paginationTotal) ||
+          (!hasMorePage && paginationPages <= 1 && (!requestedLimit || rows.length < requestedLimit))
+        );
+      const shouldReplaceCache =
+        (!params || Object.keys(params).length === 0) ||
+        (page === 1 && responseLooksComplete);
+
+      if (PERSIST_LEGACY_ITEMS_CACHE) {
+        if (shouldReplaceCache) replaceItemsCache(mergeRemoteItemsWithLocalOnlyCache(rows));
+        else mergeItemsIntoCache(rows);
+      }
+    }
+    return response;
+  },
   list: async (params?: Record<string, any>) => itemsAPI.getAll(params),
-  getById: async (id: string) => itemsBase.getById(String(id)),
+  getById: async (id: string) => {
+    const response = await itemsBase.getById(String(id));
+    if (response?.success && response?.data && PERSIST_LEGACY_ITEMS_CACHE) {
+      upsertItemCache(response.data);
+    }
+    return response;
+  },
   getDetailsByIds: async (ids: string[]) =>
     request({
       path: "/itemdetails",
       params: { item_ids: ids.map((id) => String(id || "").trim()).filter(Boolean).join(",") },
     }),
-  create: async (data: any) => itemsBase.create(data),
-  update: async (id: string, data: any) => itemsBase.update(String(id), data),
-  delete: async (id: string) => itemsBase.delete(String(id)),
-  markActive: async (id: string) =>
-    request({ method: "POST", path: `/items/${encodeURIComponent(String(id))}/active` }),
-  markInactive: async (id: string) =>
-    request({ method: "POST", path: `/items/${encodeURIComponent(String(id))}/inactive` }),
+  create: async (data: any) => {
+    const response = await itemsBase.create(data);
+    if (response?.success && response?.data && PERSIST_LEGACY_ITEMS_CACHE) {
+      upsertItemCache(response.data);
+    }
+    return response;
+  },
+  update: async (id: string, data: any) => {
+    const response = await itemsBase.update(String(id), data);
+    if (response?.success && PERSIST_LEGACY_ITEMS_CACHE) {
+      upsertItemCache(response?.data || { ...data, id: String(id), _id: String(id) });
+    }
+    return response;
+  },
+  delete: async (id: string) => {
+    const response = await itemsBase.delete(String(id));
+    if (response?.success && PERSIST_LEGACY_ITEMS_CACHE) {
+      removeItemFromCache(String(id));
+    }
+    return response;
+  },
+  markActive: async (id: string) => {
+    const response = await request({ method: "POST", path: `/items/${encodeURIComponent(String(id))}/active` });
+    if (response?.success && PERSIST_LEGACY_ITEMS_CACHE) {
+      upsertItemCache({
+        ...(response?.data || {}),
+        id: String(id),
+        _id: String(id),
+        active: true,
+        isActive: true,
+        status: "Active",
+      });
+    }
+    return response;
+  },
+  markInactive: async (id: string) => {
+    const response = await request({ method: "POST", path: `/items/${encodeURIComponent(String(id))}/inactive` });
+    if (response?.success && PERSIST_LEGACY_ITEMS_CACHE) {
+      upsertItemCache({
+        ...(response?.data || {}),
+        id: String(id),
+        _id: String(id),
+        active: false,
+        isActive: false,
+        status: "Inactive",
+      });
+    }
+    return response;
+  },
 };
 
 const productsBase = resource("/products");
@@ -1327,13 +1587,79 @@ export const currenciesAPI = {
     return currenciesLocal.delete(id);
   },
   getBaseCurrency: async () => {
-    const response = await currenciesAPI.getAll({ limit: 1000 });
-    const list = Array.isArray(response.data) ? response.data : [];
-    const base =
-      list.find((currency: any) => Boolean(currency?.isBaseCurrency || currency?.is_base_currency || currency?.isBase)) ||
-      list[0] ||
-      defaultCurrencies[0];
-    return { success: true, data: base };
+    const extractRows = (response: any) => {
+      const candidates = [
+        response?.data,
+        response?.data?.data,
+        response?.data?.currencies,
+        response?.data?.items,
+        response?.currencies,
+        response?.items,
+      ];
+
+      for (const candidate of candidates) {
+        if (Array.isArray(candidate)) return candidate;
+      }
+
+      return [];
+    };
+
+    const isBaseCurrencyRecord = (currency: any) =>
+      Boolean(currency?.isBaseCurrency || currency?.is_base_currency || currency?.isBase || currency?.baseCurrency || currency?.base_currency);
+
+    const [profileResponse, currenciesResponse] = await Promise.all([
+      request({ path: "/settings/organization/profile" }),
+      request({ path: "/currencies", params: { limit: 1000 } }),
+    ]);
+
+    const list = extractRows(currenciesResponse);
+    const flaggedBase = list.find(isBaseCurrencyRecord);
+    if (flaggedBase) {
+      return { success: true, data: flaggedBase };
+    }
+
+    const profile = profileResponse?.success && profileResponse?.data && typeof profileResponse.data === "object"
+      ? profileResponse.data
+      : null;
+    const profileBaseCode = String(
+      profile?.baseCurrency ||
+      profile?.base_currency ||
+      ""
+    ).trim().toUpperCase();
+
+    if (profileBaseCode) {
+      const matchedBase = list.find((currency: any) =>
+        String(currency?.code || currency?.currencyCode || "").trim().toUpperCase() === profileBaseCode
+      );
+
+      if (matchedBase) {
+        return {
+          success: true,
+          data: {
+            ...matchedBase,
+            isBaseCurrency: true,
+          },
+        };
+      }
+
+      return {
+        success: true,
+        data: {
+          id: `cur-${profileBaseCode.toLowerCase()}`,
+          _id: `cur-${profileBaseCode.toLowerCase()}`,
+          code: profileBaseCode,
+          symbol: profileBaseCode,
+          name: profileBaseCode,
+          isBaseCurrency: true,
+        },
+      };
+    }
+
+    return {
+      success: false,
+      data: null,
+      message: "Base currency could not be loaded from the database",
+    };
   },
 };
 
@@ -3190,7 +3516,11 @@ export const reportingTagsAPI = {
   getAll: async (params?: Record<string, any>) => {
     try {
       const res = await reportingTagsResource.getAll(params);
-      if (res?.success) return res as any;
+      if (res?.success) {
+        const rows = Array.isArray((res as any)?.data) ? (res as any).data : [];
+        writeLocalCollection(LOCAL_REPORTING_TAGS_KEY, rows);
+        return res as any;
+      }
     } catch {
       // fall back
     }
@@ -3200,7 +3530,19 @@ export const reportingTagsAPI = {
   getById: async (id: string) => {
     try {
       const res = await reportingTagsResource.getById(id);
-      if (res?.success) return res as any;
+      if (res?.success) {
+        const existing = readLocalCollection(LOCAL_REPORTING_TAGS_KEY);
+        const row = (res as any)?.data;
+        if (row && typeof row === "object") {
+          const normalizedId = String((row as any)?._id || (row as any)?.id || id || "").trim();
+          const next = Array.isArray(existing) ? [...existing] : [];
+          const index = next.findIndex((item: any) => String(item?._id || item?.id || "").trim() === normalizedId);
+          if (index >= 0) next[index] = row;
+          else next.unshift(row);
+          writeLocalCollection(LOCAL_REPORTING_TAGS_KEY, next);
+        }
+        return res as any;
+      }
     } catch {
       // fall back
     }
@@ -3209,7 +3551,14 @@ export const reportingTagsAPI = {
   create: async (data: any) => {
     try {
       const res = await reportingTagsResource.create(data);
-      if (res?.success) return res as any;
+      if (res?.success) {
+        const created = (res as any)?.data;
+        if (created && typeof created === "object") {
+          const existing = readLocalCollection(LOCAL_REPORTING_TAGS_KEY);
+          writeLocalCollection(LOCAL_REPORTING_TAGS_KEY, [created, ...(Array.isArray(existing) ? existing : [])]);
+        }
+        return res as any;
+      }
     } catch {
       // fall back
     }
@@ -3218,7 +3567,19 @@ export const reportingTagsAPI = {
   update: async (id: string, data: any) => {
     try {
       const res = await reportingTagsResource.update(id, data);
-      if (res?.success) return res as any;
+      if (res?.success) {
+        const updated = (res as any)?.data;
+        if (updated && typeof updated === "object") {
+          const existing = readLocalCollection(LOCAL_REPORTING_TAGS_KEY);
+          const normalizedId = String((updated as any)?._id || (updated as any)?.id || id || "").trim();
+          const next = Array.isArray(existing) ? [...existing] : [];
+          const index = next.findIndex((item: any) => String(item?._id || item?.id || "").trim() === normalizedId);
+          if (index >= 0) next[index] = updated;
+          else next.unshift(updated);
+          writeLocalCollection(LOCAL_REPORTING_TAGS_KEY, next);
+        }
+        return res as any;
+      }
     } catch {
       // fall back
     }
@@ -3227,7 +3588,15 @@ export const reportingTagsAPI = {
   delete: async (id: string) => {
     try {
       const res = await reportingTagsResource.delete(id);
-      if (res?.success) return res as any;
+      if (res?.success) {
+        const normalizedId = String(id || "").trim();
+        const existing = readLocalCollection(LOCAL_REPORTING_TAGS_KEY);
+        const next = (Array.isArray(existing) ? existing : []).filter(
+          (item: any) => String(item?._id || item?.id || "").trim() !== normalizedId
+        );
+        writeLocalCollection(LOCAL_REPORTING_TAGS_KEY, next);
+        return res as any;
+      }
     } catch {
       // fall back
     }
@@ -3282,6 +3651,21 @@ export const dashboardAPI = {
     request({ path: "/dashboard/summary", headers: options?.headers }),
 };
 
+export const startupSyncAPI = {
+  validate: (resources: Array<{ id: string; version_id?: string; last_updated?: string; count?: number }>) =>
+    request({
+      method: "POST",
+      path: "/sync/validate",
+      data: { resources },
+    }),
+  fetch: (resources: Array<{ id: string; version_id?: string; last_updated?: string; count?: number }>) =>
+    request({
+      method: "POST",
+      path: "/sync/fetch",
+      data: { resources },
+    }),
+};
+
 export default {
   API_BASE_URL,
   apiRequest,
@@ -3320,6 +3704,7 @@ export default {
   addonsAPI,
   priceListsAPI,
   dashboardAPI,
+  startupSyncAPI,
   emailTemplatesAPI,
 
   senderEmailsAPI,

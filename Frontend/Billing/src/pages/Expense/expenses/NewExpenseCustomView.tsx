@@ -179,20 +179,26 @@ function UserRoleSelector() {
                                         display: "flex", flexDirection: "column"
                                     }}
                                     onMouseEnter={(e) => {
-                                        e.currentTarget.style.backgroundColor = Z.primary;
-                                        e.currentTarget.style.color = "#ffffff";
-                                        const emailDiv = e.currentTarget.querySelector('.email-sub');
+                                        const target = e.currentTarget as HTMLElement;
+                                        target.style.backgroundColor = Z.primary;
+                                        target.style.color = "#ffffff";
+                                        const emailDiv = target.querySelector(".email-sub") as HTMLElement | null;
                                         if (emailDiv) emailDiv.style.opacity = "0.9";
                                     }}
                                     onMouseLeave={(e) => {
-                                        e.currentTarget.style.backgroundColor = "transparent";
-                                        e.currentTarget.style.color = "#374151";
-                                        const emailDiv = e.currentTarget.querySelector('.email-sub');
+                                        const target = e.currentTarget as HTMLElement;
+                                        target.style.backgroundColor = "transparent";
+                                        target.style.color = "#374151";
+                                        const emailDiv = target.querySelector(".email-sub") as HTMLElement | null;
                                         if (emailDiv) emailDiv.style.opacity = "1";
                                     }}
                                 >
                                     <div style={{ fontSize: "13px", fontWeight: "600", textTransform: "uppercase" }}>{item.name}</div>
-                                    {item.email && <div className="email-sub" style={{ fontSize: "12px", color: "inherit", opacity: 1 }}>{item.email}</div>}
+                                    {(item as { email?: string }).email && (
+                                        <div className="email-sub" style={{ fontSize: "12px", color: "inherit", opacity: 1 }}>
+                                            {(item as { email?: string }).email}
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                             {filteredItems.length === 0 && <div style={{ padding: "12px", textAlign: "center", color: "#6b7280", fontSize: "13px" }}>No results found</div>}

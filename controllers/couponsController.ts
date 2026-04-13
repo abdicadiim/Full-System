@@ -2,6 +2,7 @@ import type express from "express";
 import mongoose from "mongoose";
 import { Coupon } from "../models/Coupon.js";
 import { Product } from "../models/Product.js";
+import { recordDeletion } from "../services/syncTombstoneService.js";
 
 const asString = (v: unknown) => (typeof v === "string" ? v : "");
 
@@ -315,5 +316,10 @@ export const deleteCoupon: express.RequestHandler = async (req, res) => {
 
   const deleted = await Coupon.findOneAndDelete({ _id: id, organizationId: orgId }).lean();
   if (!deleted) return res.status(404).json({ success: false, message: "Coupon not found", data: null });
+  await recordDeletion({
+    organizationId: orgId,
+    resourceId: "coupons.list",
+    documentId: id,
+  });
   return res.json({ success: true, data: { id } });
 };

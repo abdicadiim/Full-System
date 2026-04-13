@@ -37,7 +37,7 @@ export default function ItemSidebar({
     const { symbol: currencySymbol } = useCurrency();
     const { accentColor } = useOrganizationBranding();
     const [sidebarSearch, setSidebarSearch] = useState("");
-    const [filterType, setFilterType] = useState("Active Items");
+    const [filterType, setFilterType] = useState("All");
     const [moreDropdownOpen, setMoreDropdownOpen] = useState(false);
     const [viewDropdownOpen, setViewDropdownOpen] = useState(false);
     const [bulkDropdownOpen, setBulkDropdownOpen] = useState(false);

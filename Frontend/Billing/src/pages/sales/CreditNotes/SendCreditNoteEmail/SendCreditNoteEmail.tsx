@@ -100,7 +100,7 @@ export default function SendCreditNoteEmail() {
 
           let resolvedCustomerEmail = String(
             creditNoteData.customerEmail ||
-            creditNoteData.email ||
+            (creditNoteData as any).email ||
             creditNoteData.customer?.email ||
             creditNoteData.customer?.primaryEmail ||
             ""
@@ -428,7 +428,7 @@ ${organizationName}`,
               textDecoration: isUnderline ? "underline" : isStrikethrough ? "line-through" : "none",
               fontSize: `${fontSize}px`,
             }}
-            onInput={(e) => setEmailData({ ...emailData, body: e.target.textContent })}
+            onInput={(e: React.FormEvent<HTMLDivElement>) => setEmailData({ ...emailData, body: e.currentTarget.textContent || "" })}
             suppressContentEditableWarning={true}
           >
             {/* Logo */}

@@ -30,6 +30,7 @@ const CurrencySchema = new mongoose.Schema(
 );
 
 CurrencySchema.index({ organizationId: 1, code: 1 }, { unique: true });
+CurrencySchema.index({ organizationId: 1, updatedAt: -1 });
 
 export const Currency = mongoose.model("Currency", CurrencySchema);
 

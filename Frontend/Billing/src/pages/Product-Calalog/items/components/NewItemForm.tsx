@@ -29,10 +29,27 @@ const SALES_ACCOUNTS = [
 const TAX_GROUP_MARKER = "__taban_tax_group__";
 
 const normalizeReportingTagOptions = (tag: any): string[] => {
-  const raw = Array.isArray(tag?.options) ? tag.options : [];
-  return raw
-    .map((value: any) => String(value ?? "").trim())
-    .filter(Boolean);
+  const raw = Array.isArray(tag?.options)
+    ? tag.options
+    : Array.isArray(tag?.values)
+      ? tag.values
+      : Array.isArray(tag?.tagValues)
+        ? tag.tagValues
+        : Array.isArray(tag?.choices)
+          ? tag.choices
+          : [];
+
+  return Array.from(new Set(
+    raw
+      .map((value: any) => {
+        if (typeof value === "string") return value.trim();
+        if (value && typeof value === "object") {
+          return String(value.value ?? value.name ?? value.option ?? value.title ?? "").trim();
+        }
+        return "";
+      })
+      .filter(Boolean)
+  ));
 };
 
 const normalizeReportingTagAppliesTo = (tag: any): string[] => {
@@ -40,15 +57,80 @@ const normalizeReportingTagAppliesTo = (tag: any): string[] => {
   const fromModulesObject = tag?.modules && typeof tag.modules === "object"
     ? Object.keys(tag.modules).filter((key) => Boolean(tag.modules[key]))
     : [];
+  const fromModuleLevel = tag?.moduleLevel && typeof tag.moduleLevel === "object"
+    ? Object.keys(tag.moduleLevel).filter((key) => Boolean(tag.moduleLevel[key]))
+    : [];
   const fromModuleSettings = tag?.moduleSettings && typeof tag.moduleSettings === "object"
     ? Object.keys(tag.moduleSettings).filter((key) => Boolean(tag.moduleSettings[key]))
     : [];
   const fromAssociations = Array.isArray(tag?.associations) ? tag.associations : [];
   const fromModulesList = Array.isArray(tag?.modulesList) ? tag.modulesList : [];
+  const fromModules = Array.isArray(tag?.modules) ? tag.modules : [];
+  const fromModuleNames = Array.isArray(tag?.moduleNames) ? tag.moduleNames : [];
+  const fromEntities = Array.isArray(tag?.entities) ? tag.entities : [];
 
-  return [...direct, ...fromModulesObject, ...fromModuleSettings, ...fromAssociations, ...fromModulesList]
+  return [
+    ...direct,
+    ...fromModulesObject,
+    ...fromModuleLevel,
+    ...fromModuleSettings,
+    ...fromAssociations,
+    ...fromModulesList,
+    ...fromModules,
+    ...fromModuleNames,
+    ...fromEntities,
+  ]
     .map((value: any) => String(value || "").toLowerCase().trim())
     .filter(Boolean);
+};
+
+const normalizeReportingTagName = (tag: any, index = 0) =>
+  String(tag?.name || tag?.title || tag?.label || `Reporting Tag ${index + 1}`).trim();
+
+const extractReportingTagRows = (response: any): any[] => {
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response?.data)) return response.data;
+  if (Array.isArray(response?.data?.data)) return response.data.data;
+  if (Array.isArray(response?.reportingTags)) return response.reportingTags;
+  if (Array.isArray(response?.rows)) return response.rows;
+  return [];
+};
+
+const getCachedReportingTagRows = (): any[] => {
+  if (typeof localStorage === "undefined") return [];
+  try {
+    const raw = localStorage.getItem("taban_books_reporting_tags");
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const normalizeAvailableReportingTags = (rows: any[]): any[] => {
+  const normalizedRows = (Array.isArray(rows) ? rows : [])
+    .map((tag: any, index: number) => ({
+      ...tag,
+      _id: String(tag?._id || tag?.id || ""),
+      name: normalizeReportingTagName(tag, index),
+      options: normalizeReportingTagOptions(tag),
+    }))
+    .filter((tag: any) => tag._id && tag.name);
+
+  const tagsForItems = normalizedRows
+    .filter((tag: any) => {
+      const appliesTo = normalizeReportingTagAppliesTo(tag);
+      return appliesTo.some((entry) =>
+        entry.includes("item") ||
+        entry.includes("items") ||
+        entry.includes("product") ||
+        entry.includes("products") ||
+        entry.includes("inventory")
+      );
+    })
+    .sort((a: any, b: any) => Number(b?.isActive !== false) - Number(a?.isActive !== false));
+
+  return tagsForItems.length > 0 ? tagsForItems : normalizedRows;
 };
 
 const getGroupedTaxes = (rows: any[]) => {
@@ -66,6 +148,14 @@ const getGroupedTaxes = (rows: any[]) => {
   const compoundTaxes: string[] = [];
   const taxGroups: string[] = [];
 
+  const formatTaxLabel = (name: string, rate: number) => {
+    const normalizedName = String(name || "").trim();
+    const normalizedRate = Number.isFinite(rate) ? rate : 0;
+    const rateText = Number.isInteger(normalizedRate) ? String(normalizedRate) : String(normalizedRate);
+    const nameAlreadyIncludesRate = new RegExp(`(^|\\D)${rateText}%($|\\D)`).test(normalizedName);
+    return nameAlreadyIncludesRate ? normalizedName : `${normalizedName} [${normalizedRate}%]`;
+  };
+
   const computeTaxLabel = (tax: any) => {
     const name = String(tax?.name || tax?.taxName || "").trim();
     const rate = Number(tax?.rate ?? tax?.taxRate ?? 0);
@@ -82,7 +172,7 @@ const getGroupedTaxes = (rows: any[]) => {
       ? Number(groupTaxes.reduce((sum: number, taxId: string) => sum + (rateById.get(taxId) || 0), 0).toFixed(2))
       : (Number.isFinite(rate) ? rate : 0);
 
-    return { name, isGroup, isCompound: !!tax?.isCompound, computedRate, label: `${name} [${computedRate}%]` };
+    return { name, isGroup, isCompound: !!tax?.isCompound, computedRate, label: formatTaxLabel(name, computedRate) };
   };
 
   rows.forEach((tax) => {
@@ -126,6 +216,7 @@ type SearchableDropdownProps = {
   groupLabel?: string;
   addNewLabel?: string;
   onAddNew?: () => void;
+  optionsMaxHeightClass?: string;
 };
 
 const SearchableDropdown = ({
@@ -138,6 +229,7 @@ const SearchableDropdown = ({
   groupLabel,
   addNewLabel,
   onAddNew,
+  optionsMaxHeightClass = "max-h-64",
 }: SearchableDropdownProps) => {
   const [open, setOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -183,11 +275,10 @@ const SearchableDropdown = ({
           setOpen(false);
           setSearchTerm("");
         }}
-        className={`flex w-full items-center justify-between rounded-lg py-2 text-[13px] transition-colors ${isIndented ? "pl-8 pr-4" : "px-4"} ${isSelected ? "font-medium text-white" : "text-slate-700 hover:bg-slate-50"}`}
-        style={isSelected ? { backgroundColor: accentColor } : undefined}
+        className={`flex w-full items-center justify-between rounded-lg py-2 text-[13px] transition-colors ${isIndented ? "pl-8 pr-4" : "px-4"} ${isSelected ? "font-medium text-slate-900" : "text-slate-700 hover:bg-slate-50"}`}
       >
         <span>{opt.label}</span>
-        {isSelected ? <Check size={14} className="text-white" /> : null}
+        {isSelected ? <Check size={14} style={{ color: accentColor }} /> : null}
       </button>
     );
   };
@@ -221,7 +312,7 @@ const SearchableDropdown = ({
             </div>
           </div>
 
-          <div className="max-h-64 overflow-y-auto custom-scrollbar py-1">
+          <div className={`${optionsMaxHeightClass} overflow-y-auto custom-scrollbar py-1`}>
             {groupedOptions ? (
               displayedGroups.length === 0 ? (
                 <div className="px-4 py-3 text-center text-[13px] text-slate-400">No results found</div>
@@ -287,7 +378,7 @@ const isReportingTagRequired = (tag: any) =>
 export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialData, formTitle = "New Item" }: NewItemFormProps) {
   const navigate = useNavigate();
   const { accentColor } = useOrganizationBranding();
-  const currencyCode = String(baseCurrency?.code || "USD").trim() || "USD";
+  const currencyCode = String(baseCurrency?.code || "").trim().toUpperCase();
   // Use code (e.g. ARS) to clearly indicate the base currency (symbol like "$" can be ambiguous).
   const currencyPrefix = currencyCode;
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -312,7 +403,9 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
     (initialData?.taxInfo ? `${initialData.taxInfo.taxName} [${initialData.taxInfo.taxRate}%]` : "")
   ).trim();
   const [taxRows, setTaxRows] = useState<any[]>([]);
-  const [availableReportingTags, setAvailableReportingTags] = useState<any[]>([]);
+  const [availableReportingTags, setAvailableReportingTags] = useState<any[]>(() =>
+    normalizeAvailableReportingTags(getCachedReportingTagRows())
+  );
   const [reportingTagValues, setReportingTagValues] = useState<Record<string, string>>({});
 
   const [images, setImages] = useState<string[]>(
@@ -393,35 +486,13 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
     let mounted = true;
     const loadReportingTags = async () => {
       try {
-        const response = await reportingTagsAPI.getAll();
-        const rows = Array.isArray(response) ? response : (response?.data || []);
+        const response = await reportingTagsAPI.getAll({ limit: 1000 });
+        const rows = extractReportingTagRows(response);
         if (!Array.isArray(rows)) {
           if (mounted) setAvailableReportingTags([]);
           return;
         }
-
-        const tagsForItems = rows
-          .filter((tag: any) => {
-            if (tag?.isActive === false) return false;
-            const appliesTo = normalizeReportingTagAppliesTo(tag);
-            return appliesTo.some((entry) => entry.includes("item"));
-          })
-          .map((tag: any) => ({
-            ...tag,
-            _id: String(tag?._id || tag?.id || ""),
-            options: normalizeReportingTagOptions(tag),
-          }))
-          .filter((tag: any) => tag._id && String(tag?.name || "").trim());
-
-        const fallbackAll = rows
-          .map((tag: any) => ({
-            ...tag,
-            _id: String(tag?._id || tag?.id || ""),
-            options: normalizeReportingTagOptions(tag),
-          }))
-          .filter((tag: any) => tag._id && String(tag?.name || "").trim());
-
-        const finalTags = tagsForItems.length > 0 ? tagsForItems : fallbackAll;
+        const finalTags = normalizeAvailableReportingTags(rows);
         if (mounted) setAvailableReportingTags(finalTags);
       } catch (e) {
         if (mounted) setAvailableReportingTags([]);
@@ -666,7 +737,7 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-98px)] flex-col bg-gray-50">
+    <div className="flex min-h-full flex-col bg-gray-50">
 
       {/* HEADER: Fixed at top */}
       <div className="flex items-center justify-between border-b bg-white px-6 py-3">
@@ -772,12 +843,19 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
 
           {/* Sales Information */}
           <div className="mt-8">
-            <h2 className="mb-6 border-b border-gray-50 pb-2 text-[15px] font-medium text-gray-800">Sales Information</h2>
+            <div className="mb-6 border-b border-gray-50 pb-2 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-[15px] font-medium text-gray-800">Sales Information</h2>
+              {currencyCode ? (
+                <span className="text-[12px] text-gray-500">Base currency: {currencyCode}</span>
+              ) : null}
+            </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-20 gap-y-6">
               <div className="grid grid-cols-[180px_1fr] items-center gap-4">
                 <Label required dotted>Selling Price</Label>
                 <div className="flex">
-                  <span className="h-[34px] flex items-center px-3 bg-gray-50 border border-r-0 border-gray-300 text-[12px] text-gray-500 rounded-l">{currencyPrefix}</span>
+                  <span className="h-[34px] flex items-center px-3 bg-gray-50 border border-r-0 border-gray-300 text-[12px] text-gray-500 rounded-l">
+                    {currencyPrefix}
+                  </span>
                   <input
                     name="sellingPrice"
                     type="number"
@@ -829,12 +907,10 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
       </div>
 
       {/* Associated / Reporting Tags */}
-      <div className="bg-gray-50 border-t border-gray-100">
-        <div className="max-w-[1120px] px-6 py-8">
-          <h2 className="mb-5 text-[15px] font-medium text-gray-800">Associated Tags</h2>
-          {availableReportingTags.length === 0 ? (
-            <div className="text-[13px] text-gray-500">No reporting tags found in Settings.</div>
-          ) : (
+      {availableReportingTags.length > 0 && (
+        <div className="bg-gray-50 border-t border-gray-100">
+          <div className="max-w-[1120px] px-6 py-8">
+            <h2 className="mb-5 text-[15px] font-medium text-gray-800">Associated Tags</h2>
             <div className="space-y-4">
               {availableReportingTags.map((tag: any) => {
                 const id = String(tag?._id || "");
@@ -851,21 +927,22 @@ export default function NewItemForm({ onCancel, onCreate, baseCurrency, initialD
                     <div className="w-full max-w-[300px]">
                       <SearchableDropdown
                         value={value}
-                        options={[{ value: "", label: "None" }, ...options.filter(Boolean).map((opt: any) => String(opt))]}
+                        options={options.filter(Boolean).map((opt: any) => String(opt))}
                         onChange={(nextValue) => {
                           setReportingTagValues((prev) => ({ ...prev, [keyById]: nextValue }));
                         }}
                         placeholder="None"
                         accentColor={accentColor}
+                        optionsMaxHeightClass="max-h-[118px]"
                       />
                     </div>
                   </div>
                 );
               })}
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="mt-20 border-t bg-[#f9fafb] px-6 py-4">
         <div className="flex gap-2">

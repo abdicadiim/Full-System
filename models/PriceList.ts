@@ -42,5 +42,6 @@ const PriceListSchema = new mongoose.Schema(
 );
 
 PriceListSchema.index({ organizationId: 1, name: 1 }, { unique: true });
+PriceListSchema.index({ organizationId: 1, updatedAt: -1 });
 
 export const PriceList = mongoose.model("PriceList", PriceListSchema);

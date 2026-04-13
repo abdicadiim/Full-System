@@ -12,6 +12,14 @@ interface NewProductModalProps {
     initialProduct?: any;
 }
 
+type FormErrors = Partial<{
+    name: string;
+    emailRecipients: string;
+    redirectionUrl: string;
+    prefix: string;
+    nextNumber: string;
+}>;
+
 const getDefaultForm = () => ({
     name: "",
     description: "",
@@ -48,6 +56,7 @@ export default function NewProductModal({
 }: NewProductModalProps) {
     const saveProductMutation = useSaveProductMutation();
     const [form, setForm] = useState(getDefaultForm);
+    const [errors, setErrors] = useState<FormErrors>({});
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const isEditMode = mode === "edit" && Boolean(initialProduct);
     const isSaving = saveProductMutation.isPending;
@@ -82,37 +91,51 @@ export default function NewProductModal({
                 prefix: String(initialProduct?.prefix || "SUB-"),
                 nextNumber: String(initialProduct?.nextNumber || "00001"),
             });
+            setErrors({});
             return;
         }
         setForm(getDefaultForm());
+        setErrors({});
     }, [isOpen, isEditMode, initialProduct]);
 
-    const saveProduct = async () => {
-        if (!form.name.trim()) {
-            toast.error("Name is required.");
-            return;
-        }
+    const validateForm = () => {
         const emailIds = normalizeEmailIds(form.emailRecipients);
+        const nextErrors: FormErrors = {};
+
+        if (!form.name.trim()) {
+            nextErrors.name = "Name is required.";
+        }
+
         const invalidEmail = emailIds.find((email) => !EMAIL_REGEX.test(email));
         if (invalidEmail) {
-            toast.error("Email IDs must contain valid email addresses.");
-            return;
+            nextErrors.emailRecipients = "Email IDs must contain valid email addresses.";
         }
+
         if (form.redirectionUrl.trim() && !isValidRedirectUrl(form.redirectionUrl.trim())) {
-            toast.error("Redirection URL must be a valid http or https URL.");
-            return;
+            nextErrors.redirectionUrl = "Redirection URL must be a valid http or https URL.";
         }
+
         if (form.autoGenerateSubscriptionNumbers) {
             if (!form.prefix.trim()) {
-                toast.error("Prefix is required when subscription number generation is enabled.");
-                return;
+                nextErrors.prefix = "Prefix is required when subscription number generation is enabled.";
             }
             if (!form.nextNumber.trim()) {
-                toast.error("Next number is required when subscription number generation is enabled.");
-                return;
+                nextErrors.nextNumber = "Next number is required when subscription number generation is enabled.";
             }
         }
+
+        setErrors(nextErrors);
+        return Object.keys(nextErrors).length === 0;
+    };
+
+    const saveProduct = async () => {
+        if (!validateForm()) {
+            toast.error("Please fix the highlighted fields.");
+            return;
+        }
+
         try {
+            const emailIds = normalizeEmailIds(form.emailRecipients);
             const editingId = String(initialProduct?.id || initialProduct?._id || "");
             const record: any = {
                 name: form.name.trim(),
@@ -142,11 +165,23 @@ export default function NewProductModal({
     };
 
     const labelClass = "block text-[13px] text-gray-700 font-normal mb-1.5";
+    const nameLabelClass = "block text-[13px] text-red-600 font-normal mb-1.5";
     const inputClass = "w-full h-[36px] rounded border border-gray-200 bg-white px-3 text-[13px] outline-none focus:border-gray-400 transition-all placeholder:text-gray-400";
     const textareaClass = "w-full h-[68px] rounded border border-gray-300 bg-white px-3 py-2 text-[13px] outline-none focus:border-gray-400 resize-y transition-all placeholder:text-gray-400";
+    const errorLabelClass = "text-red-600";
+    const errorInputClass = "border-red-400 focus:border-red-500";
+    const errorTextClass = "mt-1 text-[12px] text-red-600";
 
     return (
-        <Modal open={isOpen} title={isEditMode ? "Edit Product" : "New Product"} onClose={onClose}>
+        <Modal
+            open={isOpen}
+            title={isEditMode ? "Edit Product" : "New Product"}
+            onClose={onClose}
+            position="top"
+            panelClassName="max-w-[min(100%,42rem)]"
+            closeMode="icon"
+            closeOnBackdrop={false}
+        >
             <div className="bg-gray-50 w-full rounded-lg overflow-hidden border-none shadow-none">
 
                 {/* Form Body */}
@@ -154,15 +189,19 @@ export default function NewProductModal({
 
                     {/* Name Field */}
                     <div>
-                        <label className={labelClass}>
+                        <label className={nameLabelClass}>
                             Name<span className="text-red-500 ml-0.5">*</span>
                         </label>
                         <input
                             type="text"
-                            className={inputClass}
+                            className={`${inputClass} ${errors.name ? errorInputClass : ""}`}
                             value={form.name}
-                            onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                            onChange={(e) => {
+                                setForm((prev) => ({ ...prev, name: e.target.value }));
+                                setErrors((prev) => ({ ...prev, name: undefined }));
+                            }}
                         />
+                        {errors.name ? <p className={errorTextClass}>{errors.name}</p> : null}
                     </div>
 
                     {/* Description Field */}
@@ -178,22 +217,26 @@ export default function NewProductModal({
 
                     {/* Email Notification Recipients */}
                     <div>
-                        <label className={`${labelClass} flex items-center gap-1`}>
+                        <label className={`${labelClass} flex items-center gap-1 ${errors.emailRecipients ? errorLabelClass : ""}`}>
                             Email Notification Recipients
                             <HelpCircle size={14} className="text-gray-400 cursor-help" />
                         </label>
                         <input
                             type="text"
-                            className={inputClass}
+                            className={`${inputClass} ${errors.emailRecipients ? errorInputClass : ""}`}
                             value={form.emailRecipients}
-                            onChange={(e) => setForm((prev) => ({ ...prev, emailRecipients: e.target.value }))}
+                            onChange={(e) => {
+                                setForm((prev) => ({ ...prev, emailRecipients: e.target.value }));
+                                setErrors((prev) => ({ ...prev, emailRecipients: undefined }));
+                            }}
                         />
+                        {errors.emailRecipients ? <p className={errorTextClass}>{errors.emailRecipients}</p> : null}
                     </div>
 
                     {/* Redirection URL */}
                     <div>
                         <div className="flex justify-between items-center mb-1.5">
-                            <label className={`${labelClass} flex items-center gap-1 mb-0`}>
+                            <label className={`${labelClass} flex items-center gap-1 mb-0 ${errors.redirectionUrl ? errorLabelClass : ""}`}>
                                 Redirection URL <Info size={14} className="text-gray-400 cursor-help" />
                             </label>
                             <div className="relative">
@@ -220,10 +263,14 @@ export default function NewProductModal({
                         </div>
                         <input
                             type="text"
-                            className={`${inputClass} whitespace-nowrap overflow-hidden`}
+                            className={`${inputClass} whitespace-nowrap overflow-hidden ${errors.redirectionUrl ? errorInputClass : ""}`}
                             value={form.redirectionUrl}
-                            onChange={(e) => setForm((prev) => ({ ...prev, redirectionUrl: e.target.value }))}
+                            onChange={(e) => {
+                                setForm((prev) => ({ ...prev, redirectionUrl: e.target.value }));
+                                setErrors((prev) => ({ ...prev, redirectionUrl: undefined }));
+                            }}
                         />
+                        {errors.redirectionUrl ? <p className={errorTextClass}>{errors.redirectionUrl}</p> : null}
                         <p className="mt-2 text-[11px] text-gray-500 italic">
                             You can use placeholders to append query params to your URL to fetch subscription details.
                             <br />
@@ -250,26 +297,34 @@ export default function NewProductModal({
                             <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-top-2 duration-300 ml-6">
                                 <div className="flex gap-4">
                                     <div className="flex-1 max-w-[180px]">
-                                        <label className="flex items-center gap-1 text-[13px] text-gray-700 mb-1.5 font-normal">
+                                        <label className={`flex items-center gap-1 text-[13px] mb-1.5 font-normal ${errors.prefix ? "text-red-600" : "text-gray-700"}`}>
                                             Prefix <Info size={14} className="text-gray-400" />
                                         </label>
                                         <input
                                             type="text"
-                                            className={inputClass}
+                                            className={`${inputClass} ${errors.prefix ? errorInputClass : ""}`}
                                             value={form.prefix}
-                                            onChange={(e) => setForm(prev => ({ ...prev, prefix: e.target.value }))}
+                                            onChange={(e) => {
+                                                setForm(prev => ({ ...prev, prefix: e.target.value }));
+                                                setErrors((prev) => ({ ...prev, prefix: undefined }));
+                                            }}
                                         />
+                                        {errors.prefix ? <p className={errorTextClass}>{errors.prefix}</p> : null}
                                     </div>
                                     <div className="flex-1 max-w-[180px]">
-                                        <label className="flex items-center gap-1 text-[13px] text-gray-700 mb-1.5 font-normal">
+                                        <label className={`flex items-center gap-1 text-[13px] mb-1.5 font-normal ${errors.nextNumber ? "text-red-600" : "text-gray-700"}`}>
                                             Next Number <Info size={14} className="text-gray-400" />
                                         </label>
                                         <input
                                             type="text"
-                                            className={inputClass}
+                                            className={`${inputClass} ${errors.nextNumber ? errorInputClass : ""}`}
                                             value={form.nextNumber}
-                                            onChange={(e) => setForm(prev => ({ ...prev, nextNumber: e.target.value }))}
+                                            onChange={(e) => {
+                                                setForm(prev => ({ ...prev, nextNumber: e.target.value }));
+                                                setErrors((prev) => ({ ...prev, nextNumber: undefined }));
+                                            }}
                                         />
+                                        {errors.nextNumber ? <p className={errorTextClass}>{errors.nextNumber}</p> : null}
                                     </div>
                                 </div>
                                 <p className="text-[12px] text-gray-500 leading-relaxed max-w-[500px]">
@@ -283,6 +338,7 @@ export default function NewProductModal({
                 {/* Footer Actions */}
                 <div className="bg-white px-1 py-4 border-t border-gray-200 flex gap-3 mt-4">
                     <button
+                        type="button"
                         onClick={saveProduct}
                         disabled={isSaving}
                         className="cursor-pointer transition-all text-white px-6 py-2 rounded-lg border-[#0D4A52] border-b-[4px] hover:brightness-110 hover:-translate-y-[1px] hover:border-b-[6px] active:border-b-[2px] active:brightness-90 active:translate-y-[2px] flex items-center gap-2 text-[13px] font-semibold disabled:opacity-60 disabled:pointer-events-none"
@@ -291,6 +347,7 @@ export default function NewProductModal({
                         {isSaving ? (isEditMode ? "Updating..." : "Saving...") : "Save"}
                     </button>
                     <button
+                        type="button"
                         onClick={onClose}
                         className="rounded-lg border border-gray-200 bg-white px-6 py-2 text-[13px] text-[#111827] hover:bg-slate-50 font-medium transition-colors"
                     >

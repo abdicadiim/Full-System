@@ -9,6 +9,7 @@ import { useCurrency } from "../../../hooks/useCurrency";
 import { usePermissions } from "../../../hooks/usePermissions";
 import Skeleton from "../../../components/ui/Skeleton";
 import AccessDenied from "../../../components/AccessDenied";
+import { normalizeAddon, readAddons, writeAddons } from "./storage";
 
 const ADDONS_COLUMNS_STORAGE_KEY = "taban_addons_columns_v1";
 const MIN_ADDON_COLUMN_WIDTH = 110;
@@ -131,11 +132,19 @@ export default function AddonsPage() {
   useEffect(() => {
     let mounted = true;
     const load = async () => {
-      if (mounted) setIsLoading(true);
+      const cached = readAddons();
+      if (mounted && cached.length > 0) {
+        setAddons(cached);
+        setIsLoading(false);
+      } else if (mounted) {
+        setIsLoading(true);
+      }
       try {
         const res: any = await addonsAPI.getAll({ limit: 1000 });
         const rows = Array.isArray(res?.data) ? res.data : [];
-        if (mounted) setAddons(rows);
+        const normalized = rows.map(normalizeAddon).filter((row) => row.addonName);
+        if (mounted) setAddons(normalized);
+        writeAddons(normalized);
       } catch (e) {
         console.warn("Failed to load addons", e);
         if (mounted) setAddons([]);

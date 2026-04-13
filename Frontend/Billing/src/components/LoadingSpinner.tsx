@@ -10,9 +10,12 @@ export default function LoadingSpinner({
   className = "",
 }: LoadingSpinnerProps) {
   return (
-    <div className={`flex items-center justify-center gap-3 py-10 text-gray-600 ${className}`}>
-      <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-transparent" />
-      <span className="text-sm">{label}</span>
+    <div className={`flex flex-col items-center justify-center gap-3 text-slate-600 ${className}`}>
+      <div
+        className="h-7 w-7 animate-spin rounded-full border-2 border-slate-200 border-t-[#156372]"
+        aria-hidden="true"
+      />
+      <span className="text-sm font-medium">{label}</span>
     </div>
   );
 }

@@ -284,7 +284,7 @@ const getGroupedTaxes = (rows: any[]) => {
 
 export default function EditItemForm({ item, initialData, onCancel, onUpdate, baseCurrency, formTitle = "Edit Item" }: EditItemFormProps) {
     const sourceItem = item || initialData || ({} as Item);
-    const currencyCode = String(baseCurrency?.code || "USD").trim() || "USD";
+    const currencyCode = String(baseCurrency?.code || "").trim();
     // Use code (e.g. ARS) to clearly indicate the base currency (symbol like "$" can be ambiguous).
     const currencyPrefix = currencyCode;
     const accentColor = "#1b5e6a";

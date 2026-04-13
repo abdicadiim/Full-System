@@ -860,7 +860,7 @@ export default function PaymentsReceived() {
         selectedIds.map((id) => updatePayment(id, updatePayload))
       );
       const successCount = results.filter(
-        (result) => result.status === "fulfilled" && result.value?.success
+        (result) => result.status === "fulfilled" && (result.value as any)?.success
       ).length;
       const failedCount = selectedIds.length - successCount;
 

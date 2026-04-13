@@ -81,6 +81,7 @@ const CustomerSchema = new mongoose.Schema(
 
 CustomerSchema.index({ organizationId: 1, customerNumber: 1 }, { unique: false });
 CustomerSchema.index({ organizationId: 1, email: 1 });
+CustomerSchema.index({ organizationId: 1, updatedAt: -1 });
 
 export const Customer = mongoose.model("Customer", CustomerSchema);
 

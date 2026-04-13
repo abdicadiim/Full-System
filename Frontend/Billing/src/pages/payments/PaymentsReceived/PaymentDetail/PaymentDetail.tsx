@@ -402,17 +402,18 @@ export default function PaymentDetail() {
   };
 
   const formatCurrency = (amount: number | string, currency = symbol || baseCurrency?.code || "USD") => {
-    return `${currency}${parseFloat(amount || 0).toLocaleString('en-US', {
+    return `${currency}${Number(amount || 0).toLocaleString('en-US', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     })}`;
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return "";
+  const formatDate = (dateValue: string | number | Date | null | undefined) => {
+    if (!dateValue) return "";
+    const dateText = String(dateValue);
     // If already formatted, return as is
-    if (dateString.includes(" ")) return dateString;
-    const date = new Date(dateString);
+    if (dateText.includes(" ")) return dateText;
+    const date = new Date(dateText);
     const day = String(date.getDate()).padStart(2, "0");
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const month = months[date.getMonth()];
@@ -699,6 +700,7 @@ export default function PaymentDetail() {
           paymentMode: "",
           referenceNumber: "",
           fromAccount: "",
+          fromAccountId: "",
           description: ""
         });
 
@@ -1248,7 +1250,7 @@ export default function PaymentDetail() {
           <div className="flex items-center justify-between mb-1">
             <div className="flex flex-col leading-tight">
               <div className="text-sm text-gray-600">
-                Location: <span className="text-[#1f3b82]">{payment.location || "Head Office"}</span>
+                Location: <span className="text-[#1f3b82]">{(payment as any)?.location || "Head Office"}</span>
               </div>
               <div className="text-[24px] font-semibold text-gray-900 mt-0.5 leading-none">
                 {payment.paymentNumber || payment.id || "1"}
@@ -1543,7 +1545,7 @@ export default function PaymentDetail() {
                 <div className="bg-gradient-to-r from-[#156372] to-[#0D4A52] text-white px-4 py-3 text-center min-w-[170px] self-start">
                   <div className="text-[10px] font-medium mb-1">Amount Received</div>
                   <div className="text-[18px] font-bold leading-tight">
-                    {(payment.currency || symbol || baseCurrency?.code || "USD").substring(0, 3)}{parseFloat(payment.amountReceived || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {(payment.currency || symbol || baseCurrency?.code || "USD").substring(0, 3)}{Number(payment.amountReceived || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
                 </div>
               </div>
@@ -1574,17 +1576,20 @@ export default function PaymentDetail() {
                         <td className="px-3 py-2">
                           <span
                             className="text-blue-600 hover:text-blue-700 hover:underline cursor-pointer font-medium"
-                            onClick={() => navigate(`/sales/invoices/${alloc.invoice?._id || alloc.invoice?.id || alloc.invoice}`)}
+                            onClick={() => {
+                              const invoiceId = alloc.invoice?._id || alloc.invoice?.id || alloc.invoice;
+                              navigate(`/sales/invoices/${String(invoiceId)}`);
+                            }}
                           >
                             {alloc.invoice?.invoiceNumber || alloc.invoice?.id || alloc.invoice || "-"}
                           </span>
                         </td>
                         <td className="px-3 py-2 text-gray-800">{formatDate(alloc.invoice?.date || payment.paymentDate)}</td>
                         <td className="px-3 py-2 text-right text-gray-800">
-                          {(payment.currency || "USD").substring(0, 3)}{parseFloat(alloc.invoice?.total || alloc.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {(payment.currency || "USD").substring(0, 3)}{Number(alloc.invoice?.total || alloc.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                         <td className="px-3 py-2 text-right text-gray-800">
-                          {(payment.currency || "USD").substring(0, 3)}{parseFloat(alloc.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {(payment.currency || "USD").substring(0, 3)}{Number(alloc.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                       </tr>
                     ))
@@ -1598,17 +1603,17 @@ export default function PaymentDetail() {
                           {payment.invoiceNumber}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-gray-800">{formatDate(payment.invoiceDate || payment.paymentDate)}</td>
+                      <td className="px-3 py-2 text-gray-800">{formatDate((payment as any)?.invoiceDate || payment.paymentDate)}</td>
                       <td className="px-3 py-2 text-right text-gray-800">
-                        {(payment.currency || "USD").substring(0, 3)}{parseFloat(payment.invoiceAmount || payment.amountReceived || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {(payment.currency || "USD").substring(0, 3)}{Number((payment as any)?.invoiceAmount || payment.amountReceived || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                       <td className="px-3 py-2 text-right text-gray-800">
-                        {(payment.currency || "USD").substring(0, 3)}{parseFloat(payment.amountReceived || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {(payment.currency || "USD").substring(0, 3)}{Number(payment.amountReceived || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                     </tr>
                   ) : (
                     <tr>
-                      <td colSpan="4" className="px-3 py-4 text-center text-gray-500">No invoices linked</td>
+                      <td colSpan={4} className="px-3 py-4 text-center text-gray-500">No invoices linked</td>
                     </tr>
                   )}
                 </tbody>
@@ -1641,7 +1646,7 @@ export default function PaymentDetail() {
                         <td className="px-4 py-3 text-gray-900">{refund.refundNumber}</td>
                         <td className="px-4 py-3 text-gray-500 italic">{refund.description || "Refund for payment"}</td>
                         <td className="px-4 py-3 text-right text-gray-900 font-bold">
-                          {(payment.currency || symbol || baseCurrency?.code || "USD").substring(0, 3)} {parseFloat(refund.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          {(payment.currency || symbol || baseCurrency?.code || "USD").substring(0, 3)} {Number(refund.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
                     ))}

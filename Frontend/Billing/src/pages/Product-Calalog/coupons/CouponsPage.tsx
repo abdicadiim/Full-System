@@ -1113,7 +1113,7 @@ const CouponsPage: React.FC = () => {
                           setRecords(rows);
                           toast.success('Coupon deleted successfully');
                           if (selectedCouponId === id) {
-                            setSelectedCouponId(rows.length ? String(rows[0]?.id || rows[0]?._id || '') : null);
+                            setSelectedCouponId(rows.length ? String(rows[0]?.id || (rows[0] as any)?._id || '') : null);
                           }
                         } else {
                           const selectedSet = new Set(selectedIds);
@@ -1122,7 +1122,7 @@ const CouponsPage: React.FC = () => {
                           setRecords(rows);
                           toast.success(`${selectedIds.length} coupons deleted successfully`);
                           if (selectedCouponId && selectedSet.has(selectedCouponId)) {
-                            setSelectedCouponId(rows.length ? String(rows[0]?.id || rows[0]?._id || '') : null);
+                            setSelectedCouponId(rows.length ? String(rows[0]?.id || (rows[0] as any)?._id || '') : null);
                           }
                           clearBulkSelection();
                         }
