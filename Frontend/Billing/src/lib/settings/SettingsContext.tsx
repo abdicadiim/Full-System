@@ -16,8 +16,8 @@ const DEFAULT_THEME = {
   sidebarColor: 'rgb(21, 99, 114)',
   headerColor: 'rgb(21, 99, 114)',
   buttonColor: 'rgb(21, 99, 114)',
-  buttonHoverColor: 'rgb(245, 178, 33)',
-  accentColor: 'rgb(245, 178, 33)',
+  buttonHoverColor: 'rgb(21, 99, 114)',
+  accentColor: 'rgb(21, 99, 114)',
 };
 const DEFAULT_LIGHT_SIDEBAR_COLOR = '#f9fafb';
 

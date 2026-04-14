@@ -197,7 +197,13 @@ const extensionSettings = [
   },
 ];
 
-export default function SettingsLayout({ children }: { children?: React.ReactNode }) {
+export default function SettingsLayout({
+  children,
+  accentColor: accentColorOverride,
+}: {
+  children?: React.ReactNode;
+  accentColor?: string;
+}) {
   const navigate = useNavigate();
   const location = useLocation();
   const { settings } = useSettings();
@@ -211,10 +217,11 @@ export default function SettingsLayout({ children }: { children?: React.ReactNod
     lightTo: "#f3f4f6",
   });
   const organizationName = String(settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "").trim() || "Organization";
-  const accentColor = String(settings?.theme?.accentColor || "#3b82f6").trim();
+  const accentColor = String(accentColorOverride || "#156372").trim();
   const isLightAccent = accentColor.toLowerCase() === "#ffffff" || accentColor.toLowerCase() === "#fff" || accentColor.toLowerCase() === "white";
   const activeSidebarColor = accentColor;
   const activeSidebarTextColor = isLightAccent ? "#1f2937" : "#ffffff";
+  const settingsStyle = { "--settings-accent": accentColor } as React.CSSProperties;
 
   // Load branding data on mount
   useEffect(() => {
@@ -394,7 +401,22 @@ export default function SettingsLayout({ children }: { children?: React.ReactNod
   };
 
   return (
-    <div className="fixed inset-0 bg-gray-50 flex flex-col" style={{ marginLeft: 0, paddingLeft: 0, zIndex: 9999 }}>
+    <>
+      <style>{`
+        .settings-shell input[type="checkbox"],
+        .settings-shell input[type="radio"] {
+          accent-color: var(--settings-accent);
+        }
+
+        .settings-shell input[type="checkbox"]:focus,
+        .settings-shell input[type="radio"]:focus {
+          outline-color: var(--settings-accent);
+        }
+      `}</style>
+      <div
+        className="settings-shell fixed inset-0 bg-gray-50 flex flex-col"
+        style={{ marginLeft: 0, paddingLeft: 0, zIndex: 9999, ...settingsStyle }}
+      >
       <div className="flex flex-1 overflow-hidden">
         {/* Left Sidebar */}
         <div
@@ -467,7 +489,13 @@ export default function SettingsLayout({ children }: { children?: React.ReactNod
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search settings ( / )"
-                    className="w-full h-10 pl-9 pr-4 rounded-lg border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full h-10 pl-9 pr-4 rounded-lg border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:border-transparent"
+                    style={
+                      {
+                        caretColor: accentColor,
+                        ["--tw-ring-color" as any]: accentColor,
+                      } as React.CSSProperties
+                    }
                   />
                 </div>
               </div>
@@ -488,6 +516,7 @@ export default function SettingsLayout({ children }: { children?: React.ReactNod
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

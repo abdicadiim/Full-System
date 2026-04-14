@@ -96,6 +96,7 @@ export default function ProductDetailPage() {
   const [emailTemplatesOpen, setEmailTemplatesOpen] = useState(false);
   const [editProductOpen, setEditProductOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [statusUpdating, setStatusUpdating] = useState(false);
   const [showTabCount, setShowTabCount] = useState<Record<"plans" | "addons" | "coupons", boolean>>({
     plans: false,
     addons: false,
@@ -179,7 +180,9 @@ export default function ProductDetailPage() {
   }, []);
 
   const selectedProduct = useMemo(() => {
-    if (selectedProductQuery.data) return selectedProductQuery.data;
+    if (selectedProductQuery.data && getId(selectedProductQuery.data) === normalizedProductId) {
+      return selectedProductQuery.data;
+    }
     const fromList = products.find((row) => getId(row) === normalizedProductId);
     if (fromList) return fromList;
     const fromState =
@@ -250,12 +253,23 @@ export default function ProductDetailPage() {
     });
   }, [products, productFilter]);
 
+  const openProductDetails = (row: any) => {
+    const id = getId(row);
+    if (!id) return;
+    setActiveTab("details");
+    setActionsOpen(false);
+    setSidebarFilterOpen(false);
+    setSidebarMoreOpen(false);
+    navigate(`/products/products/${id}`, { state: { initialProduct: row } });
+  };
+
   const handleToggleStatus = async () => {
     if (!canEditProduct) {
       toast.error("You do not have permission to update this item.");
       return;
     }
     if (!selectedProduct) return;
+    if (statusUpdating) return;
     const currentlyActive = isActive(selectedProduct);
     const hasActiveAssociations =
       productPlans.some((row) => !isInactive(row)) ||
@@ -268,23 +282,30 @@ export default function ProductDetailPage() {
     }
     const targetId = getId(selectedProduct);
     const nextStatus = currentlyActive ? "Inactive" : "Active";
+    const previousProduct = selectedProduct;
+    const optimisticProduct = {
+      ...selectedProduct,
+      status: nextStatus,
+      active: !currentlyActive,
+      isActive: !currentlyActive,
+    };
+
+    setActionsOpen(false);
+    setStatusUpdating(true);
+    syncProductIntoProductQueries(queryClient, optimisticProduct);
+    toast.success(`Product marked as ${nextStatus.toLowerCase()}`);
 
     try {
       const res: any = currentlyActive
         ? await productsAPI.markInactive(targetId)
         : await productsAPI.markActive(targetId);
       if (res?.success === false) throw new Error(res?.message || "Failed to update product");
-      syncProductIntoProductQueries(queryClient, {
-        ...selectedProduct,
-        status: nextStatus,
-        active: !currentlyActive,
-        isActive: !currentlyActive,
-      });
-      await invalidateProductQueries(queryClient, targetId);
-      setActionsOpen(false);
-      toast.success(`Product marked as ${nextStatus.toLowerCase()}`);
+      void invalidateProductQueries(queryClient, targetId);
     } catch (e: any) {
+      syncProductIntoProductQueries(queryClient, previousProduct);
       toast.error(e?.message || "Failed to update product");
+    } finally {
+      setStatusUpdating(false);
     }
   };
 
@@ -360,7 +381,7 @@ export default function ProductDetailPage() {
           <button
             type="button"
             onClick={() => navigate("/products/products/new")}
-            className="mt-4 rounded bg-[#1b5e6a] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+            className="mt-4 rounded bg-[#156372] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
           >
             Create Product
           </button>
@@ -380,7 +401,7 @@ export default function ProductDetailPage() {
               className="inline-flex items-center gap-1 text-[15px] font-semibold text-[#111827]"
             >
               {productFilter === "All Products" ? "All Products" : productFilter}
-              <ChevronDown size={16} className="text-[#2563eb]" />
+              <ChevronDown size={16} className="text-[#156372]" />
             </button>
             {sidebarFilterOpen ? (
               <div className="absolute left-0 top-full z-[140] mt-1 w-48 rounded-md border border-gray-200 bg-white py-1 shadow-xl">
@@ -392,7 +413,7 @@ export default function ProductDetailPage() {
                       setProductFilter(option);
                       setSidebarFilterOpen(false);
                     }}
-                    className={`w-full px-4 py-2 text-left text-sm ${productFilter === option ? "bg-[#eff6ff] text-[#2563eb]" : "text-[#334155] hover:bg-gray-50"}`}
+                    className={`w-full px-4 py-2 text-left text-sm ${productFilter === option ? "bg-[#d9eff1] text-[#156372]" : "text-[#334155] hover:bg-gray-50"}`}
                   >
                     {option}
                   </button>
@@ -406,7 +427,7 @@ export default function ProductDetailPage() {
               <button
                 type="button"
                 onClick={() => navigate("/products/products/new")}
-                className="inline-flex h-8 w-8 items-center justify-center rounded bg-[#1b5e6a] text-white hover:opacity-90"
+                className="inline-flex h-8 w-8 items-center justify-center rounded bg-[#156372] text-white hover:opacity-90"
               >
                 +
               </button>
@@ -428,7 +449,7 @@ export default function ProductDetailPage() {
                         setSidebarMoreOpen(false);
                         navigate("/products/products/import");
                       }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#475569] hover:bg-[#3b82f6] hover:text-white"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#475569] hover:bg-[#156372] hover:text-white"
                     >
                       <Upload size={14} />
                       Import Products
@@ -437,7 +458,7 @@ export default function ProductDetailPage() {
                   <button
                     type="button"
                     onClick={handleExportProducts}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#475569] hover:bg-[#3b82f6] hover:text-white"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#475569] hover:bg-[#156372] hover:text-white"
                   >
                     <Download size={14} />
                     Export Products
@@ -459,7 +480,7 @@ export default function ProductDetailPage() {
               <button
                 key={getId(row)}
                 type="button"
-                onClick={() => navigate(`/products/products/${getId(row)}`, { state: { initialProduct: row } })}
+                onClick={() => openProductDetails(row)}
                 className={`w-full border-b border-gray-100 px-4 py-3 text-left ${active ? "bg-gray-100" : "hover:bg-gray-50"}`}
               >
                 <div className="text-[14px] font-medium text-[#1e293b]">{row?.name || "-"}</div>
@@ -477,9 +498,9 @@ export default function ProductDetailPage() {
       <main className="flex flex-1 flex-col bg-white overflow-auto">
         <div className="flex items-center justify-between border-b border-gray-100 bg-white px-6 py-6 shadow-sm">
           <h1 className="text-[20px] font-semibold text-[#111827]">{selectedProduct.name}</h1>
-          <button type="button" onClick={() => navigate("/products/plans?tab=products")} className="text-[#ef4444] hover:text-[#dc2626]">
-            <X size={18} />
-          </button>
+              <button type="button" onClick={() => navigate("/products/products")} className="text-[#ef4444] hover:text-[#dc2626]">
+                <X size={18} />
+              </button>
         </div>
 
         <div className="flex items-center gap-4 border-b border-gray-100 bg-white px-6 py-3">
@@ -540,23 +561,13 @@ export default function ProductDetailPage() {
                     <div className="absolute left-0 top-full z-[130] mt-1 w-56 rounded-lg border border-[#d7dce8] bg-white py-1 shadow-xl">
                       {canEditProduct ? (
                         <>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setActionsOpen(false);
-                              setEmailTemplatesOpen(true);
-                            }}
-                            className="mx-1 mb-1 w-[calc(100%-8px)] rounded-md px-3 py-2 text-left text-sm text-[#475569] hover:bg-[#3b82f6] hover:text-white"
-                          >
-                            Associate Email Templates
-                          </button>
-                          <button type="button" onClick={handleToggleStatus} className="w-full px-3 py-2 text-left text-sm text-[#475569] hover:bg-[#3b82f6] hover:text-white">
+                          <button type="button" onClick={handleToggleStatus} className="w-full px-3 py-2 text-left text-sm text-[#475569] hover:bg-[#f3f4f6] hover:text-[#111827]">
                             {isActive(selectedProduct) ? "Mark as Inactive" : "Mark as Active"}
                           </button>
                         </>
                       ) : null}
                       {canDeleteProduct ? (
-                        <button type="button" onClick={handleDeleteProduct} className="w-full px-3 py-2 text-left text-sm text-[#475569] hover:bg-[#3b82f6] hover:text-white">
+                        <button type="button" onClick={handleDeleteProduct} className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 hover:text-red-700">
                           Delete
                         </button>
                       ) : null}
@@ -568,7 +579,7 @@ export default function ProductDetailPage() {
                               setActionsOpen(false);
                               navigate("/products/pricing-widgets");
                             }}
-                            className="w-full px-3 py-2 text-left text-sm text-[#475569] hover:bg-[#3b82f6] hover:text-white"
+                            className="w-full px-3 py-2 text-left text-sm text-[#475569] hover:bg-[#f3f4f6] hover:text-[#111827]"
                           >
                             Configure Pricing Widget
                           </button>
@@ -578,7 +589,7 @@ export default function ProductDetailPage() {
                               setActionsOpen(false);
                               navigate(`/products/checkout-button?productId=${encodeURIComponent(getId(selectedProduct))}`);
                             }}
-                            className="w-full px-3 py-2 text-left text-sm text-[#475569] hover:bg-[#3b82f6] hover:text-white"
+                            className="w-full px-3 py-2 text-left text-sm text-[#475569] hover:bg-[#f3f4f6] hover:text-[#111827]"
                           >
                             Configure Checkout Button
                           </button>
@@ -620,7 +631,7 @@ export default function ProductDetailPage() {
 
         <div className="flex-1 p-6">
           <div className="rounded-lg border border-gray-100 bg-white p-6 shadow-sm">
-            <span className={`inline-block rounded px-3 py-1 text-xs font-semibold ${isActive(selectedProduct) ? "bg-[#1b5e6a] text-white" : "bg-[#6b7280] text-white"}`}>
+            <span className={`inline-block rounded px-3 py-1 text-xs font-semibold ${isActive(selectedProduct) ? "bg-[#156372] text-white" : "bg-[#6b7280] text-white"}`}>
               {selectedProduct.status || "Active"}
             </span>
             <div className="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -638,16 +649,16 @@ export default function ProductDetailPage() {
           <div className="mt-4 rounded-lg border border-gray-100 bg-white shadow-sm">
             <div className="border-b border-[#e5e7eb] px-5 pt-3">
               <div className="flex items-center gap-6">
-                <button type="button" onClick={() => setActiveTab("details")} className={`border-b-2 pb-3 text-sm ${activeTab === "details" ? "border-[#3b82f6] font-semibold text-[#111827]" : "border-transparent text-[#475569]"}`}>
+                <button type="button" onClick={() => setActiveTab("details")} className={`border-b-2 pb-3 text-sm ${activeTab === "details" ? "border-[#156372] font-semibold text-[#111827]" : "border-transparent text-[#475569]"}`}>
                   Product Details
                 </button>
-                <button type="button" onClick={() => setActiveTab("plans")} className={`border-b-2 pb-3 text-sm ${activeTab === "plans" ? "border-[#3b82f6] font-semibold text-[#111827]" : "border-transparent text-[#475569]"}`}>
+                <button type="button" onClick={() => setActiveTab("plans")} className={`border-b-2 pb-3 text-sm ${activeTab === "plans" ? "border-[#156372] font-semibold text-[#111827]" : "border-transparent text-[#475569]"}`}>
                   Plans
                 </button>
-                <button type="button" onClick={() => setActiveTab("addons")} className={`border-b-2 pb-3 text-sm ${activeTab === "addons" ? "border-[#3b82f6] font-semibold text-[#111827]" : "border-transparent text-[#475569]"}`}>
+                <button type="button" onClick={() => setActiveTab("addons")} className={`border-b-2 pb-3 text-sm ${activeTab === "addons" ? "border-[#156372] font-semibold text-[#111827]" : "border-transparent text-[#475569]"}`}>
                   Addons
                 </button>
-                <button type="button" onClick={() => setActiveTab("coupons")} className={`border-b-2 pb-3 text-sm ${activeTab === "coupons" ? "border-[#3b82f6] font-semibold text-[#111827]" : "border-transparent text-[#475569]"}`}>
+                <button type="button" onClick={() => setActiveTab("coupons")} className={`border-b-2 pb-3 text-sm ${activeTab === "coupons" ? "border-[#156372] font-semibold text-[#111827]" : "border-transparent text-[#475569]"}`}>
                   Coupons
                 </button>
               </div>
@@ -667,7 +678,7 @@ export default function ProductDetailPage() {
                         href={toExternalUrl(String(selectedProduct.redirectionUrl))}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[#2563eb] hover:underline break-all"
+                        className="text-[#156372] hover:underline break-all"
                       >
                         {String(selectedProduct.redirectionUrl)}
                       </a>
@@ -688,7 +699,7 @@ export default function ProductDetailPage() {
                       <button
                         type="button"
                         onClick={() => navigate(`/products/plans/new?product=${encodeURIComponent(selectedProductName)}`)}
-                        className="inline-flex items-center gap-1 text-sm font-normal text-[#2563eb] hover:text-[#1d4ed8]"
+                        className="inline-flex items-center gap-1 text-sm font-normal text-[#156372] hover:text-[#0D4A52]"
                       >
                         <CirclePlus size={13} />
                         New
@@ -717,7 +728,7 @@ export default function ProductDetailPage() {
                           const rowId = getId(row);
                           const status = String(row.status || "Active");
                           const statusClass =
-                            status.toLowerCase() === "active" ? "text-[#1b5e6a]" : "text-[#64748b]";
+                            status.toLowerCase() === "active" ? "text-[#156372]" : "text-[#64748b]";
                           return (
                             <tr key={rowId} className="border-b border-[#e3e7f2] text-[14px] text-[#111827]">
                               <td className="px-4 py-3">
@@ -725,7 +736,7 @@ export default function ProductDetailPage() {
                                   <button
                                     type="button"
                                     onClick={() => navigate(`/products/plans/${rowId}`)}
-                                    className="text-[#0f172a] hover:text-[#2563eb]"
+                                    className="text-[#0f172a] hover:text-[#156372]"
                                   >
                                     {row.planName || row.plan || "-"}
                                   </button>
@@ -749,7 +760,7 @@ export default function ProductDetailPage() {
                       {showTabCount.plans ? (
                         <span className="font-medium">{productPlans.length}</span>
                       ) : (
-                        <button type="button" onClick={() => revealTabCount("plans")} className="text-[#2563eb] hover:underline">
+                        <button type="button" onClick={() => revealTabCount("plans")} className="text-[#156372] hover:underline">
                           View
                         </button>
                       )}
@@ -771,7 +782,7 @@ export default function ProductDetailPage() {
                       <button
                         type="button"
                         onClick={() => navigate(`/products/addons/new?product=${encodeURIComponent(selectedProductName)}`)}
-                        className="inline-flex items-center gap-1 text-sm font-normal text-[#2563eb] hover:text-[#1d4ed8]"
+                        className="inline-flex items-center gap-1 text-sm font-normal text-[#156372] hover:text-[#0D4A52]"
                       >
                         <CirclePlus size={13} />
                         New
@@ -800,7 +811,7 @@ export default function ProductDetailPage() {
                           const rowId = getId(row);
                           const status = String(row.status || "Active");
                           const statusClass =
-                            status.toLowerCase() === "active" ? "text-[#1b5e6a]" : "text-[#64748b]";
+                            status.toLowerCase() === "active" ? "text-[#156372]" : "text-[#64748b]";
                           return (
                             <tr key={rowId} className="border-b border-[#e3e7f2] text-[14px] text-[#111827]">
                               <td className="px-4 py-3">
@@ -808,7 +819,7 @@ export default function ProductDetailPage() {
                                   <button
                                     type="button"
                                     onClick={() => navigate(`/products/addons/${rowId}`)}
-                                    className="text-[#0f172a] hover:text-[#2563eb]"
+                                    className="text-[#0f172a] hover:text-[#156372]"
                                   >
                                     {row.addonName || "-"}
                                   </button>
@@ -832,7 +843,7 @@ export default function ProductDetailPage() {
                       {showTabCount.addons ? (
                         <span className="font-medium">{productAddons.length}</span>
                       ) : (
-                        <button type="button" onClick={() => revealTabCount("addons")} className="text-[#2563eb] hover:underline">
+                        <button type="button" onClick={() => revealTabCount("addons")} className="text-[#156372] hover:underline">
                           View
                         </button>
                       )}
@@ -854,7 +865,7 @@ export default function ProductDetailPage() {
                       <button
                         type="button"
                         onClick={() => navigate(`/products/coupons/new?product=${encodeURIComponent(selectedProductName)}`)}
-                        className="inline-flex items-center gap-1 text-sm font-normal text-[#2563eb] hover:text-[#1d4ed8]"
+                        className="inline-flex items-center gap-1 text-sm font-normal text-[#156372] hover:text-[#0D4A52]"
                       >
                         <CirclePlus size={13} />
                         New
@@ -883,7 +894,7 @@ export default function ProductDetailPage() {
                           const rowId = getId(row);
                           const status = String(row.status || "Active");
                           const statusClass =
-                            status.toLowerCase() === "active" ? "text-[#1b5e6a]" : "text-[#64748b]";
+                            status.toLowerCase() === "active" ? "text-[#156372]" : "text-[#64748b]";
                           return (
                             <tr key={rowId} className="border-b border-[#e3e7f2] text-[14px] text-[#111827]">
                               <td className="px-4 py-3">{row.couponName || "-"}</td>
@@ -903,7 +914,7 @@ export default function ProductDetailPage() {
                       {showTabCount.coupons ? (
                         <span className="font-medium">{productCoupons.length}</span>
                       ) : (
-                        <button type="button" onClick={() => revealTabCount("coupons")} className="text-[#2563eb] hover:underline">
+                        <button type="button" onClick={() => revealTabCount("coupons")} className="text-[#156372] hover:underline">
                           View
                         </button>
                       )}
@@ -944,7 +955,7 @@ export default function ProductDetailPage() {
             <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
               <button
                 type="button"
-                className="rounded-md bg-blue-600 px-4 py-1.5 text-[12px] text-white hover:bg-blue-700"
+                className="rounded-md bg-[#156372] px-4 py-1.5 text-[12px] text-white hover:bg-[#0D4A52]"
                 onClick={confirmDeleteProduct}
               >
                 Delete
@@ -995,7 +1006,7 @@ export default function ProductDetailPage() {
                     <select
                       value={emailTemplateMap[eventLabel] || "Default"}
                       onChange={(e) => setEmailTemplateMap((prev) => ({ ...prev, [eventLabel]: e.target.value }))}
-                      className="h-10 w-full rounded border border-[#cfd5e3] bg-white px-3 text-[14px] text-[#4b5563] outline-none focus:border-[#3b82f6]"
+                      className="h-10 w-full rounded border border-[#cfd5e3] bg-white px-3 text-[14px] text-[#4b5563] outline-none focus:border-[#156372]"
                     >
                       <option value="Default">Default</option>
                     </select>
@@ -1015,7 +1026,7 @@ export default function ProductDetailPage() {
                     setEmailTemplatesOpen(false);
                     toast.success("Email templates saved");
                   }}
-                  className="rounded bg-[#1b5e6a] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+                  className="rounded bg-[#156372] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
                 >
                   Save
                 </button>

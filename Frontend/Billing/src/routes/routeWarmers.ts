@@ -156,6 +156,39 @@ async function warmCreditNotesList() {
   });
 }
 
+function normalizeItemForList(item: any) {
+  return {
+    ...item,
+    images: Array.isArray(item?.images) ? item.images : (item?.image ? [item.image] : []),
+    id: item?.id || item?._id,
+    active: item?.active !== undefined ? item.active : item?.isActive,
+  };
+}
+
+function extractItemRows(response: any): any[] {
+  if (Array.isArray(response?.data)) return response.data;
+  if (Array.isArray(response?.items)) return response.items;
+  if (Array.isArray(response?.data?.data)) return response.data.data;
+  return [];
+}
+
+async function warmItemsList() {
+  await prefetchOnce("items:list", async () => {
+    await billingQueryClient.prefetchQuery({
+      queryKey: ["items", "list"],
+      queryFn: async () => {
+        if ((import.meta as any).env?.DEV) {
+          await waitForBackendReady();
+        }
+        const { itemsAPI } = await import("../services/api");
+        const response = await itemsAPI.getAll();
+        return extractItemRows(response).map((item) => normalizeItemForList(item));
+      },
+      staleTime: 2 * 60 * 1000,
+    });
+  });
+}
+
 const ROUTE_WARMERS: Record<string, () => void> = {
   "/dashboard": () => {
     warmModule("dashboard-module", () => import("../pages/home/DashboardRoutes"));
@@ -192,6 +225,7 @@ const ROUTE_WARMERS: Record<string, () => void> = {
   },
   "/products/items": () => {
     warmModule("items-module", () => import("../pages/Product-Calalog/items/ItemsPage"));
+    void warmItemsList();
   },
 };
 

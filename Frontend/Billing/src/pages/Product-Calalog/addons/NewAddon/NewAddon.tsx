@@ -14,7 +14,6 @@ type FormState = {
   product: string;
   addonName: string;
   addonCode: string;
-  description: string;
   addonType: "One-time" | "Recurring";
   billingFrequency: string;
   pricingModel: "Per Unit" | "Volume" | "Tier" | "Package" | "Flat";
@@ -96,7 +95,6 @@ const DEFAULT_FORM: FormState = {
   product: "",
   addonName: "",
   addonCode: "",
-  description: "",
   addonType: "Recurring",
   billingFrequency: "Month(s)",
   pricingModel: "Per Unit",
@@ -146,7 +144,6 @@ const toForm = (row: AddonRecord): FormState => ({
   product: row.product || "",
   addonName: row.addonName || "",
   addonCode: row.addonCode || "",
-  description: row.description || "",
   addonType: String(row.addonType || "").toLowerCase() === "one-time" ? "One-time" : "Recurring",
   billingFrequency: normBilling(row.billingFrequency || "Month(s)"),
   pricingModel: normModel(row.pricingModel),
@@ -836,7 +833,6 @@ export default function NewAddonPage() {
             product,
             addonName,
             addonCode,
-            description: form.description.trim(),
             addonType: form.addonType,
             billingFrequency: form.billingFrequency,
             pricingModel: form.pricingModel,
@@ -875,7 +871,6 @@ export default function NewAddonPage() {
           product,
           addonName,
           addonCode,
-          description: form.description.trim(),
           status: "Active",
           addonType: form.addonType,
           billingFrequency: form.billingFrequency,
@@ -940,8 +935,6 @@ export default function NewAddonPage() {
   const labelClass = "mb-1 block text-[12px] font-normal text-[#1f2937]";
   const inputBaseClass =
     "h-[32px] w-full rounded border border-[#cfd6e6] bg-white px-3 text-[12px] text-[#111827] outline-none transition-all focus:border-[#4c8bf5] disabled:cursor-not-allowed disabled:bg-gray-100";
-  const textareaBaseClass =
-    "w-full rounded border border-[#cfd6e6] bg-white px-3 py-2 text-[12px] text-[#111827] outline-none transition-all focus:border-[#4c8bf5] disabled:cursor-not-allowed disabled:bg-gray-100 resize-none";
 
   return (
     <div className="flex min-h-full w-full flex-col bg-[#f8f9fc]">
@@ -982,11 +975,7 @@ export default function NewAddonPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-x-10">
-                  <div className={`grid grid-cols-[140px_minmax(0,1fr)] items-start gap-x-6 ${inputsDisabled ? "opacity-60" : ""}`}>
-                    <label className={labelClass}>Addon Description</label>
-                    <textarea value={form.description} disabled={inputsDisabled} onChange={(e) => setField("description", e.target.value)} className={`h-20 ${textareaBaseClass}`} />
-                  </div>
+                <div className="grid grid-cols-1 gap-x-10">
                   <div className={`grid grid-cols-[140px_minmax(0,1fr)] items-start gap-x-6 ${inputsDisabled ? "opacity-60" : ""}`}>
                     <label className={labelRequiredClass}>Addon Type*</label>
                     <div className="mt-1 flex gap-5">

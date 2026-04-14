@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { isTaxGroupRecord } from "../pages/settings/organization-settings/taxes-compliance/TAX/storage.ts";
+import { isTaxGroupRecord } from "../pages/settings/organization-settings/taxes-compliance/TAX/storage";
 
 export type TaxQuickCreateTarget = { type: "expense" } | { type: "itemized"; index: number };
 

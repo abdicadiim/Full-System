@@ -1,4 +1,19 @@
-const HEALTH_URL = "http://127.0.0.1:5000/api/health";
+const DEFAULT_BACKEND_ORIGIN = "http://127.0.0.1:5000";
+
+const resolveBackendOrigin = () => {
+  const env = (typeof import.meta !== "undefined" && (import.meta as any).env) || {};
+  const raw = env?.VITE_API_ORIGIN || env?.VITE_API_URL || "";
+
+  if (!raw) return DEFAULT_BACKEND_ORIGIN;
+
+  try {
+    return new URL(raw, DEFAULT_BACKEND_ORIGIN).origin;
+  } catch {
+    return DEFAULT_BACKEND_ORIGIN;
+  }
+};
+
+const HEALTH_URL = `${resolveBackendOrigin()}/api/health`;
 const CHECK_INTERVAL_MS = 250;
 const CHECK_TIMEOUT_MS = 10000;
 

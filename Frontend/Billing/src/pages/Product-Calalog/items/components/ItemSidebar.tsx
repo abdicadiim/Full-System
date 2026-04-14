@@ -211,7 +211,7 @@ export default function ItemSidebar({
                                     <button
                                         key={view}
                                         onClick={() => { setFilterType(view); setViewDropdownOpen(false); }}
-                                        className={`w-full text-left px-4 py-2 text-sm transition-colors ${filterType === view ? 'bg-teal-50 text-teal-700 font-medium' : 'text-slate-600 hover:bg-teal-50/50'}`}
+                                        className={`w-full text-left px-4 py-2 text-sm transition-colors ${filterType === view ? 'bg-[#1b5e6a] text-white font-medium' : 'text-slate-600 hover:bg-[#1b5e6a] hover:text-white'}`}
                                     >
                                         {view}
                                     </button>
@@ -243,7 +243,7 @@ export default function ItemSidebar({
                                     <div className="relative">
                                         <button
                                             onClick={() => { setSortSubMenuOpen(!sortSubMenuOpen); setExportSubMenuOpen(false); }}
-                                            className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${sortSubMenuOpen ? 'bg-[#1b5e6a] text-white rounded mx-2 w-[calc(100%-16px)]' : 'text-slate-600 hover:bg-teal-50/50'}`}
+                                            className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${sortSubMenuOpen ? 'bg-[#1b5e6a] text-white rounded mx-2 w-[calc(100%-16px)]' : 'text-slate-600 hover:bg-[#1b5e6a] hover:text-white'}`}
                                         >
                                             <div className="flex items-center gap-3">
                                                 <ArrowUpDown size={16} className={sortSubMenuOpen ? 'text-white' : 'text-[#1b5e6a]'} />
@@ -254,14 +254,14 @@ export default function ItemSidebar({
                                         {sortSubMenuOpen && (
                                             <div className="absolute top-0 left-full ml-2 w-52 bg-white border border-gray-200 rounded-lg shadow-xl py-2 z-[160] animate-in fade-in slide-in-from-left-1 duration-200">
                                                 {['Name', 'SKU', 'Rate', 'Last Modified', 'Created Time'].map(opt => (
-                                                    <button key={opt} className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-teal-50/50">{opt}</button>
+                                            <button key={opt} className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white">{opt}</button>
                                                 ))}
                                             </div>
                                         )}
                                     </div>
 
                                     <button
-                                        className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-teal-50/50 transition-colors"
+                                        className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors"
                                         onClick={() => { navigate('/products/items/import'); setMoreDropdownOpen(false); }}
                                     >
                                         <Upload size={16} className="text-[#1b5e6a]" />
@@ -271,7 +271,7 @@ export default function ItemSidebar({
                                     <div className="relative">
                                         <button
                                             onClick={() => { setExportSubMenuOpen(!exportSubMenuOpen); setSortSubMenuOpen(false); }}
-                                            className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${exportSubMenuOpen ? 'bg-[#1b5e6a] text-white rounded mx-2 w-[calc(100%-16px)]' : 'text-slate-600 hover:bg-teal-50/50'}`}
+                                            className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${exportSubMenuOpen ? 'bg-[#1b5e6a] text-white rounded mx-2 w-[calc(100%-16px)]' : 'text-slate-600 hover:bg-[#1b5e6a] hover:text-white'}`}
                                         >
                                             <div className="flex items-center gap-3">
                                                 <Download size={16} className={exportSubMenuOpen ? 'text-white' : 'text-[#1b5e6a]'} />
@@ -281,28 +281,28 @@ export default function ItemSidebar({
                                         </button>
                                         {exportSubMenuOpen && (
                                             <div className="absolute top-0 left-full ml-2 w-52 bg-white border border-gray-200 rounded-lg shadow-xl py-2 z-[160] animate-in fade-in slide-in-from-left-1 duration-200">
-                                                <button className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-teal-50/50">Export Items</button>
-                                                <button className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-teal-50/50">Export View</button>
+                                                <button className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white">Export Items</button>
+                                                <button className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white">Export View</button>
                                             </div>
                                         )}
                                     </div>
 
                                     <div className="h-px bg-gray-100 my-1 mx-2" />
 
-                                    <button className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-teal-50/50 transition-colors">
+                                    <button className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors">
                                         <SlidersHorizontal size={16} className="text-[#1b5e6a]" />
                                         <span className="font-medium">Preferences</span>
                                     </button>
 
                                     <button
-                                        className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-700 hover:bg-teal-50/50 transition-colors"
+                                        className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-700 hover:bg-[#1b5e6a] hover:text-white transition-colors"
                                         onClick={() => { window.location.reload(); setMoreDropdownOpen(false); }}
                                     >
                                         <RefreshCw size={16} className="text-[#1b5e6a]" />
                                         <span className="font-medium">Refresh List</span>
                                     </button>
 
-                                    <button className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-teal-50/50 transition-colors">
+                                    <button className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors">
                                         <RotateCcw size={16} className="text-[#1b5e6a]" />
                                         <span className="font-medium">Reset Column Width</span>
                                     </button>

@@ -412,7 +412,6 @@ export default function AddonDetailPage() {
       "Product",
       "Addon Name",
       "Addon Code",
-      "Description",
       "Status",
       "Pricing Model",
       "Addon Type",
@@ -425,7 +424,6 @@ export default function AddonDetailPage() {
         row.product || "",
         row.addonName || "",
         row.addonCode || "",
-        row.description || "",
         row.status || "",
         row.pricingModel || "",
         row.addonType || "",
@@ -813,7 +811,6 @@ export default function AddonDetailPage() {
                       <DetailsRow label="Associated Plans" value={associatedPlans} />
                       <DetailsRow label="Pricing Interval" value={pricingInterval} />
                       <DetailsRow label="Unit name" value={unitName} />
-                      <DetailsRow label="Addon Description" value={addon.description || "-"} />
                     </div>
 
                     <div className="flex items-start justify-center">
@@ -989,14 +986,13 @@ export default function AddonDetailPage() {
                         <tr className="bg-[#f7f8fc]">
                           <th className="px-6 py-3 text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">Name</th>
                           <th className="px-6 py-3 text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">Currency</th>
-                          <th className="px-6 py-3 text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">Description</th>
                           <th className="px-6 py-3 text-[11px] font-semibold uppercase tracking-wider text-[#64748b]">Status</th>
                         </tr>
                       </thead>
                       <tbody>
                         {addonPriceLists.length === 0 ? (
                           <tr className="border-t border-gray-200">
-                            <td colSpan={4} className="px-6 py-8 text-center text-[14px] text-[#64748b]">
+                            <td colSpan={3} className="px-6 py-8 text-center text-[14px] text-[#64748b]">
                               No price lists available for this addon.
                             </td>
                           </tr>
@@ -1009,7 +1005,6 @@ export default function AddonDetailPage() {
                               <tr key={rowKey} className="border-t border-gray-200">
                                 <td className="px-6 py-4 text-[16px] text-[#0f172a]">{String(row?.name || "-")}</td>
                                 <td className="px-6 py-4 text-[16px] text-[#64748b]">{String(row?.currency || "-")}</td>
-                                <td className="px-6 py-4 text-[16px] text-[#64748b]">{String(row?.description || "-")}</td>
                                 <td className={`px-6 py-4 text-[16px] ${isActiveStatus ? "text-[#16a34a]" : "text-[#8b949e]"}`}>{status}</td>
                               </tr>
                             );

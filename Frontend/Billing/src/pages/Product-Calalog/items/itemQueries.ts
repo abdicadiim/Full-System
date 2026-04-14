@@ -1,10 +1,14 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { itemsAPI } from "../../../services/api";
+import { CUSTOMER_QUERY_PERSIST_KEY } from "../../../lib/query/queryClient";
+import { readSyncEnvelope } from "../../../lib/sync/syncStorage";
 
 const ITEM_LIST_STALE_TIME_MS = 30 * 1000;
 const ITEM_DETAIL_STALE_TIME_MS = 30 * 1000;
-const ITEMS_STORAGE_KEY = "inv_items_v1";
+const ITEMS_SYNC_STORAGE_KEY = "billing_items_sync_v1";
+const ITEMS_LEGACY_STORAGE_KEY = "inv_items_v1";
+const ITEMS_PREVIEW_STORAGE_KEY = "inv_items_preview_v1";
 const ITEM_DEBUG_STORAGE_KEY = "billing_debug_items_v1";
 const ITEM_LIST_PAGE_SIZE = 200;
 
@@ -17,7 +21,28 @@ const normalizeItemStatus = (item: any, isActive: boolean) => {
   return isActive ? "Active" : "Inactive";
 };
 
-const isItemDebugEnabled = () => {
+const readPersistedQueryItems = () => {
+  if (typeof window === "undefined" || !window.localStorage) return [];
+
+  try {
+    const raw = window.localStorage.getItem(CUSTOMER_QUERY_PERSIST_KEY);
+    if (!raw) return [];
+
+    const persisted = JSON.parse(raw);
+    const queries = Array.isArray(persisted?.clientState?.queries) ? persisted.clientState.queries : [];
+    const matchedQuery = queries.find((query: any) => {
+      const queryKey = Array.isArray(query?.queryKey) ? query.queryKey : [];
+      return queryKey.length === 3 && queryKey[0] === "items" && queryKey[1] === "list" && queryKey[2] === "all";
+    });
+
+    const queryData = matchedQuery?.state?.data;
+    return Array.isArray(queryData) ? queryData : [];
+  } catch {
+    return [];
+  }
+};
+
+export const isItemDebugEnabled = () => {
   if (typeof window === "undefined") return false;
   try {
     return window.localStorage.getItem(ITEM_DEBUG_STORAGE_KEY) === "1";
@@ -26,7 +51,7 @@ const isItemDebugEnabled = () => {
   }
 };
 
-const debugItems = (...args: any[]) => {
+export const debugItems = (...args: any[]) => {
   if (!isItemDebugEnabled()) return;
   // Keep debug output lightweight and easy to search in DevTools.
   console.debug("[items-debug]", ...args);
@@ -201,15 +226,42 @@ const buildItemsListRequestParams = (page: number, pageSize: number) => ({
   size: pageSize,
 });
 
-const readCachedItems = () => {
+export const readCachedItems = () => {
   if (typeof window === "undefined" || !window.localStorage) return [];
 
   try {
-    const raw = window.localStorage.getItem(ITEMS_STORAGE_KEY);
+    const persistedItems = readPersistedQueryItems();
+    if (persistedItems.length > 0) {
+      return persistedItems;
+    }
+
+    const envelope = readSyncEnvelope<any[]>(ITEMS_SYNC_STORAGE_KEY);
+    const syncedRows = Array.isArray(envelope?.payload) ? envelope.payload : [];
+    if (syncedRows.length > 0) {
+      return syncedRows;
+    }
+
+    const legacyRaw = window.localStorage.getItem(ITEMS_LEGACY_STORAGE_KEY);
+    const legacyRows = legacyRaw ? JSON.parse(legacyRaw) : [];
+    if (Array.isArray(legacyRows) && legacyRows.length > 0) {
+      return legacyRows;
+    }
+
+    const raw = window.localStorage.getItem(ITEMS_PREVIEW_STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
+  }
+};
+
+const writePreviewItems = (rows: any[]) => {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    const limited = Array.isArray(rows) ? rows.slice(0, ITEM_LIST_PAGE_SIZE) : [];
+    window.localStorage.setItem(ITEMS_PREVIEW_STORAGE_KEY, JSON.stringify(limited));
+  } catch {
+    // Best-effort preview cache; ignore storage quota issues.
   }
 };
 
@@ -230,13 +282,125 @@ const mergeRemoteAndCachedItems = (remoteRows: any[], cachedRows?: any[]) => {
   return [...normalizedRemoteRows, ...localOnlyRows];
 };
 
-export const fetchItemsList = async () => {
+type FetchItemsListOptions = {
+  queryClient?: QueryClient;
+};
+
+export const fetchItemsList = async (options?: FetchItemsListOptions) => {
   const pageSize = ITEM_LIST_PAGE_SIZE;
   const cachedRows = readCachedItems();
   debugItems("starting fetch", {
     cachedRows: cachedRows.length,
     pageSize,
   });
+
+  if (cachedRows.length > 0) {
+    // Serve preview cache immediately, then refresh in the background.
+    void (async () => {
+      try {
+        const firstResponse = await itemsAPI.getAll(buildItemsListRequestParams(1, pageSize));
+        if (firstResponse?.success === false) {
+          debugItems("first page failed", firstResponse?.message || "unknown error");
+          return;
+        }
+
+        const firstRows = extractRowsFromResponse(firstResponse);
+        const accumulatedRows: any[] = [...firstRows];
+        const paginationPages = getPaginationPagesFromResponse(firstResponse);
+        const paginationTotal = getPaginationTotalFromResponse(firstResponse);
+        const hasMorePage = getHasMorePageFromResponse(firstResponse);
+        debugItems("page", 1, {
+          rows: firstRows.length,
+          paginationPages,
+          paginationTotal,
+          hasMorePage,
+        });
+
+        const dedupeById = (rows: any[]) => {
+          const seen = new Set<string>();
+          return rows.filter((row: any) => {
+            const id = normalizeItemId(row?._id || row?.id || row?.itemId || row?.item_id);
+            if (!id) return true;
+            if (seen.has(id)) return false;
+            seen.add(id);
+            return true;
+          });
+        };
+
+        if (
+          hasMorePage ||
+          paginationPages > 1 ||
+          firstRows.length >= pageSize ||
+          (paginationTotal > 0 && firstRows.length < paginationTotal)
+        ) {
+          const inferredPagesFromTotal =
+            paginationTotal > 0 && firstRows.length > 0
+              ? Math.ceil(paginationTotal / firstRows.length)
+              : 0;
+          const maxPages = Math.min(
+            Math.max(paginationPages, inferredPagesFromTotal, 1),
+            1000
+          );
+          const pageNumbers = Array.from({ length: Math.max(0, maxPages - 1) }, (_, index) => index + 2);
+
+          if (pageNumbers.length > 0) {
+            const pageResponses = await Promise.all(
+              pageNumbers.map(async (page) => {
+                const response = await itemsAPI.getAll(buildItemsListRequestParams(page, pageSize));
+                if (response?.success === false) {
+                  debugItems("page failed", page, response?.message || "unknown error");
+                  throw new Error(response?.message || "Failed to load items");
+                }
+                return { page, response };
+              })
+            );
+
+            const backgroundRows = [...accumulatedRows];
+            for (const { page, response } of pageResponses) {
+              const rows = extractRowsFromResponse(response);
+              const nextPaginationPages = getPaginationPagesFromResponse(response);
+              const nextPaginationTotal = getPaginationTotalFromResponse(response) || paginationTotal;
+              const nextHasMorePage = getHasMorePageFromResponse(response);
+              debugItems("page", page, {
+                rows: rows.length,
+                paginationPages: nextPaginationPages,
+                paginationTotal: nextPaginationTotal,
+                hasMorePage: nextHasMorePage,
+              });
+              if (rows.length === 0) continue;
+
+              backgroundRows.push(...rows);
+              const uniqueRows = dedupeById(backgroundRows);
+              backgroundRows.length = 0;
+              backgroundRows.push(...uniqueRows);
+            }
+
+            const finalBackgroundRows = mergeRemoteAndCachedItems(dedupeById(backgroundRows), cachedRows);
+            debugItems("background finished", {
+              finalRows: finalBackgroundRows.length,
+            });
+
+            options?.queryClient?.setQueryData(itemQueryKeys.list(), finalBackgroundRows);
+            writePreviewItems(finalBackgroundRows);
+            return;
+          }
+        }
+
+        const finalRows = mergeRemoteAndCachedItems(dedupeById(accumulatedRows), cachedRows);
+        debugItems("finished fetch", {
+          remoteRows: accumulatedRows.length,
+          finalRows: finalRows.length,
+          cachedRows: cachedRows.length,
+        });
+        options?.queryClient?.setQueryData(itemQueryKeys.list(), finalRows);
+        writePreviewItems(finalRows);
+      } catch (error) {
+        debugItems("background fetch failed", error instanceof Error ? error.message : String(error));
+      }
+    })();
+
+    return cachedRows;
+  }
 
   const firstResponse = await itemsAPI.getAll(buildItemsListRequestParams(1, pageSize));
   if (firstResponse?.success === false) {
@@ -250,6 +414,7 @@ export const fetchItemsList = async () => {
 
   const firstRows = extractRowsFromResponse(firstResponse);
   const accumulatedRows: any[] = [...firstRows];
+  writePreviewItems(firstRows);
   const paginationPages = getPaginationPagesFromResponse(firstResponse);
   const paginationTotal = getPaginationTotalFromResponse(firstResponse);
   const hasMorePage = getHasMorePageFromResponse(firstResponse);
@@ -276,44 +441,58 @@ export const fetchItemsList = async () => {
     firstRows.length >= pageSize ||
     (paginationTotal > 0 && firstRows.length < paginationTotal)
   ) {
-    let page = 2;
-    const maxPagesGuard = 1000;
+    const inferredPagesFromTotal =
+      paginationTotal > 0 && firstRows.length > 0
+        ? Math.ceil(paginationTotal / firstRows.length)
+        : 0;
+    const maxPages = Math.min(
+      Math.max(paginationPages, inferredPagesFromTotal, 1),
+      1000
+    );
+    const pageNumbers = Array.from({ length: Math.max(0, maxPages - 1) }, (_, index) => index + 2);
 
-    while (page <= maxPagesGuard) {
-      const response = await itemsAPI.getAll(buildItemsListRequestParams(page, pageSize));
-      if (response?.success === false) {
-        debugItems("page failed", page, response?.message || "unknown error");
-        throw new Error(response?.message || "Failed to load items");
-      }
+    if (pageNumbers.length > 0) {
+      void (async () => {
+        const pageResponses = await Promise.all(
+          pageNumbers.map(async (page) => {
+            const response = await itemsAPI.getAll(buildItemsListRequestParams(page, pageSize));
+            if (response?.success === false) {
+              debugItems("page failed", page, response?.message || "unknown error");
+              throw new Error(response?.message || "Failed to load items");
+            }
+            return { page, response };
+          })
+        );
 
-      const rows = extractRowsFromResponse(response);
-      const nextPaginationPages = getPaginationPagesFromResponse(response);
-      const nextPaginationTotal = getPaginationTotalFromResponse(response) || paginationTotal;
-      const nextHasMorePage = getHasMorePageFromResponse(response);
-      debugItems("page", page, {
-        rows: rows.length,
-        paginationPages: nextPaginationPages,
-        paginationTotal: nextPaginationTotal,
-        hasMorePage: nextHasMorePage,
+        const backgroundRows = [...accumulatedRows];
+        for (const { page, response } of pageResponses) {
+          const rows = extractRowsFromResponse(response);
+          const nextPaginationPages = getPaginationPagesFromResponse(response);
+          const nextPaginationTotal = getPaginationTotalFromResponse(response) || paginationTotal;
+          const nextHasMorePage = getHasMorePageFromResponse(response);
+          debugItems("page", page, {
+            rows: rows.length,
+            paginationPages: nextPaginationPages,
+            paginationTotal: nextPaginationTotal,
+            hasMorePage: nextHasMorePage,
+          });
+          if (rows.length === 0) continue;
+
+          backgroundRows.push(...rows);
+          const uniqueRows = dedupeById(backgroundRows);
+          backgroundRows.length = 0;
+          backgroundRows.push(...uniqueRows);
+        }
+
+        const finalBackgroundRows = mergeRemoteAndCachedItems(dedupeById(backgroundRows), cachedRows);
+        debugItems("background finished", {
+          finalRows: finalBackgroundRows.length,
+        });
+
+        options?.queryClient?.setQueryData(itemQueryKeys.list(), finalBackgroundRows);
+      })().catch((error) => {
+        debugItems("background fetch failed", error instanceof Error ? error.message : String(error));
       });
-      if (rows.length === 0) {
-        break;
-      }
-
-      accumulatedRows.push(...rows);
-      const uniqueRows = dedupeById(accumulatedRows);
-      accumulatedRows.length = 0;
-      accumulatedRows.push(...uniqueRows);
-
-      if (nextPaginationTotal > 0 && accumulatedRows.length >= nextPaginationTotal) {
-        break;
-      }
-
-      if (!nextHasMorePage && rows.length < pageSize) {
-        break;
-      }
-
-      page += 1;
     }
   }
 
@@ -383,15 +562,23 @@ export const removeItemFromItemQueries = (queryClient: QueryClient, itemId: stri
 };
 
 export const useItemsListQuery = (options?: { enabled?: boolean }) =>
-  useQuery({
-    queryKey: itemQueryKeys.list(),
-    queryFn: fetchItemsList,
-    enabled: options?.enabled ?? true,
-    staleTime: 0,
-    placeholderData: (previousData) => previousData,
-    refetchOnMount: "always",
-    refetchOnWindowFocus: false,
-  });
+  {
+    const queryClient = useQueryClient();
+    const initialData =
+      queryClient.getQueryData<any[]>(itemQueryKeys.list()) ??
+      readCachedItems();
+
+    return useQuery({
+      queryKey: itemQueryKeys.list(),
+      queryFn: () => fetchItemsList({ queryClient }),
+      enabled: options?.enabled ?? true,
+      staleTime: 0,
+      initialData,
+      placeholderData: (previousData) => previousData,
+      refetchOnMount: "always",
+      refetchOnWindowFocus: false,
+    });
+  };
 
 export const useItemDetailQuery = (
   itemId: string,

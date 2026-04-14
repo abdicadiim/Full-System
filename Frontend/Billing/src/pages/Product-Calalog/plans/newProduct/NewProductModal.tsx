@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { HelpCircle, Info } from "lucide-react";
 import { toast } from "react-toastify";
 import Modal from "../../../../components/ui/Modal";
 import { useSaveProductMutation } from "../productQueries";
@@ -217,9 +216,8 @@ export default function NewProductModal({
 
                     {/* Email Notification Recipients */}
                     <div>
-                        <label className={`${labelClass} flex items-center gap-1 ${errors.emailRecipients ? errorLabelClass : ""}`}>
+                        <label className={`${labelClass} ${errors.emailRecipients ? errorLabelClass : ""}`}>
                             Email Notification Recipients
-                            <HelpCircle size={14} className="text-gray-400 cursor-help" />
                         </label>
                         <input
                             type="text"
@@ -236,8 +234,8 @@ export default function NewProductModal({
                     {/* Redirection URL */}
                     <div>
                         <div className="flex justify-between items-center mb-1.5">
-                            <label className={`${labelClass} flex items-center gap-1 mb-0 ${errors.redirectionUrl ? errorLabelClass : ""}`}>
-                                Redirection URL <Info size={14} className="text-gray-400 cursor-help" />
+                            <label className={`${labelClass} mb-0 ${errors.redirectionUrl ? errorLabelClass : ""}`}>
+                                Redirection URL
                             </label>
                             <div className="relative">
                                 <button
@@ -288,8 +286,8 @@ export default function NewProductModal({
                                 checked={form.autoGenerateSubscriptionNumbers}
                                 onChange={(e) => setForm((prev) => ({ ...prev, autoGenerateSubscriptionNumbers: e.target.checked }))}
                             />
-                            <label htmlFor="auto-gen" className="text-[13px] text-gray-700 font-medium flex items-center gap-1 cursor-pointer">
-                                Auto-Generate Subscription Numbers for This Product <HelpCircle size={14} className="text-gray-400 cursor-help" />
+                            <label htmlFor="auto-gen" className="text-[13px] text-gray-700 font-medium cursor-pointer">
+                                Auto-Generate Subscription Numbers for This Product
                             </label>
                         </div>
 
@@ -297,8 +295,8 @@ export default function NewProductModal({
                             <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-top-2 duration-300 ml-6">
                                 <div className="flex gap-4">
                                     <div className="flex-1 max-w-[180px]">
-                                        <label className={`flex items-center gap-1 text-[13px] mb-1.5 font-normal ${errors.prefix ? "text-red-600" : "text-gray-700"}`}>
-                                            Prefix <Info size={14} className="text-gray-400" />
+                                        <label className={`text-[13px] mb-1.5 font-normal ${errors.prefix ? "text-red-600" : "text-gray-700"}`}>
+                                            Prefix
                                         </label>
                                         <input
                                             type="text"
@@ -312,8 +310,8 @@ export default function NewProductModal({
                                         {errors.prefix ? <p className={errorTextClass}>{errors.prefix}</p> : null}
                                     </div>
                                     <div className="flex-1 max-w-[180px]">
-                                        <label className={`flex items-center gap-1 text-[13px] mb-1.5 font-normal ${errors.nextNumber ? "text-red-600" : "text-gray-700"}`}>
-                                            Next Number <Info size={14} className="text-gray-400" />
+                                        <label className={`text-[13px] mb-1.5 font-normal ${errors.nextNumber ? "text-red-600" : "text-gray-700"}`}>
+                                            Next Number
                                         </label>
                                         <input
                                             type="text"

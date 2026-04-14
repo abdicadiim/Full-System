@@ -344,7 +344,7 @@ const ItemsList = ({
                           navigate("/sales/quotes/new");
                           setNewTransactionOpen(false);
                         }}
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium border-b border-gray-50 last:border-0"
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-[#1b5e6a] hover:text-white transition-colors font-medium border-b border-gray-50 last:border-0"
                       >
                         Quote
                       </button>
@@ -354,7 +354,7 @@ const ItemsList = ({
                           navigate("/sales/invoices/new");
                           setNewTransactionOpen(false);
                         }}
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium border-b border-gray-50 last:border-0"
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-[#1b5e6a] hover:text-white transition-colors font-medium border-b border-gray-50 last:border-0"
                       >
                         Invoice
                       </button>
@@ -364,7 +364,7 @@ const ItemsList = ({
                           navigate("/sales/sales-receipts/new");
                           setNewTransactionOpen(false);
                         }}
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-slate-50 hover:text-slate-900 transition-colors font-medium last:border-0"
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-[#1b5e6a] hover:text-white transition-colors font-medium last:border-0"
                       >
                         Sales Receipt
                       </button>
@@ -525,29 +525,29 @@ const ItemsList = ({
                   <div className="relative">
                     <button
                       onClick={() => { setSortSubMenuOpen(!sortSubMenuOpen); setExportSubMenuOpen(false); }}
-                      className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${sortSubMenuOpen ? 'text-white rounded-md mx-2 w-[calc(100%-16px)] shadow-sm' : 'text-slate-600 hover:bg-[#1b5e6a] hover:text-white'}`}
-                      style={sortSubMenuOpen ? { backgroundColor: '#1b5e6a' } : {}}
+                      className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${sortSubMenuOpen ? 'bg-gray-100 text-slate-900 rounded-md mx-2 w-[calc(100%-16px)] shadow-sm' : 'text-slate-600 hover:bg-gray-100 hover:text-slate-900'}`}
+                      style={sortSubMenuOpen ? { backgroundColor: '#f3f4f6' } : {}}
                     >
                       <div className="flex items-center gap-3">
-                        <ArrowUpDown size={16} className={sortSubMenuOpen ? 'text-white' : ''} style={!sortSubMenuOpen ? { color: '#1b5e6a' } : {}} />
+                        <ArrowUpDown size={16} className={sortSubMenuOpen ? 'text-slate-700' : 'text-slate-500'} style={!sortSubMenuOpen ? { color: '#1b5e6a' } : {}} />
                         <span className="font-medium">Sort by</span>
                       </div>
-                      <ChevronRight size={14} className={sortSubMenuOpen ? 'text-white' : 'text-slate-400'} />
+                      <ChevronRight size={14} className={sortSubMenuOpen ? 'text-slate-700' : 'text-slate-400'} />
                     </button>
 
                     {sortSubMenuOpen && (
                       <div className="md:absolute md:top-0 md:right-full md:mr-2 md:w-52 relative w-full bg-white md:border border-gray-100 rounded-lg md:shadow-xl py-2 z-[115] md:animate-in md:fade-in md:slide-in-from-right-1 duration-200">
-                        {['Name', 'SKU', 'Rate', 'Last Modified Time', 'Created Time'].map((option) => {
-                          const keyMap: any = { 'Name': 'name', 'SKU': 'sku', 'Rate': 'sellingPrice', 'Last Modified Time': 'updatedAt', 'Created Time': 'createdAt' };
+                        {['Name', 'Rate', 'Last Modified Time', 'Created Time'].map((option) => {
+                          const keyMap: any = { 'Name': 'name', 'Rate': 'sellingPrice', 'Last Modified Time': 'updatedAt', 'Created Time': 'createdAt' };
                           const isActive = sortKey === keyMap[option];
                           return (
                             <button
                               key={option}
                               onClick={() => { setSortKey(keyMap[option]); setSortSubMenuOpen(false); }}
-                              className={`w-full flex items-center justify-between px-4 py-2 text-sm transition-colors ${isActive ? 'bg-[#1b5e6a] text-white font-bold' : 'text-slate-600 hover:bg-teal-50/50'}`}
+                              className={`w-full flex items-center justify-between px-4 py-2 text-sm transition-colors ${isActive ? 'bg-gray-100 text-slate-900 font-bold' : 'text-slate-600 hover:bg-gray-100 hover:text-slate-900'}`}
                             >
-                              <span style={isActive ? { color: 'white', fontWeight: 'bold' } : {}}>{option}</span>
-                              {isActive && <Plus size={14} className="rotate-45" style={{ color: 'white' }} />}
+                              <span style={isActive ? { color: '#0f172a', fontWeight: 'bold' } : {}}>{option}</span>
+                              {isActive && <Plus size={14} className="rotate-45" style={{ color: '#0f172a' }} />}
                             </button>
                           );
                         })}
@@ -559,10 +559,10 @@ const ItemsList = ({
 
                   {/* Import Items */}
                   <button
-                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
-                    onClick={() => { navigate('/products/items/import'); setMoreDropdownOpen(false); }}
-                  >
-                    <Upload size={16} className="text-teal-600 group-hover:text-white" />
+                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-gray-100 hover:text-slate-900 transition-colors group"
+                  onClick={() => { navigate('/products/items/import'); setMoreDropdownOpen(false); }}
+                >
+                    <Upload size={16} className="text-slate-500 group-hover:text-slate-700" />
                     <span className="font-medium">Import Items</span>
                   </button>
 
@@ -570,29 +570,23 @@ const ItemsList = ({
                   <div className="relative">
                     <button
                       onClick={() => { setExportSubMenuOpen(!exportSubMenuOpen); setSortSubMenuOpen(false); }}
-                      className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${exportSubMenuOpen ? 'text-white rounded-md mx-2 w-[calc(100%-16px)] shadow-sm' : 'text-slate-600 hover:bg-[#1b5e6a] hover:text-white'}`}
-                      style={exportSubMenuOpen ? { backgroundColor: '#1b5e6a' } : {}}
+                      className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${exportSubMenuOpen ? 'bg-gray-100 text-slate-900 rounded-md mx-2 w-[calc(100%-16px)] shadow-sm' : 'text-slate-600 hover:bg-gray-100 hover:text-slate-900'}`}
+                      style={exportSubMenuOpen ? { backgroundColor: '#f3f4f6' } : {}}
                     >
                       <div className="flex items-center gap-3">
-                        <Download size={16} className={exportSubMenuOpen ? 'text-white' : ''} style={!exportSubMenuOpen ? { color: '#1b5e6a' } : {}} />
+                        <Download size={16} className={exportSubMenuOpen ? 'text-slate-700' : 'text-slate-500'} />
                         <span className="font-medium">Export</span>
                       </div>
-                      <ChevronRight size={14} className={exportSubMenuOpen ? 'text-white' : 'text-slate-400'} />
+                      <ChevronRight size={14} className={exportSubMenuOpen ? 'text-slate-700' : 'text-slate-400'} />
                     </button>
 
                     {exportSubMenuOpen && (
                       <div className="md:absolute md:top-0 md:right-full md:mr-2 md:w-52 relative w-full bg-white md:border border-gray-100 rounded-lg md:shadow-xl py-2 z-[115] md:animate-in md:fade-in md:slide-in-from-right-1 duration-200">
                         <button
-                          className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white font-medium transition-colors"
+                          className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-gray-100 hover:text-slate-900 font-medium transition-colors"
                           onClick={() => { setIsExportModalOpen(true); setExportSubMenuOpen(false); setMoreDropdownOpen(false); }}
                         >
                           Export Items
-                        </button>
-                        <button
-                          className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white font-medium transition-colors"
-                          onClick={() => { setIsExportCurrentViewModalOpen(true); setExportSubMenuOpen(false); setMoreDropdownOpen(false); }}
-                        >
-                          Export Current View
                         </button>
                       </div>
                     )}
@@ -602,31 +596,31 @@ const ItemsList = ({
 
                   {/* Preferences */}
                   <button
-                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
-                    onClick={() => navigate('/settings/items')}
-                  >
-                    <SlidersHorizontal size={16} className="text-teal-600 group-hover:text-white" />
+                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-gray-100 hover:text-slate-900 transition-colors group"
+                  onClick={() => navigate('/settings/items')}
+                >
+                    <SlidersHorizontal size={16} className="text-teal-600 group-hover:text-slate-700" />
                     <span className="font-medium">Preferences</span>
                   </button>
 
                   {/* Refresh List */}
                   <button
-                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
-                    onClick={() => { onRefresh(); setMoreDropdownOpen(false); }}
-                  >
-                    <RefreshCw size={16} className="text-teal-600 group-hover:text-white" />
+                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-gray-100 hover:text-slate-900 transition-colors group"
+                  onClick={() => { onRefresh(); setMoreDropdownOpen(false); }}
+                >
+                    <RefreshCw size={16} className="text-teal-600 group-hover:text-slate-700" />
                     <span className="font-medium">Refresh List</span>
                   </button>
 
                   {/* Reset Column Width */}
                   <button
-                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors group"
-                    onClick={() => {
-                      setColumns(DEFAULT_COLUMNS);
-                      setMoreDropdownOpen(false);
-                    }}
-                  >
-                    <RotateCcw size={16} className="group-hover:text-white" style={{ color: accentColor }} />
+                    className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-gray-100 hover:text-slate-900 transition-colors group"
+                  onClick={() => {
+                    setColumns(DEFAULT_COLUMNS);
+                    setMoreDropdownOpen(false);
+                  }}
+                >
+                    <RotateCcw size={16} className="group-hover:text-slate-700" style={{ color: accentColor }} />
                     <span className="font-medium">Reset Column Width</span>
                   </button>
                 </div>

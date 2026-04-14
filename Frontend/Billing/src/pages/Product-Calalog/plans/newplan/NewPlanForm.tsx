@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, HelpCircle, Image as ImageIcon, PlusCircle, Search, X, GripVertical, Trash2 } from "lucide-react";
+import { Check, ChevronDown, Image as ImageIcon, PlusCircle, Search, X, GripVertical, Trash2 } from "lucide-react";
 import { toast } from "react-toastify";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useOrganizationBranding } from "../../../../hooks/useOrganizationBranding";
@@ -125,6 +125,17 @@ const normalizeReportingTagOptions = (tag: any): string[] => {
     .filter(Boolean);
 };
 
+const formatTaxLabel = (name: string, rate: number) => {
+  const cleanName = String(name || "").trim();
+  const cleanRate = Number.isFinite(rate) ? Number(rate.toFixed(2)) : 0;
+  const rateText = `${cleanRate}%`;
+  if (!cleanName) return rateText;
+  if (cleanName.includes(rateText) || cleanName.includes(rateText.replace(/\.00$/, ""))) {
+    return cleanName;
+  }
+  return `${cleanName} ${rateText}`;
+};
+
 const getGroupedTaxes = (rows: any[]) => {
   const rateById = new Map<string, number>();
 
@@ -166,7 +177,7 @@ const getGroupedTaxes = (rows: any[]) => {
       nameLower.includes("(compound tax)") ||
       nameLower.includes("compound tax");
 
-    return { name, isGroup, isCompound, computedRate, label: `${name} [${computedRate}%]` };
+    return { name, isGroup, isCompound, computedRate, label: formatTaxLabel(name, computedRate) };
   };
 
   rows.forEach((tax) => {
@@ -279,11 +290,10 @@ function TaxSearchableDropdown({
           setOpen(false);
           setSearchTerm("");
         }}
-        className={`flex w-full items-center justify-between rounded-lg py-2 text-[13px] transition-colors ${isIndented ? "pl-8 pr-4" : "px-4"} ${isSelected ? "font-medium text-white" : "text-slate-700 hover:bg-slate-50"}`}
-        style={isSelected ? { backgroundColor: accentColor } : undefined}
+        className={`flex w-full items-center justify-between rounded-lg py-2 text-[13px] transition-colors ${isIndented ? "pl-8 pr-4" : "px-4"} ${isSelected ? "bg-slate-50 font-medium text-slate-900" : "text-slate-700 hover:bg-slate-50"}`}
       >
         <span>{opt.label}</span>
-        {isSelected ? <Check size={14} className="text-white" /> : null}
+        {isSelected ? <Check size={14} className="text-slate-500" /> : null}
       </button>
     );
   };
@@ -454,14 +464,14 @@ function StyledDropdown({
             ? "border-gray-300 bg-white text-[#1f2937]"
             : "border-gray-200 bg-white text-[#1f2937] hover:border-gray-300"
           }`}
-        style={open && !disabled && isBlueStyle ? { borderColor: highlightColor, boxShadow: `0 0 0 1px ${highlightColor}` } : undefined}
+        style={open && !disabled ? { borderColor: "#111827", boxShadow: "0 0 0 1px #111827" } : undefined}
       >
         <div className="flex items-center justify-between gap-2">
           <span className={selected ? "text-[#1f2937]" : "text-[#6b7280]"}>{selected?.label || placeholder}</span>
           <ChevronDown
             size={14}
             className={`transition-transform ${open ? "rotate-180" : ""}`}
-            style={{ color: open && isBlueStyle ? highlightColor : "#64748b" }}
+            style={{ color: open ? "#111827" : "#64748b" }}
           />
         </div>
       </button>
@@ -477,7 +487,7 @@ function StyledDropdown({
           {searchable && (
             <div
               className="mb-2 flex items-center gap-2 rounded-lg border bg-gray-50 px-3 py-2 transition-colors focus-within:bg-white focus-within:border-gray-300"
-              style={isBlueStyle ? { borderColor: highlightColor } : undefined}
+              style={isBlueStyle ? { borderColor: "#111827" } : undefined}
             >
               <Search size={14} className="text-gray-400" />
               <input
@@ -505,7 +515,6 @@ function StyledDropdown({
                     {group.options.map((opt) => {
                       const isSelected = value === opt.value;
                       const isIndented = true;
-                      const selectedBlue = isSelected && selectedStyle === "blue";
                       return (
                         <button
                           type="button"
@@ -515,17 +524,14 @@ function StyledDropdown({
                             setOpen(false);
                             setSearchTerm("");
                           }}
-                          className={`mb-1 flex w-full items-center justify-between rounded-lg py-2 text-[13px] transition-colors last:mb-0 ${isIndented ? "pl-8 pr-4" : "px-4"} ${selectedBlue
-                            ? "font-medium text-white"
-                            : isSelected
-                              ? "bg-slate-50 text-slate-900 font-medium"
-                              : "text-slate-700 hover:bg-slate-50"
+                          className={`mb-1 flex w-full items-center justify-between rounded-lg py-2 text-[13px] transition-colors last:mb-0 ${isIndented ? "pl-8 pr-4" : "px-4"} ${isSelected
+                            ? "bg-slate-50 text-slate-900 font-medium"
+                            : "text-slate-700 hover:bg-slate-50"
                             }`}
-                          style={selectedBlue ? { backgroundColor: highlightColor } : undefined}
                         >
                           <span>{opt.label}</span>
                           {isSelected ? (
-                            <Check size={14} className={selectedBlue ? "text-white" : "text-gray-500"} />
+                            <Check size={14} className="text-slate-500" />
                           ) : null}
                         </button>
                       );
@@ -538,7 +544,6 @@ function StyledDropdown({
             ) : (
               filteredOptions.map((opt) => {
                 const isSelected = value === opt.value;
-                const selectedBlue = isSelected && selectedStyle === "blue";
                 return (
                   <button
                     type="button"
@@ -548,17 +553,14 @@ function StyledDropdown({
                       setOpen(false);
                       setSearchTerm("");
                     }}
-                    className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-[13px] transition-colors last:mb-0 ${selectedBlue
-                      ? "font-medium text-white"
-                      : isSelected
-                        ? "bg-slate-50 text-slate-900 font-medium"
-                        : "text-slate-700 hover:bg-slate-50"
+                    className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-[13px] transition-colors last:mb-0 ${isSelected
+                      ? "bg-slate-50 text-slate-900 font-medium"
+                      : "text-slate-700 hover:bg-slate-50"
                       }`}
-                    style={selectedBlue ? { backgroundColor: highlightColor } : undefined}
                   >
                     <span>{opt.label}</span>
                     {isSelected ? (
-                      <Check size={14} className={selectedBlue ? "text-white" : "text-gray-500"} />
+                      <Check size={14} className="text-slate-500" />
                     ) : null}
                   </button>
                 );
@@ -978,10 +980,9 @@ export default function NewPlanForm() {
                   <label className="text-[13px] text-[#ef4444]">Plan Name*</label>
                   <input name="planName" value={form.planName} onChange={onFieldChange} className={inputClass} disabled={lockDependentFields} />
                 </div>
-                <div className="grid grid-cols-1 items-center gap-4 md:grid-cols-[180px_340px_auto]">
+                <div className="grid grid-cols-1 items-center gap-4 md:grid-cols-[180px_340px]">
                   <label className="text-[13px] text-[#ef4444]">Plan Code*</label>
                   <input name="planCode" value={form.planCode} onChange={onFieldChange} className={inputClass} disabled={lockDependentFields} />
-                  <HelpCircle size={16} className="text-gray-400" />
                 </div>
               </div>
 
@@ -1009,7 +1010,7 @@ export default function NewPlanForm() {
                     </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 items-center gap-4 md:grid-cols-[180px_340px_auto]">
+                <div className="grid grid-cols-1 items-center gap-4 md:grid-cols-[180px_340px]">
                   <label className="text-[13px] text-[#ef4444]">Billing Cycles*</label>
                   <div className="grid grid-cols-[220px_84px] gap-3">
                     <div className="relative">
@@ -1031,21 +1032,21 @@ export default function NewPlanForm() {
                       disabled={lockDependentFields || form.billingCyclesType !== "Fixed number of cycles"}
                     />
                   </div>
-                  <HelpCircle size={16} className="text-gray-400" />
                 </div>
               </div>
 
-              <div className={`grid grid-cols-1 items-start gap-4 md:grid-cols-[180px_340px] ${lockDependentFields ? "opacity-45" : ""}`}>
+              <div className={`grid grid-cols-[180px_340px] items-start gap-4 ${lockDependentFields ? "opacity-45" : ""}`}>
                 <label className="pt-2 text-[13px] text-[#111827]">Plan Description</label>
                 <textarea
                   name="planDescription"
                   value={form.planDescription}
                   onChange={onFieldChange}
-                  rows={3}
-                  className="w-full resize-none rounded border border-gray-200 bg-white p-2.5 text-[13px] outline-none focus:border-gray-400 transition-all"
+                  rows={2}
+                  className="min-h-[44px] w-[340px] resize-y rounded border border-gray-200 bg-white px-3 py-2 text-[13px] outline-none focus:border-gray-400 transition-all"
                   disabled={lockDependentFields}
                 />
               </div>
+
             </div>
 
             <div className={`flex justify-start xl:justify-end ${lockDependentFields ? "opacity-45" : ""}`}>
@@ -1071,7 +1072,7 @@ export default function NewPlanForm() {
         <div className={`border-b border-gray-200 bg-gray-50 px-8 ${lockDependentFields ? "opacity-45" : ""}`}>
           <div className="flex items-end gap-5 border-b border-gray-200 pt-2">
             <button
-              className={`px-5 py-3 text-[13px] ${activeTab === "pricing" ? "border-t-2 border-[#22b573] bg-white font-medium text-[#111827]" : "text-[#111827]"} ${lockDependentFields ? "cursor-not-allowed" : ""}`}
+        className={`px-5 py-3 text-[13px] ${activeTab === "pricing" ? "border-t-2 border-[#156372] bg-white font-medium text-[#111827]" : "text-[#111827]"} ${lockDependentFields ? "cursor-not-allowed" : ""}`}
               onClick={() => !lockDependentFields && setActiveTab("pricing")}
               type="button"
               disabled={lockDependentFields}
@@ -1079,7 +1080,7 @@ export default function NewPlanForm() {
               Pricing
             </button>
             <button
-              className={`px-5 py-3 text-[13px] ${activeTab === "hosted" ? "border-t-2 border-[#22b573] bg-white font-medium text-[#111827]" : "text-[#111827]"} ${lockDependentFields ? "cursor-not-allowed" : ""}`}
+        className={`px-5 py-3 text-[13px] ${activeTab === "hosted" ? "border-t-2 border-[#156372] bg-white font-medium text-[#111827]" : "text-[#111827]"} ${lockDependentFields ? "cursor-not-allowed" : ""}`}
               onClick={() => !lockDependentFields && setActiveTab("hosted")}
               type="button"
               disabled={lockDependentFields}
@@ -1087,7 +1088,7 @@ export default function NewPlanForm() {
               Hosted Payment Pages & Portal
             </button>
             <button
-              className={`px-5 py-3 text-[13px] ${activeTab === "details" ? "border-t-2 border-[#22b573] bg-white font-medium text-[#111827]" : "text-[#111827]"} ${lockDependentFields ? "cursor-not-allowed" : ""}`}
+        className={`px-5 py-3 text-[13px] ${activeTab === "details" ? "border-t-2 border-[#156372] bg-white font-medium text-[#111827]" : "text-[#111827]"} ${lockDependentFields ? "cursor-not-allowed" : ""}`}
               onClick={() => !lockDependentFields && setActiveTab("details")}
               type="button"
               disabled={lockDependentFields}
@@ -1136,7 +1137,6 @@ export default function NewPlanForm() {
                     onFooterActionClick={() => setIsUnitModalOpen(true)}
                     selectedStyle="blue"
                   />
-                  <HelpCircle size={16} className="text-gray-400" />
                 </div>
               )}
 
@@ -1174,7 +1174,8 @@ export default function NewPlanForm() {
                       value="Goods"
                       checked={form.type === "Goods"}
                       onChange={onFieldChange}
-                      className="h-4 w-4"
+                      className="h-4 w-4 cursor-pointer"
+                      style={{ accentColor }}
                       disabled={lockDependentFields}
                     />
                     Goods
@@ -1186,7 +1187,8 @@ export default function NewPlanForm() {
                       value="Service"
                       checked={form.type === "Service"}
                       onChange={onFieldChange}
-                      className="h-4 w-4"
+                      className="h-4 w-4 cursor-pointer"
+                      style={{ accentColor }}
                       disabled={lockDependentFields}
                     />
                     Service
@@ -1237,10 +1239,7 @@ export default function NewPlanForm() {
 
                 {form.widgetsPreference && (
                   <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-[180px_1fr]">
-                    <div className="flex items-center gap-1">
-                      <label className="text-[13px] text-[#111827]">Plan Features</label>
-                      <HelpCircle size={14} className="text-gray-400" />
-                    </div>
+                    <label className="text-[13px] text-[#111827]">Plan Features</label>
 
                     <div className="space-y-3">
                       <div className="rounded-lg border border-[#cfd5e3] bg-white">
@@ -1343,7 +1342,7 @@ export default function NewPlanForm() {
                         className="h-4 w-4 rounded border-[#cfd5e3] text-[#3b82f6] focus:ring-[#3b82f6]"
                         disabled={lockDependentFields}
                       />
-                      Allow customers to switch to this plan from the portal <HelpCircle size={14} className="text-gray-400" />
+                      Allow customers to switch to this plan from the portal
                     </label>
                   </div>
                 </div>
@@ -1364,7 +1363,6 @@ export default function NewPlanForm() {
                     disabled={lockDependentFields}
                     selectedStyle="blue"
                   />
-                  <HelpCircle size={16} className="text-gray-400" />
                 </div>
 
                 <div className="grid grid-cols-1 items-center gap-4 md:grid-cols-[180px_1fr_auto]">
@@ -1377,7 +1375,6 @@ export default function NewPlanForm() {
                     disabled={lockDependentFields}
                     selectedStyle="blue"
                   />
-                  <HelpCircle size={16} className="text-gray-400" />
                 </div>
               </div>
 
@@ -1417,7 +1414,7 @@ export default function NewPlanForm() {
         </div>
       </div>
 
-      <div className="border-t border-gray-200 bg-white px-8 py-4">
+      <div className="shrink-0 border-t border-gray-200 bg-white px-8 py-4">
         <div className="flex gap-3">
           <button
             type="button"

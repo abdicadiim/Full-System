@@ -28,7 +28,7 @@ export default function ItemQueryWarmup() {
 
     void queryClient.prefetchQuery({
       queryKey: itemQueryKeys.list(),
-      queryFn: fetchItemsList,
+      queryFn: () => fetchItemsList({ queryClient }),
     });
   }, [queryClient]);
 

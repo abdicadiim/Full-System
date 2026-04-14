@@ -16,15 +16,24 @@ import BulkUpdateModal from "./components/modals/BulkUpdateModal";
 import { useCurrency } from "../../../hooks/useCurrency";
 import { usePermissions } from "../../../hooks/usePermissions";
 import { buildCloneName } from "../utils/cloneName";
-import { fetchItemsList, itemQueryKeys, useItemDetailQuery, useItemsListQuery } from "./itemQueries";
-import LoadingSpinner from "../../../components/LoadingSpinner";
+import {
+  debugItems,
+  fetchItemsList,
+  isItemDebugEnabled,
+  itemQueryKeys,
+  readCachedItems,
+  removeItemFromItemQueries,
+  syncItemIntoItemQueries,
+  useItemDetailQuery,
+  useItemsListQuery,
+} from "./itemQueries";
 
 function ItemsPageContent() {
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [items, setItems] = useState<Item[]>([]);
+  const [items, setItems] = useState<Item[]>(() => readCachedItems() as Item[]);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(() => {
@@ -118,13 +127,44 @@ function ItemsPageContent() {
     const normalizedItems = (Array.isArray(rows) ? rows : [])
       .map((item: Item) => normalizeItemForList(item))
       .filter(Boolean) as Item[];
-    setItems(normalizedItems);
+
+    setItems((prev) => {
+      if (normalizedItems.length === 0) {
+        return prev;
+      }
+
+      const merged = new Map<string, Item>();
+      [...prev, ...normalizedItems].forEach((item: any) => {
+        const normalizedId = String(item?.id || item?._id || "").trim();
+        if (!normalizedId) return;
+        merged.set(normalizedId, {
+          ...(merged.get(normalizedId) || {}),
+          ...item,
+        } as Item);
+      });
+
+      return Array.from(merged.values());
+    });
+  }, []);
+
+  const mergeItemsForView = useCallback((primary: Item[], secondary?: any[]) => {
+    const merged = new Map<string, Item>();
+
+    [...(Array.isArray(primary) ? primary : []), ...(Array.isArray(secondary) ? secondary : [])]
+      .map((item: any) => normalizeItemForList(item))
+      .filter(Boolean)
+      .forEach((item: any) => {
+        merged.set(item.id, item as Item);
+      });
+
+    return Array.from(merged.values());
   }, []);
 
   const upsertItemInState = useCallback((item: any) => {
     const normalizedItem = normalizeItemForList(item as Item);
     if (!normalizedItem) return null;
 
+    syncItemIntoItemQueries(queryClient, normalizedItem);
     setItems((prev) => {
       const withoutCurrent = prev.filter(
         (row: any) => String(row?.id || row?._id || "").trim() !== normalizedItem.id
@@ -133,11 +173,26 @@ function ItemsPageContent() {
     });
 
     return normalizedItem;
-  }, []);
+  }, [queryClient]);
+
+  const removeItemInState = useCallback((itemId: string) => {
+    const normalizedItemId = String(itemId || "").trim();
+    if (!normalizedItemId) return;
+
+    removeItemFromItemQueries(queryClient, normalizedItemId);
+    setItems((prev) =>
+      prev.filter((row: any) => String(row?.id || row?._id || "").trim() !== normalizedItemId)
+    );
+  }, [queryClient]);
 
   const itemsListQuery = useItemsListQuery({
     enabled: shouldLoadItemsQuery,
   });
+  const showItemDebugBadge = isItemDebugEnabled();
+  const visibleItems = useMemo(
+    () => mergeItemsForView(items, itemsListQuery.data as any[]),
+    [items, itemsListQuery.data, mergeItemsForView]
+  );
 
   useEffect(() => {
     if (!permissionsLoading && !canViewItems) {
@@ -159,7 +214,7 @@ function ItemsPageContent() {
       return;
     }
 
-    if (itemsListQuery.isPending && items.length === 0) {
+    if (itemsListQuery.isPending && visibleItems.length === 0) {
       setLoading(true);
       setLoadError(null);
       return;
@@ -170,7 +225,7 @@ function ItemsPageContent() {
     }
   }, [
     canViewItems,
-    items.length,
+    visibleItems.length,
     itemsListQuery.data,
     itemsListQuery.isError,
     itemsListQuery.isPending,
@@ -180,7 +235,7 @@ function ItemsPageContent() {
   const fetchItems = useCallback(async () => {
     if (!canViewItems) return [];
 
-    if (items.length === 0) {
+    if (visibleItems.length === 0) {
       setLoading(true);
     }
     setLoadError(null);
@@ -188,8 +243,11 @@ function ItemsPageContent() {
     try {
       const rows = await queryClient.fetchQuery({
         queryKey: itemQueryKeys.list(),
-        queryFn: fetchItemsList,
+        queryFn: () => fetchItemsList({ queryClient }),
         staleTime: 0,
+      });
+      debugItems("manual fetch resolved", {
+        rows: Array.isArray(rows) ? rows.length : 0,
       });
       applyItemsResult(rows);
       return rows;
@@ -200,14 +258,14 @@ function ItemsPageContent() {
     } finally {
       setLoading(false);
     }
-  }, [applyItemsResult, canViewItems, items.length, queryClient]);
+  }, [applyItemsResult, canViewItems, queryClient, visibleItems.length]);
 
   const selectedItem = useMemo(
     () =>
-      items.find(
+      visibleItems.find(
         (x: Item) => String(x.id || x._id || "").trim() === normalizedSelectedId
       ) || null,
-    [items, normalizedSelectedId]
+    [normalizedSelectedId, visibleItems]
   );
 
   const selectedItemQuery = useItemDetailQuery(normalizedSelectedId, {
@@ -246,6 +304,11 @@ function ItemsPageContent() {
       return;
     }
     try {
+      debugItems("create submit", {
+        name: String(data?.name || "").trim(),
+        sku: String(data?.sku || "").trim(),
+        tagCount: Array.isArray(tagIds) ? tagIds.length : 0,
+      });
       const response = ensureItemApiSuccess(await itemsAPI.create(data), "Failed to save item");
 
       const newItem = response.data || response;
@@ -281,6 +344,7 @@ function ItemsPageContent() {
       setClonedItem(null);
       toast.success("Item created successfully");
       await fetchItems();
+      return normalizedItem || newItem;
     } catch (error: any) {
       console.error("Failed to create item:", error);
       toast.error("Failed to create item: " + (error.message || "Unknown error"));
@@ -299,6 +363,10 @@ function ItemsPageContent() {
       return;
     }
     try {
+      debugItems("update submit", {
+        id: targetId,
+        keys: Object.keys(data || {}),
+      });
       const safeSelected = { ...(selectedItem || {}) } as any;
       const safeData = { ...(data || {}) } as any;
       delete safeSelected.id;
@@ -335,7 +403,13 @@ function ItemsPageContent() {
             ...safeData,
           });
 
-      ensureItemApiSuccess(response, "Failed to update item");
+      const normalizedResponse = ensureItemApiSuccess(response, "Failed to update item");
+      const updatedItem = normalizedResponse?.data || normalizedResponse;
+      if (updatedItem) {
+        upsertItemInState(updatedItem);
+      } else {
+        syncItemIntoItemQueries(queryClient, { ...safeSelected, ...safeData, id: targetId, _id: targetId });
+      }
       await fetchItems();
       setSelectedId(targetId);
       setRouteState({ hash: "detail", itemId: targetId });
@@ -363,7 +437,11 @@ function ItemsPageContent() {
     if (!deleteConfirmModal.itemId) return;
     setIsDeletingItems(true);
     try {
+      debugItems("delete submit", {
+        id: deleteConfirmModal.itemId,
+      });
       ensureItemApiSuccess(await itemsAPI.delete(deleteConfirmModal.itemId), "Failed to delete item");
+      removeItemInState(deleteConfirmModal.itemId);
       await fetchItems();
       if (selectedId === deleteConfirmModal.itemId) {
         handleBackToList();
@@ -390,6 +468,7 @@ function ItemsPageContent() {
           ensureItemApiSuccess(await itemsAPI.delete(id), "Failed to delete item")
         )
       );
+      deleteConfirmModal.itemIds.forEach((id) => removeItemInState(id));
       await fetchItems();
       if (deleteConfirmModal.itemIds.includes(selectedId || "")) {
         handleBackToList();
@@ -412,6 +491,12 @@ function ItemsPageContent() {
       await Promise.all(
         ids.map(async (id) => ensureItemApiSuccess(await itemsAPI.markActive(id), "Failed to mark item active"))
       );
+      ids.forEach((id) => {
+        const existing = items.find((item) => item.id === id || item._id === id);
+        if (existing) {
+          upsertItemInState({ ...existing, active: true, isActive: true, status: "Active" });
+        }
+      });
       await fetchItems();
       toast.success(`${ids.length} item(s) marked as active`);
     } catch (e: any) { toast.error(e?.message || "Bulk action failed"); }
@@ -426,6 +511,12 @@ function ItemsPageContent() {
       await Promise.all(
         ids.map(async (id) => ensureItemApiSuccess(await itemsAPI.markInactive(id), "Failed to mark item inactive"))
       );
+      ids.forEach((id) => {
+        const existing = items.find((item) => item.id === id || item._id === id);
+        if (existing) {
+          upsertItemInState({ ...existing, active: false, isActive: false, status: "Inactive" });
+        }
+      });
       await fetchItems();
       toast.success(`${ids.length} item(s) marked as inactive`);
     } catch (e: any) { toast.error(e?.message || "Bulk action failed"); }
@@ -443,6 +534,12 @@ function ItemsPageContent() {
           ensureItemApiSuccess(await itemsAPI.update(id, { [field]: value }), "Bulk update failed")
         )
       );
+      bulkUpdateModal.itemIds.forEach((id) => {
+        const existing = items.find((item) => item.id === id || item._id === id);
+        if (existing) {
+          upsertItemInState({ ...existing, [field]: value });
+        }
+      });
       await fetchItems();
       toast.success(`${bulkUpdateModal.itemIds.length} item(s) updated successfully`);
       setBulkUpdateModal({ open: false, itemIds: [] });
@@ -479,7 +576,7 @@ function ItemsPageContent() {
       ...data,
       name: buildCloneName(
         baseName,
-        items.map((row: any) => String(row?.name || "")),
+        visibleItems.map((row: any) => String(row?.name || "")),
         "Item"
       ),
       sku: baseSku ? `${baseSku}-COPY` : "",
@@ -495,7 +592,7 @@ function ItemsPageContent() {
     await handleCreateItem(clonedPayload, [], { stayOnCurrent: true });
   };
 
-  if (permissionsLoading && items.length === 0) {
+  if (permissionsLoading && visibleItems.length === 0) {
     return (
       <div className="w-full p-8 text-center text-gray-500">Loading permissions...</div>
     );
@@ -511,15 +608,7 @@ function ItemsPageContent() {
     );
   }
 
-  if (loading && items.length === 0) {
-    return (
-      <div className="flex min-h-[420px] items-center justify-center bg-white">
-        <LoadingSpinner label="Loading items..." />
-      </div>
-    );
-  }
-
-  if (loadError && items.length === 0) {
+  if (loadError && visibleItems.length === 0) {
     return (
       <div className="flex min-h-[420px] items-center justify-center bg-white px-6">
         <div className="max-w-md rounded-lg border border-rose-200 bg-rose-50 p-5 text-center">
@@ -542,8 +631,8 @@ function ItemsPageContent() {
       {currentView === "detail" && normalizedSelectedId ? (
         <div className="flex flex-col md:flex-row gap-0 h-full">
           <div className="hidden md:flex w-full md:w-1/5 border-r border-gray-200 bg-white flex-col z-20">
-              <ItemSidebar
-              items={items}
+            <ItemSidebar
+              items={visibleItems}
               selectedId={selectedId}
               onSelect={handleSelectItem}
               onNew={() => { if (resolvedCanCreateItems) openNewView(); }}
@@ -568,7 +657,7 @@ function ItemsPageContent() {
                   }
                 }}
                 onUpdate={handleUpdateItem}
-                items={items}
+                items={visibleItems}
                 setItems={setItems}
                 onDelete={handleDeleteItem}
                 setSelectedId={setSelectedId}
@@ -606,23 +695,37 @@ function ItemsPageContent() {
           className="w-full h-full overflow-y-auto overflow-x-hidden bg-white"
           style={{ scrollbarGutter: "stable" }}
         >
-          {currentView === "list" && (
-            <ItemsList
-              items={items}
-              onSelect={handleSelectItem}
-              onNew={() => { if (resolvedCanCreateItems) openNewView(); }}
-              onDelete={handleDeleteItem}
-              onBulkDelete={async (ids: string[]) => setDeleteConfirmModal({ open: true, itemId: null, itemName: null, count: ids.length, itemIds: ids })}
-              onBulkUpdate={(ids: string[]) => setBulkUpdateModal({ open: true, itemIds: ids })}
-              onBulkMarkActive={handleBulkMarkActive}
-              onBulkMarkInactive={handleBulkMarkInactive}
-              onRefresh={fetchItems}
-              baseCurrency={baseCurrency}
-              isLoading={loading}
-              canCreate={resolvedCanCreateItems}
-              canEdit={resolvedCanEditItems}
-              canDelete={resolvedCanDeleteItems}
-            />
+      {currentView === "list" && (
+            <div className="relative">
+              {showItemDebugBadge && (
+                <div className="pointer-events-none absolute right-4 top-4 z-20 rounded-xl border border-teal-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-teal-700">
+                    Items debug
+                  </div>
+                  <div className="mt-1 space-y-0.5 text-[12px] text-slate-600">
+                    <div>visible: {visibleItems.length}</div>
+                    <div>query: {Array.isArray(itemsListQuery.data) ? itemsListQuery.data.length : 0}</div>
+                    <div>loading: {itemsListQuery.isPending ? "yes" : "no"}</div>
+                  </div>
+                </div>
+              )}
+              <ItemsList
+                items={visibleItems}
+                onSelect={handleSelectItem}
+                onNew={() => { if (resolvedCanCreateItems) openNewView(); }}
+                onDelete={handleDeleteItem}
+                onBulkDelete={async (ids: string[]) => setDeleteConfirmModal({ open: true, itemId: null, itemName: null, count: ids.length, itemIds: ids })}
+                onBulkUpdate={(ids: string[]) => setBulkUpdateModal({ open: true, itemIds: ids })}
+                onBulkMarkActive={handleBulkMarkActive}
+                onBulkMarkInactive={handleBulkMarkInactive}
+                onRefresh={fetchItems}
+                baseCurrency={baseCurrency}
+                isLoading={itemsListQuery.isPending && visibleItems.length === 0}
+                canCreate={resolvedCanCreateItems}
+                canEdit={resolvedCanEditItems}
+                canDelete={resolvedCanDeleteItems}
+              />
+            </div>
           )}
 
           {currentView === "new" && resolvedCanCreateItems && (
