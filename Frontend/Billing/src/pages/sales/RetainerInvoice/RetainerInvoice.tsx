@@ -4,8 +4,10 @@ import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import {
   ArrowUpDown,
+  Check,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   Columns3,
   Download,
   FileDown,
@@ -27,6 +29,8 @@ import {
 import { deleteInvoice, Invoice } from "../salesModel";
 import { useRetainerListQuery } from "./retainerInvoiceQueries";
 import { useOrganizationBranding } from "../../../hooks/useOrganizationBranding";
+import { useThemeColors } from "../../../hooks/useThemeColors";
+import { readTaxesLocal } from "../../settings/organization-settings/taxes-compliance/TAX/storage";
 
 type RetainerRow = {
   id: string;
@@ -35,7 +39,9 @@ type RetainerRow = {
   reference: string;
   customerName: string;
   date: string;
+  dateTs: number;
   issuedDate: string;
+  issuedDateTs: number;
   status: string;
   drawStatus: string;
   projectEstimate: string;
@@ -46,12 +52,12 @@ type RetainerRow = {
   amount: number;
   balance: number;
   createdAtTs: number;
+  updatedAtTs: number;
   statusKey: string;
   drawStatusKey: string;
   sourceInvoice: Invoice;
 };
 
-type SortOption = { key: string; label: string };
 type RetainerColumnKey =
   | "date"
   | "location"
@@ -71,6 +77,25 @@ type RetainerColumnConfig = {
   key: RetainerColumnKey;
   label: string;
   defaultSelected: boolean;
+};
+
+type AdvancedSearchState = {
+  scope: string;
+  filterView: string;
+  invoiceNumber: string;
+  reference: string;
+  dateFrom: string;
+  dateTo: string;
+  description: string;
+  totalFrom: string;
+  totalTo: string;
+  projectName: string;
+  billingAddressField: string;
+  billingAddressValue: string;
+  status: string;
+  drawStatus: string;
+  customerName: string;
+  taxName: string;
 };
 
 const FAVORITE_VIEWS_STORAGE_KEY = "taban_retainer_favorite_views_v1";
@@ -111,18 +136,51 @@ const STATUS_ALIAS: Record<string, string[]> = {
   ready_to_draw: ["ready_to_draw", "ready to draw"],
 };
 
-const SORT_OPTIONS: SortOption[] = [
-  { key: "created_desc", label: "Created Time (Newest)" },
-  { key: "created_asc", label: "Created Time (Oldest)" },
-  { key: "retainer_asc", label: "Retainer # (A-Z)" },
-  { key: "retainer_desc", label: "Retainer # (Z-A)" },
-  { key: "customer_asc", label: "Customer Name (A-Z)" },
-  { key: "customer_desc", label: "Customer Name (Z-A)" },
-  { key: "amount_desc", label: "Amount (High-Low)" },
-  { key: "amount_asc", label: "Amount (Low-High)" },
-  { key: "balance_desc", label: "Balance (High-Low)" },
-  { key: "balance_asc", label: "Balance (Low-High)" },
+const ADVANCED_STATUS_OPTIONS = [
+  { value: "draft", label: "Draft" },
+  { value: "sent", label: "Sent" },
+  { value: "paid", label: "Paid" },
+  { value: "partially_paid", label: "Partially Paid" },
+  { value: "void", label: "Void" },
 ];
+
+const ADVANCED_DRAW_STATUS_OPTIONS = [
+  { value: "awaiting_payment", label: "Awaiting Payment" },
+  { value: "ready_to_draw", label: "Ready To Draw" },
+  { value: "partially_drawn", label: "Partially Drawn" },
+  { value: "drawn", label: "Drawn" },
+];
+
+const BILLING_ADDRESS_FIELD_OPTIONS = [
+  { value: "attention", label: "Attention" },
+  { value: "street1", label: "Street 1" },
+  { value: "street2", label: "Street 2" },
+  { value: "city", label: "City" },
+  { value: "state", label: "State" },
+  { value: "zipCode", label: "ZIP Code" },
+  { value: "country", label: "Country" },
+  { value: "fax", label: "Fax Number" },
+  { value: "phone", label: "Phone" },
+];
+
+type SortFieldOption = { key: string; label: string };
+const SORT_FIELDS: SortFieldOption[] = [
+  { key: "created", label: "Created Time" },
+  { key: "modified", label: "Last Modified Time" },
+  { key: "date", label: "Date" },
+  { key: "retainer", label: "Retainer Invoice Number" },
+  { key: "customer", label: "Customer Name" },
+  { key: "amount", label: "Amount" },
+  { key: "balance", label: "Balance" },
+  { key: "issuedDate", label: "Issued Date" },
+];
+
+const parseSortKey = (value: string | null | undefined) => {
+  const raw = String(value || "");
+  const match = raw.match(/^(.*)_(asc|desc)$/);
+  if (!match) return { field: "created", direction: "desc" as const };
+  return { field: match[1] || "created", direction: (match[2] as "asc" | "desc") || "desc" };
+};
 
 const DEFAULT_COLUMN_WIDTHS = {
   select: 68,
@@ -176,6 +234,114 @@ const TABLE_COLUMNS: RetainerColumnKey[] = [
   "wsq",
 ];
 
+const withAlpha = (color: string, alpha: number) => {
+  const value = String(color || "").trim();
+
+  if (value.startsWith("#")) {
+    let hex = value.slice(1);
+    if (hex.length === 3) {
+      hex = hex
+        .split("")
+        .map((char) => char + char)
+        .join("");
+    }
+
+    if (hex.length === 6) {
+      const red = parseInt(hex.slice(0, 2), 16);
+      const green = parseInt(hex.slice(2, 4), 16);
+      const blue = parseInt(hex.slice(4, 6), 16);
+      return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+    }
+  }
+
+  const rgbMatch = value.match(/^rgba?\(([^)]+)\)$/i);
+  if (rgbMatch) {
+    const [red, green, blue] = rgbMatch[1].split(",").map((part) => part.trim());
+    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+  }
+
+  return value;
+};
+
+const createDefaultAdvancedSearchState = (filterView = "all"): AdvancedSearchState => ({
+  scope: "Retainer Invoices",
+  filterView,
+  invoiceNumber: "",
+  reference: "",
+  dateFrom: "",
+  dateTo: "",
+  description: "",
+  totalFrom: "",
+  totalTo: "",
+  projectName: "",
+  billingAddressField: "attention",
+  billingAddressValue: "",
+  status: "",
+  drawStatus: "",
+  customerName: "",
+  taxName: "",
+});
+
+const normalizeValue = (value: any) => String(value || "").trim().toLowerCase();
+
+const invoiceDescriptionText = (invoice: Invoice) => {
+  const itemDescriptions = Array.isArray(invoice.items)
+    ? invoice.items
+        .flatMap((item: any) => [
+          item?.description,
+          item?.name,
+          item?.itemName,
+          item?.details,
+        ])
+        .filter(Boolean)
+    : [];
+
+  return normalizeValue(itemDescriptions.join(" "));
+};
+
+const invoiceTaxText = (invoice: Invoice) => {
+  const itemTaxes = Array.isArray(invoice.items)
+    ? invoice.items
+        .flatMap((item: any) => [
+          item?.taxName,
+          item?.tax,
+          item?.taxLabel,
+          item?.taxId,
+          item?.tax_id,
+        ])
+        .filter(Boolean)
+    : [];
+
+  return normalizeValue([invoice.shippingChargeTax, ...itemTaxes].join(" "));
+};
+
+const invoiceBillingAddressText = (invoice: Invoice, field: string) => {
+  const address = (invoice as any).customerAddress || (invoice as any).billingAddress || {};
+
+  switch (field) {
+    case "attention":
+      return normalizeValue(invoice.customerName || (invoice as any).customer?.displayName || (invoice as any).customer?.name);
+    case "street1":
+      return normalizeValue(address.street1);
+    case "street2":
+      return normalizeValue(address.street2);
+    case "city":
+      return normalizeValue(address.city);
+    case "state":
+      return normalizeValue(address.state || address.stateProvince);
+    case "zipCode":
+      return normalizeValue(address.zipCode || address.zip);
+    case "country":
+      return normalizeValue(address.country);
+    case "fax":
+      return normalizeValue((invoice as any).fax || (invoice as any).customer?.fax);
+    case "phone":
+      return normalizeValue((invoice as any).phone || (invoice as any).customer?.phone);
+    default:
+      return "";
+  }
+};
+
 const mapInvoiceToRetainer = (invoice: Invoice): RetainerRow => {
   const normalizeKey = (value: any) =>
     String(value || "")
@@ -194,12 +360,26 @@ const mapInvoiceToRetainer = (invoice: Invoice): RetainerRow => {
     return `${day} ${month} ${year}`;
   };
 
-  const created = invoice.invoiceDate || invoice.date || invoice.createdAt || "";
-  const parsed = created ? new Date(created) : null;
-  const formattedDate = formatDate(created);
-  const issuedDate = formatDate(
-    (invoice as any).issuedDate || (invoice as any).issueDate || invoice.invoiceDate || invoice.date || invoice.createdAt
-  );
+  const toTs = (value: any) => {
+    if (!value) return 0;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+  };
+
+  const invoiceDateRaw = invoice.invoiceDate || invoice.date || (invoice as any).invoice_date || "";
+  const createdRaw = (invoice as any).createdAt || (invoice as any).created_at || invoice.createdAt || invoiceDateRaw;
+  const updatedRaw =
+    (invoice as any).updatedAt ||
+    (invoice as any).updated_at ||
+    (invoice as any).lastModifiedAt ||
+    (invoice as any).modifiedAt ||
+    (invoice as any).updated ||
+    invoiceDateRaw ||
+    createdRaw;
+  const issuedRaw = (invoice as any).issuedDate || (invoice as any).issueDate || (invoice as any).issued_date || invoiceDateRaw || createdRaw;
+
+  const formattedDate = formatDate(invoiceDateRaw || createdRaw);
+  const issuedDate = formatDate(issuedRaw);
 
   const amount = Number(invoice.total || invoice.amount || 0) || 0;
   const amountPaid = Number((invoice as any).amountPaid ?? (invoice as any).paidAmount ?? 0) || 0;
@@ -248,7 +428,9 @@ const mapInvoiceToRetainer = (invoice: Invoice): RetainerRow => {
     reference: String((invoice as any).reference || (invoice as any).orderNumber || "-"),
     customerName: invoice.customerName || "Unknown Customer",
     date: formattedDate,
+    dateTs: toTs(invoiceDateRaw || createdRaw),
     issuedDate,
+    issuedDateTs: toTs(issuedRaw),
     status: effectiveStatus,
     drawStatus: effectiveDrawStatus.replace(/_/g, " ").toUpperCase(),
     projectEstimate: String((invoice as any).projectEstimate || (invoice as any).estimate || "-"),
@@ -258,7 +440,8 @@ const mapInvoiceToRetainer = (invoice: Invoice): RetainerRow => {
     isEmailed,
     amount,
     balance: Number.isFinite(balanceCandidate) ? balanceCandidate : balance,
-    createdAtTs: parsed && !Number.isNaN(parsed.getTime()) ? parsed.getTime() : 0,
+    createdAtTs: toTs(createdRaw),
+    updatedAtTs: toTs(updatedRaw) || toTs(createdRaw),
     statusKey: effectiveStatus,
     drawStatusKey: effectiveDrawStatus,
     sourceInvoice: invoice,
@@ -290,6 +473,7 @@ const TableRowSkeleton = () => (
 export default function RetainerInvoice() {
   const navigate = useNavigate();
   const { accentColor } = useOrganizationBranding();
+  const { buttonColor, sidebarColor } = useThemeColors();
 
   const [rows, setRows] = useState<RetainerRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -310,6 +494,16 @@ export default function RetainerInvoice() {
   const [selectedColumns, setSelectedColumns] = useState<Set<RetainerColumnKey>>(
     new Set(RETAINER_COLUMNS.filter((column) => column.defaultSelected).map((column) => column.key))
   );
+  const [isAdvancedSearchOpen, setIsAdvancedSearchOpen] = useState(false);
+  const [advancedSearchDraft, setAdvancedSearchDraft] = useState<AdvancedSearchState>(() =>
+    createDefaultAdvancedSearchState(localStorage.getItem(RETAINER_SELECTED_VIEW_STORAGE_KEY) || "all")
+  );
+  const [appliedAdvancedSearch, setAppliedAdvancedSearch] = useState<AdvancedSearchState>(() =>
+    createDefaultAdvancedSearchState(localStorage.getItem(RETAINER_SELECTED_VIEW_STORAGE_KEY) || "all")
+  );
+  const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
+  const [filterDropdownSearch, setFilterDropdownSearch] = useState("");
+  const [taxSearchOptions, setTaxSearchOptions] = useState<string[]>([]);
   const [draftSelectedColumns, setDraftSelectedColumns] = useState<Set<RetainerColumnKey>>(new Set());
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
@@ -380,6 +574,24 @@ export default function RetainerInvoice() {
     }
   }, []);
 
+  useEffect(() => {
+    try {
+      const localTaxes = readTaxesLocal();
+      const taxNames = Array.isArray(localTaxes)
+        ? Array.from(
+            new Set(
+              localTaxes
+                .map((tax: any) => String(tax?.name || tax?.taxName || "").trim())
+                .filter(Boolean)
+            )
+          )
+        : [];
+      setTaxSearchOptions(taxNames);
+    } catch {
+      setTaxSearchOptions([]);
+    }
+  }, []);
+
   const toggleFavoriteView = (viewKey: string) => {
     setFavoriteViews((prev) => {
       const next = new Set(prev);
@@ -418,13 +630,84 @@ export default function RetainerInvoice() {
       const drawStatus = normalize(row.drawStatusKey || row.drawStatus).split(" ").join("_");
       const aliases = (STATUS_ALIAS[selectedView] || []).map((s) => normalize(s).split(" ").join("_"));
       const viewMatch = selectedView === "all" ? true : aliases.includes(status) || aliases.includes(drawStatus);
-      return viewMatch;
+      if (!viewMatch) return false;
+
+      const invoice = row.sourceInvoice;
+      const invoiceNumberMatch = !appliedAdvancedSearch.invoiceNumber || normalizeValue(row.invoiceNumber).includes(normalizeValue(appliedAdvancedSearch.invoiceNumber));
+      const referenceMatch = !appliedAdvancedSearch.reference || normalizeValue(row.reference).includes(normalizeValue(appliedAdvancedSearch.reference));
+      const descriptionMatch =
+        !appliedAdvancedSearch.description ||
+        invoiceDescriptionText(invoice).includes(normalizeValue(appliedAdvancedSearch.description));
+      const customerMatch =
+        !appliedAdvancedSearch.customerName ||
+        normalizeValue(row.customerName) === normalizeValue(appliedAdvancedSearch.customerName);
+      const projectMatch =
+        !appliedAdvancedSearch.projectName ||
+        normalizeValue(row.project).includes(normalizeValue(appliedAdvancedSearch.projectName));
+      const statusMatch =
+        !appliedAdvancedSearch.status ||
+        normalize(status) === normalize(appliedAdvancedSearch.status);
+      const drawStatusMatch =
+        !appliedAdvancedSearch.drawStatus ||
+        normalize(drawStatus) === normalize(appliedAdvancedSearch.drawStatus);
+      const taxMatch =
+        !appliedAdvancedSearch.taxName ||
+        invoiceTaxText(invoice).includes(normalizeValue(appliedAdvancedSearch.taxName));
+      const billingAddressMatch =
+        !appliedAdvancedSearch.billingAddressValue ||
+        invoiceBillingAddressText(invoice, appliedAdvancedSearch.billingAddressField).includes(
+          normalizeValue(appliedAdvancedSearch.billingAddressValue)
+        );
+
+      const fromTs = appliedAdvancedSearch.dateFrom ? new Date(appliedAdvancedSearch.dateFrom).getTime() : 0;
+      const toTs = appliedAdvancedSearch.dateTo ? new Date(appliedAdvancedSearch.dateTo).getTime() + 86_399_999 : 0;
+      const dateFromMatch = !fromTs || row.dateTs >= fromTs;
+      const dateToMatch = !toTs || row.dateTs <= toTs;
+
+      const totalFrom = appliedAdvancedSearch.totalFrom === "" ? Number.NaN : Number(appliedAdvancedSearch.totalFrom);
+      const totalTo = appliedAdvancedSearch.totalTo === "" ? Number.NaN : Number(appliedAdvancedSearch.totalTo);
+      const totalFromMatch = Number.isNaN(totalFrom) || row.amount >= totalFrom;
+      const totalToMatch = Number.isNaN(totalTo) || row.amount <= totalTo;
+
+      return (
+        invoiceNumberMatch &&
+        referenceMatch &&
+        descriptionMatch &&
+        customerMatch &&
+        projectMatch &&
+        statusMatch &&
+        drawStatusMatch &&
+        taxMatch &&
+        billingAddressMatch &&
+        dateFromMatch &&
+        dateToMatch &&
+        totalFromMatch &&
+        totalToMatch
+      );
     });
 
     const sorted = [...filtered];
     switch (activeSortKey) {
       case "created_asc":
         sorted.sort((a, b) => a.createdAtTs - b.createdAtTs);
+        break;
+      case "modified_asc":
+        sorted.sort((a, b) => a.updatedAtTs - b.updatedAtTs);
+        break;
+      case "modified_desc":
+        sorted.sort((a, b) => b.updatedAtTs - a.updatedAtTs);
+        break;
+      case "date_asc":
+        sorted.sort((a, b) => a.dateTs - b.dateTs);
+        break;
+      case "date_desc":
+        sorted.sort((a, b) => b.dateTs - a.dateTs);
+        break;
+      case "issuedDate_asc":
+        sorted.sort((a, b) => a.issuedDateTs - b.issuedDateTs);
+        break;
+      case "issuedDate_desc":
+        sorted.sort((a, b) => b.issuedDateTs - a.issuedDateTs);
         break;
       case "retainer_asc":
         sorted.sort((a, b) => a.invoiceNumber.localeCompare(b.invoiceNumber));
@@ -456,14 +739,36 @@ export default function RetainerInvoice() {
         break;
     }
     return sorted;
-  }, [rows, selectedView, activeSortKey]);
+  }, [rows, selectedView, activeSortKey, appliedAdvancedSearch]);
 
   const hasRows = filteredRows.length > 0;
   const clipTextClass = "truncate whitespace-nowrap";
   const visibleTableColumns = TABLE_COLUMNS.filter((columnKey) => selectedColumns.has(columnKey));
   const visibleTableColumnSet = new Set<RetainerColumnKey>(visibleTableColumns);
+  const customerSearchOptions = useMemo(
+    () => Array.from(new Set(rows.map((row) => row.customerName).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [rows]
+  );
+  const projectSearchOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          rows
+            .map((row) => row.project)
+            .filter((value) => value && value !== "-")
+        )
+      ).sort((a, b) => a.localeCompare(b)),
+    [rows]
+  );
   const filteredCustomizeColumns = RETAINER_COLUMNS.filter((column) =>
     column.label.toLowerCase().includes(columnSearchTerm.toLowerCase())
+  );
+  const filteredViewOptions = useMemo(
+    () =>
+      VIEW_OPTIONS.filter((option) =>
+        option.label.toLowerCase().includes(filterDropdownSearch.trim().toLowerCase())
+      ),
+    [filterDropdownSearch]
   );
   const selectedColumnCount = draftSelectedColumns.size;
   const visibleRowIdSet = useMemo(() => new Set(filteredRows.map((row) => row.id)), [filteredRows]);
@@ -477,6 +782,41 @@ export default function RetainerInvoice() {
     selectedView === "all"
       ? "All Retainer Invoices"
       : VIEW_OPTIONS.find((option) => option.key === selectedView)?.label || "All Retainer Invoices";
+  const { field: activeSortField, direction: activeSortDirection } = parseSortKey(activeSortKey);
+  const hasAppliedAdvancedSearch = useMemo(
+    () =>
+      Object.entries(appliedAdvancedSearch).some(([key, value]) => {
+        if (key === "scope" || key === "filterView") return false;
+        return String(value || "").trim() !== "";
+      }),
+    [appliedAdvancedSearch]
+  );
+
+  const openAdvancedSearch = () => {
+    setAdvancedSearchDraft({
+      ...appliedAdvancedSearch,
+      filterView: selectedView,
+    });
+    setIsAdvancedSearchOpen(true);
+    setMoreDropdownOpen(false);
+    setSortSubMenuOpen(false);
+    setExportSubMenuOpen(false);
+  };
+
+  const closeAdvancedSearch = () => {
+    setFilterDropdownOpen(false);
+    setFilterDropdownSearch("");
+    setIsAdvancedSearchOpen(false);
+  };
+
+  const applyAdvancedSearch = () => {
+    setAppliedAdvancedSearch(advancedSearchDraft);
+    setSelectedView(advancedSearchDraft.filterView || "all");
+    setIsAdvancedSearchOpen(false);
+  };
+
+  const selectedFilterLabel =
+    VIEW_OPTIONS.find((option) => option.key === advancedSearchDraft.filterView)?.label || "All";
 
   useEffect(() => {
     if (!selectAllCheckboxRef.current) return;
@@ -1102,6 +1442,10 @@ export default function RetainerInvoice() {
                           setSortSubMenuOpen((prev) => !prev);
                           setExportSubMenuOpen(false);
                         }}
+                        onMouseEnter={() => {
+                          setSortSubMenuOpen(true);
+                          setExportSubMenuOpen(false);
+                        }}
                         className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${sortSubMenuOpen ? "text-white rounded-md mx-2 w-[calc(100%-16px)] shadow-sm" : "text-slate-600 hover:bg-[#1b5e6a] hover:text-white"
                           }`}
                         style={sortSubMenuOpen ? { backgroundColor: "#1b5e6a" } : {}}
@@ -1115,23 +1459,32 @@ export default function RetainerInvoice() {
                       </button>
                       {sortSubMenuOpen && (
                         <div className="absolute top-0 right-full mr-2 w-64 bg-white border border-gray-100 rounded-lg shadow-xl py-2 z-[120]">
-                          {SORT_OPTIONS.map((option) => (
+                          {SORT_FIELDS.map((option) => {
+                            const isActiveField = activeSortField === option.key;
+                            const nextDirection = isActiveField && activeSortDirection === "desc" ? "asc" : "desc";
+                            const nextKey = `${option.key}_${nextDirection}`;
+
+                            return (
                             <button
                               key={option.key}
                               onClick={() => {
-                                setActiveSortKey(option.key);
+                                setActiveSortKey(nextKey);
                                 setSortSubMenuOpen(false);
                                 setMoreDropdownOpen(false);
                               }}
-                              className={`w-full text-left px-4 py-2 text-sm transition-colors ${activeSortKey === option.key
+                              className={`w-full flex items-center justify-between px-4 py-2 text-sm transition-colors ${isActiveField
                                 ? "bg-[#1b5e6a] text-white font-semibold"
                                 : "text-slate-600 hover:bg-teal-50"
                                 }`}
                               type="button"
                             >
-                              {option.label}
+                              <span>{option.label}</span>
+                              {isActiveField && (
+                                <ChevronDown size={14} className={`transition-transform ${activeSortDirection === "asc" ? "rotate-180" : ""}`} />
+                              )}
                             </button>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -1140,6 +1493,10 @@ export default function RetainerInvoice() {
                       onClick={() => {
                         navigate("/sales/retainer-invoices/import");
                         setMoreDropdownOpen(false);
+                      }}
+                      onMouseEnter={() => {
+                        setSortSubMenuOpen(false);
+                        setExportSubMenuOpen(false);
                       }}
                       className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors"
                       type="button"
@@ -1152,6 +1509,10 @@ export default function RetainerInvoice() {
                       <button
                         onClick={() => {
                           setExportSubMenuOpen((prev) => !prev);
+                          setSortSubMenuOpen(false);
+                        }}
+                        onMouseEnter={() => {
+                          setExportSubMenuOpen(true);
                           setSortSubMenuOpen(false);
                         }}
                         className={`w-full flex items-center justify-between px-3 py-2 text-sm transition-colors ${exportSubMenuOpen ? "text-white rounded-md mx-2 w-[calc(100%-16px)] shadow-sm" : "text-slate-600 hover:bg-[#1b5e6a] hover:text-white"
@@ -1200,6 +1561,10 @@ export default function RetainerInvoice() {
                         navigate("/settings");
                         setMoreDropdownOpen(false);
                       }}
+                      onMouseEnter={() => {
+                        setSortSubMenuOpen(false);
+                        setExportSubMenuOpen(false);
+                      }}
                       className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors"
                       type="button"
                     >
@@ -1211,6 +1576,10 @@ export default function RetainerInvoice() {
                       onClick={() => {
                         navigate("/settings");
                         setMoreDropdownOpen(false);
+                      }}
+                      onMouseEnter={() => {
+                        setSortSubMenuOpen(false);
+                        setExportSubMenuOpen(false);
                       }}
                       className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors"
                       type="button"
@@ -1226,6 +1595,10 @@ export default function RetainerInvoice() {
                         retainerListQuery.refetch();
                         setMoreDropdownOpen(false);
                       }}
+                      onMouseEnter={() => {
+                        setSortSubMenuOpen(false);
+                        setExportSubMenuOpen(false);
+                      }}
                       className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors"
                       type="button"
                     >
@@ -1237,6 +1610,10 @@ export default function RetainerInvoice() {
                       onClick={() => {
                         setColumnWidths(DEFAULT_COLUMN_WIDTHS);
                         setMoreDropdownOpen(false);
+                      }}
+                      onMouseEnter={() => {
+                        setSortSubMenuOpen(false);
+                        setExportSubMenuOpen(false);
                       }}
                       className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-[#1b5e6a] hover:text-white transition-colors"
                       type="button"
@@ -1306,7 +1683,16 @@ export default function RetainerInvoice() {
                 })}
                 <th className="w-10 px-4 py-3 text-right sticky right-0 z-20 bg-[#f6f7fb] border-l border-transparent">
                   <div className="flex items-center justify-center">
-                    <Search size={14} className="text-gray-300" />
+                    <button
+                      type="button"
+                      onClick={openAdvancedSearch}
+                      className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
+                        hasAppliedAdvancedSearch ? "bg-slate-100" : "hover:bg-slate-100"
+                      }`}
+                      title="Advanced search"
+                    >
+                      <Search size={14} className={hasAppliedAdvancedSearch ? "text-[#156372]" : "text-gray-400"} />
+                    </button>
                   </div>
                 </th>
               </tr>
@@ -1456,12 +1842,299 @@ export default function RetainerInvoice() {
         )}
       </div>
 
+      {isAdvancedSearchOpen && (
+        <div
+          className="fixed inset-0 z-[260] flex items-start justify-center bg-black/40 px-4 py-10"
+          onClick={closeAdvancedSearch}
+        >
+          <div
+            className="w-full max-w-[1030px] overflow-hidden rounded-xl bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="grid grid-cols-[92px_minmax(0,300px)_72px_minmax(0,290px)_40px] items-center gap-4 border-b border-slate-200 px-10 py-4">
+              <label className="text-[15px] font-medium text-slate-700">Search</label>
+              <select
+                value={advancedSearchDraft.scope}
+                onChange={(event) => setAdvancedSearchDraft((prev) => ({ ...prev, scope: event.target.value }))}
+                className="h-10 rounded-md border border-slate-300 bg-white px-3 text-[14px] text-slate-700 outline-none focus:border-slate-400"
+              >
+                <option>Retainer Invoices</option>
+              </select>
+              <label className="text-[15px] font-medium text-slate-700">Filter</label>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setFilterDropdownOpen((prev) => !prev)}
+                  className="flex h-10 w-full items-center justify-between rounded-md border border-slate-300 bg-white px-3 text-[14px] text-slate-700 outline-none transition-colors hover:border-slate-400"
+                >
+                  <span>{selectedFilterLabel === "All" ? "All" : selectedFilterLabel}</span>
+                  {filterDropdownOpen ? <ChevronUp size={16} className="text-slate-500" /> : <ChevronDown size={16} className="text-slate-500" />}
+                </button>
+                {filterDropdownOpen && (
+                  <div className="absolute left-0 top-[calc(100%+8px)] z-[290] w-full min-w-[340px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
+                    <div className="border-b border-slate-100 p-3">
+                      <div className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 focus-within:border-slate-400">
+                        <Search size={15} className="text-slate-400" />
+                        <input
+                          value={filterDropdownSearch}
+                          onChange={(event) => setFilterDropdownSearch(event.target.value)}
+                          placeholder="Search"
+                          className="w-full border-none bg-transparent text-[14px] text-slate-700 outline-none placeholder:text-slate-400"
+                          autoFocus
+                        />
+                      </div>
+                    </div>
+                    <div className="max-h-[300px] overflow-y-auto px-2 py-2">
+                      <div className="px-3 pb-2 text-[13px] font-semibold text-slate-700">Default Filters</div>
+                      <div className="space-y-1">
+                        {filteredViewOptions.map((option) => {
+                          const isSelected = advancedSearchDraft.filterView === option.key;
+                          return (
+                            <button
+                              key={option.key}
+                              type="button"
+                              onClick={() => {
+                                setAdvancedSearchDraft((prev) => ({ ...prev, filterView: option.key }));
+                                setFilterDropdownOpen(false);
+                                setFilterDropdownSearch("");
+                              }}
+                              className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-[14px] transition-colors ${
+                                isSelected ? "text-white" : "text-slate-700 hover:bg-slate-50"
+                              }`}
+                              style={isSelected ? { backgroundColor: buttonColor } : undefined}
+                            >
+                              <span>{option.label === "All" ? "All" : option.label}</span>
+                              {isSelected && <Check size={16} className="shrink-0" />}
+                            </button>
+                          );
+                        })}
+                        {filteredViewOptions.length === 0 && (
+                          <div className="px-3 py-4 text-[14px] text-slate-500">No filters found</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterDropdownOpen(false);
+                  setFilterDropdownSearch("");
+                  closeAdvancedSearch();
+                }}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition-colors hover:bg-slate-100"
+                aria-label="Close advanced search"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-x-10 gap-y-4 px-10 py-5">
+              <div className="grid grid-cols-[160px_minmax(0,1fr)] items-center gap-4">
+                <label className="text-[14px] text-slate-700">Retainer Invoice#</label>
+                <input
+                  value={advancedSearchDraft.invoiceNumber}
+                  onChange={(event) => setAdvancedSearchDraft((prev) => ({ ...prev, invoiceNumber: event.target.value }))}
+                  className="h-9 rounded-md border border-slate-300 px-3 text-[14px] text-slate-700 outline-none focus:border-slate-400"
+                />
+              </div>
+              <div className="grid grid-cols-[160px_minmax(0,1fr)] items-center gap-4">
+                <label className="text-[14px] text-slate-700">Reference#</label>
+                <input
+                  value={advancedSearchDraft.reference}
+                  onChange={(event) => setAdvancedSearchDraft((prev) => ({ ...prev, reference: event.target.value }))}
+                  className="h-9 rounded-md border border-slate-300 px-3 text-[14px] text-slate-700 outline-none focus:border-slate-400"
+                />
+              </div>
+
+              <div className="grid grid-cols-[160px_minmax(0,1fr)] items-center gap-4">
+                <label className="text-[14px] text-slate-700">Date Range</label>
+                <div className="grid grid-cols-[1fr_20px_1fr] items-center gap-2">
+                  <input
+                    type="date"
+                    value={advancedSearchDraft.dateFrom}
+                    onChange={(event) => setAdvancedSearchDraft((prev) => ({ ...prev, dateFrom: event.target.value }))}
+                    className="h-9 rounded-md border border-slate-300 px-3 text-[14px] text-slate-700 outline-none focus:border-slate-400"
+                  />
+                  <span className="text-center text-slate-400">-</span>
+                  <input
+                    type="date"
+                    value={advancedSearchDraft.dateTo}
+                    onChange={(event) => setAdvancedSearchDraft((prev) => ({ ...prev, dateTo: event.target.value }))}
+                    className="h-9 rounded-md border border-slate-300 px-3 text-[14px] text-slate-700 outline-none focus:border-slate-400"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-[160px_minmax(0,1fr)] items-center gap-4">
+                <label className="text-[14px] text-slate-700">Status</label>
+                <select
+                  value={advancedSearchDraft.status}
+                  onChange={(event) => setAdvancedSearchDraft((prev) => ({ ...prev, status: event.target.value }))}
+                  className="h-9 rounded-md border border-slate-300 bg-white px-3 text-[14px] text-slate-700 outline-none focus:border-slate-400"
+                >
+                  <option value="">All</option>
+                  {ADVANCED_STATUS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-[160px_minmax(0,1fr)] items-center gap-4">
+                <label className="text-[14px] text-slate-700">Description</label>
+                <input
+                  value={advancedSearchDraft.description}
+                  onChange={(event) => setAdvancedSearchDraft((prev) => ({ ...prev, description: event.target.value }))}
+                  className="h-9 rounded-md border border-slate-300 px-3 text-[14px] text-slate-700 outline-none focus:border-slate-400"
+                />
+              </div>
+              <div className="grid grid-cols-[160px_minmax(0,1fr)] items-center gap-4">
+                <label className="text-[14px] text-slate-700">Retainer Draw Status</label>
+                <select
+                  value={advancedSearchDraft.drawStatus}
+                  onChange={(event) => setAdvancedSearchDraft((prev) => ({ ...prev, drawStatus: event.target.value }))}
+                  className="h-9 rounded-md border border-slate-300 bg-white px-3 text-[14px] text-slate-700 outline-none focus:border-slate-400"
+                >
+                  <option value="">All</option>
+                  {ADVANCED_DRAW_STATUS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-[160px_minmax(0,1fr)] items-center gap-4">
+                <label className="text-[14px] text-slate-700">Total Range</label>
+                <div className="grid grid-cols-[1fr_20px_1fr] items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    value={advancedSearchDraft.totalFrom}
+                    onChange={(event) => setAdvancedSearchDraft((prev) => ({ ...prev, totalFrom: event.target.value }))}
+                    className="h-9 rounded-md border border-slate-300 px-3 text-[14px] text-slate-700 outline-none focus:border-slate-400"
+                  />
+                  <span className="text-center text-slate-400">-</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={advancedSearchDraft.totalTo}
+                    onChange={(event) => setAdvancedSearchDraft((prev) => ({ ...prev, totalTo: event.target.value }))}
+                    className="h-9 rounded-md border border-slate-300 px-3 text-[14px] text-slate-700 outline-none focus:border-slate-400"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-[160px_minmax(0,1fr)] items-center gap-4">
+                <label className="text-[14px] text-slate-700">Customer Name</label>
+                <select
+                  value={advancedSearchDraft.customerName}
+                  onChange={(event) => setAdvancedSearchDraft((prev) => ({ ...prev, customerName: event.target.value }))}
+                  className="h-9 rounded-md border border-slate-300 bg-white px-3 text-[14px] text-slate-700 outline-none focus:border-slate-400"
+                >
+                  <option value="">Select customer</option>
+                  {customerSearchOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-[160px_minmax(0,1fr)] items-center gap-4">
+                <label className="text-[14px] text-slate-700">Project Name</label>
+                <select
+                  value={advancedSearchDraft.projectName}
+                  onChange={(event) => setAdvancedSearchDraft((prev) => ({ ...prev, projectName: event.target.value }))}
+                  className="h-9 rounded-md border border-slate-300 bg-white px-3 text-[14px] text-slate-700 outline-none focus:border-slate-400"
+                >
+                  <option value="">Select a project</option>
+                  {projectSearchOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-[160px_minmax(0,1fr)] items-center gap-4">
+                <label className="text-[14px] text-slate-700">Tax</label>
+                <select
+                  value={advancedSearchDraft.taxName}
+                  onChange={(event) => setAdvancedSearchDraft((prev) => ({ ...prev, taxName: event.target.value }))}
+                  className="h-9 rounded-md border border-slate-300 bg-white px-3 text-[14px] text-slate-700 outline-none focus:border-slate-400"
+                >
+                  <option value="">Select a Tax</option>
+                  {taxSearchOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-[160px_minmax(0,1fr)] items-start gap-4">
+                <label className="pt-2 text-[14px] text-slate-700">Billing Address</label>
+                <div className="space-y-2">
+                  <div className="grid grid-cols-[140px_minmax(0,1fr)] gap-0">
+                    <select
+                      value={advancedSearchDraft.billingAddressField}
+                      onChange={(event) =>
+                        setAdvancedSearchDraft((prev) => ({ ...prev, billingAddressField: event.target.value }))
+                      }
+                      className="h-9 rounded-l-md border border-r-0 border-slate-300 bg-white px-3 text-[14px] text-slate-700 outline-none focus:border-slate-400"
+                    >
+                      {BILLING_ADDRESS_FIELD_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      value={advancedSearchDraft.billingAddressValue}
+                      onChange={(event) =>
+                        setAdvancedSearchDraft((prev) => ({ ...prev, billingAddressValue: event.target.value }))
+                      }
+                      className="h-9 rounded-r-md border border-slate-300 px-3 text-[14px] text-slate-700 outline-none focus:border-slate-400"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-center gap-3 border-t border-slate-200 px-10 py-6">
+              <button
+                type="button"
+                onClick={applyAdvancedSearch}
+                className="rounded-md px-5 py-2 text-sm font-medium text-white"
+                style={{ backgroundColor: buttonColor }}
+              >
+                Search
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAdvancedSearchDraft({
+                    ...appliedAdvancedSearch,
+                    filterView: selectedView,
+                  });
+                  closeAdvancedSearch();
+                }}
+                className="rounded-md border border-slate-300 bg-white px-5 py-2 text-sm text-slate-700"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isCustomizeColumnsOpen && (
         <div className="fixed inset-0 z-[300] bg-black/40 backdrop-blur-[2px] flex items-start justify-center pt-[10vh] overflow-y-auto px-4 py-6" onClick={() => setIsCustomizeColumnsOpen(false)}>
           <div className="w-full max-w-[500px] bg-white rounded-xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <div className="flex items-center gap-3">
-                <SlidersHorizontal size={18} className="text-gray-500" />
+                <SlidersHorizontal size={18} style={{ color: sidebarColor }} />
                 <h2 className="text-[15px] font-semibold text-gray-800">Customize Columns</h2>
               </div>
               <div className="flex items-center gap-4">
@@ -1469,18 +2142,22 @@ export default function RetainerInvoice() {
                 <button
                   type="button"
                   className="w-7 h-7 flex items-center justify-center rounded transition-colors group hover:bg-gray-50"
+                  style={{ backgroundColor: "transparent" }}
                   onClick={() => {
                     setIsCustomizeColumnsOpen(false);
                     setColumnSearchTerm("");
                   }}
                 >
-                  <X size={16} className="text-red-500 group-hover:text-red-600" />
+                  <X size={16} style={{ color: buttonColor }} />
                 </button>
               </div>
             </div>
 
             <div className="p-4 border-b border-gray-100">
-              <div className="flex items-center gap-2 rounded-md border border-gray-300 px-3 py-2">
+              <div
+                className="flex items-center gap-2 rounded-md border px-3 py-2"
+                style={{ borderColor: withAlpha(sidebarColor, 0.24), backgroundColor: withAlpha(sidebarColor, 0.03) }}
+              >
                 <Search size={14} className="text-gray-400" />
                 <input
                   value={columnSearchTerm}
@@ -1498,7 +2175,11 @@ export default function RetainerInvoice() {
                   return (
                     <label
                       key={column.key}
-                      className="flex items-center gap-3 rounded-md bg-[#f3f4f6] px-3 py-2 cursor-pointer"
+                      className="flex items-center gap-3 rounded-md px-3 py-2 cursor-pointer border"
+                      style={{
+                        backgroundColor: checked ? withAlpha(sidebarColor, 0.12) : withAlpha(sidebarColor, 0.05),
+                        borderColor: checked ? withAlpha(sidebarColor, 0.18) : "transparent",
+                      }}
                     >
                       <GripVertical size={14} className="text-gray-400" />
                       <input
@@ -1514,6 +2195,7 @@ export default function RetainerInvoice() {
                           });
                         }}
                         className="h-4 w-4 rounded border-gray-300"
+                        style={{ accentColor: buttonColor }}
                       />
                       <span className="text-sm text-slate-700">{column.label}</span>
                     </label>
@@ -1533,7 +2215,8 @@ export default function RetainerInvoice() {
                   setIsCustomizeColumnsOpen(false);
                   setColumnSearchTerm("");
                 }}
-                className="bg-[#0D4A52] text-white px-5 py-2 rounded-md text-sm font-medium hover:brightness-110"
+                className="text-white px-5 py-2 rounded-md text-sm font-medium hover:brightness-110"
+                style={{ backgroundColor: buttonColor }}
               >
                 Save
               </button>

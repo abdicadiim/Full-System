@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { Search, X, Plus, ChevronDown, ChevronUp, Settings, Info, PlusCircle, FileText } from "lucide-react";
+import { Search, X, Plus, ChevronDown, ChevronUp, Settings, Info, PlusCircle, FileText, MoreVertical } from "lucide-react";
 import { toast } from "react-toastify";
 import { getCustomers, getInvoiceById, saveInvoice, updateInvoice } from "../../salesModel";
 import { customersAPI, invoicesAPI, projectsAPI, reportingTagsAPI, taxesAPI, transactionNumberSeriesAPI } from "../../../../services/api";
@@ -1124,7 +1124,7 @@ export default function NewRetailInvoice() {
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-98px)] flex-col bg-slate-50">
+    <div className="flex min-h-[calc(100vh-98px)] flex-col bg-white">
       <div className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white/90 px-6 py-4 backdrop-blur">
         <div className="flex items-center gap-2">
           <FileText size={18} className="text-slate-600" />
@@ -1144,8 +1144,8 @@ export default function NewRetailInvoice() {
         </button>
       </div>
 
-      <div className="mx-auto w-full max-w-[1240px] px-6 py-6">
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
+      <div className="w-full max-w-[980px] py-6">
+        <div className="animate-in fade-in slide-in-from-top-1 duration-200">
           <div className="p-6">
               <div className="grid grid-cols-[220px_1fr] items-center gap-y-4 gap-x-4 max-w-[860px]">
                 <label className={requiredLabelClass}>Customer Name*</label>
@@ -1393,7 +1393,7 @@ export default function NewRetailInvoice() {
                       <th className="text-left px-3 py-2 font-medium border-r border-slate-200">Description</th>
                       <th className="text-left px-3 py-2 font-medium border-r border-slate-200 w-[180px]">Tax</th>
                       <th className="text-right px-3 py-2 font-medium w-[180px]">Amount</th>
-                      <th className="w-[48px]" />
+                      <th className="w-[72px]" />
                     </tr>
                   </thead>
                   <tbody>
@@ -1544,8 +1544,24 @@ export default function NewRetailInvoice() {
                             className="w-full h-[34px] text-right rounded-md border border-slate-200 bg-white px-2 text-[13px] text-slate-700 shadow-sm outline-none transition-all hover:border-slate-300 focus:border-[#3b82f6] focus:ring-2 focus:ring-[#3b82f6]/20"
                           />
                         </td>
-                        <td className="px-2 py-2 text-center">
-                          <button onClick={() => removeRow(row.id)} className="text-red-500 hover:text-red-700 text-sm">x</button>
+                        <td className="px-2 py-2">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              type="button"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                              aria-label="Row options"
+                            >
+                              <MoreVertical size={16} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeRow(row.id)}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-red-500 transition-colors hover:bg-red-50 hover:text-red-700"
+                              aria-label="Remove row"
+                            >
+                              ×
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}

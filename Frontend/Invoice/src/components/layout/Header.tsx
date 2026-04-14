@@ -194,7 +194,7 @@ function Header({ onToggleSidebar }) {
             <Menu className="h-4 w-4" />
           </button>
 
-          <div className="relative min-w-0 w-full max-w-[560px]" ref={searchDropdownRef}>
+          <div className="relative min-w-0 w-full max-w-[280px]" ref={searchDropdownRef}>
             <div
               className={[
                 "flex h-9 min-w-0 w-full items-center rounded-lg border px-3 shadow-sm",

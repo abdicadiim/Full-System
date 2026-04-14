@@ -1,0 +1,88 @@
+0 verbose cli C:\Program Files\nodejs\node.exe C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js
+1 info using npm@11.6.2
+2 info using node@v24.13.0
+3 silly config load:file:C:\Program Files\nodejs\node_modules\npm\npmrc
+4 silly config load:file:C:\Users\Taban-pc\Downloads\Full-System\Frontend\Billing\.npmrc
+5 silly config load:file:C:\Users\Taban-pc\.npmrc
+6 silly config load:file:C:\Users\Taban-pc\Downloads\Full-System\Frontend\Billing\etc\npmrc
+7 verbose title npm install
+8 verbose argv "--cache" ".npm-cache" "--prefix" "Frontend/Billing" "install"
+9 verbose logfile logs-max:10 dir:C:\Users\Taban-pc\Downloads\Full-System\.npm-cache\_logs\2026-04-13T09_29_38_482Z-
+10 verbose logfile C:\Users\Taban-pc\Downloads\Full-System\.npm-cache\_logs\2026-04-13T09_29_38_482Z-debug-0.log
+11 silly logfile done cleaning log files
+12 silly packumentCache heap:2348810240 maxSize:587202560 maxEntrySize:293601280
+13 silly idealTree buildDeps
+14 silly fetch manifest @tanstack/query-sync-storage-persister@^5.96.2
+15 silly packumentCache full:https://registry.npmjs.org/@tanstack%2fquery-sync-storage-persister cache-miss
+16 http fetch GET https://registry.npmjs.org/@tanstack%2fquery-sync-storage-persister attempt 1 failed with EACCES
+17 http fetch GET https://registry.npmjs.org/@tanstack%2fquery-sync-storage-persister attempt 2 failed with EACCES
+18 http fetch GET https://registry.npmjs.org/@tanstack%2fquery-sync-storage-persister attempt 3 failed with EACCES
+19 silly fetch manifest @tanstack/react-query@^5.96.2
+20 silly packumentCache full:https://registry.npmjs.org/@tanstack%2freact-query cache-miss
+21 http fetch GET https://registry.npmjs.org/@tanstack%2freact-query attempt 1 failed with EACCES
+22 http fetch GET https://registry.npmjs.org/@tanstack%2freact-query attempt 2 failed with EACCES
+23 http fetch GET https://registry.npmjs.org/@tanstack%2freact-query attempt 3 failed with EACCES
+24 silly fetch manifest @tanstack/react-query-persist-client@^5.96.2
+25 silly packumentCache full:https://registry.npmjs.org/@tanstack%2freact-query-persist-client cache-miss
+26 http fetch GET https://registry.npmjs.org/@tanstack%2freact-query-persist-client attempt 1 failed with EACCES
+27 http fetch GET https://registry.npmjs.org/@tanstack%2freact-query-persist-client attempt 2 failed with EACCES
+28 http fetch GET https://registry.npmjs.org/@tanstack%2freact-query-persist-client attempt 3 failed with EACCES
+29 silly fetch manifest country-state-city@^3.2.1
+30 silly packumentCache full:https://registry.npmjs.org/country-state-city cache-miss
+31 http fetch GET https://registry.npmjs.org/country-state-city attempt 1 failed with EACCES
+32 http fetch GET https://registry.npmjs.org/country-state-city attempt 2 failed with EACCES
+33 http fetch GET https://registry.npmjs.org/country-state-city attempt 3 failed with EACCES
+34 silly fetch manifest dexie@^4.2.1
+35 silly packumentCache full:https://registry.npmjs.org/dexie cache-miss
+36 http fetch GET https://registry.npmjs.org/dexie attempt 1 failed with EACCES
+37 http fetch GET https://registry.npmjs.org/dexie attempt 2 failed with EACCES
+38 http fetch GET https://registry.npmjs.org/dexie attempt 3 failed with EACCES
+39 silly fetch manifest html2canvas@^1.4.1
+40 silly packumentCache full:https://registry.npmjs.org/html2canvas cache-miss
+41 http fetch GET https://registry.npmjs.org/html2canvas attempt 1 failed with EACCES
+42 http fetch GET https://registry.npmjs.org/html2canvas attempt 2 failed with EACCES
+43 http fetch GET https://registry.npmjs.org/html2canvas attempt 3 failed with EACCES
+44 silly fetch manifest jspdf@^2.5.1
+45 silly packumentCache full:https://registry.npmjs.org/jspdf cache-miss
+46 http fetch GET https://registry.npmjs.org/jspdf attempt 1 failed with EACCES
+47 http fetch GET https://registry.npmjs.org/jspdf attempt 2 failed with EACCES
+48 http fetch GET https://registry.npmjs.org/jspdf attempt 3 failed with EACCES
+49 silly fetch manifest jszip@^3.10.1
+50 silly packumentCache full:https://registry.npmjs.org/jszip cache-miss
+51 http fetch GET https://registry.npmjs.org/jszip attempt 1 failed with EACCES
+52 http fetch GET https://registry.npmjs.org/jszip attempt 2 failed with EACCES
+53 http fetch GET https://registry.npmjs.org/jszip attempt 3 failed with EACCES
+54 silly fetch manifest lucide-react@^0.471.0
+55 silly packumentCache full:https://registry.npmjs.org/lucide-react cache-miss
+56 http fetch GET https://registry.npmjs.org/lucide-react attempt 1 failed with EACCES
+57 http fetch GET https://registry.npmjs.org/lucide-react attempt 2 failed with EACCES
+58 http fetch GET https://registry.npmjs.org/lucide-react attempt 3 failed with EACCES
+59 silly fetch manifest pnpm@^10.32.0
+60 silly packumentCache full:https://registry.npmjs.org/pnpm cache-miss
+61 http fetch GET https://registry.npmjs.org/pnpm attempt 1 failed with EACCES
+62 http fetch GET https://registry.npmjs.org/pnpm attempt 2 failed with EACCES
+63 http fetch GET https://registry.npmjs.org/pnpm attempt 3 failed with EACCES
+64 silly fetch manifest react@^18.3.1
+65 silly packumentCache full:https://registry.npmjs.org/react cache-miss
+66 http fetch GET https://registry.npmjs.org/react attempt 1 failed with EACCES
+67 http fetch GET https://registry.npmjs.org/react attempt 2 failed with EACCES
+68 http fetch GET https://registry.npmjs.org/react attempt 3 failed with EACCES
+69 silly fetch manifest react-dom@^18.3.1
+70 silly packumentCache full:https://registry.npmjs.org/react-dom cache-miss
+71 http fetch GET https://registry.npmjs.org/react-dom attempt 1 failed with EACCES
+72 http fetch GET https://registry.npmjs.org/react-dom attempt 2 failed with EACCES
+73 http fetch GET https://registry.npmjs.org/react-dom attempt 3 failed with EACCES
+74 silly fetch manifest react-hot-toast@^2.6.0
+75 silly packumentCache full:https://registry.npmjs.org/react-hot-toast cache-miss
+76 http fetch GET https://registry.npmjs.org/react-hot-toast attempt 1 failed with EACCES
+77 http fetch GET https://registry.npmjs.org/react-hot-toast attempt 2 failed with EACCES
+78 http fetch GET https://registry.npmjs.org/react-hot-toast attempt 3 failed with EACCES
+79 silly fetch manifest react-router-dom@^6.28.0
+80 silly packumentCache full:https://registry.npmjs.org/react-router-dom cache-miss
+81 http fetch GET https://registry.npmjs.org/react-router-dom attempt 1 failed with EACCES
+82 http fetch GET https://registry.npmjs.org/react-router-dom attempt 2 failed with EACCES
+83 http fetch GET https://registry.npmjs.org/react-router-dom attempt 3 failed with EACCES
+84 silly fetch manifest react-toastify@^11.0.5
+85 silly packumentCache full:https://registry.npmjs.org/react-toastify cache-miss
+86 http fetch GET https://registry.npmjs.org/react-toastify attempt 1 failed with EACCES
+87 http fetch GET https://registry.npmjs.org/react-toastify attempt 2 failed with EACCES

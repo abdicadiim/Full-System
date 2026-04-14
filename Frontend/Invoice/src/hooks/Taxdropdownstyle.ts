@@ -37,7 +37,22 @@ export const getTaxRate = (tax: any) => {
 export const isTaxActive = (tax: any) =>
   tax?.isActive !== false && tax?.is_active !== false && String(tax?.status || "").toLowerCase() !== "inactive";
 
-export const taxLabel = (tax: any) => `${getTaxName(tax)} [${getTaxRate(tax)}%]`;
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+export const taxLabel = (tax: any) => {
+  const name = getTaxName(tax);
+  const rate = getTaxRate(tax);
+  if (!name) return "";
+
+  // Avoid duplicating percentages when the tax name already includes a percent (e.g. "VAT 20%").
+  if (name.includes("%")) return name;
+
+  const rateText = String(rate);
+  const rateMatch = new RegExp(`\\b${escapeRegExp(rateText)}\\s*%\\b`, "i");
+  if (rateMatch.test(name)) return name;
+
+  return `${name} [${rate}%]`;
+};
 
 const toTaxOption = (tax: any): TaxDropdownOption | null => {
   const id = getTaxId(tax);
