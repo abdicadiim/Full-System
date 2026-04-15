@@ -16,7 +16,7 @@ import { useAccountSelect } from "../../../hooks/useAccountSelect";
 import { useCurrency } from "../../../hooks/useCurrency";
 import { API_BASE_URL, getToken } from "../../../services/auth";
 import toast from "react-hot-toast";
-import { Country, State } from "country-state-city";
+import { Country } from "country-state-city";
 import NewTaxModal from "../../../../components/modals/NewTaxModal";
 import { buildTaxOptionGroups, taxLabel, normalizeCreatedTaxPayload, isTaxActive } from "../../../hooks/Taxdropdownstyle";
 import { readTaxesLocal, createTaxLocal, isTaxGroupRecord } from "../../settings/organization-settings/taxes-compliance/TAX/storage";

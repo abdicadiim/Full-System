@@ -65,6 +65,7 @@ export default function RecurringInvoiceDetail() {
           const allInvoices = await getInvoices();
           const relatedInvoices = Array.isArray(allInvoices) ? (allInvoices as any[]).filter(inv =>
             String(inv.recurringInvoiceId) === String(id) ||
+            String(inv.sourceRecurringInvoiceId) === String(id) ||
             String(inv.recurringInvoiceProfile) === String((recurringInvoiceData as any)?.profileName)
           ) : [];
           setChildInvoices(relatedInvoices);
@@ -485,6 +486,7 @@ export default function RecurringInvoiceDetail() {
 
                             const saved = await saveRecurringInvoice({
                               ...cloneData,
+                              customerName: customer?.displayName || customer?.companyName || customer?.name || cloneData.customerName || "",
                               profileName: newProfileName,
                               status: "active"
                             });

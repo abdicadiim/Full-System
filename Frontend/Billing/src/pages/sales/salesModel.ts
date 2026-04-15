@@ -233,6 +233,101 @@ export const getCustomerById = async (customerId: string | number): Promise<Cust
   }
 };
 
+const CUSTOMER_LOOKUP_LIMIT = 1000;
+
+const normalizeCustomerLookupValue = (value: any) =>
+  String(value ?? "").trim().toLowerCase();
+
+const looksLikeMongoObjectId = (value: any) =>
+  /^[a-f0-9]{24}$/i.test(String(value ?? "").trim());
+
+const getCustomerDisplayName = (customer: any) =>
+  String(
+    customer?.displayName ||
+      customer?.companyName ||
+      customer?.name ||
+      customer?.customerName ||
+      `${customer?.firstName || ""} ${customer?.lastName || ""}`.trim() ||
+      "",
+  ).trim();
+
+const buildCustomerNameLookup = (customers: any[] = []) => {
+  const lookup = new Map<string, string>();
+
+  (Array.isArray(customers) ? customers : []).forEach((customer: any) => {
+    const name = getCustomerDisplayName(customer);
+    if (!name) return;
+
+    [
+      customer?._id,
+      customer?.id,
+      customer?.customerId,
+      customer?.customer_id,
+    ].forEach((key) => {
+      const normalizedKey = normalizeCustomerLookupValue(key);
+      if (normalizedKey) {
+        lookup.set(normalizedKey, name);
+      }
+    });
+  });
+
+  return lookup;
+};
+
+const resolveInvoiceCustomerName = (
+  invoice: any,
+  customerNameLookup?: Map<string, string>,
+) => {
+  const customer = invoice?.customer;
+  const customerId = String(
+    invoice?.customerId ||
+      invoice?.customer_id ||
+      customer?._id ||
+      customer?.id ||
+      (typeof customer === "string" ? customer : ""),
+  ).trim();
+  const normalizedCustomerId = normalizeCustomerLookupValue(customerId);
+  const embeddedCustomerName = getCustomerDisplayName(customer);
+
+  if (
+    embeddedCustomerName &&
+    normalizeCustomerLookupValue(embeddedCustomerName) !== normalizedCustomerId
+  ) {
+    return embeddedCustomerName;
+  }
+
+  const explicitCustomerName = String(invoice?.customerName || "").trim();
+  const normalizedExplicitCustomerName =
+    normalizeCustomerLookupValue(explicitCustomerName);
+
+  if (
+    explicitCustomerName &&
+    normalizedExplicitCustomerName !== normalizedCustomerId &&
+    !looksLikeMongoObjectId(explicitCustomerName)
+  ) {
+    return explicitCustomerName;
+  }
+
+  for (const candidate of [customerId, explicitCustomerName]) {
+    const matchedName = customerNameLookup?.get(
+      normalizeCustomerLookupValue(candidate),
+    );
+    if (matchedName) {
+      return matchedName;
+    }
+  }
+
+  if (explicitCustomerName) {
+    return explicitCustomerName;
+  }
+
+  if (typeof customer === "string") {
+    return customer.trim();
+  }
+
+  return "";
+};
+
 export const saveCustomer = async (customerData: Partial<Customer>): Promise<Customer> => {
   try {
     const response = await customersAPI.create(customerData);
@@ -451,12 +546,16 @@ export const getInvoices = async (params: any = {}): Promise<Invoice[]> => {
 
 export const getInvoicesPaginated = async (params: any = {}): Promise<any> => {
   try {
-    const response = await invoicesAPI.getAll(params);
+    const [response, customers] = await Promise.all([
+      invoicesAPI.getAll(params),
+      getCustomers({ limit: CUSTOMER_LOOKUP_LIMIT }).catch(() => []),
+    ]);
     if (response && response.success && response.data) {
+      const customerNameLookup = buildCustomerNameLookup(customers);
       const data = response.data.map((invoice: any) => ({
         ...invoice,
         id: invoice._id || invoice.id, // Ensure id exists
-        customerName: invoice.customerName || invoice.customer?.displayName || invoice.customer?.companyName || invoice.customer?.name || (typeof invoice.customer === 'string' ? invoice.customer : ""),
+        customerName: resolveInvoiceCustomerName(invoice, customerNameLookup),
         status: invoice.status || "draft"
       }));
       return {
@@ -478,19 +577,17 @@ export const getInvoicesPaginated = async (params: any = {}): Promise<any> => {
 
 export const getInvoiceById = async (invoiceId: string): Promise<Invoice | null> => {
   try {
-    const response = await invoicesAPI.getById(invoiceId);
+    const [response, customers] = await Promise.all([
+      invoicesAPI.getById(invoiceId),
+      getCustomers({ limit: CUSTOMER_LOOKUP_LIMIT }).catch(() => []),
+    ]);
     if (response && response.success && response.data) {
+      const customerNameLookup = buildCustomerNameLookup(customers);
       const invoice = response.data;
       return {
         ...invoice,
         id: invoice._id || invoice.id,
-        customerName:
-          invoice.customerName ||
-          (typeof invoice.customer === "string" ? invoice.customer : "") ||
-          invoice.customer?.displayName ||
-          invoice.customer?.companyName ||
-          invoice.customer?.name ||
-          "",
+        customerName: resolveInvoiceCustomerName(invoice, customerNameLookup),
         status: invoice.status || "draft"
       };
     }

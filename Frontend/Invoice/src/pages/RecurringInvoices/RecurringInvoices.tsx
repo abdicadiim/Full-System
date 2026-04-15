@@ -346,6 +346,7 @@ export default function RecurringInvoices() {
 
   const customerBulkOptions = useMemo(() => {
     const optionsMap = new Map<string, string>();
+    const isIdLike = (value: any) => /^[a-f0-9]{24}$/i.test(String(value || "").trim());
     for (const customer of bulkCustomers) {
       const customerId = String(customer?.id || customer?._id || "").trim();
       const customerLabel = String(
@@ -373,7 +374,7 @@ export default function RecurringInvoices() {
         (invoice as any)?.customer?.name ||
         ""
       ).trim();
-      if (customerId && customerLabel && !optionsMap.has(customerId)) {
+      if (customerId && customerLabel && !optionsMap.has(customerId) && !isIdLike(customerLabel)) {
         optionsMap.set(customerId, customerLabel);
       }
     }
@@ -565,8 +566,8 @@ export default function RecurringInvoices() {
           bValue = new Date(b.updatedAt || b.createdAt || 0);
           break;
         case "Customer Name":
-          aValue = (a.customerName || a.customer || "").toLowerCase();
-          bValue = (b.customerName || b.customer || "").toLowerCase();
+          aValue = String(resolveRecurringCustomerName(a) || "").toLowerCase();
+          bValue = String(resolveRecurringCustomerName(b) || "").toLowerCase();
           break;
         case "Profile Name":
           aValue = (a.profileName || "").toLowerCase();
@@ -599,6 +600,7 @@ export default function RecurringInvoices() {
   // Refresh data when returning to page
   const refreshData = () => {
     setIsRefreshing(true);
+    void ensureBulkLookupData();
     (async () => {
       try {
         const [allRecurringInvoices, allCustomViews] = await Promise.all([
@@ -618,6 +620,8 @@ export default function RecurringInvoices() {
 
   useEffect(() => {
     let isActive = true;
+
+    void ensureBulkLookupData();
 
     const initialLoad = async () => {
       try {
@@ -791,7 +795,7 @@ export default function RecurringInvoices() {
   const getRecurringInvoiceFieldValue = (inv: RecurringInvoice, fieldName: string): any => {
     const fieldMap: Record<string, any> = {
       "Profile Name": inv.profileName || "",
-      "Customer Name": inv.customerName || inv.customer || "",
+      "Customer Name": resolveRecurringCustomerName(inv),
       "Repeat Every": inv.repeatEvery || "",
       "Amount": inv.total || inv.amount || 0,
       "Status": inv.status || "active",
@@ -1064,6 +1068,9 @@ export default function RecurringInvoices() {
 
     if (selectedBulkFieldConfig.payloadKey === "customer") {
       updatePayload.customerId = parsedValue;
+      updatePayload.customerName = selectedBulkFieldConfig.options?.find(
+        (option) => String(option.value) === String(parsedValue)
+      )?.label || "";
     }
 
     // Update selected invoices via API

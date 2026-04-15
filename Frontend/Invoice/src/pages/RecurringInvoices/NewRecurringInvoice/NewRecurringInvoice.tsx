@@ -2219,6 +2219,7 @@ export default function NewRecurringInvoice() {
         profileName: formData.profileName,
         customer: customerId || undefined,
         customerId: customerId || undefined,
+        customerName: getCustomerDisplayLabel(customer),
         orderNumber: formData.orderNumber,
         frequency: frequencyMapping[formData.repeatEvery] || "weekly",
         startDate: formData.startOn ? new Date(formData.startOn).toISOString() : new Date().toISOString(),
@@ -2254,15 +2255,18 @@ export default function NewRecurringInvoice() {
           const taxRate = taxObj ? Number(taxObj.rate) : 0;
           return {
             item: item.itemId || null, // Use database ID
+            itemId: item.itemId || null,
+            itemDetails: item.itemDetails,
             name: item.itemDetails,
             quantity: Number(item.quantity) || 0,
             unitPrice: Number(item.rate) || 0,
             rate: Number(item.rate) || 0, // Keep rate for frontend compatibility if needed
+            tax: item.tax || "",
             taxRate: taxRate,
             taxAmount: Number((item.amount || 0) - ((Number(item.quantity) || 0) * (Number(item.rate) || 0))),
             total: Number(item.amount) || 0,
             amount: Number(item.amount) || 0,
-            description: item.itemDetails || ""
+            description: item.description || item.itemDetails || ""
           };
         }),
 
@@ -2319,11 +2323,7 @@ export default function NewRecurringInvoice() {
 
       // Show clear confirmation and navigate to the saved recurring invoice page
       toast.success(`Recurring Invoice Profile "${formData.profileName}" has been ${isEditMode ? "updated" : "created"}. Invoices will be generated automatically based on the schedule.`);
-      if (savedRecurringId) {
-        navigate(`/sales/recurring-invoices/${savedRecurringId}`);
-      } else {
-        navigate("/sales/recurring-invoices");
-      }
+      navigate("/sales/recurring-invoices");
     } catch (error) {
       console.error("Error saving recurring invoice:", error);
       toast.error("Failed to save recurring invoice. Please try again.");

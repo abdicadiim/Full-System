@@ -1,5 +1,5 @@
 import React, { Suspense } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import CustomerDetail from "./CustomerDetail/CustomerDetail";
 import {
   CustomersIndexRoute,
@@ -12,6 +12,14 @@ import {
 
 function CustomersRouteFallback() {
   return null;
+}
+
+function CustomerDetailRoute() {
+  const location = useLocation();
+
+  // Remount the detail screen on each customer navigation so stale overlay/menu state
+  // does not leak from one customer record to the next.
+  return <CustomerDetail key={`${location.pathname}:${location.key}`} />;
 }
 
 const withSuspense = (node: React.ReactNode) => (
@@ -30,7 +38,7 @@ export default function CustomersRoutes() {
       <Route path=":id/edit" element={withSuspense(<NewCustomerRoute />)} />
       <Route path=":id/request-review" element={withSuspense(<RequestReviewRoute />)} />
       <Route path=":id/send-email-statement" element={withSuspense(<SendEmailStatementRoute />)} />
-      <Route path=":id" element={<CustomerDetail />} />
+      <Route path=":id" element={<CustomerDetailRoute />} />
       <Route path="*" element={<Navigate to="." replace />} />
     </Routes>
   );

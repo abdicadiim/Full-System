@@ -195,6 +195,11 @@ export default function CustomerDetail() {
     }, [id]);
 
     useEffect(() => {
+        if (typeof window === "undefined") return;
+        window.scrollTo(0, 0);
+    }, [id, location.key]);
+
+    useEffect(() => {
         if (!isNavigatingToEdit || typeof window === "undefined") {
             return;
         }

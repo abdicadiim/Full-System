@@ -230,6 +230,101 @@ export const getCustomerById = async (customerId: string | number): Promise<Cust
   }
 };
 
+const CUSTOMER_LOOKUP_LIMIT = 1000;
+
+const normalizeCustomerLookupValue = (value: any) =>
+  String(value ?? "").trim().toLowerCase();
+
+const looksLikeMongoObjectId = (value: any) =>
+  /^[a-f0-9]{24}$/i.test(String(value ?? "").trim());
+
+const getCustomerDisplayName = (customer: any) =>
+  String(
+    customer?.displayName ||
+      customer?.companyName ||
+      customer?.name ||
+      customer?.customerName ||
+      `${customer?.firstName || ""} ${customer?.lastName || ""}`.trim() ||
+      "",
+  ).trim();
+
+const buildCustomerNameLookup = (customers: any[] = []) => {
+  const lookup = new Map<string, string>();
+
+  (Array.isArray(customers) ? customers : []).forEach((customer: any) => {
+    const name = getCustomerDisplayName(customer);
+    if (!name) return;
+
+    [
+      customer?._id,
+      customer?.id,
+      customer?.customerId,
+      customer?.customer_id,
+    ].forEach((key) => {
+      const normalizedKey = normalizeCustomerLookupValue(key);
+      if (normalizedKey) {
+        lookup.set(normalizedKey, name);
+      }
+    });
+  });
+
+  return lookup;
+};
+
+const resolveInvoiceCustomerName = (
+  invoice: any,
+  customerNameLookup?: Map<string, string>,
+) => {
+  const customer = invoice?.customer;
+  const customerId = String(
+    invoice?.customerId ||
+      invoice?.customer_id ||
+      customer?._id ||
+      customer?.id ||
+      (typeof customer === "string" ? customer : ""),
+  ).trim();
+  const normalizedCustomerId = normalizeCustomerLookupValue(customerId);
+  const embeddedCustomerName = getCustomerDisplayName(customer);
+
+  if (
+    embeddedCustomerName &&
+    normalizeCustomerLookupValue(embeddedCustomerName) !== normalizedCustomerId
+  ) {
+    return embeddedCustomerName;
+  }
+
+  const explicitCustomerName = String(invoice?.customerName || "").trim();
+  const normalizedExplicitCustomerName =
+    normalizeCustomerLookupValue(explicitCustomerName);
+
+  if (
+    explicitCustomerName &&
+    normalizedExplicitCustomerName !== normalizedCustomerId &&
+    !looksLikeMongoObjectId(explicitCustomerName)
+  ) {
+    return explicitCustomerName;
+  }
+
+  for (const candidate of [customerId, explicitCustomerName]) {
+    const matchedName = customerNameLookup?.get(
+      normalizeCustomerLookupValue(candidate),
+    );
+    if (matchedName) {
+      return matchedName;
+    }
+  }
+
+  if (explicitCustomerName) {
+    return explicitCustomerName;
+  }
+
+  if (typeof customer === "string") {
+    return customer.trim();
+  }
+
+  return "";
+};
+
 export const saveCustomer = async (customerData: Partial<Customer>): Promise<Customer> => {
   try {
     const response = await customersAPI.create(customerData);
@@ -448,12 +543,16 @@ export const getInvoices = async (params: any = {}): Promise<Invoice[]> => {
 
 export const getInvoicesPaginated = async (params: any = {}): Promise<any> => {
   try {
-    const response = await invoicesAPI.getAll(params);
+    const [response, customers] = await Promise.all([
+      invoicesAPI.getAll(params),
+      getCustomers({ limit: CUSTOMER_LOOKUP_LIMIT }).catch(() => []),
+    ]);
     if (response && response.success && response.data) {
+      const customerNameLookup = buildCustomerNameLookup(customers);
       const data = response.data.map((invoice: any) => ({
         ...invoice,
         id: invoice._id || invoice.id, // Ensure id exists
-        customerName: invoice.customerName || invoice.customer?.displayName || invoice.customer?.companyName || invoice.customer?.name || (typeof invoice.customer === 'string' ? invoice.customer : ""),
+        customerName: resolveInvoiceCustomerName(invoice, customerNameLookup),
         status: invoice.status || "draft"
       }));
       return {
@@ -473,21 +572,444 @@ export const getInvoicesPaginated = async (params: any = {}): Promise<any> => {
   }
 };
 
+const hasMeaningfulInvoiceItems = (items: any): boolean =>
+  Array.isArray(items) &&
+  items.some((item: any) => {
+    const label = String(
+      item?.itemDetails || item?.name || item?.description || "",
+    ).trim();
+    const quantity = Number(item?.quantity ?? item?.qty ?? 0);
+    const rate = Number(item?.rate ?? item?.unitPrice ?? item?.price ?? 0);
+    const amount = Number(item?.amount ?? item?.total ?? 0);
+    return Boolean(
+      label ||
+        (Number.isFinite(quantity) && quantity !== 0) ||
+        (Number.isFinite(rate) && rate !== 0) ||
+        (Number.isFinite(amount) && amount !== 0),
+    );
+  });
+
+const getInvoiceEntityId = (invoice: any): string =>
+  String(invoice?._id || invoice?.id || invoice?.invoiceId || "").trim();
+
+const looksLikeInvoiceRecord = (value: any): boolean => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+
+  return [
+    value?.invoiceNumber,
+    value?.customerId,
+    value?.customerName,
+    value?.customer,
+    value?.orderNumber,
+    value?.total,
+    value?.amount,
+    value?.subTotal,
+    value?.subtotal,
+    value?.sourceRecurringInvoiceId,
+    value?.recurringInvoiceId,
+    value?.status,
+    value?.items,
+    value?.lineItems,
+    value?.itemDetails,
+    value?._id,
+    value?.id,
+  ].some((entry) => entry !== undefined && entry !== null && entry !== "");
+};
+
+const unwrapInvoiceRecord = (payload: any): any => {
+  const candidates = [
+    payload?.invoice,
+    payload?.data,
+    payload?.record,
+    payload?.invoice?.data,
+    payload?.data?.invoice,
+    payload?.data?.data,
+    payload,
+  ];
+
+  return candidates.find((candidate) => looksLikeInvoiceRecord(candidate)) || payload;
+};
+
+const normalizeInvoiceItem = (item: any) => {
+  if (typeof item === "string") {
+    const label = item.trim();
+    return {
+      itemDetails: label,
+      name: label || "Item",
+      description: "",
+      quantity: 1,
+      rate: 0,
+      unitPrice: 0,
+      total: 0,
+      amount: 0,
+    };
+  }
+
+  if (!item || typeof item !== "object") return null;
+
+  const quantity = toFiniteCurrencyNumber(item?.quantity ?? item?.qty ?? 0);
+  const rate = toFiniteCurrencyNumber(
+    item?.unitPrice ?? item?.rate ?? item?.price ?? 0,
+  );
+  const amount = toFiniteCurrencyNumber(
+    item?.amount ?? item?.total ?? item?.lineTotal ?? quantity * rate,
+  );
+  const label = String(
+    item?.itemDetails ||
+      item?.name ||
+      item?.description ||
+      item?.item?.name ||
+      item?.item?.description ||
+      "",
+  ).trim();
+  const description = String(
+    item?.description || item?.itemDescription || item?.itemDetails || label,
+  ).trim();
+  const itemRef =
+    typeof item?.item === "object" && item?.item
+      ? item.item?._id || item.item?.id || item?.itemId || null
+      : item?.item || item?.itemId || null;
+
+  return {
+    ...item,
+    item: itemRef,
+    itemId: itemRef,
+    itemDetails: label,
+    name: label || description || "Item",
+    description,
+    quantity,
+    rate,
+    unitPrice: rate,
+    total: amount,
+    amount,
+  };
+};
+
+const resolveInvoiceItems = (invoice: any): any[] => {
+  const candidates = [
+    invoice?.items,
+    invoice?.lineItems,
+    invoice?.itemDetails,
+    invoice?.invoice?.items,
+    invoice?.invoice?.lineItems,
+    invoice?.data?.items,
+    invoice?.data?.lineItems,
+  ];
+
+  for (const candidate of candidates) {
+    if (!Array.isArray(candidate)) continue;
+    const normalized = candidate
+      .map((item: any) => normalizeInvoiceItem(item))
+      .filter(Boolean);
+    if (hasMeaningfulInvoiceItems(normalized)) {
+      return normalized;
+    }
+    if (normalized.length > 0) {
+      return normalized;
+    }
+  }
+
+  return [];
+};
+
+const findMatchingInvoiceRow = (rows: any[], invoiceId: string, invoice: any) => {
+  const targetId = String(invoiceId || getInvoiceEntityId(invoice)).trim();
+  const targetNumber = String(invoice?.invoiceNumber || "").trim();
+
+  return (Array.isArray(rows) ? rows : []).find((row: any) => {
+    const rowId = getInvoiceEntityId(row);
+    const rowNumber = String(row?.invoiceNumber || "").trim();
+    return (
+      (targetId && rowId === targetId) ||
+      (targetNumber && rowNumber === targetNumber)
+    );
+  }) || null;
+};
+
+const findGeneratedRecurringInvoiceEntry = (
+  recurringSource: any,
+  invoice: any,
+) => {
+  const targetInvoiceId = String(
+    invoice?._id || invoice?.id || invoice?.invoiceId || "",
+  ).trim();
+  const targetInvoiceNumber = String(invoice?.invoiceNumber || "").trim();
+  const generatedInvoices = Array.isArray(recurringSource?.generatedInvoices)
+    ? recurringSource.generatedInvoices
+    : [];
+
+  return generatedInvoices.find((generatedInvoice: any) => {
+    const generatedInvoiceId = String(
+      generatedInvoice?.invoiceId ||
+        generatedInvoice?.id ||
+        generatedInvoice?._id ||
+        "",
+    ).trim();
+    const generatedInvoiceNumber = String(
+      generatedInvoice?.invoiceNumber || "",
+    ).trim();
+
+    return (
+      (targetInvoiceId && generatedInvoiceId === targetInvoiceId) ||
+      (targetInvoiceNumber && generatedInvoiceNumber === targetInvoiceNumber)
+    );
+  });
+};
+
+const findRecurringSourceForInvoice = (invoice: any) => {
+  const allRecurringInvoices = readRecurringInvoicesFromStorage();
+  const targetRecurringId = String(
+    invoice?.sourceRecurringInvoiceId || invoice?.recurringInvoiceId || "",
+  ).trim();
+
+  if (targetRecurringId) {
+    const directMatch = allRecurringInvoices.find(
+      (entry: any) =>
+        String(entry?.id || entry?._id || "").trim() === targetRecurringId,
+    );
+    if (directMatch) {
+      return directMatch;
+    }
+  }
+
+  const targetProfileName = String(
+    invoice?.recurringInvoiceProfile || invoice?.profileName || "",
+  )
+    .trim()
+    .toLowerCase();
+
+  return allRecurringInvoices.find((entry: any) => {
+    if (
+      targetProfileName &&
+      String(entry?.profileName || "").trim().toLowerCase() === targetProfileName
+    ) {
+      return true;
+    }
+
+    return Boolean(findGeneratedRecurringInvoiceEntry(entry, invoice));
+  });
+};
+
 export const getInvoiceById = async (invoiceId: string): Promise<Invoice | null> => {
   try {
-    const response = await invoicesAPI.getById(invoiceId);
+    const [response, customers, invoicesResponse] = await Promise.all([
+      invoicesAPI.getById(invoiceId),
+      getCustomers({ limit: CUSTOMER_LOOKUP_LIMIT }).catch(() => []),
+      invoicesAPI.getAll({ limit: 1000 }).catch(() => ({ success: false, data: [] })),
+    ]);
     if (response && response.success && response.data) {
-      const invoice = response.data;
+      const customerNameLookup = buildCustomerNameLookup(customers);
+      const rawResponseInvoice = unwrapInvoiceRecord(response.data);
+      const matchingListInvoice = findMatchingInvoiceRow(
+        Array.isArray(invoicesResponse?.data) ? invoicesResponse.data : [],
+        invoiceId,
+        rawResponseInvoice,
+      );
+      const responseInvoice = {
+        ...(matchingListInvoice || {}),
+        ...(rawResponseInvoice || {}),
+      };
+      const normalizedResponseItems = resolveInvoiceItems(rawResponseInvoice);
+      const normalizedListItems = resolveInvoiceItems(matchingListInvoice);
+      if (!hasMeaningfulInvoiceItems(responseInvoice?.items)) {
+        responseInvoice.items =
+          normalizedResponseItems.length > 0
+            ? normalizedResponseItems
+            : normalizedListItems;
+      }
+      if (!responseInvoice?.invoiceNumber && matchingListInvoice?.invoiceNumber) {
+        responseInvoice.invoiceNumber = matchingListInvoice.invoiceNumber;
+      }
+      if (!responseInvoice?.customerName && matchingListInvoice?.customerName) {
+        responseInvoice.customerName = matchingListInvoice.customerName;
+      }
+      if (!responseInvoice?.customerId && matchingListInvoice?.customerId) {
+        responseInvoice.customerId = matchingListInvoice.customerId;
+      }
+      if (
+        (responseInvoice?.total === undefined || responseInvoice?.total === null) &&
+        matchingListInvoice?.total !== undefined
+      ) {
+        responseInvoice.total = matchingListInvoice.total;
+      }
+      if (
+        (responseInvoice?.amount === undefined || responseInvoice?.amount === null) &&
+        matchingListInvoice?.amount !== undefined
+      ) {
+        responseInvoice.amount = matchingListInvoice.amount;
+      }
+      if (
+        (responseInvoice?.subTotal === undefined || responseInvoice?.subTotal === null) &&
+        matchingListInvoice?.subTotal !== undefined
+      ) {
+        responseInvoice.subTotal = matchingListInvoice.subTotal;
+      }
+      if (
+        (responseInvoice?.subtotal === undefined || responseInvoice?.subtotal === null) &&
+        matchingListInvoice?.subtotal !== undefined
+      ) {
+        responseInvoice.subtotal = matchingListInvoice.subtotal;
+      }
+      if (
+        (responseInvoice?.balanceDue === undefined || responseInvoice?.balanceDue === null) &&
+        matchingListInvoice?.balanceDue !== undefined
+      ) {
+        responseInvoice.balanceDue = matchingListInvoice.balanceDue;
+      }
+      if (
+        (responseInvoice?.balance === undefined || responseInvoice?.balance === null) &&
+        matchingListInvoice?.balance !== undefined
+      ) {
+        responseInvoice.balance = matchingListInvoice.balance;
+      }
+      const sourceRecurring =
+        findRecurringSourceForInvoice(responseInvoice) ||
+        findRecurringSourceForInvoice(matchingListInvoice);
+      const generatedRecurringEntry = sourceRecurring
+        ? findGeneratedRecurringInvoiceEntry(sourceRecurring, responseInvoice)
+        : null;
+      const sourceRecurringInvoiceId = String(
+        responseInvoice?.sourceRecurringInvoiceId ||
+          responseInvoice?.recurringInvoiceId ||
+          sourceRecurring?._id ||
+          sourceRecurring?.id ||
+          "",
+      ).trim();
+      const resolvedCustomerName = resolveInvoiceCustomerName(
+        responseInvoice,
+        customerNameLookup,
+      );
+      const shouldRecoverRecurringItems =
+        Boolean(sourceRecurring) && !hasMeaningfulInvoiceItems(responseInvoice?.items);
+      const shouldRecoverRecurringMetadata =
+        Boolean(sourceRecurring) &&
+        (!resolvedCustomerName ||
+          normalizeCustomerLookupValue(resolvedCustomerName) ===
+            normalizeCustomerLookupValue(responseInvoice?.customerId || ""));
+
+      let invoice = responseInvoice;
+      if (sourceRecurring && (shouldRecoverRecurringItems || shouldRecoverRecurringMetadata)) {
+        const derived = deriveInvoiceSummaryFromRecurring(sourceRecurring);
+        const recoveredCustomerName = resolveRecurringCustomerName(sourceRecurring);
+        const recoveredCustomerId = String(
+          sourceRecurring?.customerId || sourceRecurring?.customer || "",
+        ).trim();
+        const currentDiscount = toFiniteCurrencyNumber(responseInvoice?.discountAmount);
+        const currentShipping = toFiniteCurrencyNumber(
+          responseInvoice?.shippingCharges ?? responseInvoice?.shipping,
+        );
+        const currentAdjustment = toFiniteCurrencyNumber(responseInvoice?.adjustment);
+        const currentRoundOff = toFiniteCurrencyNumber(responseInvoice?.roundOff);
+        const currentSubTotal = toFiniteCurrencyNumber(
+          responseInvoice?.subTotal ?? responseInvoice?.subtotal,
+        );
+        const currentTax = toFiniteCurrencyNumber(
+          responseInvoice?.taxAmount ?? responseInvoice?.tax,
+        );
+        const currentTotal = toFiniteCurrencyNumber(
+          responseInvoice?.total ?? responseInvoice?.amount,
+        );
+        const fallbackDate =
+          responseInvoice?.invoiceDate ||
+          responseInvoice?.date ||
+          sourceRecurring?.startOn ||
+          sourceRecurring?.startDate;
+        const fallbackDueDate =
+          responseInvoice?.dueDate ||
+          sourceRecurring?.endsOn ||
+          sourceRecurring?.endDate ||
+          fallbackDate;
+
+        invoice = {
+          ...responseInvoice,
+          customer:
+            responseInvoice?.customer ||
+            sourceRecurring?.customer ||
+            recoveredCustomerId ||
+            undefined,
+          customerId: String(
+            responseInvoice?.customerId || recoveredCustomerId || "",
+          ).trim(),
+          customerName: resolvedCustomerName || recoveredCustomerName,
+          invoiceNumber:
+            responseInvoice?.invoiceNumber ||
+            generatedRecurringEntry?.invoiceNumber ||
+            "",
+          items: shouldRecoverRecurringItems ? derived.items : responseInvoice?.items,
+          subtotal: currentSubTotal > 0 ? currentSubTotal : derived.subTotal,
+          subTotal: currentSubTotal > 0 ? currentSubTotal : derived.subTotal,
+          tax: currentTax > 0 ? currentTax : derived.taxAmount,
+          taxAmount: currentTax > 0 ? currentTax : derived.taxAmount,
+          total: currentTotal > 0 ? currentTotal : derived.total,
+          amount: currentTotal > 0 ? currentTotal : derived.total,
+          balanceDue:
+            responseInvoice?.balanceDue !== undefined
+              ? responseInvoice.balanceDue
+              : responseInvoice?.balance !== undefined
+                ? responseInvoice.balance
+                : currentTotal > 0
+                  ? currentTotal
+                  : derived.total,
+          balance:
+            responseInvoice?.balance !== undefined
+              ? responseInvoice.balance
+              : responseInvoice?.balanceDue !== undefined
+                ? responseInvoice.balanceDue
+                : currentTotal > 0
+                  ? currentTotal
+                  : derived.total,
+          discountAmount: currentDiscount > 0 ? currentDiscount : derived.discountAmount,
+          shippingCharges: currentShipping !== 0 ? currentShipping : derived.shippingCharges,
+          adjustment: currentAdjustment !== 0 ? currentAdjustment : derived.adjustment,
+          roundOff: currentRoundOff !== 0 ? currentRoundOff : derived.roundOff,
+          taxExclusive: responseInvoice?.taxExclusive || derived.taxMode,
+          currency: responseInvoice?.currency || sourceRecurring?.currency || "USD",
+          date: fallbackDate,
+          invoiceDate: fallbackDate,
+          dueDate: fallbackDueDate,
+          paymentTerms:
+            responseInvoice?.paymentTerms || sourceRecurring?.paymentTerms || "",
+          customerNotes:
+            responseInvoice?.customerNotes ||
+            responseInvoice?.notes ||
+            sourceRecurring?.customerNotes ||
+            sourceRecurring?.notes ||
+            "",
+          notes:
+            responseInvoice?.notes ||
+            responseInvoice?.customerNotes ||
+            sourceRecurring?.notes ||
+            sourceRecurring?.customerNotes ||
+            "",
+          termsAndConditions:
+            responseInvoice?.termsAndConditions ||
+            responseInvoice?.terms ||
+            sourceRecurring?.termsAndConditions ||
+            sourceRecurring?.terms ||
+            "",
+          terms:
+            responseInvoice?.terms ||
+            responseInvoice?.termsAndConditions ||
+            sourceRecurring?.terms ||
+            sourceRecurring?.termsAndConditions ||
+            "",
+          sourceRecurringInvoiceId:
+            responseInvoice?.sourceRecurringInvoiceId || sourceRecurringInvoiceId,
+          recurringInvoiceId:
+            responseInvoice?.recurringInvoiceId || sourceRecurringInvoiceId,
+          recurringInvoiceProfile:
+            responseInvoice?.recurringInvoiceProfile || sourceRecurring?.profileName || "",
+          generatedFromRecurring:
+            responseInvoice?.generatedFromRecurring ?? true,
+        };
+      }
+
       return {
         ...invoice,
         id: invoice._id || invoice.id,
         customerName:
-          invoice.customerName ||
-          (typeof invoice.customer === "string" ? invoice.customer : "") ||
-          invoice.customer?.displayName ||
-          invoice.customer?.companyName ||
-          invoice.customer?.name ||
-          "",
+          resolveInvoiceCustomerName(invoice, customerNameLookup) ||
+          resolveRecurringCustomerName(sourceRecurring),
         status: invoice.status || "draft"
       };
     }
@@ -632,6 +1154,177 @@ const resolveRecurringCustomerName = (item: any): string => {
   if (typeof customerObj === "string") return customerObj;
   if (typeof item?.customerId === "string") return item.customerId;
   return "";
+};
+
+const toFiniteCurrencyNumber = (value: any): number => {
+  const next = Number(value);
+  return Number.isFinite(next) ? next : 0;
+};
+
+const roundCurrencyValue = (value: number): number =>
+  Number(toFiniteCurrencyNumber(value).toFixed(2));
+
+const getRecurringItemReference = (item: any) => {
+  const rawRef = item?.item ?? item?.itemId ?? null;
+  if (rawRef && typeof rawRef === "object") {
+    return rawRef?._id || rawRef?.id || null;
+  }
+  return rawRef || null;
+};
+
+const getRecurringItemTaxAmount = (
+  item: any,
+  lineBaseAmount: number,
+  taxRate: number,
+  taxMode: string,
+) => {
+  const explicitTaxAmount = toFiniteCurrencyNumber(item?.taxAmount);
+  if (explicitTaxAmount > 0) return explicitTaxAmount;
+
+  const lineTotal = toFiniteCurrencyNumber(
+    item?.total ?? item?.amount ?? item?.lineTotal,
+  );
+  if (lineTotal > 0 && lineTotal > lineBaseAmount) {
+    return lineTotal - lineBaseAmount;
+  }
+
+  if (taxRate <= 0 || lineBaseAmount <= 0) return 0;
+
+  if (String(taxMode || "").toLowerCase() === "tax inclusive") {
+    return lineBaseAmount - lineBaseAmount / (1 + taxRate / 100);
+  }
+
+  return lineBaseAmount * (taxRate / 100);
+};
+
+const normalizeRecurringItemForInvoice = (item: any, taxMode: string) => {
+  const itemRef = getRecurringItemReference(item);
+  const quantity = toFiniteCurrencyNumber(item?.quantity);
+  const rate = toFiniteCurrencyNumber(
+    item?.rate ?? item?.unitPrice ?? item?.price,
+  );
+  const baseAmount = quantity * rate;
+  const taxRate = toFiniteCurrencyNumber(
+    item?.taxRate ?? item?.tax?.rate ?? item?.taxPercentage,
+  );
+  const taxAmount = roundCurrencyValue(
+    getRecurringItemTaxAmount(item, baseAmount, taxRate, taxMode),
+  );
+  const lineTotalCandidate = toFiniteCurrencyNumber(
+    item?.total ?? item?.amount ?? item?.lineTotal,
+  );
+  const total =
+    lineTotalCandidate > 0
+      ? lineTotalCandidate
+      : String(taxMode || "").toLowerCase() === "tax inclusive"
+        ? baseAmount
+        : baseAmount + taxAmount;
+  const itemLabel = String(
+    item?.itemDetails ||
+      item?.name ||
+      item?.description ||
+      item?.item?.name ||
+      item?.item?.description ||
+      "",
+  ).trim();
+  const description = String(
+    item?.description ||
+      item?.itemDetails ||
+      item?.name ||
+      item?.item?.description ||
+      "",
+  ).trim();
+
+  return {
+    item: itemRef,
+    itemId: itemRef,
+    itemDetails: itemLabel,
+    name: itemLabel,
+    quantity,
+    rate,
+    unitPrice: rate,
+    tax: item?.tax ?? "",
+    taxRate,
+    taxAmount,
+    total: roundCurrencyValue(total),
+    amount: roundCurrencyValue(total),
+    description,
+    unit: item?.unit || item?.item?.unit || "",
+  };
+};
+
+const deriveInvoiceSummaryFromRecurring = (recurring: any) => {
+  const recurringItems = Array.isArray(recurring?.items) ? recurring.items : [];
+  const taxMode = String(recurring?.taxExclusive || "Tax Exclusive");
+  const items = recurringItems
+    .filter((item: any) => item && item.itemType !== "header")
+    .map((item: any) => normalizeRecurringItemForInvoice(item, taxMode))
+    .filter((item: any) => {
+      const hasLabel = String(
+        item?.itemDetails || item?.name || item?.description || "",
+      ).trim();
+      return Boolean(
+        item?.item || hasLabel || item?.quantity || item?.rate || item?.amount,
+      );
+    });
+
+  const computedSubTotal = roundCurrencyValue(
+    items.reduce((sum: number, item: any) => {
+      const lineBase =
+        toFiniteCurrencyNumber(item?.quantity) * toFiniteCurrencyNumber(item?.rate);
+      return sum + lineBase;
+    }, 0),
+  );
+  const computedTaxAmount = roundCurrencyValue(
+    items.reduce(
+      (sum: number, item: any) => sum + toFiniteCurrencyNumber(item?.taxAmount),
+      0,
+    ),
+  );
+  const discountAmount = roundCurrencyValue(
+    toFiniteCurrencyNumber(recurring?.discountAmount ?? recurring?.discount),
+  );
+  const shippingCharges = roundCurrencyValue(
+    toFiniteCurrencyNumber(recurring?.shippingCharges ?? recurring?.shipping),
+  );
+  const adjustment = roundCurrencyValue(
+    toFiniteCurrencyNumber(recurring?.adjustment),
+  );
+  const roundOff = roundCurrencyValue(toFiniteCurrencyNumber(recurring?.roundOff));
+  const computedItemsTotal = roundCurrencyValue(
+    items.reduce(
+      (sum: number, item: any) =>
+        sum + toFiniteCurrencyNumber(item?.amount ?? item?.total),
+      0,
+    ),
+  );
+  const fallbackTotal = roundCurrencyValue(
+    computedItemsTotal - discountAmount + shippingCharges + adjustment + roundOff,
+  );
+  const storedSubTotal = roundCurrencyValue(
+    toFiniteCurrencyNumber(recurring?.subTotal ?? recurring?.subtotal),
+  );
+  const storedTotal = roundCurrencyValue(
+    toFiniteCurrencyNumber(recurring?.total ?? recurring?.amount),
+  );
+  const subTotal = storedSubTotal > 0 ? storedSubTotal : computedSubTotal;
+  const total = storedTotal > 0 ? storedTotal : fallbackTotal;
+  const taxAmount = roundCurrencyValue(
+    toFiniteCurrencyNumber(recurring?.tax ?? recurring?.taxAmount) ||
+      computedTaxAmount,
+  );
+
+  return {
+    taxMode,
+    items,
+    subTotal,
+    taxAmount,
+    discountAmount,
+    shippingCharges,
+    adjustment,
+    roundOff,
+    total,
+  };
 };
 
 const readRecurringInvoicesFromStorage = (): RecurringInvoice[] => {
@@ -796,11 +1489,18 @@ export const generateInvoiceFromRecurring = async (recurringInvoiceId: string): 
   const baseForNext = String(recurring.nextInvoiceDate || recurring.startOn || recurring.startDate || now);
   const nextInvoiceDate = addIntervalISO(baseForNext, frequency);
 
-  const recurringItems = Array.isArray(recurring.items) ? recurring.items : [];
   const invoiceNumber = `INV-${Date.now()}`;
-  const subTotal = Number(recurring.subTotal ?? recurring.subtotal ?? recurring.total ?? recurring.amount ?? 0) || 0;
-  const total = Number(recurring.total ?? recurring.amount ?? subTotal) || 0;
-  const taxAmount = Math.max(total - subTotal, 0);
+  const {
+    taxMode,
+    items: normalizedItems,
+    subTotal,
+    taxAmount,
+    discountAmount,
+    shippingCharges,
+    adjustment,
+    roundOff,
+    total,
+  } = deriveInvoiceSummaryFromRecurring(recurring);
   const invoicePayload = {
     invoiceNumber,
     customer: recurring.customer || recurring.customerId || undefined,
@@ -809,24 +1509,11 @@ export const generateInvoiceFromRecurring = async (recurringInvoiceId: string): 
     date: recurring.startOn || recurring.startDate || now,
     invoiceDate: recurring.startOn || recurring.startDate || now,
     dueDate: recurring.endsOn || recurring.endDate || recurring.startOn || recurring.startDate || now,
-    items: recurringItems
-      .filter((item: any) => item && item.itemType !== "header")
-      .map((item: any) => ({
-        item: item.itemId || null,
-        itemId: item.itemId || null,
-        name: item.itemDetails || item.name || "",
-        quantity: Number(item.quantity || 0),
-        rate: Number(item.rate || 0),
-        unitPrice: Number(item.rate || 0),
-        taxRate: Number(item.taxRate || 0),
-        taxAmount: Number(item.amount || 0) - (Number(item.quantity || 0) * Number(item.rate || 0)),
-        total: Number(item.amount || 0),
-        amount: Number(item.amount || 0),
-        description: item.itemDetails || item.description || ""
-      })),
+    items: normalizedItems,
     subtotal: subTotal,
     subTotal,
     tax: taxAmount,
+    taxAmount,
     amount: total,
     total,
     status: "draft",
@@ -842,21 +1529,35 @@ export const generateInvoiceFromRecurring = async (recurringInvoiceId: string): 
     notes: recurring.notes || recurring.customerNotes || "",
     terms: recurring.terms || recurring.termsAndConditions || "",
     currency: recurring.currency || "USD",
-    taxExclusive: recurring.taxExclusive || "Tax Exclusive",
+    taxExclusive: taxMode,
     discount: Number(recurring.discount || 0) || 0,
     discountType: recurring.discountType || "percent",
-    discountAmount: Number(recurring.discountAmount || 0) || 0,
+    discountAmount,
     discountAccount: recurring.discountAccount || "",
-    shippingCharges: Number(recurring.shippingCharges || 0) || 0,
-    adjustment: Number(recurring.adjustment || 0) || 0,
-    roundOff: Number(recurring.roundOff || 0) || 0,
+    shippingCharges,
+    adjustment,
+    roundOff,
+    balanceDue: total,
+    balance: total,
+    amountPaid: 0,
+    customerNotes: recurring.customerNotes || recurring.notes || "",
+    termsAndConditions: recurring.termsAndConditions || recurring.terms || "",
+    recurringInvoiceProfile: recurring.profileName || "",
     generatedFromRecurring: true,
   };
 
   const savedInvoice = await saveInvoice(invoicePayload as Partial<Invoice>);
+  const savedInvoiceId = String(savedInvoice?.id || savedInvoice?._id || "").trim();
+  if (savedInvoiceId) {
+    try {
+      await updateInvoice(savedInvoiceId, invoicePayload as Partial<Invoice>);
+    } catch (error) {
+      console.warn("Failed to finalize generated recurring invoice payload:", error);
+    }
+  }
   const generated = {
     id: `gen-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    invoiceId: savedInvoice?.id || savedInvoice?._id || "",
+    invoiceId: savedInvoiceId,
     invoiceNumber,
     createdAt: now,
     amount: total,
