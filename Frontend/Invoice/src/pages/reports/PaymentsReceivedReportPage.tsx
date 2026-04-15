@@ -5,12 +5,14 @@ import {
   CalendarDays,
   Check,
   ChevronDown,
+  ChevronRight,
   Columns3,
   Filter,
   Menu,
   Plus,
   RefreshCw,
   Search,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 import { useCurrency } from "../../hooks/useCurrency";
@@ -31,6 +33,7 @@ type DateRangeKey =
   | "previous-month"
   | "previous-quarter"
   | "previous-year"
+  | "all-time"
   | "custom";
 
 type DateRangeValue = {
@@ -116,6 +119,62 @@ type SummaryTotals = {
   unused: number;
 };
 
+const MONTH_NAMES = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+const CALENDAR_YEAR_OPTIONS = Array.from({ length: 120 }, (_, index) => 2007 + index);
+
+const getStartOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
+
+const addMonths = (date: Date, amount: number) => new Date(date.getFullYear(), date.getMonth() + amount, 1);
+
+const isSameDay = (left: Date, right: Date) =>
+  left.getFullYear() === right.getFullYear() &&
+  left.getMonth() === right.getMonth() &&
+  left.getDate() === right.getDate();
+
+const isSameMonth = (left: Date, right: Date) =>
+  left.getFullYear() === right.getFullYear() &&
+  left.getMonth() === right.getMonth();
+
+const buildCalendarGrid = (month: Date) => {
+  const firstDay = new Date(month.getFullYear(), month.getMonth(), 1);
+  const startDay = firstDay.getDay();
+  const startCell = new Date(firstDay);
+  startCell.setDate(firstDay.getDate() - startDay);
+
+  const weeks: Date[][] = [];
+  let cursor = new Date(startCell);
+  for (let week = 0; week < 6; week += 1) {
+    const row: Date[] = [];
+    for (let day = 0; day < 7; day += 1) {
+      row.push(new Date(cursor));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    weeks.push(row);
+  }
+  return weeks;
+};
+
+const formatPickerDate = (date: Date) =>
+  date.toLocaleDateString("en-US", {
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+  });
+
 const DATE_RANGE_OPTIONS: Array<{ key: DateRangeKey; label: string }> = [
   { key: "today", label: "Today" },
   { key: "this-week", label: "This Week" },
@@ -127,6 +186,7 @@ const DATE_RANGE_OPTIONS: Array<{ key: DateRangeKey; label: string }> = [
   { key: "previous-month", label: "Previous Month" },
   { key: "previous-quarter", label: "Previous Quarter" },
   { key: "previous-year", label: "Previous Year" },
+  { key: "all-time", label: "All Time" },
   { key: "custom", label: "Custom" },
 ];
 
@@ -314,6 +374,8 @@ const getDateRangeValue = (key: DateRangeKey, customRange?: DateRangeValue): Dat
     }
     case "previous-year":
       return { start: new Date(now.getFullYear() - 1, 0, 1), end: endOfDay(new Date(now.getFullYear() - 1, 11, 31)) };
+    case "all-time":
+      return { start: new Date(1970, 0, 1), end: endOfDay(now) };
     case "custom":
       return customRange || { start: startOfDay(now), end: endOfDay(now) };
     default:
@@ -464,6 +526,8 @@ export default function PaymentsReceivedReportView({
   const [dateRangeDraftKey, setDateRangeDraftKey] = useState<DateRangeKey>("this-month");
   const [customDateRange, setCustomDateRange] = useState<DateRangeValue>(() => getDateRangeValue("this-month"));
   const [customDateRangeDraft, setCustomDateRangeDraft] = useState<DateRangeValue>(() => getDateRangeValue("this-month"));
+  const [customDateRangeMonth, setCustomDateRangeMonth] = useState<Date>(() => getStartOfMonth(getDateRangeValue("this-month").start));
+  const [isCustomDateRangeOpen, setIsCustomDateRangeOpen] = useState(false);
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
   const [moreFilterRows, setMoreFilterRows] = useState<MoreFilterRow[]>([{ id: "payment-filter-1", field: "", comparator: "", value: "" }]);
   const [customizeOpen, setCustomizeOpen] = useState(false);
@@ -700,13 +764,30 @@ export default function PaymentsReceivedReportView({
       setCustomDateRange(customDateRangeDraft);
     }
     setDateRangeKey(dateRangeDraftKey);
+    setIsCustomDateRangeOpen(false);
     setDateRangeOpen(false);
   };
 
   const cancelDateRange = () => {
     setDateRangeDraftKey(dateRangeKey);
     setCustomDateRangeDraft(customDateRange);
+    setCustomDateRangeMonth(getStartOfMonth((dateRangeKey === "custom" ? customDateRange : getDateRangeValue(dateRangeKey)).start));
+    setIsCustomDateRangeOpen(false);
     setDateRangeOpen(false);
+  };
+
+  const handleCustomStartDateClick = (date: Date) => {
+    setCustomDateRangeDraft((prev) => ({
+      start: date,
+      end: prev.end < date ? date : prev.end,
+    }));
+  };
+
+  const handleCustomEndDateClick = (date: Date) => {
+    setCustomDateRangeDraft((prev) => ({
+      start: prev.start > date ? date : prev.start,
+      end: date < prev.start ? prev.start : date,
+    }));
   };
 
   const addMoreFilterRow = () => {
@@ -859,10 +940,10 @@ export default function PaymentsReceivedReportView({
 
   return (
     <div className="relative min-h-[calc(100vh-64px)] pt-3">
-      <div className="mx-auto w-full px-3 pb-6">
+      <div className="mx-auto flex h-full w-full flex-col gap-3 px-3 pb-6">
         <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#e6e9f0] pb-3">
           <div className="min-w-0">
-            <div className="mb-1 text-sm font-medium text-[#2563eb]">{categoryName}</div>
+            <div className="mb-1 text-sm font-medium text-[#156372]">{categoryName}</div>
             <div className="flex items-baseline gap-2">
               <button
                 type="button"
@@ -885,9 +966,9 @@ export default function PaymentsReceivedReportView({
               type="button"
               onClick={onActivityClick}
               className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]"
-              aria-label="Open report activity"
+              aria-label="Open report options"
             >
-              <RefreshCw size={15} />
+              <SlidersHorizontal size={15} />
             </button>
             <button
               type="button"
@@ -895,6 +976,15 @@ export default function PaymentsReceivedReportView({
               className="inline-flex h-8 items-center gap-1 rounded border border-[#d4d9e4] bg-white px-3 text-sm font-medium text-[#1e293b] hover:bg-[#f8fafc]"
             >
               Export <ChevronDown size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={onRunReport}
+              className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] text-[#334155] hover:bg-[#f8fafc]"
+              aria-label="Refresh report"
+              title="Refresh report"
+            >
+              <RefreshCw size={15} />
             </button>
             <button
               type="button"
@@ -907,7 +997,7 @@ export default function PaymentsReceivedReportView({
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-2 overflow-x-auto border-t border-b border-[#e5e7eb] bg-white py-3">
+        <div className="mt-1 flex flex-wrap items-center gap-2 overflow-x-auto border-t border-b border-[#e5e7eb] bg-white py-3">
           <div className="flex items-center gap-2 text-sm text-[#334155]">
             <Filter size={14} />
             <span>Filters :</span>
@@ -917,8 +1007,12 @@ export default function PaymentsReceivedReportView({
             <button
               type="button"
               onClick={() => {
+                const currentRange =
+                  dateRangeKey === "custom" ? customDateRange : dateRange;
                 setDateRangeDraftKey(dateRangeKey);
-                setCustomDateRangeDraft(customDateRange);
+                setCustomDateRangeDraft(currentRange);
+                setCustomDateRangeMonth(getStartOfMonth(currentRange.start));
+                setIsCustomDateRangeOpen(dateRangeKey === "custom");
                 setDateRangeOpen((prev) => !prev);
               }}
               className="inline-flex h-8 min-w-[170px] items-center justify-between gap-3 rounded border border-[#cfd6e4] bg-[#f8fafc] px-3 text-sm text-[#334155] hover:bg-white"
@@ -931,77 +1025,273 @@ export default function PaymentsReceivedReportView({
               <ChevronDown size={14} />
             </button>
             {dateRangeOpen ? (
-              <div className="absolute left-0 top-[calc(100%+6px)] z-30 w-[280px] rounded-lg border border-[#d7dce7] bg-white p-2 shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
-                <div className="max-h-[220px] overflow-y-auto">
-                  {DATE_RANGE_OPTIONS.map((option) => (
-                    <button
-                      key={option.key}
-                      type="button"
-                      onClick={() => {
-                        setDateRangeDraftKey(option.key);
-                        if (option.key !== "custom") {
-                          setDateRangeKey(option.key);
-                          setDateRangeOpen(false);
-                        }
-                        if (option.key === "custom") {
-                          setCustomDateRangeDraft(customDateRange);
-                        }
-                      }}
-                      className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-[#f8fafc] ${
-                        dateRangeDraftKey === option.key ? "font-medium text-[#0f172a]" : "text-[#334155]"
-                      }`}
-                    >
-                      <span>{option.label}</span>
-                      {dateRangeDraftKey === option.key ? <Check size={14} className="text-[#64748b]" /> : null}
-                    </button>
-                  ))}
-                </div>
-                {dateRangeDraftKey === "custom" ? (
-                  <div className="mt-2 border-t border-[#eef2f7] pt-2">
-                    <div className="grid grid-cols-2 gap-2">
-                      <label className="block text-xs text-[#64748b]">
-                        From
-                        <input
-                          type="date"
-                          value={customDateRangeDraft.start.toISOString().slice(0, 10)}
-                          onChange={(event) => {
-                            const value = event.target.value ? new Date(event.target.value) : customDateRangeDraft.start;
-                            setCustomDateRangeDraft((prev) => ({ start: value, end: prev.end < value ? value : prev.end }));
-                          }}
-                          className="mt-1 h-9 w-full rounded-md border border-[#cbd5e1] px-2 text-sm text-[#0f172a]"
-                        />
-                      </label>
-                      <label className="block text-xs text-[#64748b]">
-                        To
-                        <input
-                          type="date"
-                          value={customDateRangeDraft.end.toISOString().slice(0, 10)}
-                          onChange={(event) => {
-                            const value = event.target.value ? new Date(event.target.value) : customDateRangeDraft.end;
-                            setCustomDateRangeDraft((prev) => ({ start: prev.start > value ? value : prev.start, end: value }));
-                          }}
-                          className="mt-1 h-9 w-full rounded-md border border-[#cbd5e1] px-2 text-sm text-[#0f172a]"
-                        />
-                      </label>
-                    </div>
-                    <div className="mt-2 flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={cancelDateRange}
-                        className="rounded-md border border-[#d7dce7] bg-white px-3 py-1.5 text-sm text-[#334155]"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={applyDateRange}
-                        className="rounded-md bg-[#1f6f7a] px-3 py-1.5 text-sm font-medium text-white"
-                      >
-                        Apply
-                      </button>
+              <div
+                className={`absolute left-0 top-[calc(100%+6px)] z-40 overflow-visible rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)] ${
+                  isCustomDateRangeOpen ? "w-[680px]" : "w-[165px]"
+                }`}
+              >
+                <div className="flex">
+                  <div className="w-[165px] border-r border-[#eef2f7]">
+                    <div className="max-h-[280px] overflow-y-auto py-1">
+                      {DATE_RANGE_OPTIONS.map((option) => {
+                        const isSelected = option.key === dateRangeDraftKey;
+                        return (
+                          <button
+                            key={option.key}
+                            type="button"
+                            onClick={() => {
+                              if (option.key === "custom") {
+                                const currentRange =
+                                  dateRangeKey === "custom"
+                                    ? customDateRange
+                                    : dateRange;
+                                setDateRangeDraftKey("custom");
+                                setCustomDateRangeDraft(currentRange);
+                                setCustomDateRangeMonth(getStartOfMonth(currentRange.start));
+                                setIsCustomDateRangeOpen(true);
+                                return;
+                              }
+
+                              setDateRangeKey(option.key);
+                              setDateRangeDraftKey(option.key);
+                              setIsCustomDateRangeOpen(false);
+                              setDateRangeOpen(false);
+                            }}
+                            className={`flex w-full items-center justify-between px-4 py-2 text-left text-sm ${
+                              isSelected
+                                ? "font-medium text-[#0f172a]"
+                                : "text-[#334155] hover:bg-[#f8fafc]"
+                            }`}
+                          >
+                            <span>{option.label}</span>
+                            {isSelected ? (
+                              <Check size={14} className="text-[#0f172a]" />
+                            ) : null}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
-                ) : null}
+
+                  {isCustomDateRangeOpen ? (
+                    <div className="flex-1 p-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">
+                            Start Date
+                          </div>
+                          <div className="relative">
+                            <CalendarDays
+                              size={14}
+                              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#64748b]"
+                            />
+                            <input
+                              type="text"
+                              readOnly
+                              value={formatPickerDate(customDateRangeDraft.start)}
+                              className="h-10 w-full rounded border border-[#156372] bg-white pl-9 pr-3 text-sm text-[#334155] outline-none"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">
+                            End Date
+                          </div>
+                          <div className="relative">
+                            <CalendarDays
+                              size={14}
+                              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#64748b]"
+                            />
+                            <input
+                              type="text"
+                              readOnly
+                              value={formatPickerDate(customDateRangeDraft.end)}
+                              className="h-10 w-full rounded border border-[#156372] bg-white pl-9 pr-3 text-sm text-[#334155] outline-none"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-[1fr_1fr] gap-3">
+                        {[
+                          { month: customDateRangeMonth, side: "start" as const },
+                          {
+                            month: addMonths(customDateRangeMonth, 1),
+                            side: "end" as const,
+                          },
+                        ].map(({ month, side }) => {
+                          const monthLabel = month.toLocaleDateString("en-US", {
+                            month: "short",
+                            year: "numeric",
+                          });
+                          const weeks = buildCalendarGrid(month);
+
+                          return (
+                            <div
+                              key={`${side}-${monthLabel}`}
+                              className="rounded-lg border border-[#eef2f7] bg-white p-2"
+                            >
+                              <div className="mb-2 flex items-center justify-between gap-2 px-1">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setCustomDateRangeMonth((prev) =>
+                                      addMonths(prev, -1),
+                                    )
+                                  }
+                                  className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-[#f8fafc]"
+                                  aria-label="Previous month"
+                                >
+                                  <ChevronRight
+                                    size={14}
+                                    className="rotate-180 text-[#64748b]"
+                                  />
+                                </button>
+
+                                <div className="flex items-center gap-1">
+                                  <select
+                                    value={month.getMonth()}
+                                    onChange={(event) =>
+                                      side === "start"
+                                        ? setCustomDateRangeMonth(
+                                            new Date(
+                                              month.getFullYear(),
+                                              Number(event.target.value),
+                                              1,
+                                            ),
+                                          )
+                                        : setCustomDateRangeMonth(
+                                            new Date(
+                                              month.getFullYear(),
+                                              Number(event.target.value),
+                                              1,
+                                            ),
+                                          )
+                                    }
+                                    className="h-6 rounded border border-[#cfd6e4] bg-white px-1 text-[11px] text-[#334155] outline-none"
+                                  >
+                                    {MONTH_NAMES.map((monthName, index) => (
+                                      <option key={monthName} value={index}>
+                                        {monthName}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <select
+                                    value={month.getFullYear()}
+                                    onChange={(event) =>
+                                      setCustomDateRangeMonth(
+                                        new Date(
+                                          Number(event.target.value),
+                                          month.getMonth(),
+                                          1,
+                                        ),
+                                      )
+                                    }
+                                    className="h-6 rounded border border-[#cfd6e4] bg-white px-1 text-[11px] text-[#334155] outline-none"
+                                  >
+                                    {CALENDAR_YEAR_OPTIONS.map((year) => (
+                                      <option key={year} value={year}>
+                                        {year}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setCustomDateRangeMonth((prev) =>
+                                      addMonths(prev, 1),
+                                    )
+                                  }
+                                  className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-[#f8fafc]"
+                                  aria-label="Next month"
+                                >
+                                  <ChevronRight
+                                    size={14}
+                                    className="text-[#64748b]"
+                                  />
+                                </button>
+                              </div>
+
+                              <table className="w-full table-fixed border-collapse text-center text-[11px]">
+                                <thead>
+                                  <tr className="text-[#156372]">
+                                    {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
+                                      <th key={day} className="pb-1 font-semibold">
+                                        {day}
+                                      </th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {weeks.map((week, weekIndex) => (
+                                    <tr key={`${side}-week-${weekIndex}`}>
+                                      {week.map((day) => {
+                                        const inCurrentMonth = isSameMonth(day, month);
+                                        const isStart = isSameDay(day, customDateRangeDraft.start);
+                                        const isEnd = isSameDay(day, customDateRangeDraft.end);
+                                        const inRange = day >= customDateRangeDraft.start && day <= customDateRangeDraft.end;
+                                        const isToday = isSameDay(day, new Date());
+
+                                        return (
+                                          <td key={day.toISOString()} className="p-0">
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                side === "start"
+                                                  ? handleCustomStartDateClick(day)
+                                                  : handleCustomEndDateClick(day)
+                                              }
+                                              className={`m-[1px] flex h-7 w-full items-center justify-center rounded text-[11px] ${
+                                                !inCurrentMonth
+                                                  ? "text-[#cbd5e1]"
+                                                  : isStart || isEnd
+                                                    ? "bg-[#156372] font-semibold text-white"
+                                                    : inRange
+                                                      ? "bg-[#d9eff1] text-[#0f172a]"
+                                                      : "text-[#334155] hover:bg-[#f8fafc]"
+                                              } ${isToday && !isStart && !isEnd ? "ring-1 ring-inset ring-[#156372]/30" : ""}`}
+                                            >
+                                              {day.getDate()}
+                                            </button>
+                                          </td>
+                                        );
+                                      })}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-between gap-2">
+                        <div className="text-xs text-[#64748b]">
+                          {formatPickerDate(customDateRangeDraft.start)} -{" "}
+                          {formatPickerDate(customDateRangeDraft.end)}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={cancelDateRange}
+                            className="inline-flex h-8 items-center rounded border border-[#d4d9e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={applyDateRange}
+                            className="inline-flex h-8 items-center rounded bg-[#156372] px-3 text-sm font-semibold text-white hover:bg-[#0f4a52]"
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             ) : null}
           </div>
@@ -1011,7 +1301,7 @@ export default function PaymentsReceivedReportView({
             onClick={() => setMoreFiltersOpen((prev) => !prev)}
             className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
           >
-            <Plus size={14} className="text-[#2563eb]" />
+            <Plus size={14} className="text-[#156372]" />
             More Filters
           </button>
 
@@ -1123,74 +1413,76 @@ export default function PaymentsReceivedReportView({
           </div>
         ) : null}
 
-        <div className="mt-3 flex flex-wrap items-center justify-end gap-2 text-sm text-[#475569]">
-          <div className="relative">
+        <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[16px] border border-[#d7dce7] bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-end gap-2 border-b border-[#e6e9f0] px-4 py-2 text-sm text-[#475569]">
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setGroupByOpen((prev) => !prev)}
+                className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
+              >
+                <span className="inline-flex items-center gap-2">
+                  <Columns3 size={14} className="text-[#64748b]" />
+                  Group By :
+                  <strong className="text-[#0f172a]">{getGroupByLabelLocal(groupByKey)}</strong>
+                </span>
+                <ChevronDown size={14} />
+              </button>
+              {groupByOpen ? (
+                <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-[220px] rounded-lg border border-[#d7dce7] bg-white p-2 shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                  {groupBySelections.map((option) => (
+                    <button
+                      key={option.key}
+                      type="button"
+                      onClick={() => {
+                        setGroupByKey(option.key);
+                        setGroupByOpen(false);
+                      }}
+                      className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-[#f8fafc]"
+                    >
+                      <span>{option.label}</span>
+                      {groupByKey === option.key ? <Check size={14} className="text-[#64748b]" /> : null}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
             <button
               type="button"
-              onClick={() => setGroupByOpen((prev) => !prev)}
+              onClick={openCustomize}
               className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
             >
-              <span className="inline-flex items-center gap-2">
-                <Columns3 size={14} className="text-[#64748b]" />
-                Group By :
-                <strong className="text-[#0f172a]">{getGroupByLabelLocal(groupByKey)}</strong>
+              Customize Report Columns
+              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#d9eff1] px-1 text-[11px] font-semibold text-[#1b6f7b]">
+                {selectedColumns.length}
               </span>
-              <ChevronDown size={14} />
             </button>
-            {groupByOpen ? (
-              <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-[220px] rounded-lg border border-[#d7dce7] bg-white p-2 shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
-                {groupBySelections.map((option) => (
-                  <button
-                    key={option.key}
-                    type="button"
-                    onClick={() => {
-                      setGroupByKey(option.key);
-                      setGroupByOpen(false);
-                    }}
-                    className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-[#f8fafc]"
-                  >
-                    <span>{option.label}</span>
-                    {groupByKey === option.key ? <Check size={14} className="text-[#64748b]" /> : null}
-                  </button>
-                ))}
+          </div>
+
+          <div className="flex-1 overflow-auto px-4 py-4">
+            <div className="w-full overflow-hidden rounded-[12px] border border-[#e8edf5] bg-white">
+              <div className="border-b border-[#eef2f7] px-4 py-10 text-center">
+                <div className="mb-1 text-sm text-[#64748b]">{organizationName || " "}</div>
+                <div className="text-[20px] font-semibold text-[#0f172a]">{reportName}</div>
+                <div className="mt-1 text-sm text-[#156372]">
+                  From {formatDate(dateRange.start)} To {formatDate(dateRange.end)}
+                </div>
               </div>
-            ) : null}
-          </div>
 
-          <button
-            type="button"
-            onClick={openCustomize}
-            className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
-          >
-            Customize Report Columns
-            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#d9eff1] px-1 text-[11px] font-semibold text-[#1b6f7b]">
-              {selectedColumns.length}
-            </span>
-          </button>
-        </div>
-
-        <div className="mt-3 rounded-xl border border-[#d7dce7] bg-white">
-          <div className="border-b border-[#eef2f7] px-4 py-10 text-center">
-            <div className="mb-1 text-sm text-[#64748b]">{organizationName || " "}</div>
-            <div className="text-[20px] font-semibold text-[#0f172a]">{reportName}</div>
-            <div className="mt-1 text-sm text-[#2563eb]">
-              From {formatDate(dateRange.start)} To {formatDate(dateRange.end)}
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="min-w-full border-collapse text-left">
-              <thead>
-                <tr className="border-b border-[#eef2f7]">
-                  {visibleColumns.map((column) => (
-                    <th key={column.key} className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#475569]">
-                      {column.label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {isLoading ? (
+              <div className="overflow-x-auto">
+              <table className="min-w-full border-collapse text-left">
+                  <thead>
+                    <tr className="border-b border-[#eef2f7]">
+                      {visibleColumns.map((column) => (
+                        <th key={column.key} className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#475569]">
+                          {column.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                <tbody>
+                  {isLoading ? (
                     <tr>
                       <td className="px-4 py-10 text-center text-sm text-[#64748b]" colSpan={visibleColumns.length}>
                         Loading report data...
@@ -1210,154 +1502,157 @@ export default function PaymentsReceivedReportView({
                           : "No payments found for the selected filters."}
                       </td>
                     </tr>
-                ) : (
-                  <>
-                    {groupedPayments.map((group) => {
-                      const groupTotals = group.items.reduce<SummaryTotals>(
-                        (acc, payment) => {
-                          if (isRefundMode) {
-                            const refund = payment as RefundRecord;
-                            const amount = Number(refund.amount ?? 0) || 0;
-                            const currency = String(refund.currency || baseCurrencyCode || "USD").trim().toUpperCase() || baseCurrencyCode;
-                            const exchangeRate = Number(
-                              refund.exchangeRate ??
-                                refund.exchange_rate ??
-                                refund.fxRate ??
-                                refund.rate ??
-                                0,
-                            );
-                            const baseAmount =
-                              currency === baseCurrencyCode || exchangeRate <= 0
-                                ? amount
-                                : amount * exchangeRate;
-                            acc.amount += amount;
-                            acc.unused += baseAmount;
-                            return acc;
-                          }
+                  ) : (
+                    <>
+                      {groupedPayments.map((group) => {
+                        const groupTotals = group.items.reduce<SummaryTotals>(
+                          (acc, payment) => {
+                            if (isRefundMode) {
+                              const refund = payment as RefundRecord;
+                              const amount = Number(refund.amount ?? 0) || 0;
+                              const currency = String(refund.currency || baseCurrencyCode || "USD").trim().toUpperCase() || baseCurrencyCode;
+                              const exchangeRate = Number(
+                                refund.exchangeRate ??
+                                  refund.exchange_rate ??
+                                  refund.fxRate ??
+                                  refund.rate ??
+                                  0,
+                              );
+                              const baseAmount =
+                                currency === baseCurrencyCode || exchangeRate <= 0
+                                  ? amount
+                                  : amount * exchangeRate;
+                              acc.amount += amount;
+                              acc.unused += baseAmount;
+                              return acc;
+                            }
 
-                          acc.amount += Number((payment as Payment).amountReceived ?? (payment as Payment).amount ?? 0) || 0;
-                          acc.unused += Number((payment as Payment).unusedAmount ?? 0) || 0;
-                          return acc;
-                        },
-                        { amount: 0, unused: 0 }
-                      );
-                      return (
-                        <React.Fragment key={group.label}>
-                          {groupByKey !== "none" ? (
-                            <tr className="border-b border-[#eef2f7] bg-[#f8fafc]">
-                              <td className="px-4 py-2 text-sm font-semibold text-[#0f172a]" colSpan={visibleColumns.length}>
-                                {group.label}
-                              </td>
-                            </tr>
-                          ) : null}
-                          {group.items.map((payment) => {
-                            const rowKey = isRefundMode
-                              ? String((payment as RefundRecord).id || (payment as RefundRecord)._id || (payment as RefundRecord).refundNumber || "")
-                              : String((payment as Payment).id || "");
-                            return (
-                            <tr key={rowKey} className="border-b border-[#eef2f7]">
-                              {visibleColumns.map((column) => (
-                                <td
-                                  key={column.key}
-                                  className={`px-4 py-3 text-sm ${column.kind === "text" ? "text-left" : "text-center"} ${
-                                    column.key === "payment-number" || column.key === "customer-name"
-                                      ? "font-medium text-[#2563eb]"
-                                      : "text-[#0f172a]"
-                                  }`}
-                                  >
-                                  {column.key === "payment-number" && !isRefundMode ? (
-                                    <Link to={`/payments/payments-received/${payment.id}`} className="text-[#2563eb] hover:underline">
-                                      {formatColumnValue(column, payment)}
-                                    </Link>
-                                  ) : (
-                                    formatColumnValue(column, payment)
+                            acc.amount += Number((payment as Payment).amountReceived ?? (payment as Payment).amount ?? 0) || 0;
+                            acc.unused += Number((payment as Payment).unusedAmount ?? 0) || 0;
+                            return acc;
+                          },
+                          { amount: 0, unused: 0 },
+                        );
+                        return (
+                          <React.Fragment key={group.label}>
+                            {groupByKey !== "none" ? (
+                              <tr className="border-b border-[#eef2f7] bg-[#f8fafc]">
+                                <td className="px-4 py-2 text-sm font-semibold text-[#0f172a]" colSpan={visibleColumns.length}>
+                                  {group.label}
+                                </td>
+                              </tr>
+                            ) : null}
+                            {group.items.map((payment) => {
+                              const rowKey = isRefundMode
+                                ? String((payment as RefundRecord).id || (payment as RefundRecord)._id || (payment as RefundRecord).refundNumber || "")
+                                : String((payment as Payment).id || "");
+                              return (
+                                <tr key={rowKey} className="border-b border-[#eef2f7]">
+                                  {visibleColumns.map((column) => (
+                                    <td
+                                      key={column.key}
+                                      className={`px-4 py-3 text-sm ${column.kind === "text" ? "text-left" : "text-center"} ${
+                                        column.key === "payment-number" || column.key === "customer-name"
+                                          ? "font-medium text-[#156372]"
+                                          : "text-[#0f172a]"
+                                      }`}
+                                    >
+                                      {column.key === "payment-number" && !isRefundMode ? (
+                                        <Link to={`/payments/payments-received/${payment.id}`} className="text-[#156372] hover:underline">
+                                          {formatColumnValue(column, payment)}
+                                        </Link>
+                                      ) : (
+                                        formatColumnValue(column, payment)
+                                      )}
+                                    </td>
+                                  ))}
+                                </tr>
+                              );
+                            })}
+                            {groupByKey !== "none" ? (
+                              <tr className="border-b border-[#e5e7eb] bg-[#fcfcfd]">
+                                {visibleColumns.map((column, index) => {
+                                  if (index === 0) {
+                                    return (
+                                      <td key={`${group.label}-total`} className="px-4 py-3 text-sm font-semibold text-[#0f172a]">
+                                        Total
+                                      </td>
+                                    );
+                                  }
+                                  if (column.key === "amount") {
+                                    return (
+                                      <td key={`${group.label}-amount`} className="px-4 py-3 text-center text-sm font-semibold text-[#0f172a]">
+                                        {formatMoney(
+                                          groupTotals.amount,
+                                          isRefundMode ? String(filteredPayments[0]?.currency || baseCurrencyCode || "SOS") : String(filteredPayments[0]?.currency || "SOS"),
+                                        )}
+                                      </td>
+                                    );
+                                  }
+                                  if (column.key === "unused-amount") {
+                                    return (
+                                      <td key={`${group.label}-unused`} className="px-4 py-3 text-center text-sm font-semibold text-[#0f172a]">
+                                        {formatMoney(
+                                          groupTotals.unused,
+                                          isRefundMode ? baseCurrencyCode : String(filteredPayments[0]?.currency || "SOS"),
+                                        )}
+                                      </td>
+                                    );
+                                  }
+                                  return <td key={`${group.label}-${column.key}`} className="px-4 py-3 text-sm" />;
+                                })}
+                              </tr>
+                            ) : null}
+                          </React.Fragment>
+                        );
+                      })}
+                      {groupByKey === "none" ? (
+                        <tr className="border-b border-[#e5e7eb]">
+                          {visibleColumns.map((column, index) => {
+                            if (index === 0) {
+                              return (
+                                <td key="payments-total" className="px-4 py-3 text-sm font-semibold text-[#0f172a]">
+                                  Total
+                                </td>
+                              );
+                            }
+                            if (column.key === "amount") {
+                              return (
+                                <td key="payments-amount" className="px-4 py-3 text-center text-sm font-semibold text-[#0f172a]">
+                                  {formatMoney(
+                                    totals.amount,
+                                    isRefundMode ? String(filteredPayments[0]?.currency || baseCurrencyCode || "SOS") : String(filteredPayments[0]?.currency || "SOS"),
                                   )}
                                 </td>
-                              ))}
-                            </tr>
-                          )})}
-                          {groupByKey !== "none" ? (
-                            <tr className="border-b border-[#e5e7eb] bg-[#fcfcfd]">
-                              {visibleColumns.map((column, index) => {
-                                if (index === 0) {
-                                  return (
-                                    <td key={`${group.label}-total`} className="px-4 py-3 text-sm font-semibold text-[#0f172a]">
-                                      Total
-                                    </td>
-                                  );
-                                }
-                                if (column.key === "amount") {
-                                  return (
-                                    <td key={`${group.label}-amount`} className="px-4 py-3 text-center text-sm font-semibold text-[#0f172a]">
-                                      {formatMoney(
-                                        groupTotals.amount,
-                                        isRefundMode ? String(filteredPayments[0]?.currency || baseCurrencyCode || "SOS") : String(filteredPayments[0]?.currency || "SOS"),
-                                      )}
-                                    </td>
-                                  );
-                                }
-                                if (column.key === "unused-amount") {
-                                  return (
-                                    <td key={`${group.label}-unused`} className="px-4 py-3 text-center text-sm font-semibold text-[#0f172a]">
-                                      {formatMoney(
-                                        groupTotals.unused,
-                                        isRefundMode ? baseCurrencyCode : String(filteredPayments[0]?.currency || "SOS"),
-                                      )}
-                                    </td>
-                                  );
-                                }
-                                return <td key={`${group.label}-${column.key}`} className="px-4 py-3 text-sm" />;
-                              })}
-                            </tr>
-                          ) : null}
-                        </React.Fragment>
-                      );
-                    })}
-                    {groupByKey === "none" ? (
-                      <tr className="border-b border-[#e5e7eb]">
-                        {visibleColumns.map((column, index) => {
-                          if (index === 0) {
-                            return (
-                              <td key="payments-total" className="px-4 py-3 text-sm font-semibold text-[#0f172a]">
-                                Total
-                              </td>
-                            );
-                          }
-                          if (column.key === "amount") {
-                            return (
-                              <td key="payments-amount" className="px-4 py-3 text-center text-sm font-semibold text-[#0f172a]">
-                                {formatMoney(
-                                  totals.amount,
-                                  isRefundMode ? String(filteredPayments[0]?.currency || baseCurrencyCode || "SOS") : String(filteredPayments[0]?.currency || "SOS"),
-                                )}
-                              </td>
-                            );
-                          }
-                          if (column.key === "unused-amount") {
-                            return (
-                              <td key="payments-unused" className="px-4 py-3 text-center text-sm font-semibold text-[#0f172a]">
-                                {formatMoney(
-                                  totals.unused,
-                                  isRefundMode ? baseCurrencyCode : String(filteredPayments[0]?.currency || "SOS"),
-                                )}
-                              </td>
-                            );
-                          }
-                          return <td key={`payments-${column.key}`} className="px-4 py-3 text-sm" />;
-                        })}
-                      </tr>
-                    ) : null}
-                  </>
-                )}
-              </tbody>
-            </table>
+                              );
+                            }
+                            if (column.key === "unused-amount") {
+                              return (
+                                <td key="payments-unused" className="px-4 py-3 text-center text-sm font-semibold text-[#0f172a]">
+                                  {formatMoney(
+                                    totals.unused,
+                                    isRefundMode ? baseCurrencyCode : String(filteredPayments[0]?.currency || "SOS"),
+                                  )}
+                                </td>
+                              );
+                            }
+                            return <td key={`payments-${column.key}`} className="px-4 py-3 text-sm" />;
+                          })}
+                        </tr>
+                      ) : null}
+                    </>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
+        </section>
       </div>
 
       {exportOpen ? (
-        <div className="absolute right-4 top-16 z-40 w-[240px] rounded-lg border border-[#d7dce7] bg-white p-2 shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
-          {["PDF", "XLSX (Microsoft Excel)", "CSV (Comma Separated Value)", "Print"].map((label) => (
+        <div className="absolute right-4 top-16 z-40 w-[220px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+          {["PDF", "XLSX (Microsoft Excel)", "Print"].map((label) => (
             <button
               key={label}
               type="button"
@@ -1365,7 +1660,7 @@ export default function PaymentsReceivedReportView({
                 setExportOpen(false);
                 toast.success(`Export ${label} started`);
               }}
-              className="flex w-full items-center rounded-md px-3 py-2 text-left text-sm text-[#0f172a] hover:bg-[#f8fafc]"
+              className="flex w-full items-center px-3 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
             >
               {label}
             </button>
@@ -1486,7 +1781,7 @@ export default function PaymentsReceivedReportView({
               </div>
             </div>
             <div className="flex items-center justify-start gap-2 border-t border-[#eef2f7] px-6 py-4">
-              <button type="button" onClick={applyColumns} className="rounded-md bg-[#3b82f6] px-4 py-2 text-sm font-medium text-white">
+              <button type="button" onClick={applyColumns} className="rounded-md bg-[#156372] px-4 py-2 text-sm font-medium text-white">
                 Apply
               </button>
               <button type="button" onClick={() => setCustomizeOpen(false)} className="rounded-md border border-[#d7dce7] bg-white px-4 py-2 text-sm text-[#0f172a]">

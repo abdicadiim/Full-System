@@ -475,8 +475,8 @@ export default function TaxSummaryReportPage() {
                 </button>
 
                 {isExportOpen ? (
-                  <div className="absolute right-0 top-[calc(100%+6px)] z-40 w-[240px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
-                    {["PDF", "XLSX (Microsoft Excel)", "CSV (Comma Separated Value)", "Print"].map(
+                  <div className="absolute right-0 top-[calc(100%+6px)] z-40 w-[220px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                    {["PDF", "XLSX (Microsoft Excel)", "Print"].map(
                       (exportLabel) => (
                         <button
                           key={exportLabel}
@@ -485,7 +485,7 @@ export default function TaxSummaryReportPage() {
                             setIsExportOpen(false);
                             toast.success(`Export ${exportLabel} started`);
                           }}
-                          className="flex w-full items-center px-3 py-2 text-left text-sm text-[#0f172a] hover:bg-[#f8fafc]"
+                          className="flex w-full items-center px-3 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
                         >
                           {exportLabel}
                         </button>
@@ -754,7 +754,7 @@ export default function TaxSummaryReportPage() {
                           key={`${row.taxName}-${column}`}
                           className={`px-4 py-3 text-sm ${
                             index === 0
-                              ? "font-medium text-[#2563eb]"
+                              ? "font-medium text-[#156372]"
                               : index === 1
                                 ? "text-center text-[#334155]"
                                 : "text-right text-[#334155]"

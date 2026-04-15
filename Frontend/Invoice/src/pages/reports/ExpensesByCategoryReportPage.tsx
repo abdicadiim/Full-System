@@ -539,38 +539,18 @@ export default function ExpensesByCategoryReportPage() {
                   />
                 </button>
                 {isExportOpen ? (
-                  <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-[252px] overflow-visible rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
-                    <div className="border-b border-[#eef2f7] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">
-                      Export As
-                    </div>
+                  <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-[220px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
                     <div className="py-1">
                       {[
                         "PDF",
                         "XLSX (Microsoft Excel)",
-                        "XLS (Microsoft Excel 1997-2004 Compatible)",
-                        "CSV (Comma Separated Value)",
-                        "Export to Zoho Sheet",
+                        "Print",
                       ].map((label) => (
                         <button
                           key={label}
                           type="button"
                           onClick={() => handleExport(label)}
-                          className="flex w-full items-center px-4 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="border-t border-[#eef2f7] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">
-                      Print
-                    </div>
-                    <div className="py-1">
-                      {["Print", "Print Preference"].map((label) => (
-                        <button
-                          key={label}
-                          type="button"
-                          onClick={() => handleExport(label)}
-                          className="flex w-full items-center px-4 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
+                          className="flex w-full items-center px-3 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
                         >
                           {label}
                         </button>
@@ -665,7 +645,7 @@ export default function ExpensesByCategoryReportPage() {
                     isMoreFiltersOpen ? "border-[#1b6f7b] bg-white" : "border-[#cfd6e4] bg-[#f8fafc]"
                   }`}
                 >
-                  <Plus size={14} className="text-[#2563eb]" />
+                  <Plus size={14} className="text-[#156372]" />
                   More Filters
                 </button>
 
@@ -690,7 +670,7 @@ export default function ExpensesByCategoryReportPage() {
                       </div>
                     </label>
                     <div className="mt-3 flex items-center justify-between">
-                      <button type="button" onClick={() => setCategorySearch("")} className="text-sm text-[#2563eb] hover:underline">
+                      <button type="button" onClick={() => setCategorySearch("")} className="text-sm text-[#156372] hover:underline">
                         Clear
                       </button>
                       <button
@@ -720,7 +700,7 @@ export default function ExpensesByCategoryReportPage() {
               <div className="border-b border-[#eef2f7] px-4 py-10 text-center">
                 {organizationName ? <div className="mb-1 text-sm text-[#64748b]">{organizationName}</div> : null}
                 <h2 className="text-[20px] font-semibold text-[#0f172a]">{report.name}</h2>
-                <div className="mt-1 text-sm text-[#2563eb]">{dateLabel}</div>
+                <div className="mt-1 text-sm text-[#156372]">{dateLabel}</div>
               </div>
 
               <div className="overflow-x-auto">
@@ -778,7 +758,7 @@ export default function ExpensesByCategoryReportPage() {
                                 <td
                                   key={`${row.id}-${cellIndex}`}
                                   className={`px-4 py-3 text-[14px] ${
-                                    cellIndex === 0 ? "font-medium text-[#2563eb]" : "text-center text-[#334155]"
+                                    cellIndex === 0 ? "font-medium text-[#156372]" : "text-center text-[#334155]"
                                   }`}
                                 >
                                   {value}

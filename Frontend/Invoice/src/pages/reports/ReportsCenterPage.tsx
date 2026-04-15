@@ -209,7 +209,7 @@ export default function ReportsCenterPage() {
                                 setSearch("");
                                 setIsSearchOpen(false);
                               }}
-                              className="block px-5 py-2 text-[13px] text-[#1d4ed8] hover:bg-[#f8fafc]"
+                              className="block px-5 py-2 text-[13px] text-[#156372] hover:bg-[#f8fafc]"
                             >
                               {report.name}
                             </Link>

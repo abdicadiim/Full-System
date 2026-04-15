@@ -205,7 +205,7 @@ export default function TaxReportDetailPage() {
               <div className="text-[20px] font-semibold text-[#0f172a]">
                 {report.name}
               </div>
-              <div className="mt-1 text-sm text-[#2563eb]">{dateLabel}</div>
+              <div className="mt-1 text-sm text-[#156372]">{dateLabel}</div>
             </div>
           </div>
 
@@ -294,8 +294,8 @@ export default function TaxReportDetailPage() {
       </div>
 
       {isExportOpen ? (
-        <div className="absolute right-6 top-16 z-40 w-[240px] rounded-lg border border-[#d7dce7] bg-white p-2 shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
-          {["PDF", "XLSX (Microsoft Excel)", "CSV (Comma Separated Value)", "Print"].map(
+        <div className="absolute right-6 top-16 z-40 w-[220px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+          {["PDF", "XLSX (Microsoft Excel)", "Print"].map(
             (label) => (
               <button
                 key={label}
@@ -304,7 +304,7 @@ export default function TaxReportDetailPage() {
                   setIsExportOpen(false);
                   toast.success(`Export ${label} started`);
                 }}
-                className="flex w-full items-center rounded-md px-3 py-2 text-left text-sm text-[#0f172a] hover:bg-[#f8fafc]"
+                className="flex w-full items-center px-3 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
               >
                 {label}
               </button>

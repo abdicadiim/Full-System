@@ -896,7 +896,6 @@ function ReportsDrawer({
     </div>
   );
 }
-
 function ReportActivityDrawer({
   open,
   onClose,
@@ -2227,7 +2226,7 @@ function SalesByCustomerReportView({
             <Menu size={15} />
           </button>
           <div>
-            <p className="text-sm font-medium text-[#1b6f7b]">{categoryName}</p>
+            <p className="text-sm font-medium text-[#156372]">{categoryName}</p>
             <h1 className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[24px] font-semibold leading-tight text-[#0f172a]">
               <span>{reportName}</span>
               <span className="text-sm font-normal text-[#475569]">
@@ -2244,7 +2243,7 @@ function SalesByCustomerReportView({
               type="button"
               onClick={() => setIsExportOpen((prev) => !prev)}
               className={`inline-flex h-9 items-center gap-1 rounded border bg-white px-3 text-sm font-medium text-[#1e293b] hover:bg-[#f8fafc] ${
-                isExportOpen ? "border-[#1b6f7b]" : "border-[#d4d9e4]"
+                isExportOpen ? "border-[#156372]" : "border-[#d4d9e4]"
               }`}
               aria-haspopup="menu"
               aria-expanded={isExportOpen}
@@ -2257,38 +2256,29 @@ function SalesByCustomerReportView({
             </button>
 
             {isExportOpen ? (
-              <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-[252px] overflow-visible rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
-                <div className="border-b border-[#eef2f7] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">
-                  Export As
-                </div>
+              <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-[220px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
                 <div className="py-1">
                   {[
                     "PDF",
                     "XLSX (Microsoft Excel)",
-                    "XLS (Microsoft Excel 1997-2004 Compatible)",
-                    "CSV (Comma Separated Value)",
-                    "Export to Zoho Sheet",
                   ].map((label) => (
                     <button
                       key={label}
                       type="button"
                       onClick={() => handleExportAction(label)}
-                      className="flex w-full items-center px-4 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
+                      className="flex w-full items-center px-3 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
                     >
                       {label}
                     </button>
                   ))}
                 </div>
-                <div className="border-t border-[#eef2f7] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">
-                  Print
-                </div>
                 <div className="py-1">
-                  {["Print", "Print Preference"].map((label) => (
+                  {["Print"].map((label) => (
                     <button
                       key={label}
                       type="button"
                       onClick={() => handleExportAction(label)}
-                      className="flex w-full items-center px-4 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
+                      className="flex w-full items-center px-3 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
                     >
                       {label}
                     </button>
@@ -2330,7 +2320,7 @@ function SalesByCustomerReportView({
             onClick={openDateRangeDropdown}
             className={`inline-flex h-8 items-center gap-1 rounded border px-3 text-sm text-[#334155] hover:bg-white ${
               isDateRangeOpen
-                ? "border-[#1b6f7b] bg-white"
+                ? "border-[#156372] bg-white"
                 : "border-[#cfd6e4] bg-[#f8fafc]"
             }`}
             aria-haspopup="menu"
@@ -2407,7 +2397,7 @@ function SalesByCustomerReportView({
                             type="text"
                             readOnly
                             value={formatPickerDate(customDateRangeDraft.start)}
-                            className="h-10 w-full rounded border border-[#1b6f7b] bg-white pl-9 pr-3 text-sm text-[#334155] outline-none"
+                            className="h-10 w-full rounded border border-[#156372] bg-white pl-9 pr-3 text-sm text-[#334155] outline-none"
                           />
                         </div>
                       </div>
@@ -2424,7 +2414,7 @@ function SalesByCustomerReportView({
                             type="text"
                             readOnly
                             value={formatPickerDate(customDateRangeDraft.end)}
-                            className="h-10 w-full rounded border border-[#1b6f7b] bg-white pl-9 pr-3 text-sm text-[#334155] outline-none"
+                            className="h-10 w-full rounded border border-[#156372] bg-white pl-9 pr-3 text-sm text-[#334155] outline-none"
                           />
                         </div>
                       </div>
@@ -2530,7 +2520,7 @@ function SalesByCustomerReportView({
 
                             <table className="w-full table-fixed border-collapse text-center text-[11px]">
                               <thead>
-                                <tr className="text-[#1b6f7b]">
+                                <tr className="text-[#156372]">
                                   {[
                                     "Su",
                                     "Mo",
@@ -2591,11 +2581,11 @@ function SalesByCustomerReportView({
                                               !inCurrentMonth
                                                 ? "text-[#cbd5e1]"
                                                 : isStart || isEnd
-                                                  ? "bg-[#1b6f7b] font-semibold text-white"
+                                                  ? "bg-[#156372] font-semibold text-white"
                                                   : inRange
                                                     ? "bg-[#d9eff1] text-[#0f172a]"
                                                     : "text-[#334155] hover:bg-[#f8fafc]"
-                                            } ${isToday && !isStart && !isEnd ? "ring-1 ring-inset ring-[#1b6f7b]/30" : ""}`}
+                                            } ${isToday && !isStart && !isEnd ? "ring-1 ring-inset ring-[#156372]/30" : ""}`}
                                           >
                                             {day.getDate()}
                                           </button>
@@ -2627,7 +2617,7 @@ function SalesByCustomerReportView({
                         <button
                           type="button"
                           onClick={applyCustomDateRange}
-                          className="inline-flex h-8 items-center rounded bg-[#1b6f7b] px-3 text-sm font-semibold text-white hover:bg-[#155963]"
+                          className="inline-flex h-8 items-center rounded bg-[#156372] px-3 text-sm font-semibold text-white hover:bg-[#0f4a52]"
                         >
                           Apply
                         </button>
@@ -2645,7 +2635,7 @@ function SalesByCustomerReportView({
             onClick={() => setIsEntityOpen((prev) => !prev)}
             className={`relative inline-flex h-8 w-[184px] items-center overflow-hidden rounded border px-3 pr-12 text-sm text-[#334155] hover:bg-white ${
               isEntityOpen
-                ? "border-[#1b6f7b] bg-white"
+                ? "border-[#156372] bg-white"
                 : "border-[#cfd6e4] bg-[#f8fafc]"
             }`}
             aria-haspopup="menu"
@@ -2683,7 +2673,7 @@ function SalesByCustomerReportView({
                     value={entitySearch}
                     onChange={(event) => setEntitySearch(event.target.value)}
                     placeholder="Search"
-                    className="h-9 w-full rounded-md border border-[#1b6f7b] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                    className="h-9 w-full rounded-md border border-[#156372] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
                   />
                   <Search
                     size={14}
@@ -2739,11 +2729,11 @@ function SalesByCustomerReportView({
           }}
           className={`inline-flex h-8 items-center gap-1 rounded border px-3 text-sm text-[#334155] hover:bg-[#f8fafc] ${
             isMoreFiltersOpen || hasMoreFilters
-              ? "border-[#1b6f7b] bg-white"
+              ? "border-[#156372] bg-white"
               : "border-[#cfd6e4] bg-white"
           }`}
         >
-          <Plus size={14} className="text-[#1b6f7b]" /> More Filters
+          <Plus size={14} className="text-[#156372]" /> More Filters
         </button>
 
         {isMoreFiltersOpen ? (
@@ -2822,7 +2812,7 @@ function SalesByCustomerReportView({
                           }
                           className={`relative flex h-8 w-full items-center overflow-hidden rounded border px-3 pr-10 text-sm text-[#334155] outline-none ${
                             fieldMenuOpen
-                              ? "border-[#1b6f7b] bg-white"
+                              ? "border-[#156372] bg-white"
                               : "border-[#cfd6e4] bg-white hover:bg-[#f8fafc]"
                           }`}
                           aria-haspopup="menu"
@@ -2837,7 +2827,7 @@ function SalesByCustomerReportView({
                             size={14}
                             className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
                               fieldMenuOpen
-                                ? "rotate-180 text-[#1b6f7b]"
+                                ? "rotate-180 text-[#156372]"
                                 : "text-[#64748b]"
                             }`}
                           />
@@ -2886,7 +2876,7 @@ function SalesByCustomerReportView({
                                     )
                                   }
                                   placeholder="Search"
-                                  className="h-9 w-full rounded-md border border-[#1b6f7b] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                                  className="h-9 w-full rounded-md border border-[#156372] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
                                 />
                                 <Search
                                   size={14}
@@ -2965,7 +2955,7 @@ function SalesByCustomerReportView({
                           className={`relative flex h-8 w-full items-center overflow-hidden rounded border px-3 pr-9 text-sm text-[#334155] outline-none ${
                             row.field
                               ? comparatorMenuOpen
-                                ? "border-[#1b6f7b] bg-white"
+                                ? "border-[#156372] bg-white"
                                 : "border-[#cfd6e4] bg-white hover:bg-[#f8fafc]"
                               : "cursor-not-allowed border-[#e2e8f0] bg-[#f8fafc] text-[#94a3b8]"
                           }`}
@@ -2981,7 +2971,7 @@ function SalesByCustomerReportView({
                             size={14}
                             className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
                               comparatorMenuOpen
-                                ? "rotate-180 text-[#1b6f7b]"
+                                ? "rotate-180 text-[#156372]"
                                 : row.field
                                   ? "text-[#64748b]"
                                   : "text-[#cbd5e1]"
@@ -3006,7 +2996,7 @@ function SalesByCustomerReportView({
                                     )
                                   }
                                   placeholder="Search"
-                                  className="h-9 w-full rounded-md border border-[#1b6f7b] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                                  className="h-9 w-full rounded-md border border-[#156372] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
                                 />
                                 <Search
                                   size={14}
@@ -3082,7 +3072,7 @@ function SalesByCustomerReportView({
                               );
                             }}
                             placeholder="Enter a value"
-                            className="h-8 w-full rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#1b6f7b]"
+                            className="h-8 w-full rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#156372]"
                           />
                         ) : (
                           <>
@@ -3096,7 +3086,7 @@ function SalesByCustomerReportView({
                               className={`relative flex h-8 w-full items-center overflow-hidden rounded border px-3 pr-9 text-sm outline-none ${
                                 row.field
                                   ? valueMenuOpen
-                                    ? "border-[#1b6f7b] bg-white text-[#334155]"
+                                    ? "border-[#156372] bg-white text-[#334155]"
                                     : "border-[#cfd6e4] bg-white text-[#334155] hover:bg-[#f8fafc]"
                                   : "cursor-not-allowed border-[#e2e8f0] bg-[#f8fafc] text-[#94a3b8]"
                               }`}
@@ -3112,7 +3102,7 @@ function SalesByCustomerReportView({
                                 size={14}
                                 className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
                                   valueMenuOpen
-                                    ? "rotate-180 text-[#1b6f7b]"
+                                    ? "rotate-180 text-[#156372]"
                                     : row.field
                                       ? "text-[#64748b]"
                                       : "text-[#cbd5e1]"
@@ -3212,7 +3202,7 @@ function SalesByCustomerReportView({
                 <button
                   type="button"
                   onClick={addMoreFilterRow}
-                  className="inline-flex items-center gap-1 text-sm font-medium text-[#1b6f7b] hover:underline"
+                  className="inline-flex items-center gap-1 text-sm font-medium text-[#156372] hover:underline"
                 >
                   <Plus size={14} /> Add More
                 </button>
@@ -3227,7 +3217,7 @@ function SalesByCustomerReportView({
                   setIsMoreFiltersOpen(false);
                   refreshReport();
                 }}
-                className="inline-flex h-9 items-center rounded bg-[#1b6f7b] px-4 text-sm font-semibold text-white hover:bg-[#155963]"
+                className="inline-flex h-9 items-center rounded bg-[#156372] px-4 text-sm font-semibold text-white hover:bg-[#0f4a52]"
               >
                 Run Report
               </button>
@@ -3258,7 +3248,7 @@ function SalesByCustomerReportView({
             closeAllOpenPanels();
             refreshReport();
           }}
-          className="inline-flex h-8 items-center gap-1 rounded bg-[#1b6f7b] px-4 text-sm font-semibold text-white hover:bg-[#155963]"
+          className="inline-flex h-8 items-center gap-1 rounded bg-[#156372] px-4 text-sm font-semibold text-white hover:bg-[#0f4a52]"
         >
           <CalendarDays size={14} /> Run Report
         </button>
@@ -3295,7 +3285,7 @@ function SalesByCustomerReportView({
                   <button
                     type="button"
                     onClick={() => setIsCompareWithSelectOpen((prev) => !prev)}
-                    className="relative flex h-10 w-full items-center justify-between rounded border border-[#1b6f7b] bg-white px-3 pr-9 text-sm text-[#334155] outline-none hover:bg-[#f8fafc]"
+                    className="relative flex h-10 w-full items-center justify-between rounded border border-[#156372] bg-white px-3 pr-9 text-sm text-[#334155] outline-none hover:bg-[#f8fafc]"
                     aria-haspopup="menu"
                     aria-expanded={isCompareWithSelectOpen}
                   >
@@ -3306,7 +3296,7 @@ function SalesByCustomerReportView({
                       size={14}
                       className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
                         isCompareWithSelectOpen
-                          ? "rotate-180 text-[#1b6f7b]"
+                          ? "rotate-180 text-[#156372]"
                           : "text-[#64748b]"
                       }`}
                     />
@@ -3322,7 +3312,7 @@ function SalesByCustomerReportView({
                               setCompareWithSearch(event.target.value)
                             }
                             placeholder="Search"
-                            className="h-9 w-full rounded-md border border-[#1b6f7b] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                            className="h-9 w-full rounded-md border border-[#156372] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
                           />
                           <Search
                             size={14}
@@ -3379,7 +3369,7 @@ function SalesByCustomerReportView({
                           onClick={() =>
                             setIsCompareWithCountOpen((prev) => !prev)
                           }
-                          className="relative flex h-10 w-full items-center justify-between rounded border border-[#1b6f7b] bg-white px-3 pr-9 text-sm text-[#334155] outline-none hover:bg-[#f8fafc]"
+                          className="relative flex h-10 w-full items-center justify-between rounded border border-[#156372] bg-white px-3 pr-9 text-sm text-[#334155] outline-none hover:bg-[#f8fafc]"
                           aria-haspopup="menu"
                           aria-expanded={isCompareWithCountOpen}
                         >
@@ -3390,7 +3380,7 @@ function SalesByCustomerReportView({
                             size={14}
                             className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
                               isCompareWithCountOpen
-                                ? "rotate-180 text-[#1b6f7b]"
+                                ? "rotate-180 text-[#156372]"
                                 : "text-[#64748b]"
                             }`}
                           />
@@ -3408,7 +3398,7 @@ function SalesByCustomerReportView({
                                     )
                                   }
                                   placeholder="Search"
-                                  className="h-9 w-full rounded-md border border-[#1b6f7b] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                                  className="h-9 w-full rounded-md border border-[#156372] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
                                 />
                                 <Search
                                   size={14}
@@ -3469,7 +3459,7 @@ function SalesByCustomerReportView({
                               event.target.checked,
                             )
                           }
-                          className="mt-1 h-4 w-4 rounded border-[#cfd6e4] text-[#1b6f7b] focus:ring-[#1b6f7b]"
+                          className="mt-1 h-4 w-4 rounded border-[#cfd6e4] text-[#156372] focus:ring-[#156372]"
                         />
                         <span>Arrange period/year from latest to oldest</span>
                       </label>
@@ -3481,7 +3471,7 @@ function SalesByCustomerReportView({
                   <button
                     type="button"
                     onClick={applyCompareWith}
-                    className="inline-flex h-8 items-center rounded bg-[#1b6f7b] px-3 text-sm font-semibold text-white hover:bg-[#155963]"
+                    className="inline-flex h-8 items-center rounded bg-[#156372] px-3 text-sm font-semibold text-white hover:bg-[#0f4a52]"
                   >
                     Apply
                   </button>
@@ -3506,7 +3496,7 @@ function SalesByCustomerReportView({
           >
             <Columns3 size={14} />
             Customize Report Columns
-            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#d9eff1] px-1 text-[11px] font-semibold text-[#1b6f7b]">
+            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#d9eff1] px-1 text-[11px] font-semibold text-[#156372]">
               {selectedReportColumns.length}
             </span>
           </button>
@@ -3572,14 +3562,14 @@ function SalesByCustomerReportView({
                     <button
                       type="button"
                       onClick={() => setCustomizeReportTab("general")}
-                      className="flex w-full items-center border-l-4 border-[#1b6f7b] bg-white px-4 py-3 text-left text-sm font-medium text-[#0f172a]"
+                      className="flex w-full items-center border-l-4 border-[#156372] bg-white px-4 py-3 text-left text-sm font-medium text-[#0f172a]"
                     >
                       General
                     </button>
                     <button
                       type="button"
                       onClick={() => setCustomizeReportTab("columns")}
-                      className="flex w-full items-center px-4 py-3 text-left text-sm text-[#2563eb] hover:bg-[#f8fafc]"
+                      className="flex w-full items-center px-4 py-3 text-left text-sm text-[#156372] hover:bg-[#f8fafc]"
                     >
                       Show / Hide Columns
                     </button>
@@ -3632,7 +3622,7 @@ function SalesByCustomerReportView({
                               size={14}
                               className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
                                 isCustomizeDateRangeOpen
-                                  ? "rotate-180 text-[#1b6f7b]"
+                                  ? "rotate-180 text-[#156372]"
                                   : "text-[#64748b]"
                               }`}
                             />
@@ -3728,7 +3718,7 @@ function SalesByCustomerReportView({
                                             value={formatPickerDate(
                                               customizeCustomDateRangeDraft.start,
                                             )}
-                                            className="h-10 w-full rounded border border-[#1b6f7b] bg-white pl-9 pr-3 text-sm text-[#334155] outline-none"
+                                            className="h-10 w-full rounded border border-[#156372] bg-white pl-9 pr-3 text-sm text-[#334155] outline-none"
                                           />
                                         </div>
                                       </div>
@@ -3747,7 +3737,7 @@ function SalesByCustomerReportView({
                                             value={formatPickerDate(
                                               customizeCustomDateRangeDraft.end,
                                             )}
-                                            className="h-10 w-full rounded border border-[#1b6f7b] bg-white pl-9 pr-3 text-sm text-[#334155] outline-none"
+                                            className="h-10 w-full rounded border border-[#156372] bg-white pl-9 pr-3 text-sm text-[#334155] outline-none"
                                           />
                                         </div>
                                       </div>
@@ -3875,7 +3865,7 @@ function SalesByCustomerReportView({
 
                                             <table className="w-full table-fixed border-collapse text-center text-[11px]">
                                               <thead>
-                                                <tr className="text-[#1b6f7b]">
+                                                <tr className="text-[#156372]">
                                                   {[
                                                     "Su",
                                                     "Mo",
@@ -3947,11 +3937,11 @@ function SalesByCustomerReportView({
                                                                   ? "text-[#cbd5e1]"
                                                                   : isStart ||
                                                                       isEnd
-                                                                    ? "bg-[#1b6f7b] font-semibold text-white"
+                                                                    ? "bg-[#156372] font-semibold text-white"
                                                                     : inRange
                                                                       ? "bg-[#d9eff1] text-[#0f172a]"
                                                                       : "text-[#334155] hover:bg-[#f8fafc]"
-                                                              } ${isToday && !isStart && !isEnd ? "ring-1 ring-inset ring-[#1b6f7b]/30" : ""}`}
+                                                              } ${isToday && !isStart && !isEnd ? "ring-1 ring-inset ring-[#156372]/30" : ""}`}
                                                             >
                                                               {day.getDate()}
                                                             </button>
@@ -3999,7 +3989,7 @@ function SalesByCustomerReportView({
                                             );
                                             setIsCustomizeDateRangeOpen(false);
                                           }}
-                                          className="inline-flex h-8 items-center rounded bg-[#1b6f7b] px-3 text-sm font-semibold text-white hover:bg-[#155963]"
+                                          className="inline-flex h-8 items-center rounded bg-[#156372] px-3 text-sm font-semibold text-white hover:bg-[#0f4a52]"
                                         >
                                           Apply
                                         </button>
@@ -4039,7 +4029,7 @@ function SalesByCustomerReportView({
                                   size={14}
                                   className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
                                     isCustomizeCompareOpen
-                                      ? "rotate-180 text-[#1b6f7b]"
+                                      ? "rotate-180 text-[#156372]"
                                       : "text-[#64748b]"
                                   }`}
                                 />
@@ -4074,7 +4064,7 @@ function SalesByCustomerReportView({
                                         )
                                       }
                                       placeholder="Search"
-                                      className="h-9 w-full rounded-md border border-[#1b6f7b] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                                      className="h-9 w-full rounded-md border border-[#156372] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
                                     />
                                     <Search
                                       size={14}
@@ -4164,7 +4154,7 @@ function SalesByCustomerReportView({
                                     size={14}
                                     className={`transition-transform duration-150 ${
                                       isCustomizeCompareCountOpen
-                                        ? "rotate-180 text-[#1b6f7b]"
+                                        ? "rotate-180 text-[#156372]"
                                         : "text-[#64748b]"
                                     }`}
                                   />
@@ -4182,7 +4172,7 @@ function SalesByCustomerReportView({
                                             )
                                           }
                                           placeholder="Search"
-                                          className="h-9 w-full rounded-md border border-[#1b6f7b] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                                          className="h-9 w-full rounded-md border border-[#156372] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
                                         />
                                         <Search
                                           size={14}
@@ -4251,7 +4241,7 @@ function SalesByCustomerReportView({
                                   event.target.checked,
                                 )
                               }
-                              className="mt-1 h-4 w-4 rounded border-[#cfd6e4] text-[#1b6f7b] focus:ring-[#1b6f7b]"
+                              className="mt-1 h-4 w-4 rounded border-[#cfd6e4] text-[#156372] focus:ring-[#156372]"
                             />
                             <span>
                               Arrange period/year from latest to oldest
@@ -4283,7 +4273,7 @@ function SalesByCustomerReportView({
                               size={14}
                               className={`transition-transform duration-150 ${
                                 isCustomizeEntityOpen
-                                  ? "rotate-180 text-[#1b6f7b]"
+                                  ? "rotate-180 text-[#156372]"
                                   : "text-[#64748b]"
                               }`}
                             />
@@ -4301,7 +4291,7 @@ function SalesByCustomerReportView({
                                       )
                                     }
                                     placeholder="Search"
-                                    className="h-9 w-full rounded-md border border-[#1b6f7b] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                                    className="h-9 w-full rounded-md border border-[#156372] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
                                   />
                                   <Search
                                     size={14}
@@ -4462,7 +4452,7 @@ function SalesByCustomerReportView({
                                       }
                                       className={`relative flex h-8 w-full items-center overflow-hidden rounded border px-3 pr-10 text-sm text-[#334155] outline-none ${
                                         fieldMenuOpen
-                                          ? "border-[#1b6f7b] bg-white"
+                                          ? "border-[#156372] bg-white"
                                           : "border-[#cfd6e4] bg-white hover:bg-[#f8fafc]"
                                       }`}
                                       aria-haspopup="menu"
@@ -4477,7 +4467,7 @@ function SalesByCustomerReportView({
                                         size={14}
                                         className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
                                           fieldMenuOpen
-                                            ? "rotate-180 text-[#1b6f7b]"
+                                            ? "rotate-180 text-[#156372]"
                                             : "text-[#64748b]"
                                         }`}
                                       />
@@ -4528,7 +4518,7 @@ function SalesByCustomerReportView({
                                                 )
                                               }
                                               placeholder="Search"
-                                              className="h-9 w-full rounded-md border border-[#1b6f7b] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                                              className="h-9 w-full rounded-md border border-[#156372] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
                                             />
                                             <Search
                                               size={14}
@@ -4621,7 +4611,7 @@ function SalesByCustomerReportView({
                                       className={`relative flex h-8 w-full items-center overflow-hidden rounded border px-3 pr-9 text-sm text-[#334155] outline-none ${
                                         row.field
                                           ? comparatorMenuOpen
-                                            ? "border-[#1b6f7b] bg-white"
+                                            ? "border-[#156372] bg-white"
                                             : "border-[#cfd6e4] bg-white hover:bg-[#f8fafc]"
                                           : "cursor-not-allowed border-[#e2e8f0] bg-[#f8fafc] text-[#94a3b8]"
                                       }`}
@@ -4637,7 +4627,7 @@ function SalesByCustomerReportView({
                                         size={14}
                                         className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
                                           comparatorMenuOpen
-                                            ? "rotate-180 text-[#1b6f7b]"
+                                            ? "rotate-180 text-[#156372]"
                                             : row.field
                                               ? "text-[#64748b]"
                                               : "text-[#cbd5e1]"
@@ -4664,7 +4654,7 @@ function SalesByCustomerReportView({
                                                 )
                                               }
                                               placeholder="Search"
-                                              className="h-9 w-full rounded-md border border-[#1b6f7b] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                                              className="h-9 w-full rounded-md border border-[#156372] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
                                             />
                                             <Search
                                               size={14}
@@ -4748,7 +4738,7 @@ function SalesByCustomerReportView({
                                           );
                                         }}
                                         placeholder="Enter a value"
-                                        className="h-8 w-full rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#1b6f7b]"
+                                        className="h-8 w-full rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#156372]"
                                       />
                                     ) : (
                                       <>
@@ -4765,7 +4755,7 @@ function SalesByCustomerReportView({
                                           className={`relative flex h-8 w-full items-center overflow-hidden rounded border px-3 pr-9 text-sm outline-none ${
                                             row.field
                                               ? valueMenuOpen
-                                                ? "border-[#1b6f7b] bg-white text-[#334155]"
+                                                ? "border-[#156372] bg-white text-[#334155]"
                                                 : "border-[#cfd6e4] bg-white text-[#334155] hover:bg-[#f8fafc]"
                                               : "cursor-not-allowed border-[#e2e8f0] bg-[#f8fafc] text-[#94a3b8]"
                                           }`}
@@ -4781,7 +4771,7 @@ function SalesByCustomerReportView({
                                             size={14}
                                             className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
                                               valueMenuOpen
-                                                ? "rotate-180 text-[#1b6f7b]"
+                                                ? "rotate-180 text-[#156372]"
                                                 : row.field
                                                   ? "text-[#64748b]"
                                                   : "text-[#cbd5e1]"
@@ -4889,7 +4879,7 @@ function SalesByCustomerReportView({
                         <button
                           type="button"
                           onClick={addCustomizeMoreFilterRow}
-                          className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-[#1b6f7b] hover:underline"
+                          className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-[#156372] hover:underline"
                         >
                           <Plus size={14} />
                           Add More
@@ -4914,7 +4904,7 @@ function SalesByCustomerReportView({
                                     )
                                   }
                                   placeholder="Search"
-                                  className="h-9 w-full rounded-md border border-[#d7dce7] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#1b6f7b]"
+                                  className="h-9 w-full rounded-md border border-[#d7dce7] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#156372]"
                                 />
                                 <Search
                                   size={14}
@@ -5037,7 +5027,7 @@ function SalesByCustomerReportView({
                       applyCustomizeColumns();
                       refreshReport();
                     }}
-                    className="inline-flex h-9 items-center rounded bg-[#1b6f7b] px-4 text-sm font-semibold text-white hover:bg-[#155963]"
+                    className="inline-flex h-9 items-center rounded bg-[#156372] px-4 text-sm font-semibold text-white hover:bg-[#0f4a52]"
                   >
                     Run Report
                   </button>
@@ -5123,7 +5113,7 @@ function SalesByCustomerReportView({
                           key={column.key}
                           className={`px-4 py-3 text-sm ${
                             column.kind === "text" ? "text-left" : "text-center"
-                          } ${column.key === "name" ? "font-medium text-[#2563eb]" : "text-[#2563eb]"}`}
+                          } ${column.key === "name" ? "font-medium text-[#156372]" : "text-[#156372]"}`}
                         >
                           {formatReportColumnValue(
                             column.key,
@@ -5168,6 +5158,11 @@ export default function ReportDetailPage() {
   const [isReportsDrawerOpen, setIsReportsDrawerOpen] = useState(false);
   const [isReportActivityOpen, setIsReportActivityOpen] = useState(false);
   const reportsMenuButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    setIsReportsDrawerOpen(false);
+    setIsReportActivityOpen(false);
+  }, [categoryId, reportId]);
 
   const dateLabel = useMemo(() => {
     const now = new Date();
@@ -5475,20 +5470,20 @@ export default function ReportDetailPage() {
                           [field.key]: Number.isFinite(value) ? value : 0,
                         }));
                       }}
-                      className="h-9 w-full rounded border border-[#cfd6e4] px-3 text-sm text-[#0f172a] outline-none focus:border-[#1b6f7b]"
+                      className="h-9 w-full rounded border border-[#cfd6e4] px-3 text-sm text-[#0f172a] outline-none focus:border-[#156372]"
                     />
                   </label>
                 ))}
               </div>
-              <div className="mt-4 rounded border border-[#bfdbfe] bg-[#eff6ff] px-4 py-3">
-                <p className="text-xs uppercase tracking-wide text-[#1d4ed8]">
+              <div className="mt-4 rounded border border-[#b8dde1] bg-[#ecf7f8] px-4 py-3">
+                <p className="text-xs uppercase tracking-wide text-[#156372]">
                   {report.calculator.resultLabel}
                 </p>
-                <p className="text-2xl font-semibold text-[#1e40af]">
+                <p className="text-2xl font-semibold text-[#0f4a52]">
                   {(calculatorResult || 0).toFixed(calculatorPrecision)}
                 </p>
                 {report.calculator.helpText ? (
-                  <p className="mt-1 text-xs text-[#1e3a8a]">
+                  <p className="mt-1 text-xs text-[#0f4a52]">
                     {report.calculator.helpText}
                   </p>
                 ) : null}
@@ -5543,3 +5538,4 @@ export default function ReportDetailPage() {
     </div>
   );
 }
+

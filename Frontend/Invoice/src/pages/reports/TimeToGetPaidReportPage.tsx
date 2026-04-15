@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
   Check,
   ChevronDown,
+  ChevronRight,
   Columns3,
   Filter,
+  Folder,
   Menu,
   RefreshCw,
   X,
@@ -13,7 +15,7 @@ import {
 import ReportCustomizeColumnsModal, {
   type ColumnGroup,
 } from "./ReportCustomizeColumnsModal";
-import { getCategoryById, getReportById } from "./reportsCatalog";
+import { REPORTS_BY_CATEGORY, getCategoryById, getReportById } from "./reportsCatalog";
 import { reportsAPI } from "../../services/api";
 import { useSettings } from "../../lib/settings/SettingsContext";
 import {
@@ -71,6 +73,54 @@ const REPORT_COLUMNS = [
 
 const REPORT_COLUMN_GROUPS: ColumnGroup[] = [
   { label: "Reports", items: REPORT_COLUMNS },
+  {
+    label: "Contacts",
+    items: [
+      "Customer ID",
+      "Company Name",
+      "First Name",
+      "Last Name",
+      "Website",
+      "Customer Email",
+      "Customer Type",
+      "Mobile Phone",
+      "Work Phone",
+      "Department",
+      "Designation",
+      "Facebook",
+      "Twitter",
+      "Skype",
+      "Status",
+      "Created By",
+      "Created Time",
+      "Last Modified Time",
+      "Credit Limit",
+      "Payment Terms",
+      "Remarks",
+      "Receivables",
+      "Receivables (FCY)",
+      "Unused Credits",
+      "Unused Credits (FCY)",
+      "Billing Name",
+      "Billing Street 1",
+      "Billing Street 2",
+      "Billing City",
+      "Billing State",
+      "Billing Code",
+      "Billing Country",
+      "Billing Phone",
+      "Billing Fax",
+      "Shipping Name",
+      "Shipping Street 1",
+      "Shipping Street 2",
+      "Shipping City",
+      "Shipping State",
+      "Shipping Code",
+      "Shipping Country",
+      "Shipping Phone",
+      "Shipping Fax",
+    ],
+  },
 ];
 
 const DATE_RANGE_PRESETS: DateRangePreset[] = [
@@ -431,6 +481,187 @@ const getDefaultCustomRange = (): RangeDate => {
   };
 };
 
+function ReportsDrawer({
+  open,
+  currentCategoryId,
+  currentReportId,
+  triggerRef,
+  onClose,
+}: {
+  open: boolean;
+  currentCategoryId: string;
+  currentReportId: string;
+  triggerRef: React.RefObject<HTMLButtonElement | null>;
+  onClose: () => void;
+}) {
+  const drawerRef = useRef<HTMLDivElement | null>(null);
+  const [search, setSearch] = useState("");
+  const [expandedSections, setExpandedSections] = useState<string[]>([
+    currentCategoryId,
+  ]);
+
+  useEffect(() => {
+    setExpandedSections((prev) =>
+      prev.includes(currentCategoryId) ? prev : [currentCategoryId],
+    );
+  }, [currentCategoryId]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        !drawerRef.current?.contains(target) &&
+        !triggerRef.current?.contains(target)
+      ) {
+        onClose();
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose, open, triggerRef]);
+
+  const sections = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return Object.entries(REPORTS_BY_CATEGORY)
+      .map(([categoryId, reports]) => {
+        const category = getCategoryById(categoryId);
+        if (!category) return null;
+
+        const filteredReports = query
+          ? reports.filter(
+              (report) =>
+                report.name.toLowerCase().includes(query) ||
+                category.name.toLowerCase().includes(query),
+            )
+          : reports;
+
+        return {
+          id: categoryId,
+          label: category.name,
+          reports: filteredReports,
+        };
+      })
+      .filter(Boolean)
+      .filter((section) => section.reports.length > 0) as Array<{
+        id: string;
+        label: string;
+        reports: Array<{ id: string; categoryId: string; name: string }>;
+      }>;
+  }, [search]);
+
+  if (!open) return null;
+
+  const isSearching = search.trim().length > 0;
+
+  return (
+    <div
+      ref={drawerRef}
+      className="absolute left-0 top-0 z-30 h-full w-[260px] overflow-hidden border-r border-[#e5e7eb] bg-white shadow-[8px_0_20px_rgba(15,23,42,0.08)]"
+    >
+      <div className="flex h-full flex-col">
+        <div className="flex items-center justify-between border-b border-[#eef2f7] px-4 py-3">
+          <div className="text-[18px] font-semibold text-[#0f172a]">Reports</div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-7 w-7 items-center justify-center text-[#ef4444] hover:bg-[#fef2f2]"
+            aria-label="Close reports drawer"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="border-b border-[#eef2f7] px-3 py-3">
+          <div className="relative">
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search reports"
+              className="h-9 w-full rounded-lg border border-[#d8dfea] bg-white pl-3 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#7da0ff]"
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-2 py-2">
+          <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">
+            All Reports
+          </div>
+
+          {sections.length > 0 ? (
+            <div className="space-y-1">
+              {sections.map((section) => {
+                const expanded =
+                  isSearching || expandedSections.includes(section.id);
+
+                return (
+                  <div key={section.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isSearching) return;
+                        setExpandedSections((prev) =>
+                          prev.includes(section.id) ? [] : [section.id],
+                        );
+                      }}
+                      className="flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm text-[#111827] hover:bg-[#f8fafc]"
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <Folder size={14} className="text-[#9aa3b2]" />
+                        <span className="truncate">{section.label}</span>
+                      </span>
+                      {expanded ? (
+                        <ChevronDown size={12} className="text-[#9aa3b2]" />
+                      ) : (
+                        <ChevronRight size={12} className="text-[#9aa3b2]" />
+                      )}
+                    </button>
+
+                    {expanded ? (
+                      <div className="ml-5 mt-1 space-y-0.5">
+                        {section.reports.map((report) => {
+                          const isActive = report.id === currentReportId;
+                          return (
+                            <Link
+                              key={report.id}
+                              to={`/reports/${report.categoryId}/${report.id}`}
+                              onClick={onClose}
+                              className={`block rounded px-2 py-1.5 text-sm hover:bg-[#eef4ff] ${
+                                isActive
+                                  ? "bg-[#eef4ff] font-medium text-[#111827]"
+                                  : "text-[#111827] hover:text-black"
+                              }`}
+                            >
+                              {report.name}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="px-2 py-4 text-sm text-[#64748b]">No reports found.</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function TimeToGetPaidReportPage() {
   const navigate = useNavigate();
   const { categoryId } = useParams();
@@ -438,6 +669,7 @@ export default function TimeToGetPaidReportPage() {
   const category = getCategoryById(resolvedCategoryId);
   const report = getReportById(resolvedCategoryId, "time-to-get-paid");
   const filtersRef = useRef<HTMLDivElement>(null);
+  const reportsMenuButtonRef = useRef<HTMLButtonElement | null>(null);
   const debugEnabled = useMemo(() => {
     if (typeof window === "undefined") return false;
     try {
@@ -461,6 +693,7 @@ export default function TimeToGetPaidReportPage() {
   const [exportOpen, setExportOpen] = useState(false);
   const [groupByKey, setGroupByKey] = useState<"none">("none");
   const [groupByOpen, setGroupByOpen] = useState(false);
+  const [isReportsDrawerOpen, setIsReportsDrawerOpen] = useState(false);
   const { settings } = useSettings();
   const organizationName = String(
     settings?.general?.companyDisplayName || settings?.general?.schoolDisplayName || "",
@@ -474,9 +707,17 @@ export default function TimeToGetPaidReportPage() {
     () => getRangeLabel(selectedDateRange, selectedRangeBounds),
     [selectedRangeBounds, selectedDateRange],
   );
-  const closeTarget = `/reports/${resolvedCategoryId}`;
+  const closeTarget = "/reports";
   const reportDisplayName = report?.name || "Time to Get Paid";
   const categoryDisplayName = category?.name.replace(" Reports", "") || "Payments Received";
+  const closeReportPage = () => {
+    setExportOpen(false);
+    setGroupByOpen(false);
+    setCustomizeColumnsOpen(false);
+    setIsDateRangeOpen(false);
+    setIsReportsDrawerOpen(false);
+    navigate(closeTarget);
+  };
 
   const syncDateRangeDraft = () => {
     setDateRangeDraftKey(selectedDateRange);
@@ -587,8 +828,20 @@ export default function TimeToGetPaidReportPage() {
 
   return (
     <div className="relative min-h-[calc(100vh-64px)] pt-3">
-      <div className="mx-auto w-full px-3 pb-6">
-        <section className="relative overflow-visible rounded-[18px] border border-[#d7dce7] bg-white shadow-sm">
+      <ReportsDrawer
+        open={isReportsDrawerOpen}
+        currentCategoryId={resolvedCategoryId}
+        currentReportId="time-to-get-paid"
+        triggerRef={reportsMenuButtonRef}
+        onClose={() => setIsReportsDrawerOpen(false)}
+      />
+      <div
+        className={`pr-3 transition-[padding-left,padding-right] duration-200 ${
+          isReportsDrawerOpen ? "lg:pl-[260px]" : ""
+        }`}
+      >
+        <div className="w-full px-3 pb-6">
+          <section className="relative w-full overflow-visible rounded-[18px] border border-[#d7dce7] bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3">
             <div className="min-w-0">
               <div className="mb-1 text-[14px] font-medium leading-none text-[#1d6d79]">
@@ -597,6 +850,8 @@ export default function TimeToGetPaidReportPage() {
               <div className="flex min-w-0 items-baseline gap-2">
                 <button
                   type="button"
+                  ref={reportsMenuButtonRef}
+                  onClick={() => setIsReportsDrawerOpen((current) => !current)}
                   className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-[#d4d9e4] bg-white text-[#334155] hover:bg-[#f8fafc]"
                   aria-label="Open reports menu"
                 >
@@ -634,7 +889,7 @@ export default function TimeToGetPaidReportPage() {
               </button>
               <button
                 type="button"
-                onClick={() => navigate(closeTarget)}
+                onClick={closeReportPage}
                 className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] text-[#ef4444] hover:bg-[#fef2f2]"
                 aria-label="Close report"
               >
@@ -650,7 +905,7 @@ export default function TimeToGetPaidReportPage() {
             <button
               type="button"
               onClick={openDateRangePicker}
-              className="inline-flex items-center gap-1 text-sm font-medium text-[#1d4ed8] hover:underline"
+              className="inline-flex items-center gap-1 text-sm font-medium text-[#156372] hover:underline"
             >
               <Filter size={14} />
               Apply Filter
@@ -805,7 +1060,7 @@ export default function TimeToGetPaidReportPage() {
                 <div className="mb-1 text-sm text-[#64748b]">{organizationName}</div>
               ) : null}
               <div className="text-[20px] font-semibold text-[#0f172a]">{reportDisplayName}</div>
-              <div className="mt-1 text-sm text-[#2563eb]">{dateLabel}</div>
+              <div className="mt-1 text-sm text-[#156372]">{dateLabel}</div>
             </div>
 
             <div className="overflow-x-auto border-t border-[#eef2f7]">
@@ -860,7 +1115,7 @@ export default function TimeToGetPaidReportPage() {
                               <td
                                 key={`${rowIndex}-${cellIndex}`}
                                 className={`px-4 py-3 text-[14px] ${
-                                  cellIndex === 0 ? "font-medium text-[#2563eb]" : "text-center text-[#334155]"
+                                  cellIndex === 0 ? "font-medium text-[#156372]" : "text-center text-[#334155]"
                                 }`}
                               >
                                 {cell}
@@ -893,12 +1148,13 @@ export default function TimeToGetPaidReportPage() {
               </table>
             </div>
           </div>
-        </section>
+          </section>
+        </div>
       </div>
 
       {exportOpen ? (
-        <div className="absolute right-6 top-16 z-40 w-[240px] rounded-lg border border-[#d7dce7] bg-white p-2 shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
-          {["PDF", "XLSX (Microsoft Excel)", "CSV (Comma Separated Value)", "Print"].map((label) => (
+        <div className="absolute right-6 top-16 z-40 w-[220px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+          {["PDF", "XLSX (Microsoft Excel)", "Print"].map((label) => (
             <button
               key={label}
               type="button"
@@ -906,7 +1162,7 @@ export default function TimeToGetPaidReportPage() {
                 setExportOpen(false);
                 toast.success(`Export ${label} started`);
               }}
-              className="flex w-full items-center rounded-md px-3 py-2 text-left text-sm text-[#0f172a] hover:bg-[#f8fafc]"
+              className="flex w-full items-center px-3 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
             >
               {label}
             </button>

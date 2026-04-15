@@ -442,7 +442,7 @@ export default function CustomerReviewsReportPage() {
                   <div className="mt-2 text-[14px] text-[#0f172a]">5 Stars</div>
                 </div>
                 <div className="border-r border-[#e6eaf1] px-6 py-6">
-                  <div className="text-[24px] font-medium text-[#3b82f6]">0</div>
+                  <div className="text-[24px] font-medium text-[#156372]">0</div>
                   <div className="mt-2 text-[14px] text-[#0f172a]">4 Stars</div>
                 </div>
                 <div className="px-6 py-6">

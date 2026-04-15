@@ -46,6 +46,11 @@ type FilterRow = {
   comparator: string;
   value: string;
 };
+type MoreFilterDropdownState = {
+  rowId: string;
+  kind: "field" | "comparator" | "value";
+  search: string;
+} | null;
 type DateRangeKey =
   | "today"
   | "this-week"
@@ -83,7 +88,7 @@ type ReportConfig = {
   rightControls: Array<{
     label: string;
     state: "groupBy" | "showBy" | "agingIntervals";
-    options: FilterOption[];
+    options: Array<FilterOption & { hidden?: boolean }>;
   }>;
   moreFilterGroups: FilterGroup[];
   moreFilterValues: Record<string, FilterOption[]>;
@@ -132,12 +137,76 @@ const COMPARATORS = [
 
 const NO_VALUE = new Set(["is-empty", "is-not-empty"]);
 const CURRENCY_CODES = ["SOS", "USD", "EUR", "GBP", "KES"];
-const ENTITY_OPTIONS = [{ key: "invoice", label: "Invoice" }];
+type EntityKey = "invoice" | "credit-note" | "sales-receipt";
+type EntityOption = { key: EntityKey; label: string };
+const ENTITY_OPTIONS: EntityOption[] = [
+  { key: "invoice", label: "Invoice" },
+  { key: "credit-note", label: "Credit Note" },
+  { key: "sales-receipt", label: "Sales Receipt" },
+];
 type AgingByKey = "invoice-due-date" | "invoice-date";
 const AGING_BY_OPTIONS: Array<{ key: AgingByKey; label: string }> = [
   { key: "invoice-due-date", label: "Invoice Due Date" },
   { key: "invoice-date", label: "Invoice Date" },
 ];
+type GroupByKey = "none" | "customer-name" | "sales-person" | "currency";
+type GroupByOption = { key: GroupByKey; label: string; hidden?: boolean };
+type ShowByKey = "outstanding-invoice-amount" | "balance-due";
+const SHOW_BY_OPTIONS: Array<{ key: ShowByKey; label: string }> = [
+  {
+    key: "outstanding-invoice-amount",
+    label: "Outstanding Invoice Amount",
+  },
+  { key: "balance-due", label: "Balance Due" },
+];
+type AgingIntervalUnit = "Days" | "Weeks" | "Months";
+const AGING_INTERVAL_COUNT_OPTIONS = Array.from({ length: 11 }, (_, index) =>
+  String(index + 2),
+);
+const AGING_INTERVAL_UNIT_OPTIONS: AgingIntervalUnit[] = [
+  "Days",
+  "Weeks",
+  "Months",
+];
+
+const parseAgingIntervalsLabel = (value: string) => {
+  const normalized = value.trim().replace(/\s+/g, " ");
+  const match =
+    normalized.match(/^(\d+)\s*x\s*(\d+)\s*(days|weeks|months)?$/i) ??
+    normalized.match(/^(\d+)\s*[x×]\s*(\d+)\s*(days|weeks|months)?$/i);
+  const count = match ? Number(match[1]) : 4;
+  const interval = match ? Number(match[2]) : 15;
+  const unit = ((match?.[3] || "days").toLowerCase() === "weeks"
+    ? "Weeks"
+    : (match?.[3] || "days").toLowerCase() === "months"
+      ? "Months"
+      : "Days") as AgingIntervalUnit;
+
+  return { count, interval, unit };
+};
+
+const formatAgingIntervalsLabel = ({
+  count,
+  interval,
+  unit,
+}: {
+  count: number;
+  interval: number;
+  unit: AgingIntervalUnit;
+}) => `${count} X ${interval} ${unit}`;
+
+const formatAgingIntervalsRequestValue = ({
+  count,
+  interval,
+  unit,
+}: {
+  count: number;
+  interval: number;
+  unit: AgingIntervalUnit;
+}) =>
+  unit === "Days"
+    ? `${count}x${interval}`
+    : `${count}x${interval}${unit.toLowerCase()}`;
 
 const formatDate = (d: Date) =>
   d.toLocaleDateString("en-GB", {
@@ -564,8 +633,8 @@ const RECEIVABLES_CONFIG_BASE: Record<
         label: "Group By",
         state: "groupBy",
         options: [
-          { key: "none", label: "None" },
-          { key: "customer-name", label: "Customer Name" },
+          { key: "none", label: "None", hidden: true },
+          { key: "sales-person", label: "Sales person" },
           { key: "currency", label: "Currency" },
         ],
       },
@@ -595,6 +664,14 @@ const RECEIVABLES_CONFIG_BASE: Record<
         options: [
           { key: "customer-name", label: "Customer Name" },
           {
+            key: "due-date",
+            label: "Due Date",
+          },
+          {
+            key: "sales-person",
+            label: "Sales person",
+          },
+          {
             key: "currency",
             label: "Currency",
             values: CURRENCY_CODES.map((value) => ({
@@ -602,35 +679,11 @@ const RECEIVABLES_CONFIG_BASE: Record<
               label: value,
             })),
           },
-          { key: "current", label: "Current" },
-          { key: "1-15-days", label: "1-15 Days" },
-          { key: "16-30-days", label: "16-30 Days" },
-          { key: "31-45-days", label: "31-45 Days" },
-          { key: "gt-45-days", label: "> 45 Days" },
-          { key: "total", label: "Total" },
-          { key: "total-fcy", label: "Total (FCY)" },
-        ],
-      },
-      {
-        label: "Locations",
-        options: [
-          {
-            key: "location",
-            label: "Location",
-            values: [
-              { key: "mogadishu", label: "Mogadishu" },
-              { key: "hargeisa", label: "Hargeisa" },
-            ],
-          },
         ],
       },
     ],
     moreFilterValues: {
       currency: CURRENCY_CODES.map((value) => ({ key: value, label: value })),
-      location: [
-        { key: "mogadishu", label: "Mogadishu" },
-        { key: "hargeisa", label: "Hargeisa" },
-      ],
     },
     columns: [
       {
@@ -644,6 +697,66 @@ const RECEIVABLES_CONFIG_BASE: Record<
           { key: "gt-45-days", label: "> 45 Days", kind: "currency" },
           { key: "total", label: "Total", kind: "currency" },
           { key: "total-fcy", label: "Total (FCY)", kind: "currency" },
+        ],
+      },
+      {
+        label: "Contacts",
+        options: [
+          { key: "customer-id", label: "Customer ID", kind: "text" },
+          { key: "company-name", label: "Company Name", kind: "text" },
+          { key: "first-name", label: "First Name", kind: "text" },
+          { key: "last-name", label: "Last Name", kind: "text" },
+          { key: "website", label: "Website", kind: "text" },
+          { key: "customer-email", label: "Customer Email", kind: "text" },
+          { key: "customer-type", label: "Customer Type", kind: "text" },
+          { key: "mobile-phone", label: "Mobile Phone", kind: "text" },
+          { key: "work-phone", label: "Work Phone", kind: "text" },
+          { key: "department", label: "Department", kind: "text" },
+          { key: "designation", label: "Designation", kind: "text" },
+          { key: "facebook", label: "Facebook", kind: "text" },
+          { key: "twitter", label: "Twitter", kind: "text" },
+          { key: "skype", label: "Skype", kind: "text" },
+          { key: "status", label: "Status", kind: "text" },
+          { key: "created-by", label: "Created By", kind: "text" },
+          { key: "created-time", label: "Created Time", kind: "text" },
+          {
+            key: "last-modified-time",
+            label: "Last Modified Time",
+            kind: "text",
+          },
+          { key: "credit-limit", label: "Credit Limit", kind: "currency" },
+          { key: "payment-terms", label: "Payment Terms", kind: "text" },
+          { key: "remarks", label: "Remarks", kind: "text" },
+          { key: "receivables", label: "Receivables", kind: "currency" },
+          {
+            key: "receivables-fcy",
+            label: "Receivables (FCY)",
+            kind: "currency",
+          },
+          { key: "unused-credits", label: "Unused Credits", kind: "currency" },
+          {
+            key: "unused-credits-fcy",
+            label: "Unused Credits (FCY)",
+            kind: "currency",
+          },
+          { key: "billing-name", label: "Billing Name", kind: "text" },
+          { key: "billing-street-1", label: "Billing Street 1", kind: "text" },
+          { key: "billing-street-2", label: "Billing Street 2", kind: "text" },
+          { key: "billing-city", label: "Billing City", kind: "text" },
+          { key: "billing-state", label: "Billing State", kind: "text" },
+          { key: "billing-code", label: "Billing Code", kind: "text" },
+          { key: "billing-country", label: "Billing Country", kind: "text" },
+          { key: "billing-phone", label: "Billing Phone", kind: "text" },
+          { key: "billing-fax", label: "Billing Fax", kind: "text" },
+          { key: "shipping-name", label: "Shipping Name", kind: "text" },
+          { key: "shipping-street-1", label: "Shipping Street 1", kind: "text" },
+          { key: "shipping-street-2", label: "Shipping Street 2", kind: "text" },
+          { key: "shipping-city", label: "Shipping City", kind: "text" },
+          { key: "shipping-state", label: "Shipping State", kind: "text" },
+          { key: "shipping-code", label: "Shipping Code", kind: "text" },
+          { key: "shipping-country", label: "Shipping Country", kind: "text" },
+          { key: "shipping-phone", label: "Shipping Phone", kind: "text" },
+          { key: "shipping-fax", label: "Shipping Fax", kind: "text" },
         ],
       },
     ],
@@ -671,9 +784,10 @@ const RECEIVABLES_CONFIG_BASE: Record<
         label: "Group By",
         state: "groupBy",
         options: [
-          { key: "none", label: "None" },
+          { key: "none", label: "None", hidden: true },
           { key: "customer-name", label: "Customer Name" },
-          { key: "status", label: "Status" },
+          { key: "sales-person", label: "Sales person" },
+          { key: "currency", label: "Currency" },
         ],
       },
       {
@@ -689,31 +803,9 @@ const RECEIVABLES_CONFIG_BASE: Record<
       {
         label: "Reports",
         options: [
-          { key: "date", label: "Date" },
           { key: "due-date", label: "Due Date" },
-          { key: "transaction", label: "Transaction" },
-          {
-            key: "type",
-            label: "Type",
-            values: [
-              { key: "invoice", label: "Invoice" },
-              { key: "debit-note", label: "Debit Note" },
-              { key: "credit-note", label: "Credit Note" },
-            ],
-          },
-          {
-            key: "status",
-            label: "Status",
-            values: [
-              { key: "paid", label: "Paid" },
-              { key: "overdue", label: "Overdue" },
-              { key: "draft", label: "Draft" },
-            ],
-          },
           { key: "customer-name", label: "Customer Name" },
-          { key: "age", label: "Age" },
-          { key: "amount", label: "Amount" },
-          { key: "balance-due", label: "Balance Due" },
+          { key: "sales-person", label: "Sales person" },
           {
             key: "currency",
             label: "Currency",
@@ -724,36 +816,9 @@ const RECEIVABLES_CONFIG_BASE: Record<
           },
         ],
       },
-      {
-        label: "Locations",
-        options: [
-          {
-            key: "location",
-            label: "Location",
-            values: [
-              { key: "mogadishu", label: "Mogadishu" },
-              { key: "hargeisa", label: "Hargeisa" },
-            ],
-          },
-        ],
-      },
     ],
     moreFilterValues: {
-      type: [
-        { key: "invoice", label: "Invoice" },
-        { key: "debit-note", label: "Debit Note" },
-        { key: "credit-note", label: "Credit Note" },
-      ],
-      status: [
-        { key: "paid", label: "Paid" },
-        { key: "overdue", label: "Overdue" },
-        { key: "draft", label: "Draft" },
-      ],
       currency: CURRENCY_CODES.map((value) => ({ key: value, label: value })),
-      location: [
-        { key: "mogadishu", label: "Mogadishu" },
-        { key: "hargeisa", label: "Hargeisa" },
-      ],
     },
     columns: [
       {
@@ -768,6 +833,86 @@ const RECEIVABLES_CONFIG_BASE: Record<
           { key: "age", label: "Age", kind: "text" },
           { key: "amount", label: "Amount", kind: "currency" },
           { key: "balance-due", label: "Balance Due", kind: "currency" },
+          {
+            key: "payment-retention",
+            label: "Payment Retention",
+            kind: "currency",
+          },
+          { key: "bca-balance", label: "BCA Balance", kind: "currency" },
+          { key: "po-number", label: "P.O#", kind: "text" },
+          { key: "sales-person", label: "Sales person", kind: "text" },
+          { key: "amount-fcy", label: "Amount (FCY)", kind: "currency" },
+          {
+            key: "balance-due-fcy",
+            label: "Balance Due (FCY)",
+            kind: "currency",
+          },
+          {
+            key: "payment-expected-date",
+            label: "Payment expected date",
+            kind: "date",
+          },
+          { key: "currency", label: "Currency", kind: "text" },
+        ],
+      },
+      {
+        label: "Contacts",
+        options: [
+          { key: "customer-id", label: "Customer ID", kind: "text" },
+          { key: "company-name", label: "Company Name", kind: "text" },
+          { key: "first-name", label: "First Name", kind: "text" },
+          { key: "last-name", label: "Last Name", kind: "text" },
+          { key: "website", label: "Website", kind: "text" },
+          { key: "customer-email", label: "Customer Email", kind: "text" },
+          { key: "customer-type", label: "Customer Type", kind: "text" },
+          { key: "mobile-phone", label: "Mobile Phone", kind: "text" },
+          { key: "work-phone", label: "Work Phone", kind: "text" },
+          { key: "department", label: "Department", kind: "text" },
+          { key: "designation", label: "Designation", kind: "text" },
+          { key: "facebook", label: "Facebook", kind: "text" },
+          { key: "twitter", label: "Twitter", kind: "text" },
+          { key: "skype", label: "Skype", kind: "text" },
+          { key: "status", label: "Status", kind: "text" },
+          { key: "created-by", label: "Created By", kind: "text" },
+          { key: "created-time", label: "Created Time", kind: "text" },
+          {
+            key: "last-modified-time",
+            label: "Last Modified Time",
+            kind: "text",
+          },
+          { key: "credit-limit", label: "Credit Limit", kind: "currency" },
+          { key: "payment-terms", label: "Payment Terms", kind: "text" },
+          { key: "remarks", label: "Remarks", kind: "text" },
+          { key: "receivables", label: "Receivables", kind: "currency" },
+          {
+            key: "receivables-fcy",
+            label: "Receivables (FCY)",
+            kind: "currency",
+          },
+          { key: "unused-credits", label: "Unused Credits", kind: "currency" },
+          {
+            key: "unused-credits-fcy",
+            label: "Unused Credits (FCY)",
+            kind: "currency",
+          },
+          { key: "billing-name", label: "Billing Name", kind: "text" },
+          { key: "billing-street-1", label: "Billing Street 1", kind: "text" },
+          { key: "billing-street-2", label: "Billing Street 2", kind: "text" },
+          { key: "billing-city", label: "Billing City", kind: "text" },
+          { key: "billing-state", label: "Billing State", kind: "text" },
+          { key: "billing-code", label: "Billing Code", kind: "text" },
+          { key: "billing-country", label: "Billing Country", kind: "text" },
+          { key: "billing-phone", label: "Billing Phone", kind: "text" },
+          { key: "billing-fax", label: "Billing Fax", kind: "text" },
+          { key: "shipping-name", label: "Shipping Name", kind: "text" },
+          { key: "shipping-street-1", label: "Shipping Street 1", kind: "text" },
+          { key: "shipping-street-2", label: "Shipping Street 2", kind: "text" },
+          { key: "shipping-city", label: "Shipping City", kind: "text" },
+          { key: "shipping-state", label: "Shipping State", kind: "text" },
+          { key: "shipping-code", label: "Shipping Code", kind: "text" },
+          { key: "shipping-country", label: "Shipping Country", kind: "text" },
+          { key: "shipping-phone", label: "Shipping Phone", kind: "text" },
+          { key: "shipping-fax", label: "Shipping Fax", kind: "text" },
         ],
       },
     ],
@@ -1114,6 +1259,26 @@ const makeFilterRow = (): FilterRow => ({
   value: "",
 });
 
+const getMoreFilterFieldLabel = (config: ReportConfig, field: string) =>
+  fieldLookup(config, field)?.label ?? "Select a field";
+
+const getMoreFilterComparatorLabel = (comparator: string) =>
+  COMPARATORS.find((option) => option.key === comparator)?.label ??
+  "Select a comparator";
+
+const getMoreFilterValueLabel = (
+  config: ReportConfig,
+  field: string,
+  value: string,
+) => {
+  const fieldDef = fieldLookup(config, field);
+  const options = fieldDef?.values || config.moreFilterValues[field] || [];
+  return (
+    options.find((option) => option.key === value)?.label ??
+    (options[0]?.label || "Select a value")
+  );
+};
+
 const resolveReceivablesReportId = (reportId: ReceivablesReportId) => {
   switch (reportId) {
     case "receivable-summary":
@@ -1177,7 +1342,12 @@ function ReceivablesReportShell({
     { key: "invoice-date", label: "Invoice Date" },
     { key: "due-date", label: "Due Date" },
   ];
-  const [entities, setEntities] = useState("invoice");
+  const [entityKeys, setEntityKeys] = useState<EntityKey[]>(
+    ENTITY_OPTIONS.map((option) => option.key),
+  );
+  const entityRef = useRef<HTMLDivElement | null>(null);
+  const [isEntityOpen, setIsEntityOpen] = useState(false);
+  const [entitySearch, setEntitySearch] = useState("");
   const agingByRef = useRef<HTMLDivElement | null>(null);
   const [agingByOpen, setAgingByOpen] = useState(false);
   const [agingBy, setAgingBy] = useState<AgingByKey>("invoice-due-date");
@@ -1191,11 +1361,43 @@ function ReceivablesReportShell({
     config.rightControls.find((item) => item.state === "showBy")?.options[0]
       ?.key || "outstanding-invoice-amount",
   );
-  const [agingIntervals, setAgingIntervals] = useState(
+  const initialAgingIntervalsLabel =
     config.rightControls.find((item) => item.state === "agingIntervals")
-      ?.options[0]?.key || "4x15",
+      ?.options[0]?.label || "4 X 15 Days";
+  const initialAgingIntervalsSelection = useMemo(
+    () => parseAgingIntervalsLabel(initialAgingIntervalsLabel),
+    [initialAgingIntervalsLabel],
   );
-  const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
+  const [agingIntervals, setAgingIntervals] = useState(
+    initialAgingIntervalsLabel,
+  );
+  const agingIntervalsRef = useRef<HTMLDivElement | null>(null);
+  const [agingIntervalsOpen, setAgingIntervalsOpen] = useState(false);
+  const agingIntervalsCountRef = useRef<HTMLDivElement | null>(null);
+  const agingIntervalsUnitRef = useRef<HTMLDivElement | null>(null);
+  const [agingIntervalsCountOpen, setAgingIntervalsCountOpen] =
+    useState(false);
+  const [agingIntervalsUnitOpen, setAgingIntervalsUnitOpen] =
+    useState(false);
+  const [agingIntervalsCountSearch, setAgingIntervalsCountSearch] =
+    useState("");
+  const [agingIntervalsDraftCount, setAgingIntervalsDraftCount] = useState(
+    initialAgingIntervalsSelection.count,
+  );
+  const [agingIntervalsDraftInterval, setAgingIntervalsDraftInterval] =
+    useState(initialAgingIntervalsSelection.interval);
+  const [agingIntervalsDraftUnit, setAgingIntervalsDraftUnit] =
+    useState<AgingIntervalUnit>(initialAgingIntervalsSelection.unit);
+  const groupByRef = useRef<HTMLDivElement | null>(null);
+  const [groupByOpen, setGroupByOpen] = useState(false);
+  const [groupBySearch, setGroupBySearch] = useState("");
+  const showByRef = useRef<HTMLDivElement | null>(null);
+  const [showByOpen, setShowByOpen] = useState(false);
+  const [showBySearch, setShowBySearch] = useState("");
+  const [isMoreFiltersOpen, setIsMoreFiltersOpen] = useState(false);
+  const moreFiltersRef = useRef<HTMLDivElement | null>(null);
+  const [moreFilterDropdown, setMoreFilterDropdown] =
+    useState<MoreFilterDropdownState>(null);
   const [moreFilters, setMoreFilters] = useState<FilterRow[]>([]);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [selectedColumns, setSelectedColumns] = useState<string[]>(
@@ -1253,6 +1455,10 @@ function ReceivablesReportShell({
   );
   const rows = (payload?.rows ?? []) as ReportRow[];
   const totals = payload?.totals ?? null;
+  const agingIntervalsRequestValue = useMemo(
+    () => formatAgingIntervalsRequestValue(parseAgingIntervalsLabel(agingIntervals)),
+    [agingIntervals],
+  );
 
   useEffect(() => {
     const load = async () => {
@@ -1269,9 +1475,11 @@ function ReceivablesReportShell({
           ),
           groupBy,
           showBy,
-          agingIntervals,
+          agingIntervals: agingIntervalsRequestValue,
         };
-        if (config.showEntities) params.entities = entities;
+        if (config.showEntities && entityKeys.length > 0) {
+          params.entities = entityKeys.join(",");
+        }
         if (config.showAgingBy) params.agingBy = agingBy;
         if (config.showReportBy) params.reportBy = reportBy;
         if (debugReceivables) {
@@ -1294,9 +1502,9 @@ function ReceivablesReportShell({
     load();
   }, [
     agingBy,
-    agingIntervals,
+    agingIntervalsRequestValue,
     config,
-    entities,
+    entityKeys,
     groupBy,
     moreFilters,
     selectedDateRange.end.getTime(),
@@ -1338,6 +1546,32 @@ function ReceivablesReportShell({
   }, [compareWithOpen]);
 
   useEffect(() => {
+    if (!isEntityOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!entityRef.current?.contains(target)) {
+        setIsEntityOpen(false);
+        setEntitySearch("");
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsEntityOpen(false);
+        setEntitySearch("");
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isEntityOpen]);
+
+  useEffect(() => {
     if (!isExportOpen) return;
 
     const handlePointerDown = (event: MouseEvent) => {
@@ -1370,14 +1604,62 @@ function ReceivablesReportShell({
     return String(value);
   };
 
-  const addFilterRow = () =>
-    setMoreFilters((rows) => [...rows, makeFilterRow()]);
+  const openMoreFilterDropdown = (
+    rowId: string,
+    kind: "field" | "comparator" | "value",
+  ) => {
+    setMoreFilterDropdown((prev) =>
+      prev?.rowId === rowId && prev.kind === kind
+        ? null
+        : { rowId, kind, search: "" },
+    );
+  };
+
+  const closeMoreFilterDropdown = () => setMoreFilterDropdown(null);
+
+  const addFilterRow = () => {
+    const row = makeFilterRow();
+    setMoreFilters((rows) => [...rows, row]);
+    openMoreFilterDropdown(row.id, "field");
+  };
   const updateFilterRow = (id: string, patch: Partial<FilterRow>) =>
     setMoreFilters((rows) =>
       rows.map((row) => (row.id === id ? { ...row, ...patch } : row)),
     );
   const removeFilterRow = (id: string) =>
     setMoreFilters((rows) => rows.filter((row) => row.id !== id));
+  const getFilteredFieldGroups = (query: string) => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return config.moreFilterGroups
+      .map((group) => {
+        const options = group.options.filter((option) =>
+          option.label.toLowerCase().includes(normalizedQuery),
+        );
+        return { ...group, options };
+      })
+      .filter((group) => group.options.length > 0);
+  };
+  const getFilteredComparatorOptions = (query: string, field?: string) => {
+    const normalizedQuery = query.trim().toLowerCase();
+    const fieldSpecificOptions =
+      field === "currency"
+        ? COMPARATORS.filter((option) =>
+            ["is-empty", "is-not-empty", "is-in", "is-not-in"].includes(
+              option.key,
+            ),
+          )
+        : field === "location"
+          ? COMPARATORS.filter((option) =>
+              ["is-in", "is-not-in"].includes(option.key),
+            )
+          : COMPARATORS;
+    return fieldSpecificOptions.filter((option) =>
+      option.label.toLowerCase().includes(normalizedQuery),
+    );
+  };
+  const hasMoreFilters = moreFilters.some(
+    (row) => row.field || row.comparator || row.value.trim(),
+  );
   const openColumns = () => {
     setColumnDraft(selectedColumns);
     setColumnsOpen(true);
@@ -1412,6 +1694,106 @@ function ReceivablesReportShell({
     setCompareWithCountOpen(false);
     setAgingByOpen((prev) => !prev);
   };
+
+  const openGroupByDropdown = () => {
+    setDateRangeOpen(false);
+    setIsCustomDateRangeOpen(false);
+    setColumnsOpen(false);
+    setCompareWithOpen(false);
+    setCompareWithCountOpen(false);
+    setAgingByOpen(false);
+    setShowByOpen(false);
+    setGroupByOpen((prev) => !prev);
+    setGroupBySearch("");
+  };
+
+  const openShowByDropdown = () => {
+    setDateRangeOpen(false);
+    setIsCustomDateRangeOpen(false);
+    setColumnsOpen(false);
+    setCompareWithOpen(false);
+    setCompareWithCountOpen(false);
+    setAgingByOpen(false);
+    setGroupByOpen(false);
+    setShowByOpen((prev) => !prev);
+    setShowBySearch("");
+  };
+
+  const openAgingIntervalsDropdown = () => {
+    setDateRangeOpen(false);
+    setIsCustomDateRangeOpen(false);
+    setColumnsOpen(false);
+    setCompareWithOpen(false);
+    setCompareWithCountOpen(false);
+    setAgingByOpen(false);
+    setGroupByOpen(false);
+    setShowByOpen(false);
+    setAgingIntervalsCountOpen(false);
+    setAgingIntervalsUnitOpen(false);
+    if (agingIntervalsOpen) {
+      setAgingIntervalsOpen(false);
+      return;
+    }
+
+    const parsed = parseAgingIntervalsLabel(agingIntervals);
+    setAgingIntervalsDraftCount(parsed.count);
+    setAgingIntervalsDraftInterval(parsed.interval);
+    setAgingIntervalsDraftUnit(parsed.unit);
+    setAgingIntervalsCountSearch("");
+    setAgingIntervalsOpen(true);
+  };
+
+  const applyAgingIntervals = () => {
+    const next = formatAgingIntervalsLabel({
+      count: agingIntervalsDraftCount,
+      interval: agingIntervalsDraftInterval,
+      unit: agingIntervalsDraftUnit,
+    });
+    setAgingIntervals(next);
+    setAgingIntervalsOpen(false);
+    setAgingIntervalsCountOpen(false);
+    setAgingIntervalsUnitOpen(false);
+    setAgingIntervalsCountSearch("");
+  };
+
+  const cancelAgingIntervals = () => {
+    const parsed = parseAgingIntervalsLabel(agingIntervals);
+    setAgingIntervalsDraftCount(parsed.count);
+    setAgingIntervalsDraftInterval(parsed.interval);
+    setAgingIntervalsDraftUnit(parsed.unit);
+    setAgingIntervalsOpen(false);
+    setAgingIntervalsCountOpen(false);
+    setAgingIntervalsUnitOpen(false);
+    setAgingIntervalsCountSearch("");
+  };
+
+  const toggleEntityDropdown = () => {
+    setDateRangeOpen(false);
+    setIsCustomDateRangeOpen(false);
+    setColumnsOpen(false);
+    setCompareWithOpen(false);
+    setCompareWithCountOpen(false);
+    setAgingByOpen(false);
+    setIsEntityOpen((prev) => !prev);
+    setEntitySearch("");
+  };
+
+  const filteredEntityOptions = useMemo(() => {
+    const query = entitySearch.trim().toLowerCase();
+    return ENTITY_OPTIONS.filter((option) =>
+      option.label.toLowerCase().includes(query),
+    );
+  }, [entitySearch]);
+
+  const getEntitySelectionLabel = (keys: EntityKey[]) => {
+    if (keys.length === 0) return "None";
+    if (keys.length === ENTITY_OPTIONS.length) return "All";
+    return ENTITY_OPTIONS.filter((option) => keys.includes(option.key))
+      .map((option) => option.label)
+      .join(", ");
+  };
+
+  const entityLabel = getEntitySelectionLabel(entityKeys);
 
   const applyCompareWith = () => {
     setCompareWithKey(compareWithDraftKey);
@@ -1534,13 +1916,193 @@ function ReceivablesReportShell({
     document.addEventListener("keydown", handleKeyDown);
     return () => {
       document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
+    document.removeEventListener("keydown", handleKeyDown);
     };
   }, [agingByOpen]);
+
+  useEffect(() => {
+    if (!groupByOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!groupByRef.current?.contains(target)) {
+        setGroupByOpen(false);
+        setGroupBySearch("");
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setGroupByOpen(false);
+        setGroupBySearch("");
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [groupByOpen]);
+
+  useEffect(() => {
+    if (!agingIntervalsOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!agingIntervalsRef.current?.contains(target)) {
+        cancelAgingIntervals();
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        cancelAgingIntervals();
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [agingIntervalsOpen, agingIntervals]);
+
+  useEffect(() => {
+    if (!agingIntervalsCountOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!agingIntervalsCountRef.current?.contains(target)) {
+        setAgingIntervalsCountOpen(false);
+        setAgingIntervalsCountSearch("");
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setAgingIntervalsCountOpen(false);
+        setAgingIntervalsCountSearch("");
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [agingIntervalsCountOpen]);
+
+  useEffect(() => {
+    if (!agingIntervalsUnitOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!agingIntervalsUnitRef.current?.contains(target)) {
+        setAgingIntervalsUnitOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setAgingIntervalsUnitOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [agingIntervalsUnitOpen]);
+
+  useEffect(() => {
+    if (!showByOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!showByRef.current?.contains(target)) {
+        setShowByOpen(false);
+        setShowBySearch("");
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowByOpen(false);
+        setShowBySearch("");
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showByOpen]);
+
+  useEffect(() => {
+    if (!moreFilterDropdown) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!moreFiltersRef.current?.contains(target)) {
+        setMoreFilterDropdown(null);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMoreFilterDropdown(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [moreFilterDropdown]);
 
   const setRightCalendarMonth = (monthIndex: number, year: number) => {
     setCustomDateRangeMonth(addMonths(new Date(year, monthIndex, 1), -1));
   };
+
+  const groupByOptions = useMemo(
+    () =>
+      (config.rightControls.find((item) => item.state === "groupBy")
+        ?.options as GroupByOption[] | undefined)?.filter(
+        (option) => !option.hidden,
+      ) ?? [],
+    [config.rightControls],
+  );
+
+  const filteredGroupByOptions = useMemo(() => {
+    const query = groupBySearch.trim().toLowerCase();
+    return groupByOptions.filter((option) =>
+      option.label.toLowerCase().includes(query),
+    );
+  }, [groupBySearch, groupByOptions]);
+
+  const getGroupByLabel = (key: GroupByKey) =>
+    groupByOptions.find((option) => option.key === key)?.label ?? "None";
+
+  const filteredShowByOptions = useMemo(() => {
+    const query = showBySearch.trim().toLowerCase();
+    return SHOW_BY_OPTIONS.filter((option) =>
+      option.label.toLowerCase().includes(query),
+    );
+  }, [showBySearch]);
+
+  const getShowByLabel = (key: ShowByKey) =>
+    SHOW_BY_OPTIONS.find((option) => option.key === key)?.label ??
+    "Outstanding Invoice Amount";
 
   const handleExportAction = (label: string) => {
     setIsExportOpen(false);
@@ -1772,7 +2334,7 @@ function ReceivablesReportShell({
                   <Menu size={15} />
                 </button>
                 <div className="min-w-0">
-                  <div className="mb-1 text-sm font-medium text-[#2563eb]">
+                  <div className="mb-1 text-sm font-medium text-[#156372]">
                     Receivables
                   </div>
                   <div className="flex min-w-0 items-baseline gap-2">
@@ -1813,44 +2375,24 @@ function ReceivablesReportShell({
                   </button>
 
                   {isExportOpen ? (
-                    <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-[252px] overflow-visible rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
-                      <div className="border-b border-[#eef2f7] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">
-                        Export As
-                      </div>
+                    <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-[220px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
                       <div className="py-1">
                         {[
                           "PDF",
                           "XLSX (Microsoft Excel)",
-                          "XLS (Microsoft Excel 1997-2004 Compatible)",
-                          "CSV (Comma Separated Value)",
-                          "Export to Zoho Sheet",
+                          "Print",
                         ].map((label) => (
                           <button
                             key={label}
                             type="button"
                             onClick={() => handleExportAction(label)}
-                            className="flex w-full items-center px-4 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
+                            className="flex w-full items-center px-3 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
                           >
                             {label}
                           </button>
                         ))}
                       </div>
-                      <div className="border-t border-[#eef2f7] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">
-                        Print
-                      </div>
-                      <div className="py-1">
-                        {["Print", "Print Preference"].map((label) => (
-                          <button
-                            key={label}
-                            type="button"
-                            onClick={() => handleExportAction(label)}
-                            className="flex w-full items-center px-4 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                  </div>
                   ) : null}
                 </div>
                 <button
@@ -1871,7 +2413,8 @@ function ReceivablesReportShell({
             </div>
           </div>
 
-          <div className="relative z-20 mt-4 flex flex-wrap items-center gap-2 overflow-visible border-t border-b border-[#e5e7eb] bg-white py-3">
+          <div className="relative z-20 mt-4">
+            <div className="flex flex-wrap items-center gap-2 overflow-visible border-t border-b border-[#e5e7eb] bg-white py-3">
             <div className="flex items-center gap-2 text-sm text-[#334155]">
               <Filter size={14} />
               <span>Filters :</span>
@@ -2232,7 +2775,7 @@ function ReceivablesReportShell({
                   onClick={openAgingByDropdown}
                   className={`inline-flex h-8 w-[210px] items-center justify-between gap-3 rounded border px-3 text-sm text-[#334155] hover:bg-white ${
                     agingByOpen
-                      ? "border-[#1b6f7b] bg-white"
+                      ? "border-[#0f172a] bg-white shadow-[0_0_0_1px_rgba(15,23,42,0.08)]"
                       : "border-[#cfd6e4] bg-[#f8fafc]"
                   }`}
                   aria-haspopup="menu"
@@ -2256,7 +2799,7 @@ function ReceivablesReportShell({
                 </button>
 
                 {agingByOpen ? (
-                  <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-[210px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                  <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-fit min-w-[168px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
                     <div className="py-1">
                       {AGING_BY_OPTIONS.map((option) => {
                         const isSelected = agingBy === option.key;
@@ -2270,10 +2813,10 @@ function ReceivablesReportShell({
                             }}
                             role="menuitemradio"
                             aria-checked={isSelected}
-                            className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
+                            className={`flex w-full items-center justify-between whitespace-nowrap px-2 py-2 text-left text-sm ${
                               isSelected
                                 ? "font-medium text-[#0f172a]"
-                                : "text-[#334155]"
+                                : "text-[#334155] hover:bg-[#f8fafc]"
                             }`}
                           >
                             <span>{option.label}</span>
@@ -2290,25 +2833,105 @@ function ReceivablesReportShell({
             ) : null}
 
             {config.showEntities ? (
-              <label className="inline-flex h-8 items-center gap-2 rounded border border-[#cfd6e4] bg-[#f8fafc] px-3 text-sm text-[#334155]">
-                <span>Entities :</span>
-                <select
-                  value={entities}
-                  onChange={(event) => setEntities(event.target.value)}
-                  className="bg-transparent outline-none"
+              <div ref={entityRef} className="relative inline-flex">
+                <button
+                  type="button"
+                  onClick={toggleEntityDropdown}
+                  className={`relative inline-flex h-8 w-[184px] items-center overflow-hidden rounded border px-3 pr-12 text-sm text-[#334155] hover:bg-white ${
+                    isEntityOpen
+                      ? "border-[#156372] bg-white"
+                      : "border-[#cfd6e4] bg-[#f8fafc]"
+                  }`}
+                  aria-haspopup="menu"
+                  aria-expanded={isEntityOpen}
                 >
-                  {ENTITY_OPTIONS.map((option) => (
-                    <option key={option.key} value={option.key}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  <span className="shrink-0 whitespace-nowrap">Entities :</span>
+                  <span className="min-w-0 flex-1 truncate text-left font-medium whitespace-nowrap">
+                    {entityLabel}
+                  </span>
+                  <ChevronDown
+                    size={14}
+                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#334155]"
+                  />
+                </button>
+
+                {entityKeys.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setEntityKeys([]);
+                    }}
+                    className="absolute right-6 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-[#ef4444] hover:bg-[#fef2f2]"
+                    aria-label="Clear selected entities"
+                  >
+                    <X size={12} />
+                  </button>
+                ) : null}
+
+                {isEntityOpen ? (
+                  <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-[168px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                    <div className="border-b border-[#eef2f7] p-2">
+                      <div className="relative">
+                        <Search
+                          size={14}
+                          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]"
+                        />
+                        <input
+                          value={entitySearch}
+                          onChange={(event) => setEntitySearch(event.target.value)}
+                          placeholder="Search"
+                          className="h-9 w-full rounded-md border border-[#156372] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                        />
+                      </div>
+                    </div>
+                    <div className="max-h-[220px] overflow-y-auto py-1">
+                      {filteredEntityOptions.length > 0 ? (
+                        filteredEntityOptions.map((option) => {
+                          const isSelected = entityKeys.includes(option.key);
+                          return (
+                            <button
+                              key={option.key}
+                              type="button"
+                              onClick={() => {
+                                setEntityKeys((prev) =>
+                                  prev.includes(option.key)
+                                    ? prev.filter((key) => key !== option.key)
+                                    : [...prev, option.key],
+                                );
+                              }}
+                              className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm ${
+                                isSelected
+                                  ? "bg-[#f1f5f9] font-medium text-[#0f172a]"
+                                  : "text-[#334155] hover:bg-[#f8fafc]"
+                              }`}
+                            >
+                              <span className="inline-flex h-4 w-4 items-center justify-center rounded border border-[#c7d0de] bg-white">
+                                {isSelected ? (
+                                  <Check size={12} className="text-[#0f172a]" />
+                                ) : null}
+                              </span>
+                              <span>{option.label}</span>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <div className="px-4 py-6 text-center text-sm text-[#64748b]">
+                          No matching entities.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             ) : null}
 
             <button
               type="button"
-              onClick={() => setMoreFiltersOpen((value) => !value)}
+              onClick={() => {
+                setIsMoreFiltersOpen((value) => !value);
+                closeMoreFilterDropdown();
+              }}
               className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
             >
               <Plus size={14} className="text-[#1b6f7b]" /> More Filters
@@ -2321,347 +2944,894 @@ function ReceivablesReportShell({
             >
               <CalendarDays size={14} /> Run Report
             </button>
-          </div>
-
-          {moreFiltersOpen ? (
-            <div className="mt-3 rounded-xl border border-[#d7dce7] bg-white p-4 shadow-sm">
-              <div className="space-y-3">
-                {moreFilters.map((row, index) => {
-                  const fieldDef = fieldLookup(config, row.field);
-                  const values =
-                    fieldDef?.values ||
-                    config.moreFilterValues[row.field] ||
-                    [];
-                  const mode = NO_VALUE.has(row.comparator)
-                    ? "none"
-                    : values.length
-                      ? "select"
-                      : "text";
-                  return (
-                    <div
-                      key={row.id}
-                      className="flex flex-wrap items-center gap-2"
-                    >
-                      <div className="inline-flex h-9 w-10 items-center justify-center rounded border border-[#cfd6e4] bg-[#f8fafc] text-sm text-[#334155]">
-                        {index + 1}
-                      </div>
-                      <select
-                        value={row.field}
-                        onChange={(event) =>
-                          updateFilterRow(row.id, {
-                            field: event.target.value,
-                            comparator: "",
-                            value: "",
-                          })
-                        }
-                        className="h-9 min-w-[220px] rounded border border-[#cfd6e4] px-3 text-sm outline-none"
-                      >
-                        <option value="">Select a field</option>
-                        {config.moreFilterGroups.map((group) => (
-                          <optgroup key={group.label} label={group.label}>
-                            {group.options.map((option) => (
-                              <option key={option.key} value={option.key}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </optgroup>
-                        ))}
-                      </select>
-                      <select
-                        value={row.comparator}
-                        onChange={(event) =>
-                          updateFilterRow(row.id, {
-                            comparator: event.target.value,
-                            value: "",
-                          })
-                        }
-                        className="h-9 min-w-[170px] rounded border border-[#cfd6e4] px-3 text-sm outline-none"
-                      >
-                        <option value="">Select a comparator</option>
-                        {COMPARATORS.map((option) => (
-                          <option key={option.key} value={option.key}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                      {mode === "select" ? (
-                        <select
-                          value={row.value}
-                          onChange={(event) =>
-                            updateFilterRow(row.id, {
-                              value: event.target.value,
-                            })
-                          }
-                          className="h-9 min-w-[220px] rounded border border-[#cfd6e4] px-3 text-sm outline-none"
-                        >
-                          <option value="">
-                            {values[0]?.label || "Select a value"}
-                          </option>
-                          {values.map((option) => (
-                            <option key={option.key} value={option.key}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      ) : mode === "text" ? (
-                        <input
-                          value={row.value}
-                          onChange={(event) =>
-                            updateFilterRow(row.id, {
-                              value: event.target.value,
-                            })
-                          }
-                          placeholder="Enter a value"
-                          className="h-9 min-w-[220px] rounded border border-[#cfd6e4] px-3 text-sm outline-none"
-                        />
-                      ) : (
-                        <div className="inline-flex h-9 min-w-[220px] items-center rounded border border-[#cfd6e4] bg-[#f8fafc] px-3 text-sm text-[#64748b]">
-                          No value needed
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={addFilterRow}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded border border-[#cfd6e4] text-[#64748b]"
-                      >
-                        <Plus size={16} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeFilterRow(row.id)}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded border border-[#cfd6e4] text-[#ef4444]"
-                      >
-                        <X size={16} />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <button
-                type="button"
-                onClick={addFilterRow}
-                className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-[#0f9aa7]"
-              >
-                <Plus size={14} /> Add More
-              </button>
-
-              <div className="mt-5 flex items-center gap-2 border-t border-[#e6e9f0] pt-4">
-                <button
-                  type="button"
-                  onClick={() => setRefreshTick((value) => value + 1)}
-                  className="inline-flex h-9 items-center rounded bg-[var(--button-primary)] px-4 text-sm font-semibold text-white hover:opacity-95"
-                >
-                  Run Report
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMoreFiltersOpen(false)}
-                  className="inline-flex h-9 items-center rounded border border-[#d4d9e4] bg-white px-4 text-sm text-[#334155]"
-                >
-                  Cancel
-                </button>
-              </div>
             </div>
+
+          {isMoreFiltersOpen ? (
+            <div
+              className="fixed inset-0 z-30 bg-transparent"
+              onMouseDown={() => {
+                closeMoreFilterDropdown();
+                setIsMoreFiltersOpen(false);
+              }}
+              aria-hidden="true"
+            />
           ) : null}
 
-          <div className="mt-3 flex flex-wrap items-center justify-end gap-2 text-sm text-[#475569]">
-            {config.rightControls.map((control) => {
-              const value =
-                control.state === "groupBy"
-                  ? groupBy
-                  : control.state === "showBy"
-                    ? showBy
-                    : agingIntervals;
-              const setValue =
-                control.state === "groupBy"
-                  ? setGroupBy
-                  : control.state === "showBy"
-                    ? setShowBy
-                    : setAgingIntervals;
-              return (
-                <label
-                  key={control.label}
-                  className="inline-flex h-8 items-center gap-2 rounded border border-[#cfd6e4] bg-white px-3"
-                >
-                  <span>{control.label} :</span>
-                  <select
-                    value={value}
-                    onChange={(event) => setValue(event.target.value)}
-                    className="bg-transparent outline-none"
-                  >
-                    {control.options.map((option) => (
-                      <option key={option.key} value={option.key}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              );
-            })}
+          {isMoreFiltersOpen ? (
+            <div
+              ref={moreFiltersRef}
+              className="absolute left-0 top-[calc(100%+10px)] z-40 w-[720px] rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]"
+            >
+              <div className="px-4 py-4">
+                <div className="space-y-3">
+                  {moreFilters.map((row, index) => {
+                    const activeDropdown =
+                      moreFilterDropdown?.rowId === row.id
+                        ? moreFilterDropdown
+                        : null;
+                    const fieldMenuOpen = activeDropdown?.kind === "field";
+                    const comparatorMenuOpen =
+                      activeDropdown?.kind === "comparator";
+                    const valueMenuOpen = activeDropdown?.kind === "value";
+                    const fieldMenuSearch = fieldMenuOpen
+                      ? activeDropdown.search
+                      : "";
+                    const comparatorMenuSearch = comparatorMenuOpen
+                      ? activeDropdown.search
+                      : "";
+                    const filteredFieldGroups =
+                      getFilteredFieldGroups(fieldMenuSearch);
+                    const filteredComparatorOptions =
+                      getFilteredComparatorOptions(
+                        comparatorMenuSearch,
+                        row.field,
+                      );
+                    const fieldDef = fieldLookup(config, row.field);
+                    const values =
+                      fieldDef?.values ||
+                      config.moreFilterValues[row.field] ||
+                      [];
+                    const valueMode = NO_VALUE.has(row.comparator)
+                      ? "none"
+                      : values.length
+                        ? "dropdown"
+                        : "text";
+                    const fieldLabel = getMoreFilterFieldLabel(
+                      config,
+                      row.field,
+                    );
+                    const comparatorLabel = getMoreFilterComparatorLabel(
+                      row.comparator,
+                    );
+                    const valueLabel =
+                      valueMode === "text"
+                        ? row.value || "Enter a value"
+                        : row.value
+                          ? getMoreFilterValueLabel(
+                              config,
+                              row.field,
+                              row.value,
+                            )
+                          : values[0]?.label || "Select a value";
 
-            <div ref={compareWithRef} className="relative">
-              <button
-                type="button"
-                onClick={openCompareWithDropdown}
-                className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
-                aria-haspopup="menu"
-                aria-expanded={compareWithOpen}
-              >
-                Compare With :{" "}
-                <span className="font-medium text-[#0f172a]">
-                  {getCompareWithLabel(compareWithKey)}
-                </span>
-                <ChevronDown
-                  size={14}
-                  className={`transition-transform duration-150 ${compareWithOpen ? "rotate-180 text-[#1f6f7a]" : "text-[#64748b]"}`}
-                />
-              </button>
-
-              {compareWithOpen ? (
-                <div className="absolute right-0 top-[calc(100%+6px)] z-40 w-[300px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
-                  <div className="border-b border-[#eef2f7] px-4 py-3 text-sm font-medium text-[#0f172a]">
-                    Compare With
-                  </div>
-                  <div className="p-3">
-                    <div className="max-h-[180px] overflow-y-auto rounded-lg border border-[#d7dce7] bg-white">
-                      {COMPARE_WITH_OPTIONS.map((option) => {
-                        const isSelected = compareWithDraftKey === option.key;
-                        return (
-                          <button
-                            key={option.key}
-                            type="button"
-                            onClick={() => {
-                              setCompareWithDraftKey(option.key);
-                              if (option.key === "none") {
-                                setCompareWithDraftCount(1);
-                                setCompareWithDraftArrangeLatest(false);
-                                setCompareWithCountOpen(false);
-                              } else {
-                                setCompareWithDraftCount((current) =>
-                                  current < 1 ? 1 : current,
-                                );
-                                setCompareWithCountOpen(true);
-                              }
-                            }}
-                            className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
-                              isSelected
-                                ? "font-medium text-[#0f172a]"
-                                : "text-[#334155] hover:bg-[#f8fafc]"
-                            }`}
-                          >
-                            <span>{option.label}</span>
-                            {isSelected ? (
-                              <Check size={14} className="text-[#64748b]" />
-                            ) : null}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {compareWithDraftKey !== "none" ? (
-                      <div className="mt-3">
-                        <div className="mb-2 text-sm text-[#334155]">
-                          {compareWithDraftKey === "previous-years"
-                            ? "Number of Year(s)"
-                            : "Number of Period(s)"}
+                    return (
+                      <div
+                        key={row.id}
+                        className="grid grid-cols-[34px_minmax(0,240px)_minmax(0,170px)_minmax(0,1fr)_auto_auto] items-center gap-3"
+                      >
+                        <div className="flex h-8 items-center justify-center rounded border border-[#d7dce7] bg-white text-xs text-[#475569]">
+                          {index + 1}
                         </div>
-                        <div ref={compareWithCountRef} className="relative">
+
+                        <div className="relative">
                           <button
                             type="button"
                             onClick={() =>
-                              setCompareWithCountOpen((prev) => !prev)
+                              openMoreFilterDropdown(row.id, "field")
                             }
-                            className="relative flex h-10 w-full items-center justify-between rounded border border-[#1f6f7a] bg-white px-3 pr-9 text-sm text-[#334155] outline-none hover:bg-[#f8fafc]"
+                            className={`relative flex h-8 w-full items-center overflow-hidden rounded border px-3 pr-10 text-sm text-[#334155] outline-none ${
+                              fieldMenuOpen
+                                ? "border-[#156372] bg-white"
+                                : "border-[#cfd6e4] bg-white hover:bg-[#f8fafc]"
+                            }`}
                             aria-haspopup="menu"
-                            aria-expanded={compareWithCountOpen}
+                            aria-expanded={fieldMenuOpen}
                           >
-                            <span className="min-w-0 truncate">
-                              {compareWithDraftCount}
+                            <span
+                              className={`min-w-0 flex-1 truncate text-left ${row.field ? "font-medium" : "text-[#94a3b8]"}`}
+                            >
+                              {fieldLabel}
                             </span>
                             <ChevronDown
                               size={14}
                               className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
-                                compareWithCountOpen
-                                  ? "rotate-180 text-[#1f6f7a]"
+                                fieldMenuOpen
+                                  ? "rotate-180 text-[#156372]"
                                   : "text-[#64748b]"
                               }`}
                             />
                           </button>
 
-                          {compareWithCountOpen ? (
-                            <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-[168px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                          {row.field ? (
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setMoreFilters((prev) =>
+                                  prev.map((item) =>
+                                    item.id === row.id
+                                      ? {
+                                          ...item,
+                                          field: "",
+                                          comparator: "",
+                                          value: "",
+                                        }
+                                      : item,
+                                  ),
+                                );
+                                closeMoreFilterDropdown();
+                              }}
+                              className="absolute right-7 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-[#ef4444] hover:bg-[#fef2f2]"
+                              aria-label="Clear field"
+                            >
+                              <X size={12} />
+                            </button>
+                          ) : null}
+
+                          {fieldMenuOpen ? (
+                            <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-[240px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                              <div className="border-b border-[#eef2f7] p-2">
+                                <div className="relative">
+                                  <input
+                                    value={fieldMenuSearch}
+                                    onChange={(event) =>
+                                      setMoreFilterDropdown((prev) =>
+                                        prev
+                                          ? {
+                                              ...prev,
+                                              search: event.target.value,
+                                            }
+                                          : prev,
+                                      )
+                                    }
+                                    placeholder="Search"
+                                    className="h-9 w-full rounded-md border border-[#156372] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                                  />
+                                  <Search
+                                    size={14}
+                                    className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]"
+                                  />
+                                </div>
+                              </div>
+
                               <div className="max-h-[220px] overflow-y-auto py-1">
-                                {COMPARE_WITH_NUMBER_OPTIONS.map((option) => {
-                                  const isSelected =
-                                    String(compareWithDraftCount) === option;
-                                  return (
-                                    <button
-                                      key={option}
-                                      type="button"
-                                      onClick={() => {
-                                        setCompareWithDraftCount(
-                                          Number(option),
-                                        );
-                                        setCompareWithCountOpen(false);
-                                      }}
-                                      className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
-                                        isSelected
-                                          ? "font-medium text-[#0f172a]"
-                                          : "text-[#334155] hover:bg-[#f8fafc]"
-                                      }`}
-                                    >
-                                      <span>{option}</span>
-                                      {isSelected ? (
-                                        <Check
-                                          size={14}
-                                          className="text-[#64748b]"
-                                        />
-                                      ) : null}
-                                    </button>
-                                  );
-                                })}
+                                {filteredFieldGroups.length > 0 ? (
+                                  filteredFieldGroups.map((group) => (
+                                    <div key={group.label}>
+                                      <div className="px-3 py-2 text-sm font-semibold text-[#475569]">
+                                        {group.label}
+                                      </div>
+                                      <div className="pb-1">
+                                        {group.options.map((option) => {
+                                          const isSelected =
+                                            row.field === option.key;
+                                          return (
+                                            <button
+                                              key={option.key}
+                                              type="button"
+                                              onClick={() => {
+                                                updateFilterRow(row.id, {
+                                                  field: option.key,
+                                                  comparator: "",
+                                                  value: "",
+                                                });
+                                                closeMoreFilterDropdown();
+                                              }}
+                                              className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
+                                                isSelected
+                                                  ? "bg-white font-medium text-[#0f172a]"
+                                                  : "text-[#334155] hover:bg-[#f8fafc]"
+                                              }`}
+                                            >
+                                              <span>{option.label}</span>
+                                              {isSelected ? (
+                                                <Check
+                                                  size={14}
+                                                  className="text-[#64748b]"
+                                                />
+                                              ) : null}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <div className="px-3 py-3 text-sm uppercase tracking-[0.04em] text-[#64748b]">
+                                    No results found
+                                  </div>
+                                )}
                               </div>
                             </div>
                           ) : null}
                         </div>
 
-                        <label className="mt-3 flex items-start gap-2 text-sm text-[#334155]">
-                          <input
-                            type="checkbox"
-                            checked={compareWithDraftArrangeLatest}
-                            onChange={(event) =>
-                              setCompareWithDraftArrangeLatest(
-                                event.target.checked,
-                              )
-                            }
-                            className="mt-1 h-4 w-4 rounded border-[#cfd6e4] text-[#1f6f7a] focus:ring-[#1f6f7a]"
-                          />
-                          <span>Arrange period/year from latest to oldest</span>
-                        </label>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!row.field) return;
+                              openMoreFilterDropdown(row.id, "comparator");
+                            }}
+                            disabled={!row.field}
+                            className={`relative flex h-8 w-full items-center overflow-hidden rounded border px-3 pr-9 text-sm text-[#334155] outline-none ${
+                              row.field
+                                ? comparatorMenuOpen
+                                  ? "border-[#156372] bg-white"
+                                  : "border-[#cfd6e4] bg-white hover:bg-[#f8fafc]"
+                                : "cursor-not-allowed border-[#e2e8f0] bg-[#f8fafc] text-[#94a3b8]"
+                            }`}
+                            aria-haspopup="menu"
+                            aria-expanded={comparatorMenuOpen}
+                          >
+                            <span
+                              className={`min-w-0 flex-1 truncate text-left ${row.field && row.comparator ? "font-medium" : "text-[#94a3b8]"}`}
+                            >
+                              {comparatorLabel}
+                            </span>
+                            <ChevronDown
+                              size={14}
+                              className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
+                                comparatorMenuOpen
+                                  ? "rotate-180 text-[#156372]"
+                                  : row.field
+                                    ? "text-[#64748b]"
+                                    : "text-[#cbd5e1]"
+                              }`}
+                            />
+                          </button>
+
+                          {comparatorMenuOpen ? (
+                            <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-[168px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                              <div className="border-b border-[#eef2f7] p-2">
+                                <div className="relative">
+                                  <input
+                                    value={comparatorMenuSearch}
+                                    onChange={(event) =>
+                                      setMoreFilterDropdown((prev) =>
+                                        prev
+                                          ? {
+                                              ...prev,
+                                              search: event.target.value,
+                                            }
+                                          : prev,
+                                      )
+                                    }
+                                    placeholder="Search"
+                                    className="h-9 w-full rounded-md border border-[#156372] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                                  />
+                                  <Search
+                                    size={14}
+                                    className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="max-h-[220px] overflow-y-auto py-1">
+                                {filteredComparatorOptions.length > 0 ? (
+                                  filteredComparatorOptions.map((option) => {
+                                    const isSelected =
+                                      row.comparator === option.key;
+                                    return (
+                                      <button
+                                        key={option.key}
+                                        type="button"
+                                        onClick={() => {
+                                          updateFilterRow(row.id, {
+                                            comparator: option.key,
+                                            value: "",
+                                          });
+                                          closeMoreFilterDropdown();
+                                        }}
+                                        className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
+                                          isSelected
+                                            ? "bg-white font-medium text-[#0f172a]"
+                                            : "text-[#334155] hover:bg-[#f8fafc]"
+                                        }`}
+                                      >
+                                        <span>{option.label}</span>
+                                        {isSelected ? (
+                                          <Check
+                                            size={14}
+                                            className="text-[#64748b]"
+                                          />
+                                        ) : null}
+                                      </button>
+                                    );
+                                  })
+                                ) : (
+                                  <div className="px-3 py-3 text-sm uppercase tracking-[0.04em] text-[#64748b]">
+                                    No results found
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <div className="relative">
+                          {valueMode === "none" ? (
+                            <div className="flex h-8 items-center rounded border border-[#e2e8f0] bg-[#f8fafc] px-3 text-sm text-[#94a3b8]">
+                              No value needed
+                            </div>
+                          ) : valueMode === "text" ? (
+                            <input
+                              type="text"
+                              value={row.value}
+                              onChange={(event) =>
+                                updateFilterRow(row.id, {
+                                  value: event.target.value,
+                                })
+                              }
+                              placeholder="Enter a value"
+                              className="h-8 w-full rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#156372]"
+                            />
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!row.field) return;
+                                  openMoreFilterDropdown(row.id, "value");
+                                }}
+                                disabled={!row.field}
+                                className={`relative flex h-8 w-full items-center overflow-hidden rounded border px-3 pr-9 text-sm outline-none ${
+                                  row.field
+                                    ? valueMenuOpen
+                                      ? "border-[#156372] bg-white text-[#334155]"
+                                      : "border-[#cfd6e4] bg-white text-[#334155] hover:bg-[#f8fafc]"
+                                    : "cursor-not-allowed border-[#e2e8f0] bg-[#f8fafc] text-[#94a3b8]"
+                                }`}
+                                aria-haspopup="menu"
+                                aria-expanded={valueMenuOpen}
+                              >
+                                <span
+                                  className={`min-w-0 flex-1 truncate text-left ${row.value ? "font-medium" : "text-[#94a3b8]"}`}
+                                >
+                                  {valueLabel}
+                                </span>
+                                <ChevronDown
+                                  size={14}
+                                  className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
+                                    valueMenuOpen
+                                      ? "rotate-180 text-[#156372]"
+                                      : row.field
+                                        ? "text-[#64748b]"
+                                        : "text-[#cbd5e1]"
+                                  }`}
+                                />
+                              </button>
+
+                              {valueMenuOpen ? (
+                                <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-[220px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                                  <div className="max-h-[220px] overflow-y-auto py-1">
+                                    {(fieldLookup(config, row.field)?.values ||
+                                      config.moreFilterValues[row.field] ||
+                                      []).map((option) => {
+                                      const isSelected =
+                                        row.value === option.key;
+                                      return (
+                                        <button
+                                          key={option.key}
+                                          type="button"
+                                          onClick={() => {
+                                            updateFilterRow(row.id, {
+                                              value: option.key,
+                                            });
+                                            closeMoreFilterDropdown();
+                                          }}
+                                          className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
+                                            isSelected
+                                              ? "bg-white font-medium text-[#0f172a]"
+                                              : "text-[#334155] hover:bg-[#f8fafc]"
+                                          }`}
+                                        >
+                                          <span>{option.label}</span>
+                                          {isSelected ? (
+                                            <Check
+                                              size={14}
+                                              className="text-[#64748b]"
+                                            />
+                                          ) : null}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ) : null}
+                            </>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={addFilterRow}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#cfd6e4] text-[#64748b]"
+                        >
+                          <Plus size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeFilterRow(row.id)}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#cfd6e4] text-[#ef4444]"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={addFilterRow}
+                  className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-[#0f9aa7]"
+                >
+                  <Plus size={14} /> Add More
+                </button>
+
+                <div className="mt-5 flex items-center gap-2 border-t border-[#e6e9f0] pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setRefreshTick((value) => value + 1)}
+                    className="inline-flex h-9 items-center rounded bg-[#156372] px-4 text-sm font-semibold text-white hover:bg-[#0f4a52]"
+                  >
+                    Run Report
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMoreFiltersOpen(false);
+                      closeMoreFilterDropdown();
+                    }}
+                    className="inline-flex h-9 items-center rounded border border-[#d4d9e4] bg-white px-4 text-sm text-[#334155]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center justify-end gap-2 text-sm text-[#475569]">
+            {config.rightControls.map((control) => {
+              if (control.state === "groupBy") {
+                return (
+                  <div ref={groupByRef} key={control.label} className="relative">
+                    <button
+                      type="button"
+                      onClick={openGroupByDropdown}
+                      className={`inline-flex h-8 w-[220px] items-center justify-between gap-3 rounded border px-3 text-sm text-[#334155] hover:bg-white ${
+                        groupByOpen
+                          ? "border-[#156372] bg-white shadow-[0_0_0_1px_rgba(21,99,114,0.08)]"
+                          : "border-[#cfd6e4] bg-[#f8fafc]"
+                      }`}
+                      aria-haspopup="menu"
+                      aria-expanded={groupByOpen}
+                    >
+                      <span className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap">
+                        <span>Group By :</span>
+                        <strong className="truncate">
+                          {groupBy === "none" ? "None" : getGroupByLabel(groupBy)}
+                        </strong>
+                      </span>
+                      <ChevronDown
+                        size={14}
+                        className={`transition-transform duration-150 ${
+                          groupByOpen
+                            ? "rotate-180 text-[#1f6f7a]"
+                            : "text-[#64748b]"
+                        }`}
+                      />
+                    </button>
+
+                    {groupByOpen ? (
+                      <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-[220px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                        <div className="border-b border-[#eef2f7] p-2">
+                          <div className="relative">
+                            <Search
+                              size={14}
+                              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]"
+                            />
+                            <input
+                              value={groupBySearch}
+                              onChange={(event) =>
+                                setGroupBySearch(event.target.value)
+                              }
+                              placeholder="Search"
+                              className="h-9 w-full rounded-md border border-[#156372] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="max-h-[180px] overflow-y-auto py-1">
+                          {filteredGroupByOptions.length > 0 ? (
+                            filteredGroupByOptions.map((option) => {
+                              const isSelected = groupBy === option.key;
+                              return (
+                                <button
+                                  key={option.key}
+                                  type="button"
+                                  onClick={() => {
+                                    setGroupBy(option.key);
+                                    setGroupByOpen(false);
+                                    setGroupBySearch("");
+                                  }}
+                                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
+                                    isSelected
+                                      ? "bg-white font-medium text-[#0f172a]"
+                                      : "text-[#334155] hover:bg-[#f8fafc]"
+                                  }`}
+                                >
+                                  <span>{option.label}</span>
+                                  {isSelected ? (
+                                    <Check size={14} className="text-[#64748b]" />
+                                  ) : null}
+                                </button>
+                              );
+                            })
+                          ) : (
+                            <div className="px-3 py-3 text-sm uppercase tracking-[0.04em] text-[#64748b]">
+                              No results found
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ) : null}
                   </div>
+                );
+              }
 
-                  <div className="flex items-center gap-2 border-t border-[#eef2f7] px-4 py-3">
+              if (control.state === "showBy") {
+                return (
+                  <div ref={showByRef} key={control.label} className="relative">
                     <button
                       type="button"
-                      onClick={applyCompareWith}
-                      className="inline-flex h-8 items-center rounded bg-[#1f6f7a] px-3 text-sm font-semibold text-white hover:bg-[#185a63]"
+                      onClick={openShowByDropdown}
+                      className={`inline-flex h-8 w-[240px] items-center justify-between gap-3 rounded border px-3 text-sm text-[#334155] hover:bg-white ${
+                        showByOpen
+                          ? "border-[#156372] bg-white shadow-[0_0_0_1px_rgba(21,99,114,0.08)]"
+                          : "border-[#cfd6e4] bg-[#f8fafc]"
+                      }`}
+                      aria-haspopup="menu"
+                      aria-expanded={showByOpen}
                     >
-                      Apply
+                      <span className="inline-flex min-w-0 items-center gap-2 whitespace-nowrap">
+                        <span>Show By :</span>
+                        <strong className="truncate">
+                          {getShowByLabel(showBy as ShowByKey)}
+                        </strong>
+                      </span>
+                      <ChevronDown
+                        size={14}
+                        className={`transition-transform duration-150 ${
+                          showByOpen
+                            ? "rotate-180 text-[#1f6f7a]"
+                            : "text-[#64748b]"
+                        }`}
+                      />
                     </button>
-                    <button
-                      type="button"
-                      onClick={cancelCompareWith}
-                      className="inline-flex h-8 items-center rounded border border-[#d4d9e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
-                    >
-                      Cancel
-                    </button>
+
+                    {showByOpen ? (
+                      <div className="absolute left-0 top-[calc(100%+6px)] z-40 w-[240px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                        <div className="border-b border-[#eef2f7] p-2">
+                          <div className="relative">
+                            <Search
+                              size={14}
+                              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]"
+                            />
+                            <input
+                              value={showBySearch}
+                              onChange={(event) =>
+                                setShowBySearch(event.target.value)
+                              }
+                              placeholder="Search"
+                              className="h-9 w-full rounded-md border border-[#156372] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="max-h-[180px] overflow-y-auto py-1">
+                          {filteredShowByOptions.length > 0 ? (
+                            filteredShowByOptions.map((option) => {
+                              const isSelected = showBy === option.key;
+                              return (
+                                <button
+                                  key={option.key}
+                                  type="button"
+                                  onClick={() => {
+                                    setShowBy(option.key);
+                                    setShowByOpen(false);
+                                    setShowBySearch("");
+                                  }}
+                                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
+                                    isSelected
+                                      ? "bg-white font-medium text-[#0f172a]"
+                                      : "text-[#334155] hover:bg-[#f8fafc]"
+                                  }`}
+                                >
+                                  <span>{option.label}</span>
+                                  {isSelected ? (
+                                    <Check size={14} className="text-[#64748b]" />
+                                  ) : null}
+                                </button>
+                              );
+                            })
+                          ) : (
+                            <div className="px-3 py-3 text-sm uppercase tracking-[0.04em] text-[#64748b]">
+                              No results found
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
-                </div>
-              ) : null}
-            </div>
+                );
+              }
+
+              if (control.state === "agingIntervals") {
+                return (
+                  <div
+                    ref={agingIntervalsRef}
+                    key={control.label}
+                    className="relative"
+                  >
+                    <button
+                      type="button"
+                      onClick={openAgingIntervalsDropdown}
+                      className={`inline-flex h-8 w-[208px] items-center justify-between gap-2 rounded border px-2 text-[12px] text-[#334155] hover:bg-white ${
+                        agingIntervalsOpen
+                          ? "border-[#156372] bg-white shadow-[0_0_0_1px_rgba(21,99,114,0.08)]"
+                          : "border-[#cfd6e4] bg-[#f8fafc]"
+                      }`}
+                      aria-haspopup="menu"
+                      aria-expanded={agingIntervalsOpen}
+                    >
+                      <span className="inline-flex min-w-0 items-center gap-1 whitespace-nowrap">
+                        <span>Aging Intervals :</span>
+                        <strong className="whitespace-nowrap">
+                          {agingIntervals}
+                        </strong>
+                      </span>
+                      <ChevronDown
+                        size={14}
+                        className={`transition-transform duration-150 ${
+                          agingIntervalsOpen
+                            ? "rotate-180 text-[#1f6f7a]"
+                            : "text-[#64748b]"
+                        }`}
+                      />
+                    </button>
+
+                    {agingIntervalsOpen ? (
+                      <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-[280px] overflow-visible rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                        <div className="border-b border-[#eef2f7] px-3 py-2 text-sm font-medium text-[#0f172a]">
+                          Aging Intervals
+                        </div>
+                        <div className="space-y-3 px-3 py-3">
+                          <div ref={agingIntervalsCountRef} className="relative">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAgingIntervalsUnitOpen(false);
+                                setAgingIntervalsCountOpen((prev) => !prev);
+                                setAgingIntervalsCountSearch("");
+                              }}
+                              className="relative flex h-10 w-full items-center justify-between rounded border border-[#cfd6e4] bg-white px-3 pr-9 text-sm text-[#334155] outline-none hover:bg-[#f8fafc]"
+                              aria-haspopup="menu"
+                              aria-expanded={agingIntervalsCountOpen}
+                            >
+                              <span className="min-w-0 truncate">
+                                {agingIntervalsDraftCount}
+                              </span>
+                              <ChevronDown
+                                size={14}
+                                className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-transform duration-150 ${
+                                  agingIntervalsCountOpen
+                                    ? "rotate-180 text-[#156372]"
+                                    : "text-[#64748b]"
+                                }`}
+                              />
+                            </button>
+
+                            {agingIntervalsCountOpen ? (
+                              <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-full overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                                <div className="border-b border-[#eef2f7] p-2">
+                                  <div className="relative">
+                                    <input
+                                      value={agingIntervalsCountSearch}
+                                      onChange={(event) =>
+                                        setAgingIntervalsCountSearch(
+                                          event.target.value,
+                                        )
+                                      }
+                                      placeholder="Search"
+                                      className="h-9 w-full rounded-md border border-[#156372] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8]"
+                                    />
+                                    <Search
+                                      size={14}
+                                      className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="max-h-[220px] overflow-y-auto py-1">
+                                  {AGING_INTERVAL_COUNT_OPTIONS.filter(
+                                    (option) =>
+                                      option
+                                        .toLowerCase()
+                                        .includes(
+                                          agingIntervalsCountSearch
+                                            .trim()
+                                            .toLowerCase(),
+                                        ),
+                                  ).length > 0 ? (
+                                    AGING_INTERVAL_COUNT_OPTIONS.filter(
+                                      (option) =>
+                                        option
+                                          .toLowerCase()
+                                          .includes(
+                                            agingIntervalsCountSearch
+                                              .trim()
+                                              .toLowerCase(),
+                                          ),
+                                    ).map((option) => {
+                                      const isSelected =
+                                        agingIntervalsDraftCount ===
+                                        Number(option);
+                                      return (
+                                        <button
+                                          key={option}
+                                          type="button"
+                                          onClick={() => {
+                                            setAgingIntervalsDraftCount(
+                                              Number(option),
+                                            );
+                                            setAgingIntervalsCountOpen(false);
+                                            setAgingIntervalsCountSearch("");
+                                          }}
+                                          className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
+                                            isSelected
+                                              ? "bg-[#eef4ff] font-medium text-[#0f172a]"
+                                              : "text-[#334155] hover:bg-[#f8fafc]"
+                                          }`}
+                                        >
+                                          <span>{option}</span>
+                                          {isSelected ? (
+                                            <Check
+                                              size={14}
+                                              className="text-[#64748b]"
+                                            />
+                                          ) : null}
+                                        </button>
+                                      );
+                                    })
+                                  ) : (
+                                    <div className="px-3 py-3 text-sm uppercase tracking-[0.04em] text-[#64748b]">
+                                      No results found
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+
+                          <div className="text-sm text-[#334155]">
+                            Intervals of
+                          </div>
+
+                          <div className="flex items-stretch">
+                            <input
+                              type="number"
+                              min={1}
+                              value={agingIntervalsDraftInterval}
+                              onChange={(event) =>
+                                setAgingIntervalsDraftInterval(
+                                  Number(event.target.value || 0),
+                                )
+                              }
+                              className="h-10 min-w-0 flex-1 rounded-l border border-[#cfd6e4] border-r-0 bg-white px-3 text-sm text-[#334155] outline-none focus:border-[#156372]"
+                            />
+
+                            <div ref={agingIntervalsUnitRef} className="relative">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAgingIntervalsCountOpen(false);
+                                  setAgingIntervalsUnitOpen((prev) => !prev);
+                                }}
+                                className="inline-flex h-10 w-[84px] items-center justify-between rounded-r border border-[#cfd6e4] bg-[#f8fafc] px-3 text-sm text-[#334155] hover:bg-white"
+                                aria-haspopup="menu"
+                                aria-expanded={agingIntervalsUnitOpen}
+                              >
+                                <span className="truncate">
+                                  {agingIntervalsDraftUnit}
+                                </span>
+                                <ChevronDown
+                                  size={14}
+                                  className={`transition-transform duration-150 ${
+                                    agingIntervalsUnitOpen
+                                      ? "rotate-180 text-[#156372]"
+                                      : "text-[#64748b]"
+                                  }`}
+                                />
+                              </button>
+
+                              {agingIntervalsUnitOpen ? (
+                                <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-[92px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                                  <div className="py-1">
+                                    {AGING_INTERVAL_UNIT_OPTIONS.map(
+                                      (option) => {
+                                        const isSelected =
+                                          agingIntervalsDraftUnit === option;
+                                        return (
+                                          <button
+                                            key={option}
+                                            type="button"
+                                            onClick={() => {
+                                              setAgingIntervalsDraftUnit(option);
+                                              setAgingIntervalsUnitOpen(false);
+                                            }}
+                                            className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${
+                                              isSelected
+                                                ? "bg-[#eef4ff] font-medium text-[#0f172a]"
+                                                : "text-[#334155] hover:bg-[#f8fafc]"
+                                            }`}
+                                          >
+                                            <span>{option}</span>
+                                            {isSelected ? (
+                                              <Check
+                                                size={14}
+                                                className="text-[#64748b]"
+                                              />
+                                            ) : null}
+                                          </button>
+                                        );
+                                      },
+                                    )}
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 border-t border-[#eef2f7] px-3 py-3">
+                          <button
+                            type="button"
+                            onClick={applyAgingIntervals}
+                            className="inline-flex h-8 items-center rounded bg-[#156372] px-3 text-sm font-semibold text-white hover:bg-[#0f4a52]"
+                          >
+                            Apply
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelAgingIntervals}
+                            className="inline-flex h-8 items-center rounded border border-[#d4d9e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              }
+
+              return null;
+            })}
 
             <button
               type="button"
@@ -2686,7 +3856,7 @@ function ReceivablesReportShell({
               <div className="text-[20px] font-semibold text-[#0f172a]">
                 {config.title}
               </div>
-              <div className="mt-1 text-sm text-[#2563eb]">{dateLabel}</div>
+              <div className="mt-1 text-sm text-[#156372]">{dateLabel}</div>
             </div>
 
             {loading ? (
@@ -2725,7 +3895,7 @@ function ReceivablesReportShell({
                           {visibleColumns.map((column, columnIndex) => (
                             <td
                               key={column.key}
-                              className={`px-4 py-3 text-sm ${columnIndex === 0 ? "font-medium text-[#0f172a]" : "text-[#2563eb]"}`}
+                              className={`px-4 py-3 text-sm ${columnIndex === 0 ? "font-medium text-[#0f172a]" : "text-[#156372]"}`}
                             >
                               {formatCell(column, row.values[column.key])}
                             </td>
@@ -2765,9 +3935,9 @@ function ReceivablesReportShell({
         </div>
 
         {columnsOpen ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
+          <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/45 px-4 py-6">
             <div className="w-full max-w-[860px] rounded-xl bg-white shadow-2xl">
-              <div className="flex items-center justify-between border-b border-[#e6e9f0] px-5 py-3">
+              <div className="flex items-center justify-between border-b border-[#eef2f7] px-6 py-3">
                 <div className="text-[16px] font-medium text-[#0f172a]">
                   Customize Report Columns
                 </div>
@@ -2780,55 +3950,75 @@ function ReceivablesReportShell({
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 gap-6 px-5 py-5 md:grid-cols-[1fr_56px_1fr]">
+              <div className="grid grid-cols-1 gap-6 px-6 py-5 md:grid-cols-[1fr_56px_1fr]">
                 <div>
                   <div className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#64748b]">
                     Available Columns
                   </div>
-                  <div className="flex items-center gap-2 rounded-t border border-[#cfd6e4] bg-white px-2 py-1">
-                    <Search size={14} className="text-[#94a3b8]" />
-                    <input
-                      value={columnSearch}
-                      onChange={(event) => setColumnSearch(event.target.value)}
-                      placeholder="Search"
-                      className="w-full bg-transparent text-sm outline-none"
-                    />
-                  </div>
-                  <div className="max-h-[420px] overflow-y-auto rounded-b border border-t-0 border-[#cfd6e4] bg-white">
-                    {config.columns.map((group) => (
-                      <div key={group.label} className="py-1">
-                        <div className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.06em] text-[#94a3b8]">
-                          {group.label}
-                        </div>
-                        {group.options
-                          .filter((option) => !columnDraft.includes(option.key))
-                          .filter(
-                            (option) =>
-                              !columnSearch.trim() ||
-                              option.label
-                                .toLowerCase()
-                                .includes(columnSearch.trim().toLowerCase()),
-                          )
-                          .map((option) => {
-                            const active = activeAvailableColumn === option.key;
-                            return (
-                              <button
-                                key={option.key}
-                                type="button"
-                                onClick={() =>
-                                  setActiveAvailableColumn(option.key)
-                                }
-                                className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${active ? "bg-[#f8fafc] text-[#0f172a]" : "text-[#334155] hover:bg-[#f8fafc]"}`}
-                              >
-                                <span>{option.label}</span>
-                                {active ? (
-                                  <Check size={14} className="text-[#64748b]" />
-                                ) : null}
-                              </button>
-                            );
-                          })}
+                  <div className="rounded-lg border border-[#d7dce7] bg-white">
+                    <div className="border-b border-[#eef2f7] p-2">
+                      <div className="relative">
+                        <input
+                          value={columnSearch}
+                          onChange={(event) =>
+                            setColumnSearch(event.target.value)
+                          }
+                          placeholder="Search"
+                          className="h-9 w-full rounded-md border border-[#d7dce7] bg-white pl-8 pr-3 text-sm text-[#334155] outline-none placeholder:text-[#94a3b8] focus:border-[#156372]"
+                        />
+                        <Search
+                          size={14}
+                          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8]"
+                        />
                       </div>
-                    ))}
+                    </div>
+
+                    <div className="max-h-[440px] overflow-y-auto py-1">
+                      {config.columns.map((group) => (
+                        <div key={group.label} className="py-1">
+                          <div className="px-4 py-2 text-sm font-medium text-[#9aa3b2]">
+                            {group.label}
+                          </div>
+                          <div className="pb-1">
+                            {group.options
+                              .filter((option) => !columnDraft.includes(option.key))
+                              .filter(
+                                (option) =>
+                                  !columnSearch.trim() ||
+                                  option.label
+                                    .toLowerCase()
+                                    .includes(columnSearch.trim().toLowerCase()),
+                              )
+                              .map((option) => {
+                                const active =
+                                  activeAvailableColumn === option.key;
+                                return (
+                                  <button
+                                    key={option.key}
+                                    type="button"
+                                    onClick={() =>
+                                      setActiveAvailableColumn(option.key)
+                                    }
+                                    className={`flex w-full items-center px-4 py-2 text-left text-sm ${
+                                      active
+                                        ? "bg-[#eef4ff] font-medium text-[#0f172a]"
+                                        : "text-[#334155] hover:bg-[#f8fafc]"
+                                    }`}
+                                  >
+                                    <span>{option.label}</span>
+                                    {active ? (
+                                      <Check
+                                        size={14}
+                                        className="text-[#64748b]"
+                                      />
+                                    ) : null}
+                                  </button>
+                                );
+                              })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -2853,14 +4043,14 @@ function ReceivablesReportShell({
                   <div className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#64748b]">
                     Selected Columns
                   </div>
-                  <div className="min-h-[420px] rounded border border-[#cfd6e4] bg-white p-2">
+                  <div className="min-h-[440px] rounded-lg border border-[#d7dce7] bg-white p-3">
                     {columnDraft.map((key) => {
                       const option = columnLookup(activeReportId, key);
                       if (!option) return null;
                       return (
                         <div
                           key={key}
-                          className="flex items-center justify-between rounded px-3 py-2 text-sm hover:bg-[#f8fafc]"
+                          className="flex items-center justify-between rounded px-3 py-2 text-sm text-[#334155] hover:bg-[#f8fafc]"
                         >
                           <div>
                             <span className="text-[#0f172a]">
@@ -2877,19 +4067,6 @@ function ReceivablesReportShell({
                               )
                             </span>
                           </div>
-                          {option.locked ? null : (
-                            <button
-                              type="button"
-                              className="text-[#ef4444]"
-                              onClick={() =>
-                                setColumnDraft((prev) =>
-                                  prev.filter((item) => item !== key),
-                                )
-                              }
-                            >
-                              <X size={14} />
-                            </button>
-                          )}
                         </div>
                       );
                     })}
@@ -2897,21 +4074,26 @@ function ReceivablesReportShell({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 border-t border-[#e6e9f0] px-5 py-4">
-                <button
-                  type="button"
-                  onClick={() => setSelectedColumns(columnDraft)}
-                  className="inline-flex h-9 items-center rounded bg-[#4f8cff] px-4 text-sm font-semibold text-white"
-                >
-                  Apply
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setColumnsOpen(false)}
-                  className="inline-flex h-9 items-center rounded border border-[#d4d9e4] bg-white px-4 text-sm text-[#334155]"
-                >
-                  Cancel
-                </button>
+              <div className="border-t border-[#eef2f7] px-6 py-4">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedColumns(columnDraft);
+                      setColumnsOpen(false);
+                    }}
+                    className="inline-flex h-9 items-center rounded bg-[#156372] px-4 text-sm font-semibold text-white hover:bg-[#0f4a52]"
+                  >
+                    Apply
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setColumnsOpen(false)}
+                    className="inline-flex h-9 items-center rounded border border-[#d4d9e4] bg-white px-4 text-sm text-[#334155] hover:bg-[#f8fafc]"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             </div>
           </div>

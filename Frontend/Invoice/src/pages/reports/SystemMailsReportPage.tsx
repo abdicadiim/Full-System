@@ -764,7 +764,7 @@ export default function SystemMailsReportPage() {
                                 }}
                                 className={`block w-full px-4 py-2 text-left text-sm ${
                                   row.value === option
-                                    ? "bg-[#3b82f6] text-white"
+                                    ? "bg-[#156372] text-white"
                                     : "text-[#334155] hover:bg-[#f8fafc]"
                                 }`}
                               >

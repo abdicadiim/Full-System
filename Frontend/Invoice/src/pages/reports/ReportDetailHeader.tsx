@@ -35,7 +35,7 @@ export default function ReportDetailHeader({
   onClosePage,
 }: ReportDetailHeaderProps) {
   return (
-    <div className="rounded-lg border border-[#d7dce7] bg-white">
+    <div className="overflow-hidden rounded-lg border border-[#d7dce7] bg-white">
       <div className="flex flex-wrap items-start justify-between gap-4 px-4 py-3">
         <div className="flex min-w-0 items-start gap-3">
           {menuButtonRef && onMenuClick ? (
@@ -50,7 +50,7 @@ export default function ReportDetailHeader({
             </button>
           ) : null}
           <div className="min-w-0">
-            <p className="text-sm font-medium text-[#4f5f79]">{categoryName}</p>
+            <p className="text-sm font-medium text-[#156372]">{categoryName}</p>
             <h1 className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[24px] font-semibold leading-tight text-[#0f172a]">
               <span>{reportName}</span>
               <span className="text-sm font-normal text-[#475569]">- {dateLabel}</span>
@@ -86,7 +86,7 @@ export default function ReportDetailHeader({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-[#e6e9f0] px-4 py-2">
+      <div className="flex flex-wrap items-center gap-2 border-t border-[#e6e9f0] px-4 py-3">
         <span className="text-sm text-[#334155]">Filters :</span>
         {filters.map((filter) => (
           <button
@@ -98,12 +98,12 @@ export default function ReportDetailHeader({
           </button>
         ))}
         <button type="button" className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]">
-          <Plus size={14} className="text-[#2563eb]" /> More Filters
+          <Plus size={14} className="text-[#156372]" /> More Filters
         </button>
         <button
           type="button"
           onClick={onRunReport}
-          className="inline-flex h-8 items-center gap-1 rounded bg-[#22a06b] px-4 text-sm font-semibold text-white hover:bg-[#1b8b5d]"
+          className="inline-flex h-8 items-center gap-1 rounded bg-[#156372] px-4 text-sm font-semibold text-white hover:bg-[#0f4f5b]"
         >
           <CalendarDays size={14} /> Run Report
         </button>

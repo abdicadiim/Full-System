@@ -316,12 +316,12 @@ export default function ExpenseDetailsReportPage() {
             </button>
             {isExportOpen ? (
               <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-[220px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
-                {["PDF", "XLSX", "CSV", "Print"].map((label) => (
+                {["PDF", "XLSX (Microsoft Excel)", "Print"].map((label) => (
                   <button
                     key={label}
                     type="button"
                     onClick={() => handleExport(label)}
-                    className="flex w-full items-center px-4 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
+                    className="flex w-full items-center px-3 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
                   >
                     {label}
                   </button>
@@ -568,7 +568,7 @@ export default function ExpenseDetailsReportPage() {
         <div className="px-4 py-8 text-center">
           <div className="text-[14px] text-[#64748b]">{organizationName || "Organization"}</div>
           <div className="mt-1 text-[20px] font-medium text-[#111827]">{report.name}</div>
-          <div className="mt-1 text-[14px] text-[#2563eb]">{dateRangeText}</div>
+          <div className="mt-1 text-[14px] text-[#156372]">{dateRangeText}</div>
         </div>
 
         <div className="overflow-x-auto border-t border-[#eef2f7]">

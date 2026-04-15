@@ -29,8 +29,8 @@ const persistSession = (result: any) => {
 const prefetchOrganizationSelection = async () => {
   try {
     const result = await orgApi.list();
-    if (result?.success && Array.isArray(result.organizations)) {
-      writeOrganizationSelectionCache(result.organizations);
+    if (result?.success && Array.isArray(result.data?.organizations)) {
+      writeOrganizationSelectionCache(result.data.organizations);
     } else {
       clearOrganizationSelectionCache();
     }

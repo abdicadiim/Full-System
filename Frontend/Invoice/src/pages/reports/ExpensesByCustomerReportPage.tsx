@@ -397,18 +397,17 @@ export default function ExpensesByCustomerReportPage() {
                   Export <ChevronDown size={14} />
                 </button>
                 {isExportOpen ? (
-                  <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-56 rounded-lg border border-[#d7dce7] bg-white p-2 shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                  <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-[220px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
                     {[
                       "PDF",
                       "XLSX (Microsoft Excel)",
-                      "CSV (Comma Separated Value)",
                       "Print",
                     ].map((label) => (
                       <button
                         key={label}
                         type="button"
                         onClick={() => handleExport(label)}
-                        className="flex w-full items-center rounded-md px-3 py-2 text-left text-sm text-[#0f172a] hover:bg-[#f8fafc]"
+                        className="flex w-full items-center px-3 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
                       >
                         {label}
                       </button>

@@ -1645,38 +1645,18 @@ export function SalesBySalesPersonReportView({
             </button>
 
             {isExportOpen ? (
-              <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-[252px] overflow-visible rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
-                <div className="border-b border-[#eef2f7] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">
-                  Export As
-                </div>
+              <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-[220px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
                 <div className="py-1">
                   {[
                     "PDF",
                     "XLSX (Microsoft Excel)",
-                    "XLS (Microsoft Excel 1997-2004 Compatible)",
-                    "CSV (Comma Separated Value)",
-                    "Export to Zoho Sheet",
+                    "Print",
                   ].map((label) => (
                     <button
                       key={label}
                       type="button"
                       onClick={() => handleExportAction(label)}
-                      className="flex w-full items-center px-4 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <div className="border-t border-[#eef2f7] px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">
-                  Print
-                </div>
-                <div className="py-1">
-                  {["Print", "Print Preference"].map((label) => (
-                    <button
-                      key={label}
-                      type="button"
-                      onClick={() => handleExportAction(label)}
-                      className="flex w-full items-center px-4 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
+                      className="flex w-full items-center px-3 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
                     >
                       {label}
                     </button>
@@ -2202,7 +2182,7 @@ export function SalesBySalesPersonReportView({
                     <button
                       type="button"
                       onClick={() => setCustomizeReportTab("columns")}
-                      className="flex w-full items-center px-4 py-3 text-left text-sm text-[#2563eb] hover:bg-[#f8fafc]"
+                      className="flex w-full items-center px-4 py-3 text-left text-sm text-[#156372] hover:bg-[#f8fafc]"
                     >
                       Show / Hide Columns
                     </button>
@@ -3257,7 +3237,7 @@ export function SalesBySalesPersonReportView({
                           key={column.key}
                           className={`px-4 py-3 text-sm ${
                             column.kind === "text" ? "text-left" : "text-center"
-                          } ${column.key === "name" ? "font-medium text-[#2563eb]" : "text-[#2563eb]"}`}
+                          } ${column.key === "name" ? "font-medium text-[#156372]" : "text-[#156372]"}`}
                         >
                           {formatReportColumnValue(column.key, row.values[column.key])}
                         </td>
@@ -3471,10 +3451,10 @@ export default function ReportDetailPage() {
                   </label>
                 ))}
               </div>
-              <div className="mt-4 rounded border border-[#bfdbfe] bg-[#eff6ff] px-4 py-3">
-                <p className="text-xs uppercase tracking-wide text-[#1d4ed8]">{report.calculator.resultLabel}</p>
-                <p className="text-2xl font-semibold text-[#1e40af]">{(calculatorResult || 0).toFixed(calculatorPrecision)}</p>
-                {report.calculator.helpText ? <p className="mt-1 text-xs text-[#1e3a8a]">{report.calculator.helpText}</p> : null}
+              <div className="mt-4 rounded border border-[#b8dde1] bg-[#ecf7f8] px-4 py-3">
+                <p className="text-xs uppercase tracking-wide text-[#156372]">{report.calculator.resultLabel}</p>
+                <p className="text-2xl font-semibold text-[#0f4a52]">{(calculatorResult || 0).toFixed(calculatorPrecision)}</p>
+                {report.calculator.helpText ? <p className="mt-1 text-xs text-[#0f4a52]">{report.calculator.helpText}</p> : null}
               </div>
             </section>
           ) : null}

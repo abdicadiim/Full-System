@@ -119,12 +119,12 @@ export default function ReportCustomizeColumnsModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[10000] flex items-start justify-center overflow-y-auto bg-black/45 px-4 pt-8"
+      className="fixed inset-0 z-[10000] flex items-start justify-center overflow-y-auto bg-black/45 px-4 py-6"
       onClick={onClose}
       role="presentation"
     >
       <div
-        className="w-full max-w-[760px] overflow-hidden rounded-[12px] border border-[#dbe1ea] bg-white shadow-[0_24px_60px_rgba(15,23,42,0.28)]"
+        className="w-full max-w-[860px] overflow-hidden rounded-[12px] border border-[#dbe1ea] bg-white shadow-[0_24px_60px_rgba(15,23,42,0.28)]"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -149,8 +149,8 @@ export default function ReportCustomizeColumnsModal({
           </button>
         </div>
 
-        <div className="px-5 py-4">
-          <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_52px_minmax(0,1fr)]">
+        <div className="px-6 py-5">
+          <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_56px_minmax(0,1fr)]">
             <div>
               <div className="mb-2 text-[12px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">Available Columns</div>
               <div className="relative">
@@ -159,11 +159,11 @@ export default function ReportCustomizeColumnsModal({
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Search"
-                  className="h-9 w-full rounded-[8px] border border-[#d4d9e4] bg-white pl-9 pr-3 text-[13px] text-[#334155] outline-none focus:border-[#156372]"
+                  className="h-10 w-full rounded-[8px] border border-[#d4d9e4] bg-white pl-9 pr-3 text-[13px] text-[#334155] outline-none focus:border-[#156372]"
                 />
               </div>
 
-              <div className="mt-2 max-h-[420px] overflow-y-auto rounded-[10px] border border-[#e6eaf1] bg-white p-1">
+              <div className="mt-2 max-h-[470px] overflow-y-auto rounded-[10px] border border-[#e6eaf1] bg-white p-1">
                 {filteredGroups.map((group) => (
                   <div key={group.label} className="mb-2">
                     <div className="px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.08em] text-[#94a3b8]">
@@ -209,7 +209,7 @@ export default function ReportCustomizeColumnsModal({
 
             <div>
               <div className="mb-2 text-[12px] font-semibold uppercase tracking-[0.08em] text-[#64748b]">Selected Columns</div>
-              <div className="max-h-[460px] overflow-y-auto rounded-[10px] border border-[#e6eaf1] bg-white p-2">
+              <div className="max-h-[470px] overflow-y-auto rounded-[10px] border border-[#e6eaf1] bg-white p-2">
                 {selectedOptions.map((column, index) => (
                   <div
                     key={column.key}
@@ -241,7 +241,7 @@ export default function ReportCustomizeColumnsModal({
           </div>
         </div>
 
-        <div className="flex items-center gap-3 border-t border-[#e6eaf1] px-5 py-4">
+        <div className="flex items-center gap-3 border-t border-[#e6eaf1] px-6 py-4">
           <button
             type="button"
             onClick={() => onSave(ensureLockedColumns(draftSelected, selectedOptions))}

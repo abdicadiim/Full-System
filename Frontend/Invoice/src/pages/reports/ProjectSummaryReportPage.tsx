@@ -548,7 +548,7 @@ export default function ProjectSummaryReportPage() {
                               isHours ? "text-center" : "text-left"
                             } ${isAmount && value !== "-" ? "text-[#0f172a]" : ""}`}
                           >
-                            {isLink ? <span className="text-[#1d4ed8]">{value}</span> : value}
+                            {isLink ? <span className="text-[#156372]">{value}</span> : value}
                           </td>
                         );
                       })}

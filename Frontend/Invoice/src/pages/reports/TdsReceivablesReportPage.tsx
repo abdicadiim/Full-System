@@ -434,8 +434,8 @@ export default function TdsReceivablesReportPage() {
                   Export <ChevronDown size={14} />
                 </button>
                 {isExportOpen ? (
-                  <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-56 rounded-lg border border-[#d7dce7] bg-white p-2 shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
-                    {["PDF", "XLSX (Microsoft Excel)", "CSV (Comma Separated Value)", "Print"].map(
+                  <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-[220px] overflow-hidden rounded-lg border border-[#d7dce7] bg-white shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
+                    {["PDF", "XLSX (Microsoft Excel)", "Print"].map(
                       (label) => (
                         <button
                           key={label}
@@ -444,7 +444,7 @@ export default function TdsReceivablesReportPage() {
                             setIsExportOpen(false);
                             toast.success(`Export ${label} started`);
                           }}
-                          className="flex w-full items-center rounded-md px-3 py-2 text-left text-sm text-[#0f172a] hover:bg-[#f8fafc]"
+                          className="flex w-full items-center px-3 py-2 text-left text-sm text-[#334155] hover:bg-[#f8fafc]"
                         >
                           {label}
                         </button>
@@ -548,7 +548,7 @@ export default function TdsReceivablesReportPage() {
                   onClick={() => setIsMoreFiltersOpen((value) => !value)}
                   className="inline-flex h-8 items-center gap-1 rounded border border-[#cfd6e4] bg-white px-3 text-sm text-[#334155] hover:bg-[#f8fafc]"
                 >
-                  <Plus size={14} className="text-[#2563eb]" /> More Filters
+                  <Plus size={14} className="text-[#156372]" /> More Filters
                 </button>
                 {isMoreFiltersOpen ? (
                   <div className="absolute left-0 top-[calc(100%+6px)] z-30 w-72 rounded-lg border border-[#d7dce7] bg-white p-3 shadow-[0_10px_24px_rgba(15,23,42,0.12)]">
@@ -623,7 +623,7 @@ export default function TdsReceivablesReportPage() {
                 <h2 className="text-[20px] font-semibold text-[#0f172a]">
                   {report.name}
                 </h2>
-                <div className="mt-1 text-sm text-[#2563eb]">{dateLabel}</div>
+                <div className="mt-1 text-sm text-[#156372]">{dateLabel}</div>
                 <div className="mt-3 text-sm text-[#64748b]">Basis : Accrual</div>
               </div>
 
@@ -695,7 +695,7 @@ export default function TdsReceivablesReportPage() {
                                 key={`${row.id}-${cellIndex}`}
                                 className={`px-4 py-3 text-[14px] ${
                                   cellIndex === 0
-                                    ? "font-medium text-[#2563eb]"
+                                    ? "font-medium text-[#156372]"
                                     : "text-center text-[#334155]"
                                 }`}
                               >
