@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { useUser } from "../../lib/auth/UserContext";
 import { useSettings } from "../../lib/settings/SettingsContext";
+import { preloadCustomersIndexRoute } from "../../pages/Customers/customerRouteLoaders";
 import { getNavConfigForRole } from "../../config/roleBasedNav";
 import { prefetchRouteChunk } from "../../routes/routeWarmers";
 import { normalizeImageSrc } from "../../utils/imageSources";
@@ -705,7 +706,12 @@ function Sidebar({ mobileOpen = false, onCloseMobile, collapsed = false, onToggl
                             to={item.to}
                             end={item.to === "/dashboard" || item.to === "/"}
                             onMouseEnter={() => prefetchRouteChunk(item.to)}
-                            onPointerDown={() => prefetchRouteChunk(item.to)}
+                            onPointerDown={() => {
+                              prefetchRouteChunk(item.to);
+                              if (item.to === "/sales/customers") {
+                                void preloadCustomersIndexRoute();
+                              }
+                            }}
                             onFocus={() => prefetchRouteChunk(item.to)}
                             onClick={(event) => {
                               if (hasSubMenu) {

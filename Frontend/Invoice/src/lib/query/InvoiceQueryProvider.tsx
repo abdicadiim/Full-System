@@ -3,6 +3,8 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { queryClient } from "../queryClient";
+import { clearCustomerFetchCache } from "../customerFetchCache";
+import { customerQueryKeys } from "../../pages/Customers/customerQueries";
 
 const INVOICE_QUERY_PERSIST_KEY = "invoice_query_cache_v1";
 const INVOICE_QUERY_CACHE_BUSTER = "invoice-cache-v1";
@@ -58,11 +60,36 @@ const createPersister = () => {
   return wrapPersisterWithPromises(basePersister);
 };
 
+const CustomerQuerySyncBridge = () => {
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Refresh all customer caches when any screen reports a customer change.
+    const handleCustomersUpdated = () => {
+      clearCustomerFetchCache();
+      void queryClient.invalidateQueries({ queryKey: customerQueryKeys.all() });
+      void queryClient.invalidateQueries({ queryKey: ["api", "/customers"] });
+    };
+
+    window.addEventListener("customersUpdated", handleCustomersUpdated);
+    return () => {
+      window.removeEventListener("customersUpdated", handleCustomersUpdated);
+    };
+  }, []);
+
+  return null;
+};
+
 export function InvoiceQueryProvider({ children }: { children: React.ReactNode }) {
   const persister = React.useMemo(() => createPersister(), []);
 
   if (!persister) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    return (
+      <QueryClientProvider client={queryClient}>
+        <CustomerQuerySyncBridge />
+        {children}
+      </QueryClientProvider>
+    );
   }
 
   return (
@@ -78,6 +105,7 @@ export function InvoiceQueryProvider({ children }: { children: React.ReactNode }
         },
       }}
     >
+      <CustomerQuerySyncBridge />
       {children}
     </PersistQueryClientProvider>
   );

@@ -324,6 +324,7 @@ export const useCustomersListQuery = (
     queryFn: () => fetchCustomersList(normalizedParams),
     enabled: options?.enabled ?? true,
     staleTime: CUSTOMER_LIST_STALE_TIME_MS,
+    refetchOnMount: "always",
     placeholderData: keepPreviousData,
   });
 };
@@ -350,6 +351,7 @@ export const useCustomerDetailQuery = (
     queryFn: () => fetchCustomerDetail(normalizedCustomerId),
     enabled: (options?.enabled ?? true) && Boolean(normalizedCustomerId),
     staleTime: CUSTOMER_DETAIL_STALE_TIME_MS,
+    refetchOnMount: "always",
     placeholderData: options?.preferFresh
       ? undefined
       : () =>

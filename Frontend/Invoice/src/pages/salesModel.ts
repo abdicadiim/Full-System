@@ -1,5 +1,6 @@
 import { recurringInvoicesAPI, quotesAPI, invoicesAPI, customersAPI, taxesAPI, itemsAPI, salespersonsAPI, salesReceiptsAPI, paymentsReceivedAPI, creditNotesAPI, projectsAPI, settingsAPI, plansAPI, reportingTagsAPI } from "../services/api";
 import { getToken } from "../services/auth";
+import { cachedCustomerFetch } from "../lib/customerFetchCache";
 
 
 const STORAGE_KEY = "taban_books_customers";
@@ -177,7 +178,7 @@ export const getCustomers = async (params: any = {}): Promise<Customer[]> => {
   // Use a large limit for dropdowns if not specified
   const finalParams = { limit: 1000, ...params };
   const cacheKey = `customers:${JSON.stringify(finalParams)}`;
-  return cachedFetch(cacheKey, async () => {
+  return cachedCustomerFetch(cacheKey, async () => {
     const response = await getCustomersFromAPI(finalParams);
     return response.data || [];
   });

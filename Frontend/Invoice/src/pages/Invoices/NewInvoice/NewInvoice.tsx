@@ -1332,27 +1332,41 @@ useEffect(() => {
   return () => document.removeEventListener("mousedown", handleOutsideAdditionalInfoMenu);
 }, []);
 
+const loadCustomers = async () => {
+  try {
+    const response = await customersAPI.getAll();
+    const rows = response?.success && Array.isArray(response?.data)
+      ? response.data
+      : Array.isArray((response as any)?.data)
+        ? (response as any).data
+        : [];
+    const normalizedCustomers = rows.map((customer: any) => ({
+      ...customer,
+      id: customer?._id || customer?.id,
+      name: customer?.displayName || customer?.companyName || customer?.name || "",
+    }));
+    setCustomers(normalizedCustomers.filter(isCustomerActive));
+  } catch (error) {
+    console.error("Error loading customers:", error);
+    setCustomers([]);
+  }
+};
+
 useEffect(() => {
-  const loadCustomers = async () => {
-    try {
-      const response = await customersAPI.getAll();
-      const rows = response?.success && Array.isArray(response?.data)
-        ? response.data
-        : Array.isArray((response as any)?.data)
-          ? (response as any).data
-          : [];
-      const normalizedCustomers = rows.map((customer: any) => ({
-        ...customer,
-        id: customer?._id || customer?.id,
-        name: customer?.displayName || customer?.companyName || customer?.name || "",
-      }));
-      setCustomers(normalizedCustomers.filter(isCustomerActive));
-    } catch (error) {
-      console.error("Error loading customers:", error);
-      setCustomers([]);
-    }
+  void loadCustomers();
+}, []);
+
+useEffect(() => {
+  const handleCustomersUpdated = () => {
+    void loadCustomers();
   };
-  loadCustomers();
+
+  window.addEventListener("customersUpdated", handleCustomersUpdated);
+  window.addEventListener("focus", handleCustomersUpdated);
+  return () => {
+    window.removeEventListener("customersUpdated", handleCustomersUpdated);
+    window.removeEventListener("focus", handleCustomersUpdated);
+  };
 }, []);
 
 useEffect(() => {

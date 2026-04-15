@@ -6,6 +6,8 @@ import { InvoiceQueryProvider } from './lib/query/InvoiceQueryProvider'
 import './index.css'
 import 'react-toastify/dist/ReactToastify.css'
 
+const RootWrapper = import.meta.env.DEV ? React.Fragment : React.StrictMode
+
 if (import.meta.env.PROD && !window.location.pathname.startsWith("/sender-verification")) {
   const schedulePreload = () => {
     if ("requestIdleCallback" in window) {
@@ -27,7 +29,7 @@ if (import.meta.env.PROD && !window.location.pathname.startsWith("/sender-verifi
 }
 
 createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
+  <RootWrapper>
     <InvoiceQueryProvider>
       <BrowserRouter
         future={{
@@ -38,5 +40,5 @@ createRoot(document.getElementById('root')).render(
         <App />
       </BrowserRouter>
     </InvoiceQueryProvider>
-  </React.StrictMode>
+  </RootWrapper>
 )

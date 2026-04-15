@@ -1456,10 +1456,8 @@ export default function useCustomersPageController() {
         applyCustomerListResult(cachedResult);
       }
 
-      const response = await queryClient.fetchQuery({
-        queryKey,
-        queryFn: () => fetchCustomersList(queryParams),
-      });
+      const response = await fetchCustomersList(queryParams);
+      queryClient.setQueryData(queryKey, response);
 
       applyCustomerListResult(response);
     } catch (error: any) {
@@ -2399,6 +2397,7 @@ export default function useCustomersPageController() {
     moduleDropdownRef,
     moduleOptions,
     moreMenuRef,
+    loadCustomers,
     navigate,
     openReceivablesDropdownId,
     openSearchModalForCurrentContext,

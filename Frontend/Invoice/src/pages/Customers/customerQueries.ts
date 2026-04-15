@@ -323,6 +323,7 @@ export const useCustomersListQuery = (
     queryKey: customerQueryKeys.list(normalizedParams),
     queryFn: () => fetchCustomersList(normalizedParams),
     enabled: options?.enabled ?? true,
+    refetchOnMount: "always",
     staleTime: CUSTOMER_LIST_STALE_TIME_MS,
     placeholderData: keepPreviousData,
   });

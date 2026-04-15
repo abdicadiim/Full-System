@@ -1391,6 +1391,7 @@ export default function useCustomersPageController() {
       setIsDeletingCustomer(true);
       await customersAPI.delete(deleteCustomerId);
       await loadCustomers();
+      notifyCustomersUpdated({ action: "deleted", customerId: deleteCustomerId });
       setSelectedCustomers(prev => {
         const newSet = new Set(prev);
         newSet.delete(deleteCustomerId);
@@ -1419,6 +1420,7 @@ export default function useCustomersPageController() {
       setIsBulkDeletingCustomers(true);
       await customersAPI.bulkDelete(deleteCustomerIds);
       await loadCustomers();
+      notifyCustomersUpdated({ action: "bulk-deleted", customerIds: deleteCustomerIds });
       setSelectedCustomers(new Set());
       setIsBulkDeleteModalOpen(false);
       setDeleteCustomerIds([]);
@@ -1564,6 +1566,18 @@ export default function useCustomersPageController() {
     setSelectedCustomers(new Set());
   };
 
+  const notifyCustomersUpdated = (detail: Record<string, any> = {}) => {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(
+      new CustomEvent("customersUpdated", {
+        detail: {
+          ...detail,
+          timestamp: Date.now(),
+        },
+      })
+    );
+  };
+
   const handleBulkMarkActive = async () => {
     if (selectedCustomers.size === 0) {
       toast.error("Please select at least one customer.");
@@ -1608,6 +1622,7 @@ export default function useCustomersPageController() {
       applyStatusPatchToCache();
       await customersAPI.bulkUpdate(ids, statusPatch);
       await loadCustomers();
+      notifyCustomersUpdated({ action: "bulk-updated", customerIds: ids, status: "active" });
       toast.success(`Marked ${selectedCustomers.size} customer(s) as active`);
       setSelectedCustomers(new Set());
     } catch (error) {
@@ -1667,6 +1682,7 @@ export default function useCustomersPageController() {
       applyStatusPatchToCache();
       await customersAPI.bulkUpdate(ids, statusPatch);
       await loadCustomers();
+      notifyCustomersUpdated({ action: "bulk-updated", customerIds: ids, status: "inactive" });
       toast.success(`Marked ${selectedCustomers.size} customer(s) as inactive`);
       setSelectedCustomers(new Set());
     } catch (error) {
@@ -1711,6 +1727,11 @@ export default function useCustomersPageController() {
     try {
       await customersAPI.merge(mergeTargetCustomer.id, sourceCustomerIds);
       await loadCustomers();
+      notifyCustomersUpdated({
+        action: "merged",
+        customerId: mergeTargetCustomer.id,
+        customerIds: sourceCustomerIds,
+      });
       const sourceNames = customers
         .filter(c => sourceCustomerIds.includes(c.id))
         .map(c => c.name)
@@ -1762,6 +1783,10 @@ export default function useCustomersPageController() {
         isConsolidatedBillingEnabled: enabled,
       });
       await loadCustomers();
+      notifyCustomersUpdated({
+        action: enabled ? "consolidated-billing-enabled" : "consolidated-billing-disabled",
+        customerIds: ids,
+      });
       toast.success(`${enabled ? "Enabled" : "Disabled"} consolidated billing for ${count} customer(s).`);
       setSelectedCustomers(new Set());
       setBulkConsolidatedAction(null);
@@ -2044,6 +2069,11 @@ export default function useCustomersPageController() {
 
       // Refresh customers list
       await loadCustomers();
+      notifyCustomersUpdated({
+        action: "bulk-updated",
+        customerIds: selectedCustomerIds,
+        fields: Object.keys(updateData),
+      });
       setIsBulkUpdateModalOpen(false);
       toast.success(`Updated ${selectedCustomers.size} customer(s) successfully.`);
       setSelectedCustomers(new Set());

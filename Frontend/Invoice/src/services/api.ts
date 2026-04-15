@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { queryClient, QUERY_CACHE_TTL_MS } from "../lib/queryClient";
 import { db } from "../store/db";
+import { clearCustomerFetchCache } from "../lib/customerFetchCache";
 import { readTaxesLocal } from "../pages/settings/organization-settings/taxes-compliance/TAX/storage";
 
 export const API_BASE_URL =
@@ -310,6 +311,7 @@ const request = async ({
         if (
           cachedState &&
           cachedValue !== undefined &&
+          !(cachedState as any).isInvalidated &&
           Date.now() - cachedState.dataUpdatedAt < QUERY_CACHE_TTL_MS
         ) {
           return cachedValue;
@@ -344,6 +346,19 @@ const request = async ({
     const result = await performFetch();
     if (result?.success !== false) {
       await invalidateRequestPath(normalizedPath);
+      if (normalizedPath === "/customers" || normalizedPath.startsWith("/customers/")) {
+        clearCustomerFetchCache();
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("customersUpdated", {
+              detail: {
+                path: normalizedPath,
+                timestamp: Date.now(),
+              },
+            })
+          );
+        }
+      }
     }
     return result;
   } catch (error: any) {

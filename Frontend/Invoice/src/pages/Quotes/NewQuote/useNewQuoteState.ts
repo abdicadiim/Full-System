@@ -38,7 +38,12 @@ const LS_LOCATIONS_CACHE_KEY = "taban_locations_cache";
 const readCachedCustomersForQuote = (): Customer[] => {
   try {
     const cachedQueries = queryClient.getQueriesData({ queryKey: ["api", "/customers"] });
-    for (const [, cachedValue] of cachedQueries) {
+    for (const [queryKey, cachedValue] of cachedQueries) {
+      const cachedState = queryClient.getQueryState(queryKey as any);
+      if ((cachedState as any)?.isInvalidated) {
+        continue;
+      }
+
       const payload: any = cachedValue;
       const rows = Array.isArray(payload?.data)
         ? payload.data
@@ -580,6 +585,19 @@ export function useNewQuoteState() {
   const [quoteNumberMode, setQuoteNumberMode] = useState("auto"); // "auto" or "manual"
   useEffect(() => {
     void loadCustomersForDropdown();
+  }, []);
+
+  useEffect(() => {
+    const handleCustomersUpdated = () => {
+      void loadCustomersForDropdown();
+    };
+
+    window.addEventListener("customersUpdated", handleCustomersUpdated);
+    window.addEventListener("focus", handleCustomersUpdated);
+    return () => {
+      window.removeEventListener("customersUpdated", handleCustomersUpdated);
+      window.removeEventListener("focus", handleCustomersUpdated);
+    };
   }, []);
   const [quotePrefix, setQuotePrefix] = useState("");
   const [quoteNextNumber, setQuoteNextNumber] = useState("");
