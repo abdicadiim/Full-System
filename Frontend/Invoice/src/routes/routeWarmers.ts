@@ -201,6 +201,9 @@ const ROUTE_WARMERS: Record<string, () => void> = {
     warmModule("credit-notes-module", () => import("../pages/CreditNotes/CreditNotesRoutes"));
     void warmCreditNotesList();
   },
+  "/reports": () => {
+    warmModule("reports-module", () => import("../pages/reports/ReportsRoutes"));
+  },
 };
 
 export function prefetchRouteChunk(path: string) {

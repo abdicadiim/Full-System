@@ -25,7 +25,17 @@ const DocumentsPage = lazy(() => import('../pages/documents/DocumentsPage'))
 const SenderVerificationPage = lazy(() => import('../pages/public/SenderVerificationPage'))
 
 function RouteFallback() {
-  return null
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center p-6">
+      <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <svg className="h-5 w-5 animate-spin text-[rgb(21,99,114)]" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" opacity="0.18" />
+          <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+        </svg>
+        <span className="text-sm font-medium text-slate-600">Loading page...</span>
+      </div>
+    </div>
+  )
 }
 
 function LegacyPaymentsReceivedRedirect() {
