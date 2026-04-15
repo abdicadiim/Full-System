@@ -363,6 +363,41 @@ export function useNewQuoteCustomerSearch(controller: any) {
           console.error("Error loading local salespersons:", error);
         }
 
+        void Promise.allSettled([getSalespersonsFromAPI(), getTaxes()]).then(([salespersonsResult, taxesResult]) => {
+          if (salespersonsResult.status === "fulfilled") {
+            const normalizedSalespersons = (salespersonsResult.value || [])
+              .map(normalizeSalesperson)
+              .filter(isSalespersonActive);
+            setSalespersons(normalizedSalespersons);
+          }
+
+          if (taxesResult.status === "fulfilled") {
+            const fetchedTaxes = (taxesResult.value || []).map((t: any) => ({
+              ...t,
+              id: t._id || t.id
+            }));
+            const cachedTaxes = readTaxesLocal();
+            const useFetched = fetchedTaxes.length > 0;
+            const combinedTaxes = useFetched ? fetchedTaxes : cachedTaxes;
+            const dedupedTaxes = Array.from(
+              new Map(
+                combinedTaxes
+                  .map((tax: any): [string, any] => {
+                    const id = String(tax?._id || tax?.id || tax?.tax_id || tax?.taxId || tax?.name || tax?.taxName || tax?.tax_name || "").trim();
+                    return [id.toLowerCase(), tax];
+                  })
+                  .filter(([id]) => Boolean(id))
+              ).values()
+            );
+            const normalizedTaxes = dedupedTaxes.filter((tax: any) => {
+              const name = String(tax?.name || tax?.taxName || tax?.tax_name || tax?.displayName || tax?.title || "").trim();
+              return name.length > 0;
+            });
+            const activeTaxes = normalizedTaxes.filter((tax: any) => isTaxActive(tax));
+            setTaxes(activeTaxes);
+          }
+        });
+
         // Load heavy dropdown data in parallel.
         const [
           projectsResult,

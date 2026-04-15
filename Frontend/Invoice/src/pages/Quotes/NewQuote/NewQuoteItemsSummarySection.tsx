@@ -68,6 +68,23 @@ export default function NewQuoteItemsSummarySection({ controller }: Props) {
     handleSaveAndSend, handleCancel, handleOtherAction
   } = controller as any;
 
+  const closeExclusiveRowDropdowns = () => {
+    setIsAddNewRowDropdownOpen(false);
+    setIsUploadDropdownOpen(false);
+  };
+
+  const openExclusiveDropdown = (
+    isOpen: boolean,
+    setOpen: React.Dispatch<React.SetStateAction<boolean>>
+  ) => {
+    if (isOpen) {
+      setOpen(false);
+      return;
+    }
+    closeExclusiveRowDropdowns();
+    setOpen(true);
+  };
+
   const formatDecimalPlaceholderValue = (value: any) => {
     const numeric = Number(value ?? 0);
     if (!Number.isFinite(numeric) || numeric === 0) return "";
@@ -110,6 +127,73 @@ export default function NewQuoteItemsSummarySection({ controller }: Props) {
 
   const handleRowDragEnd = () => {
     setDraggedRowId(null);
+  };
+
+  const renderReportingTagsInlinePanel = (item: any) => {
+    if (!isReportingTagsModalOpen || currentReportingTagsItemId !== item.id) return null;
+
+    return (
+      <div className="mt-2 rounded-md border border-gray-200 bg-white shadow-sm">
+        <div className="px-4 py-2 border-b border-gray-200">
+          <h3 className="text-sm font-semibold text-gray-900">Reporting Tags</h3>
+        </div>
+        <div className="p-4">
+          {availableReportingTags.length === 0 ? (
+            <p className="text-sm text-gray-700">
+              There are no active reporting tags or you haven't created a reporting tag yet. You can create/edit reporting tags under settings.
+            </p>
+          ) : (
+            <div className="space-y-4 max-h-[50vh] overflow-y-auto">
+              {availableReportingTags.map((tag: any) => {
+                const tagId = String(tag?._id || tag?.id || "");
+                const tagName = String(tag?.name || "Tag");
+                const tagOptions = Array.isArray(tag?.options) ? tag.options : [];
+                return (
+                  <div key={tagId} className="space-y-1">
+                    <label className="text-sm text-gray-700">
+                      {tagName}
+                      {Boolean(tag?.isMandatory) ? <span className="text-red-500 ml-1">*</span> : null}
+                    </label>
+                    <select
+                      className="w-full h-10 px-3 border border-gray-300 rounded text-sm text-gray-700 bg-white focus:outline-none focus:border-[#156372]"
+                      value={reportingTagSelections[tagId] || ""}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setReportingTagSelections(prev => ({ ...prev, [tagId]: value }));
+                      }}
+                    >
+                      <option value="">None</option>
+                      {tagOptions.map((option: string) => (
+                        <option key={`${tagId}-${option}`} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-200">
+          <button
+            className="px-4 py-2 bg-white text-gray-700 rounded-md text-sm font-medium border border-gray-300"
+            onClick={() => {
+              setCurrentReportingTagsItemId(null);
+              setIsReportingTagsModalOpen(false);
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            className="px-4 py-2 bg-[#156372] text-white rounded-md text-sm font-medium border border-[#156372]"
+            onClick={handleSaveReportingTags}
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -300,12 +384,21 @@ export default function NewQuoteItemsSummarySection({ controller }: Props) {
                                     <button
                                       type="button"
                                       className="mt-1 inline-flex items-center gap-2 text-xs text-gray-700 hover:text-[#156372]"
-                                      onClick={() => handleOpenReportingTagsModal(item.id)}
+                                      onClick={() => {
+                                        const isCurrentOpen = isReportingTagsModalOpen && currentReportingTagsItemId === item.id;
+                                        if (isCurrentOpen) {
+                                          setCurrentReportingTagsItemId(null);
+                                          setIsReportingTagsModalOpen(false);
+                                          return;
+                                        }
+                                        handleOpenReportingTagsModal(item.id);
+                                      }}
                                     >
                                       <Tag size={12} className="text-gray-500" />
                                       <span>{getItemReportingTagsSummaryLabel(item)}</span>
                                       <ChevronDown size={12} className="text-gray-500" />
                                     </button>
+                                    {renderReportingTagsInlinePanel(item)}
                                   </>
                                 )}
                               </div>
@@ -551,7 +644,7 @@ export default function NewQuoteItemsSummarySection({ controller }: Props) {
                   <button
                     type="button"
                     className="flex h-10 items-center justify-center px-3 text-[#1f3f79] hover:bg-[#e7eefb] transition-colors"
-                    onClick={() => setIsAddNewRowDropdownOpen(prev => !prev)}
+                    onClick={() => openExclusiveDropdown(isAddNewRowDropdownOpen, setIsAddNewRowDropdownOpen)}
                     aria-label="Add row options"
                     aria-expanded={isAddNewRowDropdownOpen}
                   >
@@ -856,7 +949,7 @@ export default function NewQuoteItemsSummarySection({ controller }: Props) {
                           <button
                             type="button"
                             className="h-10 min-w-[40px] px-3 rounded-md bg-[#156372] text-white text-sm font-semibold hover:bg-[#0f5661] transition-colors inline-flex items-center justify-center"
-                            onClick={() => setIsUploadDropdownOpen((prev) => !prev)}
+                            onClick={() => openExclusiveDropdown(isUploadDropdownOpen, setIsUploadDropdownOpen)}
                           >
                             <Paperclip size={14} className="mr-1" />
                             {formData.attachedFiles.length}

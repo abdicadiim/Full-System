@@ -1096,6 +1096,42 @@ const NewQuote = () => {
     const loadData = async () => {
       setIsLoading(true);
       try {
+        void Promise.allSettled([getSalespersonsFromAPI(), getTaxes()]).then(([salespersonsResult, taxesResult]) => {
+          if (salespersonsResult.status === "fulfilled") {
+            const normalizedSalespersons = (salespersonsResult.value || []).map((s: any) => ({
+              ...s,
+              id: s._id || s.id,
+              name: s.name || s.displayName || "Unknown"
+            }));
+            setSalespersons(normalizedSalespersons);
+          }
+
+          if (taxesResult.status === "fulfilled") {
+            const fetchedTaxes = (taxesResult.value || []).map((t: any) => ({
+              ...t,
+              id: t._id || t.id
+            }));
+            const cachedTaxes = readTaxesLocal();
+            const combinedTaxes = [...fetchedTaxes, ...cachedTaxes];
+            const dedupedTaxes = Array.from(
+              new Map(
+                combinedTaxes
+                  .map((tax: any): [string, any] => {
+                    const id = String(tax?._id || tax?.id || tax?.tax_id || tax?.taxId || tax?.name || tax?.taxName || tax?.tax_name || "").trim();
+                    return [id.toLowerCase(), tax];
+                  })
+                  .filter(([id]) => Boolean(id))
+              ).values()
+            );
+            const normalizedTaxes = dedupedTaxes.filter((tax: any) => {
+              const name = String(tax?.name || tax?.taxName || tax?.tax_name || tax?.displayName || tax?.title || "").trim();
+              return name.length > 0;
+            });
+            const activeTaxes = normalizedTaxes.filter((tax: any) => isTaxActive(tax));
+            setTaxes(activeTaxes);
+          }
+        });
+
         // Load heavy dropdown data in parallel.
         const [
           projectsResult,
@@ -3314,6 +3350,73 @@ const NewQuote = () => {
     return "Reporting Tags";
   };
 
+  const renderReportingTagsInlinePanel = (item: any) => {
+    if (!isReportingTagsModalOpen || currentReportingTagsItemId !== item.id) return null;
+
+    return (
+      <div className="mt-2 rounded-md border border-gray-200 bg-white shadow-sm">
+        <div className="px-4 py-2 border-b border-gray-200">
+          <h3 className="text-sm font-semibold text-gray-900">Reporting Tags</h3>
+        </div>
+        <div className="p-4">
+          {availableReportingTags.length === 0 ? (
+            <p className="text-sm text-gray-700">
+              There are no active reporting tags or you haven't created a reporting tag yet. You can create/edit reporting tags under settings.
+            </p>
+          ) : (
+            <div className="space-y-4 max-h-[50vh] overflow-y-auto">
+              {availableReportingTags.map((tag: any) => {
+                const tagId = String(tag?._id || tag?.id || "");
+                const tagName = String(tag?.name || "Tag");
+                const tagOptions = Array.isArray(tag?.options) ? tag.options : [];
+                return (
+                  <div key={tagId} className="space-y-1">
+                    <label className="text-sm text-gray-700">
+                      {tagName}
+                      {Boolean(tag?.isMandatory) ? <span className="text-red-500 ml-1">*</span> : null}
+                    </label>
+                    <select
+                      className="w-full h-10 px-3 border border-gray-300 rounded text-sm text-gray-700 bg-white focus:outline-none focus:border-[#156372]"
+                      value={reportingTagSelections[tagId] || ""}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setReportingTagSelections(prev => ({ ...prev, [tagId]: value }));
+                      }}
+                    >
+                      <option value="">None</option>
+                      {tagOptions.map((option: string) => (
+                        <option key={`${tagId}-${option}`} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-200">
+          <button
+            className="px-4 py-2 bg-white text-gray-700 rounded-md text-sm font-medium border border-gray-300"
+            onClick={() => {
+              setCurrentReportingTagsItemId(null);
+              setIsReportingTagsModalOpen(false);
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            className="px-4 py-2 bg-[#156372] text-white rounded-md text-sm font-medium border border-[#156372]"
+            onClick={handleSaveReportingTags}
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   const getFilteredItems = (itemId) => {
     const search = (itemSearches[itemId] || "").toLowerCase().trim();
     if (!search) return availableItems;
@@ -5009,16 +5112,32 @@ const NewQuote = () => {
     // For example: open a modal with more options, or perform a specific action
   };
 
-  if (isLoading && isEditMode) {
-    return (
-      <div className="w-full h-full min-h-0 bg-[#f6f7fb] flex items-center justify-center">
-        <div className="flex items-center gap-2 text-sm text-slate-600">
-          <Loader2 size={18} className="animate-spin" />
-          Loading quote...
-        </div>
-      </div>
-    );
-  }
+  const closeOpenDropdowns = () => {
+    setIsCustomerDropdownOpen(false);
+    setIsSalespersonDropdownOpen(false);
+    setIsProjectDropdownOpen(false);
+    setIsTaxPreferenceDropdownOpen(false);
+    setIsLocationDropdownOpen(false);
+    setIsPhoneCodeDropdownOpen(false);
+    setIsCountryDropdownOpen(false);
+    setIsUploadDropdownOpen(false);
+    setIsAddNewRowDropdownOpen(false);
+    setIsBulkActionsOpen(false);
+    setIsQuoteDatePickerOpen(false);
+    setIsExpiryDatePickerOpen(false);
+  };
+
+  const openExclusiveDropdown = (
+    isOpen: boolean,
+    setOpen: React.Dispatch<React.SetStateAction<boolean>>
+  ) => {
+    if (isOpen) {
+      setOpen(false);
+      return;
+    }
+    closeOpenDropdowns();
+    setOpen(true);
+  };
 
   return (
     <>
@@ -5043,7 +5162,6 @@ const NewQuote = () => {
               </button>
             </div>
             <div className="flex items-center gap-3">
-              {isLoading ? <Loader2 size={18} className="animate-spin text-slate-500" /> : null}
               <button
                 onClick={() => navigate("/sales/quotes")}
                 className="text-gray-500 hover:text-gray-700 transition-colors"
@@ -5076,7 +5194,7 @@ const NewQuote = () => {
                         if (!customers.length && !isCustomersLoading) {
                           void loadCustomersForDropdown();
                         }
-                        setIsCustomerDropdownOpen(!isCustomerDropdownOpen);
+                        openExclusiveDropdown(isCustomerDropdownOpen, setIsCustomerDropdownOpen);
                       }}
                     />
                     <div
@@ -5086,7 +5204,7 @@ const NewQuote = () => {
                         if (!customers.length && !isCustomersLoading) {
                           void loadCustomersForDropdown();
                         }
-                        setIsCustomerDropdownOpen(!isCustomerDropdownOpen);
+                        openExclusiveDropdown(isCustomerDropdownOpen, setIsCustomerDropdownOpen);
                       }}
                     >
                       {isCustomerDropdownOpen ? <ChevronUp size={14} className="text-[#156372]" /> : <ChevronDown size={14} className="text-gray-400" />}
@@ -5244,7 +5362,7 @@ const NewQuote = () => {
                     <button
                       type="button"
                       className="w-full h-10 px-3 pr-8 border border-gray-300 rounded text-sm text-gray-700 bg-white flex items-center justify-between focus:outline-none focus:border-[#156372]"
-                      onClick={() => setIsLocationDropdownOpen((prev) => !prev)}
+                      onClick={() => openExclusiveDropdown(isLocationDropdownOpen, setIsLocationDropdownOpen)}
                     >
                       <span className="truncate">{formData.selectedLocation || "Head Office"}</span>
                       <ChevronDown size={14} className="text-gray-400" />
@@ -5323,7 +5441,7 @@ const NewQuote = () => {
                       className={`w-full px-3 py-2 border ${formErrors.quoteDate ? 'border-red-500' : 'border-gray-300'} rounded text-sm text-gray-700 focus:outline-none`}
                       value={formatDateForDisplay(formData.quoteDate)}
                       readOnly
-                      onClick={() => setIsQuoteDatePickerOpen(!isQuoteDatePickerOpen)}
+                      onClick={() => openExclusiveDropdown(isQuoteDatePickerOpen, setIsQuoteDatePickerOpen)}
                     />
                     {isQuoteDatePickerOpen && (
                       <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 w-64 p-4">
@@ -5383,7 +5501,7 @@ const NewQuote = () => {
                         placeholder="dd/MM/yyyy"
                         value={formatDateForDisplay(formData.expiryDate)}
                         readOnly
-                        onClick={() => setIsExpiryDatePickerOpen(!isExpiryDatePickerOpen)}
+                        onClick={() => openExclusiveDropdown(isExpiryDatePickerOpen, setIsExpiryDatePickerOpen)}
                       />
                       {isExpiryDatePickerOpen && (
                         <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 w-64 p-4">
@@ -5438,7 +5556,7 @@ const NewQuote = () => {
                 <div className="flex-1 max-w-xs relative" ref={salespersonDropdownRef}>
                   <div
                     className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-700 flex justify-between items-center bg-white cursor-pointer"
-                    onClick={() => setIsSalespersonDropdownOpen(!isSalespersonDropdownOpen)}
+                    onClick={() => openExclusiveDropdown(isSalespersonDropdownOpen, setIsSalespersonDropdownOpen)}
                   >
                     <span className={formData.salesperson ? "text-gray-900" : "text-gray-400"}>
                       {formData.salesperson || "Select or Add Salesperson"}
@@ -5502,7 +5620,7 @@ const NewQuote = () => {
                       }`}
                     onClick={() => {
                       if (selectedCustomer) {
-                        setIsProjectDropdownOpen(!isProjectDropdownOpen);
+                        openExclusiveDropdown(isProjectDropdownOpen, setIsProjectDropdownOpen);
                       }
                     }}
                   >
@@ -5578,8 +5696,7 @@ const NewQuote = () => {
                         type="button"
                         className="inline-flex items-center gap-2 text-sm text-gray-700 hover:text-[#156372] transition-colors"
                         onClick={() => {
-                          setIsTaxPreferenceDropdownOpen(prev => !prev);
-                          setIsPriceListDropdownOpen(false);
+                          openExclusiveDropdown(isTaxPreferenceDropdownOpen, setIsTaxPreferenceDropdownOpen);
                         }}
                       >
                         <Briefcase size={14} className="text-gray-400" />
@@ -5641,7 +5758,7 @@ const NewQuote = () => {
                   <div className="relative" ref={bulkActionsRef}>
                     <div
                       className="flex items-center gap-1 text-[#156372] cursor-pointer hover:text-[#0D4A52] text-sm font-medium"
-                      onClick={() => setIsBulkActionsOpen(!isBulkActionsOpen)}
+                      onClick={() => openExclusiveDropdown(isBulkActionsOpen, setIsBulkActionsOpen)}
                     >
                       <CheckCircle size={14} />
                       <span>Bulk Actions</span>
@@ -5776,12 +5893,21 @@ const NewQuote = () => {
                                     <button
                                       type="button"
                                       className="mt-1 inline-flex items-center gap-2 text-xs text-gray-700 hover:text-[#156372]"
-                                      onClick={() => handleOpenReportingTagsModal(item.id)}
+                                      onClick={() => {
+                                        const isCurrentOpen = isReportingTagsModalOpen && currentReportingTagsItemId === item.id;
+                                        if (isCurrentOpen) {
+                                          setCurrentReportingTagsItemId(null);
+                                          setIsReportingTagsModalOpen(false);
+                                          return;
+                                        }
+                                        handleOpenReportingTagsModal(item.id);
+                                      }}
                                     >
                                       <Tag size={12} className="text-gray-500" />
                                       <span>{getItemReportingTagsSummaryLabel(item)}</span>
                                       <ChevronDown size={12} className="text-gray-500" />
                                     </button>
+                                    {renderReportingTagsInlinePanel(item)}
                                   </>
                                 )}
                               </div>
@@ -6026,7 +6152,7 @@ const NewQuote = () => {
                 <div className="relative">
                   <button
                     className="flex items-center gap-2 px-4 py-2 bg-[#eef3ff] border border-[#d7deef] text-[#1f3f79] rounded-md text-sm font-medium hover:bg-[#e7eefb] transition-colors"
-                    onClick={() => setIsAddNewRowDropdownOpen(!isAddNewRowDropdownOpen)}
+                    onClick={() => openExclusiveDropdown(isAddNewRowDropdownOpen, setIsAddNewRowDropdownOpen)}
                   >
                     <Plus size={16} />
                     Add New Row
@@ -6206,7 +6332,7 @@ const NewQuote = () => {
                         <button
                           type="button"
                           className="h-10 min-w-[40px] px-3 rounded-md bg-[#156372] text-white text-sm font-semibold hover:bg-[#0f5661] transition-colors inline-flex items-center justify-center"
-                          onClick={() => setIsUploadDropdownOpen((prev) => !prev)}
+                          onClick={() => openExclusiveDropdown(isUploadDropdownOpen, setIsUploadDropdownOpen)}
                         >
                           <Paperclip size={14} className="mr-1" />
                           {formData.attachedFiles.length}
@@ -6341,7 +6467,7 @@ const NewQuote = () => {
                     type="button"
                     className="w-full h-9 rounded border border-gray-300 px-3 text-[12px] text-gray-700 outline-none focus:border-[#156372] bg-white flex items-center justify-between"
                     onClick={() => {
-                      setIsCountryDropdownOpen((prev) => !prev);
+                      openExclusiveDropdown(isCountryDropdownOpen, setIsCountryDropdownOpen);
                       setCountrySearch("");
                     }}
                   >
@@ -6426,7 +6552,7 @@ const NewQuote = () => {
                         type="button"
                         className="h-9 w-full rounded-l border border-gray-300 px-2 text-[12px] text-gray-700 bg-white flex items-center justify-between outline-none focus:border-[#156372]"
                         onClick={() => {
-                          setIsPhoneCodeDropdownOpen((prev) => !prev);
+                          openExclusiveDropdown(isPhoneCodeDropdownOpen, setIsPhoneCodeDropdownOpen);
                           setPhoneCodeSearch("");
                         }}
                       >
@@ -8094,78 +8220,6 @@ const NewQuote = () => {
           </div>
         )
       }
-
-      {/* Reporting Tags Modal */}
-      {isReportingTagsModalOpen && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          onClick={() => setIsReportingTagsModalOpen(false)}
-        >
-          <div
-            className="bg-white rounded-lg shadow-xl w-full max-w-md"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-5 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">Reporting Tags</h2>
-            </div>
-            <div className="p-5">
-              {availableReportingTags.length === 0 ? (
-                <p className="text-sm text-gray-700">
-                  There are no active reporting tags or you haven't created a reporting tag yet. You can create/edit reporting tags under settings.
-                </p>
-              ) : (
-                <div className="space-y-4 max-h-[50vh] overflow-y-auto">
-                  {availableReportingTags.map((tag: any) => {
-                    const tagId = String(tag?._id || tag?.id || "");
-                    const tagName = String(tag?.name || "Tag");
-                    const tagOptions = Array.isArray(tag?.options) ? tag.options : [];
-                    return (
-                      <div key={tagId} className="space-y-1">
-                        <label className="text-sm text-gray-700">
-                          {tagName}
-                          {Boolean(tag?.isMandatory) ? <span className="text-red-500 ml-1">*</span> : null}
-                        </label>
-                        <div className="relative">
-                          <select
-                            className="w-full h-10 rounded border border-gray-300 bg-white px-3 pr-10 text-sm text-gray-700 outline-none focus:border-[#156372] appearance-none shadow-sm"
-                            value={reportingTagSelections[tagId] || ""}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              setReportingTagSelections((prev) => ({ ...prev, [tagId]: value }));
-                            }}
-                          >
-                            <option value="">Select an option</option>
-                            {tagOptions.map((option: string) => (
-                              <option key={`${tagId}-${option}`} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-            <div className="flex items-center justify-end gap-3 p-5 border-t border-gray-200">
-              <button
-                className="px-4 py-2 bg-white text-gray-700 rounded-md text-sm font-medium border border-gray-300"
-                onClick={() => setIsReportingTagsModalOpen(false)}
-              >
-                Cancel
-              </button>
-              <button
-                className="px-4 py-2 bg-[#156372] text-white rounded-md text-sm font-medium border border-[#156372]"
-                onClick={handleSaveReportingTags}
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Advanced Customer Search Modal */}
       {

@@ -291,8 +291,8 @@ export const getCustomerComments = (customerId) => {
     const stored = localStorage.getItem(STORAGE_KEYS.COMMENTS);
     if (stored) {
       const allComments = JSON.parse(stored);
-      return allComments.filter(c => c.customerId === customerId).sort((a, b) => 
-        new Date(b.createdAt) - new Date(a.createdAt)
+      return allComments.filter(c => c.customerId === customerId).sort((a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
     }
     return [];
@@ -338,8 +338,8 @@ export const getCustomerMails = (customerId) => {
     const stored = localStorage.getItem(STORAGE_KEYS.MAILS);
     if (stored) {
       const allMails = JSON.parse(stored);
-      return allMails.filter(m => m.customerId === customerId).sort((a, b) => 
-        new Date(b.date) - new Date(a.date)
+      return allMails.filter(m => m.customerId === customerId).sort((a, b) =>
+        new Date(b.date).getTime() - new Date(a.date).getTime()
       );
     }
     return [];

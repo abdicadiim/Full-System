@@ -1,8 +1,8 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
-import { customersAPI, documentsAPI } from "../../../services/api";
+import { customersAPI, documentsAPI, subscriptionsAPI } from "../../../services/api";
 import type {
   CustomerDetailMail as Mail,
   CustomerPdfTemplates,
@@ -1553,105 +1553,40 @@ export function useCustomerDetailPageViewModel(args: any) {
         return Array.from(new Set(labels));
     })();
 
-    const customerSubscriptions = (() => {
-        const fromCustomer = Array.isArray((customer as any)?.subscriptions)
-            ? (customer as any).subscriptions
-            : [];
-        if (fromCustomer.length) return fromCustomer;
-        if (!customer) return [];
-        try {
-            const readList = (key: string) => {
-                try {
-                    const raw = localStorage.getItem(key);
-                    const parsed = raw ? JSON.parse(raw) : [];
-                    return Array.isArray(parsed) ? parsed : [];
-                } catch {
-                    return [];
-                }
-            };
+    const [customerSubscriptions, setCustomerSubscriptions] = useState<any[]>(
+        Array.isArray((customer as any)?.subscriptions) ? (customer as any).subscriptions : []
+    );
 
-            const merged = [
-                ...readList("taban_subscriptions_v1"),
-                ...readList("taban_subscriptions"),
-                ...readList("subscriptions"),
-            ];
-            if (!merged.length) return [];
-
-            const unique = new Map<string, any>();
-            merged.forEach((row: any, idx: number) => {
-                const key = String(row?.id || row?._id || row?.subscriptionId || row?.subscriptionNumber || `row-${idx}`);
-                if (!unique.has(key)) unique.set(key, row);
-            });
-            const parsed = Array.from(unique.values());
-
-            const normalizeText = (value: any) => String(value ?? "").trim();
-            const normalizeKey = (value: any) => normalizeText(value).toLowerCase();
-            const getFirstValue = (...values: any[]) => values.find((v) => normalizeText(v));
-
-            const customerIds = new Set(
-                [
-                    id,
-                    (customer as any)?._id,
-                    (customer as any)?.id,
-                    (customer as any)?.customerId,
-                    (customer as any)?.customer_id,
-                    (customer as any)?.contactId,
-                    (customer as any)?.contact_id,
-                    (customer as any)?.booksCustomerId,
-                    (customer as any)?.zohoCustomerId,
-                ]
-                    .map((v) => normalizeText(v))
-                    .filter(Boolean)
-            );
-            if (!customerIds.size) return [];
-
-            const customerName = normalizeKey(
-                getFirstValue((customer as any)?.name, (customer as any)?.displayName, (customer as any)?.companyName, "")
-            );
-            const customerEmail = normalizeKey(
-                getFirstValue(
-                    (customer as any)?.email,
-                    (customer as any)?.contactEmail,
-                    (customer as any)?.contactPersons?.find?.((p: any) => p?.isPrimary)?.email,
-                    ""
-                )
-            );
-
-            return parsed.filter((sub: any) => {
-                const subCustomerId = normalizeText(
-                    getFirstValue(
-                        sub?.customerId,
-                        sub?.customer_id,
-                        sub?.contactId,
-                        sub?.contact_id,
-                        sub?.customer?._id,
-                        sub?.customer?.id,
-                        typeof sub?.customer === "string" ? sub.customer : "",
-                        ""
-                    )
-                );
-                if (subCustomerId && customerIds.has(subCustomerId)) return true;
-
-                const subEmail = normalizeKey(
-                    getFirstValue(
-                        sub?.customerEmail,
-                        sub?.email,
-                        sub?.customer?.email,
-                        sub?.contactPersons?.[0]?.email,
-                        ""
-                    )
-                );
-                if (customerEmail && subEmail && subEmail === customerEmail) return true;
-
-                const subName = normalizeKey(getFirstValue(sub?.customerName, sub?.customer?.name, sub?.customer?.displayName, ""));
-                if (customerName && subName && subName === customerName) return true;
-
-                return false;
-            });
-        } catch {
-            return [];
+    useEffect(() => {
+        const embedded = Array.isArray((customer as any)?.subscriptions) ? (customer as any).subscriptions : [];
+        if (embedded.length > 0) {
+            setCustomerSubscriptions(embedded);
+            return;
         }
-    })();
+
+        if (!customer) {
+            setCustomerSubscriptions([]);
+            return;
+        }
+
+        let cancelled = false;
+        const loadSubscriptions = async () => {
+            try {
+                const response: any = await subscriptionsAPI.getAll({ customerId: id, limit: 10000 });
+                if (cancelled) return;
+                setCustomerSubscriptions(Array.isArray(response?.data) ? response.data : []);
+            } catch {
+                if (!cancelled) {
+                    setCustomerSubscriptions([]);
+                }
+            }
+        };
+
+        void loadSubscriptions();
+        return () => {
+            cancelled = true;
+        };
+    }, [customer, id]);
     return {
         displayName,
         primaryContact,

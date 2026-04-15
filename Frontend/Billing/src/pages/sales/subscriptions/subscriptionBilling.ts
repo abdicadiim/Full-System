@@ -1,7 +1,7 @@
-import { invoicesAPI } from "../../../services/api";
+import { invoicesAPI, subscriptionsAPI } from "../../../services/api";
 
-const SUBSCRIPTIONS_STORAGE_KEY = "taban_subscriptions_v1";
 const BILLING_LAST_RUN_KEY = "taban_subscriptions_billing_last_run";
+let billingSimulationPromise: Promise<void> | null = null;
 
 const parseSubscriptionDate = (value?: string): Date | null => {
   if (!value) return null;
@@ -137,74 +137,121 @@ const buildInvoicePayload = async (subscription: any, invoiceDate: Date) => {
 };
 
 export const runSubscriptionBillingSimulation = async () => {
-  const now = new Date();
-  if (now.getHours() < 6) return;
-  const todayKey = now.toISOString().split("T")[0];
-  const lastRun = localStorage.getItem(BILLING_LAST_RUN_KEY);
-  if (lastRun === todayKey) return;
-
-  let subscriptions: any[] = [];
-  try {
-    const raw = localStorage.getItem(SUBSCRIPTIONS_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    subscriptions = Array.isArray(parsed) ? parsed : [];
-  } catch {
-    subscriptions = [];
+  if (billingSimulationPromise) {
+    return billingSimulationPromise;
   }
 
-  let updated = [...subscriptions];
-  let didUpdate = false;
+  billingSimulationPromise = (async () => {
+    const now = new Date();
+    if (now.getHours() < 6) return;
 
-  for (let i = 0; i < updated.length; i += 1) {
-    const sub = updated[i];
-    if (!sub || sub.status !== "LIVE" || !sub.generateInvoices) continue;
+    const todayKey = now.toISOString().split("T")[0];
+    const lastRun = localStorage.getItem(BILLING_LAST_RUN_KEY);
+    if (lastRun === todayKey) return;
 
-    const scheduled = sub.scheduledUpdate;
-    if (scheduled?.applyOn) {
-      const applyOnDate = parseSubscriptionDate(scheduled.applyOn);
-      if (applyOnDate && applyOnDate.getTime() <= now.getTime()) {
-        const payload = scheduled.payload || {};
-        updated[i] = {
-          ...sub,
-          ...payload,
-          id: sub.id,
-          scheduledUpdate: null,
-          scheduledUpdateDate: "",
-        };
+    let subscriptions: any[] = [];
+    try {
+      const response: any = await subscriptionsAPI.getAll({ limit: 10000 });
+      subscriptions = Array.isArray(response?.data) ? response.data : [];
+    } catch {
+      subscriptions = [];
+    }
+
+    for (let i = 0; i < subscriptions.length; i += 1) {
+      const sub = subscriptions[i];
+      if (!sub || sub.status !== "LIVE" || !sub.generateInvoices) continue;
+
+      const scheduled = sub.scheduledUpdate;
+      if (scheduled?.applyOn) {
+        const applyOnDate = parseSubscriptionDate(scheduled.applyOn);
+        if (applyOnDate && applyOnDate.getTime() <= now.getTime()) {
+          const payload = scheduled.payload || {};
+          const applied = {
+            ...sub,
+            ...payload,
+            id: sub.id,
+            scheduledUpdate: null,
+            scheduledUpdateDate: "",
+          };
+          try {
+            const updateRes = await subscriptionsAPI.update(String(sub.id || sub._id || ""), {
+              ...applied,
+              id: undefined,
+              _id: undefined,
+            });
+            if (updateRes?.success) {
+              subscriptions[i] = Array.isArray(updateRes?.data) ? updateRes.data : updateRes?.data || applied;
+            } else {
+              subscriptions[i] = applied;
+              continue;
+            }
+          } catch {
+            subscriptions[i] = applied;
+            continue;
+          }
+        }
+      }
+
+      const nextBillingDate = parseSubscriptionDate(subscriptions[i]?.nextBillingOn);
+      if (!nextBillingDate) continue;
+      if (nextBillingDate.getTime() > now.getTime()) continue;
+
+      try {
+        const invoicePayload = await buildInvoicePayload(subscriptions[i], nextBillingDate);
+        await invoicesAPI.create(invoicePayload);
+      } catch {
+        // ignore invoice creation errors
+      }
+
+      const next = addMonths(nextBillingDate, 1);
+      const nextRow = {
+        ...subscriptions[i],
+        lastBilledOn: formatSubscriptionDate(nextBillingDate),
+        nextBillingOn: formatSubscriptionDate(next),
+      };
+      try {
+        const updateRes = await subscriptionsAPI.update(String(nextRow.id || nextRow._id || ""), {
+          ...nextRow,
+          id: undefined,
+          _id: undefined,
+        });
+        if (updateRes?.success && updateRes?.data) {
+          subscriptions[i] = updateRes.data;
+        } else {
+          subscriptions[i] = nextRow;
+        }
+      } catch {
+        subscriptions[i] = nextRow;
       }
     }
 
-    const nextBillingDate = parseSubscriptionDate(updated[i]?.nextBillingOn);
-    if (!nextBillingDate) continue;
-    if (nextBillingDate.getTime() > now.getTime()) continue;
-
     try {
-      const invoicePayload = await buildInvoicePayload(updated[i], nextBillingDate);
-      await invoicesAPI.create(invoicePayload);
-    } catch {
-      // ignore invoice creation errors
-    }
-
-    const next = addMonths(nextBillingDate, 1);
-    updated[i] = {
-      ...updated[i],
-      lastBilledOn: formatSubscriptionDate(nextBillingDate),
-      nextBillingOn: formatSubscriptionDate(next),
-    };
-    didUpdate = true;
-  }
-
-  if (didUpdate) {
-    try {
-      localStorage.setItem(SUBSCRIPTIONS_STORAGE_KEY, JSON.stringify(updated));
+      localStorage.setItem(BILLING_LAST_RUN_KEY, todayKey);
     } catch {
       // ignore storage errors
     }
-  }
+  })();
+
   try {
-    localStorage.setItem(BILLING_LAST_RUN_KEY, todayKey);
+    await billingSimulationPromise;
+  } finally {
+    billingSimulationPromise = null;
+  }
+};
+
+
+
+
+
+
+
+
+
+
+export const resetSubscriptionBillingSimulation = () => {
+  try {
+    localStorage.removeItem(BILLING_LAST_RUN_KEY);
   } catch {
     // ignore storage errors
   }
 };
-

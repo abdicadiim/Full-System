@@ -273,6 +273,9 @@ const SubscriptionPreviewPage = () => {
     }
   };
   const draftSnapshot = useMemo(() => readDraftFromSession(), []);
+  const isQuoteConversionDraft =
+    String(draftSnapshot?.sourceType || "").trim().toLowerCase() === "quote" &&
+    !String(draftSnapshot?.id || "").trim();
   const currency = state.currency || "USD";
   const quantity = Number(state.quantity || 0) || 0;
   const price = Number(state.price || 0) || 0;
@@ -407,7 +410,10 @@ const SubscriptionPreviewPage = () => {
           type="button"
           onClick={() => {
             const draft = readDraftFromSession();
-            if (draft?.id) {
+            const isQuoteConversionDraft =
+              String(draft?.sourceType || "").trim().toLowerCase() === "quote" &&
+              !String(draft?.id || "").trim();
+            if (draft?.id && !isQuoteConversionDraft) {
               navigate(`/sales/subscriptions/${draft.id}/edit`, { state: { draft: buildSubscriptionEditDraft(draft) } });
               return;
             }
@@ -700,38 +706,20 @@ const SubscriptionPreviewPage = () => {
             const nextBillingAligned = alignNextBillingDate(startDateRaw);
             const nextBillingOn = formatShortDate(nextBillingAligned || addMonthsDate(startDateRaw, 1));
             const amountValue = totalImmediate;
-            const amountLabel = `${currencyCode}${amountValue.toFixed(2)}`;
+    const amountLabel = `${currencyCode}${amountValue.toFixed(2)}`;
 
-            const listKey = "taban_subscriptions_v1";
-            let existing: any[] = [];
-            try {
-              const rawList = localStorage.getItem(listKey);
-              const parsed = rawList ? JSON.parse(rawList) : [];
-              existing = Array.isArray(parsed) ? parsed : [];
-            } catch {
-              existing = [];
-            }
-
-            const nextIndex = existing.length + 1;
-            const fallbackNumber = `SUB-${String(nextIndex).padStart(5, "0")}`;
+            const isEditMode = Boolean(draft?.id) && !isQuoteConversionDraft;
             const subscriptionNumber = String(
               draft?.subscriptionNumber ||
               state.subscriptionNumber ||
-              existingRow?.subscriptionNumber ||
-              fallbackNumber
+              `SUB-${String(Date.now()).slice(-8)}`
             );
-            const isEditMode = Boolean(draft?.id);
-            const existingIndex = isEditMode
-              ? existing.findIndex((row: any) => String(row?.id || "") === String(draft?.id || ""))
-              : -1;
-            const existingRow = existingIndex >= 0 ? existing[existingIndex] : null;
-            const createdOnValue = String(draft?.createdOn || existingRow?.createdOn || createdOn);
-            const activatedOnValue = activatedOn || String(existingRow?.activatedOn || createdOnValue);
+            const subscriptionId = isEditMode ? String(draft?.id || draft?._id || "").trim() : "";
+            const createdOnValue = String(draft?.createdOn || createdOn);
+            const activatedOnValue = activatedOn || createdOnValue;
             const isBackdated = Boolean(startDateRaw && startDateRaw < new Date().toISOString().split("T")[0]);
-            const lastBilledOnValue = isBackdated
-              ? formatShortDate(new Date().toISOString())
-              : activatedOnValue || String(existingRow?.lastBilledOn || createdOnValue);
-            const nextBillingOnValue = nextBillingOn || String(existingRow?.nextBillingOn || "");
+            const lastBilledOnValue = isBackdated ? formatShortDate(new Date().toISOString()) : activatedOnValue;
+            const nextBillingOnValue = nextBillingOn || String(draft?.nextBillingOn || "");
             const enteredPaymentAmount = Number(String(paymentAmount || "").replace(/[^\d.-]/g, "")) || 0;
             const amountReceivedValue = receivedPayment ? Math.max(0, Math.min(enteredPaymentAmount, totalImmediate)) : 0;
             const paymentStatusValue =
@@ -742,85 +730,76 @@ const SubscriptionPreviewPage = () => {
                 : amountReceivedValue > 0
                 ? "partially paid"
                 : "unpaid";
-            const manualRenewalPreference = String(
-              draft?.manualRenewalInvoicePreference || existingRow?.manualRenewalInvoicePreference || "Generate a New Invoice"
-            );
-            const shouldGenerateInvoices = Boolean(
-              draft?.manualRenewal ?? existingRow?.manualRenewal ?? false
-            )
-              ? manualRenewalPreference === "Generate a New Invoice" &&
-                Boolean(draft?.generateInvoices ?? existingRow?.generateInvoices ?? true)
-              : Boolean(draft?.generateInvoices ?? existingRow?.generateInvoices ?? true);
+            const manualRenewalPreference = String(draft?.manualRenewalInvoicePreference || "Generate a New Invoice");
+            const shouldGenerateInvoices = Boolean(draft?.manualRenewal ?? false)
+              ? manualRenewalPreference === "Generate a New Invoice" && Boolean(draft?.generateInvoices ?? true)
+              : Boolean(draft?.generateInvoices ?? true);
+            const {
+              sourceType: _draftSourceType,
+              quoteConversion: _draftQuoteConversion,
+              ...subscriptionDraft
+            } = draft && typeof draft === "object" ? draft : {};
             const subscription = {
-              ...(draft && typeof draft === "object" ? draft : {}),
-              id: String(draft?.id || existingRow?.id || `sub-${Date.now()}`),
+              ...subscriptionDraft,
+              id: subscriptionId,
               createdOn: createdOnValue,
               activatedOn: activatedOnValue,
-              location: String(draft?.location || existingRow?.location || "Head Office"),
+              location: String(draft?.location || "Head Office"),
               subscriptionNumber,
-              customerName: String(draft?.customerName || existingRow?.customerName || "Customer"),
-              customerEmail: String(draft?.contactPersons?.[0]?.email || existingRow?.customerEmail || ""),
-              customerId: String(draft?.customerId || existingRow?.customerId || ""),
+              customerName: String(draft?.customerName || "Customer"),
+              customerEmail: String(draft?.contactPersons?.[0]?.email || draft?.customerEmail || ""),
+              customerId: String(draft?.customerId || ""),
               contactPersons: Array.isArray(draft?.contactPersons)
                 ? draft.contactPersons
-                : existingRow?.contactPersons || [],
-              billingAddress: draft?.billingAddress ?? existingRow?.billingAddress ?? null,
-              shippingAddress: draft?.shippingAddress ?? existingRow?.shippingAddress ?? null,
-              salesperson: String(draft?.salesperson || existingRow?.salesperson || ""),
-              salespersonName: String(draft?.salespersonName || existingRow?.salespersonName || ""),
-              productId: String(draft?.productId || existingRow?.productId || ""),
-              productName: String(draft?.productName || existingRow?.productName || ""),
-              planName: String(draft?.planName || state.planName || existingRow?.planName || ""),
-              planDescription: String(draft?.planDescription || existingRow?.planDescription || ""),
-              status: normalizeLifecycleStatus(draft?.status || existingRow?.status || "LIVE"),
+                : [],
+              billingAddress: draft?.billingAddress ?? null,
+              shippingAddress: draft?.shippingAddress ?? null,
+              salesperson: String(draft?.salesperson || ""),
+              salespersonId: String(draft?.salespersonId || ""),
+              salespersonName: String(draft?.salespersonName || ""),
+              productId: String(draft?.productId || ""),
+              productName: String(draft?.productName || ""),
+              planName: String(draft?.planName || state.planName || ""),
+              planDescription: String(draft?.planDescription || ""),
+              status: normalizeLifecycleStatus(draft?.status || "LIVE"),
               amount: amountLabel,
-              quantity: Number(draft?.quantity || existingRow?.quantity || 1) || 1,
-              price: Number(draft?.price || existingRow?.price || 0) || 0,
-              basePrice: Number(draft?.basePrice || existingRow?.basePrice || 0) || 0,
-              tax: String(draft?.tax || existingRow?.tax || ""),
-              taxRate: Number(draft?.taxRate || existingRow?.taxRate || 0) || 0,
-              taxPreference: String(draft?.taxPreference || existingRow?.taxPreference || "Tax Exclusive"),
-              contentType: String(draft?.contentType || existingRow?.contentType || "product"),
-              items: Array.isArray(draft?.items) ? draft.items : existingRow?.items || [],
-              customerNotes: String(draft?.customerNotes || existingRow?.customerNotes || ""),
-              expiresAfter: String(draft?.expiresAfter || existingRow?.expiresAfter || ""),
-              neverExpires: Boolean(draft?.neverExpires ?? existingRow?.neverExpires ?? false),
-              coupon: String(draft?.coupon || existingRow?.coupon || ""),
-              couponCode: String(draft?.couponCode || existingRow?.couponCode || ""),
-              couponValue: String(draft?.couponValue || existingRow?.couponValue || ""),
-              manualRenewal: Boolean(draft?.manualRenewal ?? existingRow?.manualRenewal ?? false),
-              manualRenewalInvoicePreference: String(
-                draft?.manualRenewalInvoicePreference || existingRow?.manualRenewalInvoicePreference || "Generate a New Invoice"
-              ),
-              manualRenewalFreeExtension: String(draft?.manualRenewalFreeExtension || existingRow?.manualRenewalFreeExtension || ""),
-              advanceBillingEnabled: Boolean(draft?.advanceBillingEnabled ?? existingRow?.advanceBillingEnabled ?? false),
-              advanceBillingMethod: String(draft?.advanceBillingMethod || existingRow?.advanceBillingMethod || "Advance Invoice"),
-              advanceBillingPeriodDays: Number(draft?.advanceBillingPeriodDays ?? existingRow?.advanceBillingPeriodDays ?? 5) || 5,
-              advanceBillingAutoGenerate: Boolean(draft?.advanceBillingAutoGenerate ?? existingRow?.advanceBillingAutoGenerate ?? false),
-              advanceBillingApplyUpcomingTerms: Boolean(
-                draft?.advanceBillingApplyUpcomingTerms ?? existingRow?.advanceBillingApplyUpcomingTerms ?? false
-              ),
-              invoicePreference: String(draft?.invoicePreference || existingRow?.invoicePreference || "Create and Send Invoices"),
-              usageBillingEnabled: Boolean(draft?.usageBillingEnabled ?? existingRow?.usageBillingEnabled ?? false),
-              prepaidBillingEnabled: Boolean(draft?.prepaidBillingEnabled ?? existingRow?.prepaidBillingEnabled ?? false),
-              prepaidPlanName: String(draft?.prepaidPlanName || existingRow?.prepaidPlanName || ""),
-              drawdownCreditName: String(draft?.drawdownCreditName || existingRow?.drawdownCreditName || ""),
-              drawdownRate: String(draft?.drawdownRate || existingRow?.drawdownRate || ""),
-              consolidatedBillingEnabled: Boolean(
-                draft?.consolidatedBillingEnabled ?? existingRow?.consolidatedBillingEnabled ?? false
-              ),
-              calendarBillingMode: String(
-                draft?.calendarBillingMode || existingRow?.calendarBillingMode || "Same as a subscription's activation date"
-              ),
-              calendarBillingDays: String(draft?.calendarBillingDays || existingRow?.calendarBillingDays || ""),
-              calendarBillingMonths: String(draft?.calendarBillingMonths || existingRow?.calendarBillingMonths || ""),
-              tag: String(draft?.tag || existingRow?.tag || ""),
-              reportingTags: Array.isArray(draft?.reportingTags)
-                ? draft.reportingTags
-                : existingRow?.reportingTags || [],
+              quantity: Number(draft?.quantity || 1) || 1,
+              price: Number(draft?.price || 0) || 0,
+              basePrice: Number(draft?.basePrice || 0) || 0,
+              tax: String(draft?.tax || ""),
+              taxRate: Number(draft?.taxRate || 0) || 0,
+              taxPreference: String(draft?.taxPreference || "Tax Exclusive"),
+              contentType: String(draft?.contentType || "product"),
+              items: Array.isArray(draft?.items) ? draft.items : [],
+              customerNotes: String(draft?.customerNotes || ""),
+              expiresAfter: String(draft?.expiresAfter || ""),
+              neverExpires: Boolean(draft?.neverExpires ?? false),
+              coupon: String(draft?.coupon || ""),
+              couponCode: String(draft?.couponCode || ""),
+              couponValue: String(draft?.couponValue || ""),
+              manualRenewal: Boolean(draft?.manualRenewal ?? false),
+              manualRenewalInvoicePreference: String(draft?.manualRenewalInvoicePreference || "Generate a New Invoice"),
+              manualRenewalFreeExtension: String(draft?.manualRenewalFreeExtension || ""),
+              advanceBillingEnabled: Boolean(draft?.advanceBillingEnabled ?? false),
+              advanceBillingMethod: String(draft?.advanceBillingMethod || "Advance Invoice"),
+              advanceBillingPeriodDays: Number(draft?.advanceBillingPeriodDays ?? 5) || 5,
+              advanceBillingAutoGenerate: Boolean(draft?.advanceBillingAutoGenerate ?? false),
+              advanceBillingApplyUpcomingTerms: Boolean(draft?.advanceBillingApplyUpcomingTerms ?? false),
+              invoicePreference: String(draft?.invoicePreference || "Create and Send Invoices"),
+              usageBillingEnabled: Boolean(draft?.usageBillingEnabled ?? false),
+              prepaidBillingEnabled: Boolean(draft?.prepaidBillingEnabled ?? false),
+              prepaidPlanName: String(draft?.prepaidPlanName || ""),
+              drawdownCreditName: String(draft?.drawdownCreditName || ""),
+              drawdownRate: String(draft?.drawdownRate || ""),
+              consolidatedBillingEnabled: Boolean(draft?.consolidatedBillingEnabled ?? false),
+              calendarBillingMode: String(draft?.calendarBillingMode || "Same as a subscription's activation date"),
+              calendarBillingDays: String(draft?.calendarBillingDays || ""),
+              calendarBillingMonths: String(draft?.calendarBillingMonths || ""),
+              tag: String(draft?.tag || ""),
+              reportingTags: Array.isArray(draft?.reportingTags) ? draft.reportingTags : [],
               lastBilledOn: lastBilledOnValue,
               nextBillingOn: nextBillingOnValue,
-              referenceNumber: String(draft?.referenceNumber || existingRow?.referenceNumber || ""),
+              referenceNumber: String(draft?.referenceNumber || ""),
               immediateCharges: totalImmediate,
               paymentReceived: amountReceivedValue > 0,
               amountReceived: amountReceivedValue,
@@ -830,25 +809,25 @@ const SubscriptionPreviewPage = () => {
               depositTo: String(depositTo || ""),
               paymentNotes: String(paymentNotes || ""),
               paymentReferenceNumber: String(referenceNumber || ""),
-              priceListId: draft?.priceListId || existingRow?.priceListId || "",
-              priceListName: draft?.priceListName || existingRow?.priceListName || "",
-              addonLines: Array.isArray(draft?.addonLines) ? draft.addonLines : existingRow?.addonLines || [],
-              meteredBilling: Boolean(draft?.meteredBilling ?? existingRow?.meteredBilling ?? false),
-              paymentTerms: String(draft?.paymentTerms || existingRow?.paymentTerms || "Due on Receipt"),
-              partialPayments: Boolean(draft?.partialPayments ?? existingRow?.partialPayments ?? false),
-              prorateCharges: Boolean(draft?.prorateCharges ?? existingRow?.prorateCharges ?? true),
+              priceListId: draft?.priceListId || "",
+              priceListName: draft?.priceListName || "",
+              addonLines: Array.isArray(draft?.addonLines) ? draft.addonLines : [],
+              meteredBilling: Boolean(draft?.meteredBilling ?? false),
+              paymentTerms: String(draft?.paymentTerms || "Due on Receipt"),
+              partialPayments: Boolean(draft?.partialPayments ?? false),
+              prorateCharges: Boolean(draft?.prorateCharges ?? true),
               generateInvoices: shouldGenerateInvoices,
-              invoiceTemplate: String(draft?.invoiceTemplate || existingRow?.invoiceTemplate || "Standard Template"),
-              roundOffPreference: String(draft?.roundOffPreference || existingRow?.roundOffPreference || "No Rounding"),
-              scheduledUpdate: existingRow?.scheduledUpdate || null,
-              scheduledUpdateDate: existingRow?.scheduledUpdateDate || "",
+              invoiceTemplate: String(draft?.invoiceTemplate || "Standard Template"),
+              roundOffPreference: String(draft?.roundOffPreference || "No Rounding"),
+              scheduledUpdate: null,
+              scheduledUpdateDate: "",
               formSnapshot: draft && typeof draft === "object" ? draft : {},
             };
 
             const applyMode = String(draft?.applyChanges || state.applyChanges || "immediately");
             const applyOn =
               applyMode === "end_of_term"
-                ? existingRow?.nextBillingOn || subscription.nextBillingOn
+                ? subscription.nextBillingOn
                 : applyMode === "scheduled"
                 ? formatShortDate(draft?.applyChangesDate || state.applyChangesDate || "")
                 : "";
@@ -858,65 +837,52 @@ const SubscriptionPreviewPage = () => {
             let backendGeneratedInvoice = false;
             try {
               if (isEditMode) {
-                const editId = String(draft?.id || existingRow?.id || subscription.id || "");
-                if (editId) {
-                  const payload =
-                    applyMode === "immediately"
-                      ? {
-                          ...subscription,
-                          id: undefined,
-                          _id: undefined,
-                        }
-                      : {
-                          scheduledUpdate: { applyOn, mode: applyMode, payload: subscription },
-                          scheduledUpdateDate: applyOn,
-                        };
-                  const updatedRes: any = await subscriptionsAPI.update(editId, payload);
-                  if (updatedRes?.success && updatedRes?.data) {
-                    finalSubscription = { ...finalSubscription, ...updatedRes.data, id: String(updatedRes.data.id || editId) };
-                  } else {
-                    finalSubscription = { ...finalSubscription, id: editId };
-                  }
+                const editId = String(draft?.id || draft?._id || "").trim();
+                if (!editId) {
+                  throw new Error("Missing subscription id.");
                 }
+                const payload =
+                  applyMode === "immediately"
+                    ? {
+                        ...subscription,
+                        id: undefined,
+                        _id: undefined,
+                      }
+                    : {
+                        scheduledUpdate: { applyOn, mode: applyMode, payload: subscription },
+                        scheduledUpdateDate: applyOn,
+                      };
+                const updatedRes: any = await subscriptionsAPI.update(editId, payload);
+                if (!updatedRes?.success || !updatedRes?.data) {
+                  throw new Error(updatedRes?.message || "Failed to update subscription.");
+                }
+                finalSubscription = { ...finalSubscription, ...updatedRes.data, id: String(updatedRes.data.id || editId) };
               } else {
                 const createdRes: any = await subscriptionsAPI.create({
                   ...subscription,
                   id: undefined,
                   _id: undefined,
                 });
-                if (createdRes?.success && createdRes?.data) {
-                  createdViaApi = true;
-                  backendGeneratedInvoice = Boolean(
-                    createdRes?.data?.generatedInvoiceId ||
-                      createdRes?.data?.generatedInvoiceNumber ||
-                      createdRes?.data?.generatedInvoice?.id ||
-                      createdRes?.data?.generatedInvoice?._id
-                  );
-                  finalSubscription = { ...finalSubscription, ...createdRes.data, id: String(createdRes.data.id || finalSubscription.id) };
+                if (!createdRes?.success || !createdRes?.data) {
+                  throw new Error(createdRes?.message || "Failed to create subscription.");
                 }
-              }
-            } catch {
-              // keep local fallback path below
-            }
-
-            let updated = [...existing];
-            if (isEditMode && existingIndex >= 0) {
-              if (applyMode === "immediately") {
-                updated[existingIndex] = finalSubscription;
-              } else {
-                updated[existingIndex] = {
-                  ...existingRow,
-                  scheduledUpdate: { applyOn, mode: applyMode, payload: finalSubscription },
-                  scheduledUpdateDate: applyOn,
+                createdViaApi = true;
+                backendGeneratedInvoice = Boolean(
+                  createdRes?.data?.generatedInvoiceId ||
+                    createdRes?.data?.generatedInvoiceNumber ||
+                    createdRes?.data?.generatedInvoice?.id ||
+                    createdRes?.data?.generatedInvoice?._id
+                );
+                finalSubscription = {
+                  ...finalSubscription,
+                  ...createdRes.data,
+                  id: String(createdRes.data.id || createdRes.data._id || ""),
                 };
               }
-            } else {
-              updated = [finalSubscription, ...existing];
-            }
-            try {
-              localStorage.setItem(listKey, JSON.stringify(updated));
-            } catch {
-              // ignore storage errors
+            } catch (error) {
+              const message = error instanceof Error ? error.message : "Failed to save subscription.";
+              toast.error(message);
+              return;
             }
 
             // Auto-generate invoice for new subscriptions when enabled
@@ -991,12 +957,6 @@ const SubscriptionPreviewPage = () => {
                       generatedInvoiceNumber: String(createdInvoice?.invoiceNumber || nextNumber).trim(),
                       generatedInvoiceStatus: String(createdInvoice?.status || invoiceStatus || "").trim(),
                     };
-                    updated[existingIndex >= 0 ? existingIndex : 0] = finalSubscription;
-                    try {
-                      localStorage.setItem(listKey, JSON.stringify(updated));
-                    } catch {
-                      // ignore storage errors
-                    }
                   }
                   if (amountReceivedValue > 0 && createdInvoice?.id) {
                     await paymentsReceivedAPI.create({
@@ -1034,7 +994,7 @@ const SubscriptionPreviewPage = () => {
           }}
           className="px-5 py-2 bg-[#156372] text-white rounded font-bold text-[13px] hover:bg-[#0f4f5b]"
         >
-          {draftSnapshot?.id ? "Update" : "Create"}
+          {draftSnapshot?.id && !isQuoteConversionDraft ? "Update" : "Create"}
         </button>
         <button
           onClick={() => {

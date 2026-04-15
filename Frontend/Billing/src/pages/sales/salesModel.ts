@@ -1,4 +1,4 @@
-import { recurringInvoicesAPI, quotesAPI, invoicesAPI, customersAPI, taxesAPI, itemsAPI, salespersonsAPI, salesReceiptsAPI, paymentsReceivedAPI, creditNotesAPI, projectsAPI, settingsAPI, plansAPI, reportingTagsAPI } from "../../services/api.ts";
+import { recurringInvoicesAPI, quotesAPI, invoicesAPI, customersAPI, taxesAPI, itemsAPI, salespersonsAPI, salesReceiptsAPI, paymentsReceivedAPI, creditNotesAPI, projectsAPI, settingsAPI, plansAPI, reportingTagsAPI } from "../../services/api";
 
 
 const STORAGE_KEY = "taban_books_customers";
@@ -9,6 +9,15 @@ const MEMORY_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 type CacheEntry<T> = { ts: number; value?: T; promise?: Promise<T> };
 const memoryCache = new Map<string, CacheEntry<any>>();
 
+const shouldCacheFetchedValue = (value: any) => {
+  if (Array.isArray(value)) return value.length > 0;
+  if (value && typeof value === "object") {
+    const data = (value as any).data;
+    if (Array.isArray(data)) return data.length > 0;
+  }
+  return value !== undefined && value !== null;
+};
+
 const cachedFetch = async <T,>(
   key: string,
   fetcher: () => Promise<T>,
@@ -17,7 +26,7 @@ const cachedFetch = async <T,>(
   const now = Date.now();
   const entry = memoryCache.get(key) as CacheEntry<T> | undefined;
 
-  if (entry?.value !== undefined && now - entry.ts < ttlMs) {
+  if (entry?.value !== undefined && now - entry.ts < ttlMs && shouldCacheFetchedValue(entry.value)) {
     return entry.value;
   }
   if (entry?.promise) {
@@ -26,7 +35,11 @@ const cachedFetch = async <T,>(
 
   const promise = fetcher()
     .then((value) => {
-      memoryCache.set(key, { ts: Date.now(), value });
+      if (shouldCacheFetchedValue(value)) {
+        memoryCache.set(key, { ts: Date.now(), value });
+      } else {
+        memoryCache.delete(key);
+      }
       return value;
     })
     .catch((err) => {
@@ -59,6 +72,7 @@ export interface Customer {
   id: string;
   _id?: string;
   name: string;
+  customerName?: string;
   customerNumber?: string;
   displayName?: string;
   companyName?: string;
@@ -92,8 +106,12 @@ export interface Customer {
   firstName?: string;
   lastName?: string;
   customerType?: string;
+  type?: string;
   enablePortal?: boolean;
+  portalEnabled?: boolean;
+  portalStatus?: string;
   customerLanguage?: string;
+  language?: string;
   paymentTerms?: string;
   unusedCredits?: number;
   billingAddress?: {
@@ -1392,6 +1410,10 @@ export interface Quote {
   date: string;
   quoteDate?: string;
   expiryDate?: string;
+  productId?: string;
+  productName?: string;
+  planName?: string;
+  addonLines?: any[];
   items: any[];
   subTotal: number;
   subtotal: number;
@@ -1506,6 +1528,10 @@ export const mapQuoteFromApi = (quote: any): Quote => {
     project: quote?.project,
     projectId: quote?.project?._id || quote?.project,
     projectName: quote?.project?.name || quote?.projectName || '',
+    productId: String(quote?.productId || quote?.product?._id || quote?.product?.id || ""),
+    productName: String(quote?.productName || quote?.product?.name || quote?.product?.productName || ""),
+    planName: String(quote?.planName || ""),
+    addonLines: Array.isArray(quote?.addonLines) ? quote.addonLines : [],
     date: quote?.quoteDate || quote?.date || quote?.createdAt,
     quoteDate: quote?.quoteDate || quote?.date || quote?.createdAt,
     expiryDate: quote?.expiryDate,
@@ -1938,6 +1964,8 @@ export interface Salesperson {
   name: string;
   email: string;
   status?: string;
+  displayName?: string;
+  fullName?: string;
 }
 
 export const getSalespersonsFromAPI = async (): Promise<Salesperson[]> => {

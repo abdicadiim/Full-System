@@ -26,6 +26,7 @@ import {
     MapPin,
 } from "lucide-react";
 import { useOrganizationBranding } from "../../../../hooks/useOrganizationBranding";
+import { waitForBackendReady } from "../../../../services/backendReady";
 import { Customer, Salesperson, getCustomers, getSalespersonsFromAPI, getPlansFromAPI, getBaseCurrency, getItemsFromAPI, getTaxesFromAPI, Tax, getReportingTagsFromAPI, ReportingTag } from "../../salesModel";
 import { customersAPI, invoicesAPI, subscriptionsAPI, productsAPI, locationsAPI, transactionNumberSeriesAPI } from "../../../../services/api";
 import { toast } from "react-toastify";
@@ -438,7 +439,22 @@ const NewSubscriptionPage = () => {
     const { subscriptionId } = useParams();
     const { accentColor } = useOrganizationBranding();
     const editDraft = (location.state as any)?.draft || null;
-     const isEditMode = Boolean(editDraft || subscriptionId);
+    const sessionDraftSnapshot = useMemo(() => {
+        try {
+            const raw = sessionStorage.getItem("taban_subscription_draft_v1");
+            return raw ? JSON.parse(raw) : null;
+        } catch {
+            return null;
+        }
+    }, []);
+    const quoteDraftSourceType = String(
+        (location.state as any)?.draft?.sourceType ||
+        sessionDraftSnapshot?.sourceType ||
+        ""
+    ).trim().toLowerCase();
+    const quoteDraftId = String((location.state as any)?.draft?.id || sessionDraftSnapshot?.id || "").trim();
+    const isQuoteConversion = Boolean((location.state as any)?.sourceQuote || (quoteDraftSourceType === "quote" && !quoteDraftId));
+    const isEditMode = Boolean(editDraft || subscriptionId);
 
     // Data State
     const [customers, setCustomers] = useState<Customer[]>([]);
@@ -468,9 +484,6 @@ const NewSubscriptionPage = () => {
     const [salespersonSearch, setSalespersonSearch] = useState("");
     const [isSalespersonDropdownOpen, setIsSalespersonDropdownOpen] = useState(false);
     const salespersonDropdownRef = useRef<HTMLDivElement>(null);
-    const [isReportingTagDropdownOpen, setIsReportingTagDropdownOpen] = useState(false);
-    const reportingTagDropdownRef = useRef<HTMLDivElement>(null);
-    const [reportingTagSearch, setReportingTagSearch] = useState("");
     const [isTaxDropdownOpen, setIsTaxDropdownOpen] = useState(false);
     const taxDropdownRef = useRef<HTMLDivElement>(null);
     const [taxSearch, setTaxSearch] = useState("");
@@ -560,7 +573,7 @@ const NewSubscriptionPage = () => {
         location: "",
         contentType: "product", // product or items
         taxPreference: "Tax Exclusive",
-        tag: "GGGGG",
+        tag: "",
         planName: "Select a Plan",
         planDescription: "",
         quantity: 1,
@@ -576,7 +589,8 @@ const NewSubscriptionPage = () => {
         neverExpires: false,
         referenceNumber: "",
         salesperson: "",
-        customZxc: "",
+        salespersonId: "",
+        salespersonName: "",
         meteredBilling: true,
         paymentMode: "offline",
         paymentTerms: "Due on Receipt",
@@ -631,7 +645,24 @@ const NewSubscriptionPage = () => {
         return true;
     };
     const getCustomerPrimaryName = (customer: any) =>
-        String(customer?.name || customer?.displayName || customer?.customerName || "Customer").trim();
+        String(
+            customer?.displayName ||
+            customer?.name ||
+            customer?.companyName ||
+            customer?.customerName ||
+            `${customer?.firstName || ""} ${customer?.lastName || ""}`.trim() ||
+            "Customer"
+        ).trim();
+    const isCustomerActive = (customer: any) => {
+        const status = String(customer?.status || customer?.customerStatus || customer?.state || "").trim().toLowerCase();
+        if (status) {
+            return !["inactive", "disabled", "archived"].includes(status);
+        }
+        if (typeof customer?.isActive === "boolean") {
+            return customer.isActive;
+        }
+        return true;
+    };
     const getCustomerEmail = (customer: any) =>
         String(customer?.email || customer?.customerEmail || customer?.contactPersons?.[0]?.email || "").trim();
     const getCustomerCompany = (customer: any) =>
@@ -844,10 +875,15 @@ const NewSubscriptionPage = () => {
     const extractProductLink = (row: any) => {
         const productSource = row?.product;
         const sourceName = typeof productSource === "string" ? productSource : (productSource?.name || "");
-        const sourceId = typeof productSource === "object" ? (productSource?._id || productSource?.id || "") : "";
+        const sourceId =
+            typeof productSource === "string"
+                ? productSource
+                : typeof productSource === "object"
+                    ? (productSource?._id || productSource?.id || "")
+                    : "";
         return {
-            productId: String(row?.productId || sourceId || "").trim(),
-            productName: String(row?.productName || sourceName || "").trim(),
+            productId: String(row?.productId || sourceId || sourceName || "").trim(),
+            productName: String(row?.productName || sourceName || sourceId || "").trim(),
         };
     };
 
@@ -880,33 +916,107 @@ const NewSubscriptionPage = () => {
         return Math.max(0, total - paid);
     };
 
-    // Load Data
+    // Load customers independently so the selector can populate even if the
+    // rest of the subscription data is still coming in.
     useEffect(() => {
-        const loadData = async () => {
+        let isMounted = true;
+
+        const loadCustomers = async () => {
             setIsLoadingCustomers(true);
+            try {
+                await waitForBackendReady();
+                let customersData = await getCustomers();
+                if (!Array.isArray(customersData) || customersData.length === 0) {
+                    const response: any = await customersAPI.getAll({ limit: 2000 });
+                    customersData = Array.isArray(response?.data) ? response.data : [];
+                }
+                const normalizedCustomers = (customersData || []).map((customer: any) => ({
+                    ...customer,
+                    id: customer?._id || customer?.id,
+                    name: customer?.displayName || customer?.companyName || `${customer?.firstName || ""} ${customer?.lastName || ""}`.trim() || "Unknown",
+                }));
+                if (!isMounted) return;
+                setCustomers(normalizedCustomers.filter(isCustomerActive));
+            } catch (error) {
+                console.error("Failed to load customers:", error);
+                if (isMounted) setCustomers([]);
+            } finally {
+                if (isMounted) setIsLoadingCustomers(false);
+            }
+        };
+
+        void loadCustomers();
+
+        const onFocus = () => {
+            void loadCustomers();
+        };
+        window.addEventListener("focus", onFocus);
+
+        return () => {
+            isMounted = false;
+            window.removeEventListener("focus", onFocus);
+        };
+    }, []);
+
+    const normalizeSalespersonRows = (rows: any[]) =>
+        (Array.isArray(rows) ? rows : [])
+            .map((salesperson: any) => ({
+                ...salesperson,
+                id: String(salesperson?.id || salesperson?._id || "").trim(),
+                name: String(salesperson?.name || salesperson?.displayName || salesperson?.fullName || "").trim(),
+            }))
+            .filter((salesperson: any) => Boolean(salesperson.id || salesperson.name));
+
+    // Load salespersons independently so unrelated API failures do not blank the dropdown.
+    useEffect(() => {
+        let isMounted = true;
+
+        const loadSalespersons = async () => {
             setIsLoadingSalespersons(true);
+            try {
+                await waitForBackendReady();
+                const data = await getSalespersonsFromAPI();
+                if (!isMounted) return;
+                setSalespersons(normalizeSalespersonRows(Array.isArray(data) ? data : []));
+            } catch (error) {
+                console.error("Failed to load salespersons:", error);
+                if (isMounted) setSalespersons([]);
+            } finally {
+                if (isMounted) setIsLoadingSalespersons(false);
+            }
+        };
+
+        void loadSalespersons();
+
+        return () => {
+            isMounted = false;
+        };
+    }, []);
+
+    // Load the rest of the data without blocking the customer selector.
+    useEffect(() => {
+        let isMounted = true;
+
+        const loadData = async () => {
             setIsLoadingPlans(true);
             setIsLoadingItems(true);
             try {
-                const [customersData, salespersonsData, plansData, baseCurrency, itemsData, taxesData, reportingTagsData, productsRes] = await Promise.all([
-                    getCustomers({ status: 'active' }),
-                    getSalespersonsFromAPI(),
+                await waitForBackendReady();
+                const [plansData, baseCurrency, itemsData, taxesData, reportingTagsData, productsRes] = await Promise.all([
                     getPlansFromAPI(),
                     getBaseCurrency(),
                     getItemsFromAPI(),
                     getTaxesFromAPI(),
                     getReportingTagsFromAPI(),
-                    productsAPI.getAll({ status: 'active' })
+                    productsAPI.getAll({ status: "active" })
                 ]);
-                setCustomers(customersData);
-                setSalespersons(salespersonsData);
+                if (!isMounted) return;
+
                 setAvailableItems(itemsData);
                 setTaxes(taxesData);
                 setReportingTags(reportingTagsData);
 
-                if (!formData.customerId) {
-                    setFormData(prev => ({ ...prev, currency: baseCurrency }));
-                }
+                setFormData((prev) => (prev.customerId ? prev : { ...prev, currency: baseCurrency }));
 
                 // Map Plans from API
                 const mappedPlans: PlanAddonOption[] = plansData
@@ -1049,13 +1159,24 @@ const NewSubscriptionPage = () => {
                 console.error("Failed to load data:", error);
                 toast.error("Failed to load some data. Please try again.");
             } finally {
-                setIsLoadingCustomers(false);
-                setIsLoadingSalespersons(false);
-                setIsLoadingPlans(false);
-                setIsLoadingItems(false);
+                if (isMounted) {
+                    setIsLoadingPlans(false);
+                    setIsLoadingItems(false);
+                }
             }
         };
-        loadData();
+
+        void loadData();
+
+        const onFocus = () => {
+            void loadData();
+        };
+        window.addEventListener("focus", onFocus);
+
+        return () => {
+            isMounted = false;
+            window.removeEventListener("focus", onFocus);
+        };
     }, []);
 
     useEffect(() => {
@@ -1158,19 +1279,9 @@ const NewSubscriptionPage = () => {
         const hydrate = async () => {
             if (subscriptionId) {
                 try {
-                    let found: any = null;
                     const apiRes: any = await subscriptionsAPI.getById(String(subscriptionId));
                     if (apiRes?.success && apiRes?.data) {
-                        found = apiRes.data;
-                    }
-                    if (!found) {
-                        const rawList = localStorage.getItem("taban_subscriptions_v1");
-                        const list = rawList ? JSON.parse(rawList) : [];
-                        const rows = Array.isArray(list) ? list : [];
-                        found = rows.find((row: any) => String(row?.id) === String(subscriptionId));
-                    }
-                    if (found) {
-                        const draftFromSubscription = buildSubscriptionEditDraft(found);
+                        const draftFromSubscription = buildSubscriptionEditDraft(apiRes.data);
                         setFormData((prev) => ({ ...prev, ...draftFromSubscription }));
                         if (Array.isArray(draftFromSubscription.addonLines)) {
                             setAddonLines(draftFromSubscription.addonLines);
@@ -1179,7 +1290,7 @@ const NewSubscriptionPage = () => {
                         return;
                     }
                 } catch {
-                    // ignore storage errors
+                    // ignore load errors
                 }
             }
             const raw = sessionStorage.getItem("taban_subscription_draft_v1");
@@ -1222,7 +1333,7 @@ const NewSubscriptionPage = () => {
         const refreshSalespersons = async () => {
             try {
                 const data = await getSalespersonsFromAPI();
-                setSalespersons(Array.isArray(data) ? data : []);
+                setSalespersons(normalizeSalespersonRows(Array.isArray(data) ? data : []));
             } catch (error) {
                 console.error("Failed to refresh salespersons:", error);
             }
@@ -1373,19 +1484,49 @@ const NewSubscriptionPage = () => {
     }, []);
 
     useEffect(() => {
-        if (!formData.customerId) {
+        const currentCustomerId = String(formData.customerId || "").trim().toLowerCase();
+        const currentCustomerName = String(formData.customerName || "").trim().toLowerCase();
+
+        if (!currentCustomerId && !currentCustomerName) {
             setSelectedCustomer(null);
             setBillingAddress(null);
             setShippingAddress(null);
             return;
         }
-        const match = customers.find(
-            (customer) => String(customer.id || (customer as any)._id) === String(formData.customerId)
-        );
+
+        const match = customers.find((customer) => {
+            const customerId = String(customer.id || (customer as any)._id || (customer as any).customerId || "").trim().toLowerCase();
+            if (currentCustomerId && customerId === currentCustomerId) return true;
+            if (!currentCustomerName) return false;
+            const customerName = String(
+                customer.displayName ||
+                customer.name ||
+                customer.companyName ||
+                customer.customerName ||
+                `${customer.firstName || ""} ${customer.lastName || ""}`.trim() ||
+                ""
+            )
+                .trim()
+                .toLowerCase();
+            return Boolean(customerName && customerName === currentCustomerName);
+        });
+
         if (match) {
+            const resolvedCustomerId = getCustomerKey(match);
+            const resolvedCustomerName = getCustomerPrimaryName(match);
+            setFormData((prev) => {
+                let next = prev;
+                if (resolvedCustomerId && String(prev.customerId || "").trim() !== resolvedCustomerId) {
+                    next = { ...next, customerId: resolvedCustomerId };
+                }
+                if (resolvedCustomerName && String(prev.customerName || "").trim() !== resolvedCustomerName) {
+                    next = { ...next, customerName: resolvedCustomerName };
+                }
+                return next;
+            });
             setSelectedCustomer(match);
         }
-    }, [formData.customerId, customers]);
+    }, [formData.customerId, formData.customerName, customers]);
 
     useEffect(() => {
         if (!selectedCustomer) {
@@ -1513,7 +1654,6 @@ const NewSubscriptionPage = () => {
         setIsProductDropdownOpen(false);
         setIsPlanAddonDropdownOpen(false);
         setIsSalespersonDropdownOpen(false);
-        setIsReportingTagDropdownOpen(false);
         setIsTaxDropdownOpen(false);
         setTaxSearch("");
         setIsCouponDropdownOpen(false);
@@ -1673,8 +1813,8 @@ const NewSubscriptionPage = () => {
 
         setFormData(prev => ({
             ...prev,
-            customerId: String((customer as any).id || (customer as any)._id || ""),
-            customerName: customer.name || customer.displayName || "",
+            customerId: String((customer as any).id || (customer as any)._id || (customer as any).customerId || ""),
+            customerName: getCustomerPrimaryName(customer),
             currency: customer.currency || "AMD",
             priceListId: String((customer as any).priceListId || ""),
             priceListName: (priceLists.find(pl => String(pl.id) === String((customer as any).priceListId))?.name) || prev.priceListName,
@@ -1788,15 +1928,35 @@ const NewSubscriptionPage = () => {
 
     const filteredCustomers = useMemo(() => {
         if (!customerSearch) return customers;
-        return customers.filter(c =>
-            (c.name || "").toLowerCase().includes(customerSearch.toLowerCase()) ||
-            (c.email || "").toLowerCase().includes(customerSearch.toLowerCase()) ||
-            (c.id || "").toLowerCase().includes(customerSearch.toLowerCase())
+        const term = customerSearch.toLowerCase().trim();
+        return customers.filter((c) =>
+            [
+                c.name,
+                c.displayName,
+                c.companyName,
+                c.customerName,
+                c.customerNumber,
+                c.email,
+                c.id,
+            ].some((value) => String(value || "").toLowerCase().includes(term))
         );
     }, [customers, customerSearch]);
 
+    const isSalespersonActive = (salesperson: any) => {
+        const status = String(salesperson?.status || "").toLowerCase();
+        if (status) return status === "active";
+        if (typeof salesperson?.isActive === "boolean") return salesperson.isActive;
+        return true;
+    };
+
+    const getSalespersonDisplayName = (salesperson: any) =>
+        salesperson?.name ||
+        salesperson?.displayName ||
+        salesperson?.fullName ||
+        "";
+
     const activeSalespersons = useMemo(() => {
-        return salespersons.filter(s => s.status?.toLowerCase() !== 'inactive');
+        return salespersons.filter(isSalespersonActive);
     }, [salespersons]);
 
     const activeProducts = useMemo(() => {
@@ -1823,15 +1983,56 @@ const NewSubscriptionPage = () => {
         const term = salespersonSearch.toLowerCase().trim();
         if (!term) return activeSalespersons;
         return activeSalespersons.filter((s) =>
-            String(s.name || "").toLowerCase().includes(term) ||
+            String(s.name || s.displayName || "").toLowerCase().includes(term) ||
             String(s.email || "").toLowerCase().includes(term)
         );
     }, [activeSalespersons, salespersonSearch]);
 
     const selectedProductName = useMemo(() => {
-        const found = activeProducts.find((p) => p.id === formData.productId);
+        const found = activeProducts.find((p) => p.id === formData.productId) || products.find((p) => p.id === formData.productId);
         return found?.name || formData.productName || "";
-    }, [activeProducts, formData.productId, formData.productName]);
+    }, [activeProducts, products, formData.productId, formData.productName]);
+
+    const selectedSalesperson = useMemo(() => {
+        const salespersonId = String(formData.salespersonId || formData.salesperson || "").trim();
+        if (salespersonId) {
+            const byId = salespersons.find((sp) => String(sp.id || sp._id || "").trim() === salespersonId);
+            if (byId) return byId;
+        }
+
+        const selectedName = String(formData.salespersonName || formData.salesperson || "").trim().toLowerCase();
+        if (!selectedName) return null;
+
+        return (
+            salespersons.find((sp) => {
+                const displayName = String(sp.name || sp.displayName || "").trim().toLowerCase();
+                return displayName === selectedName;
+            }) || null
+        );
+    }, [salespersons, formData.salespersonId, formData.salesperson, formData.salespersonName]);
+
+    const selectedSalespersonIsActive = Boolean(selectedSalesperson && isSalespersonActive(selectedSalesperson));
+    const selectedSalespersonLabel = String(
+        getSalespersonDisplayName(selectedSalesperson || {}) ||
+        formData.salespersonName ||
+        formData.salesperson ||
+        ""
+    ).trim();
+    const selectedSalespersonDisplay = selectedSalespersonLabel || "Select or Add Salesperson";
+    const hasSelectedSalesperson = Boolean(selectedSalespersonLabel);
+
+    const handleSalespersonSelect = (salesperson: any) => {
+        const salespersonId = String(salesperson?.id || salesperson?._id || "").trim();
+        const salespersonName = getSalespersonDisplayName(salesperson);
+        setFormData((prev) => ({
+            ...prev,
+            salesperson: salespersonName,
+            salespersonName,
+            salespersonId,
+        }));
+        setSalespersonSearch("");
+        setIsSalespersonDropdownOpen(false);
+    };
 
     const selectedLocationSeries = useMemo(() => {
         const currentLocation = String(formData.location || "").trim().toLowerCase();
@@ -1846,7 +2047,7 @@ const NewSubscriptionPage = () => {
     }, [formData.location, locationOptions]);
 
     useEffect(() => {
-        if (isEditMode) return;
+        if (isEditMode && !isQuoteConversion) return;
         const locationName = String(selectedLocationSeries?.locationName || "").trim();
         if (!locationName) return;
 
@@ -1874,7 +2075,7 @@ const NewSubscriptionPage = () => {
         return () => {
             cancelled = true;
         };
-    }, [isEditMode, selectedLocationSeries]);
+    }, [isEditMode, isQuoteConversion, selectedLocationSeries]);
 
     useEffect(() => {
         if (formData.productId || !formData.productName || !activeProducts.length) return;
@@ -1887,6 +2088,54 @@ const NewSubscriptionPage = () => {
         if (!match) return;
         setFormData((prev) => ({ ...prev, productId: match.id, productName: match.name }));
     }, [formData.productId, formData.productName, activeProducts, normalizeText]);
+
+    useEffect(() => {
+        if (formData.productId || !planAddons.length || !activeProducts.length) return;
+
+        const normalizedPlanName = normalizeText(formData.planName);
+        const normalizedAddonNames = new Set(
+            addonLines
+                .map((line) => normalizeText(line.addonName))
+                .filter(Boolean)
+        );
+
+        const matchingRows = planAddons.filter((row) => {
+            const isActive = resolveActiveFlag(row.status, row.active);
+            if (!isActive && !isEditMode) return false;
+            const rowName = normalizeText(row.name);
+            if (!rowName) return false;
+            if (row.type === "plan" && normalizedPlanName && rowName === normalizedPlanName) return true;
+            if (row.type === "addon" && normalizedAddonNames.has(rowName)) return true;
+            return false;
+        });
+
+        const selectedRow = matchingRows.find((row) => row.type === "plan") || matchingRows[0];
+        if (!selectedRow) return;
+
+        const selectedProductId = String(selectedRow.productId || "").trim();
+        const selectedProductName = String(selectedRow.productName || "").trim();
+        if (!selectedProductId && !selectedProductName) return;
+
+        const matchedProduct = activeProducts.find((product) => {
+            const productIdMatch = selectedProductId && String(product.id) === selectedProductId;
+            const productNameMatch =
+                selectedProductName &&
+                (normalizeText(product.name) === normalizeText(selectedProductName) ||
+                    (product.code ? normalizeText(product.code) === normalizeText(selectedProductName) : false));
+            return productIdMatch || productNameMatch;
+        });
+
+        if (!matchedProduct) return;
+
+        setFormData((prev) => {
+            if (prev.productId === matchedProduct.id && prev.productName === matchedProduct.name) return prev;
+            return {
+                ...prev,
+                productId: matchedProduct.id,
+                productName: matchedProduct.name,
+            };
+        });
+    }, [formData.productId, formData.planName, addonLines, planAddons, activeProducts, normalizeText, resolveActiveFlag, isEditMode]);
 
     const availablePlanAddons = useMemo(() => {
         const selectedProductId = String(formData.productId || "").trim();
@@ -1937,11 +2186,6 @@ const NewSubscriptionPage = () => {
     const availableAddons = useMemo(
         () => availablePlanAddons.filter((row) => row.type === "addon"),
         [availablePlanAddons]
-    );
-
-    const selectedSalesperson = useMemo(
-        () => activeSalespersons.find((s) => String(s.id || s._id) === String(formData.salesperson)),
-        [activeSalespersons, formData.salesperson]
     );
 
     const handleProductSelect = (product: ProductOption) => {
@@ -2008,11 +2252,12 @@ const NewSubscriptionPage = () => {
 
     useEffect(() => {
         if (!formData.coupon) return;
+        if (isQuoteConversion) return;
         const stillValid = activeCoupons.some((coupon) => coupon.couponName === formData.coupon);
         if (!stillValid) {
             setFormData((prev) => ({ ...prev, coupon: "", couponCode: "", couponValue: "0.00" }));
         }
-    }, [activeCoupons, formData.coupon]);
+    }, [activeCoupons, formData.coupon, isQuoteConversion]);
 
 
     const formatAddressLines = (addr: any) => {
@@ -2333,9 +2578,34 @@ const NewSubscriptionPage = () => {
 
     const customerDetails = useMemo(() => {
         if (selectedCustomer) return selectedCustomer;
-        if (!formData.customerId) return null;
-        return customers.find((customer) => String(customer.id || (customer as any)._id) === String(formData.customerId)) || null;
-    }, [customers, formData.customerId, selectedCustomer]);
+        const currentCustomerId = String(formData.customerId || "").trim().toLowerCase();
+        const currentCustomerName = String(formData.customerName || "").trim().toLowerCase();
+        if (!currentCustomerId && !currentCustomerName) return null;
+        return (
+            customers.find((customer) => {
+                const customerId = String(customer.id || (customer as any)._id || (customer as any).customerId || "").trim().toLowerCase();
+                if (currentCustomerId && customerId === currentCustomerId) return true;
+                if (!currentCustomerName) return false;
+                const customerName = String(
+                    customer.displayName ||
+                    customer.name ||
+                    customer.companyName ||
+                    customer.customerName ||
+                    `${customer.firstName || ""} ${customer.lastName || ""}`.trim() ||
+                    ""
+                )
+                    .trim()
+                    .toLowerCase();
+                return Boolean(customerName && customerName === currentCustomerName);
+            }) || null
+        );
+    }, [customers, formData.customerId, formData.customerName, selectedCustomer]);
+
+    const selectedCustomerLabel = useMemo(() => {
+        const resolvedCustomer = customerDetails || selectedCustomer;
+        const resolvedLabel = resolvedCustomer ? getCustomerPrimaryName(resolvedCustomer) : "";
+        return String(formData.customerName || resolvedLabel).trim();
+    }, [customerDetails, formData.customerName, selectedCustomer]);
 
     const customerPanelName = getCustomerPrimaryName(customerDetails || selectedCustomer || {});
     const customerPanelEmail = getCustomerEmail(customerDetails || selectedCustomer || {});
@@ -2413,6 +2683,7 @@ const NewSubscriptionPage = () => {
                                     <div className="flex items-stretch gap-0 flex-1 relative" ref={customerDropdownRef}>
                                         <div className="relative flex-1">
                                             <button
+                                                type="button"
                                                 onClick={() => {
                                                     if (isCustomerDropdownOpen) {
                                                         setIsCustomerDropdownOpen(false);
@@ -2421,9 +2692,9 @@ const NewSubscriptionPage = () => {
                                                     closeAllDropdowns();
                                                     setIsCustomerDropdownOpen(true);
                                                 }}
-                                                className={`w-full h-[34px] px-3 border border-gray-300 rounded-l-md rounded-r-none text-[13px] outline-none text-left bg-white flex items-center justify-between ${!formData.customerName ? 'text-gray-400' : 'text-gray-800'}`}
+                                                className={`w-full h-[34px] px-3 border border-gray-300 rounded-l-md rounded-r-none text-[13px] outline-none text-left bg-white flex items-center justify-between ${!selectedCustomerLabel ? 'text-gray-400' : 'text-gray-800'}`}
                                             >
-                                                <span>{formData.customerName || "Select or add a customer"}</span>
+                                                <span>{selectedCustomerLabel || "Select or add a customer"}</span>
                                                 <ChevronDown size={14} className="text-gray-400" />
                                             </button>
 
@@ -2449,7 +2720,8 @@ const NewSubscriptionPage = () => {
                                                         ) : (
                                                             filteredCustomers.map(customer => (
                                                                 <button
-                                                                    key={customer.id}
+                                                                    type="button"
+                                                                    key={getCustomerKey(customer) || customer.id || customer.name}
                                                                     onClick={() => handleCustomerSelect(customer)}
                                                                     className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-start gap-3 border-b border-gray-50 last:border-0 transition-colors"
                                                                 >
@@ -2459,7 +2731,7 @@ const NewSubscriptionPage = () => {
                                                                     <div className="min-w-0 flex-1">
                                                                         <div className="flex items-center justify-between">
                                                                             <span className="font-bold text-[13px] text-gray-800 truncate">{customer.name}</span>
-                                                                            {formData.customerId === customer.id && <Check size={14} className="text-[#156372] shrink-0" />}
+                                                                            {String(formData.customerId || "").trim() === getCustomerKey(customer) && <Check size={14} className="text-[#156372] shrink-0" />}
                                                                         </div>
                                                                         <div className="text-[12px] text-gray-500 truncate mt-0.5">
                                                                             {customer.email || "No email"} | {customer.companyName || "No Company"}
@@ -2470,6 +2742,7 @@ const NewSubscriptionPage = () => {
                                                         )}
                                                     </div>
                                                     <button
+                                                        type="button"
                                                         onClick={() => navigate("/sales/customers/new")}
                                                         className="w-full p-2.5 text-blue-600 text-[13px] font-medium border-t border-gray-100 hover:bg-gray-50 flex items-center gap-2 justify-center"
                                                     >
@@ -2479,7 +2752,19 @@ const NewSubscriptionPage = () => {
                                                 </div>
                                             )}
                                         </div>
-                                        <button className="h-10 w-10 bg-[#156372] text-white rounded-r hover:bg-[#0D4A52] flex items-center justify-center border border-[#156372] border-l-0">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                if (isCustomerDropdownOpen) {
+                                                    setIsCustomerDropdownOpen(false);
+                                                    return;
+                                                }
+                                                closeAllDropdowns();
+                                                setIsCustomerDropdownOpen(true);
+                                            }}
+                                            className="h-10 w-10 bg-[#156372] text-white rounded-r hover:bg-[#0D4A52] flex items-center justify-center border border-[#156372] border-l-0"
+                                            aria-label="Open customer search"
+                                        >
                                             <Search size={16} />
                                         </button>
                                         {(formData.customerId || formData.customerName) && (
@@ -3029,60 +3314,6 @@ const NewSubscriptionPage = () => {
                                                 </td>
                                                 <td className="px-2 py-2 border-b border-l border-gray-100 text-center">
                                                     <MoreVertical size={16} className="mx-auto text-blue-600" />
-                                                </td>
-                                            </tr>
-                                            <tr>
-                                                <td colSpan={6} className="px-3 py-2 text-[13px] text-slate-600 border-b border-gray-100">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-medium text-gray-500">Reporting Tags:</span>
-                                                        <div className="relative" ref={reportingTagDropdownRef}>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    if (isReportingTagDropdownOpen) {
-                                                                        setIsReportingTagDropdownOpen(false);
-                                                                        return;
-                                                                    }
-                                                                    closeAllDropdowns();
-                                                                    setIsReportingTagDropdownOpen(true);
-                                                                }}
-                                                                className="flex items-center gap-1.5 px-2 py-0.5 hover:bg-gray-100 rounded border border-transparent hover:border-gray-200 transition-all"
-                                                            >
-                                                                <span className={formData.tag ? "text-blue-600" : "text-gray-400"}>
-                                                                    {formData.tag || "Select Tag"}
-                                                                </span>
-                                                                <ChevronDown size={12} className="text-gray-400" />
-                                                            </button>
-                                                            {isReportingTagDropdownOpen && (
-                                                                <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-[210]">
-                                                                    <div className="p-2 border-b border-gray-50">
-                                                                        <input
-                                                                            type="text"
-                                                                            className="w-full px-2 py-1 text-[12px] bg-gray-50 border border-transparent focus:border-blue-500 rounded outline-none"
-                                                                            placeholder="Search tags"
-                                                                            value={reportingTagSearch}
-                                                                            onChange={(e) => setReportingTagSearch(e.target.value)}
-                                                                        />
-                                                                    </div>
-                                                                    <div className="max-h-[160px] overflow-y-auto py-1">
-                                                                        {reportingTags.filter(t => t.name.toLowerCase().includes(reportingTagSearch.toLowerCase())).map(tag => (
-                                                                            <button
-                                                                                key={tag.id}
-                                                                                onClick={() => {
-                                                                                    handleChange("tag", tag.name);
-                                                                                    setIsReportingTagDropdownOpen(false);
-                                                                                }}
-                                                                                className="w-full text-left px-4 py-1.5 hover:bg-gray-50 text-[12px] flex items-center justify-between"
-                                                                            >
-                                                                                <span>{tag.name}</span>
-                                                                                {formData.tag === tag.name && <Check size={12} className="text-blue-600" />}
-                                                                            </button>
-                                                                        ))}
-                                                                    </div>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
                                                 </td>
                                             </tr>
                                         </tbody>
@@ -4153,8 +4384,9 @@ const NewSubscriptionPage = () => {
                                     <div className="flex items-center">
                                         <label className="text-[13px] text-gray-600 w-44 shrink-0">Salesperson</label>
                                         <div className="relative w-full" ref={salespersonDropdownRef}>
-                                            <button
-                                                type="button"
+                                            <div
+                                                role="button"
+                                                tabIndex={0}
                                                 onClick={() => {
                                                     if (isSalespersonDropdownOpen) {
                                                         setIsSalespersonDropdownOpen(false);
@@ -4163,11 +4395,22 @@ const NewSubscriptionPage = () => {
                                                     closeAllDropdowns();
                                                     setIsSalespersonDropdownOpen(true);
                                                 }}
-                                                className={`w-full px-3 py-1.5 border border-gray-300 rounded text-[13px] outline-none text-left bg-white flex items-center justify-between ${selectedSalesperson ? "text-gray-800" : "text-gray-400"}`}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === "Enter" || e.key === " ") {
+                                                        e.preventDefault();
+                                                        if (isSalespersonDropdownOpen) {
+                                                            setIsSalespersonDropdownOpen(false);
+                                                            return;
+                                                        }
+                                                        closeAllDropdowns();
+                                                        setIsSalespersonDropdownOpen(true);
+                                                    }
+                                                }}
+                                                className={`w-full px-3 py-1.5 border border-gray-300 rounded text-[13px] outline-none text-left bg-white flex items-center justify-between cursor-pointer ${hasSelectedSalesperson ? "text-gray-800" : "text-gray-400"}`}
                                             >
-                                                <span>{selectedSalesperson?.name || (isLoadingSalespersons ? "Loading..." : "Select a salesperson")}</span>
+                                                <span>{selectedSalespersonDisplay}</span>
                                                 <ChevronDown size={14} className="text-gray-400" />
-                                            </button>
+                                            </div>
                                             {isSalespersonDropdownOpen && (
                                                 <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-2xl z-[200] overflow-hidden">
                                                     <div className="p-2 border-b border-gray-100 flex items-center gap-2 bg-gray-50/50">
@@ -4182,20 +4425,19 @@ const NewSubscriptionPage = () => {
                                                         />
                                                     </div>
                                                     <div className="max-h-[220px] overflow-y-auto">
-                                                        {filteredSalespersons.length === 0 ? (
-                                                            <div className="p-3 text-[12px] text-gray-400 text-center">No active salespersons found</div>
+                                                        {isLoadingSalespersons && filteredSalespersons.length === 0 ? (
+                                                            <div className="p-3 text-[12px] text-gray-400 text-center">Loading salespersons...</div>
+                                                        ) : filteredSalespersons.length === 0 ? (
+                                                            <div className="p-3 text-[12px] text-gray-400 text-center">No salespersons found</div>
                                                         ) : (
                                                             filteredSalespersons.map((sp) => (
                                                                 <button
                                                                     key={String(sp.id || sp._id || sp.name)}
                                                                     type="button"
-                                                                    onClick={() => {
-                                                                        handleChange("salesperson", String(sp.id || sp._id || ""));
-                                                                        setIsSalespersonDropdownOpen(false);
-                                                                    }}
-                                                                    className="w-full text-left px-3 py-2.5 text-[13px] hover:bg-gray-50 border-b border-gray-50 last:border-0"
+                                                                    onClick={() => handleSalespersonSelect(sp)}
+                                                                    className="w-full cursor-pointer truncate px-4 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-900 border-b border-gray-50 last:border-0"
                                                                 >
-                                                                    {sp.name}
+                                                                    {getSalespersonDisplayName(sp) || "Unnamed Salesperson"}
                                                                 </button>
                                                             ))
                                                         )}
@@ -4203,9 +4445,10 @@ const NewSubscriptionPage = () => {
                                                     <button
                                                         type="button"
                                                         onClick={() => navigate("/sales/salespersons/new")}
-                                                        className="w-full p-2.5 text-blue-600 text-[13px] font-medium border-t border-gray-100 hover:bg-gray-50 flex items-center gap-2 justify-center"
+                                                        className="w-full border-t border-gray-100 px-4 py-2 text-left text-[#156372] text-[13px] font-medium flex items-center gap-2 hover:bg-gray-50"
                                                     >
-                                                        <Plus size={14} /> Manage Salespersons
+                                                        <PlusCircle size={16} />
+                                                        <span>Manage Salespersons</span>
                                                     </button>
                                                 </div>
                                             )}
@@ -4214,33 +4457,6 @@ const NewSubscriptionPage = () => {
                                     <div className="flex items-center">
                                         <label className="text-[13px] text-gray-600 w-44 shrink-0">Associate Project(s) Hours</label>
                                         <div className="text-[13px] text-gray-500">There are no active projects for this customer.</div>
-                                    </div>
-
-                                    <div className="border-t border-gray-100 pt-4" />
-
-                                    <div className="flex items-center">
-                                        <label className="text-[13px] text-[#d9534f] w-44 shrink-0">zxc*</label>
-                                        <div className="relative w-full">
-                                            <select
-                                                className="w-full px-3 py-1.5 border border-gray-300 rounded text-[13px] outline-none appearance-none bg-white"
-                                                value={formData.customZxc}
-                                                onChange={(e) => handleChange("customZxc", e.target.value)}
-                                            >
-                                                <option value="">Select</option>
-                                                <option value="ZXC">ZXC</option>
-                                            </select>
-                                            <ChevronDown size={14} className="pointer-events-none absolute right-8 top-1/2 -translate-y-1/2 text-gray-400" />
-                                            {formData.customZxc && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleChange("customZxc", "")}
-                                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-red-500"
-                                                    aria-label="Clear"
-                                                >
-                                                    <X size={14} />
-                                                </button>
-                                            )}
-                                        </div>
                                     </div>
 
                                     <div className="border-t border-gray-100 pt-4" />
@@ -5089,6 +5305,9 @@ const NewSubscriptionPage = () => {
                                 currency: formData.currency,
                                 customerId: formData.customerId,
                                 subscriptionNumber: formData.subscriptionNumber,
+                                salesperson: formData.salesperson,
+                                salespersonId: formData.salespersonId,
+                                salespersonName: formData.salespersonName,
                                 productId: formData.productId,
                                 productName: formData.productName,
                                 planName: formData.planName,

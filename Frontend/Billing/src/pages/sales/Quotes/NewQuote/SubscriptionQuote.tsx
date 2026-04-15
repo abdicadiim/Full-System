@@ -42,6 +42,8 @@ type ProductOption = {
   code?: string;
   status?: string;
   active?: boolean;
+  plans?: any[];
+  addons?: any[];
 };
 
 type PlanAddonOption = {
@@ -167,10 +169,20 @@ export default function SubscriptionQuote() {
   const [products, setProducts] = useState<ProductOption[]>([]);
   const [planAddons, setPlanAddons] = useState<PlanAddonOption[]>([]);
   const [selectedPlanAddon, setSelectedPlanAddon] = useState<PlanAddonOption | null>(null);
+  const [selectedAddon, setSelectedAddon] = useState<PlanAddonOption | null>(null);
   const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [isPlanAddonDropdownOpen, setIsPlanAddonDropdownOpen] = useState(false);
   const [planAddonSearch, setPlanAddonSearch] = useState("");
+  const addonRowRef = useRef<HTMLDivElement | null>(null);
+  const [isAddonRowVisible, setIsAddonRowVisible] = useState(false);
+  const [isAddonDropdownOpen, setIsAddonDropdownOpen] = useState(false);
+  const [addonSearch, setAddonSearch] = useState("");
+  const [addonQuantity, setAddonQuantity] = useState("1.00");
+  const [addonRate, setAddonRate] = useState("0.00");
+  const [addonTax, setAddonTax] = useState("");
+  const [addonTaxSearch, setAddonTaxSearch] = useState("");
+  const [isAddonTaxDropdownOpen, setIsAddonTaxDropdownOpen] = useState(false);
   const [isManageSalespersonsOpen, setIsManageSalespersonsOpen] = useState(false);
   const [manageSalespersonSearch, setManageSalespersonSearch] = useState("");
   const [selectedSalespersonIds, setSelectedSalespersonIds] = useState<string[]>([]);
@@ -204,6 +216,8 @@ export default function SubscriptionQuote() {
   const [availableReportingTags, setAvailableReportingTags] = useState<any[]>([]);
   const [reportingTagSelections, setReportingTagSelections] = useState<Record<string, string>>({});
   const [isReportingTagsDropdownOpen, setIsReportingTagsDropdownOpen] = useState(false);
+  const [activeReportingTagId, setActiveReportingTagId] = useState<string | null>(null);
+  const [reportingTagSearch, setReportingTagSearch] = useState("");
   const reportingTagsDropdownRef = useRef<HTMLDivElement | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const didPrefillCustomerRef = useRef(false);
@@ -239,6 +253,22 @@ export default function SubscriptionQuote() {
 
   const updateField = <K extends keyof SubscriptionQuoteForm>(field: K, value: SubscriptionQuoteForm[K]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+  const closeOpenDropdowns = () => {
+    setIsCustomerDropdownOpen(false);
+    setIsSalespersonDropdownOpen(false);
+    setIsProductDropdownOpen(false);
+    setIsPlanAddonDropdownOpen(false);
+    setIsAddonDropdownOpen(false);
+    setIsAddonTaxDropdownOpen(false);
+    setIsLocationDropdownOpen(false);
+    setIsTaxPreferenceDropdownOpen(false);
+    setIsCouponDropdownOpen(false);
+    setIsTaxDropdownOpen(false);
+    setIsReportingTagsDropdownOpen(false);
+    setActiveReportingTagId(null);
+    setReportingTagSearch("");
+    setIsPhoneCodeDropdownOpen(false);
   };
   const isProductSelected = formData.product.trim().length > 0;
   const normalizeText = (value: any) => String(value || "").trim().toLowerCase();
@@ -442,6 +472,16 @@ export default function SubscriptionQuote() {
       }))
       .filter((group) => group.options.length > 0);
   }, [taxSearch, taxOptionGroups]);
+  const filteredAddonTaxGroups = useMemo(() => {
+    const keyword = addonTaxSearch.trim().toLowerCase();
+    if (!keyword) return taxOptionGroups;
+    return taxOptionGroups
+      .map((group) => ({
+        ...group,
+        options: group.options.filter((tax) => taxLabel(tax.raw ?? tax).toLowerCase().includes(keyword)),
+      }))
+      .filter((group) => group.options.length > 0);
+  }, [addonTaxSearch, taxOptionGroups]);
   const selectedTaxLabel = useMemo(() => {
     const matchedTax = taxes.find((tax: any) => {
       const id = String(tax?.id || tax?._id || "").trim();
@@ -451,6 +491,15 @@ export default function SubscriptionQuote() {
     if (!matchedTax) return String(formData.tax || "").trim();
     return taxLabel(matchedTax);
   }, [taxes, formData.tax]);
+  const selectedAddonTaxLabel = useMemo(() => {
+    const matchedTax = taxes.find((tax: any) => {
+      const id = String(tax?.id || tax?._id || "").trim();
+      const label = taxLabel(tax);
+      return (id && String(addonTax || "").trim() === id) || String(addonTax || "").trim() === label;
+    });
+    if (!matchedTax) return String(addonTax || "").trim();
+    return taxLabel(matchedTax);
+  }, [taxes, addonTax]);
 
   const applyResolvedPriceListChoice = (nextPriceListName: string) => {
     setFormData((prev) => ({
@@ -484,6 +533,83 @@ export default function SubscriptionQuote() {
     const normalizedPrefix = sanitizeQuotePrefix(prefix);
     const digits = String(number || "").replace(/\D/g, "") || "000001";
     return `${normalizedPrefix}${digits.padStart(6, "0")}`;
+  };
+
+  const isDuplicateQuoteNumberError = (error: any) => {
+    const message = String(
+      error?.response?.data?.message ||
+      error?.response?.data?.error ||
+      error?.message ||
+      error?.data?.message ||
+      ""
+    ).toLowerCase();
+    return (
+      message.includes("duplicate") ||
+      message.includes("already exists") ||
+      message.includes("conflict") ||
+      message.includes("409") ||
+      message.includes("quote number already exists")
+    );
+  };
+
+  const getFreshQuoteNumberForSave = async (currentNumber: string) => {
+    const current = String(currentNumber || "").trim();
+    const fallbackPrefix = deriveQuotePrefixFromNumber(current, quotePrefix);
+    const fallbackDigits = extractQuoteDigits(current) || quoteNextNumber || "000001";
+
+    try {
+      const response: any = await transactionNumberSeriesAPI.getNextNumber({ module: "Quote", reserve: true });
+      const reservedNumber = String(
+        response?.data?.quoteNumber ||
+        response?.data?.nextNumber ||
+        response?.quoteNumber ||
+        response?.nextNumber ||
+        ""
+      ).trim();
+      if (reservedNumber) {
+        const reservedPrefix = deriveQuotePrefixFromNumber(reservedNumber, fallbackPrefix);
+        const reservedDigits = extractQuoteDigits(reservedNumber) || fallbackDigits;
+        return buildQuoteNumber(reservedPrefix, reservedDigits);
+      }
+    } catch (error) {
+      console.error("Failed to reserve quote number before saving subscription quote:", error);
+    }
+
+    try {
+      const response: any = await transactionNumberSeriesAPI.getNextNumber({ module: "Quote", reserve: false });
+      const nextNumber = String(
+        response?.data?.quoteNumber ||
+        response?.data?.nextNumber ||
+        response?.quoteNumber ||
+        response?.nextNumber ||
+        ""
+      ).trim();
+      if (nextNumber) {
+        const nextPrefix = deriveQuotePrefixFromNumber(nextNumber, fallbackPrefix);
+        const nextDigits = extractQuoteDigits(nextNumber) || fallbackDigits;
+        return buildQuoteNumber(nextPrefix, nextDigits);
+      }
+    } catch (error) {
+      console.error("Failed to fetch fallback quote number before saving subscription quote:", error);
+    }
+
+    try {
+      const existingQuotes = await getQuotes();
+      const prefix = sanitizeQuotePrefix(fallbackPrefix);
+      const maxSuffix = existingQuotes
+        .map((quote: any) => String(quote?.quoteNumber || "").trim())
+        .filter((number) => number.startsWith(prefix))
+        .map((number) => {
+          const digits = number.match(/\d+$/);
+          return digits ? parseInt(digits[0], 10) : 0;
+        })
+        .reduce((max, cur) => (cur > max ? cur : max), 0);
+      return buildQuoteNumber(prefix, String(maxSuffix + 1));
+    } catch (error) {
+      console.error("Failed to derive fallback quote number before saving subscription quote:", error);
+    }
+
+    return buildQuoteNumber(fallbackPrefix, fallbackDigits);
   };
 
   const normalizeTaxRows = (rows: any[]) => {
@@ -574,6 +700,13 @@ export default function SubscriptionQuote() {
       productName: String(row?.productName || sourceName || "").trim(),
     };
   };
+  const buildPlanAddonDedupKey = (row: PlanAddonOption) =>
+    [
+      row.type,
+      normalizeText(row.name),
+      normalizeText(row.code),
+      String(Number(row.rate || 0).toFixed(2)),
+    ].join("|");
   const mapProductsRows = (rows: any[]): ProductOption[] =>
     rows
       .map((row: any, idx: number) => {
@@ -602,6 +735,8 @@ export default function SubscriptionQuote() {
           code: String(row?.code || row?.sku || row?.productCode || "").trim(),
           status: String(statusValue || ""),
           active: typeof activeValue === "boolean" ? activeValue : undefined,
+          plans: Array.isArray(row?.plans) ? row.plans : [],
+          addons: Array.isArray(row?.addons) ? row.addons : [],
         };
       })
       .filter((row: ProductOption) => row.name);
@@ -797,7 +932,11 @@ export default function SubscriptionQuote() {
           }))
           .filter((row: PlanAddonOption) => row.name);
 
-        setPlanAddons([...mappedPlans, ...mappedAddons]);
+        const mergedPlanAddons = [...mappedPlans, ...mappedAddons];
+        const uniquePlanAddons = Array.from(
+          new Map(mergedPlanAddons.map((row) => [buildPlanAddonDedupKey(row), row])).values()
+        );
+        setPlanAddons(uniquePlanAddons);
       } catch {
         const localPlans = readRows("inv_plans_v1");
         const mappedPlans: PlanAddonOption[] = localPlans
@@ -833,7 +972,11 @@ export default function SubscriptionQuote() {
           }))
           .filter((row: PlanAddonOption) => row.name);
 
-        setPlanAddons([...mappedPlans, ...mappedAddons]);
+        const mergedPlanAddons = [...mappedPlans, ...mappedAddons];
+        const uniquePlanAddons = Array.from(
+          new Map(mergedPlanAddons.map((row) => [buildPlanAddonDedupKey(row), row])).values()
+        );
+        setPlanAddons(uniquePlanAddons);
       }
     };
 
@@ -973,6 +1116,10 @@ export default function SubscriptionQuote() {
       if (planAddonDropdownRef.current && !planAddonDropdownRef.current.contains(event.target as Node)) {
         setIsPlanAddonDropdownOpen(false);
       }
+      if (addonRowRef.current && !addonRowRef.current.contains(event.target as Node)) {
+        setIsAddonDropdownOpen(false);
+        setIsAddonTaxDropdownOpen(false);
+      }
       if (locationDropdownRef.current && !locationDropdownRef.current.contains(event.target as Node)) {
         setIsLocationDropdownOpen(false);
       }
@@ -987,6 +1134,8 @@ export default function SubscriptionQuote() {
       }
       if (reportingTagsDropdownRef.current && !reportingTagsDropdownRef.current.contains(event.target as Node)) {
         setIsReportingTagsDropdownOpen(false);
+        setActiveReportingTagId(null);
+        setReportingTagSearch("");
       }
       if (phoneCodeDropdownRef.current && !phoneCodeDropdownRef.current.contains(event.target as Node)) {
         setIsPhoneCodeDropdownOpen(false);
@@ -1265,12 +1414,6 @@ export default function SubscriptionQuote() {
   });
 
   const selectedProduct = products.find((product: ProductOption) => product.name === formData.product);
-  const selectedProductNameKey = normalizeText(formData.product);
-  const selectedProductAliases = new Set(
-    [selectedProduct?.id, selectedProduct?.name, selectedProduct?.code]
-      .map((value) => normalizeText(value))
-      .filter(Boolean)
-  );
 
   const activePlanAddons = planAddons.filter((row: PlanAddonOption) => {
     const status = normalizeText(row.status);
@@ -1285,33 +1428,117 @@ export default function SubscriptionQuote() {
     return normalizeText(row.name).includes(term) || normalizeText(row.code).includes(term);
   });
 
-  const linkedPlanAddons = searchMatchedPlanAddons.filter((row: PlanAddonOption) => {
-    const rowAliases = new Set(
-      [row.productId, row.productName]
+  const getLinkedPlanAddonsForProduct = (product: ProductOption | null, sourceRows: PlanAddonOption[] = activePlanAddons) => {
+    if (!product) return [];
+    const productPlans = Array.isArray(product.plans) ? product.plans : [];
+    const productAddons = Array.isArray(product.addons) ? product.addons : [];
+    const productAliases = new Set(
+      [product.id, product.name, product.code]
         .map((value) => normalizeText(value))
         .filter(Boolean)
     );
-    const rowProductNameKey = normalizeText(row.productName);
+    const productNameKey = normalizeText(product.name);
+    const hasEmbeddedLinks = productPlans.length > 0 || productAddons.length > 0;
 
-    let linked = false;
-    for (const alias of selectedProductAliases) {
-      if (rowAliases.has(alias)) {
-        linked = true;
-        break;
+    const embeddedRows: PlanAddonOption[] = [
+      ...productPlans.map((linked: any, index: number) => ({
+        id: String(linked?.planId || linked?.id || linked?._id || linked?.code || linked?.name || `plan-${index}`),
+        name: String(linked?.name || linked?.planName || linked?.title || "").trim(),
+        code: String(linked?.code || linked?.planCode || "").trim(),
+        type: "plan" as const,
+        productId: product.id,
+        productName: product.name,
+        rate: Number(linked?.rate ?? linked?.price ?? 0) || 0,
+        taxSelection: String(linked?.taxId || linked?.tax || linked?.taxSelection || "").trim(),
+        taxName: String(linked?.taxName || "").trim(),
+        taxRate: Number(linked?.taxRate ?? 0) || 0,
+        status: String(linked?.status || "active"),
+        active: linked?.status ? String(linked.status).toLowerCase() === "active" : undefined,
+      })),
+      ...productAddons.map((linked: any, index: number) => ({
+        id: String(linked?.addonId || linked?.id || linked?._id || linked?.code || linked?.name || `addon-${index}`),
+        name: String(linked?.name || linked?.addonName || linked?.title || "").trim(),
+        code: String(linked?.code || linked?.addonCode || "").trim(),
+        type: "addon" as const,
+        productId: product.id,
+        productName: product.name,
+        rate: Number(linked?.rate ?? linked?.price ?? 0) || 0,
+        taxSelection: String(linked?.taxId || linked?.tax || linked?.taxSelection || "").trim(),
+        taxName: String(linked?.taxName || "").trim(),
+        taxRate: Number(linked?.taxRate ?? 0) || 0,
+        status: String(linked?.status || "active"),
+        active: linked?.status ? String(linked.status).toLowerCase() === "active" : undefined,
+      })),
+    ].filter((row) => row.name);
+
+    const matchesEmbeddedPlan = (row: PlanAddonOption) => {
+      const listRows = row.type === "plan" ? productPlans : productAddons;
+      return (Array.isArray(listRows) ? listRows : []).some((linked: any) => {
+        const linkedId = String(linked?.planId || linked?.addonId || linked?.id || linked?._id || "").trim();
+        const linkedName = String(linked?.name || linked?.planName || linked?.addonName || "").trim();
+        const linkedCode = String(linked?.code || linked?.planCode || linked?.addonCode || "").trim();
+        const rowId = String(row.id || "").trim();
+        const rowName = normalizeText(row.name);
+        const rowCode = normalizeText(row.code);
+        return (
+          (linkedId && linkedId === rowId) ||
+          (linkedName && rowName === normalizeText(linkedName)) ||
+          (linkedCode && rowCode === normalizeText(linkedCode))
+        );
+      });
+    };
+
+    const matchesLegacyLink = (row: PlanAddonOption) => {
+      const rowAliases = new Set(
+        [row.productId, row.productName]
+          .map((value) => normalizeText(value))
+          .filter(Boolean)
+      );
+      const rowProductNameKey = normalizeText(row.productName);
+
+      let linked = false;
+      for (const alias of productAliases) {
+        if (rowAliases.has(alias)) {
+          linked = true;
+          break;
+        }
       }
-    }
-    if (!linked && selectedProductNameKey && rowProductNameKey) {
-      linked =
-        rowProductNameKey.includes(selectedProductNameKey) ||
-        selectedProductNameKey.includes(rowProductNameKey);
-    }
-    return linked;
-  });
+      if (!linked && productNameKey && rowProductNameKey) {
+        linked =
+          rowProductNameKey.includes(productNameKey) ||
+          productNameKey.includes(rowProductNameKey);
+      }
+      return linked;
+    };
 
-  const availablePlanAddons = !isProductSelected
-    ? []
-    : (linkedPlanAddons.length > 0 ? linkedPlanAddons : searchMatchedPlanAddons);
-  const isPlanAddonFallbackMode = isProductSelected && linkedPlanAddons.length === 0 && searchMatchedPlanAddons.length > 0;
+    const filteredRows = sourceRows
+      .filter((row: PlanAddonOption) => (hasEmbeddedLinks ? matchesEmbeddedPlan(row) : matchesLegacyLink(row)));
+
+    const rowsToUse = hasEmbeddedLinks && filteredRows.length === 0 ? embeddedRows : filteredRows;
+
+    return rowsToUse
+      .sort((a, b) => {
+        if (a.type !== b.type) return a.type === "plan" ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+  };
+
+  const linkedPlanAddons = getLinkedPlanAddonsForProduct(selectedProduct, searchMatchedPlanAddons);
+
+  const availablePlanOptions = isProductSelected ? linkedPlanAddons.filter((row: PlanAddonOption) => row.type === "plan") : [];
+  const availableAddonOptions = isProductSelected ? linkedPlanAddons.filter((row: PlanAddonOption) => row.type === "addon") : [];
+  const filteredAddonOptions = availableAddonOptions.filter((row: PlanAddonOption) => {
+    const term = normalizeText(addonSearch);
+    if (!term) return true;
+    return normalizeText(row.name).includes(term) || normalizeText(row.code).includes(term);
+  });
+  const getFilteredReportingTagOptions = (tag: any) => {
+    const options = Array.isArray(tag?.options) ? tag.options : [];
+    const term = normalizeText(reportingTagSearch);
+    if (!term) return options;
+    return options.filter((opt: any) => normalizeText(opt).includes(term));
+  };
+  const isPlanAddonFallbackMode = false;
 
   const activeCoupons = coupons.filter((coupon: CouponOption) => {
     const status = normalizeText(coupon.status);
@@ -1598,12 +1825,22 @@ export default function SubscriptionQuote() {
 
   const handleProductSelect = (product: ProductOption) => {
     updateField("product", product.name);
-    updateField("plan", "");
-    updateField("rate", "0.00");
     updateField("coupon", "");
     updateField("couponCode", "");
     updateField("couponValue", "0.00");
+    updateField("plan", "");
+    updateField("rate", "0.00");
+    updateField("tax", "");
     setSelectedPlanAddon(null);
+    setSelectedAddon(null);
+    setAddonQuantity("1.00");
+    setAddonRate("0.00");
+    setAddonTax("");
+    setAddonSearch("");
+    setAddonTaxSearch("");
+    setIsAddonRowVisible(false);
+    setIsAddonDropdownOpen(false);
+    setIsAddonTaxDropdownOpen(false);
     setProductSearch("");
     setPlanAddonSearch("");
     setCouponSearch("");
@@ -1628,6 +1865,34 @@ export default function SubscriptionQuote() {
     setIsPlanAddonDropdownOpen(false);
   };
 
+  const handleAddonSelect = (row: PlanAddonOption) => {
+    setSelectedAddon(row);
+    const baseRate = Number(row.rate || 0);
+    const nextRate = selectedPriceList ? applyPriceListToBaseRate(baseRate, selectedPriceList, row) : baseRate;
+    const customerTaxLabel = selectedCustomer ? getCustomerTaxLabel(selectedCustomer) : "";
+    const addonTaxLabel = getPlanAddonTaxLabel(row);
+    setAddonQuantity("1.00");
+    setAddonRate(nextRate.toFixed(2));
+    setAddonTax(customerTaxLabel || addonTaxLabel || "");
+    setIsAddonRowVisible(true);
+    setAddonSearch("");
+    setIsAddonDropdownOpen(false);
+    setAddonTaxSearch("");
+    setIsAddonTaxDropdownOpen(false);
+  };
+
+  const handleRemoveAddon = () => {
+    setSelectedAddon(null);
+    setAddonQuantity("1.00");
+    setAddonRate("0.00");
+    setAddonTax("");
+    setAddonSearch("");
+    setAddonTaxSearch("");
+    setIsAddonRowVisible(false);
+    setIsAddonDropdownOpen(false);
+    setIsAddonTaxDropdownOpen(false);
+  };
+
   useEffect(() => {
     if (!selectedPlanAddon) return;
     const baseRate = Number(selectedPlanAddon.rate || 0);
@@ -1641,6 +1906,21 @@ export default function SubscriptionQuote() {
       return { ...prev, rate: nextRateText, tax: nextTax };
     });
   }, [selectedPriceList, selectedPlanAddon, selectedCustomer, taxes]);
+
+  useEffect(() => {
+    if (!selectedAddon) return;
+    const baseRate = Number(selectedAddon.rate || 0);
+    const nextRate = selectedPriceList ? applyPriceListToBaseRate(baseRate, selectedPriceList, selectedAddon) : baseRate;
+    const nextRateText = nextRate.toFixed(2);
+    const customerTaxLabel = selectedCustomer ? getCustomerTaxLabel(selectedCustomer) : "";
+    const addonTaxLabel = getPlanAddonTaxLabel(selectedAddon);
+    setAddonRate((prev) => (String(prev || "").trim() === nextRateText ? prev : nextRateText));
+    setAddonTax((prev) => {
+      const nextTax = customerTaxLabel || addonTaxLabel || prev;
+      if (String(prev || "").trim() === String(nextTax || "").trim()) return prev;
+      return nextTax;
+    });
+  }, [selectedPriceList, selectedAddon, selectedCustomer, taxes]);
 
   const formatCouponValue = (coupon: CouponOption) => {
     const isPercent = normalizeText(coupon.discountType).includes("percent");
@@ -1675,19 +1955,60 @@ export default function SubscriptionQuote() {
   };
 
   const isTaxInclusive = normalizeText(formData.taxPreference) === "tax inclusive";
+  const planQuantityAmount = useMemo(() => toAmount(formData.quantity), [formData.quantity]);
+  const planRateAmount = useMemo(() => toAmount(formData.rate), [formData.rate]);
+  const planBaseAmount = useMemo(() => planQuantityAmount * planRateAmount, [planQuantityAmount, planRateAmount]);
   const quoteTaxRate = useMemo(() => extractTaxRate(formData.tax), [formData.tax]);
-  const quoteBaseAmount = useMemo(() => toAmount(formData.quantity) * toAmount(formData.rate), [formData.quantity, formData.rate]);
-  const quoteTaxAmount = useMemo(() => {
-    if (quoteTaxRate <= 0 || quoteBaseAmount <= 0) return 0;
-    if (isTaxInclusive) return (quoteBaseAmount * quoteTaxRate) / (100 + quoteTaxRate);
-    return (quoteBaseAmount * quoteTaxRate) / 100;
-  }, [quoteBaseAmount, quoteTaxRate, isTaxInclusive]);
-  const quoteLineAmount = useMemo(() => {
-    if (quoteTaxRate <= 0) return quoteBaseAmount;
-    return isTaxInclusive ? quoteBaseAmount : quoteBaseAmount + quoteTaxAmount;
-  }, [quoteBaseAmount, quoteTaxAmount, quoteTaxRate, isTaxInclusive]);
+  const planTaxAmount = useMemo(() => {
+    if (quoteTaxRate <= 0 || planBaseAmount <= 0) return 0;
+    if (isTaxInclusive) return (planBaseAmount * quoteTaxRate) / (100 + quoteTaxRate);
+    return (planBaseAmount * quoteTaxRate) / 100;
+  }, [planBaseAmount, quoteTaxRate, isTaxInclusive]);
+  const planLineAmount = useMemo(() => {
+    if (quoteTaxRate <= 0) return planBaseAmount;
+    return isTaxInclusive ? planBaseAmount : planBaseAmount + planTaxAmount;
+  }, [planBaseAmount, planTaxAmount, quoteTaxRate, isTaxInclusive]);
+
+  const hasAddonSelection = Boolean(isAddonRowVisible && selectedAddon);
+  const addonQuantityAmount = useMemo(() => (hasAddonSelection ? toAmount(addonQuantity) : 0), [hasAddonSelection, addonQuantity]);
+  const addonRateAmount = useMemo(() => (hasAddonSelection ? toAmount(addonRate) : 0), [hasAddonSelection, addonRate]);
+  const addonBaseAmount = useMemo(() => addonQuantityAmount * addonRateAmount, [addonQuantityAmount, addonRateAmount]);
+  const addonTaxRate = useMemo(() => extractTaxRate(addonTax), [addonTax]);
+  const addonTaxAmount = useMemo(() => {
+    if (!hasAddonSelection || addonTaxRate <= 0 || addonBaseAmount <= 0) return 0;
+    if (isTaxInclusive) return (addonBaseAmount * addonTaxRate) / (100 + addonTaxRate);
+    return (addonBaseAmount * addonTaxRate) / 100;
+  }, [addonBaseAmount, addonTaxRate, hasAddonSelection, isTaxInclusive]);
+  const addonLineAmount = useMemo(() => {
+    if (!hasAddonSelection || addonTaxRate <= 0) return addonBaseAmount;
+    return isTaxInclusive ? addonBaseAmount : addonBaseAmount + addonTaxAmount;
+  }, [addonBaseAmount, addonTaxAmount, addonTaxRate, hasAddonSelection, isTaxInclusive]);
+
+  const quoteBaseAmount = useMemo(() => planBaseAmount + (hasAddonSelection ? addonBaseAmount : 0), [planBaseAmount, addonBaseAmount, hasAddonSelection]);
+  const quoteTaxAmount = useMemo(() => planTaxAmount + (hasAddonSelection ? addonTaxAmount : 0), [planTaxAmount, addonTaxAmount, hasAddonSelection]);
+  const quoteLineAmount = planLineAmount;
   const couponDiscountAmount = useMemo(() => parseCouponDiscount(formData.couponValue, quoteBaseAmount), [formData.couponValue, quoteBaseAmount]);
-  const recurringTotal = useMemo(() => Math.max(quoteBaseAmount - couponDiscountAmount, 0), [quoteBaseAmount, couponDiscountAmount]);
+  const summaryLineItems = useMemo(() => {
+    const items: Array<{ name: string; amount: number; rate: number }> = [];
+    if (formData.plan) {
+      items.push({
+        name: formData.plan,
+        amount: planLineAmount,
+        rate: planRateAmount,
+      });
+    }
+    if (selectedAddon && isAddonRowVisible) {
+      items.push({
+        name: selectedAddon.name,
+        amount: addonLineAmount,
+        rate: addonRateAmount,
+      });
+    }
+    return items;
+  }, [formData.plan, planLineAmount, planRateAmount, selectedAddon, isAddonRowVisible, addonLineAmount, addonRateAmount]);
+  const summarySubtotal = useMemo(() => summaryLineItems.reduce((sum, item) => sum + item.amount, 0), [summaryLineItems]);
+  const immediateTotal = useMemo(() => Math.max(summarySubtotal - couponDiscountAmount, 0), [summarySubtotal, couponDiscountAmount]);
+  const recurringTotal = useMemo(() => Math.max(summarySubtotal - couponDiscountAmount, 0), [summarySubtotal, couponDiscountAmount]);
   const quoteDateForSummary = useMemo(() => {
     const iso = toIsoDate(formData.quoteDate);
     if (iso) {
@@ -1696,20 +2017,11 @@ export default function SubscriptionQuote() {
     }
     return new Date();
   }, [formData.quoteDate]);
-  const billingCycleDays = useMemo(
-    () => new Date(quoteDateForSummary.getFullYear(), quoteDateForSummary.getMonth() + 1, 0).getDate(),
-    [quoteDateForSummary]
-  );
-  const prorateDays = 5;
-  const immediateTotal = useMemo(
-    () => (recurringTotal > 0 ? (recurringTotal * prorateDays) / Math.max(billingCycleDays, 1) : 0),
-    [recurringTotal, prorateDays, billingCycleDays]
-  );
   const immediateRangeEnd = useMemo(() => {
     const d = new Date(quoteDateForSummary);
-    d.setDate(d.getDate() + prorateDays - 1);
+    d.setMonth(d.getMonth() + 1);
     return d;
-  }, [quoteDateForSummary, prorateDays]);
+  }, [quoteDateForSummary]);
   const displaySummaryDate = (d: Date) =>
     new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(d);
 
@@ -1723,42 +2035,88 @@ export default function SubscriptionQuote() {
     setIsCouponDropdownOpen(false);
   };
 
-  const buildQuotePayload = () => {
-    const quantity = toAmount(formData.quantity);
-    const rate = toAmount(formData.rate);
+  const formatAddressSnapshot = (address: any) => {
+    if (!address) return "";
+    if (typeof address === "string") return address.trim();
+
+    const attention = String(address?.attention || "").trim();
+    const street1 = String(address?.street1 || "").trim();
+    const street2 = String(address?.street2 || "").trim();
+    const city = String(address?.city || "").trim();
+    const state = String(address?.state || "").trim();
+    const zipCode = String(address?.zipCode || "").trim();
+    const country = String(address?.country || "").trim();
+    const cityStateZip = [city, state, zipCode].filter(Boolean).join(", ");
+
+    return [attention, street1, street2, cityStateZip, country].filter(Boolean).join(", ");
+  };
+
+  const ensureCustomerAddressBeforeSave = () => {
+    const billing = formatAddressSnapshot(billingAddress || (selectedCustomer as any)?.billingAddress);
+    const shipping = formatAddressSnapshot(shippingAddress || (selectedCustomer as any)?.shippingAddress);
+    if (billing || shipping) return true;
+    toast.error("Add a billing or shipping address before saving the quote.");
+    openAddressModal("billing");
+    return false;
+  };
+
+  const buildQuotePayload = (overrideQuoteNumber?: string) => {
+    const billing = formatAddressSnapshot(billingAddress || (selectedCustomer as any)?.billingAddress);
+    const shipping = formatAddressSnapshot(shippingAddress || (selectedCustomer as any)?.shippingAddress);
+    const quoteNumberValue = String(overrideQuoteNumber || formData.quoteNumber || "").trim();
+    const quantity = planQuantityAmount;
+    const rate = planRateAmount;
     const subtotal = quoteBaseAmount;
     const discount = couponDiscountAmount;
     const totalBeforeDiscount = isTaxInclusive ? subtotal : subtotal + quoteTaxAmount;
     const total = Math.max(totalBeforeDiscount - discount, 0);
 
     const taxName = String(formData.tax || "").split("[")[0].trim() || (normalizeText(formData.tax) === "non-taxable" ? "Non-Taxable" : "");
-
-    const quoteItems = formData.plan
-      ? [
-        {
-          id: 1,
-          itemId: String(selectedPlanAddon?.id || ""),
-          itemType: String(selectedPlanAddon?.type || "plan"),
-          name: formData.plan,
-          description: "",
-          quantity,
-          rate,
-          taxId: "",
-          taxName: taxName || "Non-Taxable",
-          taxRate: quoteTaxRate,
-          tax: formData.tax || "Non-Taxable",
-          amount: quoteLineAmount,
-          reportingTags: Object.entries(reportingTagSelections).map(([tagId, value]) => ({ tagId, value })),
-        },
-      ]
-      : [];
+    const quoteItems: any[] = [];
+    if (formData.plan) {
+      quoteItems.push({
+        id: 1,
+        itemId: String(selectedPlanAddon?.id || ""),
+        itemType: String(selectedPlanAddon?.type || "plan"),
+        name: formData.plan,
+        description: "",
+        quantity,
+        rate,
+        taxId: "",
+        taxName: taxName || "Non-Taxable",
+        taxRate: quoteTaxRate,
+        tax: formData.tax || "Non-Taxable",
+        amount: quoteLineAmount,
+        reportingTags: Object.entries(reportingTagSelections).map(([tagId, value]) => ({ tagId, value })),
+      });
+    }
+    if (selectedAddon && isAddonRowVisible) {
+      const addonTaxName = String(addonTax || "").split("[")[0].trim() || (normalizeText(addonTax) === "non-taxable" ? "Non-Taxable" : "");
+      quoteItems.push({
+        id: quoteItems.length + 1,
+        itemId: String(selectedAddon.id || ""),
+        itemType: String(selectedAddon.type || "addon"),
+        name: selectedAddon.name,
+        description: "",
+        quantity: addonQuantityAmount,
+        rate: addonRateAmount,
+        taxId: "",
+        taxName: addonTaxName || "Non-Taxable",
+        taxRate: addonTaxRate,
+        tax: addonTax || "Non-Taxable",
+        amount: addonLineAmount,
+        reportingTags: Object.entries(reportingTagSelections).map(([tagId, value]) => ({ tagId, value })),
+      });
+    }
 
     return {
-      quoteNumber: formData.quoteNumber,
+      quoteNumber: quoteNumberValue,
       referenceNumber: formData.referenceNumber,
       customerName: formData.customerName,
       customer: selectedCustomer?.id || selectedCustomer?._id || formData.customerName,
       customerId: selectedCustomer?.id || selectedCustomer?._id || undefined,
+      billingAddress: billing,
+      shippingAddress: shipping,
       quoteDate: formData.quoteDate,
       expiryDate: formData.expiryDate || undefined,
       salesperson: formData.salesperson,
@@ -1801,15 +2159,41 @@ export default function SubscriptionQuote() {
 
   const handleSaveAsDraft = async () => {
     if (saveLoading) return;
+    if (!ensureCustomerAddressBeforeSave()) return;
     setSaveLoading("draft");
     try {
-      const payload = buildQuotePayload();
+      const currentNumber = String(formData.quoteNumber || "").trim();
+      const effectiveQuoteNumber =
+        quoteNumberMode === "auto"
+          ? await getFreshQuoteNumberForSave(currentNumber)
+          : currentNumber || await getFreshQuoteNumberForSave(currentNumber);
+      if (effectiveQuoteNumber && effectiveQuoteNumber !== currentNumber) {
+        updateField("quoteNumber", effectiveQuoteNumber);
+      }
+      const payload = buildQuotePayload(effectiveQuoteNumber);
       const savedQuote: any = await saveQuote(payload);
       const id = extractSavedQuoteId(savedQuote);
       setIsSummaryModalOpen(false);
       if (id) navigate(`/sales/quotes/${id}`, { replace: true });
       else navigate("/sales/quotes", { replace: true });
     } catch (error) {
+      if (isDuplicateQuoteNumberError(error)) {
+        try {
+          const retryQuoteNumber = await getFreshQuoteNumberForSave(formData.quoteNumber);
+          if (retryQuoteNumber) {
+            updateField("quoteNumber", retryQuoteNumber);
+            const retryPayload = buildQuotePayload(retryQuoteNumber);
+            const savedQuote: any = await saveQuote(retryPayload);
+            const id = extractSavedQuoteId(savedQuote);
+            setIsSummaryModalOpen(false);
+            if (id) navigate(`/sales/quotes/${id}`, { replace: true });
+            else navigate("/sales/quotes", { replace: true });
+            return;
+          }
+        } catch (retryError) {
+          console.error("Failed retrying subscription quote save with fresh quote number:", retryError);
+        }
+      }
       console.error("Failed to save subscription quote as draft:", error);
       alert("Failed to save quote as draft.");
     } finally {
@@ -1819,9 +2203,18 @@ export default function SubscriptionQuote() {
 
   const handleSaveAndSend = async () => {
     if (saveLoading) return;
+    if (!ensureCustomerAddressBeforeSave()) return;
     setSaveLoading("send");
     try {
-      const payload = buildQuotePayload();
+      const currentNumber = String(formData.quoteNumber || "").trim();
+      const effectiveQuoteNumber =
+        quoteNumberMode === "auto"
+          ? await getFreshQuoteNumberForSave(currentNumber)
+          : currentNumber || await getFreshQuoteNumberForSave(currentNumber);
+      if (effectiveQuoteNumber && effectiveQuoteNumber !== currentNumber) {
+        updateField("quoteNumber", effectiveQuoteNumber);
+      }
+      const payload = buildQuotePayload(effectiveQuoteNumber);
       const savedQuote: any = await saveQuote(payload);
       const id = extractSavedQuoteId(savedQuote);
       setIsSendApprovalModalOpen(false);
@@ -1829,6 +2222,24 @@ export default function SubscriptionQuote() {
       if (id) navigate(`/sales/quotes/${id}/email`, { state: { preloadedQuote: savedQuote } });
       else navigate("/sales/quotes", { replace: true });
     } catch (error) {
+      if (isDuplicateQuoteNumberError(error)) {
+        try {
+          const retryQuoteNumber = await getFreshQuoteNumberForSave(formData.quoteNumber);
+          if (retryQuoteNumber) {
+            updateField("quoteNumber", retryQuoteNumber);
+            const retryPayload = buildQuotePayload(retryQuoteNumber);
+            const savedQuote: any = await saveQuote(retryPayload);
+            const id = extractSavedQuoteId(savedQuote);
+            setIsSendApprovalModalOpen(false);
+            setIsSummaryModalOpen(false);
+            if (id) navigate(`/sales/quotes/${id}/email`, { state: { preloadedQuote: savedQuote } });
+            else navigate("/sales/quotes", { replace: true });
+            return;
+          }
+        } catch (retryError) {
+          console.error("Failed retrying subscription quote send with fresh quote number:", retryError);
+        }
+      }
       console.error("Failed to save and open email for subscription quote:", error);
       alert("Failed to save and send quote.");
     } finally {
@@ -2623,7 +3034,7 @@ export default function SubscriptionQuote() {
               )}
             </div>
 
-            <div className={`mt-4 w-full max-w-[1060px] border border-slate-200 bg-white relative ${(isPlanAddonDropdownOpen || isTaxDropdownOpen || isReportingTagsDropdownOpen) ? "overflow-visible z-[100]" : "overflow-x-auto z-0"}`}>
+            <div className={`mt-4 w-full max-w-[1060px] border border-slate-200 bg-white relative ${(isPlanAddonDropdownOpen || isTaxDropdownOpen || isReportingTagsDropdownOpen) ? "overflow-visible z-[300]" : "overflow-x-auto z-0"}`}>
               <div className="min-w-[860px]">
                 <div className="grid grid-cols-[2.5fr_0.72fr_0.82fr_0.9fr_0.82fr_44px] border-b border-slate-200 bg-white text-[11px] font-semibold uppercase tracking-wide text-slate-800">
                   <div className="px-4 py-2.5">Plan and Addon</div>
@@ -2641,7 +3052,7 @@ export default function SubscriptionQuote() {
                   <div className="border-l border-slate-200 px-2 py-2.5" />
                 </div>
 
-                <div className={`grid grid-cols-[2.5fr_0.72fr_0.82fr_0.9fr_0.82fr_44px] items-stretch gap-0 border-b border-slate-200 bg-white ${!isProductSelected ? "opacity-60" : ""} relative ${(isPlanAddonDropdownOpen || isTaxDropdownOpen || isReportingTagsDropdownOpen) ? "z-50" : "z-0"}`}>
+                <div className={`grid grid-cols-[2.5fr_0.72fr_0.82fr_0.9fr_0.82fr_44px] items-stretch gap-0 border-b border-slate-200 bg-white ${!isProductSelected ? "opacity-60" : ""} relative ${(isPlanAddonDropdownOpen || isTaxDropdownOpen || isReportingTagsDropdownOpen) ? "z-[300]" : "z-0"}`}>
                   <div className="flex items-center gap-3 px-4 py-3 border-r border-slate-200">
                     <div className="flex h-7 w-7 items-center justify-center rounded-sm bg-slate-100 text-slate-400">
                       <ImageIcon size={14} />
@@ -2650,14 +3061,17 @@ export default function SubscriptionQuote() {
                       <button
                         type="button"
                         disabled={!isProductSelected}
-                        onClick={() => setIsPlanAddonDropdownOpen((prev) => !prev)}
+                        onClick={() => {
+                          closeOpenDropdowns();
+                          setIsPlanAddonDropdownOpen((prev) => !prev);
+                        }}
                         className={`w-full bg-white px-0 text-left text-[13px] text-slate-500 outline-none flex items-center justify-between ${!isProductSelected ? "cursor-not-allowed" : ""}`}
                       >
                         <span className="truncate">{formData.plan || "Type or click to select a plan."}</span>
                         <ChevronDown size={16} className="ml-2 text-slate-500" />
                       </button>
                       {isPlanAddonDropdownOpen && isProductSelected && (
-                        <div className="absolute left-0 right-0 top-full z-[100] mt-1 overflow-hidden rounded-md border border-slate-200 bg-white shadow-none">
+                        <div className="absolute left-0 right-0 top-full z-[500] mt-1 overflow-hidden rounded-md border border-slate-200 bg-white shadow-none">
                           <div className="border-b border-slate-200 p-2">
                             <div className="relative">
                               <Search size={14} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -2673,14 +3087,14 @@ export default function SubscriptionQuote() {
                           </div>
                           {isPlanAddonFallbackMode && (
                             <div className="border-b border-slate-200 px-3 py-1.5 text-[12px] text-slate-500">
-                              Showing all active plans and addons.
+                              Showing all active plans.
                             </div>
                           )}
                           <div className="max-h-60 overflow-y-auto">
-                            {availablePlanAddons.length === 0 ? (
-                              <div className="px-3 py-2 text-[13px] text-slate-500">No plans/addons found</div>
+                            {availablePlanOptions.length === 0 ? (
+                              <div className="px-3 py-2 text-[13px] text-slate-500">No plans found</div>
                             ) : (
-                              availablePlanAddons.map((row: PlanAddonOption) => (
+                              availablePlanOptions.map((row: PlanAddonOption) => (
                                 <button
                                   key={row.id}
                                   type="button"
@@ -2723,7 +3137,10 @@ export default function SubscriptionQuote() {
                     <button
                       type="button"
                       disabled={!isProductSelected}
-                      onClick={() => setIsTaxDropdownOpen((prev) => !prev)}
+                      onClick={() => {
+                        closeOpenDropdowns();
+                        setIsTaxDropdownOpen((prev) => !prev);
+                      }}
                       className="w-full px-2 py-1.5 border border-gray-300 bg-white rounded outline-none text-sm text-left flex items-center justify-between hover:border-gray-400 transition-colors"
                     >
                       <span className={selectedTaxLabel ? "text-gray-900" : "text-gray-500"}>
@@ -2803,12 +3220,13 @@ export default function SubscriptionQuote() {
                       </div>
                     )}
                   </div>
-                  <div className="border-r border-slate-200 px-4 py-3 text-right text-[14px] font-semibold leading-none text-slate-900">{quoteLineAmount.toFixed(2)}</div>
+                  <div className="border-r border-slate-200 px-4 py-3 text-right text-[14px] font-semibold leading-none text-slate-900">{planLineAmount.toFixed(2)}</div>
                   <div className="relative flex items-center justify-center" ref={moreMenuRef}>
                     <button
                       type="button"
                       disabled={!isProductSelected}
-                      onClick={() => {
+                    onClick={() => {
+                        closeOpenDropdowns();
                         setShowReportingTags((prev) => {
                           const next = !prev;
                           if (!next) setIsReportingTagsDropdownOpen(false);
@@ -2828,7 +3246,10 @@ export default function SubscriptionQuote() {
                       <button
                         type="button"
                         disabled={!isProductSelected}
-                        onClick={() => setIsReportingTagsDropdownOpen(!isReportingTagsDropdownOpen)}
+                        onClick={() => {
+                          closeOpenDropdowns();
+                          setIsReportingTagsDropdownOpen((prev) => !prev);
+                        }}
                         className="flex items-center gap-2 hover:text-slate-700 font-medium"
                       >
                         <Tag size={14} className="text-slate-400" />
@@ -2845,38 +3266,108 @@ export default function SubscriptionQuote() {
                             {availableReportingTags.length === 0 ? (
                               <div className="text-slate-500">No reporting tags available.</div>
                             ) : (
-                              availableReportingTags.map((tag: any) => (
-                              <div key={tag.id || tag._id}>
-                                  <label className="mb-1 block text-[12px] font-medium text-slate-600">{tag.name}</label>
-                                  <div className="relative">
-                                    <select
-                                      className="h-10 w-full appearance-none rounded border border-slate-300 bg-white px-3 pr-10 text-[13px] text-slate-700 outline-none focus:border-[#156372]"
-                                      value={reportingTagSelections[tag.id || tag._id] || ""}
-                                      onChange={(e) => {
-                                        const val = e.target.value;
-                                        setReportingTagSelections(prev => {
-                                          const next = { ...prev };
-                                          if (val) next[tag.id || tag._id] = val;
-                                          else delete next[tag.id || tag._id];
-                                          return next;
-                                        });
-                                      }}
-                                    >
-                                      <option value="">Select an option</option>
-                                      {(Array.isArray(tag.options) ? tag.options : []).map((opt: any) => (
-                                        <option key={opt} value={opt}>{opt}</option>
-                                      ))}
-                                    </select>
-                                    <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                              availableReportingTags.map((tag: any) => {
+                                const tagKey = String(tag.id || tag._id || "").trim();
+                                const selectedValue = reportingTagSelections[tagKey] || "";
+                                const isOpen = activeReportingTagId === tagKey;
+                                const options = getFilteredReportingTagOptions(tag);
+                                return (
+                                  <div key={tagKey || tag.name}>
+                                    <label className="mb-1 block text-[12px] font-medium text-slate-600">{tag.name}</label>
+                                    <div className="relative">
+                                      <button
+                                        type="button"
+                                        className={`h-10 w-full rounded border px-3 pr-10 text-left text-[13px] text-slate-700 outline-none transition ${isOpen ? "border-[#156372]" : "border-slate-300"} focus:border-[#156372]`}
+                                        onClick={() => {
+                                          const nextOpen = isOpen ? null : tagKey;
+                                          setActiveReportingTagId(nextOpen);
+                                          setReportingTagSearch("");
+                                        }}
+                                      >
+                                        <span className={selectedValue ? "text-slate-700" : "text-slate-400"}>
+                                          {selectedValue || "Select an option"}
+                                        </span>
+                                      </button>
+                                      {isOpen ? (
+                                        <ChevronUp size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#156372]" />
+                                      ) : (
+                                        <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                      )}
+                                      {isOpen && (
+                                        <div className="absolute left-0 top-full z-50 mt-1 w-full rounded-md border border-slate-200 bg-white shadow-lg">
+                                          <div className="border-b border-slate-200 p-2">
+                                            <div className="relative">
+                                              <Search size={14} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                                              <input
+                                                type="text"
+                                                className="h-8 w-full rounded border border-slate-300 bg-white pl-7 pr-2 text-[13px] text-slate-700 outline-none focus:border-[#3b82f6]"
+                                                value={reportingTagSearch}
+                                                onChange={(e) => setReportingTagSearch(e.target.value)}
+                                                placeholder="Search"
+                                                autoFocus
+                                              />
+                                            </div>
+                                          </div>
+                                          <div className="max-h-52 overflow-y-auto">
+                                            {options.length === 0 ? (
+                                              <div className="px-3 py-2 text-[13px] text-slate-500">No options found</div>
+                                            ) : (
+                                              options.map((opt: any) => {
+                                                const optionValue = String(opt || "").trim();
+                                                const selected = selectedValue === optionValue;
+                                                return (
+                                                  <button
+                                                    key={optionValue}
+                                                    type="button"
+                                                    className={`w-full border-b border-slate-100 px-3 py-2 text-left text-[13px] ${selected ? "bg-[#eef5ff] text-[#156372]" : "text-slate-700 hover:bg-[#eef5ff]"}`}
+                                                    onClick={() => {
+                                                      setReportingTagSelections((prev) => {
+                                                        const next = { ...prev };
+                                                        if (optionValue) next[tagKey] = optionValue;
+                                                        else delete next[tagKey];
+                                                        return next;
+                                                      });
+                                                      setActiveReportingTagId(null);
+                                                      setReportingTagSearch("");
+                                                    }}
+                                                  >
+                                                    {optionValue}
+                                                  </button>
+                                                );
+                                              })
+                                            )}
+                                          </div>
+                                          <button
+                                            type="button"
+                                            className="flex w-full items-center gap-2 border-t border-slate-100 px-3 py-2 text-[13px] text-[#3b82f6] hover:bg-slate-50"
+                                            onClick={() => {
+                                              setReportingTagSelections((prev) => {
+                                                const next = { ...prev };
+                                                delete next[tagKey];
+                                                return next;
+                                              });
+                                              setActiveReportingTagId(null);
+                                              setReportingTagSearch("");
+                                            }}
+                                          >
+                                            Clear Selection
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              ))
+                                );
+                              })
                             )}
                           </div>
                           <div className="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-3">
                             <button
                               type="button"
-                              onClick={() => setIsReportingTagsDropdownOpen(false)}
+                              onClick={() => {
+                                setIsReportingTagsDropdownOpen(false);
+                                setActiveReportingTagId(null);
+                                setReportingTagSearch("");
+                              }}
                               className="rounded bg-[#0f6c82] px-4 py-1.5 text-[13px] font-medium text-white hover:bg-[#0d5a6d]"
                             >
                               Done
@@ -2890,7 +3381,184 @@ export default function SubscriptionQuote() {
               </div>
             </div>
 
-            {activeCoupons.length > 0 && (
+            {isProductSelected && selectedPlanAddon && (
+              <div className="mt-3 w-full max-w-[1060px]">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-medium text-[#156372] shadow-sm hover:bg-slate-50"
+                  onClick={() => {
+                    closeOpenDropdowns();
+                    setIsAddonRowVisible(true);
+                    setAddonSearch("");
+                    setIsAddonDropdownOpen(true);
+                  }}
+                >
+                  <PlusCircle size={14} />
+                  Add Addon
+                </button>
+              </div>
+            )}
+
+            {isProductSelected && selectedPlanAddon && isAddonRowVisible && (
+              <div className={`mt-3 w-full max-w-[1060px] relative ${(isAddonDropdownOpen || isAddonTaxDropdownOpen) ? "z-[900]" : "z-20"}`}>
+                <div className={`${(isAddonDropdownOpen || isAddonTaxDropdownOpen) ? "overflow-visible" : "overflow-x-auto"} border border-slate-200 bg-white`}>
+                  <div ref={addonRowRef} className="relative z-[910] grid grid-cols-[2.5fr_0.72fr_0.82fr_0.9fr_0.82fr_44px] items-stretch gap-0 border-b border-slate-200 bg-white">
+                    <div className="flex items-center gap-3 px-4 py-3 border-r border-slate-200">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-sm bg-slate-100 text-slate-400">
+                        <ImageIcon size={14} />
+                      </div>
+                      <div className="relative flex-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            closeOpenDropdowns();
+                            setIsAddonDropdownOpen((prev) => !prev);
+                          }}
+                          className="w-full bg-white px-0 text-left text-[13px] text-slate-500 outline-none flex items-center justify-between"
+                        >
+                          <span className="truncate">{selectedAddon?.name || "Type or click to select an addon."}</span>
+                          <ChevronDown size={16} className="ml-2 text-slate-500" />
+                        </button>
+                        {isAddonDropdownOpen && (
+                          <div className="absolute left-0 right-0 top-full z-[950] mt-1 overflow-hidden rounded-md border border-slate-200 bg-white shadow-none">
+                            <div className="border-b border-slate-200 p-2">
+                              <div className="relative">
+                                <Search size={14} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <input
+                                  type="text"
+                                  className="h-8 w-full rounded border border-slate-300 bg-white pl-7 pr-2 text-[13px] text-slate-700 outline-none focus:border-slate-300"
+                                  value={addonSearch}
+                                  onChange={(e) => setAddonSearch(e.target.value)}
+                                  placeholder="Search"
+                                  autoFocus
+                                />
+                              </div>
+                            </div>
+                            <div className="max-h-60 overflow-y-auto">
+                              {filteredAddonOptions.length === 0 ? (
+                                <div className="px-3 py-2 text-[13px] text-slate-500">No addons found</div>
+                              ) : (
+                                filteredAddonOptions.map((row: PlanAddonOption) => (
+                                  <button
+                                    key={row.id}
+                                    type="button"
+                                    className={`block w-full border-b border-slate-100 px-3 py-2 text-left hover:bg-[#eef5ff] ${normalizeText(selectedAddon?.name) === normalizeText(row.name) ? "border-l-2 border-l-[#3b82f6]" : ""}`}
+                                    onClick={() => handleAddonSelect(row)}
+                                  >
+                                    <div className={`text-[13px] font-medium ${normalizeText(selectedAddon?.name) === normalizeText(row.name) ? "text-[#1d4ed8]" : "text-slate-800"}`}>{row.name}</div>
+                                    <div className="text-[12px] text-slate-500">Code: {row.code || "-"}</div>
+                                  </button>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <input
+                      type="text"
+                      className="h-full w-full border-r border-slate-200 bg-white px-4 text-[13px] text-right text-slate-700 outline-none"
+                      value={addonQuantity}
+                      onChange={(e) => setAddonQuantity(e.target.value)}
+                    />
+                    <input
+                      type="text"
+                      className="h-full w-full border-r border-slate-200 bg-white px-4 text-[13px] text-right text-slate-700 outline-none"
+                      value={addonRate}
+                      onChange={(e) => setAddonRate(e.target.value)}
+                    />
+                    <div className="relative border-r border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          closeOpenDropdowns();
+                          setIsAddonTaxDropdownOpen((prev) => !prev);
+                        }}
+                        className="w-full px-2 py-1.5 border border-gray-300 bg-white rounded outline-none text-sm text-left flex items-center justify-between hover:border-gray-400 transition-colors"
+                      >
+                        <span className={selectedAddonTaxLabel ? "text-gray-900" : "text-gray-500"}>
+                          {selectedAddonTaxLabel || "Select a Tax"}
+                        </span>
+                        <ChevronDown
+                          size={14}
+                          className={`transition-transform ${isAddonTaxDropdownOpen ? "rotate-180" : ""}`}
+                          style={{ color: "#156372" }}
+                        />
+                      </button>
+                      {isAddonTaxDropdownOpen && (
+                        <div className="absolute left-0 top-full z-[950] mt-1 w-72 rounded-xl border border-[#d6dbe8] bg-white p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+                          <div className="p-2">
+                            <div
+                              className="flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-all focus-within:bg-white"
+                              style={{ borderColor: "#156372" }}
+                            >
+                              <Search size={14} className="text-slate-400" />
+                              <input
+                                type="text"
+                                className="w-full border-none bg-transparent text-[13px] text-slate-700 outline-none placeholder:text-slate-400"
+                                value={addonTaxSearch}
+                                onChange={(e) => setAddonTaxSearch(e.target.value)}
+                                placeholder="Search..."
+                                autoFocus
+                              />
+                            </div>
+                          </div>
+                          <div className="max-h-64 overflow-y-auto py-1 custom-scrollbar">
+                            {filteredAddonTaxGroups.length > 0 ? (
+                              filteredAddonTaxGroups.map((group) => (
+                                <div key={group.label}>
+                                  <div className="px-4 py-1.5 text-[10px] font-extrabold uppercase tracking-widest text-slate-700">
+                                    {group.label}
+                                  </div>
+                                  {group.options.map((tax) => {
+                                    const label = taxLabel(tax.raw ?? tax);
+                                    const taxId = String(tax.id || "").trim();
+                                    const selected = String(addonTax || "").trim() === taxId || String(addonTax || "").trim() === label;
+                                    return (
+                                      <button
+                                        key={taxId}
+                                        type="button"
+                                        className={`w-full px-4 py-2 text-left text-[13px] ${selected
+                                          ? "text-[#156372] font-medium hover:bg-gray-50 hover:text-gray-900"
+                                          : "text-slate-700 hover:bg-gray-50 hover:text-gray-900"
+                                          }`}
+                                        onClick={() => {
+                                          setAddonTax(taxId || label);
+                                          setIsAddonTaxDropdownOpen(false);
+                                          setAddonTaxSearch("");
+                                        }}
+                                      >
+                                        {label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              ))
+                            ) : (
+                              <div className="px-4 py-3 text-center text-[13px] text-slate-500">No taxes found</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="border-r border-slate-200 px-4 py-3 text-right text-[14px] font-semibold leading-none text-slate-900">
+                      {addonLineAmount.toFixed(2)}
+                    </div>
+                    <div className="flex items-center justify-center px-2">
+                      <button
+                        type="button"
+                        className="text-red-400 hover:text-red-500"
+                        onClick={handleRemoveAddon}
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {isProductSelected && (
             <div className={`mt-8 w-full max-w-[1060px] relative ${isCouponDropdownOpen ? "z-[500]" : "z-0"}`}>
                 <h3 className="mb-3 text-[14px] font-medium text-slate-700">Coupon</h3>
                 <div className={`${isCouponDropdownOpen ? "overflow-visible" : "overflow-x-auto"} border border-slate-200 bg-white relative`}>
@@ -2910,7 +3578,10 @@ export default function SubscriptionQuote() {
                             <button
                               type="button"
                               className="flex w-full items-center justify-between text-[13px] text-slate-500"
-                              onClick={() => setIsCouponDropdownOpen((prev) => !prev)}
+                              onClick={() => {
+                                closeOpenDropdowns();
+                                setIsCouponDropdownOpen((prev) => !prev);
+                              }}
                             >
                               <span>{formData.coupon || "Enter at least 3 characters to search"}</span>
                               <ChevronDown size={14} className={`text-slate-400 transition-transform ${isCouponDropdownOpen ? "rotate-180" : ""}`} />
@@ -3842,9 +4513,7 @@ export default function SubscriptionQuote() {
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="text-[16px] font-medium text-[#f97316]">Immediate Charges</p>
-                    <p className="text-[13px] text-slate-600">
-                      From {displaySummaryDate(quoteDateForSummary)} to {displaySummaryDate(immediateRangeEnd)}
-                    </p>
+                    <p className="text-[13px] text-slate-600">On {displaySummaryDate(quoteDateForSummary)}</p>
                     <button
                       type="button"
                       className="mt-1 text-[13px] text-[#2563eb] hover:underline"
@@ -3855,22 +4524,33 @@ export default function SubscriptionQuote() {
                   </div>
                   <div className="text-right">
                     <p className="text-[30px] font-semibold text-slate-800">{formatCurrency(immediateTotal)}</p>
-                    <p className="text-[12px] italic text-slate-500">Prorated Amount</p>
+                    <p className="text-[12px] italic text-slate-500">Monthly Amount</p>
                   </div>
                 </div>
 
                 {showImmediateBreakdown && (
                   <div className="mt-3 border-t border-slate-200 pt-3 text-[13px] text-slate-700">
-                    <div className="flex items-center justify-between">
-                      <span>{formData.plan || "-"}</span>
-                      <span className="flex items-center gap-1">{formatCurrency(immediateTotal)} <ChevronDown size={12} className="text-[#2563eb]" /></span>
-                    </div>
-                    <div className="mt-1 text-[12px] italic text-slate-500">
-                      Actual Cost: {formatCurrency(toAmount(formData.rate))}/Unit
-                    </div>
+                    {summaryLineItems.length === 0 ? (
+                      <div className="text-slate-500">No items selected.</div>
+                    ) : (
+                      summaryLineItems.map((item, index) => (
+                        <div key={`${item.name}-${index}`} className="mb-3">
+                          <div className="flex items-center justify-between">
+                            <span>{item.name}</span>
+                            <span className="flex items-center gap-1">
+                              {formatCurrency(item.amount)}
+                              <ChevronDown size={12} className="text-[#2563eb]" />
+                            </span>
+                          </div>
+                          <div className="mt-1 text-[12px] italic text-slate-500">
+                            Actual Cost: {formatCurrency(item.rate)}/Unit
+                          </div>
+                        </div>
+                      ))
+                    )}
                     <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3">
                       <span className="font-medium">Sub Total</span>
-                      <span className="font-medium">{formatCurrency(immediateTotal)}</span>
+                      <span className="font-medium">{formatCurrency(summarySubtotal)}</span>
                     </div>
                     <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3">
                       <span className="font-medium">Total Immediate Charges</span>
@@ -3887,7 +4567,7 @@ export default function SubscriptionQuote() {
                     <p className="text-[13px] text-slate-600">Billed per month, starting from {displaySummaryDate(immediateRangeEnd)}</p>
                     <button
                       type="button"
-                      className="mt-1 w-full rounded border border-[#3b82f6] px-2 py-1 text-left text-[13px] text-[#2563eb]"
+                      className="mt-1 inline-flex items-center gap-1 rounded px-0 py-0 text-left text-[13px] text-[#2563eb] hover:underline focus:outline-none"
                       onClick={() => setShowRecurringBreakdown((prev) => !prev)}
                     >
                       {showRecurringBreakdown ? "Hide Breakdown" : "Show Breakdown"} <ChevronDown size={12} className="inline-block" />
@@ -3898,13 +4578,19 @@ export default function SubscriptionQuote() {
 
                 {showRecurringBreakdown && (
                   <div className="mt-3 space-y-1 border-t border-slate-200 pt-3 text-[13px] text-slate-700">
-                    <div className="flex items-center justify-between">
-                      <span>{formData.plan || "-"}</span>
-                      <span>{formatCurrency(quoteBaseAmount)}</span>
-                    </div>
+                    {summaryLineItems.length === 0 ? (
+                      <div className="text-slate-500">No items selected.</div>
+                    ) : (
+                      summaryLineItems.map((item, index) => (
+                        <div key={`${item.name}-${index}`} className="flex items-center justify-between">
+                          <span>{item.name}</span>
+                          <span>{formatCurrency(item.amount)}</span>
+                        </div>
+                      ))
+                    )}
                     <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3">
                       <span className="font-medium">Sub Total</span>
-                      <span className="font-medium">{formatCurrency(quoteBaseAmount)}</span>
+                      <span className="font-medium">{formatCurrency(summarySubtotal)}</span>
                     </div>
                     <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-3 text-slate-500">
                       <span>Round Off</span>

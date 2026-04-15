@@ -565,7 +565,6 @@ const LOCAL_QUOTES_KEY = "taban_books_quotes";
 const LOCAL_INVOICES_KEY = "taban_books_invoices";
 const LOCAL_RECURRING_INVOICES_KEY = "taban_books_recurring_invoices";
 const LOCAL_PAYMENTS_RECEIVED_KEY = "taban_books_payments_received";
-const LOCAL_SUBSCRIPTIONS_KEY = "taban_subscriptions_v1";
 const LOCAL_CREDIT_NOTES_KEY = "taban_books_credit_notes";
 const LOCAL_SALES_RECEIPTS_KEY = "taban_books_sales_receipts";
 const LOCAL_EXPENSES_KEY = "taban_books_expenses";
@@ -1256,7 +1255,6 @@ const currenciesLocal = localResource(
 );
 const invoicesLocal = localResource(LOCAL_INVOICES_KEY, "inv");
 const paymentsReceivedLocal = localResource(LOCAL_PAYMENTS_RECEIVED_KEY, "pay");
-const subscriptionsLocal = localResource(LOCAL_SUBSCRIPTIONS_KEY, "sub");
 const creditNotesLocal = localResource(LOCAL_CREDIT_NOTES_KEY, "cn");
 const quotesLocal = localResource(LOCAL_QUOTES_KEY, "quote");
 const recurringInvoicesLocal = localResource(
@@ -1887,61 +1885,23 @@ export const paymentsReceivedAPI = {
 
 const subscriptionsBase = resource("/subscriptions");
 export const subscriptionsAPI = {
-  ...subscriptionsLocal,
   getAll: async (params?: Record<string, any>) => {
-    try {
-      const res = await subscriptionsBase.getAll(params);
-      if (res?.success) {
-        const rows = Array.isArray((res as any).data) ? (res as any).data : [];
-        writeLocalCollection(LOCAL_SUBSCRIPTIONS_KEY, rows);
-        return res as any;
-      }
-      if (typeof (res as any)?.status === "number") return res as any;
-    } catch {
-      // fall back
-    }
-    return subscriptionsLocal.getAll(params);
+    const res = await subscriptionsBase.getAll(params);
+    if (res?.success) return res as any;
+    return res as any;
   },
   list: (params?: Record<string, any>) => subscriptionsAPI.getAll(params),
   getById: async (id: string) => {
-    try {
-      const res = await subscriptionsBase.getById(id);
-      if (res?.success) return res as any;
-      if (typeof (res as any)?.status === "number") return res as any;
-    } catch {
-      // fall back
-    }
-    return subscriptionsLocal.getById(id);
+    return subscriptionsBase.getById(id);
   },
   create: async (data: any) => {
-    try {
-      const res = await subscriptionsBase.create(data);
-      if (res?.success) return res as any;
-      if (typeof (res as any)?.status === "number") return res as any;
-    } catch {
-      // fall back
-    }
-    return subscriptionsLocal.create(data);
+    return subscriptionsBase.create(data);
   },
   update: async (id: string, data: any) => {
-    try {
-      const res = await subscriptionsBase.update(id, data);
-      if (res?.success) return res as any;
-      if (typeof (res as any)?.status === "number") return res as any;
-    } catch {
-      // fall back
-    }
-    return subscriptionsLocal.update(id, data);
+    return subscriptionsBase.update(id, data);
   },
   delete: async (id: string) => {
-    try {
-      const res = await subscriptionsBase.delete(id);
-      if (res?.success) return res as any;
-      if (typeof (res as any)?.status === "number") return res as any;
-    } catch {
-      // fall back
-    }
-    return subscriptionsLocal.delete(id);
+    return subscriptionsBase.delete(id);
   },
 };
 

@@ -729,7 +729,7 @@ export default function Quotes() {
 
   const normalizeStatusKey = (value: any) => String(value || "").toLowerCase().replace(/[\s_-]+/g, "");
 
-  const parseDateSafe = (value: any) => {
+  function parseDateSafe(value: any) {
     if (!value) return null;
     const direct = new Date(value);
     if (!Number.isNaN(direct.getTime())) return direct;
@@ -741,7 +741,7 @@ export default function Quotes() {
       return Number.isNaN(parsed.getTime()) ? null : parsed;
     }
     return null;
-  };
+  }
 
   const formatDateISO = (value: any) => {
     const parsed = parseDateSafe(value);
@@ -2295,14 +2295,6 @@ export default function Quotes() {
                       </>
                     )}
                   </div>
-                  <div className="p-2 border-t border-gray-100 bg-gray-50/50">
-                    <button
-                      onClick={handleNewCustomView}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-[#156372] hover:bg-[#156372]/10 rounded-md transition-colors"
-                    >
-                      <Plus size={16} /> New Custom View
-                    </button>
-                  </div>
                 </div>
               )}
             </div>
@@ -2374,10 +2366,7 @@ export default function Quotes() {
                   <div className="relative">
                     <button
                       onClick={() => setOpenMoreSubmenu((prev) => (prev === "sort" ? null : "sort"))}
-                      className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between ${openMoreSubmenu === "sort"
-                        ? "text-white bg-[#156372]"
-                        : "text-gray-700 hover:bg-[#156372] hover:text-white"
-                        }`}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50 flex items-center justify-between"
                     >
                       <span className="flex items-center gap-3">
                         <ArrowUpDown size={16} />
@@ -2393,13 +2382,10 @@ export default function Quotes() {
                             <button
                               key={option.key}
                               onClick={() => handleSelectSortFromMenu(option.key)}
-                              className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${isActive
-                                ? "text-white bg-[#156372]"
-                                : "text-gray-700 hover:bg-[#156372] hover:text-white"
-                                }`}
+                              className="w-full text-left px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50 flex items-center justify-between"
                             >
                               <span>{option.label}</span>
-                              {isActive ? <Check size={14} /> : null}
+                              {isActive ? <Check size={14} className="text-gray-500" /> : null}
                             </button>
                           );
                         })}
@@ -2408,7 +2394,7 @@ export default function Quotes() {
                   </div>
                   <button
                     onClick={handleImportQuotes}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors flex items-center gap-3"
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50 flex items-center gap-3"
                   >
                     <Download size={16} />
                     Import Quotes
@@ -2416,10 +2402,7 @@ export default function Quotes() {
                   <div className="relative">
                     <button
                       onClick={() => setOpenMoreSubmenu((prev) => (prev === "export" ? null : "export"))}
-                      className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center gap-3 ${openMoreSubmenu === "export"
-                        ? "text-white bg-[#156372]"
-                        : "text-gray-700 hover:bg-[#156372] hover:text-white"
-                        }`}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50 flex items-center gap-3"
                     >
                       <Upload size={16} />
                       <span className="flex-1">Export</span>
@@ -2429,13 +2412,13 @@ export default function Quotes() {
                       <div className="absolute top-0 right-full mr-2 w-52 bg-white border border-gray-200 rounded-lg shadow-xl py-1 z-[120]">
                         <button
                           onClick={handleExportQuotesFromMenu}
-                          className="w-full text-left px-3 py-2 text-sm text-white bg-[#156372] hover:bg-[#0f4f5b] transition-colors"
+                          className="w-full text-left px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50"
                         >
                           Export Quotes
                         </button>
                         <button
                           onClick={handleExportCurrentViewFromMenu}
-                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors"
+                          className="w-full text-left px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50"
                         >
                           Export Current View
                         </button>
@@ -2444,14 +2427,14 @@ export default function Quotes() {
                   </div>
                   <button
                     onClick={handleQuotePreferences}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors flex items-center gap-3"
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50 flex items-center gap-3"
                   >
                     <Settings size={16} />
                     Preferences
                   </button>
                   <button
                     onClick={handleManageCustomFields}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors flex items-center gap-3"
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50 flex items-center gap-3"
                   >
                     <Columns size={16} />
                     Manage Custom Fields
@@ -2459,14 +2442,14 @@ export default function Quotes() {
                   <div className="h-px bg-gray-100 my-1" />
                   <button
                     onClick={refreshData}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors flex items-center gap-3"
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50 flex items-center gap-3"
                   >
                     <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
                     Refresh List
                   </button>
                   <button
                     onClick={handleResetColumnWidth}
-                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-[#156372] hover:text-white transition-colors flex items-center gap-3"
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50 flex items-center gap-3"
                   >
                     <RefreshCw size={16} />
                     Reset Column Width

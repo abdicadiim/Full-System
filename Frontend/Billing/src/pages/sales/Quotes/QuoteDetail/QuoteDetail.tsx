@@ -48,10 +48,11 @@ import {
   Send
 } from "lucide-react";
 import { getQuoteById, getQuotes, updateQuote, deleteQuotes, getCustomers, getSalespersons, getProjects, getInvoices, saveInvoice, saveQuote } from "../../salesModel";
-import { currenciesAPI, documentsAPI, quotesAPI, senderEmailsAPI, settingsAPI } from "../../../../services/api";
+import { currenciesAPI, documentsAPI, quotesAPI, senderEmailsAPI, settingsAPI, transactionNumberSeriesAPI } from "../../../../services/api";
 import { toast } from "react-toastify";
 import { resolveVerifiedPrimarySender } from "../../../../utils/emailSenderDisplay";
 import QuoteCommentsPanel from "./QuoteCommentsPanel";
+import { buildSubscriptionDraftFromQuote, buildSubscriptionEditDraft } from "../../subscriptions/subscriptionDraftUtils";
 
 const QuoteDetail = () => {
   const { quoteId } = useParams();
@@ -2399,9 +2400,35 @@ const QuoteDetail = () => {
     }
   };
 
-  const handleCreateSubscription = () => {
-    navigate("/sales/quotes/subscription/new", {
-      state: { clonedData: quote }
+  const resolveSubscriptionNumberForQuote = async (sourceQuote: any) => {
+    const locationName = String(sourceQuote?.selectedLocation || sourceQuote?.location || "Head Office").trim() || "Head Office";
+    const cachedNumber = transactionNumberSeriesAPI.getCachedNextNumber({ module: "Subscriptions", locationName });
+    if (cachedNumber) return cachedNumber;
+
+    try {
+      const response: any = await transactionNumberSeriesAPI.getNextNumber({ module: "Subscriptions", locationName, reserve: false });
+      const nextNumber = String(response?.data?.nextNumber || response?.data?.next_number || response?.nextNumber || "").trim();
+      if (nextNumber) return nextNumber;
+    } catch (error) {
+      console.error("Failed to generate subscription number from quote:", error);
+    }
+
+    return "";
+  };
+
+  const handleCreateSubscription = async () => {
+    if (!quote) {
+      toast.error("Quote is still loading. Please try again in a moment.");
+      return;
+    }
+
+    const subscriptionNumber = await resolveSubscriptionNumberForQuote(quote);
+    const draft = buildSubscriptionEditDraft(buildSubscriptionDraftFromQuote({ ...quote, subscriptionNumber }));
+    navigate("/sales/subscriptions/new", {
+      state: {
+        draft,
+        sourceQuote: quote,
+      },
     });
   };
 

@@ -8,7 +8,7 @@ This repo has one backend and three separate frontend apps:
 
 ## Start Each App In Its Own Terminal
 
-Open a terminal in each app folder and run its own dev command.
+Open a terminal in each frontend app folder and run its own dev command. Run the backend from the repo root.
 
 ```bash
 cd Frontend/Auth
@@ -25,16 +25,20 @@ cd Frontend/Invoice
 npm run dev
 ```
 
-Run the backend in a separate terminal from the repo root:
+Run the backend from the repo root:
 
 ```bash
-npm run dev:backend
+npm run dev
+```
+
+For a production-style start, use:
+
+```bash
+npm start
 ```
 
 ## Disabled Commands
 
-These root-level combined launch commands now stop with an error on purpose:
+These root-level combined launch commands are still disabled on purpose:
 
-- `npm run dev`
 - `npm run dev:all`
-

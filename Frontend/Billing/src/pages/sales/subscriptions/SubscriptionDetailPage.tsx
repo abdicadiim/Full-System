@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
   ChevronDown,
@@ -189,6 +189,7 @@ const getPrimarySubscriptionInvoice = (rows: any[], subscription: any) => {
 
 export default function SubscriptionDetailPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { subscriptionId } = useParams();
   const { user } = useUser();
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
@@ -197,16 +198,11 @@ export default function SubscriptionDetailPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isCloning, setIsCloning] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [subscriptions, setSubscriptions] = useState(() => {
-    try {
-      const raw = localStorage.getItem("taban_subscriptions_v1");
-      const parsed = raw ? JSON.parse(raw) : [];
-      if (Array.isArray(parsed)) return parsed;
-    } catch {
-      // ignore storage errors
-    }
-    return [];
+  const [subscriptions, setSubscriptions] = useState<any[]>(() => {
+    const routeSubscription = (location.state as any)?.subscription;
+    return routeSubscription ? [routeSubscription] : [];
   });
+  const [isSubscriptionsLoading, setIsSubscriptionsLoading] = useState(true);
   const [isAddCouponOpen, setIsAddCouponOpen] = useState(false);
   const [isAddChargeOpen, setIsAddChargeOpen] = useState(false);
   const [isUpdateSalespersonOpen, setIsUpdateSalespersonOpen] = useState(false);
@@ -266,6 +262,12 @@ export default function SubscriptionDetailPage() {
   >([]);
   const [selectedCouponId, setSelectedCouponId] = useState("");
   const [chargeAmount, setChargeAmount] = useState("");
+  const [chargeAccount, setChargeAccount] = useState("Sales");
+  const [chargeLocation, setChargeLocation] = useState("Head Office");
+  const [chargeReason, setChargeReason] = useState("");
+  const [chargeDescription, setChargeDescription] = useState("");
+  const [chargeReportingTag, setChargeReportingTag] = useState("None");
+  const [chargeAllowPartialPayments, setChargeAllowPartialPayments] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "invoice" | "activity">("overview");
   const [editingItemKey, setEditingItemKey] = useState<string | null>(null);
   const [descriptionDraft, setDescriptionDraft] = useState("");
@@ -274,11 +276,15 @@ export default function SubscriptionDetailPage() {
   const detailMoreRef = useRef<HTMLDivElement>(null);
 
   const selected = useMemo(() => {
-    if (!subscriptions.length) return null;
-    if (subscriptionId) {
-      return subscriptions.find((sub: any) => sub.id === subscriptionId) || subscriptions[0];
+    const normalizedId = String(subscriptionId || "").trim();
+    if (normalizedId) {
+      return (
+        subscriptions.find(
+          (sub: any) => String(sub?.id || sub?._id || "").trim() === normalizedId
+        ) || null
+      );
     }
-    return subscriptions[0];
+    return subscriptions[0] || null;
   }, [subscriptionId, subscriptions]);
   const selectedCount = selectedIds.length;
   const isAllSelected = selectedCount > 0 && selectedIds.length === subscriptions.length;
@@ -435,47 +441,64 @@ export default function SubscriptionDetailPage() {
     return String(match?.name || match?.displayName || id).trim();
   }, [selected?.salesperson, selected?.salespersonId, salespersons]);
 
-  const persistSubscriptions = (next: any[]) => {
+  const persistSubscriptions = async (next: any[]) => {
     const previous = subscriptions;
     setSubscriptions(next);
     try {
-      localStorage.setItem("taban_subscriptions_v1", JSON.stringify(next));
-    } catch {
-      // ignore storage errors
-    }
-    void (async () => {
-      try {
-        const previousById = new Map(
-          previous.map((row: any) => [String(row?.id || row?._id || ""), row]).filter(([id]) => Boolean(id))
-        );
-        const nextById = new Map(
-          next.map((row: any) => [String(row?.id || row?._id || ""), row]).filter(([id]) => Boolean(id))
-        );
+      const previousById = new Map<string, any>(
+        previous
+          .map((row: any): [string, any] | null => {
+            const id = String(row?.id || row?._id || "").trim();
+            return id ? [id, row] : null;
+          })
+          .filter((entry): entry is [string, any] => Boolean(entry))
+      );
+      const nextById = new Map<string, any>(
+        next
+          .map((row: any): [string, any] | null => {
+            const id = String(row?.id || row?._id || "").trim();
+            return id ? [id, row] : null;
+          })
+          .filter((entry): entry is [string, any] => Boolean(entry))
+      );
 
-        for (const row of next) {
-          const id = String(row?.id || row?._id || "").trim();
-          if (id && previousById.has(id)) {
-            await subscriptionsAPI.update(id, { ...row, id: undefined, _id: undefined });
-          } else {
-            await subscriptionsAPI.create({ ...row, id: undefined, _id: undefined });
+      for (const row of next) {
+        const id = String(row?.id || row?._id || "").trim();
+        if (id && previousById.has(id)) {
+          const updateRes = await subscriptionsAPI.update(id, { ...row, id: undefined, _id: undefined });
+          if (!updateRes?.success) {
+            throw new Error(updateRes?.message || "Failed to update subscription.");
+          }
+        } else {
+          const createRes = await subscriptionsAPI.create({ ...row, id: undefined, _id: undefined });
+          if (!createRes?.success) {
+            throw new Error(createRes?.message || "Failed to create subscription.");
           }
         }
-
-        for (const [id] of previousById.entries()) {
-          if (!nextById.has(id)) {
-            await subscriptionsAPI.delete(id);
-          }
-        }
-      } catch {
-        // keep local state if API is unavailable
       }
-    })();
+
+      for (const [id] of previousById.entries()) {
+        if (!nextById.has(id)) {
+          const deleteRes = await subscriptionsAPI.delete(id);
+          if (!deleteRes?.success) {
+            throw new Error(deleteRes?.message || "Failed to delete subscription.");
+          }
+        }
+      }
+
+      return true;
+    } catch (error) {
+      setSubscriptions(previous);
+      const message = error instanceof Error ? error.message : "Failed to save subscription changes.";
+      toast.error(message);
+      return false;
+    }
   };
 
-  const updateSelectedSubscription = (patch: Record<string, any>) => {
-    if (!selected?.id) return;
+  const updateSelectedSubscription = async (patch: Record<string, any>) => {
+    if (!selected?.id) return false;
     const next = subscriptions.map((sub: any) => (sub.id === selected.id ? { ...sub, ...patch } : sub));
-    persistSubscriptions(next);
+    return persistSubscriptions(next);
   };
 
   const createInvoiceFromSelected = async (options?: { source?: string; invoiceNumberPrefix?: string; status?: string }) => {
@@ -526,7 +549,7 @@ export default function SubscriptionDetailPage() {
     return response?.data || response || null;
   };
 
-  const handleSavePause = () => {
+  const handleSavePause = async () => {
     if (!selected?.id) return;
     if (pauseWhen === "specific" && !pauseOnDate) {
       setPauseError("Please choose the date to pause on.");
@@ -540,7 +563,7 @@ export default function SubscriptionDetailPage() {
     const pauseISO = pauseWhen === "immediately" ? new Date().toISOString() : pauseOnDate;
     const resumeISO = resumeOnDate ? new Date(resumeOnDate).toISOString() : "";
 
-    updateSelectedSubscription({
+    const saved = await updateSelectedSubscription({
       status: "PAUSED",
       pauseDate: formatShortDate(pauseISO),
       resumeDate: resumeISO ? formatShortDate(resumeISO) : "",
@@ -552,6 +575,7 @@ export default function SubscriptionDetailPage() {
         reason: pauseReason.trim(),
       },
     });
+    if (!saved) return;
     setIsPauseModalOpen(false);
     setPauseWhen("immediately");
     setPauseOnDate("");
@@ -561,7 +585,7 @@ export default function SubscriptionDetailPage() {
     toast.success("Subscription paused successfully.");
   };
 
-  const handleSaveResume = () => {
+  const handleSaveResume = async () => {
     if (!selected?.id) return;
     if (resumeWhen === "specific" && !resumeAtDate) {
       setResumeError("Please choose the date to resume on.");
@@ -574,7 +598,7 @@ export default function SubscriptionDetailPage() {
 
     const resumeISO = resumeWhen === "immediately" ? new Date().toISOString() : resumeAtDate;
 
-    updateSelectedSubscription({
+    const saved = await updateSelectedSubscription({
       status: "LIVE",
       resumeDate: formatShortDate(resumeISO),
       resumeMeta: {
@@ -584,6 +608,7 @@ export default function SubscriptionDetailPage() {
         reason: resumeReason.trim(),
       },
     });
+    if (!saved) return;
     setIsResumeModalOpen(false);
     setResumeWhen("immediately");
     setResumeAtDate("");
@@ -592,7 +617,7 @@ export default function SubscriptionDetailPage() {
     toast.success("Subscription resumed successfully.");
   };
 
-  const handleSaveReactivate = () => {
+  const handleSaveReactivate = async () => {
     if (!selected?.id) return;
     if (reactivateWhen === "specific" && !reactivateAtDate) {
       setReactivateError("Please choose the date to reactivate on.");
@@ -605,7 +630,7 @@ export default function SubscriptionDetailPage() {
 
     const reactivateISO = reactivateWhen === "immediately" ? new Date().toISOString() : reactivateAtDate;
 
-    updateSelectedSubscription({
+    const saved = await updateSelectedSubscription({
       status: "LIVE",
       reactivatedOn: formatShortDate(reactivateISO),
       reactivationMeta: {
@@ -614,6 +639,7 @@ export default function SubscriptionDetailPage() {
         reason: reactivateReason.trim(),
       },
     });
+    if (!saved) return;
     setIsReactivateModalOpen(false);
     setReactivateWhen("immediately");
     setReactivateAtDate("");
@@ -636,7 +662,7 @@ export default function SubscriptionDetailPage() {
     persistSubscriptions(updated);
   };
 
-  const handleProceedCancel = () => {
+  const handleProceedCancel = async () => {
     if (!selected) return;
     const reason =
       cancelReason === "Others" ? cancelOtherReason.trim() : cancelReason.trim();
@@ -653,7 +679,8 @@ export default function SubscriptionDetailPage() {
         scheduledCancellationDate: sub?.scheduledCancellationDate || new Date().toISOString(),
       };
     });
-    persistSubscriptions(next);
+    const saved = await persistSubscriptions(next);
+    if (!saved) return;
     setIsCancelModalOpen(false);
     setCancelReason("");
     setCancelOtherReason("");
@@ -661,7 +688,7 @@ export default function SubscriptionDetailPage() {
     toast.success("Subscription cancelled successfully.");
   };
 
-  const applyCouponForSelected = () => {
+  const applyCouponForSelected = async () => {
     if (!selected) return;
     const chosen = coupons.find((row) => row.id === selectedCouponId);
     if (!chosen) {
@@ -678,7 +705,8 @@ export default function SubscriptionDetailPage() {
         couponValue: nextValue,
       };
     });
-    persistSubscriptions(updated);
+    const saved = await persistSubscriptions(updated);
+    if (!saved) return;
     setSelectedCouponId("");
     setIsAddCouponOpen(false);
     toast.success("Coupon applied successfully.");
@@ -738,7 +766,10 @@ export default function SubscriptionDetailPage() {
         id: undefined,
         _id: undefined,
       });
-      const created = response?.data || response || clonePayload;
+      if (!response?.success || !response?.data) {
+        throw new Error(response?.message || "Failed to clone subscription.");
+      }
+      const created = response.data;
       const clonedId = String(created?.id || created?._id || "").trim() || `sub-${Date.now()}`;
 
       const normalizedClone = {
@@ -754,11 +785,6 @@ export default function SubscriptionDetailPage() {
 
       const nextRows = [normalizedClone, ...subscriptions];
       setSubscriptions(nextRows);
-      try {
-        localStorage.setItem("taban_subscriptions_v1", JSON.stringify(nextRows));
-      } catch {
-        // ignore storage errors
-      }
 
       if (productSeries && selectedProductId) {
         try {
@@ -844,7 +870,7 @@ export default function SubscriptionDetailPage() {
     customerId,
   ]);
 
-  const saveNoteForSelected = () => {
+  const saveNoteForSelected = async () => {
     if (!selected) return;
     const text = noteDraft.trim();
     if (!text) {
@@ -863,7 +889,8 @@ export default function SubscriptionDetailPage() {
       const existingNotes = Array.isArray(sub.notes) ? sub.notes : [];
       return { ...sub, notes: [newNote, ...existingNotes] };
     });
-    persistSubscriptions(updated);
+    const saved = await persistSubscriptions(updated);
+    if (!saved) return;
     setIsAddNoteOpen(false);
   };
 
@@ -877,7 +904,7 @@ export default function SubscriptionDetailPage() {
     persistSubscriptions(updated);
   };
 
-  const saveBillingDateChange = () => {
+  const saveBillingDateChange = async () => {
     if (!selected) return;
     if (!billingDateDraft) {
       setBillingFormError("Please select a new billing date.");
@@ -896,7 +923,8 @@ export default function SubscriptionDetailPage() {
         nextBillingReason: billingReasonDraft.trim(),
       };
     });
-    persistSubscriptions(updated);
+    const saved = await persistSubscriptions(updated);
+    if (!saved) return;
     setIsChangeBillingOpen(false);
   };
 
@@ -959,41 +987,65 @@ export default function SubscriptionDetailPage() {
 
   useEffect(() => {
     const load = async () => {
+      setIsSubscriptionsLoading(true);
+      const targetSubscriptionId = String(subscriptionId || "").trim();
+      const routeSubscription = (location.state as any)?.subscription || null;
       try {
         const res: any = await subscriptionsAPI.getAll({ limit: 10000 });
-        if (res?.success) {
-          setSubscriptions(Array.isArray(res.data) ? res.data : []);
-          return;
+        let rows = Array.isArray(res?.data) ? res.data : [];
+
+        if (targetSubscriptionId) {
+          const existing = rows.find(
+            (row: any) => String(row?.id || row?._id || "").trim() === targetSubscriptionId
+          );
+          if (!existing) {
+            try {
+              const byIdRes: any = await subscriptionsAPI.getById(targetSubscriptionId);
+              if (byIdRes?.success && byIdRes?.data) {
+                rows = [
+                  byIdRes.data,
+                  ...rows.filter(
+                    (row: any) => String(row?.id || row?._id || "").trim() !== targetSubscriptionId
+                  ),
+                ];
+              }
+            } catch {
+              // ignore direct fetch errors; we may still have a route-state subscription to show
+            }
+          }
+        }
+
+        if (routeSubscription) {
+          const routeId = String(routeSubscription?.id || routeSubscription?._id || "").trim();
+          if (routeId && !rows.some((row: any) => String(row?.id || row?._id || "").trim() === routeId)) {
+            rows = [routeSubscription, ...rows];
+          }
+        }
+
+        if (rows.length > 0) {
+          setSubscriptions(rows);
+        } else if (routeSubscription) {
+          setSubscriptions([routeSubscription]);
+        } else {
+          setSubscriptions([]);
         }
       } catch {
-        // fallback below
-      }
-      try {
-        const raw = localStorage.getItem("taban_subscriptions_v1");
-        const parsed = raw ? JSON.parse(raw) : [];
-        if (Array.isArray(parsed)) {
-          setSubscriptions(parsed);
-          return;
+        if (routeSubscription) {
+          setSubscriptions([routeSubscription]);
+        } else {
+          setSubscriptions([]);
         }
-      } catch {
-        // ignore storage errors
+      } finally {
+        setIsSubscriptionsLoading(false);
       }
-      setSubscriptions([]);
     };
     void load();
-    const onStorage = (event: StorageEvent) => {
-      if (!event.key || event.key === "taban_subscriptions_v1") {
-        void load();
-      }
-    };
     const onFocus = () => void load();
-    window.addEventListener("storage", onStorage);
     window.addEventListener("focus", onFocus);
     return () => {
-      window.removeEventListener("storage", onStorage);
       window.removeEventListener("focus", onFocus);
     };
-  }, []);
+  }, [location.state, subscriptionId]);
 
   useEffect(() => {
     if (!isAddChargeOpen || !selected) return;
@@ -1309,6 +1361,13 @@ export default function SubscriptionDetailPage() {
                     className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
                     onClick={() => {
                       setDetailMoreOpen(false);
+                      setChargeAmount("");
+                      setChargeAccount("Sales");
+                      setChargeLocation("Head Office");
+                      setChargeReason("");
+                      setChargeDescription("");
+                      setChargeReportingTag("None");
+                      setChargeAllowPartialPayments(false);
                       setIsAddChargeOpen(true);
                     }}
                   >
@@ -1418,26 +1477,27 @@ export default function SubscriptionDetailPage() {
                     </button>
                   )}
                   <button
-                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
-                    onClick={async () => {
-                      setDetailMoreOpen(false);
-                      try {
-                        const invoice = await createInvoiceFromSelected({
-                          source: "advance-billing",
-                          invoiceNumberPrefix: "ADV",
-                          status: selected?.advanceBillingMethod === "Advance Payment Request" ? "sent" : undefined,
+                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                  onClick={async () => {
+                    setDetailMoreOpen(false);
+                    try {
+                      const invoice = await createInvoiceFromSelected({
+                        source: "advance-billing",
+                        invoiceNumberPrefix: "ADV",
+                        status: selected?.advanceBillingMethod === "Advance Payment Request" ? "sent" : undefined,
+                      });
+                      if (invoice) {
+                        const saved = await updateSelectedSubscription({
+                          lastAdvanceInvoiceId: String(invoice.id || invoice._id || ""),
+                          lastAdvanceInvoiceNumber: String(invoice.invoiceNumber || ""),
+                          lastAdvanceInvoiceDate: new Date().toISOString(),
                         });
-                        if (invoice) {
-                          updateSelectedSubscription({
-                            lastAdvanceInvoiceId: String(invoice.id || invoice._id || ""),
-                            lastAdvanceInvoiceNumber: String(invoice.invoiceNumber || ""),
-                            lastAdvanceInvoiceDate: new Date().toISOString(),
-                          });
-                        }
-                        toast.success("Advance invoice generated successfully.");
-                      } catch (error) {
-                        console.error("Failed to generate advance invoice:", error);
-                        toast.error("Failed to generate advance invoice.");
+                        if (!saved) return;
+                      }
+                      toast.success("Advance invoice generated successfully.");
+                    } catch (error) {
+                      console.error("Failed to generate advance invoice:", error);
+                      toast.error("Failed to generate advance invoice.");
                       }
                     }}
                   >
@@ -2320,7 +2380,11 @@ export default function SubscriptionDetailPage() {
                       />
                     </div>
                     <label className="mt-2 inline-flex items-center gap-2 text-xs text-gray-500">
-                      <input type="checkbox" />
+                      <input
+                        type="checkbox"
+                        checked={chargeAllowPartialPayments}
+                        onChange={(e) => setChargeAllowPartialPayments(e.target.checked)}
+                      />
                       Allow partial payments
                     </label>
                   </div>
@@ -2329,13 +2393,21 @@ export default function SubscriptionDetailPage() {
                 <div className="mt-5 grid grid-cols-2 gap-6">
                   <div>
                     <label className="text-sm text-gray-700">Account</label>
-                    <select className="mt-2 w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+                    <select
+                      className="mt-2 w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                      value={chargeAccount}
+                      onChange={(e) => setChargeAccount(e.target.value)}
+                    >
                       <option>Sales</option>
                     </select>
                   </div>
                   <div>
                     <label className="text-sm text-gray-700">Location</label>
-                    <select className="mt-2 w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+                    <select
+                      className="mt-2 w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                      value={chargeLocation}
+                      onChange={(e) => setChargeLocation(e.target.value)}
+                    >
                       <option>Head Office</option>
                     </select>
                   </div>
@@ -2344,6 +2416,8 @@ export default function SubscriptionDetailPage() {
                     <textarea
                       className="mt-2 w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
                       rows={3}
+                      value={chargeReason}
+                      onChange={(e) => setChargeReason(e.target.value)}
                       placeholder="This will be displayed in the line item details of the invoice sent to your customer."
                     />
                   </div>
@@ -2352,12 +2426,18 @@ export default function SubscriptionDetailPage() {
                     <textarea
                       className="mt-2 w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
                       rows={3}
+                      value={chargeDescription}
+                      onChange={(e) => setChargeDescription(e.target.value)}
                       placeholder="Mention why you are adding this charge."
                     />
                   </div>
                   <div>
                     <label className="text-sm text-gray-700 uppercase text-[11px] tracking-wide">Reporting Tags</label>
-                    <select className="mt-2 w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+                    <select
+                      className="mt-2 w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                      value={chargeReportingTag}
+                      onChange={(e) => setChargeReportingTag(e.target.value)}
+                    >
                       <option>None</option>
                     </select>
                   </div>
@@ -2371,8 +2451,45 @@ export default function SubscriptionDetailPage() {
               <div className="px-6 py-4 border-t border-gray-200 flex items-center gap-2">
                 <button
                   className="px-4 py-2 bg-[#156372] hover:bg-[#0D4A52] text-white rounded-md text-sm font-semibold"
-                  onClick={() => {
+                  onClick={async () => {
+                    if (!selected?.id) return;
+                    const parsedAmount = Number(String(chargeAmount).trim());
+                    if (!chargeAmount.trim() || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+                      toast.error("Enter a valid charge amount.");
+                      return;
+                    }
+                    if (!chargeReason.trim()) {
+                      toast.error("Enter a charge reason.");
+                      return;
+                    }
+
+                    const existingCharges = Array.isArray(selected?.charges) ? selected.charges : [];
+                    const newCharge = {
+                      id: `charge-${Date.now()}`,
+                      amount: parsedAmount,
+                      currency: currencyCode,
+                      account: chargeAccount,
+                      location: chargeLocation,
+                      reason: chargeReason.trim(),
+                      description: chargeDescription.trim(),
+                      reportingTag: chargeReportingTag,
+                      allowPartialPayments: chargeAllowPartialPayments,
+                      createdAt: new Date().toISOString(),
+                    };
+
+                    const saved = await updateSelectedSubscription({
+                      charges: [newCharge, ...existingCharges],
+                    });
+                    if (!saved) return;
+
                     setIsAddChargeOpen(false);
+                    setChargeAmount("");
+                    setChargeAccount("Sales");
+                    setChargeLocation("Head Office");
+                    setChargeReason("");
+                    setChargeDescription("");
+                    setChargeReportingTag("None");
+                    setChargeAllowPartialPayments(false);
                     toast.success("Charge added successfully.");
                   }}
                 >
@@ -2418,7 +2535,7 @@ export default function SubscriptionDetailPage() {
               <div className="px-5 py-4 border-t border-gray-200 flex items-center gap-2">
                 <button
                   className="px-4 py-2 bg-[#156372] hover:bg-[#0D4A52] text-white rounded-md text-sm font-semibold"
-                  onClick={() => {
+                  onClick={async () => {
                     const nextId = String(selectedSalespersonId || "");
                     const salespersonName =
                       String(
@@ -2436,7 +2553,8 @@ export default function SubscriptionDetailPage() {
                           }
                         : row
                     );
-                    persistSubscriptions(updated);
+                    const saved = await persistSubscriptions(updated);
+                    if (!saved) return;
                     setIsUpdateSalespersonOpen(false);
                   }}
                 >
@@ -2505,13 +2623,14 @@ export default function SubscriptionDetailPage() {
                 <button
                   type="button"
                   className="rounded-md bg-[#156372] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0D4A52]"
-                  onClick={() => {
-                    updateSelectedSubscription({
+                  onClick={async () => {
+                    const saved = await updateSelectedSubscription({
                       manualRenewal: true,
                       manualRenewalInvoicePreference: manualRenewalPreference,
                       manualRenewalFreeExtension,
                       generateInvoices: manualRenewalPreference === "Generate a New Invoice",
                     });
+                    if (!saved) return;
                     setIsManualRenewalOpen(false);
                     toast.success("Manual renewal settings saved.");
                   }}
@@ -2598,14 +2717,15 @@ export default function SubscriptionDetailPage() {
                 <button
                   type="button"
                   className="rounded-md bg-[#156372] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0D4A52]"
-                  onClick={() => {
-                    updateSelectedSubscription({
+                  onClick={async () => {
+                    const saved = await updateSelectedSubscription({
                       advanceBillingEnabled: true,
                       advanceBillingMethod,
                       advanceBillingPeriodDays,
                       advanceBillingAutoGenerate,
                       advanceBillingApplyUpcomingTerms,
                     });
+                    if (!saved) return;
                     setIsAdvanceBillingOpen(false);
                     toast.success("Advance billing settings saved.");
                   }}
@@ -2679,15 +2799,16 @@ export default function SubscriptionDetailPage() {
                       }
                       const currentBillingDate = parseShortDate(selected?.nextBillingOn) || new Date().toISOString().split("T")[0];
                       const nextBilling = addMonthsToDate(currentBillingDate, 1);
-                      updateSelectedSubscription({
+                      const saved = await updateSelectedSubscription({
                         manualRenewal: true,
                         manualRenewalInvoicePreference: renewInvoicePreference,
                         manualRenewalFreeExtension: renewFreeExtension,
                         lastBilledOn: formatDisplayDate(new Date().toISOString()),
-                        nextBillingOn: nextBilling ? formatDisplayDate(nextBilling) : selected.nextBillingOn,
+                        nextBillingOn: nextBilling ? formatDisplayDate(nextBilling.toISOString()) : selected.nextBillingOn,
                         renewalInvoiceId: invoice?.id || invoice?._id || "",
                         renewalInvoiceNumber: invoice?.invoiceNumber || "",
                       });
+                      if (!saved) return;
                       setIsRenewNowOpen(false);
                       toast.success("Subscription renewed successfully.");
                     } catch (error) {
@@ -3189,7 +3310,7 @@ export default function SubscriptionDetailPage() {
               <div className="px-5 py-4 border-t border-gray-200 flex items-center gap-2">
                 <button
                   className="px-4 py-2 bg-[#156372] hover:bg-[#0D4A52] text-white rounded-md text-sm font-semibold"
-                  onClick={() => {
+                  onClick={async () => {
                     const updated = subscriptions.map((row: any) => {
                       if (row.id !== selected?.id) return row;
                       const nextContacts = contactPersons.filter((c) => selectedContactEmails.includes(c.email));
@@ -3199,7 +3320,8 @@ export default function SubscriptionDetailPage() {
                         customerEmail: nextContacts[0]?.email || row.customerEmail || "",
                       };
                     });
-                    persistSubscriptions(updated);
+                    const saved = await persistSubscriptions(updated);
+                    if (!saved) return;
                     setIsManageContactsOpen(false);
                   }}
                 >
@@ -3216,6 +3338,14 @@ export default function SubscriptionDetailPage() {
           </div>
         )}
       </div>
+      ) : isSubscriptionsLoading ? (
+        <div className="flex-1 flex items-center justify-center text-sm text-gray-500">
+          Loading subscription...
+        </div>
+      ) : subscriptionId ? (
+        <div className="flex-1 flex items-center justify-center text-sm text-gray-500">
+          Subscription not found.
+        </div>
       ) : (
         <div className="flex-1 flex items-center justify-center text-sm text-gray-500">
           No subscriptions found. Create or update a subscription to see details.
@@ -3243,18 +3373,19 @@ export default function SubscriptionDetailPage() {
               You cannot retrieve this subscription once it has been deleted.
             </div>
             <div className="flex items-center justify-start gap-2 border-t border-slate-100 px-5 py-3">
-              <button
-                type="button"
-                className="px-4 py-1.5 rounded-md bg-red-600 text-white text-[12px] hover:bg-red-700"
-                onClick={() => {
-                  if (!selected?.id) return;
-                  const updated = subscriptions.filter((row: any) => row.id !== selected.id);
-                  persistSubscriptions(updated);
-                  setSelectedIds((prev) => prev.filter((id) => id !== selected.id));
-                  toast.success("Subscription deleted successfully.");
-                  setShowDeleteModal(false);
-                  navigate("/sales/subscriptions");
-                }}
+                <button
+                  type="button"
+                  className="px-4 py-1.5 rounded-md bg-red-600 text-white text-[12px] hover:bg-red-700"
+                  onClick={async () => {
+                    if (!selected?.id) return;
+                    const updated = subscriptions.filter((row: any) => row.id !== selected.id);
+                    const saved = await persistSubscriptions(updated);
+                    if (!saved) return;
+                    setSelectedIds((prev) => prev.filter((id) => id !== selected.id));
+                    toast.success("Subscription deleted successfully.");
+                    setShowDeleteModal(false);
+                    navigate("/sales/subscriptions");
+                  }}
               >
                 Delete
               </button>

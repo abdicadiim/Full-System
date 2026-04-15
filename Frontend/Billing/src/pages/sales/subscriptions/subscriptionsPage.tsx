@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useEffect, useLayoutEffect, useState, useCallback } from "react";
+import React, { useMemo, useRef, useEffect, useLayoutEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
@@ -19,8 +19,6 @@ import {
 import { useOrganizationBranding } from "../../../hooks/useOrganizationBranding";
 import { subscriptionsAPI } from "../../../services/api";
 import { useSubscriptionsListQuery } from "./subscriptionsQueries";
-
-const SUBSCRIPTIONS_STORAGE_KEY = "taban_subscriptions_v1";
 
 type Column = {
     key: string;
@@ -135,17 +133,6 @@ const SubscriptionsPage = () => {
     }, [columns]);
 
     const subscriptionsListQuery = useSubscriptionsListQuery();
-    const [storageFallbackLoaded, setStorageFallbackLoaded] = useState(false);
-
-    const loadFromLocalStorage = useCallback(() => {
-        try {
-            const raw = localStorage.getItem(SUBSCRIPTIONS_STORAGE_KEY);
-            const parsed = raw ? JSON.parse(raw) : [];
-            return Array.isArray(parsed) ? parsed : [];
-        } catch {
-            return [];
-        }
-    }, []);
 
     useEffect(() => {
         if (subscriptionsListQuery.isFetching && !subscriptionsListQuery.data) {
@@ -153,47 +140,30 @@ const SubscriptionsPage = () => {
             return;
         }
 
-    if (subscriptionsListQuery.data) {
-        const rows = Array.isArray(subscriptionsListQuery.data) ? subscriptionsListQuery.data : [];
-        setSubscriptions(rows);
-        setIsLoading(false);
-        setStorageFallbackLoaded(false);
-        try {
-            localStorage.setItem(SUBSCRIPTIONS_STORAGE_KEY, JSON.stringify(rows));
-        } catch {
-            // ignore
-        }
-        return;
-    }
-
-        if (subscriptionsListQuery.isError && !storageFallbackLoaded) {
-            setSubscriptions(loadFromLocalStorage());
+        if (subscriptionsListQuery.data) {
+            const rows = Array.isArray(subscriptionsListQuery.data) ? subscriptionsListQuery.data : [];
+            setSubscriptions(rows);
             setIsLoading(false);
-            setStorageFallbackLoaded(true);
+            return;
+        }
+
+        if (subscriptionsListQuery.isError) {
+            setSubscriptions([]);
+            setIsLoading(false);
         }
     }, [
         subscriptionsListQuery.data,
         subscriptionsListQuery.isFetching,
         subscriptionsListQuery.isError,
-        loadFromLocalStorage,
-        storageFallbackLoaded,
     ]);
 
     useEffect(() => {
-        const handleStorage = (event: StorageEvent) => {
-            if (!event.key || event.key === SUBSCRIPTIONS_STORAGE_KEY) {
-                subscriptionsListQuery.refetch();
-            }
-        };
-
         const handleFocus = () => {
             subscriptionsListQuery.refetch();
         };
 
-        window.addEventListener("storage", handleStorage);
         window.addEventListener("focus", handleFocus);
         return () => {
-            window.removeEventListener("storage", handleStorage);
             window.removeEventListener("focus", handleFocus);
         };
     }, [subscriptionsListQuery]);
@@ -449,43 +419,59 @@ const SubscriptionsPage = () => {
         return [...lines, ...formatAddressLines(normalized)];
     };
 
-    const persistSubscriptions = (next: any[]) => {
+    const persistSubscriptions = async (next: any[]) => {
         const previous = subscriptions;
         setSubscriptions(next);
         try {
-            localStorage.setItem(SUBSCRIPTIONS_STORAGE_KEY, JSON.stringify(next));
-        } catch {
-            // ignore write errors (private mode, quota, etc.)
-        }
-        void (async () => {
-            try {
-                const previousById = new Map(
-                    previous.map((row: any) => [String(row?.id || row?._id || ""), row]).filter(([id]) => Boolean(id))
-                );
-                const nextById = new Map(
-                    next.map((row: any) => [String(row?.id || row?._id || ""), row]).filter(([id]) => Boolean(id))
-                );
+            const previousById = new Map<string, any>(
+                previous
+                    .map((row: any): [string, any] | null => {
+                        const id = String(row?.id || row?._id || "").trim();
+                        return id ? [id, row] : null;
+                    })
+                    .filter((entry): entry is [string, any] => Boolean(entry))
+            );
+            const nextById = new Map<string, any>(
+                next
+                    .map((row: any): [string, any] | null => {
+                        const id = String(row?.id || row?._id || "").trim();
+                        return id ? [id, row] : null;
+                    })
+                    .filter((entry): entry is [string, any] => Boolean(entry))
+            );
 
-                for (const row of next) {
-                    const id = String(row?.id || row?._id || "").trim();
-                    if (id && previousById.has(id)) {
-                        await subscriptionsAPI.update(id, { ...row, id: undefined, _id: undefined });
-                    } else {
-                        await subscriptionsAPI.create({ ...row, id: undefined, _id: undefined });
+            for (const row of next) {
+                const id = String(row?.id || row?._id || "").trim();
+                if (id && previousById.has(id)) {
+                    const updateRes = await subscriptionsAPI.update(id, { ...row, id: undefined, _id: undefined });
+                    if (!updateRes?.success) {
+                        throw new Error(updateRes?.message || "Failed to update subscription.");
+                    }
+                } else {
+                    const createRes = await subscriptionsAPI.create({ ...row, id: undefined, _id: undefined });
+                    if (!createRes?.success) {
+                        throw new Error(createRes?.message || "Failed to create subscription.");
                     }
                 }
-
-                for (const [id] of previousById.entries()) {
-                    if (!nextById.has(id)) {
-                        await subscriptionsAPI.delete(id);
-                    }
-                }
-
-                await subscriptionsListQuery.refetch();
-            } catch {
-                // keep local state when API is unavailable
             }
-        })();
+
+            for (const [id] of previousById.entries()) {
+                if (!nextById.has(id)) {
+                    const deleteRes = await subscriptionsAPI.delete(id);
+                    if (!deleteRes?.success) {
+                        throw new Error(deleteRes?.message || "Failed to delete subscription.");
+                    }
+                }
+            }
+
+            await subscriptionsListQuery.refetch();
+            return true;
+        } catch (error) {
+            setSubscriptions(previous);
+            const message = error instanceof Error ? error.message : "Failed to save subscriptions.";
+            toast.error(message);
+            return false;
+        }
     };
 
     const openCancelModal = () => {
@@ -566,7 +552,7 @@ const SubscriptionsPage = () => {
         setFilterDropdownOpen(false);
     };
 
-    const handleProceedCancel = () => {
+    const handleProceedCancel = async () => {
         const reason =
             cancelReason === "Others" ? cancelOtherReason.trim() : cancelReason.trim();
 
@@ -585,13 +571,14 @@ const SubscriptionsPage = () => {
             };
         });
 
-        persistSubscriptions(next);
+        const saved = await persistSubscriptions(next);
+        if (!saved) return;
         setIsCancelModalOpen(false);
         setSelectedIds([]);
         toast.success("Subscriptions cancelled successfully.");
     };
 
-    const handleSavePause = () => {
+    const handleSavePause = async () => {
         if (pauseWhen === "specific" && !pauseOnDate) {
             setPauseError("Please choose the date to pause on.");
             return;
@@ -622,13 +609,14 @@ const SubscriptionsPage = () => {
             };
         });
 
-        persistSubscriptions(next);
+        const saved = await persistSubscriptions(next);
+        if (!saved) return;
         setIsPauseModalOpen(false);
         setSelectedIds([]);
         toast.success("Subscriptions paused successfully.");
     };
 
-    const handleSaveResume = () => {
+    const handleSaveResume = async () => {
         if (resumeWhen === "specific" && !resumeAtDate) {
             setResumeError("Please choose the date to resume on.");
             return;
@@ -656,13 +644,14 @@ const SubscriptionsPage = () => {
             };
         });
 
-        persistSubscriptions(next);
+        const saved = await persistSubscriptions(next);
+        if (!saved) return;
         setIsResumeModalOpen(false);
         setSelectedIds([]);
         toast.success("Subscriptions resumed successfully.");
     };
 
-    const handleUpdateAutocharge = () => {
+    const handleUpdateAutocharge = async () => {
         if (!autochargeChoice) {
             setAutochargeError("Please select an option.");
             return;
@@ -679,13 +668,14 @@ const SubscriptionsPage = () => {
                 },
             };
         });
-        persistSubscriptions(next);
+        const saved = await persistSubscriptions(next);
+        if (!saved) return;
         setIsAutochargeModalOpen(false);
         setSelectedIds([]);
         toast.success("Autocharge updated successfully.");
     };
 
-    const handleUpdateNextBillingDate = () => {
+    const handleUpdateNextBillingDate = async () => {
         if (!nextBillingDate) {
             setNextBillingError("Please choose the next billing date.");
             return;
@@ -711,13 +701,14 @@ const SubscriptionsPage = () => {
             };
         });
 
-        persistSubscriptions(next);
+        const saved = await persistSubscriptions(next);
+        if (!saved) return;
         setIsNextBillingModalOpen(false);
         setSelectedIds([]);
         toast.success("Next billing date updated successfully.");
     };
 
-    const handleProceedPaymentTerms = () => {
+    const handleProceedPaymentTerms = async () => {
         if (!selectedPaymentTerm) {
             setPaymentTermsError("Please select payment terms.");
             return;
@@ -735,7 +726,8 @@ const SubscriptionsPage = () => {
             };
         });
 
-        persistSubscriptions(next);
+        const saved = await persistSubscriptions(next);
+        if (!saved) return;
         setIsPaymentTermsModalOpen(false);
         setSelectedIds([]);
         toast.success("Payment terms updated successfully.");
@@ -749,7 +741,7 @@ const SubscriptionsPage = () => {
         return INVOICE_PDF_TEMPLATES.filter((t) => t.toLowerCase().includes(term));
     }, [INVOICE_PDF_TEMPLATES, invoiceTemplateSearch]);
 
-    const handleUpdateInvoiceTemplate = () => {
+    const handleUpdateInvoiceTemplate = async () => {
         if (!selectedInvoicePdfTemplate) {
             setInvoiceTemplateError("Please select a PDF template.");
             return;
@@ -767,13 +759,14 @@ const SubscriptionsPage = () => {
             };
         });
 
-        persistSubscriptions(next);
+        const saved = await persistSubscriptions(next);
+        if (!saved) return;
         setIsInvoiceTemplateModalOpen(false);
         setSelectedIds([]);
         toast.success("Invoice template updated successfully.");
     };
 
-    const handleProceedUpdateAddress = () => {
+    const handleProceedUpdateAddress = async () => {
         if (hasMultipleCustomersSelected) {
             setAddressError("You cannot update addresses for multiple customers at once.");
             return;
@@ -798,19 +791,21 @@ const SubscriptionsPage = () => {
             return updated;
         });
 
-        persistSubscriptions(next);
+        const saved = await persistSubscriptions(next);
+        if (!saved) return;
         setIsUpdateAddressModalOpen(false);
         setSelectedIds([]);
         toast.success("Address updated successfully.");
     };
 
-    const handleProceedDelete = () => {
+    const handleProceedDelete = async () => {
         if (selectedIds.length === 0) {
             setIsDeleteModalOpen(false);
             return;
         }
         const next = subscriptions.filter((sub: any) => !selectedIds.includes(sub.id));
-        persistSubscriptions(next);
+        const saved = await persistSubscriptions(next);
+        if (!saved) return;
         setSelectedIds([]);
         setIsDeleteModalOpen(false);
         toast.success("Selected subscriptions deleted.");
@@ -1026,7 +1021,7 @@ const SubscriptionsPage = () => {
                                         type="checkbox"
                                         checked={subscriptions.length > 0 && selectedIds.length === subscriptions.length}
                                         onChange={toggleSelectAll}
-                                        style={{ accentColor: accentColor }}
+                                        style={{ accentColor: "#156372" }}
                                         className="w-4 h-4 rounded border-gray-300 cursor-pointer focus:ring-0"
                                     />
                                 </div>
@@ -1087,7 +1082,11 @@ const SubscriptionsPage = () => {
                                     key={sub.id}
                                     className="text-[13px] group transition-all hover:bg-[#f8fafc] cursor-pointer h-[50px] border-b border-[#eef1f6]"
                                     style={selectedIds.includes(sub.id) ? { backgroundColor: "#1b5e6a1A" } : {}}
-                                    onClick={() => navigate(`/sales/subscriptions/${sub.id}`)}
+                                    onClick={() =>
+                                        navigate(`/sales/subscriptions/${sub.id}`, {
+                                            state: { subscription: sub },
+                                        })
+                                    }
                                 >
                                     <td className="px-4 py-3">
                                         <div className="flex items-center gap-2">
@@ -1199,7 +1198,7 @@ const SubscriptionsPage = () => {
                                             setAutochargeError("");
                                         }}
                                         className="h-4 w-4"
-                                        style={{ accentColor: accentColor }}
+                                        style={{ accentColor: "#156372" }}
                                     />
                                     <span>Enable Autocharge</span>
                                 </label>
@@ -1213,7 +1212,7 @@ const SubscriptionsPage = () => {
                                             setAutochargeError("");
                                         }}
                                         className="h-4 w-4"
-                                        style={{ accentColor: accentColor }}
+                                        style={{ accentColor: "#156372" }}
                                     />
                                     <span>Disable Autocharge</span>
                                 </label>
@@ -1238,7 +1237,7 @@ const SubscriptionsPage = () => {
                             <button
                                 type="button"
                                 onClick={handleUpdateAutocharge}
-                                className="px-4 py-2 rounded-md bg-[#22b573] text-white text-sm font-semibold hover:brightness-95"
+                                className="px-4 py-2 rounded-md bg-[#156372] text-white text-sm font-semibold hover:bg-[#0D4A52]"
                             >
                                 Update
                             </button>
@@ -1278,7 +1277,7 @@ const SubscriptionsPage = () => {
                                         onClick={() => setInvoiceTemplateDropdownOpen((v) => !v)}
                                         className={`w-full h-10 px-3 rounded-md border text-sm bg-white flex items-center justify-between gap-3 transition-colors ${
                                             invoiceTemplateDropdownOpen
-                                                ? "border-blue-500 ring-2 ring-blue-100"
+                                ? "border-[#156372] ring-2 ring-[#156372]/15"
                                                 : "border-gray-200 hover:bg-gray-50"
                                         }`}
                                         aria-haspopup="listbox"
@@ -1327,13 +1326,13 @@ const SubscriptionsPage = () => {
                                                                     setInvoiceTemplateDropdownOpen(false);
                                                                 }}
                                                                 className={`w-full text-left px-3 py-2.5 text-sm flex items-center justify-between gap-3 transition-colors ${
-                                                                    active ? "bg-blue-50 text-blue-700" : "text-gray-800 hover:bg-gray-50"
+                                                                    active ? "bg-[#156372]/10 text-[#156372]" : "text-gray-800 hover:bg-gray-50"
                                                                 }`}
                                                                 role="option"
                                                                 aria-selected={active}
                                                             >
                                                                 <span>{template}</span>
-                                                                {active && <Check size={16} className="text-blue-600" />}
+                                                                {active && <Check size={16} className="text-[#156372]" />}
                                                             </button>
                                                         );
                                                     })
@@ -1358,7 +1357,7 @@ const SubscriptionsPage = () => {
                             <button
                                 type="button"
                                 onClick={handleUpdateInvoiceTemplate}
-                                className="px-4 py-2 rounded-md bg-[#22b573] text-white text-sm font-semibold hover:brightness-95"
+                                className="px-4 py-2 rounded-md bg-[#156372] text-white text-sm font-semibold hover:bg-[#0D4A52]"
                             >
                                 Update
                             </button>
@@ -1397,7 +1396,7 @@ const SubscriptionsPage = () => {
                                     type="button"
                                     onClick={() => setAddressFieldDropdownOpen((v) => !v)}
                                     className={`w-full h-10 px-3 rounded-md border text-sm bg-white flex items-center justify-between gap-3 transition-colors ${
-                                        addressFieldDropdownOpen ? "border-blue-500 ring-2 ring-blue-100" : "border-gray-200 hover:bg-gray-50"
+                                        addressFieldDropdownOpen ? "border-[#156372] ring-2 ring-[#156372]/15" : "border-gray-200 hover:bg-gray-50"
                                     }`}
                                     aria-haspopup="listbox"
                                     aria-expanded={addressFieldDropdownOpen}
@@ -1455,13 +1454,13 @@ const SubscriptionsPage = () => {
                                                                 setAddressFieldSearch("");
                                                             }}
                                                             className={`w-full text-left px-3 py-2.5 text-sm flex items-center justify-between gap-3 transition-colors ${
-                                                                active ? "bg-blue-50 text-blue-700" : "text-gray-800 hover:bg-gray-50"
+                                                                active ? "bg-[#156372]/10 text-[#156372]" : "text-gray-800 hover:bg-gray-50"
                                                             }`}
                                                             role="option"
                                                             aria-selected={active}
                                                         >
                                                             <span>{opt.label}</span>
-                                                            {active && <Check size={16} className="text-blue-600" />}
+                                                            {active && <Check size={16} className="text-[#156372]" />}
                                                         </button>
                                                     );
                                                 })}
@@ -1530,7 +1529,7 @@ const SubscriptionsPage = () => {
                                                                     }}
                                                                     className={`w-full text-left rounded-lg border p-3 bg-white transition-colors hover:bg-gray-50 ${
                                                                         active
-                                                                            ? "border-blue-500 ring-2 ring-blue-100"
+                                        ? "border-[#156372] ring-2 ring-[#156372]/15"
                                                                             : "border-gray-200"
                                                                     }`}
                                                                 >
@@ -1587,7 +1586,7 @@ const SubscriptionsPage = () => {
                                 className={`px-4 py-2 rounded-md text-sm font-semibold ${
                                     hasMultipleCustomersSelected
                                         ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-                                        : "bg-[#22b573] text-white hover:brightness-95"
+                                        : "bg-[#156372] text-white hover:bg-[#0D4A52]"
                                 }`}
                             >
                                 Proceed
@@ -1633,7 +1632,7 @@ const SubscriptionsPage = () => {
                                         type="button"
                                         onClick={() => setPaymentTermsDropdownOpen((v) => !v)}
                                         className={`w-full h-10 px-3 rounded-md border text-sm bg-white flex items-center justify-between gap-3 transition-colors ${
-                                            paymentTermsDropdownOpen ? "border-blue-500 ring-2 ring-blue-100" : "border-gray-200 hover:bg-gray-50"
+                                            paymentTermsDropdownOpen ? "border-[#156372] ring-2 ring-[#156372]/15" : "border-gray-200 hover:bg-gray-50"
                                         }`}
                                         aria-haspopup="listbox"
                                         aria-expanded={paymentTermsDropdownOpen}
@@ -1687,13 +1686,13 @@ const SubscriptionsPage = () => {
                                                                     setPaymentTermsSearch("");
                                                                 }}
                                                                 className={`w-full text-left px-3 py-2.5 text-sm flex items-center justify-between gap-3 transition-colors ${
-                                                                    active ? "bg-blue-50 text-blue-700" : "text-gray-800 hover:bg-gray-50"
+                                                                    active ? "bg-[#156372]/10 text-[#156372]" : "text-gray-800 hover:bg-gray-50"
                                                                 }`}
                                                                 role="option"
                                                                 aria-selected={active}
                                                             >
                                                                 <span>{term}</span>
-                                                                {active && <Check size={16} className="text-blue-600" />}
+                                                                {active && <Check size={16} className="text-[#156372]" />}
                                                             </button>
                                                         );
                                                     })}
@@ -1719,7 +1718,7 @@ const SubscriptionsPage = () => {
                             <button
                                 type="button"
                                 onClick={handleProceedPaymentTerms}
-                                className="px-4 py-2 rounded-md bg-[#22b573] text-white text-sm font-semibold hover:brightness-95"
+                                className="px-4 py-2 rounded-md bg-[#156372] text-white text-sm font-semibold hover:bg-[#0D4A52]"
                             >
                                 Proceed
                             </button>
@@ -1745,7 +1744,7 @@ const SubscriptionsPage = () => {
                             <button
                                 type="button"
                                 onClick={() => setIsNextBillingModalOpen(false)}
-                                className="h-8 w-8 rounded-md border border-blue-500 bg-white flex items-center justify-center hover:bg-blue-50"
+                                className="h-8 w-8 rounded-md border border-[#156372] bg-white flex items-center justify-center hover:bg-[#156372]/10"
                                 aria-label="Close"
                             >
                                 <X size={16} className="text-red-500" />
@@ -1766,7 +1765,7 @@ const SubscriptionsPage = () => {
                                         setNextBillingError("");
                                     }}
                                     placeholder="dd MMM yyyy"
-                                    className="flex-1 h-10 px-3 rounded-md border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-blue-100 bg-white"
+                                    className="flex-1 h-10 px-3 rounded-md border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-[#156372]/15 bg-white"
                                     onFocus={(e) => (e.currentTarget.type = "date")}
                                     onBlur={(e) => (e.currentTarget.type = "text")}
                                     type="text"
@@ -1789,7 +1788,7 @@ const SubscriptionsPage = () => {
                             <button
                                 type="button"
                                 onClick={handleUpdateNextBillingDate}
-                                className="px-4 py-2 rounded-md bg-[#22b573] text-white text-sm font-semibold hover:brightness-95"
+                                className="px-4 py-2 rounded-md bg-[#156372] text-white text-sm font-semibold hover:bg-[#0D4A52]"
                             >
                                 Update
                             </button>
@@ -1838,11 +1837,11 @@ const SubscriptionsPage = () => {
                                 >
                                     <div className="flex items-start gap-3">
                                         <input
-                                            type="radio"
-                                            checked={resumeWhen === "immediately"}
-                                            onChange={() => {}}
-                                            className="mt-1 h-4 w-4"
-                                            style={{ accentColor: accentColor }}
+                                        type="radio"
+                                        checked={resumeWhen === "immediately"}
+                                        onChange={() => {}}
+                                        className="mt-1 h-4 w-4"
+                                        style={{ accentColor: "#156372" }}
                                         />
                                         <div>
                                             <div className="text-sm font-medium text-gray-800">Immediately</div>
@@ -1865,11 +1864,11 @@ const SubscriptionsPage = () => {
                                 >
                                     <div className="flex items-start gap-3">
                                         <input
-                                            type="radio"
-                                            checked={resumeWhen === "specific"}
-                                            onChange={() => {}}
-                                            className="mt-1 h-4 w-4"
-                                            style={{ accentColor: accentColor }}
+                                        type="radio"
+                                        checked={resumeWhen === "specific"}
+                                        onChange={() => {}}
+                                        className="mt-1 h-4 w-4"
+                                        style={{ accentColor: "#156372" }}
                                         />
                                         <div className="w-full">
                                             <div className="text-sm font-medium text-gray-800">On Specific Date</div>
@@ -1887,7 +1886,7 @@ const SubscriptionsPage = () => {
                                                             setResumeError("");
                                                         }}
                                                         placeholder="dd MMM yyyy"
-                                                        className="w-full h-10 px-3 rounded-md border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-blue-100"
+                                                        className="w-full h-10 px-3 rounded-md border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-[#156372]/15"
                                                         onFocus={(e) => (e.currentTarget.type = "date")}
                                                         onBlur={(e) => (e.currentTarget.type = "text")}
                                                         type="text"
@@ -1899,7 +1898,7 @@ const SubscriptionsPage = () => {
                                 </button>
                             </div>
 
-                            <div className="mt-0 pt-3 px-4 pb-4 rounded-lg bg-blue-50 border border-blue-100">
+                            <div className="mt-0 pt-3 px-4 pb-4 rounded-lg bg-[#156372]/5 border border-[#156372]/10">
                                 <div className="text-sm font-medium text-gray-800">
                                     Issue Credits for Subscriptions' Paused Period
                                 </div>
@@ -1917,7 +1916,7 @@ const SubscriptionsPage = () => {
                                         setResumeError("");
                                     }}
                                     placeholder="Mention why you are resuming this subscription."
-                                    className="w-full min-h-[84px] p-3 rounded-md border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-blue-100 resize-y bg-white"
+                                    className="w-full min-h-[84px] p-3 rounded-md border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-[#156372]/15 resize-y bg-white"
                                     maxLength={500}
                                 />
                                 <div className="text-xs text-gray-500 mt-1">Max. 500 characters</div>
@@ -1929,7 +1928,7 @@ const SubscriptionsPage = () => {
                             <button
                                 type="button"
                                 onClick={handleSaveResume}
-                                className="px-4 py-2 rounded-md bg-[#22b573] text-white text-sm font-semibold hover:brightness-95"
+                                className="px-4 py-2 rounded-md bg-[#156372] text-white text-sm font-semibold hover:bg-[#0D4A52]"
                             >
                                 Save
                             </button>
@@ -1979,10 +1978,10 @@ const SubscriptionsPage = () => {
                                     <div className="flex items-start gap-3">
                                         <input
                                             type="radio"
-                                            checked={pauseWhen === "immediately"}
-                                            onChange={() => { }}
-                                            className="mt-1 h-4 w-4"
-                                            style={{ accentColor: accentColor }}
+                                        checked={pauseWhen === "immediately"}
+                                        onChange={() => { }}
+                                        className="mt-1 h-4 w-4"
+                                            style={{ accentColor: "#156372" }}
                                         />
                                         <div>
                                             <div className="text-sm font-medium text-gray-800">Immediately</div>
@@ -2006,10 +2005,10 @@ const SubscriptionsPage = () => {
                                     <div className="flex items-start gap-3">
                                         <input
                                             type="radio"
-                                            checked={pauseWhen === "specific"}
-                                            onChange={() => { }}
-                                            className="mt-1 h-4 w-4"
-                                            style={{ accentColor: accentColor }}
+                                        checked={pauseWhen === "specific"}
+                                        onChange={() => { }}
+                                        className="mt-1 h-4 w-4"
+                                            style={{ accentColor: "#156372" }}
                                         />
                                         <div className="w-full">
                                             <div className="text-sm font-medium text-gray-800">On Specific Date</div>
@@ -2027,7 +2026,7 @@ const SubscriptionsPage = () => {
                                                             setPauseError("");
                                                         }}
                                                         placeholder="dd MMM yyyy"
-                                                        className="w-full h-10 px-3 rounded-md border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-blue-100"
+                                                        className="w-full h-10 px-3 rounded-md border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-[#156372]/15"
                                                         onFocus={(e) => (e.currentTarget.type = "date")}
                                                         onBlur={(e) => (e.currentTarget.type = "text")}
                                                     type="text"
@@ -2048,14 +2047,14 @@ const SubscriptionsPage = () => {
                                     value={resumeOnDate}
                                     onChange={(e) => setResumeOnDate(e.target.value)}
                                     placeholder="dd MMM yyyy"
-                                    className="w-full h-10 px-3 rounded-md border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-blue-100"
+                                    className="w-full h-10 px-3 rounded-md border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-[#156372]/15"
                                     onFocus={(e) => (e.currentTarget.type = "date")}
                                     onBlur={(e) => (e.currentTarget.type = "text")}
                                 type="text"
                                 />
                             </div>
 
-                            <div className="mt-0 pt-3 px-4 pb-4 rounded-lg bg-blue-50 border border-blue-100">
+                            <div className="mt-0 pt-3 px-4 pb-4 rounded-lg bg-[#156372]/5 border border-[#156372]/10">
                                 <div className="text-sm font-medium text-gray-800">
                                     Issue Credits for Subscriptions' Paused Period
                                 </div>
@@ -2073,7 +2072,7 @@ const SubscriptionsPage = () => {
                                         setPauseError("");
                                     }}
                                     placeholder="Mention why you are pausing this subscription."
-                                    className="w-full min-h-[84px] p-3 rounded-md border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-blue-100 resize-y bg-white"
+                                    className="w-full min-h-[84px] p-3 rounded-md border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-[#156372]/15 resize-y bg-white"
                                     maxLength={500}
                                 />
                                 <div className="text-xs text-gray-500 mt-1">Max. 500 characters</div>
@@ -2085,7 +2084,7 @@ const SubscriptionsPage = () => {
                             <button
                                 type="button"
                                 onClick={handleSavePause}
-                                className="px-4 py-2 rounded-md bg-[#22b573] text-white text-sm font-semibold hover:brightness-95"
+                                className="px-4 py-2 rounded-md bg-[#156372] text-white text-sm font-semibold hover:bg-[#0D4A52]"
                             >
                                 Save
                             </button>
@@ -2109,7 +2108,7 @@ const SubscriptionsPage = () => {
                             <button
                                 type="button"
                                 onClick={() => setIsCancelModalOpen(false)}
-                                className="h-8 w-8 rounded-md border border-blue-500 bg-white flex items-center justify-center hover:bg-blue-50"
+                                className="h-8 w-8 rounded-md border border-[#156372] bg-white flex items-center justify-center hover:bg-[#156372]/10"
                                 aria-label="Close"
                             >
                                 <X size={16} className="text-red-500" />
@@ -2132,7 +2131,7 @@ const SubscriptionsPage = () => {
                                                 setCancelError("");
                                             }}
                                             className="h-4 w-4"
-                                            style={{ accentColor: accentColor }}
+                                            style={{ accentColor: "#156372" }}
                                         />
                                         <span>{reason}</span>
                                     </label>
@@ -2160,7 +2159,7 @@ const SubscriptionsPage = () => {
                             <button
                                 type="button"
                                 onClick={handleProceedCancel}
-                                className="px-5 py-2 rounded-md bg-[#22b573] text-white text-sm font-semibold hover:brightness-95"
+                                className="px-5 py-2 rounded-md bg-[#156372] text-white text-sm font-semibold hover:bg-[#0D4A52]"
                             >
                                 Proceed
                             </button>

@@ -439,7 +439,6 @@ const LOCAL_QUOTES_KEY = "taban_books_quotes";
 const LOCAL_INVOICES_KEY = "taban_books_invoices";
 const LOCAL_RECURRING_INVOICES_KEY = "taban_books_recurring_invoices";
 const LOCAL_PAYMENTS_RECEIVED_KEY = "taban_books_payments_received";
-const LOCAL_SUBSCRIPTIONS_KEY = "taban_subscriptions_v1";
 const LOCAL_CREDIT_NOTES_KEY = "taban_books_credit_notes";
 const LOCAL_DEBIT_NOTES_KEY = "taban_books_debit_notes";
 const LOCAL_SALES_RECEIPTS_KEY = "taban_books_sales_receipts";
@@ -484,7 +483,8 @@ const LOCAL_PAYMENT_MODES_KEY = "taban_books_payment_modes";
   };
   const LOCAL_RECURRING_SETTINGS_KEY = "taban_books_settings_recurring_invoices";
   const LOCAL_RETAINER_INVOICE_SETTINGS_KEY = "taban_books_settings_retainer_invoices";
-  const LOCAL_VENDORS_KEY = "taban_books_vendors";
+const LOCAL_VENDORS_KEY = "taban_books_vendors";
+const LOCAL_SUBSCRIPTIONS_KEY = "taban_books_subscriptions";
 const LOCAL_DOCUMENTS_KEY = "taban_books_documents";
 const LOCAL_REPORTING_TAGS_KEY = "taban_books_reporting_tags";
 const LOCAL_GENERAL_SETTINGS_KEY = "taban_books_settings_general";
@@ -1349,10 +1349,10 @@ const taxesLocal = localResource(LOCAL_TAXES_KEY, "tax", defaultTaxes);
 const currenciesLocal = localResource(LOCAL_CURRENCIES_KEY, "cur", defaultCurrencies);
 const invoicesLocal = localResource(LOCAL_INVOICES_KEY, "inv");
 const paymentsReceivedLocal = localResource(LOCAL_PAYMENTS_RECEIVED_KEY, "pay");
-const subscriptionsLocal = localResource(LOCAL_SUBSCRIPTIONS_KEY, "sub");
 const creditNotesLocal = localResource(LOCAL_CREDIT_NOTES_KEY, "cn");
 const debitNotesLocal = localResource(LOCAL_DEBIT_NOTES_KEY, "dn");
 const quotesLocal = localResource(LOCAL_QUOTES_KEY, "quote");
+const subscriptionsLocal = localResource(LOCAL_SUBSCRIPTIONS_KEY, "sub");
 const recurringInvoicesLocal = localResource(LOCAL_RECURRING_INVOICES_KEY, "ri");
 const expensesLocal = localResource(LOCAL_EXPENSES_KEY, "exp");
 const recurringExpensesLocal = localResource(LOCAL_RECURRING_EXPENSES_KEY, "rexp");
@@ -1924,62 +1924,303 @@ export const paymentsReceivedAPI = {
 };
 
 const subscriptionsBase = resource("/subscriptions");
+const normalizeSubscriptionCacheRow = (row: any) => {
+  if (!row || typeof row !== "object") return null;
+  const id = getEntityId(row);
+  if (!id) return null;
+
+  return {
+    ...row,
+    id,
+    _id: row?._id || row?.id || id,
+  };
+};
+
+const readSubscriptionsCacheRows = () => readLocalCollection(LOCAL_SUBSCRIPTIONS_KEY);
+
+const writeSubscriptionsCacheRows = (rows: any[]) => {
+  const normalizedRows = (Array.isArray(rows) ? rows : [])
+    .map((row) => normalizeSubscriptionCacheRow(row))
+    .filter(Boolean);
+  writeLocalCollection(LOCAL_SUBSCRIPTIONS_KEY, normalizedRows as any[]);
+  return normalizedRows as any[];
+};
+
+const removeSubscriptionsCacheRowsById = (id: string) => {
+  const normalizedId = String(id || "").trim();
+  if (!normalizedId) return readSubscriptionsCacheRows();
+  const remaining = readSubscriptionsCacheRows().filter((row: any) => getEntityId(row) !== normalizedId);
+  writeLocalCollection(LOCAL_SUBSCRIPTIONS_KEY, remaining);
+  return remaining;
+};
+
+const upsertSubscriptionsCacheRows = (rows: any[]) => {
+  const existing = readSubscriptionsCacheRows();
+  const next = Array.isArray(existing) ? [...existing] : [];
+
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const normalized = normalizeSubscriptionCacheRow(row);
+    if (!normalized) return;
+
+    const idx = next.findIndex((item: any) => getEntityId(item) === normalized.id);
+    if (idx >= 0) {
+      const merged = { ...next[idx], ...normalized };
+      if (Boolean(normalized.__localOnly)) {
+        merged.__localOnly = true;
+      } else {
+        delete merged.__localOnly;
+      }
+      next[idx] = merged;
+    } else {
+      if (Boolean(normalized.__localOnly)) {
+        next.push(normalized);
+      } else {
+        const { __localOnly: _localOnly, ...cleanRow } = normalized as any;
+        next.push(cleanRow);
+      }
+    }
+  });
+
+  writeLocalCollection(LOCAL_SUBSCRIPTIONS_KEY, next);
+  return next;
+};
+
+const mergeSubscriptionsWithLocalOnlyRows = (rows: any[]) => {
+  const normalizedRemoteRows = (Array.isArray(rows) ? rows : [])
+    .map((row) => normalizeSubscriptionCacheRow(row))
+    .filter(Boolean) as any[];
+
+  const existing = readSubscriptionsCacheRows();
+  const remoteIds = new Set(normalizedRemoteRows.map((row: any) => getEntityId(row)).filter(Boolean));
+  const localOnlyRows = (Array.isArray(existing) ? existing : [])
+    .map((row) => normalizeSubscriptionCacheRow(row))
+    .filter((row: any) => {
+      const id = getEntityId(row);
+      return Boolean(row) && !remoteIds.has(id) && (Boolean(row?.__localOnly) || !isMongoObjectIdLike(id));
+    }) as any[];
+
+  return [...normalizedRemoteRows, ...localOnlyRows];
+};
+
+const extractSubscriptionsRows = (response: any) => {
+  const candidates = [
+    response?.data,
+    response?.data?.data,
+    response?.data?.rows,
+    response?.data?.subscriptions,
+    response?.rows,
+    response?.subscriptions,
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) return candidate;
+  }
+
+  return [];
+};
+
+const normalizeSubscriptionsListResponse = (response: any) => {
+  const rows = extractSubscriptionsRows(response);
+  const paginationSource = response?.pagination || response?.data?.pagination || {};
+  const fallbackLimit = Math.max(1, Number(paginationSource.limit || response?.limit || response?.data?.limit || rows.length || 50) || 50);
+  const total = Number(paginationSource.total ?? response?.total ?? response?.data?.total ?? rows.length) || rows.length;
+  const page = Number(paginationSource.page ?? response?.page ?? response?.data?.page ?? 1) || 1;
+  const limit = Number(paginationSource.limit ?? response?.limit ?? response?.data?.limit ?? fallbackLimit) || fallbackLimit;
+  const pages =
+    Number(
+      paginationSource.pages ??
+      response?.totalPages ??
+      response?.data?.totalPages ??
+      Math.max(1, Math.ceil(total / Math.max(1, limit)))
+    ) || 1;
+
+  return {
+    ...(response && typeof response === "object" ? response : {}),
+    success: response?.success !== false,
+    data: rows,
+    pagination: {
+      total,
+      page,
+      limit,
+      pages,
+    },
+    total,
+    page,
+    limit,
+    totalPages: pages,
+  };
+};
+
 export const subscriptionsAPI = {
-  ...subscriptionsLocal,
   getAll: async (params?: Record<string, any>) => {
     try {
       const res = await subscriptionsBase.getAll(params);
       if (res?.success) {
-        const rows = Array.isArray((res as any).data) ? (res as any).data : [];
-        writeLocalCollection(LOCAL_SUBSCRIPTIONS_KEY, rows);
-        return res as any;
+        const normalized = normalizeSubscriptionsListResponse(res);
+        const mergedRows = mergeSubscriptionsWithLocalOnlyRows(normalized.data);
+        writeSubscriptionsCacheRows(mergedRows);
+        const { data, pagination } = paginateRows(filterRowsByParams(mergedRows, params), params);
+        return {
+          ...normalized,
+          data,
+          pagination,
+          total: pagination.total,
+          page: pagination.page,
+          limit: pagination.limit,
+          totalPages: pagination.pages,
+        } as any;
       }
       if (typeof (res as any)?.status === "number") return res as any;
     } catch {
       // fall back
     }
-    return subscriptionsLocal.getAll(params);
+    const local = await subscriptionsLocal.getAll(params);
+    const mergedRows = mergeSubscriptionsWithLocalOnlyRows(local.data || []);
+    writeSubscriptionsCacheRows(mergedRows);
+    const { data, pagination } = paginateRows(filterRowsByParams(mergedRows, params), params);
+    return {
+      success: true,
+      data,
+      pagination,
+      total: pagination.total,
+      page: pagination.page,
+      limit: pagination.limit,
+      totalPages: pagination.pages,
+    };
   },
   list: (params?: Record<string, any>) => subscriptionsAPI.getAll(params),
   getById: async (id: string) => {
+    const normalizedId = String(id || "").trim();
+    if (!normalizedId) {
+      return { success: false, message: "Not found", data: null };
+    }
+
+    const local = await subscriptionsLocal.getById(normalizedId);
+    if (local?.success && local?.data) {
+      return {
+        success: true,
+        data: normalizeSubscriptionCacheRow(local.data) || local.data,
+      };
+    }
+
     try {
-      const res = await subscriptionsBase.getById(id);
-      if (res?.success) return res as any;
+      const res = await subscriptionsBase.getById(normalizedId);
+      if (res?.success && res?.data) {
+        const row = normalizeSubscriptionCacheRow(res.data);
+        if (row) upsertSubscriptionsCacheRows([row]);
+        return { ...res, data: row || res.data };
+      }
       if (typeof (res as any)?.status === "number") return res as any;
     } catch {
       // fall back
     }
-    return subscriptionsLocal.getById(id);
+
+    return subscriptionsLocal.getById(normalizedId);
   },
   create: async (data: any) => {
     try {
       const res = await subscriptionsBase.create(data);
-      if (res?.success) return res as any;
+      if (res?.success && res?.data) {
+        const row = normalizeSubscriptionCacheRow(res.data);
+        if (row) upsertSubscriptionsCacheRows([row]);
+        return { ...res, data: row || res.data };
+      }
       if (typeof (res as any)?.status === "number") return res as any;
     } catch {
-      // fall back
+      // surface the failure to the caller so writes do not silently drift to local state
     }
-    return subscriptionsLocal.create(data);
+    return {
+      success: false,
+      message: "Failed to create subscription.",
+      data: null,
+    };
   },
   update: async (id: string, data: any) => {
+    const normalizedId = String(id || "").trim();
+    if (!normalizedId) {
+      return { success: false, message: "Not found", data: null };
+    }
+
+    const local = await subscriptionsLocal.getById(normalizedId);
+    const hasLocalRow = Boolean(local?.success && local?.data);
+    const isLocalOnly = Boolean(hasLocalRow && (local.data.__localOnly || !isMongoObjectIdLike(normalizedId)));
+    if (isLocalOnly) {
+      const payload = {
+        ...(local.data || {}),
+        ...(data || {}),
+        id: undefined,
+        _id: undefined,
+        __localOnly: undefined,
+      };
+      try {
+        const createRes = await subscriptionsBase.create(payload);
+        if (createRes?.success && createRes?.data) {
+          const row = normalizeSubscriptionCacheRow(createRes.data);
+          removeSubscriptionsCacheRowsById(normalizedId);
+          if (row) upsertSubscriptionsCacheRows([row]);
+          return { ...createRes, data: row || createRes.data };
+        }
+        if (typeof (createRes as any)?.status === "number") return createRes as any;
+      } catch {
+        // surface the failure to the caller so local-only rows can still be saved when the server is available
+      }
+      return {
+        success: false,
+        message: "Failed to promote local subscription to the server.",
+        data: null,
+      };
+    }
+
     try {
-      const res = await subscriptionsBase.update(id, data);
-      if (res?.success) return res as any;
+      const res = await subscriptionsBase.update(normalizedId, data);
+      if (res?.success && res?.data) {
+        const row = normalizeSubscriptionCacheRow(res.data);
+        if (row) upsertSubscriptionsCacheRows([row]);
+        return { ...res, data: row || res.data };
+      }
+      const status = Number((res as any)?.status || 0);
       if (typeof (res as any)?.status === "number") return res as any;
     } catch {
-      // fall back
+      // surface the failure to the caller so writes do not silently drift to local state
     }
-    return subscriptionsLocal.update(id, data);
+    return {
+      success: false,
+      message: "Failed to update subscription.",
+      data: null,
+    };
   },
   delete: async (id: string) => {
+    const normalizedId = String(id || "").trim();
+    if (!normalizedId) {
+      return { success: true, data: { id: normalizedId } };
+    }
+
+    const local = await subscriptionsLocal.getById(normalizedId);
+    const isLocalOnly = Boolean(local?.success && local?.data && (local.data.__localOnly || !isMongoObjectIdLike(normalizedId)));
+    if (isLocalOnly) {
+      removeSubscriptionsCacheRowsById(normalizedId);
+      return {
+        success: true,
+        data: { id: normalizedId },
+      };
+    }
+
     try {
-      const res = await subscriptionsBase.delete(id);
-      if (res?.success) return res as any;
+      const res = await subscriptionsBase.delete(normalizedId);
+      if (res?.success) {
+        const remaining = readSubscriptionsCacheRows().filter((row: any) => getEntityId(row) !== normalizedId);
+        writeLocalCollection(LOCAL_SUBSCRIPTIONS_KEY, remaining);
+        return res as any;
+      }
       if (typeof (res as any)?.status === "number") return res as any;
     } catch {
-      // fall back
+      // surface the failure to the caller so writes do not silently drift to local state
     }
-    return subscriptionsLocal.delete(id);
+    return {
+      success: false,
+      message: "Failed to delete subscription.",
+      data: null,
+    };
   },
 };
 

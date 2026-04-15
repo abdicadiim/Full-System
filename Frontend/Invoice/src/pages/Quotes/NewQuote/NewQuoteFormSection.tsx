@@ -119,6 +119,27 @@ export default function NewQuoteFormSection({ controller }: Props) {
     typeof selectedCustomerPortalStatusRaw === "boolean"
       ? (selectedCustomerPortalStatusRaw ? "Enabled" : "Disabled")
       : String(selectedCustomerPortalStatusRaw || "-");
+
+  const closeOpenDropdowns = () => {
+    setIsCustomerDropdownOpen(false);
+    setIsSalespersonDropdownOpen(false);
+    setIsProjectDropdownOpen(false);
+    setIsLocationDropdownOpen(false);
+    setIsQuoteDatePickerOpen(false);
+    setIsExpiryDatePickerOpen(false);
+  };
+
+  const openExclusiveDropdown = (
+    isOpen: boolean,
+    setOpen: React.Dispatch<React.SetStateAction<boolean>>
+  ) => {
+    if (isOpen) {
+      setOpen(false);
+      return;
+    }
+    closeOpenDropdowns();
+    setOpen(true);
+  };
   const selectedCustomerLanguage =
     (selectedCustomer as any)?.language ||
     (selectedCustomer as any)?.languageCode ||
@@ -456,7 +477,7 @@ export default function NewQuoteFormSection({ controller }: Props) {
                             if (!customers.length && !isCustomersLoading) {
                               void loadCustomersForDropdown();
                             }
-                            setIsCustomerDropdownOpen(!isCustomerDropdownOpen);
+                            openExclusiveDropdown(isCustomerDropdownOpen, setIsCustomerDropdownOpen);
                           }}
                         />
                         <div
@@ -466,7 +487,7 @@ export default function NewQuoteFormSection({ controller }: Props) {
                             if (!customers.length && !isCustomersLoading) {
                               void loadCustomersForDropdown();
                             }
-                            setIsCustomerDropdownOpen(!isCustomerDropdownOpen);
+                            openExclusiveDropdown(isCustomerDropdownOpen, setIsCustomerDropdownOpen);
                           }}
                         >
                           {isCustomerDropdownOpen ? <ChevronUp size={14} className="text-[#156372]" /> : <ChevronDown size={14} className="text-gray-400" />}
@@ -638,7 +659,7 @@ export default function NewQuoteFormSection({ controller }: Props) {
                     <button
                       type="button"
                       className="w-full h-10 px-3 pr-8 border border-gray-300 rounded text-sm text-gray-700 bg-white flex items-center justify-between focus:outline-none focus:border-[#156372]"
-                      onClick={() => setIsLocationDropdownOpen((prev) => !prev)}
+                      onClick={() => openExclusiveDropdown(isLocationDropdownOpen, setIsLocationDropdownOpen)}
                     >
                       <span className="truncate">{formData.selectedLocation || "Head Office"}</span>
                       <ChevronDown size={14} className="text-gray-400" />
@@ -732,7 +753,7 @@ export default function NewQuoteFormSection({ controller }: Props) {
                       className={`w-full px-3 py-2 border ${formErrors.quoteDate ? 'border-red-500' : 'border-gray-300'} rounded text-sm text-gray-700 focus:outline-none`}
                       value={formatDateForDisplay(formData.quoteDate)}
                       readOnly
-                      onClick={() => setIsQuoteDatePickerOpen(!isQuoteDatePickerOpen)}
+                      onClick={() => openExclusiveDropdown(isQuoteDatePickerOpen, setIsQuoteDatePickerOpen)}
                     />
                     {isQuoteDatePickerOpen && (
                       <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 w-64 p-4">
@@ -792,7 +813,7 @@ export default function NewQuoteFormSection({ controller }: Props) {
                         placeholder="dd/MM/yyyy"
                         value={formatDateForDisplay(formData.expiryDate)}
                         readOnly
-                        onClick={() => setIsExpiryDatePickerOpen(!isExpiryDatePickerOpen)}
+                        onClick={() => openExclusiveDropdown(isExpiryDatePickerOpen, setIsExpiryDatePickerOpen)}
                       />
                       {isExpiryDatePickerOpen && (
                         <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 w-64 p-4">
@@ -848,7 +869,7 @@ export default function NewQuoteFormSection({ controller }: Props) {
                   <div className="flex-1 max-w-xs relative" ref={salespersonDropdownRef}>
                     <div
                       className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-700 flex justify-between items-center bg-white cursor-pointer"
-                      onClick={() => setIsSalespersonDropdownOpen(!isSalespersonDropdownOpen)}
+                      onClick={() => openExclusiveDropdown(isSalespersonDropdownOpen, setIsSalespersonDropdownOpen)}
                     >
                       <span className={formData.salesperson ? "text-gray-900" : "text-gray-400"}>
                         {formData.salesperson || "Select or Add Salesperson"}
@@ -914,7 +935,7 @@ export default function NewQuoteFormSection({ controller }: Props) {
                       }`}
                     onClick={() => {
                       if (selectedCustomer) {
-                        setIsProjectDropdownOpen(!isProjectDropdownOpen);
+                        openExclusiveDropdown(isProjectDropdownOpen, setIsProjectDropdownOpen);
                       }
                     }}
                   >

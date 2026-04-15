@@ -100,6 +100,36 @@ const loadJson = <T,>(key: string, fallback: T): T => {
   }
 };
 
+const sanitizeFileNamePart = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "report";
+
+const getExportFileName = (reportName: string, extension: string) =>
+  `${sanitizeFileNamePart(reportName)}-${new Date().toISOString().split("T")[0]}.${extension}`;
+
+const normalizeSheetName = (value: string) =>
+  value
+    .replace(/[\\/?*\[\]:]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 31) || "Report";
+
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const toExportText = (value: CellValue | null | undefined) => {
+  if (value === null || value === undefined || value === "") return "-";
+  return String(value);
+};
+
 const DATE_RANGE_PRESETS: DateRangePreset[] = [
   "Today",
   "This Week",
@@ -1984,6 +2014,7 @@ export default function ReportDetailPage() {
   const report = getReportById(resolvedCategoryId, resolvedReportId);
   const reportDisplayName = customReport?.name || report?.name || "Report";
   const filterDropdownRef = useRef<HTMLDivElement>(null);
+  const exportDropdownRef = useRef<HTMLDivElement>(null);
   const compareButtonRef = useRef<HTMLButtonElement>(null);
   const nextMoreFilterRowId = useRef(2);
   const [reportsMenuOpen, setReportsMenuOpen] = useState(false);
@@ -1995,6 +2026,7 @@ export default function ReportDetailPage() {
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [customizeColumnsOpen, setCustomizeColumnsOpen] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<string[]>([]);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [comparePopoverOpen, setComparePopoverOpen] = useState(false);
   const [compareWith, setCompareWith] = useState<CompareMode>("None");
   const [compareCount, setCompareCount] = useState("1");
@@ -2090,6 +2122,7 @@ export default function ReportDetailPage() {
     setActiveFilterDropdown(null);
     setMoreFiltersOpen(false);
     setScheduleModalOpen(false);
+    setExportMenuOpen(false);
   }, [resolvedReportId]);
 
   useEffect(() => {
@@ -2155,6 +2188,10 @@ export default function ReportDetailPage() {
         setOpenMoreFilterFieldRowId(null);
         setOpenMoreFilterComparatorRowId(null);
       }
+
+      if (exportDropdownRef.current && !exportDropdownRef.current.contains(event.target as Node)) {
+        setExportMenuOpen(false);
+      }
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -2163,6 +2200,7 @@ export default function ReportDetailPage() {
         setMoreFiltersOpen(false);
         setScheduleModalOpen(false);
         setComparePopoverOpen(false);
+        setExportMenuOpen(false);
         setOpenMoreFilterFieldRowId(null);
         setOpenMoreFilterComparatorRowId(null);
       }
@@ -2259,8 +2297,181 @@ export default function ReportDetailPage() {
   const visiblePreviewColumns = effectiveVisibleColumns;
   const visiblePreviewRows = previewRows;
   const visiblePreviewTotals = previewTotals;
-  const handleExportReport = () => {
-    toast.info("Exporting report...");
+  const exportRows = useMemo(
+    () => visiblePreviewRows.map((row) => visiblePreviewColumns.map((column) => getPreviewCell(row, column))),
+    [getPreviewCell, visiblePreviewColumns, visiblePreviewRows]
+  );
+  const exportTotals = useMemo(
+    () => (visiblePreviewTotals ? visiblePreviewColumns.map((column) => getPreviewCell(visiblePreviewTotals, column)) : null),
+    [getPreviewCell, visiblePreviewColumns, visiblePreviewTotals]
+  );
+  const isExportDisabled = livePreviewLoading || !preview || visiblePreviewColumns.length === 0;
+
+  const downloadReportPdf = async () => {
+    const [{ jsPDF }, html2canvasModule] = await Promise.all([import("jspdf"), import("html2canvas")]);
+    const html2canvas = html2canvasModule.default;
+    const wrapper = document.createElement("div");
+    const previewTitle = escapeHtml(preview?.title || reportDisplayName);
+    const previewSubtitle = escapeHtml(preview?.subtitle || dateLabel);
+    const previewCategory = escapeHtml(category?.name || "Reports");
+    const headers = visiblePreviewColumns
+      .map(
+        (column) => `
+          <th style="padding: 12px 14px; border-bottom: 1px solid #e8edf5; background: #fafbfe; text-align: left; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b;">
+            ${escapeHtml(column)}
+          </th>
+        `
+      )
+      .join("");
+    const bodyRows = exportRows
+      .map(
+        (row) => `
+          <tr>
+            ${row
+              .map(
+                (cell, index) => `
+                  <td style="padding: 11px 14px; border-bottom: 1px solid #edf1f7; font-size: 12px; color: ${index === 0 ? "#2563eb" : "#334155"}; vertical-align: top;">
+                    ${escapeHtml(toExportText(cell))}
+                  </td>
+                `
+              )
+              .join("")}
+          </tr>
+        `
+      )
+      .join("");
+    const totalRow = exportTotals
+      ? `
+        <tr style="background: #f8fafc;">
+          ${exportTotals
+            .map(
+              (cell, index) => `
+                <td style="padding: 12px 14px; border-top: 1px solid #dbe2ed; font-size: 12px; font-weight: 700; color: #0f172a; vertical-align: top;">
+                  ${index === 0 ? escapeHtml(toExportText(cell)) : escapeHtml(toExportText(cell))}
+                </td>
+              `
+            )
+            .join("")}
+        </tr>
+      `
+      : "";
+
+    wrapper.style.position = "fixed";
+    wrapper.style.left = "-10000px";
+    wrapper.style.top = "0";
+    wrapper.style.width = "1200px";
+    wrapper.style.background = "#ffffff";
+    wrapper.style.zIndex = "-1";
+    wrapper.style.fontFamily = "Arial, Helvetica, sans-serif";
+    wrapper.innerHTML = `
+      <div style="padding: 24px;">
+        <div style="border: 1px solid #e8edf5; border-radius: 16px; overflow: hidden; background: #ffffff;">
+          <div style="padding: 24px 28px; border-bottom: 1px solid #e8edf5;">
+            <div style="font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b;">${previewCategory}</div>
+            <div style="margin-top: 6px; font-size: 24px; font-weight: 700; color: #0f172a;">${previewTitle}</div>
+            <div style="margin-top: 4px; font-size: 13px; color: #475569;">${previewSubtitle}</div>
+          </div>
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr>${headers}</tr>
+            </thead>
+            <tbody>
+              ${
+                bodyRows ||
+                `<tr><td colspan="${Math.max(visiblePreviewColumns.length, 1)}" style="padding: 18px; text-align: center; font-size: 13px; color: #64748b;">No data available.</td></tr>`
+              }
+              ${totalRow}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(wrapper);
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const canvas = await html2canvas(wrapper, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+      });
+
+      const pdf = new jsPDF("l", "mm", "a4");
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 10;
+      const printableWidth = pageWidth - margin * 2;
+      const printableHeight = pageHeight - margin * 2;
+      const imgData = canvas.toDataURL("image/png");
+      const imgHeight = (canvas.height * printableWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = margin;
+
+      pdf.addImage(imgData, "PNG", margin, position, printableWidth, imgHeight);
+      heightLeft -= printableHeight;
+
+      while (heightLeft > 0.01) {
+        position = margin - (imgHeight - heightLeft);
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", margin, position, printableWidth, imgHeight);
+        heightLeft -= printableHeight;
+      }
+
+      pdf.save(getExportFileName(reportDisplayName, "pdf"));
+    } finally {
+      if (wrapper.parentNode) {
+        wrapper.parentNode.removeChild(wrapper);
+      }
+    }
+  };
+
+  const downloadReportExcel = async () => {
+    const XLSX = await import("xlsx");
+    const worksheetData: (string | number)[][] = [
+      visiblePreviewColumns,
+      ...exportRows.map((row) => row.map((cell) => (cell === null || cell === undefined || cell === "" ? "" : cell))),
+    ];
+
+    if (exportTotals) {
+      worksheetData.push(exportTotals.map((cell) => (cell === null || cell === undefined || cell === "" ? "" : cell)));
+    }
+
+    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+    worksheet["!cols"] = visiblePreviewColumns.map((column, index) => {
+      const columnValues = [
+        column,
+        ...exportRows.map((row) => toExportText(row[index])),
+        ...(exportTotals ? [toExportText(exportTotals[index])] : []),
+      ];
+      const maxWidth = columnValues.reduce((width, value) => Math.max(width, String(value).length), 0);
+      return { wch: Math.min(Math.max(maxWidth + 2, 12), 40) };
+    });
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, normalizeSheetName(reportDisplayName));
+    XLSX.writeFile(workbook, getExportFileName(reportDisplayName, "xlsx"));
+  };
+
+  const handleExportReport = async (format: "pdf" | "excel") => {
+    setExportMenuOpen(false);
+
+    if (isExportDisabled) {
+      toast.error("No report data available to export.");
+      return;
+    }
+
+    try {
+      if (format === "pdf") {
+        await downloadReportPdf();
+      } else {
+        await downloadReportExcel();
+      }
+      toast.success(`Exported ${reportDisplayName} as ${format === "pdf" ? "PDF" : "Excel"}.`);
+    } catch (error) {
+      console.error("Failed to export report:", error);
+      toast.error("Failed to export the report. Please try again.");
+    }
   };
   const renderPreviewHeading = (title: string) => (
     <div className="border-b border-[#eef2f7] px-4 py-10 text-center">
@@ -2407,14 +2618,49 @@ export default function ReportDetailPage() {
             <button type="button" className="inline-flex h-8 w-8 items-center justify-center rounded border border-[#d4d9e4] text-[#156372] hover:bg-[#156372]/10" aria-label="Share">
               <Share2 size={15} />
             </button>
-            <button
-              type="button"
-              onClick={handleExportReport}
-              className="inline-flex h-8 items-center gap-2 rounded border border-[#d4d9e4] bg-white px-3 text-sm font-medium text-[#156372] hover:bg-[#f8fafc]"
-            >
-              <ArrowUpRight size={14} />
-              Export
-            </button>
+            <div ref={exportDropdownRef} className="relative">
+              <button
+                type="button"
+                disabled={isExportDisabled}
+                onClick={() => {
+                  setActiveFilterDropdown(null);
+                  setMoreFiltersOpen(false);
+                  setComparePopoverOpen(false);
+                  setExportMenuOpen((current) => !current);
+                }}
+                aria-haspopup="menu"
+                aria-expanded={exportMenuOpen}
+                className={`inline-flex h-8 items-center gap-2 rounded border bg-white px-3 text-sm font-medium transition ${
+                  isExportDisabled
+                    ? "cursor-not-allowed border-[#e2e8f0] text-[#94a3b8] opacity-60"
+                    : "border-[#d4d9e4] text-[#156372] hover:bg-[#f8fafc]"
+                }`}
+                title={isExportDisabled ? "Export is available after the report loads" : "Export report"}
+              >
+                <ArrowUpRight size={14} />
+                Export
+                <ChevronDown size={14} className={`transition-transform ${exportMenuOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {exportMenuOpen && !isExportDisabled ? (
+                <div className="absolute right-0 top-[calc(100%+8px)] z-30 w-44 overflow-hidden rounded-[10px] border border-[#d7dce7] bg-white shadow-[0_18px_40px_rgba(15,23,42,0.16)]">
+                  <button
+                    type="button"
+                    onClick={() => void handleExportReport("pdf")}
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-[14px] text-[#334155] transition hover:bg-[#f8fafc]"
+                  >
+                    Export as PDF
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleExportReport("excel")}
+                    className="flex w-full items-center gap-2 border-t border-[#eef2f7] px-4 py-2.5 text-left text-[14px] text-[#334155] transition hover:bg-[#f8fafc]"
+                  >
+                    Export as Excel
+                  </button>
+                </div>
+              ) : null}
+            </div>
             <button
               type="button"
               onClick={() => navigate(closeTarget)}

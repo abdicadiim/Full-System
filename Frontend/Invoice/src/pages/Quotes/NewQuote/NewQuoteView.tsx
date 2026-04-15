@@ -33,7 +33,6 @@ import NewQuoteContactPersonModal from "./NewQuoteContactPersonModal";
 import NewQuoteBulkAddModal from "./NewQuoteBulkAddModal";
 import NewQuoteDocumentsModal from "./NewQuoteDocumentsModal";
 import NewQuoteCloudPickerModal from "./NewQuoteCloudPickerModal";
-import NewQuoteReportingTagsModal from "./NewQuoteReportingTagsModal";
 import NewQuoteCustomerSearchModal from "./NewQuoteCustomerSearchModal";
 
 
@@ -58,7 +57,6 @@ export default function NewQuoteView({ controller }: Props) {
       <NewQuoteBulkAddModal controller={controller} />
       <NewQuoteDocumentsModal controller={controller} />
       <NewQuoteCloudPickerModal controller={controller} />
-      <NewQuoteReportingTagsModal controller={controller} />
       <NewQuoteCustomerSearchModal controller={controller} />
     </>
   );

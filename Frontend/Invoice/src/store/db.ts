@@ -109,7 +109,6 @@ const tableKeys = {
   vendors: "taban_vendors",
   invoices: "taban_invoices",
   taxes: "taban_taxes",
-  subscriptions: "taban_subscriptions",
   plans: "taban_plans",
   creditNotes: "taban_credit_notes",
 };
@@ -121,7 +120,6 @@ export const db = {
     seedIfEmpty(tableKeys.customers, []);
     seedIfEmpty(tableKeys.vendors, []);
     seedIfEmpty(tableKeys.invoices, []);
-    seedIfEmpty(tableKeys.subscriptions, []);
     seedIfEmpty(tableKeys.plans, []);
     seedIfEmpty(tableKeys.creditNotes, []);
     return true;
@@ -136,7 +134,6 @@ export const db = {
   vendors: new Table(tableKeys.vendors, "ven"),
   invoices: new InvoicesTable(tableKeys.invoices, "INV"),
   taxes: new Table(tableKeys.taxes, "tax"),
-  subscriptions: new Table(tableKeys.subscriptions, "sub"),
   plans: new Table(tableKeys.plans, "plan"),
   creditNotes: new Table(tableKeys.creditNotes, "cn"),
 };

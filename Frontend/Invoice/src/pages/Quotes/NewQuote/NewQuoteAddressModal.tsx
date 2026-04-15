@@ -36,6 +36,22 @@ export default function NewQuoteAddressModal({ controller }: Props) {
   const [stateSearch, setStateSearch] = useState("");
   const countryDropdownRef = useRef<HTMLDivElement | null>(null);
   const stateDropdownRef = useRef<HTMLDivElement | null>(null);
+  const closeExclusiveAddressDropdowns = () => {
+    setIsCountryDropdownOpen(false);
+    setIsPhoneCodeDropdownOpen(false);
+  };
+
+  const openExclusiveDropdown = (
+    isOpen: boolean,
+    setOpen: React.Dispatch<React.SetStateAction<boolean>>
+  ) => {
+    if (isOpen) {
+      setOpen(false);
+      return;
+    }
+    closeExclusiveAddressDropdowns();
+    setOpen(true);
+  };
 
   const {
     navigate, location, baseCurrencyCode, quoteId, isEditMode, clonedDataFromState, saveLoading, setSaveLoading, taxes, setTaxes, enabledSettings, setEnabledSettings,
@@ -164,7 +180,7 @@ export default function NewQuoteAddressModal({ controller }: Props) {
                   <button
                     type="button"
                     onClick={() => {
-                      setIsCountryDropdownOpen((prev) => !prev);
+                      openExclusiveDropdown(isCountryDropdownOpen, setIsCountryDropdownOpen);
                       setCountrySearch("");
                     }}
                     className="w-full px-3 py-1.5 border border-gray-300 rounded text-[13px] text-gray-700 bg-white flex items-center justify-between hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-[#156372] focus:border-[#156372]"
@@ -326,7 +342,7 @@ export default function NewQuoteAddressModal({ controller }: Props) {
                         type="button"
                         className="w-[88px] px-2 py-1.5 border-r border-gray-300 text-[13px] bg-gray-50 text-gray-600 focus:outline-none flex items-center justify-between"
                         onClick={() => {
-                          setIsPhoneCodeDropdownOpen((prev) => !prev);
+                          openExclusiveDropdown(isPhoneCodeDropdownOpen, setIsPhoneCodeDropdownOpen);
                           setPhoneCodeSearch("");
                         }}
                         aria-haspopup="listbox"
