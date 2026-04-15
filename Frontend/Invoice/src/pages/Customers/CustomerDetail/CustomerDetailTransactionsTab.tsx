@@ -81,20 +81,20 @@ export default function CustomerDetailTransactionsTab(args: any) {
                         <div className="flex-1 min-h-0 p-6" style={{ paddingRight: 0 }}>
                             <div className="relative inline-block mb-4" ref={goToTransactionsDropdownRef}>
                                 <button
-                                    className="flex items-center gap-1 text-sm text-[#0f5ca8] cursor-pointer hover:underline"
+                                    className="flex items-center gap-1 text-[13px] font-medium text-slate-700 cursor-pointer hover:text-slate-900"
                                     onClick={() => setIsGoToTransactionsDropdownOpen((prev) => !prev)}
                                 >
                                     Go to transactions
                                     <ChevronDown size={14} />
                                 </button>
                                 {isGoToTransactionsDropdownOpen && (
-                                    <div className="absolute top-full left-0 mt-1 w-[210px] max-h-[430px] overflow-y-auto bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1">
+                                    <div className="absolute top-full left-0 mt-1 w-[210px] max-h-[430px] overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1">
                                         {TRANSACTION_SECTION_OPTIONS.map((option) => {
                                             const isActive = Boolean(expandedTransactions[option.key]);
                                             return (
                                                 <button
                                                     key={option.key}
-                                                    className={`w-full text-left px-3 py-2 text-[14px] cursor-pointer ${isActive ? "bg-blue-500 text-white rounded-md mx-1 w-[calc(100%-8px)]" : "text-gray-800 hover:bg-gray-50"}`}
+                                                    className={`mx-1 w-[calc(100%-8px)] rounded-md px-3 py-2 text-left text-[14px] cursor-pointer transition-colors ${isActive ? "bg-slate-100 text-slate-900" : "text-slate-700 hover:bg-slate-50"}`}
                                                     onClick={() => openTransactionSection(option.key)}
                                                 >
                                                     {option.label}
@@ -108,7 +108,7 @@ export default function CustomerDetailTransactionsTab(args: any) {
                             {/* Transaction Categories List */}
                             <div className="space-y-0">
                                 {/* Subscriptions */}
-                                <div className={`flex items-center justify-between py-3 px-4 border-b border-gray-200 hover:bg-gray-50 transition-colors ${expandedTransactions.subscriptions ? "bg-blue-50 border-l-4 border-l-blue-600" : ""}`}>
+                                <div className={`flex items-center justify-between py-3 px-4 border-b border-gray-200 hover:bg-gray-50 transition-colors ${expandedTransactions.subscriptions ? "bg-white" : ""}`}>
                                     <div
                                         className="flex items-center gap-3 flex-1 cursor-pointer"
                                         onClick={() => toggleTransactionSection("subscriptions")}
@@ -151,7 +151,7 @@ export default function CustomerDetailTransactionsTab(args: any) {
 
                                 {/* Invoices */}
                                 <>
-                                    <div className={`flex items-center justify-between py-3 px-4 border-b border-gray-200 hover:bg-gray-50 transition-colors ${expandedTransactions.invoices ? "bg-blue-50 border-l-4 border-l-blue-600" : ""}`}>
+                                <div className={`flex items-center justify-between py-3 px-4 border-b border-gray-200 hover:bg-gray-50 transition-colors ${expandedTransactions.invoices ? "bg-white" : ""}`}>
                                         <div
                                             className="flex items-center gap-3 flex-1 cursor-pointer"
                                             onClick={() => toggleTransactionSection("invoices")}
@@ -191,7 +191,7 @@ export default function CustomerDetailTransactionsTab(args: any) {
                                                             {invoiceStatusOptions.map(status => (
                                                                 <div
                                                                     key={status}
-                                                                    className={`px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 ${invoiceStatusFilter === status ? "bg-blue-50 text-blue-600" : "text-gray-700"}`}
+                                                                className={`px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 ${invoiceStatusFilter === status ? "bg-slate-100 text-slate-900" : "text-gray-700"}`}
                                                                     onClick={() => {
                                                                         setInvoiceStatusFilter(status);
                                                                         setIsStatusDropdownOpen(false);
@@ -305,7 +305,7 @@ export default function CustomerDetailTransactionsTab(args: any) {
 
 
                                 {/* Customer Payments */}
-                                <div className={`flex items-center justify-between py-3 px-4 border-b border-gray-200 hover:bg-gray-50 transition-colors ${expandedTransactions.customerPayments ? "bg-blue-50 border-l-4 border-l-blue-600" : ""}`}>
+                                <div className={`flex items-center justify-between py-3 px-4 border-b border-gray-200 hover:bg-gray-50 transition-colors ${expandedTransactions.customerPayments ? "bg-white" : ""}`}>
                                     <div
                                         className="flex items-center gap-3 flex-1 cursor-pointer"
                                         onClick={() => toggleTransactionSection("customerPayments")}
@@ -378,7 +378,7 @@ export default function CustomerDetailTransactionsTab(args: any) {
                                 )}
 
                                 {/* Payment Links */}
-                                <div className={`flex items-center justify-between py-3 px-4 border-b border-gray-200 hover:bg-gray-50 transition-colors ${expandedTransactions.paymentLinks ? "bg-blue-50 border-l-4 border-l-blue-600" : ""}`}>
+                                <div className={`flex items-center justify-between py-3 px-4 border-b border-gray-200 hover:bg-gray-50 transition-colors ${expandedTransactions.paymentLinks ? "bg-white" : ""}`}>
                                     <div
                                         className="flex items-center gap-3 flex-1 cursor-pointer"
                                         onClick={() => toggleTransactionSection("paymentLinks")}
@@ -410,7 +410,7 @@ export default function CustomerDetailTransactionsTab(args: any) {
                                 )}
 
                                 {/* Quotes */}
-                                <div className={`flex items-center justify-between py-3 px-4 border-b border-gray-200 hover:bg-gray-50 transition-colors ${expandedTransactions.quotes ? "bg-blue-50 border-l-4 border-l-blue-600" : ""}`}>
+                                <div className={`flex items-center justify-between py-3 px-4 border-b border-gray-200 hover:bg-gray-50 transition-colors ${expandedTransactions.quotes ? "bg-white" : ""}`}>
                                     <div
                                         className="flex items-center gap-3 flex-1 cursor-pointer"
                                         onClick={() => toggleTransactionSection("quotes")}
@@ -452,7 +452,7 @@ export default function CustomerDetailTransactionsTab(args: any) {
                                                         {["all", "draft", "sent", "accepted", "declined", "expired", "invoiced"].map(status => (
                                                             <div
                                                                 key={status}
-                                                                className={`px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 ${quoteStatusFilter === status ? "bg-blue-50 text-blue-600" : "text-gray-700"}`}
+                                                                className={`px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 ${quoteStatusFilter === status ? "bg-slate-100 text-slate-900" : "text-gray-700"}`}
                                                                 onClick={() => {
                                                                     setQuoteStatusFilter(status);
                                                                     setIsQuoteStatusDropdownOpen(false);
@@ -521,7 +521,7 @@ export default function CustomerDetailTransactionsTab(args: any) {
                                 )}
 
                                 {/* Retainer Invoices */}
-                                <div className={`flex items-center justify-between py-3 px-4 border-b border-gray-200 hover:bg-gray-50 transition-colors ${expandedTransactions.recurringInvoices ? "bg-blue-50 border-l-4 border-l-blue-600" : ""}`}>
+                                <div className={`flex items-center justify-between py-3 px-4 border-b border-gray-200 hover:bg-gray-50 transition-colors ${expandedTransactions.recurringInvoices ? "bg-white" : ""}`}>
                                     <div
                                         className="flex items-center gap-3 flex-1 cursor-pointer"
                                         onClick={() => toggleTransactionSection("recurringInvoices")}
@@ -563,7 +563,7 @@ export default function CustomerDetailTransactionsTab(args: any) {
                                                         {["all", "active", "stopped", "completed", "expired"].map(status => (
                                                             <div
                                                                 key={status}
-                                                                className={`px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 ${recurringInvoiceStatusFilter === status ? "bg-blue-50 text-blue-600" : "text-gray-700"}`}
+                                                                className={`px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 ${recurringInvoiceStatusFilter === status ? "bg-slate-100 text-slate-900" : "text-gray-700"}`}
                                                                 onClick={() => {
                                                                     setRecurringInvoiceStatusFilter(status);
                                                                     setIsRecurringInvoiceStatusDropdownOpen(false);
@@ -625,7 +625,7 @@ export default function CustomerDetailTransactionsTab(args: any) {
                                 )}
 
                                 {/* Expenses */}
-                                <div className={`flex items-center justify-between py-3 px-4 border-b border-gray-200 hover:bg-gray-50 transition-colors ${expandedTransactions.expenses ? "bg-blue-50 border-l-4 border-l-blue-600" : ""}`}>
+                                <div className={`flex items-center justify-between py-3 px-4 border-b border-gray-200 hover:bg-gray-50 transition-colors ${expandedTransactions.expenses ? "bg-white" : ""}`}>
                                     <div
                                         className="flex items-center gap-3 flex-1 cursor-pointer"
                                         onClick={() => toggleTransactionSection("expenses")}
@@ -667,7 +667,7 @@ export default function CustomerDetailTransactionsTab(args: any) {
                                                         {["all", "unbilled", "invoiced", "reimbursable", "non-reimbursable"].map(status => (
                                                             <div
                                                                 key={status}
-                                                                className={`px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 ${expenseStatusFilter === status ? "bg-blue-50 text-blue-600" : "text-gray-700"}`}
+                                                                className={`px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 ${expenseStatusFilter === status ? "bg-slate-100 text-slate-900" : "text-gray-700"}`}
                                                                 onClick={() => {
                                                                     setExpenseStatusFilter(status);
                                                                     setIsExpenseStatusDropdownOpen(false);
@@ -732,7 +732,7 @@ export default function CustomerDetailTransactionsTab(args: any) {
                                 )}
 
                                 {/* Recurring Expenses */}
-                                <div className={`flex items-center justify-between py-3 px-4 border-b border-gray-200 hover:bg-gray-50 transition-colors ${expandedTransactions.recurringExpenses ? "bg-blue-50 border-l-4 border-l-blue-600" : ""}`}>
+                                <div className={`flex items-center justify-between py-3 px-4 border-b border-gray-200 hover:bg-gray-50 transition-colors ${expandedTransactions.recurringExpenses ? "bg-white" : ""}`}>
                                     <div
                                         className="flex items-center gap-3 flex-1 cursor-pointer"
                                         onClick={() => toggleTransactionSection("recurringExpenses")}
@@ -774,7 +774,7 @@ export default function CustomerDetailTransactionsTab(args: any) {
                                                         {["all", "active", "stopped", "expired"].map(status => (
                                                             <div
                                                                 key={status}
-                                                                className={`px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 ${recurringExpenseStatusFilter === status ? "bg-blue-50 text-blue-600" : "text-gray-700"}`}
+                                                                className={`px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 ${recurringExpenseStatusFilter === status ? "bg-slate-100 text-slate-900" : "text-gray-700"}`}
                                                                 onClick={() => {
                                                                     setRecurringExpenseStatusFilter(status);
                                                                     setIsRecurringExpenseStatusDropdownOpen(false);
@@ -836,7 +836,7 @@ export default function CustomerDetailTransactionsTab(args: any) {
                                 )}
 
                                 {/* Projects */}
-                                <div className={`flex items-center justify-between py-3 px-4 border-b border-gray-200 hover:bg-gray-50 transition-colors ${expandedTransactions.projects ? "bg-blue-50 border-l-4 border-l-blue-600" : ""}`}>
+                                <div className={`flex items-center justify-between py-3 px-4 border-b border-gray-200 hover:bg-gray-50 transition-colors ${expandedTransactions.projects ? "bg-white" : ""}`}>
                                     <div
                                         className="flex items-center gap-3 flex-1 cursor-pointer"
                                         onClick={() => toggleTransactionSection("projects")}
@@ -878,7 +878,7 @@ export default function CustomerDetailTransactionsTab(args: any) {
                                                         {["all", "active", "on hold", "finished", "cancelled"].map(status => (
                                                             <div
                                                                 key={status}
-                                                                className={`px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 ${projectStatusFilter === status ? "bg-blue-50 text-blue-600" : "text-gray-700"}`}
+                                                                className={`px-4 py-2 text-sm cursor-pointer hover:bg-gray-50 ${projectStatusFilter === status ? "bg-slate-100 text-slate-900" : "text-gray-700"}`}
                                                                 onClick={() => {
                                                                     setProjectStatusFilter(status);
                                                                     setIsProjectStatusDropdownOpen(false);

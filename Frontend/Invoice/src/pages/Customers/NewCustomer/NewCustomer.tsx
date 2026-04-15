@@ -1835,7 +1835,16 @@ export default function NewCustomer() {
   const pageContentMaxWidthClass =
     activeTab === "contact-persons"
       ? "max-w-none"
-      : "max-w-4xl";
+      : "max-w-[1040px]";
+  const customFieldEntries = Object.entries(formData.customFields || {});
+  const animatedFieldClass =
+    "border border-gray-300 rounded bg-white text-[13px] text-gray-700 outline-none transition-[border-color,box-shadow,transform,background-color] duration-200 ease-out hover:border-slate-400 focus:border-[#3b82f6] focus:ring-[3px] focus:ring-[#3b82f6]/15 focus:-translate-y-[1px]";
+  const animatedDropdownButtonClass =
+    "border border-gray-300 rounded bg-white text-[13px] text-gray-700 outline-none transition-[border-color,box-shadow,transform,background-color] duration-200 ease-out hover:border-slate-400 focus:border-[#3b82f6] focus:ring-[3px] focus:ring-[#3b82f6]/15";
+  const animatedPhoneGroupClass =
+    "flex items-center border border-gray-300 rounded bg-white transition-[border-color,box-shadow,transform,background-color] duration-200 ease-out hover:border-slate-400 focus-within:border-[#3b82f6] focus-within:ring-[3px] focus-within:ring-[#3b82f6]/15 focus-within:-translate-y-[1px]";
+  const animatedDropdownPanelClass =
+    "absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-80 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 slide-in-from-top-1 duration-150 origin-top";
 
 
 
@@ -1926,7 +1935,7 @@ export default function NewCustomer() {
                       name="salutation"
                       value={formData.salutation}
                       onChange={handleChange}
-                      className="w-32 px-3 py-1.5 border border-gray-300 rounded text-[13px] text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-[#156372] focus:border-[#156372]"
+                      className={`w-32 px-3 py-1.5 ${animatedFieldClass}`}
                     >
                       <option value="">Salutation</option>
                       <option value="mr">Mr.</option>
@@ -1940,7 +1949,7 @@ export default function NewCustomer() {
                       value={formData.firstName}
                       onChange={handleChange}
                       placeholder="First Name"
-                      className="flex-1 min-w-0 px-3 py-1.5 border border-gray-300 rounded text-[13px] text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#156372] focus:border-[#156372]"
+                      className={`flex-1 min-w-0 px-3 py-1.5 ${animatedFieldClass}`}
                     />
                     <input
                       type="text"
@@ -1948,7 +1957,7 @@ export default function NewCustomer() {
                       value={formData.lastName}
                       onChange={handleChange}
                       placeholder="Last Name"
-                      className="flex-1 min-w-0 px-3 py-1.5 border border-gray-300 rounded text-[13px] text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#156372] focus:border-[#156372]"
+                      className={`flex-1 min-w-0 px-3 py-1.5 ${animatedFieldClass}`}
                     />
                   </div>
                 </div>
@@ -1962,7 +1971,7 @@ export default function NewCustomer() {
                       name="companyName"
                       value={formData.companyName}
                       onChange={handleChange}
-                      className="w-full px-3 py-1.5 border border-gray-300 rounded text-[13px] text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#156372] focus:border-[#156372]"
+                      className={`w-full px-3 py-1.5 ${animatedFieldClass}`}
                     />
                   </div>
                 </div>
@@ -1982,7 +1991,7 @@ export default function NewCustomer() {
                       value={formData.displayName}
                       onChange={handleChange}
                       placeholder="Select or type to add"
-                      className={`w-full px-3 py-1.5 pr-8 border rounded text-[13px] text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#156372] focus:border-[#156372] bg-white ${errors.displayName ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                      className={`w-full px-3 py-1.5 pr-8 rounded bg-white ${errors.displayName ? "border border-red-500 bg-red-50 text-[13px] text-gray-700 outline-none transition-[border-color,box-shadow,transform,background-color] duration-200 ease-out hover:border-red-500 focus:border-[#ef4444] focus:ring-[3px] focus:ring-[#ef4444]/15 focus:-translate-y-[1px]" : animatedFieldClass}`}
                       required
                       onFocus={(e) => {
                         if (errors.displayName) {
@@ -2017,7 +2026,7 @@ export default function NewCustomer() {
                     />
                     <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                     {isDisplayNameDropdownOpen && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded shadow-lg z-50">
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded shadow-lg z-50 animate-in fade-in zoom-in-95 slide-in-from-top-1 duration-150 origin-top">
                         {(() => {
                           const firstName = formData.firstName ? formData.firstName.trim() : "";
                           const lastName = formData.lastName ? formData.lastName.trim() : "";
@@ -2055,6 +2064,80 @@ export default function NewCustomer() {
                   </div>
                 </div>
 
+                {/* Currency */}
+                <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4 items-start" ref={currencyDropdownRef}>
+                  <label className="text-[13px] font-medium text-gray-700 flex items-center gap-1 pt-1.5">
+                    Currency
+                    <HelpTooltip text="The currency in which you want to track transactions for this customer.">
+                      <Info size={14} className="text-gray-400 cursor-help" />
+                    </HelpTooltip>
+                  </label>
+                  <div className="w-full max-w-md relative">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const wasOpen = isCurrencyDropdownOpen;
+                        closeAllDropdowns();
+                        setIsCurrencyDropdownOpen(!wasOpen);
+                      }}
+                      className={`w-full px-3 py-1.5 flex items-center justify-between ${animatedDropdownButtonClass}`}
+                    >
+                      <span className="text-gray-700">{selectedCurrencyLabel}</span>
+                      <ChevronDown size={14} className={`text-gray-400 transition-transform ${isCurrencyDropdownOpen ? "rotate-180" : ""}`} />
+                    </button>
+
+                    {isCurrencyDropdownOpen && (
+                      <div className={animatedDropdownPanelClass}>
+                        <div className="flex items-center gap-2 p-3 bg-white border-b border-gray-100">
+                          <Search size={18} className="text-gray-400 flex-shrink-0" />
+                          <input
+                            type="text"
+                            placeholder="Search"
+                            value={currencySearch}
+                            onChange={(e) => setCurrencySearch(e.target.value)}
+                            className="flex-1 border-none outline-none text-[13px] text-gray-700 bg-transparent placeholder-gray-400"
+                            autoFocus
+                          />
+                        </div>
+                        <div className="max-h-60 overflow-y-auto custom-scrollbar">
+                          {filteredCurrencies.map((currency) => (
+                            <div
+                              key={currency.code}
+                              onClick={() => handleCurrencySelect(currency)}
+                              className={`px-4 py-2.5 text-[13px] cursor-pointer flex items-center justify-between hover:bg-gray-50 transition-colors ${formData.currency === currency.code ? "bg-blue-50 text-blue-600 font-medium" : "text-gray-700"}`}
+                            >
+                              <span>{getCurrencyLabel(currency)}</span>
+                              {formData.currency === currency.code && (
+                                <Check size={16} className="text-blue-500" />
+                              )}
+                            </div>
+                          ))}
+                          {filteredCurrencies.length === 0 && (
+                            <div className="px-4 py-3 text-sm text-gray-500 text-center italic">
+                              No currencies found matching "{currencySearch}"
+                            </div>
+                          )}
+                        </div>
+                        <div
+                          onClick={() => {
+                            setIsCurrencyDropdownOpen(false);
+                            setCurrencySearch("");
+                            setIsNewCurrencyModalOpen(true);
+                          }}
+                          className="px-4 py-3 text-[13px] text-blue-600 font-medium cursor-pointer hover:bg-blue-50 border-t border-gray-100 flex items-center gap-2 transition-colors"
+                        >
+                          <Plus size={16} />
+                          Add new currency
+                        </div>
+                      </div>
+                    )}
+                    <p className="mt-2 text-[11px] text-gray-500 leading-relaxed">
+                      Currency and payment settings will be used across this customer's invoices, quotes, and receipts.
+                    </p>
+                  </div>
+                </div>
+
                 {/* Email Address */}
                 <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4 items-center">
                   <label className="text-[13px] font-medium text-gray-700 flex items-center gap-1">
@@ -2074,8 +2157,10 @@ export default function NewCustomer() {
                       onChange={handleChange}
                       onBlur={handleEmailBlur}
                       placeholder="Enter email address"
-                      className={`w-full pl-9 pr-3 py-1.5 border rounded text-[13px] text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#156372] focus:border-[#156372] ${
-                        errors.email ? "border-red-500 bg-red-50" : "border-gray-300"
+                      className={`w-full pl-9 pr-3 py-1.5 rounded text-[13px] text-gray-700 ${
+                        errors.email
+                          ? "border border-red-500 bg-red-50 outline-none transition-[border-color,box-shadow,transform,background-color] duration-200 ease-out hover:border-red-500 focus:border-[#ef4444] focus:ring-[3px] focus:ring-[#ef4444]/15 focus:-translate-y-[1px]"
+                          : animatedFieldClass
                       }`}
                     />
                     {errors.email && (
@@ -2096,7 +2181,11 @@ export default function NewCustomer() {
                       value={formData.customerNumber}
                       onChange={handleChange}
                       readOnly
-                      className={`w-full pr-10 px-3 py-1.5 border rounded text-[13px] text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#156372] focus:border-[#156372] bg-gray-50 cursor-default ${errors.customerNumber ? "border-red-500 bg-red-50" : "border-gray-300"}`}
+                      className={`w-full pr-10 px-3 py-1.5 rounded text-[13px] text-gray-700 cursor-default ${
+                        errors.customerNumber
+                          ? "border border-red-500 bg-red-50 outline-none transition-[border-color,box-shadow,transform,background-color] duration-200 ease-out hover:border-red-500 focus:border-[#ef4444] focus:ring-[3px] focus:ring-[#ef4444]/15"
+                          : "border border-gray-300 bg-gray-50 outline-none transition-[border-color,box-shadow,transform,background-color] duration-200 ease-out hover:border-slate-400 focus:border-[#3b82f6] focus:ring-[3px] focus:ring-[#3b82f6]/15"
+                      }`}
                       required
                     />
                     <button
@@ -2123,7 +2212,7 @@ export default function NewCustomer() {
                   </label>
                   <div className="flex flex-wrap gap-4 max-w-xl">
                     {/* Work Phone */}
-                    <div className="flex items-center border border-gray-300 rounded bg-white w-64">
+                    <div className={`w-64 ${animatedPhoneGroupClass}`}>
                       <div className="relative" ref={workPhonePrefixRef}>
                         <div
                           onClick={(e) => {
@@ -2180,7 +2269,7 @@ export default function NewCustomer() {
                     </div>
 
                     {/* Mobile Phone */}
-                    <div className="flex items-center border border-gray-300 rounded bg-white w-64">
+                    <div className={`w-64 ${animatedPhoneGroupClass}`}>
                       <div className="relative" ref={mobilePrefixRef}>
                         <div
                           onClick={(e) => {
@@ -2255,13 +2344,13 @@ export default function NewCustomer() {
                         closeAllDropdowns();
                         setIsCustomerLanguageDropdownOpen(!wasOpen);
                       }}
-                      className="w-full px-3 py-1.5 border border-gray-300 rounded text-[13px] text-gray-700 bg-white flex items-center justify-between hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-[#156372] focus:border-[#156372]"
+                      className={`w-full px-3 py-1.5 flex items-center justify-between ${animatedDropdownButtonClass}`}
                     >
                       <span>{selectedCustomerLanguage.label}</span>
                       <ChevronDown size={14} className={`text-gray-400 transition-transform ${isCustomerLanguageDropdownOpen ? "rotate-180" : ""}`} />
                     </button>
                     {isCustomerLanguageDropdownOpen && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded shadow-lg z-50 max-h-60 overflow-y-auto">
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded shadow-lg z-50 max-h-60 overflow-y-auto animate-in fade-in zoom-in-95 slide-in-from-top-1 duration-150 origin-top">
                         {customerLanguageOptions.map((lang) => (
                           <div
                             key={lang.value}
@@ -2363,15 +2452,18 @@ export default function NewCustomer() {
 
 
               {/* Tabs */}
-              <div className="flex gap-2 mb-6 border-b border-gray-200 overflow-x-auto whitespace-nowrap">
+              <div className="mb-6 border-b border-gray-200 overflow-x-auto whitespace-nowrap">
+                <div className="flex gap-1.5">
                 {[
                   { id: "other-details", label: "Other Details" },
                   { id: "address", label: "Address" },
                   { id: "contact-persons", label: "Contact Persons" },
+                  { id: "custom-fields", label: "Custom Fields" },
+                  { id: "remarks", label: "Remarks" },
                 ].map((tab) => (
                   <button
                     key={tab.id}
-                    className={`shrink-0 px-4 py-2.5 text-[13px] transition-all border-b-2 font-medium ${activeTab === tab.id ? "text-[#156372] border-[#156372]" : "text-gray-500 hover:text-gray-700 border-transparent"}`}
+                    className={`shrink-0 rounded-t-lg border border-b-0 px-4 py-2.5 text-[13px] font-medium transition-all duration-200 ${activeTab === tab.id ? "bg-white text-[#156372] shadow-[0_-1px_0_0_#d1d5db,1px_0_0_0_#d1d5db,-1px_0_0_0_#d1d5db] border-gray-300" : "text-gray-500 hover:bg-white/70 hover:text-gray-700 border-transparent"}`}
                     onClick={() => {
                       if (tab.id === "contact-persons") {
                         setActiveTab("contact-persons");
@@ -2403,10 +2495,11 @@ export default function NewCustomer() {
                     {tab.label}
                   </button>
                 ))}
+                </div>
               </div>
 
               {/* Tab Content */}
-              <div className="mt-6">
+              <div className="mt-6 animate-in fade-in slide-in-from-bottom-1 duration-200">
                 {activeTab === "other-details" && (
                   <div className="space-y-6">
                     {/* Tax Rate */}
@@ -2427,8 +2520,8 @@ export default function NewCustomer() {
                               closeAllDropdowns();
                               setIsTaxRateDropdownOpen(!wasOpen);
                             }}
-                            className="h-[34px] w-full rounded border border-gray-300 bg-white px-3 text-left text-[13px] transition-colors hover:border-gray-400 outline-none"
-                            style={isTaxRateDropdownOpen ? { borderColor: "#156372" } : {}}
+                            className={`h-[34px] w-full px-3 text-left ${animatedDropdownButtonClass}`}
+                            style={isTaxRateDropdownOpen ? { borderColor: "#3b82f6", boxShadow: "0 0 0 3px rgba(59,130,246,0.15)", transform: "translateY(-1px)" } : {}}
                           >
                             <div className="flex items-center justify-between gap-2">
                               <span className={formData.taxRate ? "text-[#1f2937]" : "text-[#6b7280]"}>
@@ -2442,11 +2535,11 @@ export default function NewCustomer() {
                             </div>
                           </button>
                           {isTaxRateDropdownOpen && (
-                            <div className="absolute left-0 top-full z-[9999] mt-1 w-full rounded-xl border border-[#d6dbe8] bg-white p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+                            <div className="absolute left-0 top-full z-[9999] mt-1 w-full rounded-xl border border-[#d6dbe8] bg-white p-1 shadow-2xl animate-in fade-in zoom-in-95 slide-in-from-top-1 duration-150 origin-top">
                               <div className="p-2">
                                 <div
-                                  className="flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-all focus-within:bg-white"
-                                  style={{ borderColor: "#156372" }}
+                                  className="flex items-center gap-2 rounded-lg border bg-slate-50/50 px-3 py-1.5 transition-[border-color,box-shadow,background-color] duration-200 focus-within:bg-white"
+                                  style={{ borderColor: "#3b82f6" }}
                                 >
                                   <Search size={14} className="text-slate-400" />
                                   <input
@@ -2544,80 +2637,8 @@ export default function NewCustomer() {
                           name="companyId"
                           value={formData.companyId}
                           onChange={handleChange}
-                          className="w-full px-3 py-1.5 border border-gray-300 rounded text-[13px] text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#156372] focus:border-[#156372] hover:border-gray-400 transition-colors"
+                          className={`w-full px-3 py-1.5 ${animatedFieldClass}`}
                         />
-                      </div>
-                    </div>
-
-                    {/* Currency */}
-                    <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4 items-center" ref={currencyDropdownRef}>
-                      <label className="text-[13px] font-medium text-gray-700 flex items-center gap-1">
-                        Currency
-                        <HelpTooltip text="The currency in which you want to track transactions for this customer.">
-                          <Info size={14} className="text-gray-400 cursor-help" />
-                        </HelpTooltip>
-                      </label>
-                      <div className="w-full max-w-md relative">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const wasOpen = isCurrencyDropdownOpen;
-                            closeAllDropdowns();
-                            setIsCurrencyDropdownOpen(!wasOpen);
-                          }}
-                          className="w-full px-3 py-1.5 border border-gray-300 rounded text-[13px] text-gray-700 bg-white flex items-center justify-between hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-[#156372] focus:border-[#156372] transition-colors"
-                        >
-                          <span className="text-gray-700">{selectedCurrencyLabel}</span>
-                          <ChevronDown size={14} className={`text-gray-400 transition-transform ${isCurrencyDropdownOpen ? "rotate-180" : ""}`} />
-                        </button>
-
-                        {isCurrencyDropdownOpen && (
-                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-80 overflow-hidden flex flex-col">
-                            <div className="flex items-center gap-2 p-3 bg-white border-b border-gray-100">
-                              <Search size={18} className="text-gray-400 flex-shrink-0" />
-                              <input
-                                type="text"
-                                placeholder="Search"
-                                value={currencySearch}
-                                onChange={(e) => setCurrencySearch(e.target.value)}
-                                className="flex-1 border-none outline-none text-[13px] text-gray-700 bg-transparent placeholder-gray-400"
-                                autoFocus
-                              />
-                            </div>
-                            <div className="max-h-60 overflow-y-auto custom-scrollbar">
-                              {filteredCurrencies.map((currency) => (
-                                <div
-                                  key={currency.code}
-                                  onClick={() => handleCurrencySelect(currency)}
-                                  className={`px-4 py-2.5 text-[13px] cursor-pointer flex items-center justify-between hover:bg-gray-50 transition-colors ${formData.currency === currency.code ? "bg-blue-50 text-blue-600 font-medium" : "text-gray-700"}`}
-                                >
-                                  <span>{getCurrencyLabel(currency)}</span>
-                                  {formData.currency === currency.code && (
-                                    <Check size={16} className="text-blue-500" />
-                                  )}
-                                </div>
-                              ))}
-                              {filteredCurrencies.length === 0 && (
-                                <div className="px-4 py-3 text-sm text-gray-500 text-center italic">
-                                  No currencies found matching "{currencySearch}"
-                                </div>
-                              )}
-                            </div>
-                            {/* Add new currency option */}
-                            <div
-                              onClick={() => {
-                                setIsCurrencyDropdownOpen(false);
-                                setCurrencySearch("");
-                                setIsNewCurrencyModalOpen(true);
-                              }}
-                              className="px-4 py-3 text-[13px] text-blue-600 font-medium cursor-pointer hover:bg-blue-50 border-t border-gray-100 flex items-center gap-2 transition-colors"
-                            >
-                              <Plus size={16} />
-                              Add new currency
-                            </div>
-                          </div>
-                        )}
                       </div>
                     </div>
 
@@ -2732,85 +2753,6 @@ export default function NewCustomer() {
                         </div>
                       </div>
                     )}
-
-                    {/* Price List */}
-                    <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4 items-center">
-                      <label className="text-[13px] font-medium text-gray-700 flex items-center gap-1">
-                        Price List
-                        <HelpTooltip text="Select a price list to associate with this customer. This will be used to determine item rates in transactions.">
-                          <Info size={14} className="text-gray-400 cursor-help" />
-                        </HelpTooltip>
-                      </label>
-                      <div className="w-full max-w-md relative" ref={priceListDropdownRef}>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const wasOpen = isPriceListDropdownOpen;
-                            closeAllDropdowns();
-                            setIsPriceListDropdownOpen(!wasOpen);
-                          }}
-                          className="w-full px-3 py-1.5 border border-gray-300 rounded text-[13px] text-gray-700 bg-white flex items-center justify-between hover:border-gray-400 focus:outline-none focus:ring-1 focus:ring-[#156372] focus:border-[#156372] transition-colors"
-                        >
-                          <span className={formData.priceListId ? "text-gray-900" : "text-gray-400"}>
-                            {formData.priceListId ? (priceLists.find(p => p.id === formData.priceListId)?.name || "Select a Price List") : "Select a Price List"}
-                          </span>
-                          <ChevronDown size={14} className={`text-gray-400 transition-transform ${isPriceListDropdownOpen ? "rotate-180" : ""}`} />
-                        </button>
-
-                        {isPriceListDropdownOpen && (
-                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-80 overflow-hidden flex flex-col">
-                            <div className="flex items-center gap-2 p-3 bg-white border-b border-gray-100">
-                              <Search size={18} className="text-gray-400 flex-shrink-0" />
-                              <input
-                                type="text"
-                                placeholder="Search"
-                                value={priceListSearch}
-                                onChange={(e) => setPriceListSearch(e.target.value)}
-                                className="flex-1 border-none outline-none text-[13px] text-gray-700 bg-transparent placeholder-gray-400"
-                                autoFocus
-                              />
-                            </div>
-                            <div className="max-h-60 overflow-y-auto custom-scrollbar">
-                              <div
-                                onClick={() => {
-                                  setFormData(prev => ({ ...prev, priceListId: "" }));
-                                  setIsPriceListDropdownOpen(false);
-                                }}
-                                className={`px-4 py-2.5 text-[13px] cursor-pointer flex items-center hover:bg-gray-50 transition-colors ${!formData.priceListId ? "bg-blue-50 text-blue-600 font-medium" : "text-gray-700"}`}
-                              >
-                                None
-                              </div>
-                              {priceLists
-                                .filter(p => p.name.toLowerCase().includes(priceListSearch.toLowerCase()))
-                                .map((p) => (
-                                  <div
-                                    key={p.id}
-                                    onClick={() => {
-                                      setFormData(prev => ({ ...prev, priceListId: p.id }));
-                                      setIsPriceListDropdownOpen(false);
-                                    }}
-                                    className={`px-4 py-2.5 text-[13px] cursor-pointer flex items-center justify-between hover:bg-gray-50 transition-colors ${formData.priceListId === p.id ? "bg-blue-50 text-blue-600 font-medium" : "text-gray-700"}`}
-                                  >
-                                    <div className="flex flex-col">
-                                      <span>{p.name}</span>
-                                      <span className="text-[11px] text-gray-400">{p.pricingScheme} {p.currency !== "-" ? `(${p.currency})` : ""}</span>
-                                    </div>
-                                    {formData.priceListId === p.id && (
-                                      <Check size={16} className="text-blue-500" />
-                                    )}
-                                  </div>
-                                ))}
-                              {priceLists.filter(p => p.name.toLowerCase().includes(priceListSearch.toLowerCase())).length === 0 && (
-                                <div className="px-4 py-3 text-sm text-gray-500 text-center italic">
-                                  No price lists found
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
 
                     {/* Payment Terms */}
                     <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4 items-center">
@@ -3787,6 +3729,74 @@ export default function NewCustomer() {
                         <Plus size={16} />
                         Add Contact Person
                       </button>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === "custom-fields" && (
+                  <div className="mt-6 max-w-3xl">
+                    {customFieldEntries.length > 0 ? (
+                      <div className="space-y-5 rounded-xl border border-gray-200 bg-white p-5 shadow-sm animate-in fade-in slide-in-from-bottom-1 duration-200">
+                        {customFieldEntries.map(([fieldKey, fieldValue]) => (
+                          <div key={fieldKey} className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4 items-center">
+                            <label className="text-[13px] font-medium text-gray-700">
+                              {String(fieldKey)
+                                .replace(/([A-Z])/g, " $1")
+                                .replace(/[_-]+/g, " ")
+                                .replace(/\s+/g, " ")
+                                .trim()
+                                .replace(/^\w/, (char) => char.toUpperCase())}
+                            </label>
+                            <input
+                              type="text"
+                              value={String(fieldValue ?? "")}
+                              onChange={(event) =>
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  customFields: {
+                                    ...(prev.customFields || {}),
+                                    [fieldKey]: event.target.value,
+                                  },
+                                }))
+                              }
+                              className="w-full max-w-md px-3 py-1.5 border border-gray-300 rounded text-[13px] text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#156372] focus:border-[#156372] hover:border-gray-400 transition-colors"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-gray-300 bg-gradient-to-br from-white to-slate-50 px-6 py-10 text-center shadow-sm animate-in fade-in zoom-in-95 duration-200">
+                        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
+                          <LayoutGrid size={18} />
+                        </div>
+                        <h3 className="text-[15px] font-semibold text-gray-800">No custom fields yet</h3>
+                        <p className="mx-auto mt-2 max-w-md text-[13px] leading-6 text-gray-500">
+                          Custom customer fields will appear here once they are created in settings.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === "remarks" && (
+                  <div className="mt-6 max-w-3xl animate-in fade-in slide-in-from-bottom-1 duration-200">
+                    <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                      <div className="border-b border-gray-100 bg-slate-50/70 px-4 py-3">
+                        <div className="text-[13px] font-semibold text-gray-800">Internal Remarks</div>
+                        <p className="mt-1 text-[12px] text-gray-500">
+                          Add notes for your team about this customer.
+                        </p>
+                      </div>
+                      <div className="p-4">
+                        <textarea
+                          name="remarks"
+                          value={formData.remarks}
+                          onChange={handleChange}
+                          placeholder="Type customer notes, reminders, or internal remarks..."
+                          rows={8}
+                          className="w-full resize-y rounded-xl border border-gray-300 bg-white px-4 py-3 text-[13px] leading-6 text-gray-700 outline-none transition-colors focus:border-[#156372] focus:ring-1 focus:ring-[#156372]"
+                        />
+                      </div>
                     </div>
                   </div>
                 )}

@@ -338,41 +338,41 @@ export default function CustomerCommentsPanel({
     });
 
   return (
-    <div className="flex-1 min-h-0 bg-white p-8 overflow-y-auto">
-      <div className="mb-10 bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm max-w-5xl mx-auto">
-        <div className="flex gap-4 p-3 bg-gray-50/80 border-b border-gray-200">
+    <div className="flex-1 min-h-0 overflow-y-auto bg-white p-6">
+      <div className="mb-8 w-full max-w-[720px] overflow-hidden rounded-md border border-slate-200 bg-white">
+        <div className="flex gap-5 border-b border-slate-200 bg-white px-4 py-2.5">
           <button
             type="button"
-            className={`p-1.5 rounded-[7px] cursor-pointer transition-all flex items-center justify-center ${isBold ? "text-gray-800 bg-white border border-[#cfd5e3] shadow-sm" : "text-gray-500 border border-transparent hover:bg-gray-100"}`}
+            className={`flex cursor-pointer items-center justify-center rounded-[6px] border p-1.5 transition-all ${isBold ? "border-slate-300 bg-slate-50 text-slate-900 shadow-sm" : "border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800"}`}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => applyCommentFormat("bold")}
             title="Bold"
           >
-            <Bold size={15} />
+            <Bold size={14} />
           </button>
           <button
             type="button"
-            className={`p-1.5 rounded-[7px] cursor-pointer transition-all flex items-center justify-center ${isItalic ? "text-gray-800 bg-white border border-[#cfd5e3] shadow-sm" : "text-gray-500 border border-transparent hover:bg-gray-100"}`}
+            className={`flex cursor-pointer items-center justify-center rounded-[6px] border p-1.5 transition-all ${isItalic ? "border-slate-300 bg-slate-50 text-slate-900 shadow-sm" : "border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800"}`}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => applyCommentFormat("italic")}
             title="Italic"
           >
-            <Italic size={15} />
+            <Italic size={14} />
           </button>
           <button
             type="button"
-            className={`p-1.5 rounded-[7px] cursor-pointer transition-all flex items-center justify-center ${isUnderline ? "text-gray-800 bg-white border border-[#cfd5e3] shadow-sm" : "text-gray-500 border border-transparent hover:bg-gray-100"}`}
+            className={`flex cursor-pointer items-center justify-center rounded-[6px] border p-1.5 transition-all ${isUnderline ? "border-slate-300 bg-slate-50 text-slate-900 shadow-sm" : "border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800"}`}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => applyCommentFormat("underline")}
             title="Underline"
           >
-            <Underline size={15} />
+            <Underline size={14} />
           </button>
         </div>
         <div className="p-0">
           <div className="relative">
             {isEditorEmpty && (
-              <div className="pointer-events-none absolute left-5 top-4 text-sm text-gray-400">
+              <div className="pointer-events-none absolute left-4 top-3 text-[13px] text-slate-400">
                 Add a comment...
               </div>
             )}
@@ -382,7 +382,7 @@ export default function CustomerCommentsPanel({
               contentEditable
               suppressContentEditableWarning
               dir="ltr"
-              className="min-h-40 w-full px-5 py-4 text-sm text-gray-700 outline-none whitespace-pre-wrap leading-relaxed border-none"
+              className="min-h-[124px] w-full whitespace-pre-wrap border-none px-4 py-3 text-[14px] leading-relaxed text-slate-700 outline-none"
               onInput={syncEditorState}
               onMouseUp={syncEditorState}
               onKeyUp={syncEditorState}
@@ -391,10 +391,10 @@ export default function CustomerCommentsPanel({
             />
           </div>
         </div>
-        <div className="border-t border-gray-200 px-5 py-4">
+        <div className="border-t border-slate-200 px-4 py-3">
           <button
             type="button"
-            className="px-5 py-2 bg-[#156372] text-white rounded text-[13px] font-bold cursor-pointer hover:opacity-90 active:scale-95 transition-all shadow-sm border-none disabled:opacity-60"
+            className="inline-flex cursor-pointer items-center rounded-md border border-slate-300 bg-white px-4 py-1.5 text-[12px] font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             onClick={handleAddComment}
             disabled={isSaving || isEditorEmpty}
           >
@@ -403,43 +403,43 @@ export default function CustomerCommentsPanel({
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto">
-        <div className="flex items-center gap-4 mb-8">
+      <div className="w-full max-w-[720px]">
+        <div className="mb-6 flex items-center gap-3">
           <div className="flex items-center gap-1.5">
-            <h3 className="text-[11px] font-bold text-gray-600 uppercase tracking-[0.2em] whitespace-nowrap">ALL COMMENTS</h3>
-            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-500 px-1.5 text-[11px] font-bold leading-none text-white">
+            <h3 className="whitespace-nowrap text-[11px] font-bold uppercase tracking-[0.22em] text-slate-700">ALL COMMENTS</h3>
+            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-sky-600 px-1.5 text-[11px] font-bold leading-none text-white">
               {localComments.length}
             </span>
           </div>
-          <div className="h-px w-full bg-gray-100"></div>
+          <div className="h-px flex-1 bg-slate-200"></div>
         </div>
 
         {localComments.length === 0 ? (
-          <div className="text-center py-20 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
-            <p className="text-sm text-gray-400 font-medium italic">No comments yet.</p>
+          <div className="py-16 text-center">
+            <p className="text-sm italic text-slate-500">No comments yet.</p>
           </div>
         ) : (
-          <div className="space-y-5 pb-20 pr-6">
+          <div className="space-y-4 pb-16">
             {localComments.map((comment) => (
               <div key={comment.id} className="group flex items-start gap-3">
-                <div className="mt-0.5 h-6 w-6 shrink-0 rounded-full border border-[#cfdaf0] bg-white text-[11px] font-semibold text-[#6b7a90] flex items-center justify-center shadow-sm">
+                <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-white text-[11px] font-semibold text-slate-600 shadow-sm">
                   {getCommentAuthorInitial(comment)}
                 </div>
                 <div className="flex-1">
                   <div className="mb-2 flex items-center gap-2 text-[12px]">
-                    <span className="font-semibold text-[#111827]">{getCommentAuthorName(comment)}</span>
+                    <span className="font-semibold text-slate-900">{getCommentAuthorName(comment)}</span>
                     <span className="text-[#94a3b8]">•</span>
-                    <span className="text-[#64748b]">{formatCommentDate(comment.createdAt || comment.timestamp || "")}</span>
+                    <span className="text-slate-500">{formatCommentDate(comment.createdAt || comment.timestamp || "")}</span>
                   </div>
-                  <div className="rounded-lg bg-[#f8fafc] px-4 py-3 shadow-sm border border-[#eef2f7]">
+                  <div className="rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm">
                     <div className="flex items-start justify-between gap-4">
                       <div
-                        className="text-[15px] leading-relaxed text-[#156372] whitespace-pre-wrap font-semibold flex-1"
+                        className="flex-1 whitespace-pre-wrap text-[14px] leading-relaxed text-slate-700"
                         dangerouslySetInnerHTML={{ __html: commentMarkupToHtml(comment.content || comment.text || "") }}
                       />
                       <button
                         type="button"
-                        className="mt-0.5 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all cursor-pointer border-none bg-transparent opacity-0 group-hover:opacity-100"
+                        className="mt-0.5 cursor-pointer rounded-full border-none bg-transparent p-1.5 text-slate-300 opacity-0 transition-all hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
                         onClick={() => handleDeleteComment(comment.id)}
                         title="Delete comment"
                       >

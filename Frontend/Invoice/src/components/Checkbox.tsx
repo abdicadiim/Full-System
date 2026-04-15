@@ -13,7 +13,7 @@ export default function Checkbox({ checked, onChange, onClick, readOnly, ...prop
         cursor: isReadOnly ? "default" : "pointer",
         width: "16px",
         height: "16px",
-        accentColor: "rgb(21, 99, 114)",
+        accentColor: "var(--accent, rgb(21, 99, 114))",
       }}
       {...props}
     />

@@ -108,7 +108,7 @@ export const PaymentTermsDropdown = ({
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="flex h-9 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 text-sm text-gray-700 shadow-none outline-none transition-colors hover:border-slate-300 focus:border-slate-300"
+        className="flex h-9 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 text-sm text-gray-700 shadow-none outline-none transition-[border-color,box-shadow,transform,background-color] duration-200 ease-out hover:border-slate-400 focus:border-[#3b82f6] focus:ring-[3px] focus:ring-[#3b82f6]/15 focus:-translate-y-[1px]"
       >
         <span className="truncate text-left">{selected?.label || placeholder}</span>
         <ChevronDown
@@ -121,11 +121,11 @@ export const PaymentTermsDropdown = ({
         createPortal(
           <div
             ref={menuRef}
-            className={`z-[1400] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.14)] ${menuClassName}`}
+            className={`z-[1400] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-[0_10px_24px_rgba(15,23,42,0.14)] animate-in fade-in zoom-in-95 slide-in-from-top-1 duration-150 origin-top ${menuClassName}`}
             style={menuStyle}
           >
           <div className="border-b border-gray-100 p-2">
-            <div className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2">
+            <div className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 transition-[border-color,box-shadow,background-color] duration-200 focus-within:border-[#3b82f6] focus-within:ring-[3px] focus-within:ring-[#3b82f6]/15 focus-within:bg-white">
               <Search size={15} className="text-gray-400" />
               <input
                 ref={searchInputRef}

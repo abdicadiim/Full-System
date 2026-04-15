@@ -20,8 +20,8 @@ body {
   --sidebar-bg: rgb(21, 99, 114);
   --header-bg: rgb(21, 99, 114);
   --button-primary: rgb(21, 99, 114);
-  --button-hover: rgb(245, 178, 33);
-  --accent: rgb(245, 178, 33);
+  --button-hover: rgb(21, 99, 114);
+  --accent: rgb(21, 99, 114);
 }
 .scrollbar-thin::-webkit-scrollbar { height: 6px; width: 6px; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }

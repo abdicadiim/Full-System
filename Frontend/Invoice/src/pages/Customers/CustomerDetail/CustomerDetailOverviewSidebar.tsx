@@ -23,7 +23,7 @@ type CustomerDetailOverviewSidebarProps = {
   setIsInviteModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
   showInviteCard: boolean;
   setShowInviteCard: React.Dispatch<React.SetStateAction<boolean>>;
-  toggleSection: (section: "address" | "otherDetails" | "contactPersons" | "associateTags" | "recordInfo") => void;
+  toggleSection: (section: "address" | "otherDetails" | "contactPersons" | "recordInfo") => void;
   expandedSections: Record<string, boolean>;
   setAddressType: React.Dispatch<React.SetStateAction<string>>;
   setAddressFormData: React.Dispatch<React.SetStateAction<any>>;
@@ -33,8 +33,6 @@ type CustomerDetailOverviewSidebarProps = {
   resetContactPersonModal: () => void;
   setIsAddContactPersonModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
   markContactPersonAsPrimary: (index: number) => Promise<void>;
-  openAssociateTagsModal: () => void;
-  associatedTagLabels: string[];
 };
 
 const buildAddressFormData = (customer: any, type: "billing" | "shipping") => {
@@ -114,8 +112,6 @@ export default function CustomerDetailOverviewSidebar({
   resetContactPersonModal,
   setIsAddContactPersonModalOpen,
   markContactPersonAsPrimary,
-  openAssociateTagsModal,
-  associatedTagLabels,
 }: CustomerDetailOverviewSidebarProps) {
   const openAddressModal = (type: "billing" | "shipping") => {
     setAddressType(type);
@@ -134,7 +130,7 @@ export default function CustomerDetailOverviewSidebar({
   return (
     <div className="w-[290px] flex-shrink-0 border-r border-gray-200 bg-[#f8f9fc]">
       <div className="border-b border-gray-200 p-3">
-        <div className="mb-2 text-sm text-[#1f5fa8]">{(customer as any).companyName || displayName}</div>
+        <div className="mb-2 text-[12px] text-gray-900">{(customer as any).companyName || displayName}</div>
         {!showInviteCard ? (
           <div className="flex items-start gap-2.5">
             <div
@@ -158,7 +154,7 @@ export default function CustomerDetailOverviewSidebar({
 
             <div className="min-w-0 flex-1">
               <div className="mb-1 flex items-center gap-2">
-                <span className="truncate text-[13px] font-medium text-gray-900">
+                <span className="truncate text-[12px] font-medium text-gray-900">
                   {primaryContact ? (
                     <>
                       {primaryContact.salutation && `${primaryContact.salutation}. `}
@@ -181,7 +177,7 @@ export default function CustomerDetailOverviewSidebar({
                   {isSettingsDropdownOpen && (
                     <div className="absolute right-0 top-full z-50 mt-1 min-w-[120px] rounded-md border border-gray-200 bg-white shadow-lg">
                       <button
-                        className="w-full cursor-pointer bg-blue-50 px-4 py-2 text-left text-sm text-blue-600 transition-colors hover:bg-blue-100"
+                        className="w-full cursor-pointer bg-gray-50 px-4 py-2 text-left text-sm text-gray-900 transition-colors hover:bg-gray-100"
                         onClick={(event) => {
                           event.stopPropagation();
                           setIsSettingsDropdownOpen(false);
@@ -195,7 +191,7 @@ export default function CustomerDetailOverviewSidebar({
                         Edit
                       </button>
                       <button
-                        className="w-full cursor-pointer px-4 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
+                        className="w-full cursor-pointer px-4 py-2 text-left text-sm text-gray-900 transition-colors hover:bg-gray-50"
                         onClick={(event) => {
                           event.stopPropagation();
                           setIsSettingsDropdownOpen(false);
@@ -212,10 +208,10 @@ export default function CustomerDetailOverviewSidebar({
                   )}
                 </div>
               </div>
-              <div className="mb-1 text-[12px] text-gray-600">{primaryContact?.email || customer.email || ""}</div>
+              <div className="mb-1 text-[11px] text-gray-900">{primaryContact?.email || customer.email || ""}</div>
               <button
                 onClick={() => setIsInviteModalOpen(true)}
-                className="cursor-pointer border-none bg-transparent p-0 text-[12px] text-blue-600 hover:underline"
+                className="cursor-pointer border-none bg-transparent p-0 text-[11px] text-gray-900 hover:underline"
               >
                 Invite to Portal
               </button>
@@ -251,12 +247,12 @@ export default function CustomerDetailOverviewSidebar({
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="mb-0.5 truncate text-base font-bold text-gray-900">
+                <div className="mb-0.5 truncate text-[12px] font-bold text-gray-900">
                   {primaryContact ? `${primaryContact.firstName} ${primaryContact.lastName}` : displayName}
                 </div>
-                <div className="mb-3 truncate text-sm text-gray-600">{primaryContact?.email || customer.email || ""}</div>
-                <div className="mb-3 text-[13px] font-medium text-gray-600">Portal invitation not accepted</div>
-                <button className="cursor-pointer border-none bg-transparent p-0 text-[13px] font-medium text-blue-600 hover:underline">
+                <div className="mb-3 truncate text-[12px] text-gray-900">{primaryContact?.email || customer.email || ""}</div>
+                <div className="mb-3 text-[12px] font-medium text-gray-900">Portal invitation not accepted</div>
+                <button className="cursor-pointer border-none bg-transparent p-0 text-[12px] font-medium text-gray-900 hover:underline">
                   Re-invite
                 </button>
               </div>
@@ -273,17 +269,17 @@ export default function CustomerDetailOverviewSidebar({
           onClick={() => toggleSection("address")}
           aria-expanded={expandedSections.address}
         >
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-800">ADDRESS</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-900">ADDRESS</span>
           {expandedSections.address ? <ChevronUp size={14} className="text-[#2563eb]" /> : <ChevronDown size={14} className="text-[#2563eb]" />}
         </button>
 
         {expandedSections.address && (
           <div className="px-3 pb-3.5">
             <div className="mb-4">
-              <div className="mb-1 text-sm text-gray-600">Billing Address</div>
+              <div className="mb-1 text-[12px] text-gray-900">Billing Address</div>
               {hasBillingAddress ? (
                 <div>
-                  <div className="text-sm text-gray-900">
+                  <div className="text-[12px] text-gray-900">
                     {billingAddress.street1 || customer.billingStreet1 || ""}
                     {(billingAddress.city || customer.billingCity) && `, ${billingAddress.city || customer.billingCity}`}
                     {(billingAddress.state || customer.billingState) && `, ${billingAddress.state || customer.billingState}`}
@@ -291,7 +287,7 @@ export default function CustomerDetailOverviewSidebar({
                   </div>
                   <a
                     href="#"
-                    className="text-sm text-blue-600 hover:underline"
+                    className="text-[12px] text-gray-900 hover:underline"
                     onClick={(event) => {
                       event.preventDefault();
                       openAddressModal("billing");
@@ -303,7 +299,7 @@ export default function CustomerDetailOverviewSidebar({
               ) : (
                 <a
                   href="#"
-                  className="text-sm text-blue-600 hover:underline"
+                  className="text-[12px] text-gray-900 hover:underline"
                   onClick={(event) => {
                     event.preventDefault();
                     openAddressModal("billing");
@@ -315,10 +311,10 @@ export default function CustomerDetailOverviewSidebar({
             </div>
 
             <div>
-              <div className="mb-1 text-sm text-gray-600">Shipping Address</div>
+              <div className="mb-1 text-[12px] text-gray-900">Shipping Address</div>
               {hasShippingAddress ? (
                 <div>
-                  <div className="text-sm text-gray-900">
+                  <div className="text-[12px] text-gray-900">
                     {shippingAddress.street1 || customer.shippingStreet1 || ""}
                     {(shippingAddress.city || customer.shippingCity) && `, ${shippingAddress.city || customer.shippingCity}`}
                     {(shippingAddress.state || customer.shippingState) && `, ${shippingAddress.state || customer.shippingState}`}
@@ -326,7 +322,7 @@ export default function CustomerDetailOverviewSidebar({
                   </div>
                   <a
                     href="#"
-                    className="text-sm text-blue-600 hover:underline"
+                    className="text-[12px] text-gray-900 hover:underline"
                     onClick={(event) => {
                       event.preventDefault();
                       openAddressModal("shipping");
@@ -338,7 +334,7 @@ export default function CustomerDetailOverviewSidebar({
               ) : (
                 <a
                   href="#"
-                  className="text-sm text-blue-600 hover:underline"
+                  className="text-[12px] text-gray-900 hover:underline"
                   onClick={(event) => {
                     event.preventDefault();
                     openAddressModal("shipping");
@@ -359,46 +355,24 @@ export default function CustomerDetailOverviewSidebar({
           onClick={() => toggleSection("otherDetails")}
           aria-expanded={expandedSections.otherDetails}
         >
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-800">OTHER DETAILS</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-900">OTHER DETAILS</span>
           {expandedSections.otherDetails ? <ChevronUp size={14} className="text-[#2563eb]" /> : <ChevronDown size={14} className="text-[#2563eb]" />}
         </button>
         {expandedSections.otherDetails && (
           <div className="grid grid-cols-[138px_minmax(0,1fr)] gap-x-2.5 gap-y-2.5 px-3 pb-3.5 pt-2">
-            <span className="text-sm text-slate-500">Customer Type</span>
-            <span className="text-sm font-medium text-slate-900">{customer.customerType === "individual" ? "Individual" : "Business"}</span>
-            <span className="text-sm text-slate-500">Customer Number</span>
-            <span className="text-sm font-medium text-slate-900">{customer.customerNumber || "--"}</span>
-            <span className="text-sm text-slate-500">Default Currency</span>
-            <span className="text-sm font-medium text-slate-900">{customer.currency || "USD"}</span>
-            <span className="text-sm text-slate-500">
-              <span className="border-b border-dotted border-slate-400">Consolidated Billing</span>
-            </span>
-            <span
-              className={`inline-flex items-center gap-1 text-sm font-medium ${
-                (customer as any)?.consolidatedBilling || (customer as any)?.enableConsolidatedBilling || (customer as any)?.isConsolidatedBillingEnabled
-                  ? "text-emerald-600"
-                  : "text-rose-500"
-              }`}
-            >
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  (customer as any)?.consolidatedBilling || (customer as any)?.enableConsolidatedBilling || (customer as any)?.isConsolidatedBillingEnabled
-                    ? "bg-emerald-500"
-                    : "bg-rose-500"
-                }`}
-              />
-              {(customer as any)?.consolidatedBilling || (customer as any)?.enableConsolidatedBilling || (customer as any)?.isConsolidatedBillingEnabled
-                ? "Enabled"
-                : "Disabled"}
-              <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-current text-[9px] leading-none">i</span>
-            </span>
-            <span className="text-sm text-slate-500">Portal Status</span>
-            <span className={`inline-flex items-center gap-1 text-sm font-medium ${portalEnabled ? "text-emerald-600" : "text-rose-500"}`}>
+            <span className="text-[12px] text-gray-900">Customer Type</span>
+            <span className="text-[12px] font-medium text-gray-900">{customer.customerType === "individual" ? "Individual" : "Business"}</span>
+            <span className="text-[12px] text-gray-900">Customer Number</span>
+            <span className="text-[12px] font-medium text-gray-900">{customer.customerNumber || "--"}</span>
+            <span className="text-[12px] text-gray-900">Default Currency</span>
+            <span className="text-[12px] font-medium text-gray-900">{customer.currency || "USD"}</span>
+            <span className="text-[12px] text-gray-900">Portal Status</span>
+            <span className={`inline-flex items-center gap-1 text-[12px] font-medium ${portalEnabled ? "text-emerald-600" : "text-rose-500"}`}>
               <span className={`h-1.5 w-1.5 rounded-full ${portalEnabled ? "bg-emerald-500" : "bg-rose-500"}`} />
               {portalEnabled ? "Enabled" : "Disabled"}
             </span>
-            <span className="text-sm text-slate-500">Customer Language</span>
-            <span className="text-sm font-medium text-slate-900">
+            <span className="text-[12px] text-gray-900">Customer Language</span>
+            <span className="text-[12px] font-medium text-gray-900">
               {customer.customerLanguage ? `${customer.customerLanguage.charAt(0).toUpperCase()}${customer.customerLanguage.slice(1)}` : "English"}
             </span>
           </div>
@@ -409,11 +383,11 @@ export default function CustomerDetailOverviewSidebar({
         <div className="flex items-center justify-between px-3 py-2.5">
           <button
             type="button"
-            className="flex-1 cursor-pointer text-left text-[10px] font-semibold uppercase tracking-wider text-gray-800"
+            className="flex-1 cursor-pointer text-left text-[10px] font-semibold uppercase tracking-wider text-gray-900"
             onClick={() => toggleSection("contactPersons")}
             aria-expanded={expandedSections.contactPersons}
           >
-            CONTACT PERSONS ({customer.contactPersons?.length || 0})
+            {customer.contactPersons?.length ? `CONTACT PERSONS (${customer.contactPersons.length})` : "CONTACT PERSONS"}
           </button>
           <div className="flex items-center gap-2">
             <button
@@ -461,7 +435,7 @@ export default function CustomerDetailOverviewSidebar({
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <div className="flex items-center gap-2 truncate text-sm font-semibold text-gray-900">
+                            <div className="flex items-center gap-2 truncate text-[12px] font-semibold text-gray-900">
                               <span className="truncate">{name}</span>
                               {isPrimary && (
                                 <span className="flex-shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
@@ -469,12 +443,12 @@ export default function CustomerDetailOverviewSidebar({
                                 </span>
                               )}
                             </div>
-                            {email && <div className="truncate text-sm text-gray-600">{email}</div>}
+                            {email && <div className="truncate text-[12px] text-gray-900">{email}</div>}
                           </div>
                           <div className="relative flex-shrink-0" data-contact-person-menu-root="true">
                             <button
                               type="button"
-                              className="cursor-pointer p-1 text-gray-500 hover:text-gray-700"
+                              className="cursor-pointer p-1 text-gray-900 hover:text-black"
                               title="Contact settings"
                               onClick={(event) => {
                                 event.stopPropagation();
@@ -487,7 +461,7 @@ export default function CustomerDetailOverviewSidebar({
                               <div className="absolute right-0 top-full z-[120] mt-2 w-44 rounded-lg border border-gray-200 bg-white py-1 shadow-xl">
                                 <button
                                   type="button"
-                                  className="mx-1 my-1 w-[calc(100%-8px)] cursor-pointer rounded-md px-3 py-2 text-left text-sm text-gray-800 transition-colors hover:bg-gray-50"
+                                  className="mx-1 my-1 w-[calc(100%-8px)] cursor-pointer rounded-md px-3 py-2 text-left text-[12px] text-gray-900 transition-colors hover:bg-gray-50"
                                   onClick={(event) => {
                                     event.stopPropagation();
                                     setOpenContactPersonSettingsIndex(null);
@@ -498,7 +472,7 @@ export default function CustomerDetailOverviewSidebar({
                                 </button>
                                 <button
                                   type="button"
-                                  className="w-full cursor-pointer px-4 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
+                                  className="w-full cursor-pointer px-4 py-2 text-left text-[12px] text-gray-900 transition-colors hover:bg-gray-50"
                                   onClick={async (event) => {
                                     event.stopPropagation();
                                     setOpenContactPersonSettingsIndex(null);
@@ -509,7 +483,7 @@ export default function CustomerDetailOverviewSidebar({
                                 </button>
                                 <button
                                   type="button"
-                                  className="w-full cursor-pointer px-4 py-2 text-left text-sm text-red-600 transition-colors hover:bg-red-50"
+                                  className="w-full cursor-pointer px-4 py-2 text-left text-[12px] text-red-600 transition-colors hover:bg-red-50"
                                   onClick={(event) => {
                                     event.stopPropagation();
                                     setOpenContactPersonSettingsIndex(null);
@@ -523,14 +497,14 @@ export default function CustomerDetailOverviewSidebar({
                           </div>
                         </div>
                         {workPhone && (
-                          <div className="mt-1 flex items-center gap-2 text-sm text-gray-700">
-                            <Phone size={14} className="text-gray-500" />
+                          <div className="mt-1 flex items-center gap-2 text-[12px] text-gray-900">
+                            <Phone size={14} className="text-gray-900" />
                             <span className="truncate">{workPhone}</span>
                           </div>
                         )}
                         {mobile && (
-                          <div className="mt-1 flex items-center gap-2 text-sm text-gray-700">
-                            <Smartphone size={14} className="text-gray-500" />
+                          <div className="mt-1 flex items-center gap-2 text-[12px] text-gray-900">
+                            <Smartphone size={14} className="text-gray-900" />
                             <span className="truncate">{mobile}</span>
                           </div>
                         )}
@@ -540,66 +514,28 @@ export default function CustomerDetailOverviewSidebar({
                 })}
               </div>
             ) : (
-              <div className="py-4 text-center text-sm text-gray-500">No contact persons found.</div>
+              <div className="py-4 text-center text-[12px] text-gray-900">No contact persons found.</div>
             )}
-          </div>
-        )}
-      </div>
-
-      <div className="border-b border-gray-200">
-        <div className="flex items-center justify-between px-4 py-3">
-          <button
-            type="button"
-            className="flex-1 cursor-pointer text-left text-xs font-semibold uppercase tracking-wider text-gray-800"
-            onClick={() => toggleSection("associateTags")}
-            aria-expanded={expandedSections.associateTags}
-          >
-            ASSOCIATE TAGS
-          </button>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-blue-600 text-white transition-colors hover:bg-blue-700"
-              onClick={() => openAssociateTagsModal()}
-              aria-label="Add tag"
-              title="Add tag"
-            >
-              <Plus size={14} />
-            </button>
-            <button
-              type="button"
-              className="cursor-pointer rounded p-1 text-blue-600 hover:bg-blue-50"
-              onClick={() => toggleSection("associateTags")}
-              aria-label={expandedSections.associateTags ? "Collapse" : "Expand"}
-            >
-              {expandedSections.associateTags ? <ChevronUp size={14} className="text-[#2563eb]" /> : <ChevronDown size={14} className="text-[#2563eb]" />}
-            </button>
-          </div>
-        </div>
-        {expandedSections.associateTags && (
-          <div className="px-4 pb-4">
-            <div className="flex flex-wrap gap-2">
-              {associatedTagLabels.length > 0 ? (
-                associatedTagLabels.map((tag, index) => (
-                  <span key={`${tag}-${index}`} className="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-1 text-xs text-blue-700">
-                    {tag}
-                    <X size={12} className="text-gray-500" />
-                  </span>
-                ))
-              ) : (
-                <span className="text-xs text-gray-400">No tags associated</span>
-              )}
-            </div>
           </div>
         )}
       </div>
 
       <div className="border-b border-gray-200 p-3">
         <div className="border border-green-200 bg-green-50 p-3">
-          <p className="mb-3 text-sm text-gray-700">
-            Customer Portal allows your customers to keep track of all the transactions between them and your business.
-          </p>
-          <button className="rounded border border-gray-300 bg-white px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50">Enable Portal</button>
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded border border-green-300 bg-green-100 text-green-700">
+              <User size={14} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="mb-3 text-[12px] text-gray-900">
+                Customer Portal allows your customers to keep track of all the transactions between them and your business.{" "}
+                <a href="#" className="text-gray-900 hover:underline" onClick={(event) => event.preventDefault()}>
+                  Learn More
+                </a>
+              </p>
+              <button className="rounded border border-gray-300 bg-white px-4 py-1.5 text-[12px] text-gray-900 hover:bg-gray-50">Enable Portal</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -610,29 +546,29 @@ export default function CustomerDetailOverviewSidebar({
           onClick={() => toggleSection("recordInfo")}
           aria-expanded={expandedSections.recordInfo}
         >
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-800">RECORD INFO</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-900">RECORD INFO</span>
           {expandedSections.recordInfo ? <ChevronUp size={14} className="text-[#2563eb]" /> : <ChevronDown size={14} className="text-[#2563eb]" />}
         </button>
         {expandedSections.recordInfo && (
           <div className="px-3 pb-3.5">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Customer Number:</span>
-                <span className="text-sm font-medium text-gray-900">{customer.customerNumber || "--"}</span>
+                <span className="text-[12px] text-gray-900">Customer Number:</span>
+                <span className="text-[12px] font-medium text-gray-900">{customer.customerNumber || "--"}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Customer ID:</span>
-                <span className="text-sm font-medium text-gray-900">{customer._id || customer.id || id || "--"}</span>
+                <span className="text-[12px] text-gray-900">Customer ID:</span>
+                <span className="text-[12px] font-medium text-gray-900">{customer._id || customer.id || id || "--"}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Created On:</span>
-                <span className="text-sm font-medium text-gray-900">
+                <span className="text-[12px] text-gray-900">Created On:</span>
+                <span className="text-[12px] font-medium text-gray-900">
                   {formatRecordDate(customer.createdDate || customer.createdAt || customer.created_on)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Created By:</span>
-                <span className="text-sm font-medium text-gray-900">
+                <span className="text-[12px] text-gray-900">Created By:</span>
+                <span className="text-[12px] font-medium text-gray-900">
                   {resolveCreatedByName(customer.createdBy || customer.created_by || customer.createdByUser || customer.createdByUserId)}
                 </span>
               </div>

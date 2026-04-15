@@ -14,8 +14,8 @@ export function useThemeColors() {
     sidebarColor: theme.sidebarColor || 'rgb(21, 99, 114)',
     headerColor: theme.headerColor || branding.primaryColor || '#005766',
     buttonColor: theme.buttonColor || 'rgb(21, 99, 114)',
-    buttonHoverColor: theme.buttonHoverColor || 'rgb(245, 178, 33)',
-    accentColor: theme.accentColor || 'rgb(245, 178, 33)',
+    buttonHoverColor: theme.buttonHoverColor || theme.primaryColor || branding.primaryColor || 'rgb(21, 99, 114)',
+    accentColor: theme.accentColor || theme.primaryColor || branding.primaryColor || 'rgb(21, 99, 114)',
   };
 }
 

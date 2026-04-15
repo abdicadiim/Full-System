@@ -91,8 +91,7 @@ export default function CustomerDetailHeader(args: any) {
               type="button"
               onClick={handleEditCustomer}
               disabled={isNavigatingToEdit}
-              className={`flex h-8 items-center gap-2 rounded-lg border-b-[4px] border-[#0D4A52] px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm transition-all ${isNavigatingToEdit ? "cursor-wait opacity-85" : "cursor-pointer hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[1px] active:border-b-[2px]"}`}
-              style={{ background: "linear-gradient(180deg, #156372 0%, #0D4A52 100%)" }}
+              className={`flex h-8 items-center gap-2 rounded-lg border border-gray-300 border-b-[4px] bg-white px-3.5 py-1.5 text-sm font-semibold text-gray-700 shadow-sm transition-all ${isNavigatingToEdit ? "cursor-wait opacity-85" : "cursor-pointer hover:-translate-y-[1px] hover:border-b-[6px] hover:bg-gray-50 active:translate-y-[1px] active:border-b-[2px]"}`}
               aria-busy={isNavigatingToEdit}
             >
               {isNavigatingToEdit ? <Loader2 size={16} className="animate-spin" /> : <Edit size={16} />}
@@ -119,23 +118,16 @@ export default function CustomerDetailHeader(args: any) {
             </div>
 
             <div className="relative inline-flex" ref={newTransactionDropdownRef}>
-              <div className="flex items-center">
-                <button
-                  className="flex h-8 min-w-[120px] cursor-pointer items-center justify-center gap-2 rounded-l-lg border-b-[4px] border-[#0D4A52] px-3.5 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[1px] active:border-b-[2px]"
-                  style={{ background: "linear-gradient(180deg, #156372 0%, #0D4A52 100%)" }}
-                  onClick={() => setIsNewTransactionDropdownOpen(!isNewTransactionDropdownOpen)}
-                >
+              <button
+                className="flex h-8 min-w-[156px] cursor-pointer items-center justify-between gap-2 rounded-lg border-b-[4px] border-[#0D4A52] bg-[#156372] px-3.5 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[1px] active:border-b-[2px]"
+                onClick={() => setIsNewTransactionDropdownOpen(!isNewTransactionDropdownOpen)}
+              >
+                <span className="flex items-center gap-2">
                   <Plus size={16} />
                   New Transaction
-                </button>
-                <button
-                  className="flex h-8 w-9 cursor-pointer items-center justify-center rounded-r-lg border-b-[4px] border-l border-[#0B3A41] border-white/20 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[1px] active:border-b-[2px]"
-                  style={{ background: "#0D4A52" }}
-                  onClick={() => setIsNewTransactionDropdownOpen(!isNewTransactionDropdownOpen)}
-                >
-                  <ChevronDown size={14} />
-                </button>
-              </div>
+                </span>
+                <ChevronDown size={14} />
+              </button>
               {isNewTransactionDropdownOpen && (
                 <div className="absolute right-0 top-full z-50 mt-2 max-h-[360px] w-56 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
                   <div className="border-b border-gray-200 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-gray-500">SALES</div>

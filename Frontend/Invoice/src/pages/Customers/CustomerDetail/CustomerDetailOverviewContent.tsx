@@ -1,5 +1,5 @@
 import React from "react";
-import { AlertTriangle, ChevronDown, Plus } from "lucide-react";
+import { AlertTriangle, ChevronDown, Edit2, Plus } from "lucide-react";
 import CustomerDetailOverviewActivity from "./CustomerDetailOverviewActivity";
 
 type CustomerDetailOverviewContentProps = {
@@ -13,6 +13,7 @@ type CustomerDetailOverviewContentProps = {
   isSubscriptionDropdownOpen: boolean;
   setIsSubscriptionDropdownOpen: React.Dispatch<React.SetStateAction<boolean>>;
   navigate: (to: string, options?: any) => void;
+  handleEditCustomer: () => void;
   formatDateForDisplay: (date: string | Date) => string;
   incomeTimePeriodRef: React.RefObject<HTMLDivElement | null>;
   incomeTimePeriod: string;
@@ -48,6 +49,7 @@ export default function CustomerDetailOverviewContent({
   isSubscriptionDropdownOpen,
   setIsSubscriptionDropdownOpen,
   navigate,
+  handleEditCustomer,
   formatDateForDisplay,
   incomeTimePeriodRef,
   incomeTimePeriod,
@@ -176,21 +178,27 @@ export default function CustomerDetailOverviewContent({
     return periods;
   })();
 
-  const maxChartValue = Math.max(...chartData.map((item) => item.total), 1000);
-  const hasIncomeData = chartData.some((item) => item.total > 0);
-  const chartHeight = 160;
-  const chartWidth = 400;
-
   return (
     <div className="flex-1 min-w-0 bg-white p-3">
       <div className="mb-4 grid grid-cols-2 gap-5">
-        <div>
+        <div className="group">
           <div className="px-2">
             <span className="text-sm text-gray-500">Payment due period</span>
           </div>
           <div className="px-2 pt-1">
-            <div className="text-sm text-gray-900">
+            <div className="flex items-center gap-2 rounded-md pr-1 transition-colors group-hover:bg-slate-50">
+              <div className="text-sm text-gray-900">
               {customer.paymentTerms === "due-on-receipt" ? "Due on Receipt" : customer.paymentTerms || "Due on Receipt"}
+              </div>
+              <button
+                type="button"
+                onClick={handleEditCustomer}
+                className="ml-auto rounded p-1 text-gray-500 opacity-0 transition-all hover:bg-white hover:text-gray-700 group-hover:opacity-100"
+                aria-label="Edit payment due period"
+                title="Edit"
+              >
+                <Edit2 size={14} />
+              </button>
             </div>
           </div>
         </div>
@@ -272,95 +280,18 @@ export default function CustomerDetailOverviewContent({
         </div>
       )}
 
-      {customerSubscriptions.length === 0 ? (
-        <div className="mb-4 rounded border border-dashed border-gray-300 bg-white px-4 py-10 text-center">
-          <div className="mb-4 text-sm text-gray-500">No subscriptions have been created for this customer yet.</div>
-          <div className="relative inline-flex" ref={subscriptionDropdownRef}>
-            <div className="flex items-center">
+      {customerSubscriptions.length > 0 ? (
+        <div className="mb-4 border-y border-gray-200 bg-white">
+          <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">SUBSCRIPTIONS</span>
+            <div className="inline-flex" ref={subscriptionDropdownRef}>
               <button
-                className="flex h-[38px] min-w-[100px] cursor-pointer items-center justify-center gap-2 rounded-l-lg border-b-[4px] border-[#0D4A52] px-4 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[1px] active:border-b-[2px]"
+                className="flex h-[38px] min-w-[100px] cursor-pointer items-center justify-center gap-2 rounded-lg border-b-[4px] border-[#0D4A52] px-4 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[1px] active:border-b-[2px]"
                 style={{ background: "linear-gradient(180deg, #156372 0%, #0D4A52 100%)" }}
                 onClick={() => navigate("/sales/subscriptions/new", { state: { customerId, customerName } })}
               >
                 <Plus size={16} /> New
               </button>
-              <button
-                className="flex h-[38px] w-10 cursor-pointer items-center justify-center rounded-r-lg border-b-[4px] border-l border-[#0B3A41] border-white/20 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[1px] active:border-b-[2px]"
-                style={{ background: "#0D4A52" }}
-                onClick={() => setIsSubscriptionDropdownOpen((previous) => !previous)}
-              >
-                <ChevronDown size={14} />
-              </button>
-            </div>
-            {isSubscriptionDropdownOpen && (
-              <div className="absolute left-0 top-full z-50 mt-1 w-56 overflow-hidden rounded border border-gray-200 bg-white text-left shadow-lg">
-                <div
-                  className="cursor-pointer px-4 py-2 text-sm text-white transition-colors"
-                  style={{ backgroundColor: "#156372" }}
-                  onClick={() => {
-                    setIsSubscriptionDropdownOpen(false);
-                    navigate("/sales/subscriptions/new", { state: { customerId, customerName } });
-                  }}
-                >
-                  New Subscription
-                </div>
-                <div
-                  className="cursor-pointer px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-100"
-                  onClick={() => {
-                    setIsSubscriptionDropdownOpen(false);
-                    navigate("/sales/quotes/subscription/new", { state: { customerId, customerName, forSubscription: true } });
-                  }}
-                >
-                  Create Quote for Subscription
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className="mb-4 border-y border-gray-200 bg-white">
-          <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">SUBSCRIPTIONS</span>
-            <div className="relative inline-flex" ref={subscriptionDropdownRef}>
-              <div className="flex items-center">
-                <button
-                  className="flex h-[38px] min-w-[100px] cursor-pointer items-center justify-center gap-2 rounded-l-lg border-b-[4px] border-[#0D4A52] px-4 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[1px] active:border-b-[2px]"
-                  style={{ background: "linear-gradient(180deg, #156372 0%, #0D4A52 100%)" }}
-                  onClick={() => navigate("/sales/subscriptions/new", { state: { customerId, customerName } })}
-                >
-                  <Plus size={16} /> New
-                </button>
-                <button
-                  className="flex h-[38px] w-10 cursor-pointer items-center justify-center rounded-r-lg border-b-[4px] border-l border-[#0B3A41] border-white/20 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[1px] active:border-b-[2px]"
-                  style={{ background: "#0D4A52" }}
-                  onClick={() => setIsSubscriptionDropdownOpen((previous) => !previous)}
-                >
-                  <ChevronDown size={14} />
-                </button>
-              </div>
-              {isSubscriptionDropdownOpen && (
-                <div className="absolute right-0 top-full z-50 mt-1 w-56 overflow-hidden rounded border border-gray-200 bg-white text-left shadow-lg">
-                  <div
-                    className="cursor-pointer px-4 py-2 text-sm text-white transition-colors"
-                    style={{ backgroundColor: "#156372" }}
-                    onClick={() => {
-                      setIsSubscriptionDropdownOpen(false);
-                      navigate("/sales/subscriptions/new", { state: { customerId, customerName } });
-                    }}
-                  >
-                    New Subscription
-                  </div>
-                  <div
-                    className="cursor-pointer px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-100"
-                    onClick={() => {
-                      setIsSubscriptionDropdownOpen(false);
-                      navigate("/sales/quotes/subscription/new", { state: { customerId, customerName, forSubscription: true } });
-                    }}
-                  >
-                    Create Quote for Subscription
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 
@@ -458,27 +389,27 @@ export default function CustomerDetailOverviewContent({
             })}
           </div>
         </div>
-      )}
+      ) : null}
 
-      <div className="mb-6 border-y border-gray-200 bg-white">
-        <div className="flex items-start justify-between px-2 py-4">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl font-semibold text-gray-900">Income and Expense</span>
-            <span className="text-xs text-gray-500">This chart is displayed in the organization's base currency.</span>
+      <div className="mb-4 border-y border-gray-200 bg-white">
+        <div className="flex items-start justify-between px-2 py-3">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl font-semibold text-gray-900">Income and Expense</span>
+            <span className="text-[11px] text-gray-500">This chart is displayed in the organization's base currency.</span>
           </div>
           <div className="relative" ref={incomeTimePeriodRef}>
             <button
               onClick={() => setIsIncomeTimePeriodDropdownOpen((previous) => !previous)}
-              className="cursor-pointer border-none bg-transparent text-sm text-blue-600 hover:text-blue-700"
+              className="cursor-pointer border-none bg-transparent text-[12px] text-blue-600 hover:text-blue-700"
             >
               <span className="flex items-center gap-1">
                 {incomeTimePeriod}
-                <ChevronDown size={14} className={`transition-transform duration-200 ${isIncomeTimePeriodDropdownOpen ? "rotate-180" : ""}`} />
+                <ChevronDown size={13} className={`transition-transform duration-200 ${isIncomeTimePeriodDropdownOpen ? "rotate-180" : ""}`} />
               </span>
             </button>
 
             {isIncomeTimePeriodDropdownOpen && (
-              <div className="absolute right-0 top-full z-50 mt-1 w-[200px] rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+              <div className="absolute right-0 top-full z-50 mt-1 w-[190px] rounded-md border border-gray-200 bg-white py-1 shadow-lg">
                 {["This Fiscal Year", "Previous Fiscal Year", "Last 12 Months", "Last 6 Months"].map((period) => (
                   <button
                     key={period}
@@ -486,7 +417,7 @@ export default function CustomerDetailOverviewContent({
                       setIncomeTimePeriod(period);
                       setIsIncomeTimePeriodDropdownOpen(false);
                     }}
-                    className={`w-full cursor-pointer px-4 py-2 text-left text-sm transition-colors ${incomeTimePeriod === period ? "bg-blue-500 text-white" : "text-gray-700 hover:bg-gray-50"}`}
+                    className={`w-full cursor-pointer px-4 py-2 text-left text-[12px] transition-colors ${incomeTimePeriod === period ? "bg-blue-500 text-white" : "text-gray-700 hover:bg-gray-50"}`}
                   >
                     {period}
                   </button>
@@ -496,44 +427,34 @@ export default function CustomerDetailOverviewContent({
           </div>
         </div>
 
-        <div className="px-2 pb-4">
-          <div className="relative mb-4 h-56 overflow-hidden rounded-md p-4">
-            <div className="relative h-full w-full">
-              <div className="pointer-events-none absolute inset-0 flex flex-col justify-between">
-                {[0, 1, 2, 3, 4].map((item) => (
-                  <div key={item} className="h-0 w-full border-t border-gray-200"></div>
-                ))}
+        <div className="px-2 pb-1">
+          <div className="relative mb-1 h-32 overflow-hidden rounded-md px-2 pt-1">
+            <div className="flex h-full w-full">
+              <div className="flex w-9 flex-col justify-between pb-3 pt-1 text-[8px] font-medium leading-none text-gray-400">
+                <span>5 K</span>
+                <span>4 K</span>
+                <span>3 K</span>
+                <span>2 K</span>
+                <span>1 K</span>
+                <span>0</span>
               </div>
-              {hasIncomeData && (
-                <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="h-full w-full overflow-visible">
-                  <path
-                    d={`M 0 ${chartHeight} ${chartData
-                      .map((item, index) => `L ${(index / (chartData.length - 1)) * chartWidth} ${chartHeight - (item.total / maxChartValue) * chartHeight * 0.8}`)
-                      .join(" ")} L ${chartWidth} ${chartHeight} Z`}
-                    fill="rgba(59, 130, 246, 0.10)"
-                  />
-                  <polyline
-                    fill="none"
-                    stroke="#3b82f6"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    points={chartData
-                      .map((item, index) => `${(index / (chartData.length - 1)) * chartWidth},${chartHeight - (item.total / maxChartValue) * chartHeight * 0.8}`)
-                      .join(" ")}
-                  />
-                </svg>
-              )}
-              <div className="absolute bottom-[-15px] left-0 right-0 flex justify-between px-1">
-                {chartData.map((item, index) => (
-                  <span key={index} className="text-[10px] font-medium text-gray-400">
-                    {item.label}
-                  </span>
-                ))}
+              <div className="relative flex-1">
+                <div className="pointer-events-none absolute inset-0 flex flex-col justify-between pb-3">
+                  {[0, 1, 2, 3, 4].map((item) => (
+                    <div key={item} className="h-0 w-full border-t border-gray-200"></div>
+                  ))}
+                </div>
+                <div className="absolute bottom-0 left-0 right-0 flex justify-between px-1">
+                  {chartData.map((item, index) => (
+                    <span key={index} className="text-[7px] font-medium text-gray-400">
+                      {item.label}
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
-          <div className="border-t border-gray-200 pt-4 text-lg font-medium text-gray-900">
+          <div className="border-t border-gray-200 pt-1.5 text-[15px] font-medium text-gray-900">
             Total Income ({incomeTimePeriod}) - {formatCurrency(totalIncome, customer.currency?.substring(0, 3) || "USD")}
           </div>
         </div>

@@ -294,7 +294,7 @@ export default function CustomerAttachmentsPopover({
                 <span>Uploading in background...</span>
               </div>
             ) : (
-              <label className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#156372] px-4 py-3 text-[14px] font-semibold text-white shadow-sm hover:opacity-95">
+              <label className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-3 text-[14px] font-semibold text-slate-900 shadow-sm hover:bg-slate-50">
                 <Upload size={16} />
                 <span>Upload your Files</span>
                 <input

@@ -32,10 +32,6 @@ createRoot(document.getElementById('root')).render(
   <RootWrapper>
     <InvoiceQueryProvider>
       <BrowserRouter
-        future={{
-          v7_relativeSplatPath: true,
-          v7_startTransition: true,
-        }}
       >
         <App />
       </BrowserRouter>

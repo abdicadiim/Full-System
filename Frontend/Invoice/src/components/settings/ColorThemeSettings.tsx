@@ -10,8 +10,8 @@ export default function ColorThemeSettings() {
     sidebarColor: theme.sidebarColor || 'rgb(21, 99, 114)',
     headerColor: theme.headerColor || '#005766',
     buttonColor: theme.buttonColor || 'rgb(21, 99, 114)',
-    buttonHoverColor: theme.buttonHoverColor || 'rgb(245, 178, 33)',
-    accentColor: theme.accentColor || 'rgb(245, 178, 33)',
+    buttonHoverColor: theme.buttonHoverColor || theme.primaryColor || 'rgb(21, 99, 114)',
+    accentColor: theme.accentColor || theme.primaryColor || 'rgb(21, 99, 114)',
   }));
 
   // Update local theme when settings change externally
@@ -22,8 +22,8 @@ export default function ColorThemeSettings() {
         sidebarColor: settings.theme.sidebarColor || 'rgb(21, 99, 114)',
         headerColor: settings.theme.headerColor || '#005766',
         buttonColor: settings.theme.buttonColor || 'rgb(21, 99, 114)',
-        buttonHoverColor: settings.theme.buttonHoverColor || 'rgb(245, 178, 33)',
-        accentColor: settings.theme.accentColor || 'rgb(245, 178, 33)',
+        buttonHoverColor: settings.theme.buttonHoverColor || settings.theme.primaryColor || 'rgb(21, 99, 114)',
+        accentColor: settings.theme.accentColor || settings.theme.primaryColor || 'rgb(21, 99, 114)',
       });
     }
   }, [settings?.theme]);
@@ -46,8 +46,8 @@ export default function ColorThemeSettings() {
       sidebarColor: 'rgb(21, 99, 114)',
       headerColor: '#005766',
       buttonColor: 'rgb(21, 99, 114)',
-      buttonHoverColor: 'rgb(245, 178, 33)',
-      accentColor: 'rgb(245, 178, 33)',
+      buttonHoverColor: 'rgb(21, 99, 114)',
+      accentColor: 'rgb(21, 99, 114)',
     };
     setLocalTheme(defaultTheme);
     updateTheme(defaultTheme);
