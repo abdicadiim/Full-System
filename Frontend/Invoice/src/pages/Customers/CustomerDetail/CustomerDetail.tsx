@@ -1,1 +1,1 @@
-export { default } from "../CustomerDetailLegacy/CustomerDetail";
+export { default } from "./CustomerDetailPage";

@@ -26,11 +26,12 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { deleteInvoice, Invoice } from "../salesModel";
+import { deleteInvoice, getCustomers, Invoice } from "../salesModel";
 import { useRetainerListQuery } from "./retainerInvoiceQueries";
 import { useOrganizationBranding } from "../../../hooks/useOrganizationBranding";
 import { useThemeColors } from "../../../hooks/useThemeColors";
 import { readTaxesLocal } from "../../settings/organization-settings/taxes-compliance/TAX/storage";
+import { preloadCustomerDetailRoute } from "../../Customers/customerRouteLoaders";
 
 type RetainerRow = {
   id: string;
@@ -38,6 +39,8 @@ type RetainerRow = {
   invoiceNumber: string;
   reference: string;
   customerName: string;
+  customerId: string;
+  customer: any | null;
   date: string;
   dateTs: number;
   issuedDate: string;
@@ -342,6 +345,58 @@ const invoiceBillingAddressText = (invoice: Invoice, field: string) => {
   }
 };
 
+const isLikelyCustomerId = (value: string) =>
+  /^[a-f0-9]{24}$/i.test(String(value || "").trim()) || /^cus[-_]/i.test(String(value || "").trim());
+
+const getRetainerCustomerId = (invoice: any) =>
+  String(
+    invoice?.customer?._id ||
+      invoice?.customer?.id ||
+      invoice?.customerId ||
+      (typeof invoice?.customer === "string" && isLikelyCustomerId(invoice.customer) ? invoice.customer : "") ||
+      ""
+  ).trim();
+
+const getRetainerCustomerState = (invoice: any, customerId: string, customerName: string) => {
+  const customer = invoice?.customer;
+  if (customer && typeof customer === "object") {
+    return customer;
+  }
+
+  if (!customerId && !customerName) {
+    return null;
+  }
+
+  return {
+    _id: customerId || undefined,
+    id: customerId || undefined,
+    displayName: customerName || "Customer",
+    name: customerName || "Customer",
+    companyName: customerName || "Customer",
+  };
+};
+
+const normalizeCustomerLookupValue = (value: any) =>
+  String(value ?? "")
+    .trim()
+    .toLowerCase();
+
+const findMatchingCustomerRow = (rows: any[], row: RetainerRow) => {
+  const targetName = normalizeCustomerLookupValue(row.customerName);
+  const targetId = normalizeCustomerLookupValue(row.customerId);
+
+  return (Array.isArray(rows) ? rows : []).find((customer: any) => {
+    const customerId = normalizeCustomerLookupValue(customer?._id || customer?.id);
+    const customerName = normalizeCustomerLookupValue(
+      customer?.displayName || customer?.companyName || customer?.name
+    );
+
+    if (targetId && customerId && customerId === targetId) return true;
+    if (targetName && customerName && customerName === targetName) return true;
+    return false;
+  });
+};
+
 const mapInvoiceToRetainer = (invoice: Invoice): RetainerRow => {
   const normalizeKey = (value: any) =>
     String(value || "")
@@ -387,6 +442,16 @@ const mapInvoiceToRetainer = (invoice: Invoice): RetainerRow => {
   const balance = Number.isFinite(rawBalance) ? rawBalance : Math.max(0, amount - amountPaid);
   const rawStatus = normalizeKey(invoice.status || "draft");
   const rawDrawStatus = normalizeKey((invoice as any).retainerDrawStatus || (invoice as any).drawStatus || "");
+  const customerId = getRetainerCustomerId(invoice);
+  const rawCustomerName = String(invoice.customerName || "").trim();
+  const customerName = String(
+    (rawCustomerName && !isLikelyCustomerId(rawCustomerName) && rawCustomerName) ||
+      invoice.customer?.displayName ||
+      invoice.customer?.companyName ||
+      invoice.customer?.name ||
+      (typeof invoice.customer === "string" && !isLikelyCustomerId(invoice.customer) ? invoice.customer : "") ||
+      "Unknown Customer"
+  ).trim() || "Unknown Customer";
   const effectiveStatus = (() => {
     if (rawStatus === "void") return "void";
     if (["pending_approval", "approved", "drawn", "partially_drawn"].includes(rawStatus)) return rawStatus;
@@ -426,7 +491,9 @@ const mapInvoiceToRetainer = (invoice: Invoice): RetainerRow => {
     location: String((invoice as any).location || (invoice as any).selectedLocation || "Head Office"),
     invoiceNumber: String(invoice.invoiceNumber || "-"),
     reference: String((invoice as any).reference || (invoice as any).orderNumber || "-"),
-    customerName: invoice.customerName || "Unknown Customer",
+    customerName,
+    customerId,
+    customer: getRetainerCustomerState(invoice, customerId, customerName),
     date: formattedDate,
     dateTs: toTs(invoiceDateRaw || createdRaw),
     issuedDate,
@@ -868,6 +935,72 @@ export default function RetainerInvoice() {
     if (ids.length === 0) return;
     setDeleteRetainerIds(ids);
     setIsDeleteModalOpen(true);
+  };
+
+  const navigateToCustomerDetail = async (row: RetainerRow) => {
+    void preloadCustomerDetailRoute();
+
+    try {
+      const cachedCustomerId = String(row.customerId || "").trim();
+      const cachedCustomer = row.customer && typeof row.customer === "object" ? row.customer : null;
+
+      if (cachedCustomerId && isLikelyCustomerId(cachedCustomerId)) {
+        navigate(`/sales/customers/${cachedCustomerId}`, {
+          state: {
+            customer: cachedCustomer || {
+              _id: cachedCustomerId,
+              id: cachedCustomerId,
+              displayName: row.customerName,
+              name: row.customerName,
+              companyName: row.customerName,
+            },
+          },
+        });
+        return;
+      }
+
+      const customers = await getCustomers({ limit: 1000 });
+      const matchedCustomer = findMatchingCustomerRow(customers, row);
+      const matchedCustomerId = String(matchedCustomer?._id || matchedCustomer?.id || "").trim();
+
+      if (matchedCustomerId) {
+        navigate(`/sales/customers/${matchedCustomerId}`, {
+          state: {
+            customer: matchedCustomer,
+          },
+        });
+        return;
+      }
+
+      if (cachedCustomerId) {
+        navigate(`/sales/customers/${cachedCustomerId}`, {
+          state: {
+            customer: cachedCustomer || {
+              _id: cachedCustomerId,
+              id: cachedCustomerId,
+              displayName: row.customerName,
+              name: row.customerName,
+              companyName: row.customerName,
+            },
+          },
+        });
+      }
+    } catch (error) {
+      console.error("Failed to open customer detail:", error);
+      if (row.customerId) {
+        navigate(`/sales/customers/${row.customerId}`, {
+          state: {
+            customer: row.customer || {
+              _id: row.customerId,
+              id: row.customerId,
+              displayName: row.customerName,
+              name: row.customerName,
+              companyName: row.customerName,
+            },
+          },
+        });
+      }
+    }
   };
 
   const confirmBulkDelete = async () => {
@@ -1749,7 +1882,18 @@ export default function RetainerInvoice() {
                       )}
                       {visibleTableColumnSet.has("customer") && (
                         <td className="px-4 py-3">
-                          <span className={`text-[13px] text-slate-600 block max-w-[200px] ${clipTextClass}`}>{row.customerName}</span>
+                          <button
+                            type="button"
+                            className={`text-[13px] text-slate-600 block max-w-[200px] text-left ${clipTextClass} hover:text-[#156372] hover:underline`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void navigateToCustomerDetail(row);
+                            }}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            title="Open customer details"
+                          >
+                            {row.customerName}
+                          </button>
                         </td>
                       )}
                       {visibleTableColumnSet.has("status") && (

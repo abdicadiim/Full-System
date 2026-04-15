@@ -5,7 +5,6 @@ import {
   ExternalLink,
   FileText,
   Loader2,
-  MoreVertical,
   Trash2,
   Upload,
   X,
@@ -20,6 +19,7 @@ type CustomerAttachment = {
   contentUrl?: string;
   viewUrl?: string;
   downloadUrl?: string;
+  isPending?: boolean;
 };
 
 type CustomerAttachmentsPopoverProps = {
@@ -96,24 +96,58 @@ export default function CustomerAttachmentsPopover({
   onRemoveAttachment,
 }: CustomerAttachmentsPopoverProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [attachmentMenuIndex, setAttachmentMenuIndex] = useState<number | null>(null);
   const [attachmentDeleteConfirmId, setAttachmentDeleteConfirmId] = useState<string | number | null>(null);
+  const [pendingUploads, setPendingUploads] = useState<CustomerAttachment[]>([]);
+  const [isDeletingAttachment, setIsDeletingAttachment] = useState(false);
 
   useEffect(() => {
     if (!open) {
-      setAttachmentMenuIndex(null);
       setAttachmentDeleteConfirmId(null);
     }
   }, [open]);
 
+  useEffect(() => {
+    if (!isUploading) {
+      setPendingUploads([]);
+    }
+  }, [isUploading]);
+
   if (!open) return null;
 
   const handleUploadChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    await onUpload(event);
-    if (event.currentTarget) {
-      event.currentTarget.value = "";
+    const files = Array.from(event.target.files || []);
+    if (files.length > 0) {
+      setPendingUploads(
+        files.map((file, index) => ({
+          id: `pending-${Date.now()}-${index}-${file.name}`,
+          documentId: `pending-${Date.now()}-${index}-${file.name}`,
+          name: file.name,
+          size: file.size,
+          isPending: true,
+        }))
+      );
+    }
+
+    try {
+      await onUpload(event);
+    } finally {
+      if (event.currentTarget) {
+        event.currentTarget.value = "";
+      }
     }
   };
+
+  const visibleAttachments = [
+    ...pendingUploads.filter(
+      (pending) =>
+        !attachments.some(
+          (file) =>
+            String(file.name || "").trim() === String(pending.name || "").trim() &&
+            String(file.size || "").trim() === String(pending.size || "").trim()
+        )
+    ),
+    ...attachments,
+  ];
 
   const openAttachmentInNewTab = (file: CustomerAttachment) => {
     const resolvedUrl = resolveAttachmentUrl(file.viewUrl || file.contentUrl || file.url || file.downloadUrl);
@@ -151,12 +185,23 @@ export default function CustomerAttachmentsPopover({
   };
 
   const handleRequestRemoveAttachment = (attachmentId: string | number) => {
-    setAttachmentMenuIndex(null);
     setAttachmentDeleteConfirmId(attachmentId);
   };
 
   const handleCancelRemoveAttachment = () => {
+    if (isDeletingAttachment) return;
     setAttachmentDeleteConfirmId(null);
+  };
+
+  const handleConfirmRemoveAttachment = async () => {
+    if (attachmentDeleteConfirmId === null) return;
+    setIsDeletingAttachment(true);
+    try {
+      await onRemoveAttachment(attachmentDeleteConfirmId);
+      setAttachmentDeleteConfirmId(null);
+    } finally {
+      setIsDeletingAttachment(false);
+    }
   };
 
   return (
@@ -174,21 +219,17 @@ export default function CustomerAttachmentsPopover({
           </button>
         </div>
         <div className="px-4 py-4">
-          {attachments.length === 0 ? (
+          {visibleAttachments.length === 0 ? (
             <div className="py-3 text-center text-[14px] text-slate-700">No Files Attached</div>
           ) : (
             <div className="space-y-2">
-              {attachments.map((file, index) => {
+              {visibleAttachments.map((file, index) => {
                 const attachmentUrl = resolveAttachmentUrl(file.viewUrl || file.contentUrl || file.url || file.downloadUrl);
                 const attachmentId = file.documentId || file.id || index + 1;
                 return (
                 <div key={`${String(attachmentId)}-${index}`}>
                   <div
-                    className={`group relative cursor-pointer rounded-md px-3 py-2 pr-16 text-[13px] transition-colors ${
-                      attachmentMenuIndex === index
-                        ? "w-full bg-[#eef2ff] hover:bg-[#e5e7eb]"
-                        : "w-full bg-white hover:bg-slate-100"
-                    }`}
+                    className="relative rounded-md bg-white px-3 py-2 text-[13px] transition-colors hover:bg-slate-100"
                   >
                     <div className="flex items-start gap-2">
                       <div
@@ -196,78 +237,50 @@ export default function CustomerAttachmentsPopover({
                           isPdfAttachment(file.name) ? "bg-red-50 text-red-500" : "bg-slate-50 text-slate-400"
                         }`}
                       >
-                        <FileText size={12} />
+                        {file.isPending ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-[13px] text-slate-700">{file.name}</div>
-                        <div className="text-[12px] text-slate-500">File Size: {formatAttachmentSize(file.size)}</div>
+                        <div className="text-[12px] text-slate-500">
+                          {file.isPending ? "Uploading..." : `File Size: ${formatAttachmentSize(file.size)}`}
+                        </div>
                       </div>
+                      {!file.isPending && (
+                        <div className="ml-2 flex shrink-0 items-center gap-1">
+                          {attachmentUrl ? (
+                            <button
+                              type="button"
+                              onClick={() => openAttachmentInNewTab(file)}
+                              className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-600"
+                              aria-label="Open attachment"
+                              title="Open"
+                            >
+                              <ExternalLink size={13} />
+                            </button>
+                          ) : null}
+                          {attachmentUrl ? (
+                            <button
+                              type="button"
+                              onClick={() => downloadAttachment(file)}
+                              className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-blue-50 hover:text-blue-600"
+                              aria-label="Download attachment"
+                              title="Download"
+                            >
+                              <Download size={13} />
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => handleRequestRemoveAttachment(attachmentId)}
+                            className="rounded-md p-1.5 text-red-500 transition-colors hover:bg-red-50"
+                            aria-label="Remove attachment"
+                            title="Remove"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRequestRemoveAttachment(attachmentId)}
-                      className="absolute right-8 top-1/2 -translate-y-1/2 rounded p-1 text-red-500 opacity-0 transition-opacity hover:bg-red-50 group-hover:opacity-100"
-                      aria-label="Remove attachment"
-                      title="Remove"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAttachmentMenuIndex((current) => (current === index ? null : index))}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-600 opacity-0 transition-opacity group-hover:opacity-100"
-                      aria-label="Attachment actions"
-                      title="More"
-                    >
-                      <MoreVertical size={14} />
-                    </button>
-                    {attachmentMenuIndex === index && (
-                      <div className="mt-2 flex items-center gap-5 px-8 text-[12px] font-medium text-blue-600">
-                        {attachmentUrl ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              downloadAttachment(file);
-                              setAttachmentMenuIndex(null);
-                            }}
-                            className="flex items-center gap-1 hover:text-blue-700"
-                          >
-                            <Download size={13} />
-                            Download
-                          </button>
-                        ) : (
-                          <span className="flex items-center gap-1 text-slate-400">
-                            <Download size={13} />
-                            Download
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => handleRequestRemoveAttachment(attachmentId)}
-                          className="hover:text-blue-700"
-                        >
-                          Remove
-                        </button>
-                        {attachmentUrl ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              openAttachmentInNewTab(file);
-                              setAttachmentMenuIndex(null);
-                            }}
-                            className="rounded p-1 text-blue-600 hover:bg-blue-50"
-                            aria-label="Open attachment"
-                            title="Open"
-                          >
-                            <ExternalLink size={13} />
-                          </button>
-                        ) : (
-                          <span className="rounded p-1 text-slate-400" aria-label="Open attachment" title="Open">
-                            <ExternalLink size={13} />
-                          </span>
-                        )}
-                      </div>
-                    )}
                   </div>
                 </div>
                 );
@@ -278,7 +291,7 @@ export default function CustomerAttachmentsPopover({
             {isUploading ? (
               <div className="flex h-[58px] w-full items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 text-[14px] font-medium text-slate-400">
                 <Loader2 size={16} className="animate-spin text-blue-400" />
-                <span>Uploading...</span>
+                <span>Uploading in background...</span>
               </div>
             ) : (
               <label className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#156372] px-4 py-3 text-[14px] font-semibold text-white shadow-sm hover:opacity-95">
@@ -320,18 +333,18 @@ export default function CustomerAttachmentsPopover({
                 <button
                   type="button"
                   onClick={() => {
-                    if (attachmentDeleteConfirmId !== null) {
-                      void onRemoveAttachment(attachmentDeleteConfirmId);
-                    }
+                    void handleConfirmRemoveAttachment();
                   }}
-                  className="rounded-md bg-blue-500 px-4 py-2 text-[14px] font-medium text-white hover:bg-blue-600"
+                  disabled={isDeletingAttachment}
+                  className="rounded-md bg-blue-500 px-4 py-2 text-[14px] font-medium text-white hover:bg-blue-600 disabled:cursor-wait disabled:opacity-70"
                 >
-                  Proceed
+                  {isDeletingAttachment ? "Removing..." : "Proceed"}
                 </button>
                 <button
                   type="button"
                   onClick={handleCancelRemoveAttachment}
-                  className="rounded-md border border-slate-300 bg-white px-4 py-2 text-[14px] font-medium text-slate-700 hover:bg-slate-50"
+                  disabled={isDeletingAttachment}
+                  className="rounded-md border border-slate-300 bg-white px-4 py-2 text-[14px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Cancel
                 </button>

@@ -18,4 +18,3 @@ export const SendEmailStatementRoute = lazy(loadSendEmailStatementRoute);
 
 export const preloadCustomersIndexRoute = () => loadCustomersIndexRoute();
 export const preloadCustomerDetailRoute = () => loadCustomerDetailRoute();
-export const preloadCustomersRoutes = () => import("./CustomersRoutes");

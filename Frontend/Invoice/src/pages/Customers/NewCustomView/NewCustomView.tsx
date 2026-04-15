@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { X, Search, ChevronDown, Check, Star, GripVertical, Lock, Users, FileText, Plus, Trash2, UserPlus } from "lucide-react";
 import { toast } from "react-toastify";
-import { saveCustomView } from "../../customersDbModel";
+import { saveCustomView } from "../../salesModel";
 
 const customerFields = [
   "Name", "Company Name", "Email", "Work Phone", "Mobile Phone", "Phone",
@@ -228,23 +228,30 @@ export default function NewCustomView() {
   };
 
   // Refs for dropdowns
-  const fieldDropdownRefs = useRef<Record<number, HTMLDivElement | null>>({});
-  const comparatorDropdownRefs = useRef<Record<number, HTMLDivElement | null>>({});
-  const operatorDropdownRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const fieldDropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const comparatorDropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const operatorDropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const userRoleDropdownRef = useRef<HTMLButtonElement | null>(null);
   const searchDropdownRef = useRef<HTMLDivElement | null>(null);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-
-      const isFieldDropdown = Object.values(fieldDropdownRefs.current).some((ref) => ref?.contains(target));
-      const isComparatorDropdown = Object.values(comparatorDropdownRefs.current).some((ref) => ref?.contains(target));
-      const isOperatorDropdown = Object.values(operatorDropdownRefs.current).some((ref) => ref?.contains(target));
-      const isUserRoleDropdown = userRoleDropdownRef.current?.contains(target);
-      const isSearchDropdown = searchDropdownRef.current?.contains(target);
+      const target = event.target as Node | null;
+      const fieldRefs = Object.values(fieldDropdownRefs.current) as Array<HTMLDivElement | null>;
+      const comparatorRefs = Object.values(comparatorDropdownRefs.current) as Array<HTMLDivElement | null>;
+      const operatorRefs = Object.values(operatorDropdownRefs.current) as Array<HTMLDivElement | null>;
+      const isFieldDropdown = fieldRefs.some(ref =>
+        ref && target && ref.contains(target)
+      );
+      const isComparatorDropdown = comparatorRefs.some(ref =>
+        ref && target && ref.contains(target)
+      );
+      const isOperatorDropdown = operatorRefs.some(ref =>
+        ref && target && ref.contains(target)
+      );
+      const isUserRoleDropdown = userRoleDropdownRef.current && target && userRoleDropdownRef.current.contains(target);
+      const isSearchDropdown = searchDropdownRef.current && target && searchDropdownRef.current.contains(target);
 
       if (!isFieldDropdown && Object.keys(isFieldDropdownOpen).length > 0) {
         setIsFieldDropdownOpen({});

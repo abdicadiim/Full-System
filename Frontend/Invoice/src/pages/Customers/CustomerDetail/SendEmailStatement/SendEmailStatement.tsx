@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { getCustomerById } from "../../../customersDbModel";
+import { getCustomerById } from "../../../salesModel";
 import {
   X,
   FileText,
@@ -96,7 +96,7 @@ export default function SendEmailStatement() {
 
           const fromAddress = formatSenderDisplay(
             senderResponse?.data?.name || "The Team",
-            senderResponse?.data?.email || "billing@example.com",
+            senderResponse?.data?.email || "invoice@example.com",
             "The Team"
           );
 

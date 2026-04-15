@@ -1771,6 +1771,32 @@ export const paymentsReceivedAPI = {
     } catch {}
     return paymentsReceivedLocal.getById(id);
   },
+  getByCustomer: async (customerId: string, params?: Record<string, any>) => {
+    const normalizedCustomerId = String(customerId || "").trim();
+    const all = await paymentsReceivedAPI.getAll({
+      ...(params || {}),
+      customerId: normalizedCustomerId,
+      limit: 10000,
+    });
+
+    const rows = Array.isArray(all?.data) ? all.data : [];
+    const filtered = rows.filter((payment: any) => {
+      const ref =
+        payment?.customerId ||
+        payment?.customer?._id ||
+        payment?.customer?.id ||
+        payment?.customer ||
+        "";
+      return String(ref).trim() === normalizedCustomerId;
+    });
+
+    const { data, pagination } = paginateRows(
+      filterRowsByParams(filtered, params),
+      params,
+    );
+
+    return { success: true, data, pagination };
+  },
   getByInvoice: async (invoiceId: string, params?: Record<string, any>) => {
     try {
       const res = await request({
@@ -3419,6 +3445,21 @@ export const dashboardAPI = {
     request({ path: "/dashboard/summary", params: options?.params, headers: options?.headers, skipCache: options?.skipCache }),
 };
 
+export const startupSyncAPI = {
+  validate: (resources: Array<{ id: string; version_id?: string; last_updated?: string; count?: number }>) =>
+    request({
+      method: "POST",
+      path: "/sync/validate",
+      data: { resources },
+    }),
+  fetch: (resources: Array<{ id: string; version_id?: string; last_updated?: string; count?: number }>) =>
+    request({
+      method: "POST",
+      path: "/sync/fetch",
+      data: { resources },
+    }),
+};
+
 export const authAPI = {
   getMe: () => request({ path: "/auth/me" }),
 };
@@ -3563,6 +3604,7 @@ export default {
   locationsAPI,
   settingsAPI,
   dashboardAPI,
+  startupSyncAPI,
   authAPI,
   usersAPI,
   rolesAPI,

@@ -78,9 +78,11 @@ function LegacyCustomersRedirect() {
 }
 
 export default function AppRoutes() {
+  const location = useLocation()
+
   return (
     <Suspense fallback={<RouteFallback />}>
-      <Routes>
+      <Routes key={location.pathname} location={location}>
         <Route path="/sender-verification/*" element={<SenderVerificationPage />} />
         <Route index element={<Navigate to="/dashboard" replace />} />
 

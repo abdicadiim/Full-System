@@ -10,6 +10,7 @@ import {
 } from "../../services/auth";
 import { waitForBackendReady } from "../../services/backendReady";
 import { createPermissionEvaluator, type PermissionTree } from "./permissionUtils";
+import { primeStartupResources, syncStartupResources } from "../startup/startupHydration";
 
 type User =
   | {
@@ -59,6 +60,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [hasChecked, setHasChecked] = useState(false);
   const [pollingEnabled, setPollingEnabled] = useState(false);
+  const lastHydratedUserIdRef = React.useRef("");
 
   const refresh = useCallback(async () => {
     const url = new URL(window.location.href);
@@ -96,6 +98,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         }
         clearLogoutRequested();
         setUser(payload.data);
+        const currentUserId = String(payload?.data?.id || "").trim();
         try {
           localStorage.setItem("user", JSON.stringify(payload.data));
           // GLOBAL TIMER SYNC
@@ -108,6 +111,20 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
             window.dispatchEvent(new CustomEvent("timerStateUpdated"));
           }
         } catch {}
+        const startupOrganizationId = String(payload?.data?.organizationId || "").trim() || "global";
+        primeStartupResources({ organizationId: startupOrganizationId });
+        if (currentUserId && lastHydratedUserIdRef.current !== currentUserId) {
+          try {
+            await syncStartupResources({
+              organizationId: startupOrganizationId,
+            });
+            lastHydratedUserIdRef.current = currentUserId;
+          } catch (error) {
+            if ((import.meta as any).env?.DEV) {
+              console.error("Startup hydration failed", error);
+            }
+          }
+        }
         return;
       }
       if (res.status === 401) {

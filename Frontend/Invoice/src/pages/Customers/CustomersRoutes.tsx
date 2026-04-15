@@ -1,24 +1,36 @@
-import React from "react";
+import React, { Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
-import Customers from "./Customers";
-import NewCustomer from "./NewCustomer/NewCustomer";
-import CustomerDetail from "./CustomerDetail";
-import ImportCustomers from "./ImportCustomers/ImportCustomers";
-import NewCustomView from "./NewCustomView/NewCustomView";
-import RequestReview from "./RequestReview/RequestReview";
-import SendEmailStatement from "./CustomerDetail/SendEmailStatement/SendEmailStatement";
+import {
+  CustomersIndexRoute,
+  CustomerDetailRoute,
+  ImportCustomersRoute,
+  NewCustomerRoute,
+  NewCustomViewRoute,
+  RequestReviewRoute,
+  SendEmailStatementRoute,
+} from "./customerRouteLoaders";
+
+function CustomersRouteFallback() {
+  return null;
+}
+
+const withSuspense = (node: React.ReactNode) => (
+  <Suspense fallback={<CustomersRouteFallback />}>
+    {node}
+  </Suspense>
+);
 
 export default function CustomersRoutes() {
   return (
     <Routes>
-      <Route index element={<Customers />} />
-      <Route path="new" element={<NewCustomer />} />
-      <Route path="import" element={<ImportCustomers />} />
-      <Route path="new-custom-view" element={<NewCustomView />} />
-      <Route path=":id/edit" element={<NewCustomer />} />
-      <Route path=":id/request-review" element={<RequestReview />} />
-      <Route path=":id/send-email-statement" element={<SendEmailStatement />} />
-      <Route path=":id" element={<CustomerDetail />} />
+      <Route index element={withSuspense(<CustomersIndexRoute />)} />
+      <Route path="new" element={withSuspense(<NewCustomerRoute />)} />
+      <Route path="import" element={withSuspense(<ImportCustomersRoute />)} />
+      <Route path="new-custom-view" element={withSuspense(<NewCustomViewRoute />)} />
+      <Route path=":id/edit" element={withSuspense(<NewCustomerRoute />)} />
+      <Route path=":id/request-review" element={withSuspense(<RequestReviewRoute />)} />
+      <Route path=":id/send-email-statement" element={withSuspense(<SendEmailStatementRoute />)} />
+      <Route path=":id/*" element={withSuspense(<CustomerDetailRoute />)} />
       <Route path="*" element={<Navigate to="." replace />} />
     </Routes>
   );

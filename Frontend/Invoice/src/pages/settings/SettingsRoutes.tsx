@@ -1,50 +1,60 @@
-import React from "react";
+import React, { Suspense, lazy } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
-import AllSettings from "./AllSettings";
-import SettingsProfileWrapper from "./SettingsProfileWrapper";
-import SettingsBrandingWrapper from "./SettingsBrandingWrapper";
-import SettingsCustomDomainWrapper from "./SettingsCustomDomainWrapper";
-import SettingsLocationsWrapper from "./SettingsLocationsWrapper";
-import SettingsSubscriptionWrapper from "./SettingsSubscriptionWrapper";
-import SettingsUsersWrapper from "./SettingsUsersWrapper";
-import SettingsRolesWrapper from "./SettingsRolesWrapper";
-import SettingsTaxesWrapper from "./SettingsTaxesWrapper";
-import SettingsGeneralWrapper from "./organization-settings/setup-configurations/general/SettingsGeneralWrapper";
-import SettingsCurrenciesWrapper from "./organization-settings/setup-configurations/currencies/SettingsCurrenciesWrapper";
-import SettingsOpeningBalancesWrapper from "./organization-settings/setup-configurations/opening-balances/SettingsOpeningBalancesWrapper";
-import SettingsRemindersWrapper from "./organization-settings/setup-configurations/reminders/SettingsRemindersWrapper";
-import SettingsCustomizationWrapper from "./SettingsCustomizationWrapper";
-import SettingsWorkflowRulesWrapper from "./organization-settings/automation/workflow-rules/SettingsWorkflowRulesWrapper";
-import SettingsWorkflowActionsWrapper from "./organization-settings/automation/workflow-actions/SettingsWorkflowActionsWrapper";
-import SettingsWorkflowLogsWrapper from "./organization-settings/automation/workflow-logs/SettingsWorkflowLogsWrapper";
-import SettingsUsageStatsWrapper from "./SettingsUsageStatsWrapper";
-import SettingsSchedulesWrapper from "./organization-settings/automation/schedules/SettingsSchedulesWrapper";
-import SettingsCustomersVendorsWrapper from "./module-settings/customers-vendors/SettingsCustomersVendorsWrapper";
-import SettingsItemsWrapper from "./module-settings/items/SettingsItemsWrapper";
-import SettingsAccountantWrapper from "./module-settings/accountant/SettingsAccountantWrapper";
-import SettingsProjectsWrapper from "./module-settings/projects/SettingsProjectsWrapper";
-import SettingsTimesheetWrapper from "./module-settings/timesheet/SettingsTimesheetWrapper";
-import SettingsInventoryAdjustmentsWrapper from "./SettingsInventoryAdjustmentsWrapper";
-import SettingsQuotesWrapper from "./SettingsQuotesWrapper";
-import SettingsInvoicesWrapper from "./SettingsInvoicesWrapper";
-import SettingsRecurringInvoicesWrapper from "./SettingsRecurringInvoicesWrapper";
-import SettingsSalesReceiptsWrapper from "./SettingsSalesReceiptsWrapper";
-import SettingsPaymentsReceivedWrapper from "./SettingsPaymentsReceivedWrapper";
-import SettingsCreditNotesWrapper from "./SettingsCreditNotesWrapper";
-import SettingsDeliveryNotesWrapper from "./SettingsDeliveryNotesWrapper";
-import SettingsPackingSlipsWrapper from "./SettingsPackingSlipsWrapper";
-import SettingsExpensesWrapper from "./SettingsExpensesWrapper";
-import SettingsPurchaseOrdersWrapper from "./SettingsPurchaseOrdersWrapper";
-import SettingsBillsWrapper from "./SettingsBillsWrapper";
-import SettingsRecurringBillsWrapper from "./SettingsRecurringBillsWrapper";
-import SettingsPaymentsMadeWrapper from "./SettingsPaymentsMadeWrapper";
-import SettingsVendorCreditsWrapper from "./SettingsVendorCreditsWrapper";
-import SettingsCustomerPortalWrapper from "./SettingsCustomerPortalWrapper";
-import SettingsVendorPortalWrapper from "./SettingsVendorPortalWrapper";
-import SettingsOnlinePaymentsWrapper from "./SettingsOnlinePaymentsWrapper";
-import SettingsCustomModulesWrapper from "./SettingsCustomModulesWrapper";
-import SettingsUserPreferencesWrapper from "./SettingsUserPreferencesWrapper";
-import SettingsVATWrapper from "./SettingsVATWrapper";
+
+const SettingsProfileWrapper = lazy(() => import("./SettingsProfileWrapper"));
+const SettingsBrandingWrapper = lazy(() => import("./SettingsBrandingWrapper"));
+const SettingsCustomDomainWrapper = lazy(() => import("./SettingsCustomDomainWrapper"));
+const SettingsLocationsWrapper = lazy(() => import("./SettingsLocationsWrapper"));
+const SettingsSubscriptionWrapper = lazy(() => import("./SettingsSubscriptionWrapper"));
+const SettingsUsersWrapper = lazy(() => import("./SettingsUsersWrapper"));
+const SettingsRolesWrapper = lazy(() => import("./SettingsRolesWrapper"));
+const SettingsTaxesWrapper = lazy(() => import("./SettingsTaxesWrapper"));
+const SettingsGeneralWrapper = lazy(() => import("./organization-settings/setup-configurations/general/SettingsGeneralWrapper"));
+const SettingsCurrenciesWrapper = lazy(() => import("./organization-settings/setup-configurations/currencies/SettingsCurrenciesWrapper"));
+const SettingsOpeningBalancesWrapper = lazy(() => import("./organization-settings/setup-configurations/opening-balances/SettingsOpeningBalancesWrapper"));
+const SettingsRemindersWrapper = lazy(() => import("./organization-settings/setup-configurations/reminders/SettingsRemindersWrapper"));
+const SettingsCustomizationWrapper = lazy(() => import("./SettingsCustomizationWrapper"));
+const SettingsWorkflowRulesWrapper = lazy(() => import("./organization-settings/automation/workflow-rules/SettingsWorkflowRulesWrapper"));
+const SettingsWorkflowActionsWrapper = lazy(() => import("./organization-settings/automation/workflow-actions/SettingsWorkflowActionsWrapper"));
+const SettingsWorkflowLogsWrapper = lazy(() => import("./organization-settings/automation/workflow-logs/SettingsWorkflowLogsWrapper"));
+const SettingsUsageStatsWrapper = lazy(() => import("./SettingsUsageStatsWrapper"));
+const SettingsSchedulesWrapper = lazy(() => import("./organization-settings/automation/schedules/SettingsSchedulesWrapper"));
+const SettingsCustomersVendorsWrapper = lazy(() => import("./module-settings/customers-vendors/SettingsCustomersVendorsWrapper"));
+const SettingsItemsWrapper = lazy(() => import("./module-settings/items/SettingsItemsWrapper"));
+const SettingsAccountantWrapper = lazy(() => import("./module-settings/accountant/SettingsAccountantWrapper"));
+const SettingsProjectsWrapper = lazy(() => import("./module-settings/projects/SettingsProjectsWrapper"));
+const SettingsTimesheetWrapper = lazy(() => import("./module-settings/timesheet/SettingsTimesheetWrapper"));
+const SettingsInventoryAdjustmentsWrapper = lazy(() => import("./SettingsInventoryAdjustmentsWrapper"));
+const SettingsQuotesWrapper = lazy(() => import("./SettingsQuotesWrapper"));
+const SettingsInvoicesWrapper = lazy(() => import("./SettingsInvoicesWrapper"));
+const SettingsRecurringInvoicesWrapper = lazy(() => import("./SettingsRecurringInvoicesWrapper"));
+const SettingsSalesReceiptsWrapper = lazy(() => import("./SettingsSalesReceiptsWrapper"));
+const SettingsPaymentsReceivedWrapper = lazy(() => import("./SettingsPaymentsReceivedWrapper"));
+const SettingsCreditNotesWrapper = lazy(() => import("./SettingsCreditNotesWrapper"));
+const SettingsDeliveryNotesWrapper = lazy(() => import("./SettingsDeliveryNotesWrapper"));
+const SettingsPackingSlipsWrapper = lazy(() => import("./SettingsPackingSlipsWrapper"));
+const SettingsExpensesWrapper = lazy(() => import("./SettingsExpensesWrapper"));
+const SettingsPurchaseOrdersWrapper = lazy(() => import("./SettingsPurchaseOrdersWrapper"));
+const SettingsBillsWrapper = lazy(() => import("./SettingsBillsWrapper"));
+const SettingsRecurringBillsWrapper = lazy(() => import("./SettingsRecurringBillsWrapper"));
+const SettingsPaymentsMadeWrapper = lazy(() => import("./SettingsPaymentsMadeWrapper"));
+const SettingsVendorCreditsWrapper = lazy(() => import("./SettingsVendorCreditsWrapper"));
+const SettingsCustomerPortalWrapper = lazy(() => import("./SettingsCustomerPortalWrapper"));
+const SettingsVendorPortalWrapper = lazy(() => import("./SettingsVendorPortalWrapper"));
+const SettingsOnlinePaymentsWrapper = lazy(() => import("./SettingsOnlinePaymentsWrapper"));
+const SettingsCustomModulesWrapper = lazy(() => import("./SettingsCustomModulesWrapper"));
+const SettingsUserPreferencesWrapper = lazy(() => import("./SettingsUserPreferencesWrapper"));
+const SettingsVATWrapper = lazy(() => import("./SettingsVATWrapper"));
+
+function SettingsRouteFallback() {
+  return null;
+}
+
+const withSuspense = (node: React.ReactNode) => (
+  <Suspense fallback={<SettingsRouteFallback />}>
+    {node}
+  </Suspense>
+);
 
 export default function SettingsRoutes() {
   return (
@@ -52,55 +62,55 @@ export default function SettingsRoutes() {
       <Route index element={<Navigate to="/settings/profile" replace />} />
       <Route path="system" element={<Navigate to="/settings/general" replace />} />
 
-      <Route path="profile/*" element={<SettingsProfileWrapper />} />
-      <Route path="branding/*" element={<SettingsBrandingWrapper />} />
-      <Route path="custom-domain/*" element={<SettingsCustomDomainWrapper />} />
-      <Route path="locations/*" element={<SettingsLocationsWrapper />} />
-      <Route path="subscription/*" element={<SettingsSubscriptionWrapper />} />
-      <Route path="users/*" element={<SettingsUsersWrapper />} />
-      <Route path="roles/*" element={<SettingsRolesWrapper />} />
-      <Route path="taxes/*" element={<SettingsTaxesWrapper />} />
-      <Route path="general/*" element={<SettingsGeneralWrapper />} />
-      <Route path="currencies/*" element={<SettingsCurrenciesWrapper />} />
-      <Route path="opening-balances/*" element={<SettingsOpeningBalancesWrapper />} />
-      <Route path="reminders/*" element={<SettingsRemindersWrapper />} />
+      <Route path="profile/*" element={withSuspense(<SettingsProfileWrapper />)} />
+      <Route path="branding/*" element={withSuspense(<SettingsBrandingWrapper />)} />
+      <Route path="custom-domain/*" element={withSuspense(<SettingsCustomDomainWrapper />)} />
+      <Route path="locations/*" element={withSuspense(<SettingsLocationsWrapper />)} />
+      <Route path="subscription/*" element={withSuspense(<SettingsSubscriptionWrapper />)} />
+      <Route path="users/*" element={withSuspense(<SettingsUsersWrapper />)} />
+      <Route path="roles/*" element={withSuspense(<SettingsRolesWrapper />)} />
+      <Route path="taxes/*" element={withSuspense(<SettingsTaxesWrapper />)} />
+      <Route path="general/*" element={withSuspense(<SettingsGeneralWrapper />)} />
+      <Route path="currencies/*" element={withSuspense(<SettingsCurrenciesWrapper />)} />
+      <Route path="opening-balances/*" element={withSuspense(<SettingsOpeningBalancesWrapper />)} />
+      <Route path="reminders/*" element={withSuspense(<SettingsRemindersWrapper />)} />
 
       <Route path="customization" element={<Navigate to="/settings/customization/transaction-number-series" replace />} />
-      <Route path="customization/*" element={<SettingsCustomizationWrapper />} />
-      <Route path="workflow-rules/*" element={<SettingsWorkflowRulesWrapper />} />
-      <Route path="workflow-actions/*" element={<SettingsWorkflowActionsWrapper />} />
-      <Route path="workflow-logs/*" element={<SettingsWorkflowLogsWrapper />} />
-      <Route path="usage-stats/*" element={<SettingsUsageStatsWrapper />} />
-      <Route path="schedules/*" element={<SettingsSchedulesWrapper />} />
+      <Route path="customization/*" element={withSuspense(<SettingsCustomizationWrapper />)} />
+      <Route path="workflow-rules/*" element={withSuspense(<SettingsWorkflowRulesWrapper />)} />
+      <Route path="workflow-actions/*" element={withSuspense(<SettingsWorkflowActionsWrapper />)} />
+      <Route path="workflow-logs/*" element={withSuspense(<SettingsWorkflowLogsWrapper />)} />
+      <Route path="usage-stats/*" element={withSuspense(<SettingsUsageStatsWrapper />)} />
+      <Route path="schedules/*" element={withSuspense(<SettingsSchedulesWrapper />)} />
 
-      <Route path="customers-vendors/*" element={<SettingsCustomersVendorsWrapper />} />
-      <Route path="items/*" element={<SettingsItemsWrapper />} />
-      <Route path="accountant/*" element={<SettingsAccountantWrapper />} />
-      <Route path="projects/*" element={<SettingsProjectsWrapper />} />
-      <Route path="timesheet/*" element={<SettingsTimesheetWrapper />} />
-      <Route path="inventory-adjustments/*" element={<SettingsInventoryAdjustmentsWrapper />} />
-      <Route path="quotes/*" element={<SettingsQuotesWrapper />} />
-      <Route path="invoices/*" element={<SettingsInvoicesWrapper />} />
-      <Route path="recurring-invoices/*" element={<SettingsRecurringInvoicesWrapper />} />
-      <Route path="sales-receipts/*" element={<SettingsSalesReceiptsWrapper />} />
-      <Route path="payments-received/*" element={<SettingsPaymentsReceivedWrapper />} />
-      <Route path="credit-notes/*" element={<SettingsCreditNotesWrapper />} />
-      <Route path="delivery-notes/*" element={<SettingsDeliveryNotesWrapper />} />
-      <Route path="packing-slips/*" element={<SettingsPackingSlipsWrapper />} />
-      <Route path="expenses/*" element={<SettingsExpensesWrapper />} />
-      <Route path="recurring-expenses/*" element={<SettingsExpensesWrapper />} />
-      <Route path="purchase-orders/*" element={<SettingsPurchaseOrdersWrapper />} />
-      <Route path="bills/*" element={<SettingsBillsWrapper />} />
-      <Route path="recurring-bills/*" element={<SettingsRecurringBillsWrapper />} />
-      <Route path="payments-made/*" element={<SettingsPaymentsMadeWrapper />} />
-      <Route path="vendor-credits/*" element={<SettingsVendorCreditsWrapper />} />
+      <Route path="customers-vendors/*" element={withSuspense(<SettingsCustomersVendorsWrapper />)} />
+      <Route path="items/*" element={withSuspense(<SettingsItemsWrapper />)} />
+      <Route path="accountant/*" element={withSuspense(<SettingsAccountantWrapper />)} />
+      <Route path="projects/*" element={withSuspense(<SettingsProjectsWrapper />)} />
+      <Route path="timesheet/*" element={withSuspense(<SettingsTimesheetWrapper />)} />
+      <Route path="inventory-adjustments/*" element={withSuspense(<SettingsInventoryAdjustmentsWrapper />)} />
+      <Route path="quotes/*" element={withSuspense(<SettingsQuotesWrapper />)} />
+      <Route path="invoices/*" element={withSuspense(<SettingsInvoicesWrapper />)} />
+      <Route path="recurring-invoices/*" element={withSuspense(<SettingsRecurringInvoicesWrapper />)} />
+      <Route path="sales-receipts/*" element={withSuspense(<SettingsSalesReceiptsWrapper />)} />
+      <Route path="payments-received/*" element={withSuspense(<SettingsPaymentsReceivedWrapper />)} />
+      <Route path="credit-notes/*" element={withSuspense(<SettingsCreditNotesWrapper />)} />
+      <Route path="delivery-notes/*" element={withSuspense(<SettingsDeliveryNotesWrapper />)} />
+      <Route path="packing-slips/*" element={withSuspense(<SettingsPackingSlipsWrapper />)} />
+      <Route path="expenses/*" element={withSuspense(<SettingsExpensesWrapper />)} />
+      <Route path="recurring-expenses/*" element={withSuspense(<SettingsExpensesWrapper />)} />
+      <Route path="purchase-orders/*" element={withSuspense(<SettingsPurchaseOrdersWrapper />)} />
+      <Route path="bills/*" element={withSuspense(<SettingsBillsWrapper />)} />
+      <Route path="recurring-bills/*" element={withSuspense(<SettingsRecurringBillsWrapper />)} />
+      <Route path="payments-made/*" element={withSuspense(<SettingsPaymentsMadeWrapper />)} />
+      <Route path="vendor-credits/*" element={withSuspense(<SettingsVendorCreditsWrapper />)} />
 
-      <Route path="customer-portal/*" element={<SettingsCustomerPortalWrapper />} />
-      <Route path="vendor-portal/*" element={<SettingsVendorPortalWrapper />} />
-      <Route path="online-payments/*" element={<SettingsOnlinePaymentsWrapper />} />
-      <Route path="custom-modules/*" element={<SettingsCustomModulesWrapper />} />
-      <Route path="user-preferences/*" element={<SettingsUserPreferencesWrapper />} />
-      <Route path="vat/*" element={<SettingsVATWrapper />} />
+      <Route path="customer-portal/*" element={withSuspense(<SettingsCustomerPortalWrapper />)} />
+      <Route path="vendor-portal/*" element={withSuspense(<SettingsVendorPortalWrapper />)} />
+      <Route path="online-payments/*" element={withSuspense(<SettingsOnlinePaymentsWrapper />)} />
+      <Route path="custom-modules/*" element={withSuspense(<SettingsCustomModulesWrapper />)} />
+      <Route path="user-preferences/*" element={withSuspense(<SettingsUserPreferencesWrapper />)} />
+      <Route path="vat/*" element={withSuspense(<SettingsVATWrapper />)} />
 
       <Route path="*" element={<Navigate to="/settings/profile" replace />} />
     </Routes>

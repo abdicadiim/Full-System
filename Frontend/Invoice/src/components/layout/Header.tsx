@@ -14,6 +14,7 @@ import { useUser } from "../../lib/auth/UserContext";
 import { useSettings } from "../../lib/settings/SettingsContext";
 import SettingsDrawer from "../settings/SettingsDrawer";
 import { normalizeImageSrc } from "../../utils/imageSources";
+import { prefetchRouteChunk } from "../../routes/routeWarmers";
 
 const DEFAULT_LOGO_URL = "/logo-DxLi_Ek_.png";
 const SYSTEM_NAME = "Taban Invoice";
@@ -362,7 +363,13 @@ function Header({ onToggleSidebar }) {
 
           <button
             type="button"
-            onClick={() => setOpenSettingsDrawer(true)}
+            onMouseEnter={() => prefetchRouteChunk("/settings")}
+            onPointerDown={() => prefetchRouteChunk("/settings")}
+            onFocus={() => prefetchRouteChunk("/settings")}
+            onClick={() => {
+              prefetchRouteChunk("/settings");
+              setOpenSettingsDrawer(true);
+            }}
             className={[
               "inline-flex h-8 w-8 items-center justify-center rounded-full transition",
               isLightAppearance ? "bg-white/90 text-slate-700 hover:bg-slate-100 border border-slate-200" : "bg-white/10 text-white hover:bg-white/20",

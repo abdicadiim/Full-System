@@ -16,6 +16,7 @@ const EMPTY_CURRENCY: BaseCurrency = {
 };
 
 const CURRENCY_STORAGE_KEYS = ["taban_currencies", "taban_books_currencies"];
+const CURRENCY_CHANGED_EVENT = "taban:currency-changed";
 
 const isBaseCurrencyRecord = (currency: any) => {
   const flag = currency?.isBase ?? currency?.isBaseCurrency ?? currency?.is_base_currency ?? currency?.baseCurrency ?? currency?.base_currency;
@@ -85,12 +86,18 @@ const readStoredBaseCurrency = (): BaseCurrency | null => {
 };
 
 export const useCurrency = () => {
-  const [baseCurrency, setBaseCurrency] = useState<BaseCurrency>(() => EMPTY_CURRENCY);
+  const [baseCurrency, setBaseCurrency] = useState<BaseCurrency>(() => readStoredBaseCurrency() || EMPTY_CURRENCY);
 
   useEffect(() => {
     let isMounted = true;
 
     const loadBaseCurrency = async () => {
+      const cached = readStoredBaseCurrency();
+      if (cached && isMounted) {
+        setBaseCurrency(cached);
+        return;
+      }
+
       try {
         const res = await currenciesAPI.getAll({ limit: 2000 });
         const rows = extractCurrencyRows(res);
@@ -118,8 +125,21 @@ export const useCurrency = () => {
     };
 
     loadBaseCurrency();
+
+    const syncFromCache = () => {
+      const cached = readStoredBaseCurrency();
+      if (cached && isMounted) {
+        setBaseCurrency(cached);
+      }
+    };
+
+    window.addEventListener("storage", syncFromCache);
+    window.addEventListener(CURRENCY_CHANGED_EVENT, syncFromCache);
+
     return () => {
       isMounted = false;
+      window.removeEventListener("storage", syncFromCache);
+      window.removeEventListener(CURRENCY_CHANGED_EVENT, syncFromCache);
     };
   }, []);
 

@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { prefetchRouteChunk } from "../../routes/routeWarmers";
 
 type SettingsItem = {
   label: string;
@@ -166,6 +167,9 @@ export default function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                     <button
                       key={item.label}
                       type="button"
+                      onMouseEnter={() => item.path && prefetchRouteChunk(item.path)}
+                      onPointerDown={() => item.path && prefetchRouteChunk(item.path)}
+                      onFocus={() => item.path && prefetchRouteChunk(item.path)}
                       onClick={() => {
                         if (item.path) navigate(item.path);
                         onClose();

@@ -60,8 +60,10 @@ import type {
 import { useCustomerDetailPageViewModel } from "./useCustomerDetailPageViewModel";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 
-const CUSTOMER_EDIT_PRELOAD_PREFIX = "billing_customer_edit_preload:";
-const CUSTOMER_DETAIL_SIDEBAR_CACHE_KEY = "billing_customer_detail_sidebar_seed";
+const CUSTOMER_EDIT_PRELOAD_PREFIX = "invoice_customer_edit_preload:";
+const LEGACY_CUSTOMER_EDIT_PRELOAD_PREFIX = "billing_customer_edit_preload:";
+const CUSTOMER_DETAIL_SIDEBAR_CACHE_KEY = "invoice_customer_detail_sidebar_seed";
+const LEGACY_CUSTOMER_DETAIL_SIDEBAR_CACHE_KEY = "billing_customer_detail_sidebar_seed";
 const DEFAULT_CUSTOMER_PDF_TEMPLATES: CustomerPdfTemplates = {
     customerStatement: "Standard Template",
     quotes: "Standard Template",
@@ -119,15 +121,26 @@ export default function CustomerDetail() {
     const location = useLocation();
     const initialSidebarCustomers: ExtendedCustomer[] = [];
     const initialRouteCustomer = (() => {
-        const targetId = String(id || "").trim();
-        const seededCustomer = location.state?.customer ? normalizeSidebarCustomer(location.state.customer) : null;
-        const seededCustomerId = String((seededCustomer as any)?._id || (seededCustomer as any)?.id || "").trim();
-
-        if (seededCustomer && (!targetId || !seededCustomerId || seededCustomerId === targetId)) {
-            return seededCustomer;
+        if (location.state?.customer) {
+            return normalizeSidebarCustomer(location.state.customer);
         }
-
-        return null;
+        if (typeof window === "undefined") return null;
+        try {
+            const raw =
+                sessionStorage.getItem(CUSTOMER_DETAIL_SIDEBAR_CACHE_KEY) ||
+                sessionStorage.getItem(LEGACY_CUSTOMER_DETAIL_SIDEBAR_CACHE_KEY);
+            const parsed = raw ? JSON.parse(raw) : null;
+            const list = Array.isArray(parsed) ? parsed : [];
+            const targetId = String(id || "").trim();
+            if (!targetId) return null;
+            const matched = list.find((row: any) => {
+                const rowId = String(row?._id || row?.id || "").trim();
+                return rowId === targetId;
+            });
+            return matched ? normalizeSidebarCustomer(matched) : null;
+        } catch {
+            return null;
+        }
     })();
 
     const [customer, setCustomer] = useState<ExtendedCustomer | null>(() => initialRouteCustomer);
@@ -172,10 +185,7 @@ export default function CustomerDetail() {
 
     useEffect(() => {
         const seededCustomer = location.state?.customer ? normalizeSidebarCustomer(location.state.customer) : null;
-        const targetId = String(id || "").trim();
-        const seededCustomerId = String((seededCustomer as any)?._id || (seededCustomer as any)?.id || "").trim();
-
-        if (seededCustomer && (!targetId || !seededCustomerId || seededCustomerId === targetId)) {
+        if (seededCustomer) {
             setCustomer(seededCustomer);
             setLoading(false);
             const seededStatus = String((seededCustomer as any)?.status || "").toLowerCase().trim();
@@ -187,6 +197,36 @@ export default function CustomerDetail() {
                 setCustomerStatusOverride("active");
             }
             return;
+        }
+        if (typeof window === "undefined") {
+            return;
+        }
+        try {
+            const raw =
+                sessionStorage.getItem(CUSTOMER_DETAIL_SIDEBAR_CACHE_KEY) ||
+                sessionStorage.getItem(LEGACY_CUSTOMER_DETAIL_SIDEBAR_CACHE_KEY);
+            const parsed = raw ? JSON.parse(raw) : null;
+            const list = Array.isArray(parsed) ? parsed : [];
+            const targetId = String(id || "").trim();
+            if (!targetId) return;
+            const matched = list.find((row: any) => {
+                const rowId = String(row?._id || row?.id || "").trim();
+                return rowId === targetId;
+            });
+            if (matched) {
+                const normalized = normalizeSidebarCustomer(matched);
+                setCustomer(normalized);
+                setLoading(false);
+                const matchedStatus = String((normalized as any)?.status || "").toLowerCase().trim();
+                if (matchedStatus === "active" || matchedStatus === "inactive") {
+                    setCustomerStatusOverride(matchedStatus as "active" | "inactive");
+                } else if ((normalized as any)?.isInactive === true) {
+                    setCustomerStatusOverride("inactive");
+                } else if ((normalized as any)?.isActive === true) {
+                    setCustomerStatusOverride("active");
+                }
+            }
+        } catch {
         }
     }, [id, location.key, location.state, setCustomer]);
 
@@ -1275,10 +1315,8 @@ export default function CustomerDetail() {
         const safeCustomer = toSerializableCustomerState(customer);
         if (typeof window !== "undefined") {
             try {
-                sessionStorage.setItem(
-                    `${CUSTOMER_EDIT_PRELOAD_PREFIX}${customerId}`,
-                    JSON.stringify(safeCustomer)
-                );
+                sessionStorage.setItem(`${CUSTOMER_EDIT_PRELOAD_PREFIX}${customerId}`, JSON.stringify(safeCustomer));
+                sessionStorage.removeItem(`${LEGACY_CUSTOMER_EDIT_PRELOAD_PREFIX}${customerId}`);
             } catch {
             }
         }

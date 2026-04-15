@@ -174,6 +174,9 @@ const ROUTE_WARMERS: Record<string, () => void> = {
     warmModule("items-module", () => import("../pages/items/ItemsPage"));
     void warmItemsList();
   },
+  "/settings": () => {
+    warmModule("settings-module", () => import("../pages/settings/SettingsRoutes"));
+  },
   "/sales/quotes": () => {
     warmModule("quotes-module", () => import("../pages/Quotes/QuotesRoutes"));
     void warmQuotesList();

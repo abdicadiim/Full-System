@@ -41,13 +41,14 @@ import {
   FileDown,
   RotateCcw
 } from "lucide-react";
-import { getInvoiceById, updateInvoice, deleteInvoice, Invoice } from "../salesModel";
+import { getCustomers, getInvoiceById, updateInvoice, deleteInvoice, Invoice } from "../salesModel";
 import { getInvoiceStatusDisplay } from "../../../utils/invoiceUtils";
 import { useCurrency } from "../../../hooks/useCurrency";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
 import { useInvoicesListQuery } from "./invoiceQueries";
+import { preloadCustomerDetailRoute, preloadCustomersRoutes } from "../../Customers/customerRouteLoaders";
 
 const invoiceViews = [
   "All Invoices",
@@ -103,6 +104,12 @@ const decimalFormatOptions = [
   "1234567,89",
   "1.234.567,89"
 ];
+
+const normalizeCustomerLookupValue = (value: any) =>
+  String(value ?? "").trim().toLowerCase();
+
+const isLikelyCustomerId = (value: any) =>
+  /^[a-f0-9]{24}$/i.test(String(value ?? "").trim()) || /^cus[-_]/i.test(String(value ?? "").trim());
 
 // Skeleton Loader Component - logic inline in table body
 export default function Invoices() {
@@ -203,6 +210,75 @@ export default function Invoices() {
     }
     if (page === currentPage && limit === itemsPerPage) {
       invoiceListQuery.refetch();
+    }
+  };
+
+  const navigateToCustomerDetail = async (invoice: Invoice) => {
+    void preloadCustomersRoutes();
+    void preloadCustomerDetailRoute();
+
+    const directCustomerId = String(
+      (invoice as any)?.customerId ||
+      (invoice as any)?.customer?._id ||
+      (invoice as any)?.customer?.id ||
+      ""
+    ).trim();
+
+    const directCustomerName = String(
+      invoice.customerName ||
+      (invoice as any)?.customer?.displayName ||
+      (invoice as any)?.customer?.companyName ||
+      (invoice as any)?.customer?.name ||
+      ""
+    ).trim();
+
+    const navigateWithCustomer = (customerId: string, customerState: any) => {
+      if (!customerId) return false;
+      navigate(`/sales/customers/${customerId}`, {
+        state: {
+          customer: customerState || {
+            _id: customerId,
+            id: customerId,
+            displayName: directCustomerName || "Customer",
+            name: directCustomerName || "Customer",
+            companyName: directCustomerName || "Customer",
+          },
+        },
+      });
+      return true;
+    };
+
+    if (directCustomerId && isLikelyCustomerId(directCustomerId)) {
+      navigateWithCustomer(directCustomerId, (invoice as any)?.customer);
+      return;
+    }
+
+    try {
+      const customers = await getCustomers({ limit: 1000 });
+      const targetName = normalizeCustomerLookupValue(directCustomerName);
+
+      const matchedCustomer = (Array.isArray(customers) ? customers : []).find((customer: any) => {
+        const customerId = normalizeCustomerLookupValue(customer?._id || customer?.id);
+        const customerName = normalizeCustomerLookupValue(
+          customer?.displayName || customer?.companyName || customer?.name
+        );
+
+        if (directCustomerId && customerId && customerId === normalizeCustomerLookupValue(directCustomerId)) return true;
+        if (targetName && customerName && customerName === targetName) return true;
+        return false;
+      });
+
+      const matchedCustomerId = String(matchedCustomer?._id || matchedCustomer?.id || "").trim();
+      if (matchedCustomerId) {
+        navigateWithCustomer(matchedCustomerId, matchedCustomer);
+        return;
+      }
+    } catch (error) {
+      console.error("Failed to resolve customer detail from invoice:", error);
+    }
+
+    if (directCustomerId) {
+      navigateWithCustomer(directCustomerId, (invoice as any)?.customer);
     }
   };
 
@@ -907,9 +983,18 @@ export default function Invoices() {
         return <span className="text-gray-900">{invoice.orderNumber || "-"}</span>;
       case "customerName":
         return (
-          <span className="text-gray-900">
+          <button
+            type="button"
+            className="text-gray-900 text-left hover:text-[#156372] hover:underline"
+            onClick={(e) => {
+              e.stopPropagation();
+              void navigateToCustomerDetail(invoice);
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            title="Open customer details"
+          >
             {invoice.customerName || invoice.customer?.displayName || invoice.customer?.companyName || (typeof invoice.customer === 'string' ? invoice.customer : "-")}
-          </span>
+          </button>
         );
       case "status":
         const statusDisplay = getInvoiceStatusTextDisplay(invoice);

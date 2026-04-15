@@ -7,12 +7,12 @@ const coreRouteLoaders = [
   () => import('../pages/CreditNotes/CreditNotesRoutes'),
   () => import('../pages/payments/PaymentsRoutes'),
   () => import('../pages/items/ItemsPage'),
+  () => import('../pages/settings/SettingsRoutes'),
 ];
 
 const secondaryRouteLoaders = [
   () => import('../pages/home/DashboardRoutes'),
   () => import('../pages/Expense/ExpensesRoutes'),
-  () => import('../pages/settings/SettingsRoutes'),
   () => import('../pages/reports/ReportsRoutes'),
   () => import('../pages/taxes/TaxesRoutes'),
   () => import('../pages/orgs/OrgsRoutes'),
