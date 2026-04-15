@@ -182,8 +182,8 @@ export default function CustomerDetailOverviewContent({
   const chartWidth = 400;
 
   return (
-    <div className="flex-1 min-w-0 bg-white p-4">
-      <div className="mb-4 grid grid-cols-2 gap-10">
+    <div className="flex-1 min-w-0 bg-white p-3">
+      <div className="mb-4 grid grid-cols-2 gap-5">
         <div>
           <div className="px-2">
             <span className="text-sm text-gray-500">Payment due period</span>

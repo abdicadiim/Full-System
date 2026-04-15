@@ -79,8 +79,8 @@ export default function Layout({ children }) {
 
   return (
     <OrgsProvider>
-      <div className="h-screen w-full bg-slate-50 text-[rgb(21,99,114)] overflow-hidden">
-        <div className="flex h-full">
+      <div className="h-screen w-full bg-slate-50 text-[rgb(21,99,114)] overflow-hidden pt-4 pr-4 pb-4 pl-2">
+        <div className="flex h-full gap-4">
           <Sidebar
             mobileOpen={mobileSidebarOpen}
             onCloseMobile={() => setMobileSidebarOpen(false)}

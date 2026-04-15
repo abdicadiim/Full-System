@@ -35,7 +35,7 @@ export default function CustomerDetailSidebar(args: any) {
   } = args;
 
   return (
-    <div className="flex h-full min-h-0 w-80 flex-col overflow-visible border-r border-gray-200 bg-white">
+    <div className="flex h-full min-h-0 w-64 flex-col overflow-visible border-r border-gray-200 bg-white">
       {selectedCustomers.length > 0 ? (
         <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 p-4">
           <div className="flex items-center gap-3">
@@ -77,8 +77,8 @@ export default function CustomerDetailSidebar(args: any) {
           </div>
         </div>
       ) : (
-        <div className="flex items-center justify-between border-b border-gray-200 p-4">
-          <button className="flex cursor-pointer items-center gap-2 text-xl font-semibold text-slate-900">
+        <div className="flex items-center justify-between border-b border-gray-200 p-3">
+          <button className="flex cursor-pointer items-center gap-2 text-base font-semibold text-slate-900">
             All Customers
             <ChevronDown size={16} className="text-[#1b5e6a]" />
           </button>
@@ -171,7 +171,7 @@ export default function CustomerDetailSidebar(args: any) {
         {sidebarSortedCustomers.map((customerRow: any, index: number) => (
           <div
             key={`${customerRow.id}-${index}`}
-            className={`flex cursor-pointer items-center gap-3 border-b border-gray-100 p-3 hover:bg-gray-50 ${
+            className={`flex cursor-pointer items-center gap-3 border-b border-gray-100 px-3 py-2 hover:bg-gray-50 ${
               customerRow.id === id ? "border-l-4 border-l-blue-600 bg-blue-50" : ""
             } ${selectedCustomers.includes(customerRow.id) ? "bg-[#f5f6ff]" : ""}`}
             onClick={() => {

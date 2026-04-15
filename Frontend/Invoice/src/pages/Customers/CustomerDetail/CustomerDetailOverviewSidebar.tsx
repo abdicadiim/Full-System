@@ -132,13 +132,13 @@ export default function CustomerDetailOverviewSidebar({
     (customer.contactPersons?.some((contact: any) => contact?.hasPortalAccess || contact?.enablePortal) ?? false);
 
   return (
-    <div className="w-[370px] flex-shrink-0 border-r border-gray-200 bg-[#f8f9fc]">
-      <div className="border-b border-gray-200 p-4">
+    <div className="w-[290px] flex-shrink-0 border-r border-gray-200 bg-[#f8f9fc]">
+      <div className="border-b border-gray-200 p-3">
         <div className="mb-2 text-sm text-[#1f5fa8]">{(customer as any).companyName || displayName}</div>
         {!showInviteCard ? (
-          <div className="flex items-start gap-4">
+          <div className="flex items-start gap-2.5">
             <div
-              className="group relative flex h-12 w-12 cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-gray-200"
+              className="group relative flex h-10 w-10 cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-gray-200"
               onMouseEnter={() => setIsAvatarHovered(true)}
               onMouseLeave={() => setIsAvatarHovered(false)}
               onClick={() => profileImageInputRef.current?.click()}
@@ -156,9 +156,9 @@ export default function CustomerDetailOverviewSidebar({
               <input ref={profileImageInputRef} type="file" accept="image/*" onChange={handleProfileImageUpload} style={{ display: "none" }} />
             </div>
 
-            <div className="flex-1">
+            <div className="min-w-0 flex-1">
               <div className="mb-1 flex items-center gap-2">
-                <span className="text-base font-medium text-gray-900">
+                <span className="truncate text-[13px] font-medium text-gray-900">
                   {primaryContact ? (
                     <>
                       {primaryContact.salutation && `${primaryContact.salutation}. `}
@@ -222,7 +222,7 @@ export default function CustomerDetailOverviewSidebar({
             </div>
           </div>
         ) : (
-          <div className="relative w-full overflow-hidden rounded-xl border border-gray-100 bg-[#f8f9ff] p-4 shadow-sm">
+          <div className="relative w-full overflow-hidden rounded-xl border border-gray-100 bg-[#f8f9ff] p-3 shadow-sm">
             <div className="absolute left-0 right-0 top-0 h-1 bg-blue-500"></div>
             <button
               className="absolute right-3 top-3 cursor-pointer text-gray-400 hover:text-gray-600"
@@ -230,9 +230,9 @@ export default function CustomerDetailOverviewSidebar({
             >
               <Settings size={14} />
             </button>
-            <div className="flex gap-4">
+            <div className="flex gap-2.5">
               <div
-                className="group relative h-12 w-12 cursor-pointer overflow-hidden rounded-lg bg-gray-300"
+                className="group relative h-10 w-10 cursor-pointer overflow-hidden rounded-lg bg-gray-300"
                 onMouseEnter={() => setIsAvatarHovered(true)}
                 onMouseLeave={() => setIsAvatarHovered(false)}
                 onClick={() => profileImageInputRef.current?.click()}
@@ -269,16 +269,16 @@ export default function CustomerDetailOverviewSidebar({
       <div className="border-b border-gray-200">
         <button
           type="button"
-          className="flex w-full cursor-pointer items-center justify-between px-4 py-3 text-left transition-colors hover:bg-white/50"
+          className="flex w-full cursor-pointer items-center justify-between px-3 py-2.5 text-left transition-colors hover:bg-white/50"
           onClick={() => toggleSection("address")}
           aria-expanded={expandedSections.address}
         >
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-800">ADDRESS</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-800">ADDRESS</span>
           {expandedSections.address ? <ChevronUp size={14} className="text-[#2563eb]" /> : <ChevronDown size={14} className="text-[#2563eb]" />}
         </button>
 
         {expandedSections.address && (
-          <div className="px-4 pb-4">
+          <div className="px-3 pb-3.5">
             <div className="mb-4">
               <div className="mb-1 text-sm text-gray-600">Billing Address</div>
               {hasBillingAddress ? (
@@ -355,15 +355,15 @@ export default function CustomerDetailOverviewSidebar({
       <div className="border-b border-gray-200">
         <button
           type="button"
-          className="flex w-full cursor-pointer items-center justify-between px-4 py-3 text-left transition-colors hover:bg-white/50"
+          className="flex w-full cursor-pointer items-center justify-between px-3 py-2.5 text-left transition-colors hover:bg-white/50"
           onClick={() => toggleSection("otherDetails")}
           aria-expanded={expandedSections.otherDetails}
         >
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-800">OTHER DETAILS</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-800">OTHER DETAILS</span>
           {expandedSections.otherDetails ? <ChevronUp size={14} className="text-[#2563eb]" /> : <ChevronDown size={14} className="text-[#2563eb]" />}
         </button>
         {expandedSections.otherDetails && (
-          <div className="grid grid-cols-[170px_minmax(0,1fr)] gap-x-3 gap-y-4 px-4 pb-5 pt-2">
+          <div className="grid grid-cols-[138px_minmax(0,1fr)] gap-x-2.5 gap-y-2.5 px-3 pb-3.5 pt-2">
             <span className="text-sm text-slate-500">Customer Type</span>
             <span className="text-sm font-medium text-slate-900">{customer.customerType === "individual" ? "Individual" : "Business"}</span>
             <span className="text-sm text-slate-500">Customer Number</span>
@@ -406,10 +406,10 @@ export default function CustomerDetailOverviewSidebar({
       </div>
 
       <div className="border-b border-gray-200">
-        <div className="flex items-center justify-between px-4 py-3">
+        <div className="flex items-center justify-between px-3 py-2.5">
           <button
             type="button"
-            className="flex-1 cursor-pointer text-left text-xs font-semibold uppercase tracking-wider text-gray-800"
+            className="flex-1 cursor-pointer text-left text-[10px] font-semibold uppercase tracking-wider text-gray-800"
             onClick={() => toggleSection("contactPersons")}
             aria-expanded={expandedSections.contactPersons}
           >
@@ -440,7 +440,7 @@ export default function CustomerDetailOverviewSidebar({
           </div>
         </div>
         {expandedSections.contactPersons && (
-          <div className="px-4 pb-4">
+          <div className="px-3 pb-3.5">
             {customer.contactPersons && customer.contactPersons.length > 0 ? (
               <div className="space-y-0">
                 {customer.contactPersons.map((contact: any, index: number) => {
@@ -594,8 +594,8 @@ export default function CustomerDetailOverviewSidebar({
         )}
       </div>
 
-      <div className="border-b border-gray-200 p-4">
-        <div className="border border-green-200 bg-green-50 p-4">
+      <div className="border-b border-gray-200 p-3">
+        <div className="border border-green-200 bg-green-50 p-3">
           <p className="mb-3 text-sm text-gray-700">
             Customer Portal allows your customers to keep track of all the transactions between them and your business.
           </p>
@@ -606,15 +606,15 @@ export default function CustomerDetailOverviewSidebar({
       <div>
         <button
           type="button"
-          className="flex w-full cursor-pointer items-center justify-between px-4 py-3 text-left transition-colors hover:bg-white/50"
+          className="flex w-full cursor-pointer items-center justify-between px-3 py-2.5 text-left transition-colors hover:bg-white/50"
           onClick={() => toggleSection("recordInfo")}
           aria-expanded={expandedSections.recordInfo}
         >
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-800">RECORD INFO</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-800">RECORD INFO</span>
           {expandedSections.recordInfo ? <ChevronUp size={14} className="text-[#2563eb]" /> : <ChevronDown size={14} className="text-[#2563eb]" />}
         </button>
         {expandedSections.recordInfo && (
-          <div className="px-4 pb-4">
+          <div className="px-3 pb-3.5">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Customer Number:</span>

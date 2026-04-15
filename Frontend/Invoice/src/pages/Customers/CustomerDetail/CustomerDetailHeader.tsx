@@ -47,22 +47,22 @@ export default function CustomerDetailHeader(args: any) {
   return (
     <div className="sticky top-0 z-30 bg-white">
       {!isCustomerActive(customer) ? (
-        <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-semibold text-gray-900">
+        <div className="flex items-center justify-between border-b border-gray-200 bg-white px-3 py-2.5">
+          <div className="flex items-center gap-3">
+            <h1 className="text-lg font-semibold text-gray-900">
               {customer?.name || customer?.displayName || customer?.companyName || `${customer?.firstName || ""} ${customer?.lastName || ""}`.trim() || "Customer"}
             </h1>
           </div>
-          <div className="flex items-center gap-3">
-            <button className="cursor-pointer rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50" onClick={async () => { await setActiveStatus(true); }}>
+          <div className="flex items-center gap-2.5">
+            <button className="cursor-pointer rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50" onClick={async () => { await setActiveStatus(true); }}>
               Mark as Active
             </button>
-            <div className="flex h-[38px] min-w-[44px] items-center justify-center gap-1 rounded-md border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700">
+            <div className="flex h-8 min-w-[40px] items-center justify-center gap-1 rounded-md border border-gray-300 bg-white px-2.5 text-sm font-medium text-gray-700">
               <Paperclip size={14} />
               {attachments.length}
             </div>
             <button
-              className="cursor-pointer rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+              className="cursor-pointer rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
               onClick={() => {
                 setIsMoreDropdownOpen(false);
                 setIsDeleteModalOpen(true);
@@ -80,18 +80,18 @@ export default function CustomerDetailHeader(args: any) {
           </div>
         </div>
       ) : (
-        <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-semibold text-gray-900">
+        <div className="flex items-center justify-between border-b border-gray-200 bg-white px-3 py-2.5">
+          <div className="flex items-center gap-3">
+            <h1 className="text-lg font-semibold text-gray-900">
               {customer?.name || customer?.displayName || customer?.companyName || `${customer?.firstName || ""} ${customer?.lastName || ""}`.trim() || "Customer"}
             </h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <button
               type="button"
               onClick={handleEditCustomer}
               disabled={isNavigatingToEdit}
-              className={`flex h-[38px] items-center gap-2 rounded-lg border-b-[4px] border-[#0D4A52] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all ${isNavigatingToEdit ? "cursor-wait opacity-85" : "cursor-pointer hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[1px] active:border-b-[2px]"}`}
+              className={`flex h-8 items-center gap-2 rounded-lg border-b-[4px] border-[#0D4A52] px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm transition-all ${isNavigatingToEdit ? "cursor-wait opacity-85" : "cursor-pointer hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[1px] active:border-b-[2px]"}`}
               style={{ background: "linear-gradient(180deg, #156372 0%, #0D4A52 100%)" }}
               aria-busy={isNavigatingToEdit}
             >
@@ -121,7 +121,7 @@ export default function CustomerDetailHeader(args: any) {
             <div className="relative inline-flex" ref={newTransactionDropdownRef}>
               <div className="flex items-center">
                 <button
-                  className="flex h-[38px] min-w-[140px] cursor-pointer items-center justify-center gap-2 rounded-l-lg border-b-[4px] border-[#0D4A52] px-4 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[1px] active:border-b-[2px]"
+                  className="flex h-8 min-w-[120px] cursor-pointer items-center justify-center gap-2 rounded-l-lg border-b-[4px] border-[#0D4A52] px-3.5 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[1px] active:border-b-[2px]"
                   style={{ background: "linear-gradient(180deg, #156372 0%, #0D4A52 100%)" }}
                   onClick={() => setIsNewTransactionDropdownOpen(!isNewTransactionDropdownOpen)}
                 >
@@ -129,7 +129,7 @@ export default function CustomerDetailHeader(args: any) {
                   New Transaction
                 </button>
                 <button
-                  className="flex h-[38px] w-10 cursor-pointer items-center justify-center rounded-r-lg border-b-[4px] border-l border-[#0B3A41] border-white/20 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[1px] active:border-b-[2px]"
+                  className="flex h-8 w-9 cursor-pointer items-center justify-center rounded-r-lg border-b-[4px] border-l border-[#0B3A41] border-white/20 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-[1px] hover:border-b-[6px] hover:brightness-110 active:translate-y-[1px] active:border-b-[2px]"
                   style={{ background: "#0D4A52" }}
                   onClick={() => setIsNewTransactionDropdownOpen(!isNewTransactionDropdownOpen)}
                 >
@@ -200,7 +200,7 @@ export default function CustomerDetailHeader(args: any) {
 
             <button
               onClick={() => navigate("/sales/customers")}
-              className="flex h-[38px] cursor-pointer items-center gap-2 rounded-lg border border-gray-300 border-b-[4px] bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition-all hover:-translate-y-[1px] hover:border-b-[6px] hover:bg-gray-50 active:translate-y-[1px] active:border-b-[2px]"
+              className="flex h-8 cursor-pointer items-center gap-2 rounded-lg border border-gray-300 border-b-[4px] bg-white px-3.5 py-1.5 text-sm font-semibold text-gray-700 shadow-sm transition-all hover:-translate-y-[1px] hover:border-b-[6px] hover:bg-gray-50 active:translate-y-[1px] active:border-b-[2px]"
             >
               <X size={16} />
             </button>
@@ -208,11 +208,11 @@ export default function CustomerDetailHeader(args: any) {
         </div>
       )}
 
-      <div className="mb-0 flex gap-6 border-b border-gray-200 bg-white px-1">
-        <button className={`-mb-px cursor-pointer border-b-2 px-2.5 py-3 text-[13px] font-bold transition-colors ${activeTab === "overview" ? "border-[#156372] text-gray-900" : "border-transparent text-gray-500 hover:text-gray-900"}`} onClick={() => setActiveTab("overview")}>Overview</button>
-        <button className={`-mb-px cursor-pointer border-b-2 px-2.5 py-3 text-[13px] font-bold transition-colors ${activeTab === "comments" ? "border-[#156372] text-gray-900" : "border-transparent text-gray-500 hover:text-gray-900"}`} onClick={() => setActiveTab("comments")}>Comments</button>
+      <div className="mb-0 flex gap-5 border-b border-gray-200 bg-white px-1">
+        <button className={`-mb-px cursor-pointer border-b-2 px-2 py-2.5 text-[12px] font-bold transition-colors ${activeTab === "overview" ? "border-[#156372] text-gray-900" : "border-transparent text-gray-500 hover:text-gray-900"}`} onClick={() => setActiveTab("overview")}>Overview</button>
+        <button className={`-mb-px cursor-pointer border-b-2 px-2 py-2.5 text-[12px] font-bold transition-colors ${activeTab === "comments" ? "border-[#156372] text-gray-900" : "border-transparent text-gray-500 hover:text-gray-900"}`} onClick={() => setActiveTab("comments")}>Comments</button>
         <button
-          className={`-mb-px cursor-pointer border-b-2 px-2.5 py-3 text-[13px] font-bold transition-colors ${activeTab === "transactions" ? "border-[#156372] text-gray-900" : "border-transparent text-gray-500 hover:text-gray-900"}`}
+          className={`-mb-px cursor-pointer border-b-2 px-2 py-2.5 text-[12px] font-bold transition-colors ${activeTab === "transactions" ? "border-[#156372] text-gray-900" : "border-transparent text-gray-500 hover:text-gray-900"}`}
           onClick={() => {
             setActiveTab("transactions");
             if (!selectedTransactionType) {
@@ -223,12 +223,12 @@ export default function CustomerDetailHeader(args: any) {
           Transactions
         </button>
         {customer?.linkedVendorId && (
-          <button className={`-mb-px cursor-pointer border-b-2 px-2.5 py-3 text-[13px] font-bold transition-colors ${activeTab === "purchases" ? "border-[#156372] text-gray-900" : "border-transparent text-gray-500 hover:text-gray-900"}`} onClick={() => setActiveTab("purchases")}>
+          <button className={`-mb-px cursor-pointer border-b-2 px-2 py-2.5 text-[12px] font-bold transition-colors ${activeTab === "purchases" ? "border-[#156372] text-gray-900" : "border-transparent text-gray-500 hover:text-gray-900"}`} onClick={() => setActiveTab("purchases")}>
             Purchases
           </button>
         )}
-        <button className={`-mb-px cursor-pointer border-b-2 px-2.5 py-3 text-[13px] font-bold transition-colors ${activeTab === "mails" ? "border-[#156372] text-gray-900" : "border-transparent text-gray-500 hover:text-gray-900"}`} onClick={() => setActiveTab("mails")}>Mails</button>
-        <button className={`-mb-px cursor-pointer border-b-2 px-2.5 py-3 text-[13px] font-bold transition-colors ${activeTab === "statement" ? "border-[#156372] text-gray-900" : "border-transparent text-gray-500 hover:text-gray-900"}`} onClick={() => setActiveTab("statement")}>Statement</button>
+        <button className={`-mb-px cursor-pointer border-b-2 px-2 py-2.5 text-[12px] font-bold transition-colors ${activeTab === "mails" ? "border-[#156372] text-gray-900" : "border-transparent text-gray-500 hover:text-gray-900"}`} onClick={() => setActiveTab("mails")}>Mails</button>
+        <button className={`-mb-px cursor-pointer border-b-2 px-2 py-2.5 text-[12px] font-bold transition-colors ${activeTab === "statement" ? "border-[#156372] text-gray-900" : "border-transparent text-gray-500 hover:text-gray-900"}`} onClick={() => setActiveTab("statement")}>Statement</button>
       </div>
     </div>
   );

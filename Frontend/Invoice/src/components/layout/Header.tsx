@@ -177,7 +177,7 @@ function Header({ onToggleSidebar }) {
   const isLightAppearance = settings?.branding?.appearance === "light";
 
   return (
-    <div className="sticky top-0 z-40 bg-white pt-2">
+    <div className="sticky top-0 z-40 bg-white">
       <header className="relative rounded-2xl shadow-md" style={{ backgroundColor: headerBg }}>
       <div className="flex h-14 w-full items-center justify-between gap-2 px-3 sm:px-5">
         <div className="flex min-w-0 flex-1 items-center gap-2">
