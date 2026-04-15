@@ -145,10 +145,6 @@ export default function useCustomersPageController() {
   const resizingRef = useRef<{ col: string; startX: number; startWidth: number } | null>(null);
 
   const visibleColumns = useMemo(() => columns.filter(c => c.visible), [columns]);
-  const tableMinWidth = useMemo(
-    () => visibleColumns.reduce((total, col) => total + col.width, 0) + 112,
-    [visibleColumns]
-  );
 
   const handleToggleColumn = (key: string) => {
     setColumns(prev => prev.map(c => c.key === key ? { ...c, visible: !c.visible } : c));
@@ -974,6 +970,37 @@ export default function useCustomersPageController() {
   };
 
   const displayedCustomers = getFilteredAndSortedCustomers();
+  const hasPositiveReceivables = useMemo(
+    () =>
+      displayedCustomers.some((customer) =>
+        Number(customer.receivables ?? customer.receivables_bcy ?? customer.accountsReceivable ?? 0) > 0
+      ),
+    [displayedCustomers]
+  );
+  const hasPositiveUnusedCredits = useMemo(
+    () =>
+      displayedCustomers.some((customer) =>
+        Number(customer.unusedCredits ?? customer.unused_credits ?? customer.unused_credits_bcy ?? 0) > 0
+      ),
+    [displayedCustomers]
+  );
+  const tableVisibleColumns = useMemo(
+    () =>
+      visibleColumns.filter((col) => {
+        if (col.key === "receivables" || col.key === "receivables_bcy") {
+          return hasPositiveReceivables;
+        }
+        if (col.key === "unusedCredits" || col.key === "unused_credits_bcy") {
+          return hasPositiveUnusedCredits;
+        }
+        return true;
+      }),
+    [visibleColumns, hasPositiveReceivables, hasPositiveUnusedCredits]
+  );
+  const tableMinWidth = useMemo(
+    () => tableVisibleColumns.reduce((total, col) => total + col.width, 0) + 112,
+    [tableVisibleColumns]
+  );
   const showCustomerSkeletons = isLoading && customers.length === 0;
 
   const handleSelectAll = (e) => {
@@ -2460,6 +2487,7 @@ export default function useCustomersPageController() {
     taxRateOptions,
     transactionTypeDropdownRef,
     viewSearchQuery,
+    tableVisibleColumns,
     visibleColumns,
   };
 }

@@ -1843,21 +1843,6 @@ export default function SalesReceipts() {
             <p className="text-gray-600 mb-6 max-w-md">
               Create sales receipts and send them to your customers as proof of payment you've received towards their purchase.
             </p>
-
-            <div className="flex items-center gap-4">
-              <button
-                className="px-6 py-3 bg-gradient-to-r from-[#156372] to-[#0D4A52] text-white rounded-lg text-sm font-semibold uppercase hover:opacity-90 transition-all shadow-md"
-                onClick={handleCreateNewReceipt}
-              >
-                NEW SALES RECEIPT
-              </button>
-              <button
-                className="px-6 py-3 text-[#156372] hover:text-blue-700 text-sm font-semibold underline"
-                onClick={handleImportReceipts}
-              >
-                Import Sales Receipt
-              </button>
-            </div>
           </div>
         ) : (
           <div className="flex-1 overflow-hidden bg-white min-h-0">

@@ -1540,24 +1540,6 @@ export default function RecurringInvoices() {
             <p className="text-gray-600 mb-6 max-w-md">
               Set up a profile to periodically create and send invoices to your customers.
             </p>
-
-            {/* Action Button */}
-            <div className="mb-4">
-              <button
-                className="px-6 py-3 bg-gradient-to-r from-[#156372] to-[#0D4A52] text-white rounded-md text-sm font-semibold uppercase cursor-pointer hover:opacity-90 transition-all shadow-md"
-                onClick={handleCreateNewRecurringInvoice}
-              >
-                CREATE NEW RECURRING INVOICE
-              </button>
-            </div>
-
-            {/* Import Link */}
-            <button
-              className="text-sm text-[#156372] hover:text-blue-700 underline cursor-pointer"
-              onClick={handleImport}
-            >
-              Import Recurring Invoices
-            </button>
           </div>
         ) : (
           <div className="h-full bg-white">

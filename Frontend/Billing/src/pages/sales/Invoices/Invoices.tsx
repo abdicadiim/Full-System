@@ -5,12 +5,10 @@ import {
   ChevronDown,
   ChevronUp,
   ChevronRight,
-  ChevronLeft,
   Plus,
   ArrowDownLeft,
   ArrowUpDown,
   Search,
-  Play,
   MoreHorizontal,
   Calendar,
   Upload,
@@ -104,6 +102,8 @@ const decimalFormatOptions = [
   "1234567,89",
   "1.234.567,89"
 ];
+
+const FULL_INVOICE_LIST_LIMIT = 10000;
 
 const normalizeCustomerLookupValue = (value: any) =>
   String(value ?? "").trim().toLowerCase();
@@ -201,16 +201,8 @@ export default function Invoices() {
     customerNotes: "Thank you for the payment. You just made our day."
   });
   // Refresh data when returning to page
-  const refreshData = (page = currentPage, limit = itemsPerPage) => {
-    if (page !== currentPage) {
-      setCurrentPage(page);
-    }
-    if (limit !== itemsPerPage) {
-      setItemsPerPage(limit);
-    }
-    if (page === currentPage && limit === itemsPerPage) {
-      invoiceListQuery.refetch();
-    }
+  const refreshData = () => {
+    invoiceListQuery.refetch();
   };
 
   const navigateToCustomerDetail = async (invoice: Invoice) => {
@@ -494,14 +486,10 @@ export default function Invoices() {
   });
   const [isDecimalFormatDropdownOpen, setIsDecimalFormatDropdownOpen] = useState(false);
   const [activeActionInvoiceId, setActiveActionInvoiceId] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(50);
-  const [totalItems, setTotalItems] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
   const [viewFilterParams, setViewFilterParams] = useState<Record<string, string>>({});
   const invoiceListQuery = useInvoicesListQuery({
-    page: currentPage,
-    limit: itemsPerPage,
+    page: 1,
+    limit: FULL_INVOICE_LIST_LIMIT,
     search: searchQuery,
     sort: sortConfig.key,
     order: sortConfig.direction,
@@ -512,8 +500,6 @@ export default function Invoices() {
   useEffect(() => {
     if (!invoiceListQuery.data) return;
     setInvoices(stripRetainerInvoices(invoiceListQuery.data.data));
-    setTotalItems(invoiceListQuery.data.pagination.total);
-    setTotalPages(invoiceListQuery.data.pagination.pages);
   }, [invoiceListQuery.data]);
 
   useEffect(() => {
@@ -542,9 +528,6 @@ export default function Invoices() {
 
   useEffect(() => {
     const statusFromUrl = searchParams.get('status');
-    const pageFromUrl = parseInt(searchParams.get('page') || "") || 1;
-
-    setCurrentPage(pageFromUrl);
 
     if (statusFromUrl) {
       const statusMap: { [key: string]: string } = {
@@ -2565,162 +2548,117 @@ export default function Invoices() {
       {/* Content Area */}
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
         <div className="flex-none px-6 pt-0 pb-4">
-          {!showInvoiceInsights ? (
-            <div className="rounded-md border border-[#e6e9f2] bg-[#f1f4fa] px-4 py-3">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-[12px] font-semibold uppercase tracking-wide text-[#7b8494]">Payment Summary</p>
-                <button
-                  type="button"
-                  onClick={() => setShowInvoiceInsights(true)}
-                  className="text-[12px] font-medium text-[#156372] hover:text-[#0d4a52]"
-                >
-                  View Insights
-                </button>
-              </div>
-              <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                <div
-                  className="flex items-center gap-3"
-                  onMouseEnter={() => setShowSummaryRefresh(true)}
-                  onMouseLeave={() => setShowSummaryRefresh(false)}
-                >
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#f5c77f] text-[#7b4d00]">
-                    <ArrowDownLeft size={14} />
-                  </span>
+          {hasInvoices && (
+            !showInvoiceInsights ? (
+              <div className="rounded-md border border-[#e6e9f2] bg-[#f1f4fa] px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[12px] font-semibold uppercase tracking-wide text-[#7b8494]">Payment Summary</p>
+                  <button
+                    type="button"
+                    onClick={() => setShowInvoiceInsights(true)}
+                    className="text-[12px] font-medium text-[#156372] hover:text-[#0d4a52]"
+                  >
+                    View Insights
+                  </button>
+                </div>
+                <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                  <div
+                    className="flex items-center gap-3"
+                    onMouseEnter={() => setShowSummaryRefresh(true)}
+                    onMouseLeave={() => setShowSummaryRefresh(false)}
+                  >
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#f5c77f] text-[#7b4d00]">
+                      <ArrowDownLeft size={14} />
+                    </span>
+                    <div>
+                      <p className="text-[12px] text-[#5f6b7b]">Total Outstanding Receivables</p>
+                      {isSummaryRefreshing ? (
+                        <div className="mt-1 h-6 w-24 rounded bg-[#e9edf5] animate-pulse" />
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <p className="text-[20px] leading-[1] font-medium text-[#111827]">{formatMoney(paymentSummary.totalOutstandingReceivables)}</p>
+                          {showSummaryRefresh && (
+                            <button
+                              type="button"
+                              onClick={handleSummaryRefresh}
+                              className="inline-flex items-center gap-1 text-[12px] text-[#2f6fed]"
+                            >
+                              <RefreshCw size={12} className={isSummaryRefreshing ? "animate-spin" : ""} />
+                              Refresh
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                   <div>
-                    <p className="text-[12px] text-[#5f6b7b]">Total Outstanding Receivables</p>
+                    <p className="text-[12px] text-[#5f6b7b]">Due Today</p>
+                    {isSummaryRefreshing ? (
+                      <div className="mt-1 h-6 w-20 rounded bg-[#e9edf5] animate-pulse" />
+                    ) : (
+                      <p className="text-[20px] leading-[1] font-medium text-[#111827]">{formatMoney(paymentSummary.dueToday)}</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-[12px] text-[#5f6b7b]">Due Within 30 Days</p>
                     {isSummaryRefreshing ? (
                       <div className="mt-1 h-6 w-24 rounded bg-[#e9edf5] animate-pulse" />
                     ) : (
-                      <div className="flex items-center gap-2">
-                        <p className="text-[20px] leading-[1] font-medium text-[#111827]">{formatMoney(paymentSummary.totalOutstandingReceivables)}</p>
-                        {showSummaryRefresh && (
-                          <button
-                            type="button"
-                            onClick={handleSummaryRefresh}
-                            className="inline-flex items-center gap-1 text-[12px] text-[#2f6fed]"
-                          >
-                            <RefreshCw size={12} className={isSummaryRefreshing ? "animate-spin" : ""} />
-                            Refresh
-                          </button>
-                        )}
-                      </div>
+                      <p className="text-[20px] leading-[1] font-medium text-[#111827]">{formatMoney(paymentSummary.dueWithin30Days)}</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-[12px] text-[#5f6b7b]">Overdue Invoice</p>
+                    {isSummaryRefreshing ? (
+                      <div className="mt-1 h-6 w-24 rounded bg-[#e9edf5] animate-pulse" />
+                    ) : (
+                      <p className="text-[20px] leading-[1] font-medium text-[#111827]">{formatMoney(paymentSummary.overdueInvoice)}</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-[12px] text-[#5f6b7b]">Average No. of Days for Getting Paid</p>
+                    {isSummaryRefreshing ? (
+                      <div className="mt-1 h-6 w-20 rounded bg-[#e9edf5] animate-pulse" />
+                    ) : (
+                      <p className="text-[20px] leading-[1] font-medium text-[#111827]">{Math.round(paymentSummary.averageDaysForGettingPaid)} Days</p>
                     )}
                   </div>
                 </div>
-                <div>
-                  <p className="text-[12px] text-[#5f6b7b]">Due Today</p>
-                  {isSummaryRefreshing ? (
-                    <div className="mt-1 h-6 w-20 rounded bg-[#e9edf5] animate-pulse" />
-                  ) : (
-                    <p className="text-[20px] leading-[1] font-medium text-[#111827]">{formatMoney(paymentSummary.dueToday)}</p>
-                  )}
-                </div>
-                <div>
-                  <p className="text-[12px] text-[#5f6b7b]">Due Within 30 Days</p>
-                  {isSummaryRefreshing ? (
-                    <div className="mt-1 h-6 w-24 rounded bg-[#e9edf5] animate-pulse" />
-                  ) : (
-                    <p className="text-[20px] leading-[1] font-medium text-[#111827]">{formatMoney(paymentSummary.dueWithin30Days)}</p>
-                  )}
-                </div>
-                <div>
-                  <p className="text-[12px] text-[#5f6b7b]">Overdue Invoice</p>
-                  {isSummaryRefreshing ? (
-                    <div className="mt-1 h-6 w-24 rounded bg-[#e9edf5] animate-pulse" />
-                  ) : (
-                    <p className="text-[20px] leading-[1] font-medium text-[#111827]">{formatMoney(paymentSummary.overdueInvoice)}</p>
-                  )}
-                </div>
-                <div>
-                  <p className="text-[12px] text-[#5f6b7b]">Average No. of Days for Getting Paid</p>
-                  {isSummaryRefreshing ? (
-                    <div className="mt-1 h-6 w-20 rounded bg-[#e9edf5] animate-pulse" />
-                  ) : (
-                    <p className="text-[20px] leading-[1] font-medium text-[#111827]">{Math.round(paymentSummary.averageDaysForGettingPaid)} Days</p>
-                  )}
-                </div>
               </div>
-            </div>
-          ) : (
-            <div className="rounded-md border border-[#e6e9f2] bg-[#f1f4fa] px-4 py-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-[12px] font-semibold text-[#111827]">I've analyzed your invoices and here are a few actionable insights for you.</p>
-                <div className="flex items-center gap-3 text-[12px] text-[#111827]">
-                  <span>Last Analyzed On: {analyzedOnLabel}</span>
-                  <span className="h-4 w-px bg-[#d8dce6]" />
-                  <button
-                    type="button"
-                    onClick={() => setShowInvoiceInsights(false)}
-                    className="text-[12px] text-[#3467f6] hover:underline"
-                  >
-                    Hide Invoicing Insights
-                  </button>
+            ) : (
+              <div className="rounded-md border border-[#e6e9f2] bg-[#f1f4fa] px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-[12px] font-semibold text-[#111827]">I've analyzed your invoices and here are a few actionable insights for you.</p>
+                  <div className="flex items-center gap-3 text-[12px] text-[#111827]">
+                    <span>Last Analyzed On: {analyzedOnLabel}</span>
+                    <span className="h-4 w-px bg-[#d8dce6]" />
+                    <button
+                      type="button"
+                      onClick={() => setShowInvoiceInsights(false)}
+                      className="text-[12px] text-[#3467f6] hover:underline"
+                    >
+                      Hide Invoicing Insights
+                    </button>
+                  </div>
                 </div>
+                <ul className="mt-2 space-y-1.5 text-[12px] text-[#111827]">
+                  <li>- <span className="text-[#f97316] font-semibold">{formatMoney(paymentSummary.overdueInvoice)}</span> is overdue, which is <span className="font-semibold">{outstandingPercent}%</span> of your total unpaid invoices.</li>
+                  <li>- <span className="text-[#f97316] font-semibold">{formatMoney(paymentSummary.totalOutstandingReceivables)}</span> worth of invoices remain unpaid from customers who've made <span className="font-semibold">{Math.max(0, 100 - outstandingPercent)}%</span> of their past invoice payments after the due date.</li>
+                  <li>- <span className="text-[#f97316] font-semibold">{formatMoney(paymentSummary.overdueInvoice)}</span> worth of overdue invoices have exceeded your average late payment duration of <span className="font-semibold">{Math.round(paymentSummary.averageDaysForGettingPaid)} days</span>.</li>
+                </ul>
               </div>
-              <ul className="mt-2 space-y-1.5 text-[12px] text-[#111827]">
-                <li>- <span className="text-[#f97316] font-semibold">{formatMoney(paymentSummary.overdueInvoice)}</span> is overdue, which is <span className="font-semibold">{outstandingPercent}%</span> of your total unpaid invoices.</li>
-                <li>- <span className="text-[#f97316] font-semibold">{formatMoney(paymentSummary.totalOutstandingReceivables)}</span> worth of invoices remain unpaid from customers who've made <span className="font-semibold">{Math.max(0, 100 - outstandingPercent)}%</span> of their past invoice payments after the due date.</li>
-                <li>- <span className="text-[#f97316] font-semibold">{formatMoney(paymentSummary.overdueInvoice)}</span> worth of overdue invoices have exceeded your average late payment duration of <span className="font-semibold">{Math.round(paymentSummary.averageDaysForGettingPaid)} days</span>.</li>
-              </ul>
-            </div>
+            )
           )}
         </div>
 
-        <div className="flex-1 min-h-0 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden">
         {!hasInvoices && !isRefreshing ? (
-          <div className="flex h-full flex-col items-center justify-center overflow-auto py-16 text-center">
-            {/* Video Thumbnail */}
-            <div className="relative w-full max-w-md mb-8">
-              <div className="relative w-full aspect-video bg-gradient-to-br from-[#156372] to-purple-600 rounded-lg overflow-hidden">
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <button className="flex items-center justify-center w-16 h-16 bg-white bg-opacity-20 rounded-full cursor-pointer hover:bg-opacity-30 transition-all">
-                    <Play size={24} fill="#ffffff" />
-                  </button>
-                  <div className="mt-6 flex flex-col items-center">
-                    <div className="flex items-center justify-center w-12 h-12 bg-white rounded-full mb-2">
-                      <span className="text-[#156372] font-bold text-lg">TB</span>
-                    </div>
-                    <div className="text-white font-semibold">Taban Books</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Headline */}
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">It's time to get paid!</h2>
-
-            {/* Description */}
-            <p className="text-gray-600 mb-8 max-w-md">
-              We don't want to boast too much, but sending amazing invoices and getting paid is easier than ever. Go ahead! Try it yourself.
-            </p>
-
-            {/* Action Buttons */}
-            <div className="flex items-center gap-3 mb-6">
-              <button
-                className="px-6 py-3 bg-gradient-to-r from-[#156372] to-[#0D4A52] text-white rounded-md font-semibold cursor-pointer hover:opacity-90 transition-all shadow-md"
-                onClick={handleCreateNewInvoice}
-              >
-                NEW INVOICE
-              </button>
-              <button
-                className="px-6 py-3 bg-gradient-to-r from-[#156372] to-[#0D4A52] text-white rounded-md font-semibold cursor-pointer hover:opacity-90 transition-all shadow-md"
-                onClick={handleCreateNewRecurringInvoice}
-              >
-                NEW RECURRING INVOICE
-              </button>
-            </div>
-
-            {/* Import Link */}
-            <button className="text-[#156372] hover:text-blue-700 text-sm font-medium cursor-pointer mb-12">
-              Import Invoices
-            </button>
-
-            {/* Life Cycle Section */}
-            <div className="w-full max-w-2xl">
-              <h3 className="text-xl font-semibold text-gray-900 mb-4">Life cycle of an Invoice</h3>
-              <div className="bg-gray-100 rounded-lg p-8 min-h-[200px]">
-                {/* Lifecycle steps will be displayed here */}
-              </div>
+          <div className="flex h-full items-center justify-center overflow-auto py-16 text-center">
+            <div className="max-w-md px-6">
+              <h2 className="text-2xl font-semibold text-gray-900">No invoices yet</h2>
+              <p className="mt-2 text-sm text-gray-600">
+                Create your first invoice to start tracking your receivables.
+              </p>
             </div>
           </div>
         ) : (
@@ -2942,44 +2880,6 @@ export default function Invoices() {
         )}
         </div>
       </div>
-
-      {/* Pagination Controls */}
-      {sortedInvoices.length > 0 && (
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-white">
-          <div className="flex items-center text-sm text-gray-500">
-            Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalItems)} invoices
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                if (currentPage > 1) {
-                  refreshData(currentPage - 1);
-                }
-              }}
-              disabled={currentPage === 1}
-              className={`p-2 rounded-md ${currentPage === 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100'}`}
-            >
-              <ChevronLeft size={20} />
-            </button>
-
-            <span className="text-sm font-medium text-gray-700">
-              Page {currentPage} of {totalPages}
-            </span>
-
-            <button
-              onClick={() => {
-                if (currentPage < totalPages) {
-                  refreshData(currentPage + 1);
-                }
-              }}
-              disabled={currentPage === totalPages}
-              className={`p-2 rounded-md ${currentPage === totalPages ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100'}`}
-            >
-              <ChevronRight size={20} />
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Bulk Update Modal */}
       {isBulkUpdateModalOpen && (

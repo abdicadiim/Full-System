@@ -71,9 +71,9 @@ export default function CustomersPageContent({ controller }: { controller: any }
     sortConfig,
     startResizing,
     tableMinWidth,
+    tableVisibleColumns,
     viewSearchQuery,
     setViewSearchQuery,
-    visibleColumns,
     loadCustomers,
     currentPage,
     itemsPerPage,
@@ -672,7 +672,7 @@ export default function CustomersPageContent({ controller }: { controller: any }
                 </div>
               </th>
 
-              {visibleColumns.map((col) => (
+              {tableVisibleColumns.map((col) => (
                 <th
                   key={col.key}
                   className={`px-4 py-3 relative group/header cursor-pointer select-none ${col.key !== 'name' && col.key !== 'receivables_bcy' && col.key !== 'companyName' ? 'hidden md:table-cell' : ''}`}
@@ -729,7 +729,7 @@ export default function CustomersPageContent({ controller }: { controller: any }
                   <td className="px-4 py-3 w-16">
                     <div className="h-4 w-4 bg-gray-100 rounded mx-auto" />
                   </td>
-                  {visibleColumns.map((col, idx) => (
+                  {tableVisibleColumns.map((col, idx) => (
                     <td key={idx} className="px-4 py-3" style={{ width: col.width }}>
                       <div className={`h-4 bg-gray-100 rounded ${idx === 0 ? 'w-3/4' : 'w-1/2'}`} />
                     </td>
@@ -782,7 +782,7 @@ export default function CustomersPageContent({ controller }: { controller: any }
                       </div>
                     </td>
 
-                    {visibleColumns.map(col => (
+                    {tableVisibleColumns.map(col => (
                       <td
                         key={col.key}
                         className={`px-4 py-3 truncate ${col.key !== 'name' && col.key !== 'receivables_bcy' && col.key !== 'companyName' ? 'hidden sm:table-cell' : ''}`}

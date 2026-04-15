@@ -2494,13 +2494,6 @@ export default function Quotes() {
             <p className="text-gray-500 max-w-xs mb-8">
               Looks like you haven't created any quotes yet or no quotes match your current view.
             </p>
-            <button
-              onClick={handleCreateNewQuote}
-              className="flex items-center gap-2 px-6 py-2.5 bg-[#156372] text-white rounded-lg text-sm font-bold cursor-pointer hover:bg-[#0D4A52] transition-all shadow-md active:scale-95"
-            >
-              <Plus size={18} />
-              Create Your First Quote
-            </button>
           </div>
         ) : (
           <div
